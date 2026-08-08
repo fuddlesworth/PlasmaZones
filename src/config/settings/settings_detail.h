@@ -17,10 +17,15 @@
 //
 //   2. Free helpers shared by more than one partial: the disable-list
 //      canonicalization (used by settings.cpp's load()/reset() and by
-//      settings/disable.cpp) and parseCommaList (used by settings.cpp's
-//      Ordering section and by settings/disable.cpp's lockedScreens).
+//      settings/disable.cpp), parseCommaList (used by settings.cpp's
+//      Ordering section and by settings/disable.cpp's lockedScreens), and
+//      the scrolling column-width kind repair pair (used by
+//      settings/scrolling.cpp for the global width key and by
+//      settings/perscreen.cpp for the per-monitor one).
 //      Kept inline in a nested namespace so each TU gets its own copy
 //      without relying on unity-build merging for linkage.
+
+#include "config/configdefaults.h"
 
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -204,6 +209,76 @@ inline QStringList canonicalDisableEntries(DisableAxis axis, const QStringList& 
     }
     c.sort();
     return c;
+}
+
+// ── Scrolling column-width kind repair ───────────────────────────────────────
+// The width KIND and the width VALUE are two keys sharing one meaning, and the
+// value's legal range depends entirely on the kind in force. The schema's
+// clampDouble has to span both kinds' ranges (one key, one validator) and so
+// cannot reject a value that is out of range for the kind actually stored.
+// These two helpers are the real bound, and they live here rather than in
+// either caller's TU because the global width pair (settings/scrolling.cpp)
+// and the per-monitor one (settings/perscreen.cpp) MUST heal an inconsistent
+// pair the same way. A second copy of the thresholds is how the two drift.
+//
+// Both take the kind as its stored wire value rather than an isFixed bool:
+// ClientDecides and Preset store no width of their own and deliberately leave
+// whatever the previous kind wrote in place (Preset resolves through its index
+// key), so for those two the stored value is not theirs to touch. Collapsing
+// the four kinds to a bool would clamp a retained 800px pixel width down to
+// the proportion ceiling on a Fixed→ClientDecides→Fixed round trip.
+
+/// Clamp into the kind's range. What a SETTER applies: a user dragging a
+/// slider or typing in the SpinBox wants the nearest legal value, not a jump
+/// back to a default.
+inline qreal clampColumnWidthForKind(qreal value, int kind)
+{
+    if (kind == ConfigDefaults::scrollingWidthKindClientDecides()
+        || kind == ConfigDefaults::scrollingWidthKindPreset()) {
+        return value;
+    }
+    if (kind == ConfigDefaults::scrollingWidthKindFixed()) {
+        return qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthFixedMin(), value,
+                             ConfigDefaults::scrollingDefaultColumnWidthFixedMax());
+    }
+    return qBound<qreal>(ConfigDefaults::scrollingDefaultColumnWidthProportionMin(), value,
+                         ConfigDefaults::scrollingDefaultColumnWidthProportionMax());
+}
+
+/// Repair a value that cannot belong to @p kind at all, the way the KIND
+/// setter's arms do: re-seed rather than clamp.
+///
+/// Clamping is wrong for this case and quietly produces the exact failure the
+/// kind setter exists to avoid. A proportion of 0.5 left behind under Fixed
+/// clamps to the 100px floor; worse, a pixel count of 800 left behind under
+/// Proportion clamps to 1.0, which opens every column at 100% of the work
+/// area. The repair paths have to agree, or the same broken pair heals
+/// differently depending on which one found it.
+inline qreal reseedColumnWidthForKind(qreal value, int kind)
+{
+    if (kind == ConfigDefaults::scrollingWidthKindClientDecides()
+        || kind == ConfigDefaults::scrollingWidthKindPreset()) {
+        return value;
+    }
+    const bool isFixed = kind == ConfigDefaults::scrollingWidthKindFixed();
+    if (isFixed && value < ConfigDefaults::scrollingDefaultColumnWidthFixedMin()) {
+        return ConfigDefaults::scrollingDefaultColumnWidthFixedPx();
+    }
+    if (!isFixed && value > ConfigDefaults::scrollingDefaultColumnWidthProportionMax()) {
+        return ConfigDefaults::scrollingDefaultColumnWidthValue();
+    }
+    // In-kind but out of range: a clamp is the right repair, since the value
+    // is the right SORT of thing.
+    //
+    // UNREACHABLE through the global pair, and deliberately kept as defence
+    // rather than removed: the schema's clampDouble(ProportionMin, FixedMax)
+    // validator runs on the READ path too, so that caller receives an
+    // already-bounded value and this tail is an identity. It only starts
+    // mattering if that clamp is widened for a future kind, or if a caller
+    // ever reads the raw backend. Not unit-testable through the global caller
+    // for the same reason — see the note in test_scrolling_settings.cpp's data
+    // table.
+    return clampColumnWidthForKind(value, kind);
 }
 
 inline QStringList parseCommaList(const QString& raw)

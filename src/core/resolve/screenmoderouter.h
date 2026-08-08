@@ -21,7 +21,7 @@ namespace PlasmaZones {
  *
  * Every window-lifecycle and cleanup entry point in the daemon and its
  * D-Bus adaptors should route through this class instead of calling
- * `m_autotileEngine->isAutotileScreen()` / `modeForScreen()` ad hoc at
+ * `m_autotileEngine->isActiveOnScreen()` / `modeForScreen()` ad hoc at
  * each site. Engines trust that their callers routed correctly — no
  * defensive mode checks inside SnapEngine or AutotileEngine.
  *
@@ -39,12 +39,16 @@ public:
     /// and layout manager. None of the pointers are owned; they must
     /// outlive the router.
     ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, PhosphorEngine::IPlacementEngine* snapEngine,
-                     PhosphorEngine::IPlacementEngine* autotileEngine);
+                     PhosphorEngine::IPlacementEngine* autotileEngine, PhosphorEngine::IPlacementEngine* scrollEngine);
 
-    /// Current mode for @p screenId. Consults the autotile engine's
-    /// live set first (mode is derived from assignment + context) and
-    /// falls back to the layout manager's cascade for unknown screens.
-    /// Returns Snapping when the screen isn't recognised — safest
+    /// Current mode for @p screenId. Consults the ENGINES' live sets
+    /// first — autotile then scrolling (mode is derived from assignment
+    /// + context, and a context-disable gate can differ from the raw
+    /// cascade) — and falls back to the layout manager's cascade for
+    /// screens neither engine claims. A cascade answer of Autotile or
+    /// Scrolling whose engine does NOT claim the screen downgrades to
+    /// Snapping (the engine is disabled or gated there). Returns
+    /// Snapping when the screen isn't recognised at all — safest
     /// default since snap-mode operations are generally idempotent
     /// against missing state.
     PhosphorZones::AssignmentEntry::Mode modeFor(const QString& screenId) const;
@@ -58,22 +62,16 @@ public:
     /// Convenience predicates. @see modeFor for the fallback semantics.
     bool isSnapMode(const QString& screenId) const;
     bool isAutotileMode(const QString& screenId) const;
+    bool isScrollingMode(const QString& screenId) const;
 
     /// Split a list of screen ids into per-mode buckets. Useful for
     /// multi-screen cleanup and resnap paths that need to iterate one
     /// engine at a time. Preserves input order within each bucket.
-    ///
-    /// Screens assigned to a mode whose engine is not currently wired
-    /// in the router (Scrolling — engine slot reserved, see
-    /// `AssignmentEntry::Mode`) land in @ref passthrough. Existing
-    /// callers that only enumerate `.snap` / `.autotile` correctly
-    /// skip passthrough screens (they are unmanaged by this daemon, so
-    /// cleanup loops should leave them alone).
     struct Partitioned
     {
         QStringList snap;
         QStringList autotile;
-        QStringList passthrough; ///< Scrolling-mode screens — no engine wired
+        QStringList scrolling;
     };
     Partitioned partitionByMode(const QStringList& screenIds) const;
 
@@ -81,6 +79,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorEngine::IPlacementEngine* m_snapEngine;
     PhosphorEngine::IPlacementEngine* m_autotileEngine;
+    PhosphorEngine::IPlacementEngine* m_scrollEngine;
 };
 
 } // namespace PlasmaZones

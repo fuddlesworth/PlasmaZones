@@ -12,8 +12,9 @@
 #include "settings/pages/snappingeffectscontroller.h"
 #include "settings/pages/snappingzoneselectorcontroller.h"
 #include "settings/pages/tilingalgorithmcontroller.h"
-#include "settings/pages/windowappearancecontroller.h"
+#include "settings/pages/scrollingbehaviorcontroller.h"
 #include "settings/pages/tilingbehaviorcontroller.h"
+#include "settings/pages/windowappearancecontroller.h"
 #include "settings/utils/virtualscreenutils.h"
 #include "config/configbackends.h"
 #include "config/configdefaults.h"
@@ -26,6 +27,8 @@
 #include "core/types/constants.h"
 #include "core/utils/geometryutils.h"
 #include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/ScrollingTemplate.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include "phosphor_i18n.h"
@@ -88,6 +91,97 @@
 #include <memory>
 
 namespace PlasmaZones {
+
+// The scrolling kind vocabularies and value bounds, read straight from
+// ConfigDefaults — the C++ side is the single home for these numbers. The
+// scrolling pages bind this map instead of re-spelling the literals in QML,
+// which would otherwise duplicate the kind ints, the slider and spin ranges,
+// and the preset ceiling across the C++/QML boundary.
+//
+// ConfigDefaults is not the only home the map draws from. The last four
+// entries are the template-authoring caps the scrolling template editor has
+// to obey to stay honest about what the store will keep: the column and
+// preset-list ceiling from PhosphorZones::MaxTemplateColumns, the fraction
+// dedupe epsilon the store's normalize uses to collapse near-equal preset
+// fractions, and the two text-field caps the D-Bus boundary re-applies through
+// clampName. They ride along here because that dialog already binds this one
+// map.
+//
+// The map covers both dimensions, not just widths: width kinds and their
+// value bounds, the height kinds and their fixed-pixel range, the editing
+// steps for each, the preset-index ceiling, the shortcut adjust-step percent
+// bounds, and the tab indicator's numeric ranges and its fully-rounded
+// corner-radius sentinel. Only the height kind the QML actually keys rows off is
+// exported — Auto has no row of its own (it is the fall-through when neither
+// Fixed nor Preset matches), so exporting it would be an unread entry.
+QVariantMap SettingsController::scrollingConstants() const
+{
+    return {
+        {QStringLiteral("kindProportion"), ConfigDefaults::scrollingWidthKindProportion()},
+        {QStringLiteral("kindFixed"), ConfigDefaults::scrollingWidthKindFixed()},
+        {QStringLiteral("kindClientDecides"), ConfigDefaults::scrollingWidthKindClientDecides()},
+        {QStringLiteral("proportionMin"), ConfigDefaults::scrollingDefaultColumnWidthProportionMin()},
+        {QStringLiteral("proportionMax"), ConfigDefaults::scrollingDefaultColumnWidthProportionMax()},
+        {QStringLiteral("fixedMin"), ConfigDefaults::scrollingDefaultColumnWidthFixedMin()},
+        {QStringLiteral("fixedMax"), ConfigDefaults::scrollingDefaultColumnWidthFixedMax()},
+        {QStringLiteral("proportionStep"), ConfigDefaults::scrollingDefaultColumnWidthProportionStep()},
+        {QStringLiteral("fixedStep"), ConfigDefaults::scrollingDefaultColumnWidthFixedStep()},
+        // Bounds for the shortcut adjust-step percent rows (Window Handling
+        // card) — a different thing from the editor-granularity steps above,
+        // see ConfigDefaults.
+        {QStringLiteral("stepPercentMin"), ConfigDefaults::scrollingStepPercentMin()},
+        {QStringLiteral("stepPercentMax"), ConfigDefaults::scrollingStepPercentMax()},
+        // Preset kind + the schema's stored-index ceiling. The QML spins take
+        // the smaller of this and the live list length, so a shrunk list can
+        // never leave the spin offering an index the schema would clamp.
+        {QStringLiteral("kindPreset"), ConfigDefaults::scrollingWidthKindPreset()},
+        {QStringLiteral("presetIndexMax"), ConfigDefaults::scrollingPresetIndexMax()},
+        {QStringLiteral("heightKindFixed"), ConfigDefaults::scrollingHeightKindFixed()},
+        {QStringLiteral("heightKindPreset"), ConfigDefaults::scrollingHeightKindPreset()},
+        {QStringLiteral("heightFixedMin"), ConfigDefaults::scrollingDefaultWindowHeightMin()},
+        {QStringLiteral("heightFixedMax"), ConfigDefaults::scrollingDefaultWindowHeightMax()},
+        {QStringLiteral("heightFixedStep"), ConfigDefaults::scrollingDefaultWindowHeightStep()},
+        // Tab indicator (Scrolling.TabIndicator). Bounds and steps only — the
+        // style and position VOCABULARIES are deliberately absent: both combos
+        // build their model from valueOptions("Scrolling.TabIndicator", ...)
+        // with valueRole "value", so they never read a wire value from here.
+        // Exporting them would be the unread entry this function's own policy
+        // note above forbids.
+        //
+        // The gap floor is NEGATIVE on purpose (it draws the indicator over
+        // the window) and the corner-radius floor IS the "fully rounded"
+        // sentinel — the page spells that one as a toggle, not as -1 in a spin
+        // box, so it needs the sentinel value as well as the range.
+        {QStringLiteral("tabGapMin"), ConfigDefaults::scrollingTabIndicatorGapMin()},
+        {QStringLiteral("tabGapMax"), ConfigDefaults::scrollingTabIndicatorGapMax()},
+        {QStringLiteral("tabWidthMin"), ConfigDefaults::scrollingTabIndicatorWidthMin()},
+        {QStringLiteral("tabWidthMax"), ConfigDefaults::scrollingTabIndicatorWidthMax()},
+        {QStringLiteral("tabLengthMin"), ConfigDefaults::scrollingTabIndicatorLengthProportionMin()},
+        {QStringLiteral("tabLengthMax"), ConfigDefaults::scrollingTabIndicatorLengthProportionMax()},
+        {QStringLiteral("tabLengthStep"), ConfigDefaults::scrollingTabIndicatorLengthProportionStep()},
+        {QStringLiteral("tabGapsBetweenMin"), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMin()},
+        {QStringLiteral("tabGapsBetweenMax"), ConfigDefaults::scrollingTabIndicatorGapsBetweenTabsMax()},
+        {QStringLiteral("tabCornerRadiusPill"), ConfigDefaults::scrollingTabIndicatorCornerRadiusPill()},
+        {QStringLiteral("tabCornerRadiusMax"), ConfigDefaults::scrollingTabIndicatorCornerRadiusMax()},
+        // Drop indicator (Scrolling.DropIndicator). Bounds only, same policy
+        // as the tab block above. The border bounds mirror the snapping zone
+        // overlay's so the two highlights cannot drift apart visually.
+        {QStringLiteral("dropOpacityMin"), ConfigDefaults::scrollingDropIndicatorOpacityMin()},
+        {QStringLiteral("dropOpacityMax"), ConfigDefaults::scrollingDropIndicatorOpacityMax()},
+        {QStringLiteral("dropBorderWidthMin"), ConfigDefaults::scrollingDropIndicatorBorderWidthMin()},
+        {QStringLiteral("dropBorderWidthMax"), ConfigDefaults::scrollingDropIndicatorBorderWidthMax()},
+        {QStringLiteral("dropBorderRadiusMin"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMin()},
+        {QStringLiteral("dropBorderRadiusMax"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMax()},
+        // Scrolling template authoring caps. The store truncates a template's
+        // column list and each preset list at MaxTemplateColumns, and the
+        // layout adaptor clamps the two text fields on the way in, so the
+        // editor dialog binds these to stop the user short of a silent cut.
+        {QStringLiteral("maxTemplateColumns"), PhosphorZones::MaxTemplateColumns},
+        {QStringLiteral("fractionDedupeEpsilon"), PhosphorZones::FractionDedupeEpsilon},
+        {QStringLiteral("nameMaxLength"), MaxLayoutNameLength},
+        {QStringLiteral("descriptionMaxLength"), MaxTemplateDescriptionLength},
+    };
+}
 
 QVariantList SettingsController::valueOptions(const QString& group, const QString& key) const
 {
@@ -186,8 +280,8 @@ SettingsController::~SettingsController()
     // ~RuleController runs as part of the QObject teardown, those
     // captured containers are already gone. Any model-signal slot that
     // reaches a lookup during teardown would deref destroyed state.
-    // RuleModel::leafLabel/actionLabel treat empty lookups as
-    // identity, so clearing here is the safe contract.
+    // The leafLabel/actionLabel helpers in rulemodel_labels.cpp treat empty
+    // lookups as identity, so clearing here is the safe contract.
     if (m_rulesPage) {
         m_rulesPage->setScreenLookup({});
         m_rulesPage->setActivityLookup({});
@@ -216,6 +310,15 @@ SettingsController::~SettingsController()
         if (m_rulesPage->model())
             m_rulesPage->model()->refreshLabels();
     }
+
+    // Drop the registry's borrow of the template store, the same posture the
+    // lookups above take: the injection is a raw pointer with no owner-side
+    // notification, so anything reaching the registry during the remainder of
+    // teardown must find it unwired rather than pointing at a store that is
+    // about to go. The declaration order in the header already outlives the
+    // registry; this makes the contract explicit at the one injection site.
+    if (m_localLayoutManager)
+        m_localLayoutManager->setScrollingTemplateStore(nullptr);
 }
 
 SettingsController::SettingsController(QObject* parent)
@@ -249,7 +352,11 @@ SettingsController::SettingsController(QObject* parent)
     // same across daemon/editor/settings. Adding a new engine library
     // doesn't require editing this file unless the engine demands a
     // service the KCM doesn't already publish.
-    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
+    m_localTemplateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
+    m_localTemplateStore->loadTemplates();
+    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get(),
+                                    m_localTemplateStore.get());
+    m_localLayoutManager->setScrollingTemplateStore(m_localTemplateStore.get());
 
     // Begin watching rules.json for external writes. Complements the
     // daemon's rulesChanged D-Bus signal (reloadLocalRuleStore) so the
@@ -378,6 +485,12 @@ SettingsController::SettingsController(QObject* parent)
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
         Q_EMIT daemonRunningChanged();
         if (m_daemonController.isRunning()) {
+            // The freshly started daemon has just read the current rendering
+            // config, so the General page's "restart required" banner must
+            // stop comparing against the values this app started with.
+            if (m_generalPage) {
+                m_generalPage->rebaselineStartupSnapshots();
+            }
             // Daemon just came online — reload all D-Bus-dependent data.
             // scheduleLayoutLoad() and ScreenHelper::refreshScreens() emit their
             // own NOTIFY (layoutsChanged / screensChanged). refreshVirtualDesktops
@@ -459,6 +572,11 @@ SettingsController::SettingsController(QObject* parent)
     wirePerScreenOverrideSignal(&Settings::perScreenAutotileSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenSnappingSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenZoneSelectorSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenScrollingSettingsChanged);
+
+    // An external config reload parks while the user has unsaved edits, so it
+    // drains on the same signal the dirty tracking above emits.
+    connect(this, &SettingsController::dirtyPagesChanged, this, &SettingsController::maybeDrainPendingExternalReload);
 
     // Editor + fill-on-drop settings lack Q_PROPERTY on Settings, so the
     // meta-object loop above misses them. EditorPageController forwards each
@@ -466,13 +584,14 @@ SettingsController::SettingsController(QObject* parent)
     m_editorPage = new EditorPageController(m_settings, this);
     connect(m_editorPage, &EditorPageController::changed, this, &SettingsController::onSettingsPropertyChanged);
 
-    // Snapping→Behavior + Tiling→Behavior page sub-controllers. Their
+    // Snapping→Behavior + Tiling→Behavior + Scrolling→Window page sub-controllers. Their
     // underlying settings ARE Q_PROPERTY on Settings, so the meta-object
     // loop above already wires them to onSettingsPropertyChanged(); the
     // sub-controllers only provide the QML-facing forwarders + storage/QML
     // trigger-list conversion.
     m_snappingBehaviorPage = new SnappingBehaviorController(m_settings, this);
     m_tilingBehaviorPage = new TilingBehaviorController(m_settings, this);
+    m_scrollingBehaviorPage = new ScrollingBehaviorController(m_settings, this);
 
     // Snapping→Zone Selector page sub-controller. Pure CONSTANT bounds
     // facade over ConfigDefaults — no Settings wiring required.
@@ -723,10 +842,13 @@ SettingsController::SettingsController(QObject* parent)
         }
         return zoneId;
     });
-    // SettingsController::layouts() is the union of snapping layouts
-    // (UUID-keyed) and autotile entries (algorithm-token-keyed via the
-    // "autotile:<token>" or bare-token shape PhosphorTiles ships) — one
-    // resolver lambda is sufficient. The typed setters below are about
+    // SettingsController::layouts() is the union of three id families:
+    // snapping layouts (UUID-keyed), autotile entries (algorithm-token-keyed
+    // via the "autotile:<token>" or bare-token shape PhosphorTiles ships), and
+    // native scrolling templates (UUID-keyed in their own namespace, flagged
+    // isScrollingTemplate). All three are looked up by the same raw id key, so
+    // one resolver lambda is sufficient — the rules side strips the
+    // "scrolling:" prefix before calling in. The typed setters below are about
     // CONTRACT clarity at the RuleController API surface so a
     // future caller can wire a more restrictive snapping-only lookup
     // without also constraining the tiling resolver.
@@ -805,7 +927,6 @@ SettingsController::SettingsController(QObject* parent)
             m_rulesPage->model()->refreshLabels();
         }
     };
-    connect(this, &SettingsController::dirtyPagesChanged, this, &SettingsController::maybeDrainPendingExternalReload);
     connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
     connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);
@@ -917,10 +1038,9 @@ SettingsController::SettingsController(QObject* parent)
     // itself — see its constructor — so no SettingsController-side plumbing
     // is needed here.)
 
-    // Load dismissed update version from app-local settings
+    // Load the last-seen What's New version from app-local settings
     {
         QSettings appSettings;
-        m_dismissedUpdateVersion = appSettings.value(ConfigDefaults::settingsAppDismissedUpdateVersionKey()).toString();
         m_lastSeenWhatsNewVersion =
             appSettings.value(ConfigDefaults::settingsAppLastSeenWhatsNewVersionKey()).toString();
     }
@@ -945,8 +1065,27 @@ SettingsController::SettingsController(QObject* parent)
             } else {
                 releases = doc.object().value(QLatin1String("releases")).toArray();
             }
+            // Only entries for THIS build or older are consumed: whatsnew.json
+            // gains the next release's entry while it is still unreleased, and
+            // without the clamp a user opening What's New on the current build
+            // would both SEE the unreleased entry and get it stamped as seen,
+            // so the badge never fires when that release actually ships. An
+            // unparsable app version fails open (no filtering).
+            // VERSION_STRING, not applicationVersion(): the latter is only
+            // set by the settings app's own main(); a host that skips
+            // setApplicationVersion would fail the clamp open, let the
+            // unreleased entry through, AND let markWhatsNewSeen stamp it —
+            // exactly the badge-never-fires bug the clamp prevents. An
+            // unparsable VERSION_STRING (impossible for a release build)
+            // fails open: no filtering, and the stamp risk returns with it.
+            const QVersionNumber appVersion = QVersionNumber::fromString(PlasmaZones::VERSION_STRING);
             for (const auto& entry : releases) {
                 const auto obj = entry.toObject();
+                const QVersionNumber entryVersion =
+                    QVersionNumber::fromString(obj.value(QLatin1String("version")).toString());
+                if (!appVersion.isNull() && !entryVersion.isNull() && entryVersion > appVersion) {
+                    continue;
+                }
                 QVariantMap release;
                 release[QStringLiteral("version")] = obj.value(QLatin1String("version")).toString();
                 release[QStringLiteral("date")] = obj.value(QLatin1String("date")).toString();
@@ -981,12 +1120,26 @@ SettingsController::SettingsController(QObject* parent)
     scheduleLayoutLoad();
     refreshVirtualDesktops();
     refreshActivities();
-    m_updateChecker.checkForUpdates();
 }
 
 SnappingZonesController* SettingsController::snappingZonesPage() const
 {
     return m_snappingZonesPage;
+}
+
+SnappingBehaviorController* SettingsController::snappingBehaviorPage() const
+{
+    return m_snappingBehaviorPage;
+}
+
+TilingBehaviorController* SettingsController::tilingBehaviorPage() const
+{
+    return m_tilingBehaviorPage;
+}
+
+ScrollingBehaviorController* SettingsController::scrollingBehaviorPage() const
+{
+    return m_scrollingBehaviorPage;
 }
 
 WindowAppearanceController* SettingsController::windowAppearancePage() const

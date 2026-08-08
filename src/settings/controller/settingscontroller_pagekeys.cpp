@@ -34,11 +34,12 @@ OrderingPageKind orderingPageKind(const QString& page)
     return OrderingPageKind::None;
 }
 
-// The two Quick Shortcuts pages. Their editable state is the per-mode staged
+// The three Quick Shortcuts pages. Their editable state is the per-mode staged
 // quick-slot layout assignments in StagingService (daemon-backed).
 bool isShortcutsPage(const QString& page)
 {
-    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts");
+    return page == QLatin1String("snapping-shortcuts") || page == QLatin1String("tiling-shortcuts")
+        || page == QLatin1String("scrolling-shortcuts");
 }
 
 // Every animation leaf shares the single AnimationsPageController staging domain

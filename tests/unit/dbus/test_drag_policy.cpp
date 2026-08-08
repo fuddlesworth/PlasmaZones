@@ -10,16 +10,22 @@
  * m_cachedZoneSelectorEnabled caches that went stale after every settings
  * reload — see discussion #310) and into a daemon-side pure function.
  *
- * This test pins the function's behavior against every combination of the
- * four inputs that can change routing:
+ * This test pins the function's behavior against the inputs that can
+ * change routing:
  *
- *   (snap_enabled, screen_is_autotile, context_disabled,
+ *   (snap_enabled, screen_is_autotile, screen_is_scrolling,
+ *    window_tracked_by_scroll, context_disabled, reorder_mode,
  *    active_layout_suppressed)
+ *
+ * reorder_mode is the RESOLVED bool computeDragPolicy takes. The function that
+ * produces it, WindowDragAdaptor::resolveReorderMode, is covered here too (see
+ * the reorderMode_* slots): its own precedence is context rule → global
+ * setting, and the two are pinned separately from the routing table below.
  *     → PhosphorProtocol::DragPolicy.bypassReason + flags
  *
  * Precedence (first match wins, strongest disable first):
- *   context_disabled → autotile_screen → snapping_disabled →
- *   layout_suppressed → canonical_snap
+ *   context_disabled → autotile_screen → scrolling_screen →
+ *   snapping_disabled → layout_suppressed → canonical_snap
  *
  * The precedence order is load-bearing — the log forensics on #310 showed
  * drags flip-flopping for tens of seconds after a settings reload because
@@ -30,17 +36,31 @@
 
 #include <QTest>
 #include <QCoreApplication>
+#include <QDir>
 #include <QObject>
+#include <QUuid>
+#include <memory>
 
 #include <PhosphorContext/IContextResolver.h>
+#include <PhosphorRules/MatchExpression.h>
+#include <PhosphorRules/MatchTypes.h>
+#include <PhosphorRules/Rule.h>
+#include <PhosphorRules/RuleAction.h>
+#include <PhosphorRules/RuleStore.h>
+#include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configdefaults.h"
+#include "config/configkeys.h"
 #include "helpers/AutotileTestHelpers.h"
+#include "helpers/IsolatedConfigGuard.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 
 #include "helpers/StubSettings.h"
 
 using namespace PlasmaZones;
 using namespace PhosphorTileEngine;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 namespace {
 
@@ -153,6 +173,38 @@ void seedTrackedWindow(AutotileEngine& engine, const QString& windowId, const QS
     QCoreApplication::processEvents();
 }
 
+/// Isolated rules file + a LayoutRegistry borrowing that store — the minimum
+/// needed for the context cascade resolveReorderMode consults. Mirrors
+/// RuleCascadeFixture::makeRegistryFixture; kept local so this suite does not
+/// depend on the core test tree's fixture header.
+struct RuleFixture
+{
+    RuleFixture()
+        : guard(std::make_unique<IsolatedConfigGuard>())
+        , store(std::make_unique<PhosphorRules::RuleStore>(ConfigDefaults::rulesFilePath()))
+        , registry(std::make_unique<PhosphorZones::LayoutRegistry>(store.get(), ConfigKeys::layoutsSubdir()))
+    {
+        const QString layoutDir = guard->dataPath() + QLatin1Char('/') + ConfigKeys::layoutsSubdir();
+        QDir().mkpath(layoutDir);
+        registry->setLayoutDirectory(layoutDir);
+    }
+
+    std::unique_ptr<IsolatedConfigGuard> guard;
+    std::unique_ptr<PhosphorRules::RuleStore> store;
+    std::unique_ptr<PhosphorZones::LayoutRegistry> registry;
+};
+
+/// Real ScrollEngine with null deps (the headless pattern the router test
+/// uses); claims @p screenId when @p screenIsScrolling.
+std::unique_ptr<PhosphorScrollEngine::ScrollEngine> makeScrollEngine(bool screenIsScrolling, const QString& screenId)
+{
+    auto engine = std::make_unique<PhosphorScrollEngine::ScrollEngine>(nullptr, nullptr);
+    if (screenIsScrolling) {
+        engine->setActiveScreens(QSet<QString>{screenId});
+    }
+    return engine;
+}
+
 } // namespace
 
 class TestDragPolicy : public QObject
@@ -174,8 +226,9 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("DP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/false);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
         QVERIFY(p.streamDragMoved);
@@ -193,7 +246,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     // Autotile screen — engine owns placement, plugin bypasses the snap
     // path and (later in the drag flow) applies handleDragToFloat directly.
-    // bypassReason = "autotile_screen". Policy captures geometry so the
+    // bypassReason = EngineOwnedScreen. Policy captures geometry so the
     // free-floating size can be restored on unfloat.
     // ─────────────────────────────────────────────────────────────────────
     void autotileScreen_bypassAutotile()
@@ -204,26 +257,317 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/false);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.grabKeyboard);
         QVERIFY(p.captureGeometry);
         // No windowOpened flowed through the engine, so isWindowTracked()
         // returns false and immediateFloatOnStart stays false. The
-        // "tracked window → true" path is exercised indirectly by
-        // integration tests that actually tile windows.
+        // "tracked window → true" path has NO coverage anywhere: the
+        // integration tests this once pointed at do not exist. Worth adding
+        // when someone next touches the policy — it is the arm that decides
+        // whether an autotile drag floats the window on the first tick.
         QVERIFY(!p.immediateFloatOnStart);
         // AutotileScreen bypass requires non-empty screenId per the validator.
         QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Scrolling screen — the scrolling engine owns placement, so the drag
+    // takes the same engine bypass as autotile instead of falling through
+    // to the snap pipeline. The scroll branch honours reorderMode exactly
+    // as the autotile branch does (the caller resolves it per screen: the
+    // AlwaysActive sentinel for scrolling, the DragBehavior cascade for
+    // autotile): this slot pins the reorderMode=false arm (tracked window
+    // floats immediately) and scrollingScreen_reorderModeClearsImmediateFloat
+    // pins the true arm. Uses the REAL ScrollEngine so the branch is
+    // exercised against the production isActiveOnScreen / isWindowTracked
+    // implementations, not a stand-in.
+    // ─────────────────────────────────────────────────────────────────────
+    void scrollingScreen_bypassesSnapPath()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        settings.m_dragBehavior = AutotileDragBehavior::Reorder;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+        scroll->windowOpened(QStringLiteral("win-1"), QStringLiteral("HP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        // reorderMode is resolved PER SCREEN by the caller
+        // (effectiveDragReorderModeFor): for a scrolling screen it is the
+        // AlwaysActive sentinel in the SCROLLING trigger list, never the
+        // autotile DragBehavior setting — so the autotile Reorder setting
+        // above must not leak in here, and this call passes false.
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
+            /*reorderMode=*/false, /*activeLayoutSuppressed=*/false);
+
+        // Both tiling-family engines report the SAME bypass reason: the value
+        // means "a tiling-family engine owns this screen", and its
+        // EngineOwnedScreen enumerator's name predates the scroll engine (it
+        // was spelled "autotile_screen" on the wire). The branches
+        // are told apart by the policy FIELDS, not by this token.
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
+        QVERIFY(!p.streamDragMoved);
+        QVERIFY(!p.showOverlay);
+        QVERIFY(!p.grabKeyboard);
+        QVERIFY(p.captureGeometry);
+        // Without reorder mode a tracked window floats immediately.
+        QVERIFY(p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // Scroll branch, reorder mode (the AlwaysActive sentinel in the scrolling
+    // drag-insert trigger list): the strip runs a drag-insert preview, so the
+    // effect must NOT float the tile being reordered — the same contract as
+    // the autotile Reorder case.
+    void scrollingScreen_reorderModeClearsImmediateFloat()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+        scroll->windowOpened(QStringLiteral("win-1"), QStringLiteral("HP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
+            /*reorderMode=*/true, /*activeLayoutSuppressed=*/false);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
+        QVERIFY(p.captureGeometry);
+        QVERIFY(!p.immediateFloatOnStart);
+        // ...and it GRABS THE KEYBOARD, which every other engine-owned arm
+        // does not. Always-on re-insert is the one configuration with no other
+        // way to abandon a re-insert mid-drag: hold mode cancels the preview
+        // when the trigger is released, but always-on forces insertHeld true
+        // on every tick, so the cancel arm is unreachable and Escape is the
+        // only exit. Without the grab Escape reaches KWin's MoveResizeFilter
+        // and aborts the whole move instead of just the re-insert.
+        QVERIFY2(p.grabKeyboard, "always-on re-insert must grab so Escape can cancel the preview, not the move");
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // Scroll branch, UNTRACKED window: still bypasses the snap path (the
+    // screen belongs to the strip) but must not pre-float a window the
+    // engine does not manage.
+    void scrollingScreen_untrackedWindowDoesNotPreFloat()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+
+        // reorderMode=false so the isWindowTracked lookup genuinely runs —
+        // under true the branch short-circuits before the lookup and this
+        // slot could not fail for the reason its name states.
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-untracked"), QStringLiteral("HP-1"), &resolver,
+            /*reorderMode=*/false, /*activeLayoutSuppressed=*/false);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
+        QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // The FALSE arm of the scroll branch's isActiveOnScreen guard: a
+    // non-null scroll engine that does NOT claim the screen must leave the
+    // canonical snap pipeline untouched — deleting the guard conjunct
+    // would bypass snapping for every session with a scroll engine.
+    void scrollEngineNotClaiming_keepsSnapPath()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/false, QStringLiteral("HP-1"));
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
+        QVERIFY(p.streamDragMoved);
+        QVERIFY(p.showOverlay);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // Scroll branch, EMPTY windowId (the compositor reports a drag it cannot
+    // name — e.g. a window that vanished between the grab and the call): a
+    // plain behavioural pin that the bypass stands, geometry is captured,
+    // and no pre-float is requested. (Deliberately NOT a guard-mutation
+    // discriminator: isWindowTracked(QString()) is false with or without
+    // the !isEmpty() conjunct, so no fixture can make this slot tell the
+    // two apart; the tracked-window sibling above carries the real
+    // asymmetry.)
+    void scrollingScreen_emptyWindowIdDoesNotPreFloat()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+        scroll->windowOpened(QStringLiteral("win-1"), QStringLiteral("HP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QString(), QStringLiteral("HP-1"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
+        QVERIFY(p.captureGeometry);
+        QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // resolveReorderMode: the value beginDrag feeds computeDragPolicy as
+    // `reorderMode`. Precedence is context rule → global setting, and an
+    // empty screen id has no context to resolve a rule against.
+    // ─────────────────────────────────────────────────────────────────────
+    void reorderMode_followsGlobalSettingWithoutRule()
+    {
+        PolicyStubSettings settings;
+        RuleFixture f;
+
+        settings.m_dragBehavior = AutotileDragBehavior::Reorder;
+        QVERIFY(WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-1")));
+        settings.m_dragBehavior = AutotileDragBehavior::Float;
+        QVERIFY(!WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-1")));
+
+        // No registry at all (pre-wiring) is the same fallback.
+        settings.m_dragBehavior = AutotileDragBehavior::Reorder;
+        QVERIFY(WindowDragAdaptor::resolveReorderMode(nullptr, &settings, QStringLiteral("DP-1")));
+        // No settings either → not reorder, rather than a null dereference.
+        QVERIFY(!WindowDragAdaptor::resolveReorderMode(nullptr, nullptr, QStringLiteral("DP-1")));
+    }
+
+    void reorderMode_contextRuleBeatsSetting()
+    {
+        PolicyStubSettings settings;
+        settings.m_dragBehavior = AutotileDragBehavior::Float; // the rule must override this
+        RuleFixture f;
+
+        PhosphorRules::RuleAction behavior;
+        behavior.type = QString(PhosphorRules::ActionType::SetDragBehavior);
+        behavior.params.insert(QString(PhosphorRules::ActionParam::Value),
+                               QString(PhosphorRules::DragBehaviorToken::Reorder));
+        PhosphorRules::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("reorder on DP-1");
+        rule.enabled = true;
+        rule.priority = 100;
+        rule.match = PhosphorRules::MatchExpression::makeLeaf(PhosphorRules::Field::ScreenId,
+                                                              PhosphorRules::Operator::Equals, QStringLiteral("DP-1"));
+        rule.actions = {behavior};
+        QVERIFY(f.store->setAllRules({rule}));
+
+        QVERIFY2(WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-1")),
+                 "a matched SetDragBehavior rule must beat the global setting");
+        // The rule is screen-pinned, so an unmatched screen keeps the setting…
+        QVERIFY(!WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-2")));
+        // …and an empty screen id has no context to match against.
+        QVERIFY(!WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QString()));
+
+        // Re-run the two unmatched arms against the OPPOSITE global. The rule
+        // still only matches DP-1, so both must now follow the global and
+        // answer true. Without this the arms above are satisfied just as well
+        // by a resolveReorderMode that always returns false — they would not
+        // distinguish "kept the setting" from "answered no".
+        settings.m_dragBehavior = AutotileDragBehavior::Reorder;
+        QVERIFY2(WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QStringLiteral("DP-2")),
+                 "an unmatched screen must follow the global setting, not the DP-1 rule");
+        QVERIFY2(WindowDragAdaptor::resolveReorderMode(f.registry.get(), &settings, QString()),
+                 "an empty screen id has no rule context, so the global setting stands");
+    }
+
+    // Empty screen id falls through to the snap check even while the
+    // scroll engine claims a REAL screen.
+    void scrollEngineClaiming_emptyScreenIdFallsThrough()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QString(), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // The context-disable cascade beats the scroll branch just as it beats
+    // the autotile one (contextDisabled_overridesAutotile is the twin).
+    void contextDisabled_overridesScrolling()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        resolver.m_disabled = true;
+        settings.m_snapEnabled = true;
+        auto autotile = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("HP-1"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-1"));
+        scroll->windowOpened(QStringLiteral("win-1"), QStringLiteral("HP-1"), 0, 0);
+        QCoreApplication::processEvents();
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
+            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::ContextDisabled);
+        QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Both engines claim the screen (transition artefact): the autotile
+    // branch is consulted first, so its reorder-mode behaviour wins — in
+    // Reorder mode a tracked autotile drag keeps the window tiled for the
+    // drag-insert preview (no immediate float), unlike the scroll branch.
+    // ─────────────────────────────────────────────────────────────────────
+    void bothEnginesClaim_autotileBranchWins()
+    {
+        PolicyStubSettings settings;
+        FakeContextResolver resolver;
+        settings.m_snapEnabled = true;
+        settings.m_dragBehavior = AutotileDragBehavior::Float;
+        auto autotile = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-2"));
+        auto scroll = makeScrollEngine(/*screenIsScrolling=*/true, QStringLiteral("HP-2"));
+        // Tracked in the AUTOTILE engine ONLY: under Float/no-reorder the
+        // autotile arm answers immediateFloatOnStart from ITS OWN
+        // isWindowTracked (true here) while the scroll arm would answer from
+        // the strip's (false — the window was never opened there). The
+        // assertion below can therefore only pass when the autotile branch
+        // ran, which is what this slot's name promises; under the previous
+        // reorderMode=true input both arms produced identical fields and
+        // swapping the branches was invisible.
+        seedTrackedWindow(*autotile, QStringLiteral("win-2"), QStringLiteral("HP-2"));
+
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            &settings, autotile.get(), scroll.get(), QStringLiteral("win-2"), QStringLiteral("HP-2"), &resolver,
+            /*reorderMode=*/false, /*activeLayoutSuppressed=*/false);
+
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
+        // Autotile-tracked → the autotile arm floats it on start; the scroll
+        // arm (untracked there) would have left this false.
+        QVERIFY(p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Snapping disabled on a normal screen. Dead drag — the user
-    // configured snap mode off. bypassReason = "snapping_disabled".
+    // configured snap mode off. bypassReason = SnappingDisabled.
     // Every flag false.
     // ─────────────────────────────────────────────────────────────────────
     void snapDisabled_onNormalScreen_bypass()
@@ -234,8 +578,9 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("DP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/false);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::SnappingDisabled);
         QVERIFY(!p.streamDragMoved);
@@ -251,7 +596,7 @@ private Q_SLOTS:
     // suppressed, screen has no layout of its own). Dead drag — without the
     // gate the drag path's layout resolution falls back to the global
     // default layout and snaps windows into zones the screen was never
-    // assigned (#724). bypassReason = "layout_suppressed", every flag false.
+    // assigned (#724). bypassReason = LayoutSuppressed, every flag false.
     // ─────────────────────────────────────────────────────────────────────
     void layoutSuppressed_onNormalScreen_bypass()
     {
@@ -261,8 +606,9 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/true);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("DP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/true);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::LayoutSuppressed);
         QVERIFY(!p.streamDragMoved);
@@ -291,10 +637,11 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/true);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/true);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(p.captureGeometry);
         QVERIFY(p.validationError().isEmpty());
     }
@@ -314,8 +661,9 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/true);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("DP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/true);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::ContextDisabled);
         QVERIFY(p.validationError().isEmpty());
@@ -333,8 +681,9 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/true);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("DP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/true);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::SnappingDisabled);
         QVERIFY(p.validationError().isEmpty());
@@ -343,7 +692,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     // Snapping disabled BUT the drag is on an autotile screen. Autotile
     // takes precedence — the engine still owns placement regardless of the
-    // snap-mode setting. bypassReason = "autotile_screen".
+    // snap-mode setting. bypassReason = EngineOwnedScreen.
     //
     // This is the exact scenario from discussion #310: reporter had
     // snapping off and autotile on both monitors. Drags on autotile
@@ -357,10 +706,11 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/false);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         QVERIFY(p.captureGeometry);
         QVERIFY(p.validationError().isEmpty());
     }
@@ -368,7 +718,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     // Monitor excluded in display settings. Dead drag regardless of snap
     // or autotile state — user told us to leave this monitor alone.
-    // bypassReason = "context_disabled".
+    // bypassReason = ContextDisabled.
     // ─────────────────────────────────────────────────────────────────────
     void contextDisabled_overridesAutotile()
     {
@@ -385,8 +735,9 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/false);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::ContextDisabled);
         QVERIFY(!p.streamDragMoved);
@@ -409,8 +760,9 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/false, QStringLiteral("DP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("DP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("DP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/false);
 
         // Context-disabled is checked before snapping_disabled — the reason
         // is stable at ContextDisabled even though either would produce
@@ -430,9 +782,9 @@ private Q_SLOTS:
         // Defensive shutdown path — every dep is null, including the
         // resolver. computeDragPolicy must still produce a canonical
         // snap policy without crashing.
-        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(nullptr, nullptr, QStringLiteral("win-1"),
-                                                                              QStringLiteral("DP-1"), nullptr, false,
-                                                                              /*activeLayoutSuppressed=*/false);
+        PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
+            nullptr, nullptr, nullptr, QStringLiteral("win-1"), QStringLiteral("DP-1"), nullptr, false,
+            /*activeLayoutSuppressed=*/false);
 
         QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::None);
         QVERIFY(p.streamDragMoved);
@@ -452,7 +804,7 @@ private Q_SLOTS:
         auto engine = makeEngine(/*screenIsAutotile=*/true, QStringLiteral("HP-1"));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QString(), &resolver,
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QString(), &resolver,
             settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
 
         // Autotile check is skipped for empty screenId, so snapping_disabled wins.
@@ -466,7 +818,7 @@ private Q_SLOTS:
     // AutotileDragBehavior::Reorder on an autotile screen — the daemon owns
     // drag-insert preview for tile swapping, so the plugin must NOT float
     // the window on drag-start. Policy still uses bypassReason =
-    // "autotile_screen" but immediateFloatOnStart must be cleared even
+    // EngineOwnedScreen but immediateFloatOnStart must be cleared even
     // though the window is tracked, because the synchronous fast path and
     // the async reply handler both key on this flag to skip
     // handleDragToFloat.
@@ -486,14 +838,20 @@ private Q_SLOTS:
         QVERIFY(engine->isWindowTracked(QStringLiteral("win-1")));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/false);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         // The window IS tracked, yet Reorder mode must leave immediateFloatOnStart
         // cleared.
         QVERIFY(!p.immediateFloatOnStart);
         QVERIFY(p.captureGeometry);
+        // Reorder grabs the keyboard, the autotile twin of the scrolling
+        // always-on case: the drag runs a live preview with no trigger to
+        // release, so Escape is the only way to abandon the reorder, and
+        // without a grab it aborts the whole move instead.
+        QVERIFY2(p.grabKeyboard, "reorder mode must grab so Escape can cancel the preview, not the move");
         QVERIFY(p.validationError().isEmpty());
     }
 
@@ -516,10 +874,11 @@ private Q_SLOTS:
         QVERIFY(engine->isWindowTracked(QStringLiteral("win-1")));
 
         PhosphorProtocol::DragPolicy p = WindowDragAdaptor::computeDragPolicy(
-            &settings, engine.get(), QStringLiteral("win-1"), QStringLiteral("HP-1"), &resolver,
-            settings.m_dragBehavior == AutotileDragBehavior::Reorder, /*activeLayoutSuppressed=*/false);
+            &settings, engine.get(), /*scrollEngine=*/nullptr, QStringLiteral("win-1"), QStringLiteral("HP-1"),
+            &resolver, settings.m_dragBehavior == AutotileDragBehavior::Reorder,
+            /*activeLayoutSuppressed=*/false);
 
-        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::AutotileScreen);
+        QCOMPARE(p.bypassReason, PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
         // Float mode + tracked window → immediateFloatOnStart set. This is the
         // behavior the paired reorder test proves is suppressed under Reorder.
         QVERIFY(p.immediateFloatOnStart);
@@ -560,7 +919,7 @@ private Q_SLOTS:
 
         // Bypass-reason change still flips (regression guard).
         PhosphorProtocol::DragPolicy diffReason = base;
-        diffReason.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
+        diffReason.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         QVERIFY(!(diffReason == base));
 
         // Every routing flag participates — these cases exist so a future

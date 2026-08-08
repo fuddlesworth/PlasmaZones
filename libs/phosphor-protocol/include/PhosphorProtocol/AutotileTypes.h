@@ -12,7 +12,7 @@
 
 namespace PhosphorProtocol {
 
-/// D-Bus struct for autotile tile requests: (siiiissbbs)
+/// D-Bus struct for autotile tile requests: (siiiissbbssiiib)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -27,6 +27,56 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// Overlap-layout stacking direction: "firstOnTop" or "lastOnTop".
     /// Empty for non-overlap layouts (the effect leaves z-order alone).
     QString stacking;
+    /// Scrolling mode: which screen edge this window's motion is anchored to,
+    /// "left" or "right". Empty for every other placement.
+    ///
+    /// This exists because a scrolling strip's off-viewport columns have to be
+    /// committed somewhere, and where they are committed must NOT decide which
+    /// way they appear to move. Parking a column just past the edge it left by
+    /// encodes the direction in the position, which forces a choice between a
+    /// believable animation and keeping the rect off a neighbouring output —
+    /// on a horizontally-adjacent monitor pair those two demands are in direct
+    /// conflict and the position can only satisfy one. Carrying the edge as
+    /// data lets the engine park wherever is safe while the effect still
+    /// animates from the side the user scrolled from.
+    QString scrollEdge;
+    /// Scrolling mode: how far the whole VIEW slid since the last batch, in
+    /// logical pixels, for the screen this entry belongs to. Zero for every
+    /// other placement, and zero within scrolling for a window the view does
+    /// not carry.
+    ///
+    /// It is a property of the batch rather than of the window, carried
+    /// per-entry so a batch spanning several screens stays unambiguous. The
+    /// effect springs it ONCE per output and lets every carrying window ride
+    /// it, which is what makes the strip move as one object instead of as N
+    /// windows that each started their own spring a moment apart.
+    ///
+    /// Zero means "not carried". A parked column is the case that matters:
+    /// its committed rect is off below the union of all outputs, so no
+    /// translation puts it back on screen, and it keeps the edge-anchored
+    /// slide-out built from `scrollEdge` instead.
+    int viewDeltaX = 0;
+    /// Scrolling strip: where this window really sits on the strip, when that
+    /// differs from the rect committed above. Only a PARKED column sets it.
+    ///
+    /// A parked column is committed below the union of all outputs, because a
+    /// rect is the only clip every present path honours and an off-view column
+    /// must not land on a neighbouring monitor. But the park is not where the
+    /// column IS on the strip, and while the view slides the column has to be
+    /// SEEN travelling past — otherwise the columns whizzing by during a fast
+    /// scroll are exactly the ones that have parked, and the screen goes empty
+    /// instead of showing the strip move.
+    ///
+    /// So the two answers are separated: the rect above stays the safe commit,
+    /// and this is the position to paint at. The compositor translates by the
+    /// difference and then adds the view offset on top, which puts the column
+    /// back in lockstep with the rest of the strip.
+    ///
+    /// `hasVisualPos` rather than a zero sentinel: (0, 0) is a legal position
+    /// on a strip whose screen starts at the origin.
+    int visualX = 0;
+    int visualY = 0;
+    bool hasVisualPos = false;
 
     QRect toRect() const
     {
@@ -34,8 +84,13 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     }
 
     /// Returns empty QString if valid, or a human-readable description of
-    /// the invariant violation. Call at every unmarshal site to detect a
-    /// garbled payload before acting on it.
+    /// the invariant violation. Call at every unmarshal site for THIS type to
+    /// detect a garbled payload before acting on it.
+    ///
+    /// Not every wire type in this header has one — AlgorithmInfoEntry and
+    /// PreTileGeometryEntry are unmarshalled unvalidated. That is a gap rather
+    /// than a policy: the types that carry a validator are the ones whose
+    /// garbled values were seen to do damage.
     QString validationError() const;
 };
 

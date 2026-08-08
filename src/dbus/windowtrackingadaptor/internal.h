@@ -20,9 +20,84 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorRules/WindowQuery.h>
 #include <PhosphorScreens/ScreenIdentity.h>
+#include "core/platform/logging.h"
 
 namespace PlasmaZones {
 namespace WindowTrackingInternal {
+
+/// Release @p windowId from @p source (when given and distinct from the
+/// destination) and receive it into @p dest, VERIFYING adoption.
+/// handoffReceive can silently refuse (screen no longer in the engine's set,
+/// no state, duplicate, insert failure), and by then the source has already
+/// released — an unguarded release→receive strands the window tracked by NO
+/// engine. On refusal this re-homes the window into the source engine on
+/// @p recoverScreenId / @p recoverDesktop (when available) so it stays
+/// managed; pass the window's SOURCE desktop for a cross-desktop crossing or
+/// the recovery lands on the source screen's current desktop instead.
+/// Returns true when the destination adopted the window.
+///
+/// Pre-tracked destination (source == dest is the common shape: a floating
+/// window moving between two screens of the SAME mode): isWindowTracked
+/// answers true unconditionally there, so adoption is instead verified as
+/// "the tracked screen now matches the requested destination".
+///
+/// PRECONDITION for that pre-tracked test: an engine must record an accepted
+/// arrival under a screen id that screensMatch() equates with the ctx.toScreenId
+/// it was handed. screensMatch absorbs connector-name / EDID-id spelling and the
+/// "/vs:" virtual-screen suffix, but an engine that re-resolved the arrival onto
+/// a genuinely DIFFERENT screen id (say, redirecting to a fallback output) would
+/// read here as a refusal — this helper would then re-home a window the
+/// destination actually adopted. No engine does that today; one that starts to
+/// must report the id it stored, not silently redirect.
+inline bool guardedHandoff(::PhosphorEngine::IPlacementEngine* source, ::PhosphorEngine::IPlacementEngine* dest,
+                           ::PhosphorEngine::IPlacementEngine::HandoffContext ctx, const QString& recoverScreenId,
+                           int recoverDesktop = 0)
+{
+    const bool destPreTracked = dest->isWindowTracked(ctx.windowId);
+    // The source's OWN slot, snapshotted before the release wipes it. The
+    // incoming ctx.sourceZoneIds describe the DESTINATION landing (empty for
+    // a scrolling or autotile target), so a re-home that reused them would
+    // hand the source engine no zones — and a snap source receiving a
+    // non-floating arrival with no zones lands it as a plain FREE window,
+    // i.e. tracked by nobody. Re-homing with the window's real source zones
+    // restores it where it was.
+    QStringList sourceZoneIds;
+    if (source && source != dest) {
+        if (const auto captured = source->capturePlacement(ctx.windowId)) {
+            sourceZoneIds = captured->slotFor(source->engineId()).zoneIds;
+        }
+        source->handoffRelease(ctx.windowId);
+    }
+    dest->handoffReceive(ctx);
+    const bool adopted = destPreTracked
+        ? ::PhosphorScreens::ScreenIdentity::screensMatch(dest->screenForTrackedWindow(ctx.windowId), ctx.toScreenId)
+        : dest->isWindowTracked(ctx.windowId);
+    if (adopted) {
+        return true;
+    }
+    qCWarning(lcDbusWindow) << "guardedHandoff:" << dest->engineId() << "refused" << ctx.windowId;
+    if (source && source != dest && !recoverScreenId.isEmpty()) {
+        ::PhosphorEngine::IPlacementEngine::HandoffContext back = ctx;
+        back.toScreenId = recoverScreenId;
+        back.toDesktop = recoverDesktop;
+        back.fromEngineId = dest->engineId();
+        back.sourceZoneIds = sourceZoneIds;
+        source->handoffReceive(back);
+        if (source->isWindowTracked(ctx.windowId)) {
+            qCInfo(lcDbusWindow) << "guardedHandoff: re-homed" << ctx.windowId << "into" << source->engineId() << "on"
+                                 << recoverScreenId;
+        } else {
+            // Double refusal: the window is now tracked by NO engine. Loud,
+            // so the log distinguishes recovered from stranded.
+            qCWarning(lcDbusWindow) << "guardedHandoff: re-home REFUSED too -" << ctx.windowId
+                                    << "is tracked by no engine";
+        }
+    } else if (!destPreTracked) {
+        qCWarning(lcDbusWindow) << "guardedHandoff: no recovery available -" << ctx.windowId
+                                << "is tracked by no engine";
+    }
+    return false;
+}
 
 inline QJsonArray toJsonArray(const QStringList& list)
 {
@@ -103,11 +178,48 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // open-path Float / Restore / placement resolvers only. The effect's live
     // per-window query (ruleQueryFor) stamps ScreenId / Mode / ScreenOrientation, so
     // a rule pairing one of those with a window property resolves there but not on
-    // this path. ActiveLayout is populated only by the windowless context cascade
-    // (never by either per-window query), so it is context-scoped in practice —
-    // which is the primary use of all four of these fields anyway.
-    // Extended properties — optional→optional copy preserves engagement exactly,
-    // so a field the effect could not observe stays disengaged and inert here too.
+    // this path. Callers that DO know more pin what they know on top of the
+    // query this builds. Stamping ScreenId: placementZonesByRule,
+    // applyOpenDesktopRouting, applyOpenScreenRouting, applyOpenRoutingForTiling.
+    // Stamping ScreenId AND the derived Mode: shouldFloatByRule,
+    // scrollOpenRuleParams and shouldRestoreSizeOnUnsnap, all three of which
+    // resolve UNCACHED for that reason (resolveCached is keyed on windowId and
+    // rule revision alone, so a hit discards the freshly stamped query). Each
+    // is documented at its own site.
+    //
+    // KNOWN GAP, stated so it is not mistaken for a deliberate design: no
+    // resolveCached-path resolver stamps Mode. There are SIX resolveCached
+    // callers in rules.cpp — four stamp ScreenId (placementZonesByRule,
+    // applyOpenScreenRouting, applyOpenDesktopRouting,
+    // applyOpenRoutingForTiling) and two stamp nothing at all
+    // (shouldRestoreFloatedPosition, shouldRestoreToZoneOnLogin), relying on
+    // the ordering invariant that a stamper seeds the memo first. So a
+    // user-authored rule pairing `Mode == "scrolling"` (or tiling/snapping)
+    // with SnapToZone, RouteToScreen or RouteToDesktop cannot resolve
+    // correctly on the open path, even though the rules editor offers exactly
+    // that pairing. Closing the gap for the cached six means giving up their
+    // shared memo.
+    //
+    // BOTH POLARITIES FAIL, and they fail differently. A POSITIVE leaf on an
+    // unstamped field (`Mode Equals scrolling`) reads the engaged empty string
+    // and evaluates FALSE, so the rule is silently inert — it never fires. A
+    // NEGATED leaf (`None{Mode Equals scrolling}`, `None{ScreenId Equals X}`)
+    // matches precisely BECAUSE its inner leaf failed, so it INVERTS and the
+    // rule fires for EVERY window — the far worse half, and one the editor
+    // lets users author as a none-group. Neither is left to the empty-value
+    // coincidence: each resolver in rules.cpp passes a structural admission
+    // test (admitScreenStamped / admitScreenAndModeStamped) that drops any
+    // rule referencing a field that resolver does not stamp, mirroring the
+    // zones-layer predicate at seven sites in
+    // layoutregistry_contextresolve.cpp. The gap above is therefore about
+    // which rules can WIN, not about a negated rule wrongly firing.
+    //
+    // ActiveLayout is populated only by the windowless context cascade (never
+    // by either per-window query), so it is context-scoped in practice —
+    // which is the primary use of all four of these fields anyway. Extended
+    // properties: an optional→optional copy preserves engagement exactly, so
+    // a field the effect could not observe stays disengaged and inert here
+    // too.
     query.isMinimized = meta->isMinimized;
     query.isFullscreen = meta->isFullscreen;
     query.isSticky = meta->isSticky;
@@ -132,5 +244,28 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     query.captionNormal = meta->captionNormal;
     return query;
 }
+
+/// Keys of the QVariantMap seam between scrollOpenRuleParams (rules.cpp,
+/// producer) and the setOpenParamsResolver lambda (enginewiring.cpp,
+/// consumer). One namespace so a typo on either side is a compile error,
+/// not a silently dropped rule.
+namespace ScrollOpenKeys {
+inline QString widthFraction()
+{
+    return QStringLiteral("widthFraction");
+}
+inline QString tabbed()
+{
+    return QStringLiteral("tabbed");
+}
+inline QString consume()
+{
+    return QStringLiteral("consume");
+}
+inline QString heightFraction()
+{
+    return QStringLiteral("heightFraction");
+}
+} // namespace ScrollOpenKeys
 
 } // namespace PlasmaZones

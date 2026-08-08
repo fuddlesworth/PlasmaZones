@@ -272,12 +272,14 @@ QtObject {
         }
     }
 
-    // Both action editors use the rich `LayoutComboBox` — preview tile +
-    // category / aspect badges, same component the assignment pages use.
-    // `layoutFilter` separates the two streams: 0 = manual / snapping
-    // layouts, 1 = autotile algorithms. `showNoneOption: false` because
-    // the action either targets a layout or has no value (no implicit
-    // "Default" fallback inside a rule).
+    // The snapping-layout and tiling-algorithm action editors use the rich
+    // `LayoutComboBox` — preview tile + category / aspect badges, same
+    // component the assignment pages use. `layoutFilter` separates the two
+    // streams: 0 = manual / snapping layouts, 1 = autotile algorithms.
+    // `showNoneOption: false` because the action either targets a layout or
+    // has no value (no implicit "Default" fallback inside a rule). The
+    // scrolling-template editor below uses a plain combo instead, for the
+    // reason its own comment gives.
     property Component _snappingLayoutEditor: Component {
         LayoutComboBox {
             readonly property var _param: parent.modelData
@@ -288,6 +290,48 @@ QtObject {
             layoutFilter: 0
             showNoneOption: false
             showPreview: true
+            onActivated: function (index) {
+                row.actionEdited(row._withParam(_param.key, currentValue));
+            }
+        }
+    }
+
+    // Native scrolling-template picker for SetScrollingTemplate. A plain
+    // combo over the template family in the shared layouts model — the rich
+    // LayoutComboBox streams are keyed to manual/autotile categories, and a
+    // template row needs neither aspect badges nor category chips. A stored
+    // id whose template was deleted still surfaces verbatim.
+    property Component _scrollingTemplateEditor: Component {
+        WideComboBox {
+            id: templateCombo
+
+            readonly property var _param: parent.modelData
+            readonly property var _templates: {
+                let entries = [];
+                const all = (row.appSettings && row.appSettings.layouts) || [];
+                for (let i = 0; i < all.length; i++) {
+                    if (all[i].isScrollingTemplate === true)
+                        entries.push({
+                            "label": all[i].displayName,
+                            "id": all[i].id
+                        });
+                }
+                return entries;
+            }
+
+            model: _templates
+            textRole: "label"
+            valueRole: "id"
+            currentIndex: {
+                var target = row.action[_param.key] || "";
+                for (var i = 0; i < templateCombo._templates.length; ++i) {
+                    if (templateCombo._templates[i].id === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: currentIndex >= 0 ? currentText : (row.action[_param.key] || i18n("Choose a template…"))
+            Accessible.name: _param.label
             onActivated: function (index) {
                 row.actionEdited(row._withParam(_param.key, currentValue));
             }

@@ -322,6 +322,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="targetScreenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Destination screen the daemon migrated the window onto."/>
             </arg>
+            <arg name="sourceScreenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen the window is leaving, when the daemon knows it authoritatively at arm time. Empty means the daemon armed the marker before it touched the window's placement, and the compositor may take its own notified-screen record as the source."/>
+            </arg>
         </signal>
         <signal name="applyGeometriesBatch">
             <annotation name="org.gtk.GDBus.DocString" value="Daemon requests compositor to apply geometries for a batch of windows."/>

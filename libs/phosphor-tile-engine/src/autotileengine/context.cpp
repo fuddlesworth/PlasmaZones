@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -37,6 +27,18 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
+
+// Qt and std
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QScreen>
+#include <QTimer>
+#include <QVarLengthArray>
+#include <algorithm>
+#include <cmath>
 
 namespace PhosphorTileEngine {
 
@@ -65,7 +67,13 @@ bool AutotileEngine::isWindowTiled(const QString& rawWindowId) const
         return false;
     }
     const PhosphorTiles::TilingState* state = m_states.stateForKey(it.value());
-    return state && !state->isFloating(windowId);
+    // Membership is required, not just a live key: windowOpened keys the
+    // window BEFORE onWindowAdded can refuse it (shouldTileWindow false,
+    // max-windows cap), and isFloating() answers false for a window the
+    // state does not hold — without the containsWindow check a refused
+    // window reads as "tiled" forever and the engine-tiled predicate then
+    // refuses to record its free geometry (fails closed on a free window).
+    return state && state->containsWindow(windowId) && !state->isFloating(windowId);
 }
 
 bool AutotileEngine::isWindowFloatingInAutotile(const QString& rawWindowId) const
@@ -75,8 +83,9 @@ bool AutotileEngine::isWindowFloatingInAutotile(const QString& rawWindowId) cons
     if (it == m_states.windowKeys().constEnd()) {
         return false;
     }
+    // containsWindow for the same phantom-key reason as isWindowTiled.
     const PhosphorTiles::TilingState* state = m_states.stateForKey(it.value());
-    return state && state->isFloating(windowId);
+    return state && state->containsWindow(windowId) && state->isFloating(windowId);
 }
 
 QStringList AutotileEngine::allFloatingWindows() const
@@ -104,7 +113,7 @@ void AutotileEngine::rotateWindows(bool clockwise, const QString& screenId)
 void AutotileEngine::setCurrentDesktop(int desktop)
 {
     // The daemon pushes the initial desktop in start() BEFORE the first
-    // updateAutotileScreens(); that first push must NOT read as a switch — or
+    // updateEngineScreens(); that first push must NOT read as a switch — or
     // login with autotile enabled suppresses enabledChanged and the effect
     // treats the first autotileScreensChanged as a "desktop return", skipping
     // window notification to the daemon entirely. The tracker owns that
@@ -464,7 +473,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // hold a tile its open-time rule says it must not, and
                         // the containsWindow short-circuit on its re-announce
                         // means nothing later corrects it.
-                        if (!ts->isFloating(windowId) && insertShouldFloat(windowId)) {
+                        if (!ts->isFloating(windowId) && insertShouldFloat(windowId, screenId)) {
                             ts->setFloating(windowId, true);
                         }
                         // Same lifecycle hook every other insert site runs — a
@@ -515,9 +524,12 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // is no longer in the autotile set. States for other contexts are left
     // untouched here — by the time their desktop becomes current the screen is
     // already absent from m_autotileScreens, so this loop never sees them again;
-    // they are healed per-window (windowFocused / windowOpened migration) and
+    // they are healed per-window (windowFocused / windowOpened migration),
     // reaped wholesale by pruneStatesForDesktop / pruneStatesForActivities when
-    // their desktop or activity is destroyed.
+    // their desktop or activity is destroyed, and by
+    // pruneStatesForRemovedScreen when the OUTPUT itself is unplugged (the
+    // daemon calls it for all three engines; this sweep alone would leak
+    // sibling-context states for a removed monitor).
     m_states.removeStatesIf(
         [&](const TilingStateKey& key, PhosphorTiles::TilingState*) {
             return key.desktop == currentKeyForScreen(key.screenId).desktop
@@ -544,7 +556,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             m_userTunedMasterCount.remove(key);
         });
     // Clean up reverse-map entries for released windows BEFORE emitting the
-    // signal. Signal handlers (the daemon's windowsReleased lambda) check zone
+    // signal. Signal handlers (the daemon's handleEngineWindowsReleased) check zone
     // assignments and floating state — stale mappings would cause them to see
     // phantom candidates.
     for (const QString& windowId : std::as_const(releasedWindows)) {

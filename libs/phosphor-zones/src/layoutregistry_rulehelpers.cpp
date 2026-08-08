@@ -82,29 +82,98 @@ bool hasTilingAlgorithmAction(const PWR::Rule& rule)
     return false;
 }
 
+bool hasScrollingTemplateAction(const PWR::Rule& rule)
+{
+    for (const PWR::RuleAction& action : rule.actions) {
+        if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+namespace {
+/// The ONE definition of "assignment slot action". All three predicates below
+/// and the carry-over filter share it, so a new assignment slot (like the
+/// scrolling template) cannot be added to some of them and missed in others —
+/// exactly the drift that let carryOverNonAssignmentActions duplicate
+/// SetScrollingTemplate on every rebuild while the purity gates classified
+/// template rules as mixed.
+bool isAssignmentSlotAction(const PWR::RuleAction& action)
+{
+    return action.type == QLatin1String(PWR::ActionType::SetEngineMode)
+        || action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+        || action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)
+        || action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate);
+}
+} // namespace
+
 bool isPureAssignmentRule(const PWR::Rule& rule)
 {
-    // True when every action belongs to the three assignment slots
-    // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm). Used by
-    // the shape-based scan in findExactContextRule to refuse to claim a
-    // user-authored rule that carries non-assignment actions
-    // (SetOpacity, OverrideAnimation*, Float, Exclude, ...) — admitting
-    // such a rule would silently strip those actions through the
-    // assignment-rebuild path (upsertAssignmentRule, assignLayout,
-    // applyBatchAssignments) since makeAssignmentActions emits only the
-    // three slot actions. False on an empty action list as well — a
-    // context match with no actions is not an assignment rule.
+    // True when every action belongs to the four assignment slots
+    // (SetEngineMode / SetSnappingLayout / SetTilingAlgorithm /
+    // SetScrollingTemplate), i.e. the rule is a PURE assignment. False on an
+    // empty action list as well — a context match with no actions is not an
+    // assignment rule.
+    //
+    // NOT the claim predicate. findExactContextRule used to gate on this and
+    // now uses hasAnyAssignmentSlotAction, because the rebuild paths carry
+    // non-assignment actions across (carryOverNonAssignmentActions) and so no
+    // longer strip a mixed rule. The remaining users are the ones that need
+    // "pure" specifically: purgeLayoutIdFromAssignments' Shape-1 gate,
+    // and the two batch family DROPS, which spare a mixed rule so the rebuild
+    // can merge onto it rather than shadow it.
     if (rule.actions.isEmpty()) {
         return false;
     }
     for (const PWR::RuleAction& action : rule.actions) {
-        if (action.type != QLatin1String(PWR::ActionType::SetEngineMode)
-            && action.type != QLatin1String(PWR::ActionType::SetSnappingLayout)
-            && action.type != QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
+        if (!isAssignmentSlotAction(action)) {
             return false;
         }
     }
     return true;
+}
+
+bool hasAnyAssignmentSlotAction(const PWR::Rule& rule)
+{
+    // True when at least ONE action fills an assignment slot, regardless of
+    // what else the rule carries. isPureAssignmentRule is the stricter "and
+    // nothing else" form; this is the claim predicate, used where a MIXED
+    // rule is still legitimately the rule that assigns a context. Admits a
+    // layout-only rule (SetSnappingLayout with no SetEngineMode), which the
+    // batch rebuild relies on.
+    for (const PWR::RuleAction& action : rule.actions) {
+        if (isAssignmentSlotAction(action)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void carryOverNonAssignmentActions(PWR::Rule& rebuilt, const PWR::Rule& existing)
+{
+    // makeAssignmentRule emits ONLY the four assignment slot actions, so a
+    // wholesale `rebuilt` would silently destroy anything else the rule
+    // carried. The Monitors page and the Rules editor address the same rule
+    // by its deterministic context id, so a user who adds SetOpacity (or
+    // LockContext, or an animation override) to a context assignment rule and
+    // later changes that context's layout would lose the extra action with no
+    // diagnostic.
+    //
+    // Purity gates elsewhere refuse to CLAIM a mixed rule, which protects the
+    // paths that can walk away. The rebuild paths cannot: the deterministic id
+    // means `rebuilt` collides with the mixed rule whether or not it was
+    // claimed, so the only safe rebuild is a merge. Slot actions come from
+    // `rebuilt` (they are what the caller is changing); everything else rides
+    // across in its original order. SetScrollingTemplate MUST be in the
+    // excluded set: carrying it over duplicated the action per rebuild, and
+    // the carried OLD copy won entryFromRuleMatchActions' last-wins decode,
+    // making a template permanently unchangeable after its first assignment.
+    for (const PWR::RuleAction& action : existing.actions) {
+        if (!isAssignmentSlotAction(action)) {
+            rebuilt.actions.append(action);
+        }
+    }
 }
 
 bool matchIsExactContextBase(const PWR::MatchExpression& match)
@@ -143,7 +212,7 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule)
             // Decode through `modeFromWireString` so every token the
             // ActionRegistry validator accepts round-trips end-to-end.
             // The canonical vocabulary lives at `engineModeOptions()` in
-            // libs/phosphor-rules/src/ruleaction.cpp — today
+            // libs/phosphor-rules/src/ruleaction_builtins_p.h — today
             // snapping / autotile / scrolling. The previous two-valued
             // `== "autotile"` ternary silently coerced every non-Autotile
             // token to Snapping — including the registered, picker-exposed
@@ -169,6 +238,8 @@ AssignmentEntry entryFromRuleMatchActions(const PWR::Rule& rule)
             entry.snappingLayout = action.params.value(PWR::ActionParam::LayoutId).toString();
         } else if (action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm)) {
             entry.tilingAlgorithm = action.params.value(PWR::ActionParam::Algorithm).toString();
+        } else if (action.type == QLatin1String(PWR::ActionType::SetScrollingTemplate)) {
+            entry.scrollingTemplateLayout = action.params.value(PWR::ActionParam::LayoutId).toString();
         }
     }
     return entry;

@@ -8,6 +8,8 @@
 #include <PhosphorTiles/AutotileLayoutSourceFactory.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateSource.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/ZonesLayoutSourceFactory.h>
 
 #include <QtGlobal>
@@ -16,7 +18,8 @@ namespace PlasmaZones {
 
 void buildStandardLayoutSourceBundle(PhosphorLayout::LayoutSourceBundle& bundle,
                                      PhosphorZones::IZoneLayoutRegistry* zoneLayouts,
-                                     PhosphorTiles::ITileAlgorithmRegistry* tileAlgorithms)
+                                     PhosphorTiles::ITileAlgorithmRegistry* tileAlgorithms,
+                                     PhosphorZones::ScrollingTemplateStore* scrollingTemplates)
 {
     // Force the provider libraries' registrar TUs to link in. Under the
     // current SHARED-library build these calls are no-ops (the libraries
@@ -28,6 +31,7 @@ void buildStandardLayoutSourceBundle(PhosphorLayout::LayoutSourceBundle& bundle,
     // TUs alive regardless of link mode.
     PhosphorZones::ensureZonesLayoutSourceProviderLinked();
     PhosphorTiles::ensureAutotileLayoutSourceProviderLinked();
+    PhosphorZones::ensureScrollingTemplateSourceProviderLinked();
 
     // Both registries are required by every in-tree caller. The previous
     // null-tolerant branches were dead code — kept as safety guards but
@@ -51,6 +55,11 @@ void buildStandardLayoutSourceBundle(PhosphorLayout::LayoutSourceBundle& bundle,
     }
     if (tileAlgorithms) {
         ctx.set<PhosphorTiles::ITileAlgorithmRegistry>(tileAlgorithms);
+    }
+    // Optional third family: roots without a template store simply skip the
+    // provider (its builder returns nullptr on an absent ctx entry).
+    if (scrollingTemplates) {
+        ctx.set<PhosphorZones::ScrollingTemplateStore>(scrollingTemplates);
     }
     bundle.buildFromRegistered(ctx);
 }

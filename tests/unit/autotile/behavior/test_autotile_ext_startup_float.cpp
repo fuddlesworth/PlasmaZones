@@ -218,7 +218,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        engine.setFloatPredicate([](const QString& id) {
+        engine.setFloatPredicate([](const QString& id, const QString&) {
             return id == QStringLiteral("float-me");
         });
 
@@ -265,7 +265,7 @@ private Q_SLOTS:
         engine.config()->maxWindows = 1;
         engine.setAutotileScreens({screen});
 
-        engine.setFloatPredicate([](const QString& id) {
+        engine.setFloatPredicate([](const QString& id, const QString&) {
             return id == QStringLiteral("float-me");
         });
 

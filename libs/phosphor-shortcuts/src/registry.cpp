@@ -226,9 +226,21 @@ void Registry::onBackendActivated(QString id)
     // check here is cheap and standard Qt hygiene.
     QPointer<Registry> guard(this);
 
-    const auto it = m_entries.constFind(id);
-    if (it != m_entries.constEnd() && it->callback) {
-        it->callback();
+    // Copy the callback to a stack local before invoking. A live callback can
+    // re-enter this Registry and mutate m_entries — the cheatsheet Escape
+    // dismiss path unbinds its own id mid-call, and the layout-picker fire
+    // binds six navigation ids, which can rehash the table. Either would
+    // destroy or relocate the std::function currently executing if it were
+    // invoked through the iterator.
+    std::function<void()> callback;
+    {
+        const auto it = m_entries.constFind(id);
+        if (it != m_entries.constEnd()) {
+            callback = it->callback;
+        }
+    }
+    if (callback) {
+        callback();
     }
     if (!guard) {
         return;

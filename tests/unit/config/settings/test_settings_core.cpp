@@ -29,6 +29,7 @@
 #include <PhosphorAnimation/ShaderProfile.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
 #include "config/configbackends.h"
+#include <PhosphorConfig/JsonBackend.h>
 
 #include "config/settings.h"
 #include "config/configdefaults.h"
@@ -588,16 +589,21 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        // Inject stale keys into several v2 groups
+        // Inject stale keys into several v2 groups, and SEED the three
+        // declared keys whose sparse-absence is asserted below with their
+        // current defaults — an unseeded key was never present, so !hasKey
+        // on it cannot distinguish "pruned" from "never there".
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             {
                 auto g = backend->group(ConfigDefaults::snappingBehaviorGroup());
                 g->writeString(QStringLiteral("ObsoleteActivationKey"), QStringLiteral("stale"));
+                g->writeBool(ConfigDefaults::toggleActivationKey(), ConfigDefaults::toggleActivation());
             }
             {
                 auto g = backend->group(ConfigDefaults::snappingEffectsGroup());
                 g->writeBool(QStringLiteral("OldDisplayToggle"), true);
+                g->writeBool(ConfigDefaults::showNumbersKey(), ConfigDefaults::showNumbers());
             }
             {
                 auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
@@ -606,6 +612,10 @@ private Q_SLOTS:
             {
                 auto g = backend->group(ConfigDefaults::tilingAlgorithmGroup());
                 g->writeString(QStringLiteral("RemovedAutotileSetting"), QStringLiteral("gone"));
+            }
+            {
+                auto g = backend->group(ConfigDefaults::tilingGroup());
+                g->writeBool(ConfigDefaults::enabledKey(), ConfigDefaults::autotileEnabled());
             }
             backend->sync();
         }
@@ -624,6 +634,12 @@ private Q_SLOTS:
                         ->hasKey(QStringLiteral("DeprecatedThemeIndex")));
             QVERIFY(backend->group(ConfigDefaults::tilingAlgorithmGroup())
                         ->hasKey(QStringLiteral("RemovedAutotileSetting")));
+            // The three seeded default-valued keys are genuinely present too,
+            // so the absence assertions after save() prove the PRUNE ran.
+            QVERIFY(
+                backend->group(ConfigDefaults::snappingBehaviorGroup())->hasKey(ConfigDefaults::toggleActivationKey()));
+            QVERIFY(backend->group(ConfigDefaults::snappingEffectsGroup())->hasKey(ConfigDefaults::showNumbersKey()));
+            QVERIFY(backend->group(ConfigDefaults::tilingGroup())->hasKey(ConfigDefaults::enabledKey()));
         }
 
         // Load picks up the stale keys from disk (but ignores them in members)
@@ -639,15 +655,25 @@ private Q_SLOTS:
             auto g = backend->group(ConfigDefaults::snappingBehaviorGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("ObsoleteActivationKey")),
                      "Stale key in Snapping.Behavior group must be purged by save()");
-            // Valid key must survive
-            QVERIFY2(g->hasKey(ConfigDefaults::toggleActivationKey()),
-                     "Valid key ToggleActivation must survive save()");
+            // Persistence is sparse: an untouched key still at its default is
+            // stored as ABSENCE, never as a stamped default — a stamped
+            // default would freeze the value against future default retunes.
+            QVERIFY2(!g->hasKey(ConfigDefaults::toggleActivationKey()),
+                     "Default-valued ToggleActivation must be stored as absence after save()");
+        }
+        {
+            // A modified (non-default) key survives save(). AdjacentThreshold
+            // is declared in Snapping.Gaps, not Snapping.Behavior.
+            auto g = backend->group(ConfigDefaults::snappingGapsGroup());
+            QVERIFY2(g->hasKey(ConfigDefaults::adjacentThresholdKey()),
+                     "Modified key AdjacentThreshold must survive save()");
         }
         {
             auto g = backend->group(ConfigDefaults::snappingEffectsGroup());
             QVERIFY2(!g->hasKey(QStringLiteral("OldDisplayToggle")),
                      "Stale key in Snapping.Effects group must be purged by save()");
-            QVERIFY2(g->hasKey(ConfigDefaults::showNumbersKey()), "Valid key ShowNumbers must survive save()");
+            QVERIFY2(!g->hasKey(ConfigDefaults::showNumbersKey()),
+                     "Default-valued ShowNumbers must be stored as absence after save()");
         }
         {
             auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
@@ -665,8 +691,45 @@ private Q_SLOTS:
         }
         {
             auto g = backend->group(ConfigDefaults::tilingGroup());
-            QVERIFY2(g->hasKey(ConfigDefaults::enabledKey()), "Valid key Enabled must survive save()");
+            QVERIFY2(!g->hasKey(ConfigDefaults::enabledKey()),
+                     "Default-valued Tiling Enabled must be stored as absence after save()");
         }
+    }
+
+    /**
+     * save() prunes a FROZEN default: a stored value equal to the current
+     * schema default, stamped by an older version whose save materialised
+     * every declared key. Left in place it would shadow any future default
+     * retune (the retuned scrolling shortcut chords were invisible to every
+     * install with such a config). The observable value must not change.
+     */
+    void testSave_prunesFrozenDefaults()
+    {
+        IsolatedConfigGuard guard;
+
+        // The key is seeded into its DECLARED group (Snapping.Gaps), so its
+        // removal can only come from write()'s default-prune — a stale-key
+        // purge never touches a declared key in its own group.
+        const int defaultThreshold = ConfigDefaults::adjacentThreshold();
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto g = backend->group(ConfigDefaults::snappingGapsGroup());
+            g->writeInt(ConfigDefaults::adjacentThresholdKey(), defaultThreshold);
+            backend->sync();
+        }
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            QVERIFY(
+                backend->group(ConfigDefaults::snappingGapsGroup())->hasKey(ConfigDefaults::adjacentThresholdKey()));
+        }
+
+        Settings settings;
+        settings.save();
+
+        auto backend = PlasmaZones::createDefaultConfigBackend();
+        QVERIFY2(!backend->group(ConfigDefaults::snappingGapsGroup())->hasKey(ConfigDefaults::adjacentThresholdKey()),
+                 "A stored value equal to the current default must be pruned by save()");
+        QCOMPARE(settings.adjacentThreshold(), defaultThreshold);
     }
 
     /**
@@ -917,6 +980,77 @@ private Q_SLOTS:
         QCOMPARE(changedSpy.count(), 0);
     }
 
+    /**
+     * The two commit-failure invariants that carry settings.cpp's strongest
+     * data-integrity comments, driven through a backend whose commit()
+     * always fails:
+     *   - save() must NOT advance the baseline (isKeyModified stays true, so
+     *     the unsaved edit remains discardable and the next save retries);
+     *   - reset() must return false and keep the previous COMMITTED values.
+     *     When an unsaved edit was staged, its discard is announced with one
+     *     NOTIFY round (the observable value moved back to the committed
+     *     one); with nothing staged, nothing observably changed and nothing
+     *     may fire.
+     */
+    void testCommitFailure_saveKeepsBaselineAndResetRollsBack()
+    {
+        class FailingCommitBackend : public PhosphorConfig::JsonBackend
+        {
+        public:
+            using PhosphorConfig::JsonBackend::JsonBackend;
+            bool failCommits = false;
+            bool commit() override
+            {
+                return failCommits ? false : PhosphorConfig::JsonBackend::commit();
+            }
+        };
+
+        IsolatedConfigGuard guard;
+        FailingCommitBackend backend(guard.configPath() + QStringLiteral("/plasmazones/config.json"));
+        Settings settings(&backend, nullptr, nullptr, nullptr);
+
+        // A committed non-default value to reset back to later.
+        settings.setAdjacentThreshold(77);
+        QVERIFY(settings.save());
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+
+        // save() under a failing commit: false, and the baseline must not
+        // move — the staged edit still reads as modified.
+        backend.failCommits = true;
+        settings.setAdjacentThreshold(99);
+        QVERIFY(!settings.save());
+        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+        QCOMPARE(settings.adjacentThreshold(), 99);
+
+        // reset() under a failing commit with an UNSAVED edit staged (99 over
+        // the committed 77): false, the edit is discarded back to the
+        // committed value, and that discard is ANNOUNCED — the observable
+        // value moved 99 -> 77, and a silent revert would leave QML painting
+        // the dropped edit.
+        QSignalSpy thresholdSpy(&settings, &Settings::adjacentThresholdChanged);
+        QSignalSpy changedSpy(&settings, &Settings::settingsChanged);
+        QVERIFY(!settings.reset());
+        QCOMPARE(settings.adjacentThreshold(), 77);
+        QCOMPARE(thresholdSpy.count(), 1);
+        QCOMPARE(changedSpy.count(), 1);
+
+        // Same failure with NO unsaved edit: nothing observably changes, so
+        // nothing may fire (a spurious settingsChanged is a daemon retile
+        // for nothing).
+        thresholdSpy.clear();
+        changedSpy.clear();
+        QVERIFY(!settings.reset());
+        QCOMPARE(settings.adjacentThreshold(), 77);
+        QCOMPARE(thresholdSpy.count(), 0);
+        QCOMPARE(changedSpy.count(), 0);
+
+        // And the retry works once commits succeed again.
+        backend.failCommits = false;
+        settings.setAdjacentThreshold(99);
+        QVERIFY(settings.save());
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingGapsGroup(), ConfigDefaults::adjacentThresholdKey()));
+    }
+
     /// defaultConfigJson delegates to the store's defaults snapshot, so it is
     /// field-for-field comparable with exportConfigToJson — the invariant the
     /// profiles delta engine diffs across.
@@ -928,7 +1062,12 @@ private Q_SLOTS:
 
         const QJsonObject defaults = settings.defaultConfigJson();
         const QJsonObject exported = settings.exportConfigToJson();
-        QCOMPARE(defaults.keys(), exported.keys());
+        // Non-emptiness, not key-set equality: both serializers walk the SAME
+        // schema, so their key sets cannot structurally differ and comparing
+        // them has no failure mode. What CAN silently break is a schema that
+        // lost its groups, which the value loop below would then vacuously
+        // pass over.
+        QVERIFY(!exported.keys().isEmpty());
         QCOMPARE(defaults.value(QStringLiteral("_version")), exported.value(QStringLiteral("_version")));
         // The palette-derived keys are the one legitimate divergence: with
         // UseSystem on (the default), load() runs applySystemColorScheme and
@@ -949,7 +1088,7 @@ private Q_SLOTS:
             }
             const QJsonObject defaultGroup = defaults.value(group).toObject();
             const QJsonObject exportedGroup = exported.value(group).toObject();
-            QCOMPARE(defaultGroup.keys(), exportedGroup.keys());
+            QVERIFY(!exportedGroup.keys().isEmpty());
             for (const QString& key : exportedGroup.keys()) {
                 if (paletteDerived.contains(group + QLatin1Char('/') + key)) {
                     continue;

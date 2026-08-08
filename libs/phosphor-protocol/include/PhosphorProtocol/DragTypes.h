@@ -33,7 +33,12 @@ namespace PhosphorProtocol {
 /// preserve that property when touching the effect's policy handling.
 enum class DragBypassReason : int {
     None = 0, ///< canonical snap path — drag flows through the snap pipeline
-    AutotileScreen = 1, ///< drag started/ended on an autotile screen — engine owns placement
+    EngineOwnedScreen = 1, ///< drag started/ended on a screen owned by a tiling-family
+                           ///< engine (autotile or scrolling), which owns placement
+                           ///< there. The "autotile_screen" wire string predates the
+                           ///< scrolling engine and is kept verbatim for wire
+                           ///< stability, so the token names only one of the two
+                           ///< engines this value covers.
     SnappingDisabled = 2, ///< snap mode off globally — dead drag
     ContextDisabled = 3, ///< monitor/desktop/activity excluded in settings — dead drag
     LayoutSuppressed = 4, ///< screen has no zone layout (default assignment suppressed) — dead drag
@@ -51,15 +56,16 @@ PHOSPHORPROTOCOLTYPES_EXPORT QString toWireString(DragBypassReason r);
 /// Parse from the legacy wire-format string. Unknown values map to None.
 PHOSPHORPROTOCOLTYPES_EXPORT DragBypassReason bypassReasonFromWireString(const QString& s);
 
-/// QDebug streaming for logging. Prints the enum name (e.g. "AutotileScreen").
+/// QDebug streaming for logging. Prints the qualified enum name
+/// (e.g. "DragBypassReason::EngineOwnedScreen").
 PHOSPHORPROTOCOLTYPES_EXPORT QDebug operator<<(QDebug debug, DragBypassReason r);
 
 /// Drag policy — daemon-authoritative decision about how a drag should be
 /// handled. Returned from WindowDragAdaptor::beginDrag at drag start and
 /// re-emitted via dragPolicyChanged if the cursor crosses a screen boundary
-/// that flips the mode (autotile↔snap). The compositor plugin uses this to
-/// decide whether to stream dragMoved, grab keyboard, show an overlay, and
-/// whether to apply an immediate float transition for an autotile drag.
+/// that flips the mode (engine-owned↔snap). The compositor plugin uses this
+/// to decide whether to stream dragMoved, grab keyboard, show an overlay, and
+/// whether to apply an immediate float transition for an engine-owned drag.
 ///
 /// Wire: (bbbbbss)  —  5 bools + 2 strings
 ///

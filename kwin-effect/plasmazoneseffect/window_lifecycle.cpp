@@ -18,7 +18,7 @@
 #include <QPointer>
 #include <QScopeGuard>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
@@ -87,7 +87,7 @@ bool PlasmaZonesEffect::tryInstantSnapRestore(KWin::EffectWindow* w, const QStri
         return false;
     }
     const bool savedScreenNowAutotile =
-        !cached->screenId.isEmpty() && m_autotileHandler->isAutotileScreen(cached->screenId);
+        !cached->screenId.isEmpty() && m_tilingHandler->isManagedScreen(cached->screenId);
     if (cached->geometry.isValid() && !savedScreenNowAutotile) {
         qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached->geometry
                          << "screen:" << cached->screenId;
@@ -143,6 +143,15 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
     setupWindowConnections(w);
     updateWindowStickyState(w);
+
+    // A tab-indicator surface arriving (first map, or a re-map after the daemon
+    // tore its shell down) has to be put back under the passive overlay shell —
+    // the compositor stacks same-layer surfaces by creation and this one is
+    // always the newer of the two. Costs a set check per opened window when no
+    // indicator surface is registered, which is the common case.
+    if (isScrollTabIndicatorSurface(w)) {
+        restackScrollTabSurfaces();
+    }
 
     // Tileable-app predicate: a normal top-level window we both handle and can
     // tile, that didn't open minimized. Drives the snap-restore candidacy and
@@ -214,10 +223,10 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // placement-state flush.
     reconcileRuleWindowLayer(windowId, w);
 
-    if (tileableWindow && m_autotileHandler->isScreenQueryPending()) {
+    if (tileableWindow && m_tilingHandler->isScreenQueryPending()) {
         if (tileableAppWindow) {
             // DELIBERATELY broader than the post-query gate below
-            // (canSnapRestore || onAutotileScreen): the screen's mode is
+            // (canSnapRestore || onManagedScreen): the screen's mode is
             // exactly what the pending query will tell us, so it cannot
             // discriminate here. The dispatch releases non-repositioned
             // windows promptly and re-arms the deadline for the rest
@@ -225,11 +234,11 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
             // costs at most the query latency.
             beginRestoreSuppression(w);
         }
-        m_autotileHandler->deferWindowRouting(w, canSnapRestore);
+        m_tilingHandler->deferWindowRouting(w, canSnapRestore);
         return;
     }
 
-    bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
+    bool onManagedScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
 
     // First-frame suppression: KWin places a new window at its centred
     // placement geometry and composites it there before this handler can
@@ -241,7 +250,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // autotile screen (which the autotile engine tiles). The window is
     // released by endRestoreSuppression on geometry-settle, on a negative
     // resolve, or on the hard deadline.
-    if (canSnapRestore || (tileableAppWindow && onAutotileScreen)) {
+    if (canSnapRestore || (tileableAppWindow && onManagedScreen)) {
         beginRestoreSuppression(w);
     }
 
@@ -258,7 +267,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // snap-mode zone". Cross-VS/cross-monitor teleport works because moveResize
     // takes absolute compositor coordinates, so applyWindowGeometry moves the
     // window to whichever screen the cached rect lives on. After teleport,
-    // re-evaluate onAutotileScreen because KWin updates the window's output
+    // re-evaluate onManagedScreen because KWin updates the window's output
     // assignment.
     //
     // Rare race: the saved screen may have flipped from snap→autotile between
@@ -268,10 +277,10 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         // Re-evaluate screen after teleport — cross-VS/cross-monitor
         // moveResize updates KWin's output assignment, so the window
         // may no longer be on an autotile screen.
-        onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
+        onManagedScreen = m_tilingHandler->isManagedScreen(getWindowScreenId(w));
     }
 
-    if (onAutotileScreen && canSnapRestore) {
+    if (onManagedScreen && canSnapRestore) {
         // Window landed on an autotile screen, but may have a pending snap restore
         // to a non-autotile screen. KWin's session restore places windows at their
         // saved geometry, which may be a pre-snap floating position in the autotile
@@ -298,7 +307,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
                 // knownFreeFloating only when it did NOT apply: a zone-placed
                 // window's live frame is the zone rect, and reporting it as a
                 // known free frame would persist the zone rect as float-back.
-                if (!m_autotileHandler->notifyWindowAdded(safeW, /*knownFreeFloating=*/!snapApplied)) {
+                if (!m_tilingHandler->notifyWindowAdded(safeW, /*knownFreeFloating=*/!snapApplied)) {
                     endRestoreSuppression(safeW.data());
                 }
             },
@@ -309,14 +318,14 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Standard path: notify autotile first, then try snap restore. If
     // autotile is on this screen but doesn't actually act (daemon-side
     // filter, already-notified, etc.), and snap-restore won't run either
-    // (the !onAutotileScreen guard below), nothing will move the window —
+    // (the !onManagedScreen guard below), nothing will move the window —
     // release suppression so it doesn't wait out the deadline.
-    const bool autotileTookOver = m_autotileHandler->notifyWindowAdded(w, /*knownFreeFloating=*/true);
-    if (!autotileTookOver && onAutotileScreen) {
+    const bool autotileTookOver = m_tilingHandler->notifyWindowAdded(w, /*knownFreeFloating=*/true);
+    if (!autotileTookOver && onManagedScreen) {
         endRestoreSuppression(w);
     }
 
-    if (!onAutotileScreen && canSnapRestore) {
+    if (!onManagedScreen && canSnapRestore) {
         // Always run the daemon round-trip — INCLUDING after an instant
         // restore. Instant restore only teleports the window to the cached
         // zone geometry; it does NOT register the window in the daemon's
@@ -379,9 +388,23 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // never gets a frame to run the close shader on. The grab is
     // released by `endShaderTransition` when the timer-driven teardown
     // fires.
-    tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
-                           /*reverse=*/true, /*holdCloseGrab=*/true);
+    //
+    // Skipped for a PARKED scrolling column. Its committed rect sits below the
+    // union of every output, so a surface-extent pack — which is nearly all of
+    // them — would anchor against a frame that intersects no screen while its
+    // texture is the output's, putting the anchor remap outside [0,1]. What it
+    // then draws is off-viewport either way, so the transition buys nothing
+    // and costs a full-output repaint every frame for its duration. The
+    // relocation that normally draws a parked column where it really sits is
+    // dropped one line below, so nothing would move this back on screen.
+    const bool parkedOffAllOutputs = m_scrollVisualPos.contains(closingWindowId) && !w->frameGeometry().isEmpty()
+        && !KWin::effects->screenAt(w->frameGeometry().center().toPoint());
+    if (!parkedOffAllOutputs) {
+        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
+                               /*reverse=*/true, /*holdCloseGrab=*/true);
+    }
     m_windowAnimator->removeAnimation(w);
+    m_scrollVisualPos.remove(closingWindowId);
 
     // Same value as closingWindowId above: the windowId cache isn't dropped
     // until later in this slot (m_idCaches.windowIdCache.remove near the end), so a
@@ -394,8 +417,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_dragActivation.floatedWindowIds.remove(closedWindowId);
 
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus).
-    m_autotileHandler->onWindowClosed(closedWindowId, closedScreenId);
-    m_autotileHandler->clearDesktopMoveStash(closedWindowId);
+    m_tilingHandler->onWindowClosed(closedWindowId, closedScreenId);
+    m_tilingHandler->clearDesktopMoveStash(closedWindowId);
 
     // Mirror that cleanup for snapping's own border set. Pure bookkeeping —
     // the window is being destroyed, so no setNoBorder/removeWindowDecoration is
@@ -425,8 +448,11 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         removeWindowDecoration(closedWindowId, w);
     }
 
-    // Notify general daemon for cleanup
-    notifyWindowClosed(w);
+    // Notify general daemon for cleanup. Pass the screen resolved at the
+    // top of this slot: the tiling teardown above erased the scroll
+    // tracking override, so re-deriving inside would report a
+    // position-based screen (wrong for a parked scroll column).
+    notifyWindowClosed(w, closedScreenId);
 
     // Clean up caches AFTER all consumers that call getWindowId(w).
     // The windowDeleted handler does final cleanup, but removing here
@@ -493,6 +519,18 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     if (!m_shaderManager.animationRuleSet().isEmpty()) {
         m_shaderManager.animationRuleEvaluator().clearCache();
     }
+    // The exclusion verdicts are cached the same way and IsFocused is just as
+    // matchable in an exclusion rule (`ExcludeDecorations WHEN focused`), so
+    // drop both exclusion caches on the same edge — without this, the verdict
+    // computed at the window's first consult pins for the session and the
+    // decoration never flips on focus change. Same per-slice gating as the
+    // class-swap invalidation in window_connections.cpp.
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        m_snappingExclusionEvaluator.clearCache();
+    }
+    if (!m_decorationExclusionRuleSet.isEmpty()) {
+        m_decorationExclusionEvaluator.clearCache();
+    }
 
     // Re-resolve every window's border against the new focus state so the
     // active window picks up the active colour and the rest the inactive one.
@@ -501,7 +539,7 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     updateAllDecorations();
 }
 
-void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
+void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w, const QString& preTeardownScreenId)
 {
     if (!w) {
         return;
@@ -514,11 +552,12 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
     }
 
     const int kindInt = static_cast<int>(classifyWindowKind(w));
-    // Pass KWin's authoritative current screen for the window. The daemon uses it
-    // as the final-placement screen when a cross-screen move has left the window
-    // untracked by both engines at close — otherwise its float-back records the
-    // stale source screen and it reopens on the wrong monitor.
-    const QString closeScreenId = getWindowScreenId(w);
+    // Pass the caller-resolved screen (captured before the tiling teardown
+    // dropped the scroll override). The daemon uses it as the
+    // final-placement screen when a cross-screen move has left the window
+    // untracked by both engines at close — otherwise its float-back records
+    // the stale source screen and it reopens on the wrong monitor.
+    const QString closeScreenId = preTeardownScreenId.isEmpty() ? getWindowScreenId(w) : preTeardownScreenId;
     qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId << "kind=" << kindInt
                      << "screen=" << closeScreenId;
     PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
@@ -626,10 +665,26 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // activates the window its current desktop is already updated, and
     // fire-and-forget calls share one ordered D-Bus connection, so reporting
     // here guarantees the daemon switches context first. reportScreenDesktop
-    // dedups, so outside a desktop switch this is a no-op. windowOutput
-    // resolves by window position (Discussion #724: w->screen() can disagree
-    // with the daemon on identical-model outputs).
-    if (KWin::LogicalOutput* output = windowOutput(w)) {
+    // dedups, so outside a desktop switch this is a no-op.
+    //
+    // Resolve the output from the id we ALREADY resolved above, not from the
+    // window's position. getWindowScreenId is engine-authoritative for a
+    // tiled window, and scrolling parks off-screen columns entirely outside
+    // their own screen rect, so a position-derived lookup returns the
+    // NEIGHBOURING output for a parked or hidden-tab scroll window — and
+    // activation routinely lands before the async geometry apply. Reporting
+    // that neighbour's desktop instead of the activated window's own screen
+    // silently reinstates the discussion-#728 leak for every scrolling screen.
+    // windowOutput stays the fallback for an unresolvable id (Discussion #724:
+    // w->screen() can disagree with the daemon on identical-model outputs, so
+    // the position lookup is still the better of the two remaining options),
+    // mirroring the id-first-then-centre order ruleQuery uses for
+    // screenOrientation.
+    KWin::LogicalOutput* activatedOutput = outputForScreenId(screenId);
+    if (!activatedOutput) {
+        activatedOutput = windowOutput(w);
+    }
+    if (KWin::LogicalOutput* output = activatedOutput) {
         if (auto* vd = KWin::effects->currentDesktop(output)) {
             reportScreenDesktop(outputScreenId(output), static_cast<int>(vd->x11DesktopNumber()));
         }
@@ -640,8 +695,8 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
                                                    QStringLiteral("windowActivated"), {windowId, screenId});
 
     // Notify autotile engine of focus change so m_windowToScreen is updated
-    if (m_autotileHandler->isAutotileScreen(screenId)) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Autotile,
+    if (m_tilingHandler->isManagedScreen(screenId)) {
+        PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::Tiling,
                                                        QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                        QStringLiteral("notifyWindowFocused"));
     }

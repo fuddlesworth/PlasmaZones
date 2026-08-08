@@ -64,6 +64,61 @@ public:
                                         const std::function<bool(const WindowPlacement&)>& accept = {},
                                         const std::function<bool(const WindowPlacement&)>& preferred = {});
 
+    /// Reopen resolve: the shared consumption pattern the TILING engines'
+    /// open-time restores use (SnapEngine::resolveWindowRestore keeps its own
+    /// take + re-bind: its snapped records restore cross-screen and its accept
+    /// depends on a mode-defer bypass, so rule 1 below does not fit it — and
+    /// note the snap path therefore also keeps take()'s oldest-first order
+    /// WITHOUT the live-instance exclusion below; that asymmetry is a
+    /// documented property of the snap flow, not an oversight) —
+    /// take() wrapped in the accept predicate both tiling engines share and
+    /// the two rules that make a close/reopen (fresh uuid, appId-FIFO match)
+    /// behave correctly.
+    ///
+    /// The accept predicate, hoisted here so the two engines cannot drift: a
+    /// record whose @p engineId slot is FLOATING restores when its screen
+    /// matches @p screenId (or is empty), and FIFO consumption by a DIFFERENT
+    /// instance additionally requires a valid anyFreeGeometry (a geometry-less
+    /// floating record is meaningful only same-instance — consumed by a
+    /// sibling it floats a fresh window at its spawn rect for no reason while
+    /// burning a FIFO slot). FLOATING slots only, deliberately: a TILED
+    /// record is never consumed and restores no position — its role is the
+    /// exact-final verdict below (the window closed tiled, so the reopen must
+    /// not float it).
+    ///
+    ///   1. A REJECTED exact record is FINAL — no FIFO fallback past it — but
+    ///      ONLY when that record carries a slot for the ASKING engine. The
+    ///      fallback exists for a reopen, whose fresh uuid has no exact record
+    ///      WITH A VERDICT: every open writes a geometry-only, slot-less
+    ///      record under the live uuid (the pre-tile free-geometry capture)
+    ///      before the engine's restore runs, and that stub says nothing about
+    ///      this engine, so it must not veto the FIFO. A LIVE window whose own
+    ///      record holds this engine's slot but was rejected on context (tiled
+    ///      on another desktop, say) IS final: falling through would consume a
+    ///      SIBLING's record, and the re-bind below would re-record it under
+    ///      this window's id, where the merge overwrites the window's own
+    ///      other-context slot.
+    ///   2. The consumed record is RE-BOUND to the live @p windowId and
+    ///      re-recorded, so the other engines' slots + per-screen free/float
+    ///      geometry survive the reopen.
+    ///
+    /// The appId fallback consumes the NEWEST accepted record — matching
+    /// peek()'s "the most recent placement is current truth" — and never one
+    /// whose window instance is still LIVE (per the live-instance probe): the
+    /// last close is the state the user expects back, and consuming oldest
+    /// first handed a reopen whichever stale record had sat unconsumed
+    /// longest (the octopi graveyard: eleven leftover tiled records shadowing
+    /// the fresh floating one, and colliding months-old column ranks on a
+    /// compositor-restart restore). The live exclusion is what makes
+    /// newest-first safe for multi-instance apps: a record just re-bound to
+    /// an OPEN sibling is the newest in the bucket, and without the probe the
+    /// next reopen would steal it, leaving the sibling recordless.
+    ///
+    /// Returns the consumed record (already re-recorded), or nullopt when no
+    /// record passed.
+    std::optional<WindowPlacement> takeForReopen(const QString& engineId, const QString& windowId, const QString& appId,
+                                                 const QString& screenId);
+
     /// Non-consuming lookup (unlike take): the record for the same live instance, else
     /// the NEWEST record in the appId bucket whose `accept` passes. Leaves the
     /// store unchanged — for live reads such as the float-back geometry lookup,
@@ -80,9 +135,43 @@ public:
         return peek(windowId, QString());
     }
 
+    /// Non-consuming lookup for the cross-screen reclaim
+    /// (IPlacementEngine::claimCrossScreenReopen). Differs from peek() in the
+    /// two ways that make a reclaim verdict sound:
+    ///  - It applies the LIVE-INSTANCE exclusion takeForReopen's appId
+    ///    fallback applies: a record bound to a still-OPEN sibling describes a
+    ///    different, living window, never this window's history, so it must
+    ///    not justify a cross-screen pull. peek() deliberately lacks the
+    ///    exclusion (float-back geometry reads legitimately consult a live
+    ///    sibling's record); a reclaim through plain peek() teleported a
+    ///    fresh second instance onto its open sibling's monitor on EVERY
+    ///    open, mid-session, repeatedly.
+    ///  - It scans ONLY the @p appId bucket (the window's own record included
+    ///    — a same-instance match wins outright, live or not, since the
+    ///    window's own record IS its history). peek()'s same-instance branch
+    ///    walks every bucket in the store; on the per-open reclaim path that
+    ///    cost is paid per engine per open. The narrowing is safe because
+    ///    record() RE-BUCKETS on an appId change, so a record follows the
+    ///    window's current appId — if that ever stops holding, this scan
+    ///    starts missing records peek() would find. It fails SAFE either
+    ///    way: a miss means no reclaim, never a wrong one.
+    /// Returns nullopt when @p appId is empty — a bare id has no bucket, so a
+    /// reclaim verdict is impossible.
+    std::optional<WindowPlacement> peekForReclaim(const QString& windowId, const QString& appId,
+                                                  const std::function<bool(const WindowPlacement&)>& accept = {}) const;
+
     /// True if a record exists for the same live instance, or (if @p appId non-empty)
     /// any record in that appId bucket.
     bool contains(const QString& windowId, const QString& appId = QString()) const;
+
+    /// Inject the live-window probe takeForReopen's appId fallback uses to
+    /// skip records bound to a still-open window (see its doc). Answers per
+    /// full windowId; evaluated at consume time. Unwired (tests) means no
+    /// exclusion.
+    void setLiveInstanceProbe(std::function<bool(const QString& windowId)> probe)
+    {
+        m_liveInstanceProbe = std::move(probe);
+    }
 
     /// Collapse stale pure-float duplicates for an app, keeping @p keepWindowId.
     /// A "pure-float" record carries float-back geometry but NO managed
@@ -96,8 +185,13 @@ public:
     /// Called ONLY from close-capture paths: a window closing floating is the
     /// freshest authority for its app's float-back on that screen, so duplicate
     /// siblings (left by rapid open/close or overlapping short-lived instances)
-    /// are stale. Without this the oldest-first take() rotates a reopening window
-    /// between the duplicates — it "opens in a different spot each time."
+    /// are stale. Records bound to a still-OPEN window (per the live-instance
+    /// probe) are never pruned, and a pruned sibling's engine slots and
+    /// other-screen geometry are absorbed fill-gaps-only. Without the
+    /// collapse, a consuming reopen — take()'s oldest-first for snap, or a
+    /// probe-excluded tail for the tiling engines — can rotate a reopening
+    /// window between the duplicates: it "opens in a different spot each
+    /// time."
     ///
     /// Returns true if at least one sibling was removed, so the caller can mark
     /// its persistence dirty: the preceding record() may have been a
@@ -116,6 +210,40 @@ public:
     /// must not destroy the float-back remembered for other monitors.
     bool clearFreeGeometry(const QString& windowId);
     bool clearFreeGeometry(const QString& windowId, const QString& screenId);
+
+    /// DOWNGRADE one engine's slot to WindowPlacement::stateReleased() on
+    /// every record for the same live instance, leaving the other engines'
+    /// slots, the context and the shared geometry intact. Returns true if any
+    /// record changed.
+    ///
+    /// This is the release-path counterpart of record()'s merge-never-clear:
+    /// slots accumulate as cross-mode memory, and for RESTORE that is right —
+    /// but a slot on a window an engine has knowingly GIVEN UP (cross-mode
+    /// handoff) is not memory, it is a stale ownership claim. Since the
+    /// cross-screen reclaim (pendingCrossScreenManagedRestore) treats a
+    /// managed slot plus the record-level screenId as evidence of a home to
+    /// pull the window back to, a stale slot that outlives its engine's
+    /// ownership can yank a window out from under its CURRENT engine whenever
+    /// the new owner's capture misses (the record()-overwrite of screenId is
+    /// not guaranteed on every path).
+    ///
+    /// DOWNGRADE, not remove, and the difference is load-bearing on both
+    /// sides — see stateReleased()'s contract. Removing the slot would also
+    /// risk emptying the engines map, which record()'s merge reads as "no
+    /// managed context to adopt", freezing the record's screenId against
+    /// every later geometry-only write.
+    ///
+    /// Sweeps ALL records matching the instance rather than stopping at the
+    /// first: appId drift (the Electron/CEF case this codebase canonicalizes
+    /// for) can leave records for one instance in two buckets, and the one
+    /// carrying the stale slot is not necessarily the one QHash order
+    /// reaches first.
+    ///
+    /// Callers: the tiling engines' handoffRelease, through
+    /// WindowTrackingService::releaseEngineSlot (which marks the store
+    /// dirty). NOT called on ordinary close — a window that CLOSED tiled
+    /// keeps its slot; that persistence is exactly what login restore reads.
+    bool releaseEngineSlot(const QString& windowId, const QString& engineId);
 
     /// Apply an in-place mutation to every record; @p fn returns true when it changed
     /// the record. Returns the number changed. For bulk rewrites that keep the appId
@@ -138,18 +266,24 @@ public:
     int size() const;
 
 private:
-    /// Capacity eviction preferring contentless residue over restorable
-    /// placements — see the implementation comment.
-    static void evictForCapacity(QList<WindowPlacement>& bucket);
+    /// Capacity eviction preferring contentless residue, then non-live
+    /// records, over restorable live placements — see the implementation
+    /// comment. Non-static: the middle tier consults m_liveInstanceProbe.
+    void evictForCapacity(QList<WindowPlacement>& bucket);
 
 public:
     /// Per-app record cap (public so tests can pin the eviction contract).
     static constexpr int MaxPerApp = 16;
 
 private:
-    /// appId → FIFO list of records (preserves multi-instance + close/reopen order).
+    /// appId → list of records in positional FIFO order. The POSITION order
+    /// governs take()'s oldest-first consumption (the snap paths) and the
+    /// eviction's last-resort tier; takeForReopen's fallback consumes by
+    /// SEQUENCE (newest first, live-excluded) instead, and multi-instance
+    /// distribution there rests on the live-instance probe, not on position.
     QHash<QString, QList<WindowPlacement>> m_byApp;
     quint64 m_sequence = 0;
+    std::function<bool(const QString&)> m_liveInstanceProbe;
 };
 
 } // namespace PhosphorEngine

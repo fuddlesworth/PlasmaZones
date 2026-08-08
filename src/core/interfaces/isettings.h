@@ -132,6 +132,14 @@ public:
     virtual bool autotileDragInsertToggle() const = 0;
     virtual void setAutotileDragInsertToggle(bool enable) = 0;
 
+    // Scrolling twins: hold-to-activate list for live re-inserting a dragged
+    // window into the scroll strip (WindowDragAdaptor reads them per drag,
+    // beside the autotile pair above).
+    virtual QVariantList scrollingDragInsertTriggers() const = 0;
+    virtual void setScrollingDragInsertTriggers(const QVariantList& triggers) = 0;
+    virtual bool scrollingDragInsertToggle() const = 0;
+    virtual void setScrollingDragInsertToggle(bool enable) = 0;
+
     // Per-algorithm autotile settings map. Settings inherits from
     // PhosphorEngine::IAutotileSettings (which also declares these),
     // so the override in Settings covers both bases — the redundant
@@ -177,6 +185,12 @@ public:
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
+
+    // GPU the daemon renders on: "auto" or a "vendor:device" hex PCI pair.
+    // Applied at daemon/editor startup (before QGuiApplication), so like the
+    // backend it takes effect on restart.
+    virtual QString gpuDevice() const = 0;
+    virtual void setGpuDevice(const QString& gpu) = 0;
 
     // Window decoration appearance (tiled/snapped window border + title bar).
     // Mode-neutral, distinct from the ZONE OVERLAY border settings
@@ -272,6 +286,179 @@ public:
         return false;
     }
 
+    // The two defaults below are spelled `true` rather than calling their
+    // ConfigDefaults twins, because this interface header deliberately does
+    // not depend on the config layer. A stub answering the opposite of what
+    // the real Settings would is a silent behaviour split, so the pair is
+    // pinned from the other side: settings/scrolling.cpp — a TU that sees both
+    // — static_asserts the tab-indicator defaults and
+    // ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() against the
+    // literals here, and names this comment. Change either default and fix
+    // both places.
+
+    /// Tab indicator alongside tabbed scrolling columns. Virtual with an
+    /// always-on default so the overlay service can gate through the
+    /// interface (the zoneSelectorEnabled pattern).
+    virtual bool scrollingTabIndicatorEnabled() const
+    {
+        return true;
+    }
+
+    /// Writer for the toggle above. Virtual with a no-op default (the
+    /// per-screen-accessor pattern) so the D-Bus settings registry can register
+    /// the key through the interface rather than only on the concrete Settings
+    /// — otherwise a non-Settings backend silently loses the key entirely.
+    virtual void setScrollingTabIndicatorEnabled(bool /*enabled*/)
+    {
+    }
+
+    // The tab indicator's PAINT settings, read by the overlay service through
+    // this interface for the same reason the toggle above is here. The
+    // indicator's GEOMETRY settings are deliberately absent: they change the
+    // resolved column rect, so the scrolling engine reads them through
+    // IScrollSettings and ships the finished rect in the tab-strip payload.
+    // Each NUMERIC default below is pinned against its ConfigDefaults twin by a
+    // static_assert in settings/scrolling.cpp, the way the toggle above is. The
+    // three colour defaults cannot be: ConfigDefaults returns a non-constexpr
+    // QString for them. They are pinned at runtime instead, by the schema
+    // assertions in test_scrolling_settings.cpp.
+
+    /// 0 = title chips, 1 = segment bar (ConfigDefaults' TabIndicatorStyle).
+    /// The bar is the default: it is niri's own indicator, and the only one it
+    /// has.
+    virtual int scrollingTabIndicatorStyle() const
+    {
+        return 1;
+    }
+    virtual void setScrollingTabIndicatorStyle(int /*style*/)
+    {
+    }
+    /// Gap between individual tabs, in logical pixels.
+    virtual int scrollingTabIndicatorGapsBetweenTabs() const
+    {
+        return 0;
+    }
+    virtual void setScrollingTabIndicatorGapsBetweenTabs(int /*px*/)
+    {
+    }
+    /// Per-tab corner radius in logical pixels; -1 means fully rounded. The
+    /// default is square, niri's own; the sentinel is opted into.
+    virtual int scrollingTabIndicatorCornerRadius() const
+    {
+        return 0;
+    }
+    virtual void setScrollingTabIndicatorCornerRadius(int /*px*/)
+    {
+    }
+    /// Tab colours; empty means "follow the theme" (see ConfigDefaults).
+    virtual QString scrollingTabIndicatorActiveColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingTabIndicatorActiveColor(const QString& /*color*/)
+    {
+    }
+    virtual QString scrollingTabIndicatorInactiveColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingTabIndicatorInactiveColor(const QString& /*color*/)
+    {
+    }
+    virtual QString scrollingTabIndicatorUrgentColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingTabIndicatorUrgentColor(const QString& /*color*/)
+    {
+    }
+
+    /// Drop-target indicator during a scrolling drag re-insert. Virtual with
+    /// an always-on default so the overlay service can gate through the
+    /// interface, same pattern as scrollingTabIndicatorEnabled above.
+    virtual bool scrollingDropIndicatorEnabled() const
+    {
+        return true;
+    }
+    virtual void setScrollingDropIndicatorEnabled(bool /*enabled*/)
+    {
+    }
+    /// Fill and border colours; empty means "follow the theme" (see
+    /// ConfigDefaults).
+    virtual QString scrollingDropIndicatorColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingDropIndicatorColor(const QString& /*color*/)
+    {
+    }
+    virtual QString scrollingDropIndicatorBorderColor() const
+    {
+        return QString();
+    }
+    virtual void setScrollingDropIndicatorBorderColor(const QString& /*color*/)
+    {
+    }
+    /// Fill opacity; the border always draws opaque.
+    virtual double scrollingDropIndicatorOpacity() const
+    {
+        return 0.25;
+    }
+    virtual void setScrollingDropIndicatorOpacity(double /*opacity*/)
+    {
+    }
+    virtual int scrollingDropIndicatorBorderWidth() const
+    {
+        return 2;
+    }
+    virtual void setScrollingDropIndicatorBorderWidth(int /*px*/)
+    {
+    }
+    /// 8 px, the zone overlay's radius. The static_assert in
+    /// settings/scrolling.cpp pins the CONFIGDEFAULTS value, so moving it (or
+    /// the ZoneDefaults constant it forwards) fails the build and prompts an
+    /// update here. It cannot see a change made on THIS side — editing the
+    /// literal below compiles cleanly and drifts silently, so keep the two in
+    /// step by hand.
+    virtual int scrollingDropIndicatorBorderRadius() const
+    {
+        return 8;
+    }
+    virtual void setScrollingDropIndicatorBorderRadius(int /*px*/)
+    {
+    }
+
+    /// Float-position restore for scroll-floated windows. Virtual with an
+    /// always-on default so the WindowTrackingAdaptor's restore predicate
+    /// can resolve it through the interface, like its snap/autotile twins.
+    virtual bool scrollingRestoreFloatedWindowsOnLogin() const
+    {
+        return true;
+    }
+
+    /// Writer for the toggle above, same no-op-default rationale as
+    /// setScrollingTabIndicatorEnabled. The snap/autotile twins are pure virtuals
+    /// on ISnappingSettings; this pair carries defaults because its getters do.
+    virtual void setScrollingRestoreFloatedWindowsOnLogin(bool /*restore*/)
+    {
+    }
+
+    virtual QVariantMap getPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
+    virtual void setPerScreenScrollingSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
+                                              const QVariant& /*value*/)
+    {
+    }
+    virtual void clearPerScreenScrollingSettings(const QString& /*screenIdOrName*/)
+    {
+    }
+    virtual bool hasPerScreenScrollingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
+
     virtual QVariantMap getPerScreenZoneSelectorSettings(const QString& /*screenIdOrName*/) const
     {
         return {};
@@ -291,11 +478,14 @@ public:
     // NOTE: snapping exposes only the getter — `getPerScreenSnappingSettings`
     // is the lone snapping accessor declared on
     // PhosphorEngine::IGeometrySettings (consumed by the geometry
-    // pipeline). Per-screen snapping gaps are rule-backed now, so there
-    // is no set/clear/has triplet: the getter reads the resolved gap
-    // rules and there is no per-screen snapping writer surface (unlike
-    // the autotile + zone-selector blocks above, which still carry
-    // ISettings-only set/clear/has writers).
+    // pipeline). It is a PROJECTION, not a store of its own: since the gaps
+    // unification the per-monitor gap dimensions are config-backed and live in
+    // the per-screen AUTOTILE map (one value per monitor drives both snap and
+    // tile), and this getter surfaces that map's gap subset. Hence no
+    // set/clear/has triplet, unlike the autotile + zone-selector blocks above:
+    // writes go through setPerScreenAutotileSetting and the perScreenGap*
+    // accessors, and a snapping-side writer would just be a second door onto
+    // the same keys.
     QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const override
     {
         return {};
@@ -323,14 +513,24 @@ public:
     // Settings::load (settings.cpp) for the live guard against
     // `m_ownedRuleStore`.
     virtual void load() = 0;
-    virtual void save() = 0;
-    virtual void reset() = 0;
+    /// Persist the current values. Returns false when the write did not
+    /// reach disk (the implementation keeps the previous baseline so the
+    /// unsaved values stay discardable and the next save retries).
+    virtual bool save() = 0;
+    /// Restore factory defaults. Returns false when the cleared configuration
+    /// could not be persisted, in which case the implementation must leave the
+    /// previous state intact rather than half-applying the reset. Callers that
+    /// chain further reset work (daemon notification, page bookkeeping) MUST
+    /// gate it on this result.
+    virtual bool reset() = 0;
 
 Q_SIGNALS:
     void settingsChanged();
     void dragActivationTriggersChanged();
     void autotileDragInsertTriggersChanged();
     void autotileDragInsertToggleChanged();
+    void scrollingDragInsertTriggersChanged();
+    void scrollingDragInsertToggleChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanModifierChanged();
     void zoneSpanTriggersChanged();
@@ -429,8 +629,10 @@ Q_SIGNALS:
     void perScreenZoneSelectorSettingsChanged();
     void perScreenAutotileSettingsChanged();
     void perScreenSnappingSettingsChanged();
+    void perScreenScrollingSettingsChanged();
     // Rendering
     void renderingBackendChanged();
+    void gpuDeviceChanged();
     // Window decoration appearance (border + title bar)
     void showWindowBorderChanged();
     void windowBorderScopeChanged();
@@ -603,6 +805,82 @@ Q_SIGNALS:
     void autotileDecMasterCountShortcutChanged();
     void autotileIncMasterRatioShortcutChanged();
     void autotileDecMasterRatioShortcutChanged();
+
+    // Scrolling settings
+    void scrollingEnabledChanged();
+    void scrollingCenterFocusedColumnChanged();
+    void scrollingAlwaysCenterSingleColumnChanged();
+    void scrollingCropStraddlersChanged();
+    void scrollingDefaultColumnWidthKindChanged();
+    void scrollingDefaultColumnWidthValueChanged();
+    void scrollingDefaultColumnDisplayChanged();
+    void scrollingDefaultColumnWidthPresetIndexChanged();
+    void scrollingDefaultWindowHeightKindChanged();
+    void scrollingDefaultWindowHeightValueChanged();
+    void scrollingDefaultWindowHeightPresetIndexChanged();
+    void scrollingPresetColumnWidthsChanged();
+    void scrollingPresetWindowHeightsChanged();
+
+    void defaultScrollingTemplateChanged();
+    void scrollingWheelFocusEnabledChanged();
+    void scrollingWheelFocusInvertedChanged();
+
+    // Scrolling tab indicator (Scrolling.TabIndicator)
+    void scrollingTabIndicatorEnabledChanged();
+    void scrollingTabIndicatorStyleChanged();
+    void scrollingTabIndicatorPositionChanged();
+    void scrollingTabIndicatorHideWhenSingleTabChanged();
+    void scrollingTabIndicatorPlaceWithinColumnChanged();
+    void scrollingTabIndicatorGapChanged();
+    void scrollingTabIndicatorWidthChanged();
+    void scrollingTabIndicatorLengthProportionChanged();
+    void scrollingTabIndicatorGapsBetweenTabsChanged();
+    void scrollingTabIndicatorCornerRadiusChanged();
+    void scrollingTabIndicatorActiveColorChanged();
+    void scrollingTabIndicatorInactiveColorChanged();
+    void scrollingTabIndicatorUrgentColorChanged();
+
+    // Scrolling drop indicator (Scrolling.DropIndicator)
+    void scrollingDropIndicatorEnabledChanged();
+    void scrollingDropIndicatorColorChanged();
+    void scrollingDropIndicatorBorderColorChanged();
+    void scrollingDropIndicatorOpacityChanged();
+    void scrollingDropIndicatorBorderWidthChanged();
+    void scrollingDropIndicatorBorderRadiusChanged();
+
+    // Scrolling behavior settings
+    void scrollingInsertPositionChanged();
+    void scrollingFocusNewWindowsChanged();
+    void scrollingFocusFollowsMouseChanged();
+    void scrollingStickyWindowHandlingChanged();
+    void scrollingRespectMinimumSizeChanged();
+    void scrollingRestoreStripsOnLoginChanged();
+    void scrollingRestoreFloatedWindowsOnLoginChanged();
+    void scrollingColumnWidthStepPercentChanged();
+    void scrollingWindowHeightStepPercentChanged();
+
+    // Scrolling shortcuts
+    void scrollingFocusColumnFirstShortcutChanged();
+    void scrollingFocusColumnLastShortcutChanged();
+    void scrollingMoveColumnToFirstShortcutChanged();
+    void scrollingMoveColumnToLastShortcutChanged();
+    void scrollingConsumeWindowShortcutChanged();
+    void scrollingExpelWindowShortcutChanged();
+    void scrollingConsumeOrExpelLeftShortcutChanged();
+    void scrollingConsumeOrExpelRightShortcutChanged();
+    void scrollingCenterColumnShortcutChanged();
+    void scrollingToggleColumnTabbedShortcutChanged();
+    void scrollingCycleColumnWidthShortcutChanged();
+    void scrollingCycleColumnWidthBackShortcutChanged();
+    void scrollingIncreaseColumnWidthShortcutChanged();
+    void scrollingDecreaseColumnWidthShortcutChanged();
+    void scrollingMaximizeColumnShortcutChanged();
+    void scrollingExpandColumnShortcutChanged();
+    void scrollingCycleWindowHeightShortcutChanged();
+    void scrollingCycleWindowHeightBackShortcutChanged();
+    void scrollingIncreaseWindowHeightShortcutChanged();
+    void scrollingDecreaseWindowHeightShortcutChanged();
+    void scrollingResetWindowHeightsShortcutChanged();
 };
 
 } // namespace PlasmaZones

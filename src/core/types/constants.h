@@ -33,6 +33,23 @@
 
 namespace PlasmaZones {
 
+/// Dynamic QCoreApplication property carrying the GPU-preference environment
+/// variable names this process exported (a QStringList; see
+/// daemon/rendering/vulkansupport.h). Spawn sites remove these names from a
+/// child's environment so an inherited export cannot trip the child's
+/// pre-set-value guards and freeze it on this process's stale GPU pin. The
+/// constant lives here (not in vulkansupport.h) so plasmazones_core spawn
+/// sites can read the property without a link dependency on the executables
+/// that compile vulkansupport.cpp.
+inline constexpr const char* PGpuExportedVarsProperty = "_p_gpuExportedVars";
+
+/// Companion property: environment variables this process CLEARED for the GPU
+/// preference (a QVariantMap of name to the original value). A session-wide
+/// NVIDIA offload export is cleared in-process when the pinned GPU is not
+/// NVIDIA; children have no stake in that clear, so spawn sites restore these
+/// into the child environment after scrubbing the exported names.
+inline constexpr const char* PGpuClearedVarsProperty = "_p_gpuClearedVars";
+
 // PhosphorZones::ZoneGeometryMode lives in libs/phosphor-zones —
 // `PhosphorZones::Zone.h` declares it inside `namespace PlasmaZones` so it's
 // visible to existing callers via the same name.  No alias needed here;
@@ -90,7 +107,8 @@ inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"}
  * @brief Maximum length for user-visible layout and zone names.
  *
  * Client-side cap in the QML text fields that author a name (editor
- * TopBar.qml and PropertyPanel.qml, settings NewLayoutDialog.qml, all via
+ * TopBar.qml and PropertyPanel.qml, settings NewLayoutDialog.qml and
+ * ScrollingTemplateEditorDialog.qml, all via
  * @c maximumLength). The UI cap is advisory only: callers can bypass it
  * entirely over D-Bus, and @c QQuickTextInput::maximumLength truncates by
  * UTF-16 code units so even the UI can produce a name that needs repair.
@@ -99,6 +117,18 @@ inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"}
  * layout controller (@c settingscontroller_layouts.cpp).
  */
 inline constexpr int MaxLayoutNameLength = 40;
+
+/**
+ * @brief Maximum length for a scrolling template's free-text description.
+ *
+ * The sibling of @ref MaxLayoutNameLength for the one template field that has
+ * no name-length counterpart. The settings-side
+ * ScrollingTemplateEditorDialog.qml mirrors this cap client-side via
+ * @c maximumLength, and the layout adaptor's D-Bus boundary re-applies it via
+ * @ref clampName: a direct D-Bus caller can hand us an unbounded string that
+ * then lands in the store's JSON file and in every picker tooltip.
+ */
+inline constexpr int MaxTemplateDescriptionLength = 500;
 
 /**
  * @brief Clamp a user-visible name to @p maxLength UTF-16 code units without

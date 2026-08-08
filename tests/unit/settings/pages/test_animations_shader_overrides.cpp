@@ -377,6 +377,75 @@ private Q_SLOTS:
         QVERIFY2(!snapIds.contains(QStringLiteral("wobble")), "move pack must not be offered on a crossfade leg");
     }
 
+    /// The same picker contract for the Scrolling page's Strip Scrolled row.
+    /// The page's own comment promises the picker offers only strip packs, so
+    /// pin it the way the drag leaf above is pinned: bundled strip packs in,
+    /// every other class out, and strip packs absent everywhere else.
+    void availableShaderEffectsForPath_stripLeafOffersOnlyStripShaders()
+    {
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+        AnimationsPageController c(&registry, &settings);
+
+        const auto idsFor = [&c](const QString& path) {
+            QStringList ids;
+            const QVariantList list = c.availableShaderEffectsForPath(path);
+            ids.reserve(list.size());
+            for (const QVariant& v : list)
+                ids.append(v.toMap().value(QStringLiteral("id")).toString());
+            return ids;
+        };
+
+        const QStringList stripIds = idsFor(PP::ScrollingView);
+        QVERIFY2(stripIds.contains(QStringLiteral("strip-motion-blur")),
+                 "bundled strip pack must be offered on the strip leaf");
+        QVERIFY2(stripIds.contains(QStringLiteral("phosphor-gate")),
+                 "every bundled strip pack must be offered, not just the first");
+        QVERIFY2(!stripIds.contains(QStringLiteral("window-morph")),
+                 "geometry pack must not be offered on the strip leaf");
+        QVERIFY2(!stripIds.contains(QStringLiteral("wobble")), "move pack must not be offered on the strip leaf");
+        QVERIFY2(!stripIds.contains(QStringLiteral("dissolve")),
+                 "universal crossfade must not be offered on the strip leaf");
+        QVERIFY2(!stripIds.contains(QStringLiteral("desktop-fade")),
+                 "desktop pack must not be offered on the strip leaf");
+
+        // …and the strip packs stay out of every other picker.
+        for (const QString& path : {PP::WindowSnapIn, PP::WindowOpen, PP::WindowMove, PP::DesktopSwitch}) {
+            const QStringList ids = idsFor(path);
+            QVERIFY2(!ids.contains(QStringLiteral("strip-motion-blur")),
+                     qPrintable(QStringLiteral("strip pack offered on ") + path));
+        }
+    }
+
+    /// The other half of the picker contract: an override left behind from a
+    /// pack that no longer applies must not resolve. A stale non-strip id on
+    /// the strip leaf (hand-edited config, or a pack whose appliesTo changed)
+    /// blanks rather than arming the pass with an incompatible pack.
+    void resolvedShaderProfile_stripLeafBlanksAnIncompatibleOverride()
+    {
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+        AnimationsPageController c(&registry, &settings);
+
+        QVERIFY(c.setShaderOverride(PP::ScrollingView, QStringLiteral("strip-motion-blur"), {}));
+        QCOMPARE(c.resolvedShaderProfile(PP::ScrollingView).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("strip-motion-blur"));
+    }
+
     /// User-reported scenario: parent ("All Window Events" / "All
     /// Popups" / etc.) has an explicit shader. The user wants to override
     /// a CHILD event with a different shader. Each step's resolution
@@ -666,6 +735,14 @@ private Q_SLOTS:
         const QString unsupported = QStringLiteral("editor.snapIn");
         QVERIFY(c.supportsShaderLeg(supported));
         QVERIFY(!c.supportsShaderLeg(unsupported));
+        // The strip pass made scrolling.view a consumed shader leaf (its
+        // ancestors join via the walk-up), so the Strip Scrolled card shows
+        // the picker and the pruner keeps its overrides. Taxonomy constants,
+        // not literals, so a leaf rename cannot leave this quietly asserting
+        // against a path that no longer exists.
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        QVERIFY(c.supportsShaderLeg(PP::ScrollingView));
+        QVERIFY(c.supportsShaderLeg(PP::Scrolling));
 
         QCOMPARE(c.setShaderOverrideOnPaths(QStringList{supported, unsupported}, QStringLiteral("pixelate"), {}), 1);
 

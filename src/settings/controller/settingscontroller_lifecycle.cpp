@@ -2,15 +2,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Apply / discard / reset lifecycle for SettingsController:
-//   * load()      — pull settings from disk, snapshot for dirty
-//                   diff, ensure schema migration, hydrate algorithm
-//                   ordering, refresh local layouts.
-//   * save()      — flush dirty settings to disk, commit per-page
-//                   stagers (animations + rules), notify the
-//                   daemon to reload, push quick-slot + assignment
-//                   state through D-Bus.
-//   * defaults()  — restore factory defaults and replay the page-
-//                   reset signal chain.
+//   * adoptOnDiskState() — adopt whatever is on disk as the session state
+//                   (settings, local rule store, daemon rules, screens,
+//                   layouts) and drop every staged edit. Shared by load()
+//                   and the config-import success path.
+//   * load()      — delegate the whole reload to adoptOnDiskState() and
+//                   clear the dirty state when it comes back clean. The
+//                   reload steps themselves (settings, rule store, daemon
+//                   rules, screens, layouts, staging) all live in that
+//                   shared helper, because the import path needs exactly
+//                   the same sequence.
+//   * save()      — flush dirty settings to disk, notify the daemon to
+//                   reload, and push the three staged D-Bus surfaces
+//                   (virtual screens, quick slots, assignments). Per-page
+//                   stagers (animations + rules) commit through the
+//                   framework's own domain walk, not from here.
+//   * defaults()  — restore factory defaults, stage the daemon-backed
+//                   clears the config reset cannot cover, and recompute
+//                   the dirty set.
 //   * launchEditor() — fork the zone editor process.
 //   * onSettingsPropertyChanged / onExternalSettingsChanged — the
 //     two ISettings change-tracking hooks that flow into setNeedsSave.
@@ -19,43 +28,42 @@
 
 #include "settingscontroller.h"
 
-#include "config/configdefaults.h"
-#include "config/configmigration.h"
-#include "core/utils/utils.h"
 #include "settings/utils/dbusutils.h"
+#include "settingscontroller_pagekeys.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 
 #include "core/platform/logging.h"
+#include "core/types/constants.h"
 
 #include <QCoreApplication>
-#include <QFile>
 #include <QFileInfo>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QTimer>
 
 namespace PlasmaZones {
 
-void SettingsController::load()
+bool SettingsController::adoptOnDiskState(bool treatAsyncRevertAsClean)
 {
-    m_loading = true;
-    // A full load adopts the on-disk state wholesale, which is everything a
-    // reload deferred by onExternalSettingsChanged() would have done — clear
-    // the flag so the clean transition at the end of this load doesn't
-    // schedule a redundant second reload.
-    m_pendingExternalReload = false;
+    // Hold m_loading for the whole body: every step below can fire a NOTIFY that
+    // routes through onSettingsPropertyChanged and would re-dirty the very pages
+    // this is cleaning. The caller's setNeedsSave(false) is the authoritative
+    // reset, and it runs after the flag drops.
+    const ScopedFlag loadingScope(m_loading);
+
     // Animation pages persist per-event motion overrides as separate
     // files (file-per-path under ~/.local/share/plasmazones/profiles/);
-    // m_settings.load() alone wouldn't restore them on Discard. The
-    // page controller's pre-edit snapshot rewinds those files. Shader
-    // overrides don't need this — they ride Settings::load()'s
-    // Q_PROPERTY re-emit like every other page setting.
-    // A refusal has two causes and they mean opposite things here.
+    // m_settings.load() alone wouldn't restore them. The page controller's
+    // pre-edit snapshot rewinds those files. Shader overrides don't need this —
+    // they ride Settings::load()'s Q_PROPERTY re-emit like every other page
+    // setting.
+    //
+    // A refusal has two causes and they mean opposite things, which is what
+    // @p treatAsyncRevertAsClean selects between.
     //
     // On the global Discard path this page's async revert is dispatched FIRST, so
-    // by the time the settings domain calls load() the worker already owns the
+    // by the time the settings domain gets here the worker already owns the
     // snapshot map and revertPending() refuses. That is the restore proceeding
     // normally, not a failure: the worker finishes the job and re-raises
     // pendingChangesChanged itself if it has to retain a file. Treating it as
@@ -64,37 +72,32 @@ void SettingsController::load()
     // A refusal with no worker running, or a partial restore failure, IS a page
     // that is still dirty, and forcing needsSave false there would strand the
     // snapshots for the next Discard to write back over the new state.
-    const bool animationsClean =
-        !m_animationsPage || m_animationsPage->asyncRevertInFlight() || m_animationsPage->revertPending();
-    if (!animationsClean) {
-        qCWarning(lcConfig) << "load: animation snapshots are still staged after the revert";
-    }
-    // Rules are owned by the daemon (rules.json); Discard
-    // re-fetches the daemon's authoritative set, dropping staged edits.
-    if (m_rulesPage)
-        m_rulesPage->revert();
+    const bool animationsClean = !m_animationsPage
+        || (treatAsyncRevertAsClean && m_animationsPage->asyncRevertInFlight()) || m_animationsPage->revertPending();
+
     m_settings.load();
     // m_settings borrows the shared m_localRuleStore, so Settings::load() above
     // deliberately does NOT reload it (the owner drives reloads — see the
     // borrowed-store note in Settings::load()). As that owner, re-read
-    // rules.json here so Discard reverts the store to its on-disk state.
+    // rules.json here so the store matches its on-disk state.
     // Idempotent: RuleStore::load() only emits when the content differs,
     // mirroring the daemon-rulesChanged path in reloadLocalRuleStore().
     if (m_localRuleStore)
         m_localRuleStore->load();
+    // Rules are owned by the daemon (rules.json); re-fetch the daemon's
+    // authoritative set, dropping staged edits. Async: the reply handler
+    // re-derives dirty through the permanent revertFinished listener in
+    // settingscontroller.cpp.
+    if (m_rulesPage)
+        m_rulesPage->revert();
     m_screenHelper.refreshScreens();
     scheduleLayoutLoad();
-    // Clear staged state BEFORE m_loading=false so any NOTIFY emits
-    // it triggers (clearing a staged assignment fires the mirrored
-    // Settings property) route through onSettingsPropertyChanged
-    // with m_loading=true and stay clean — the trailing
-    // setNeedsSave(false) is the authoritative reset.
     m_staging.clearAll();
     // Emit stagedXxxChanged only when reset() actually transitions a
     // non-empty optional to empty. Unconditional emit violates
     // CLAUDE.md's "only emit signals when value actually changes" rule
     // and re-walks every QML binding keyed on these signals on every
-    // load(), including the startup load when nothing was staged.
+    // call, including the startup load when nothing was staged.
     const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
     const bool hadStagedTile = m_stagedTilingOrder.has_value();
     m_stagedSnappingOrder.reset();
@@ -103,8 +106,20 @@ void SettingsController::load()
         Q_EMIT stagedSnappingOrderChanged();
     if (hadStagedTile)
         Q_EMIT stagedTilingOrderChanged();
-    m_loading = false;
-    if (animationsClean) {
+    return animationsClean;
+}
+
+void SettingsController::load()
+{
+    // A full load adopts the on-disk state wholesale, which is everything a
+    // reload deferred by onExternalSettingsChanged() would have done — clear
+    // the flag so the clean transition at the end of this load doesn't
+    // schedule a redundant second reload.
+    m_pendingExternalReload = false;
+    const bool animationsClean = adoptOnDiskState(/*treatAsyncRevertAsClean=*/true);
+    if (!animationsClean) {
+        qCWarning(lcConfig) << "load: animation snapshots are still staged after the revert";
+    } else {
         setNeedsSave(false);
     }
 }
@@ -134,7 +149,7 @@ void SettingsController::save()
         Q_EMIT stagedTilingOrderChanged();
 
     // Persistence phase (pre-save): staged VS configs need to be in Settings
-    // before the save flushes to disk. Quick-layout slots (both modes) are
+    // before the save flushes to disk. Quick-layout slots (all three modes) are
     // daemon-backed now and flush via D-Bus after notifyReload, below.
     m_staging.flushVirtualScreensToSettings(m_settings);
 
@@ -167,20 +182,34 @@ void SettingsController::save()
     // the Settings-
     // backed surface.
 
+    // The three D-Bus flushes below all report TRANSPORT failure and all
+    // RETAIN their staging when they fail, so `commitOk` gates the same clean
+    // transition for every one of them: the badge re-lights with the data
+    // still staged and the next Save re-sends it. Treating them as infallible
+    // cleared the staging AND the badge while the daemon had never applied
+    // the edits. Transport-level only: a daemon-side rejection inside a void
+    // adaptor slot (e.g. setQuickLayoutSlot ignoring an out-of-range slot)
+    // still replies successfully and is not caught here.
+    bool commitOk = true;
+
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.
-    m_staging.flushVirtualScreensToDaemon();
+    if (!m_staging.flushVirtualScreensToDaemon()) {
+        commitOk = false;
+    }
 
     // Notify daemon to reload KConfig settings (before D-Bus assignment mutations)
     DaemonDBus::notifyReload();
 
-    // Flush staged quick-layout slots (snapping + tiling) via D-Bus (after reload).
-    m_staging.flushQuickSlotsToDaemon();
+    // Flush staged quick-layout slots (snapping + tiling + scrolling) via D-Bus
+    // (after reload).
+    if (!m_staging.flushQuickSlotsToDaemon()) {
+        commitOk = false;
+    }
 
     // Flush staged assignment changes to daemon (same batch protocol as KCM).
     // This must happen AFTER notifyReload so the reload doesn't overwrite
     // the assignment changes.
-    bool assignmentsCommitOk = true;
     if (m_staging.hasPendingAssignments()) {
         QDBusMessage batchOn = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                       QStringLiteral("setSaveBatchMode"), {true});
@@ -189,16 +218,18 @@ void SettingsController::save()
             qCWarning(lcCore)
                 << "save: setSaveBatchMode(true) failed:" << batchOn.errorMessage()
                 << "— skipping flush+apply to avoid per-assignment writes the batch was meant to coalesce";
-            assignmentsCommitOk = false;
+            commitOk = false;
         } else {
-            m_staging.flushAssignmentsToDaemon();
+            if (!m_staging.flushAssignmentsToDaemon()) {
+                commitOk = false;
+            }
             QDBusMessage apply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                         QStringLiteral("applyAssignmentChanges"));
             if (apply.type() == QDBusMessage::ErrorMessage) {
                 qCWarning(lcCore) << "save: applyAssignmentChanges failed:" << apply.errorMessage();
                 Q_EMIT layoutOperationFailed(
                     PhosphorI18n::tr("Failed to apply assignment changes: %1").arg(apply.errorMessage()));
-                assignmentsCommitOk = false;
+                commitOk = false;
             }
             // Only drop batch mode if we actually entered it. ALWAYS attempt
             // to drop — leaving the daemon in batch mode after a failure
@@ -208,7 +239,7 @@ void SettingsController::save()
                                        QStringLiteral("setSaveBatchMode"), {false});
             if (batchOff.type() == QDBusMessage::ErrorMessage) {
                 qCWarning(lcCore) << "save: setSaveBatchMode(false) failed:" << batchOff.errorMessage();
-                assignmentsCommitOk = false;
+                commitOk = false;
             }
         }
     }
@@ -237,8 +268,8 @@ void SettingsController::save()
     // applyAllComplete carries the error. SettingsController::save()
     // no longer dispatches window-rule pushes (see comment above) so
     // there is no commit-result to re-flag here.
-    if (!assignmentsCommitOk) {
-        // Surface the assignment-flush failure to the user — same shape
+    if (!commitOk) {
+        // Surface the failed daemon commit to the user — same shape
         // as the rules retry path. Without this, a failed batch
         // looks "saved" in the UI while the daemon never applied the
         // edits, so the next launch silently shows stale assignments.
@@ -247,6 +278,13 @@ void SettingsController::save()
         // re-flagging the active page would dirty whatever page the user
         // happens to be viewing at save time, not the page that actually
         // has the unsaved data. Same shape as the rules block above.
+        //
+        // "overview" is the target for all three flushes, not just
+        // assignments: it is the one page that is always registered, and the
+        // retained staging is what the badge is really reporting. The
+        // virtual-screens and quick-shortcuts pages ALSO light on their own,
+        // because their dirty state is value-based over the staging maps that
+        // the failed flush just kept.
         ExternalEditScope scope(*this, QStringLiteral("overview"));
         setNeedsSave(true);
     }
@@ -271,12 +309,24 @@ void SettingsController::defaults()
     // synchronously and the staged-order reset transitions through
     // optional<>::reset() emit NOTIFY signals — all of which route via
     // onSettingsPropertyChanged and would otherwise re-mark the active
-    // page dirty before the trailing blanket-mark below overwrites
-    // m_dirtyPages. Keeping the gate engaged for the full body matches
-    // the load()/save() pattern and gives us one clean
-    // dirtyPagesChanged emit at the end.
-    m_loading = true;
-    m_settings.reset();
+    // page dirty before the final dirty-set computation below. Keeping the
+    // gate engaged for the full body matches the load()/save() pattern and
+    // gives us one clean dirtyPagesChanged emit at the end.
+    //
+    // ScopedFlag, not a bare pair of assignments: anything below can throw
+    // (a D-Bus call, a QString allocation), and a stranded m_loading = true
+    // swallows every subsequent edit for the rest of the session.
+    ScopedFlag loadingScope(m_loading);
+
+    // Nothing below may proceed on a reset that did not land. A failed commit
+    // leaves the previous configuration on disk and in the store, so notifying
+    // the daemon, resetting its managed rules and clearing the staging would
+    // half-apply a factory reset the config itself never took.
+    if (!m_settings.reset()) {
+        qCWarning(lcConfig) << "defaults: the cleared configuration could not be written — nothing was reset";
+        Q_EMIT pageResetFailed(QString(), QString(ReasonResetNotWritten));
+        return;
+    }
 
     m_staging.clearAll();
     // Gate the staged-order NOTIFY emits on transition (same rationale
@@ -307,7 +357,37 @@ void SettingsController::defaults()
         // importAllSettings().
         qCWarning(lcConfig) << "defaults: animation snapshots are still staged after the revert (a discard is in "
                                "flight, or a restore failed)";
+        // A log line is not a result. The two sibling paths (per-page Reset and
+        // per-page Discard) both raise a signal for exactly this refusal, and
+        // without one here the animation pages silently keep their overrides
+        // while the rest of the app reports a completed factory reset.
+        Q_EMIT pageResetFailed(QStringLiteral("animations"), QString(ReasonOverridesNotCleared));
     }
+
+    // Quick-layout slots are daemon-backed (mode-keyed LayoutRegistry), so
+    // m_settings.reset() above did not touch them and clearAll() only dropped
+    // whatever was staged. Stage the clears the same way per-page Reset does —
+    // through the same helper — so "Restore Defaults" actually unassigns the
+    // slots instead of leaving the user's assignments behind on the three
+    // Quick Shortcuts pages. The clears flush on the next Save, which is what
+    // leaves those pages legitimately dirty below.
+    //
+    // The loop runs over WIRE MODES, matching AssignmentEntry::Mode — the same
+    // enumeration stageQuickSlotClears and flushQuickSlotsToDaemon key on.
+    bool quickSlotsStaged = false;
+    for (const int wireMode : {QuickSlotModeSnapping, QuickSlotModeTiling, QuickSlotModeScrolling}) {
+        bool staged = false;
+        if (!stageQuickSlotClears(wireMode, staged)) {
+            const QString page = wireMode == QuickSlotModeSnapping ? QStringLiteral("snapping-shortcuts")
+                : wireMode == QuickSlotModeScrolling               ? QStringLiteral("scrolling-shortcuts")
+                                                                   : QStringLiteral("tiling-shortcuts");
+            Q_EMIT pageResetFailed(page, QString(ReasonDaemonUnreachable));
+            continue;
+        }
+        quickSlotsStaged = quickSlotsStaged || staged;
+    }
+    if (quickSlotsStaged)
+        Q_EMIT quickLayoutSlotsChanged();
 
     // Refresh screen list — symmetric with load(), which calls this
     // immediately after m_settings.load(). reset() can change screen
@@ -325,32 +405,50 @@ void SettingsController::defaults()
     // reset on the same D-Bus connection). The window border / title bar / gap
     // values are plain config now (reset by m_settings.reset() above), so this is
     // purely about the daemon-side managed rules, not the Windows appearance page.
+    //
+    // m_localRuleStore is deliberately NOT reloaded here. resetManagedDefaults is
+    // fire-and-forget, so rules.json still holds the pre-reset content at this
+    // point and a load() now would re-read exactly what is already in memory. The
+    // daemon's rulesChanged broadcast is what carries the rewrite back, through
+    // reloadLocalRuleStore (wired in settingscontroller_dbuswire.cpp), and the
+    // RuleStoreWatcher covers the file for a session with no daemon at all — a
+    // session where this reset never reaches the daemon either.
     if (m_rulesPage) {
         m_rulesPage->resetManagedDefaults();
         m_rulesPage->revert();
     }
 
-    // Defaults is a global action — mark every valid page dirty so the
-    // unsaved indicator appears next to each of them. Guard the emit
-    // on actual change so a back-to-back `defaults()` (or one called
-    // when state already matches the post-defaults set) doesn't fire
-    // a spurious `dirtyPagesChanged`, matching the emit-on-change
-    // discipline used by `setNeedsSave` everywhere else in this file.
+    // A factory reset is APPLIED, not staged: m_settings.reset() wrote the
+    // cleared configuration to disk and reloaded from it, and the daemon has
+    // been notified. So the config pages are clean, and the blanket "mark every
+    // page dirty" this used to do was unbacked — every one of those pages
+    // reports its dirty state value-based (owned keys against the committed
+    // baseline, which reset() re-captured), so they read CLEAN no matter what
+    // m_dirtyPages says. All the mark achieved was lighting the footer over a
+    // Save that had nothing to write and a Discard that had nothing to revert.
     //
-    // "rules" is INTENTIONALLY excluded from the blanket-mark: it is rule-backed
-    // (its source of truth is the daemon's `rules.json`, not the KConfig store
-    // reset() clears). The managed baselines ARE reset above (resetManagedDefaults
-    // + revert), but that path is LIVE (daemon-persisted, model reloaded) rather
-    // than staged — so the Rules page lands clean, not dirty. Marking it here would
-    // surface a stale "unsaved changes" indicator a subsequent Save could never
-    // clear. The Windows appearance page is a plain config page now (its Windows.*
-    // / Gaps.* keys were reset by m_settings.reset()), so it stays in the blanket
-    // mark like every other config page.
-    QSet<QString> fullSet = validPageNames();
-    fullSet.remove(QStringLiteral("rules"));
-    m_loading = false;
-    if (m_dirtyPages != fullSet) {
-        m_dirtyPages = fullSet;
+    // What IS genuinely unsaved after this is the staged quick-slot clears
+    // above: they are daemon-backed and only reach the daemon on the next Save.
+    // Those pages therefore compute dirty on their own, through the same
+    // isPageDirty the rest of the app uses — no special-casing needed here, and
+    // no exclusion list to keep in step with the page tree either (the old
+    // "rules" carve-out existed only because the blanket mark would have badged
+    // a live, daemon-persisted page it could never clear).
+    //
+    // Drop m_loading before recomputing so isPageDirty sees the settled state,
+    // and guard the emit on actual change to keep the emit-on-change discipline.
+    loadingScope.release();
+    // Start the recompute from an EMPTY set, not from the existing membership:
+    // isPageDirty falls back to m_dirtyPages for any page with no value-based
+    // rule of its own, so an entry left over from before the reset would keep
+    // re-electing itself forever.
+    const QSet<QString> before = m_dirtyPages;
+    m_dirtyPages.clear();
+    for (const QString& page : validPageNames()) {
+        if (isPageDirty(page))
+            m_dirtyPages.insert(page);
+    }
+    if (m_dirtyPages != before) {
         Q_EMIT dirtyPagesChanged();
     }
 }
@@ -363,7 +461,28 @@ void SettingsController::launchEditor()
     // editor doesn't silently produce a no-op click in the UI.
     const QString colocated = QCoreApplication::applicationDirPath() + QLatin1String("/plasmazones-editor");
     QString program = QFileInfo::exists(colocated) ? colocated : QStringLiteral("plasmazones-editor");
-    if (!QProcess::startDetached(program, {})) {
+    // Same GPU-var scrub contract as every spawn site in a GPU-exporting
+    // binary (see PGpuExportedVarsProperty in core/types/constants.h; the
+    // systemsettings-hosted KCM launcher exports nothing and stays on the
+    // plain static call). The settings
+    // app exports no GPU variables itself, so both properties are unset here
+    // and this is a no-op today — applied anyway so the spawn contract stays
+    // uniform rather than depending on the unstated who-exports-what chain.
+    QProcess process;
+    process.setProgram(program);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    if (QCoreApplication::instance()) {
+        const QStringList gpuVars = QCoreApplication::instance()->property(PGpuExportedVarsProperty).toStringList();
+        for (const QString& var : gpuVars) {
+            env.remove(var);
+        }
+        const QVariantMap cleared = QCoreApplication::instance()->property(PGpuClearedVarsProperty).toMap();
+        for (auto it = cleared.constBegin(); it != cleared.constEnd(); ++it) {
+            env.insert(it.key(), it.value().toString());
+        }
+    }
+    process.setProcessEnvironment(env);
+    if (!process.startDetached()) {
         qCWarning(lcCore) << "launchEditor: failed to start" << program << "— editor binary missing or not executable?";
     }
 }

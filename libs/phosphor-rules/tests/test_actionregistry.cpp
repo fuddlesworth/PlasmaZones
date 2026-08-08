@@ -4,6 +4,7 @@
 #include <PhosphorRules/RuleAction.h>
 
 #include <QJsonObject>
+#include <QSet>
 #include <QTest>
 
 using namespace PhosphorRules;
@@ -39,11 +40,20 @@ private Q_SLOTS:
         const ActionRegistry& reg = ActionRegistry::instance();
         // Assert each builtin individually — never an absolute
         // `registeredTypes().size()`, see the singleton-pollution note above.
+        // Note a same-type DOUBLE registration across the two builtin TUs is
+        // not detectable post-hoc (registerAction is register-or-replace and
+        // the hash dedupes); a duplicate whose descriptor DIFFERS surfaces
+        // through the per-type behaviour tests (slots, terminal flag, domain
+        // pins) rather than through any count here.
         QVERIFY(reg.isRegistered(QString(ActionType::SetEngineMode)));
         QVERIFY(reg.isRegistered(QString(ActionType::SetSnappingLayout)));
         QVERIFY(reg.isRegistered(QString(ActionType::SetTilingAlgorithm)));
+        QVERIFY(reg.isRegistered(QString(ActionType::SetScrollingTemplate)));
         QVERIFY(reg.isRegistered(QString(ActionType::DisableEngine)));
         QVERIFY(reg.isRegistered(QString(ActionType::Exclude)));
+        QVERIFY(reg.isRegistered(QString(ActionType::ExcludePlacement)));
+        QVERIFY(reg.isRegistered(QString(ActionType::ExcludeAnimations)));
+        QVERIFY(reg.isRegistered(QString(ActionType::ExcludeDecorations)));
         QVERIFY(reg.isRegistered(QString(ActionType::Float)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationShader)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationTiming)));
@@ -73,6 +83,37 @@ private Q_SLOTS:
 
         QCOMPARE(reg.slotFor(makeAction(ActionType::Float)), QString(ActionSlot::Float));
         QCOMPARE(reg.slotFor(makeAction(ActionType::Exclude)), QString(ActionSlot::Manage));
+        // The scoped exclusion siblings: ExcludePlacement deliberately shares
+        // the Manage slot (same "unmanaged by placement" concept, and both are
+        // terminal so neither ever fills it); ExcludeDecorations gets its own
+        // declared-for-completeness slot. A copy-pasted wrong constantSlot is
+        // exactly the failure this test exists to catch.
+        QCOMPARE(reg.slotFor(makeAction(ActionType::ExcludePlacement)), QString(ActionSlot::Manage));
+        QCOMPARE(reg.slotFor(makeAction(ActionType::ExcludeDecorations)), QString(ActionSlot::DecorationExclude));
+    }
+
+    void testTerminalFlagCompleteness()
+    {
+        // Canary over the LIVE registry: the terminal bit is the highest-
+        // consequence descriptor field (a terminal action stops a resolve
+        // walk), so pin the exact membership — isTerminal iff the type is one
+        // of the four Exclude-family builtins. A future action registered
+        // terminal by copy-paste, or an Exclude-family member losing the
+        // flag, fails here rather than surfacing as a silent behaviour
+        // change. Iterates registeredTypes() so no absolute count is
+        // asserted (singleton-pollution note above); a non-builtin sentinel
+        // registered terminal by another test in this process would trip
+        // this canary, which is the correct outcome — tests that register
+        // sentinels unregister them (see unregisterAction below).
+        const ActionRegistry& reg = ActionRegistry::instance();
+        const QSet<QString> terminalFamily = {QString(ActionType::Exclude), QString(ActionType::ExcludePlacement),
+                                              QString(ActionType::ExcludeAnimations),
+                                              QString(ActionType::ExcludeDecorations)};
+        for (const QString& type : reg.registeredTypes()) {
+            RuleAction probe;
+            probe.type = type;
+            QCOMPARE(reg.isTerminal(probe), terminalFamily.contains(type));
+        }
     }
 
     void testAnimationSlotsAreEventScoped()
@@ -99,10 +140,13 @@ private Q_SLOTS:
     void testTerminalFlag()
     {
         const ActionRegistry& reg = ActionRegistry::instance();
-        // Exclude and ExcludeAnimations are the terminal builtins — every other
-        // builtin must be non-terminal, so evaluation continues past a match.
+        // The four Exclude-family actions are the terminal builtins — every
+        // other builtin must be non-terminal, so evaluation continues past a
+        // match.
         QVERIFY(reg.isTerminal(makeAction(ActionType::Exclude)));
+        QVERIFY(reg.isTerminal(makeAction(ActionType::ExcludePlacement)));
         QVERIFY(reg.isTerminal(makeAction(ActionType::ExcludeAnimations)));
+        QVERIFY(reg.isTerminal(makeAction(ActionType::ExcludeDecorations)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::Float)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetEngineMode)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetSnappingLayout)));
@@ -144,6 +188,27 @@ private Q_SLOTS:
         QJsonObject badOpacity;
         badOpacity.insert(QStringLiteral("value"), 1.5);
         QVERIFY(!reg.validate(makeAction(ActionType::SetOpacity, badOpacity)));
+    }
+
+    void testSetScrollingTemplateAction()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        // Same layoutId-keyed value shape as SetSnappingLayout, but its OWN
+        // slot — sharing the layout slot would shadow the snapping half of
+        // the lossless pair.
+        QJsonObject layout;
+        layout.insert(QStringLiteral("layoutId"), QStringLiteral("{x}"));
+        QVERIFY(reg.validate(makeAction(ActionType::SetScrollingTemplate, layout)));
+        QCOMPARE(reg.slotFor(makeAction(ActionType::SetScrollingTemplate, layout)),
+                 QString(ActionSlot::ScrollingTemplate));
+
+        // Missing and empty layoutId both fail, mirroring SetSnappingLayout's
+        // validator: an empty template is expressed by OMITTING the action,
+        // never by an empty param.
+        QVERIFY(!reg.validate(makeAction(ActionType::SetScrollingTemplate)));
+        QJsonObject emptyLayout;
+        emptyLayout.insert(QStringLiteral("layoutId"), QString());
+        QVERIFY(!reg.validate(makeAction(ActionType::SetScrollingTemplate, emptyLayout)));
     }
 
     void testRestorePositionAction()
@@ -260,6 +325,60 @@ private Q_SLOTS:
     {
         const ActionRegistry& reg = ActionRegistry::instance();
         QVERIFY(!reg.validate(makeAction(QLatin1StringView("notRegistered"))));
+    }
+
+    /// Every registered param's `kind` must be one the settings layer's QML
+    /// dispatcher recognises. The kind is a free-form QString that no compiler
+    /// checks, and ActionRow.qml falls back to a plain TEXT FIELD for an
+    /// unknown one — so a typo silently ships a numeric slot as free text,
+    /// which is exactly what "pixels" did until this round. Failing here is
+    /// far cheaper than noticing it in the rule editor.
+    ///
+    /// The list mirrors ActionRow.qml's dispatch plus the struct doc on
+    /// ParamSchema. Adding a kind means adding it in BOTH places, and this
+    /// canary is what makes the omission loud.
+    void everyParamKindIsInTheKnownVocabulary()
+    {
+        static const QSet<QString> known = {
+            QStringLiteral("string"),
+            QStringLiteral("number"),
+            QStringLiteral("percent"),
+            QStringLiteral("enum"),
+            QStringLiteral("bool"),
+            QStringLiteral("color"),
+            QStringLiteral("snappingLayout"),
+            QStringLiteral("tilingAlgorithm"),
+            QStringLiteral("scrollingTemplate"),
+            QStringLiteral("animationEvent"),
+            QStringLiteral("shaderEffect"),
+            QStringLiteral("overlayShader"),
+            QStringLiteral("zoneOrdinals"),
+            QStringLiteral("curveEditor"),
+            QStringLiteral("screenId"),
+            QStringLiteral("virtualDesktop"),
+            QStringLiteral("decorationChain"),
+        };
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QStringList offenders;
+        int paramsSeen = 0;
+        for (const QString& type : reg.registeredTypes()) {
+            const auto desc = reg.descriptor(type);
+            if (!desc) {
+                continue;
+            }
+            for (const ParamSchema& p : desc->params) {
+                ++paramsSeen;
+                if (!known.contains(p.kind)) {
+                    offenders.append(type + QLatin1Char('/') + p.key + QLatin1String(" = \"") + p.kind
+                                     + QLatin1Char('"'));
+                }
+            }
+        }
+        QVERIFY2(paramsSeen > 0, "No descriptor params found: the scan itself is broken.");
+        QVERIFY2(offenders.isEmpty(),
+                 qPrintable(QStringLiteral("Param kinds the settings-layer dispatcher does not recognise, so their "
+                                           "editors silently fall back to a text field: %1")
+                                .arg(offenders.join(QStringLiteral(", ")))));
     }
 };
 

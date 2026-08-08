@@ -51,16 +51,32 @@ struct PerScreenOverlayState
     // state, not lib-mechanism state.
     PhosphorOverlay::ShellState* shell = nullptr;
 
+    /// The scrolling tab indicators' own shell state, borrowed from the
+    /// SECOND ShellHost the daemon runs (@c m_tabShellHost) with the same
+    /// contract as @c shell above.
+    ///
+    /// They get a surface to themselves because the compositor slides it:
+    /// the KWin effect adds the scrolling strip's view offset to this
+    /// surface so the indicators travel with their columns. A surface
+    /// translates as a whole, and the passive shell carries the navigation
+    /// OSD, which fires on the very action that scrolls — so sharing one
+    /// would slide the OSD sideways on every scroll. See
+    /// PhosphorRoles::ScrollTabShell.
+    PhosphorOverlay::ShellState* tabShell = nullptr;
+
     /// Convenience accessors that resolve the named PZ slot through
     /// the shell's generic slot map. Returns nullptr when no shell
     /// is wired up, or when the QML aliasing in PassiveOverlayShell.qml
-    /// did not expose the requested slot Item.
+    /// (ScrollTabShell.qml for @c scrollTabsSlot) did not expose the
+    /// requested slot Item.
     QQuickItem* osdSlot() const;
     QQuickItem* snapAssistSlot() const;
     QQuickItem* layoutPickerSlot() const;
     QQuickItem* zoneSelectorSlot() const;
     QQuickItem* mainOverlaySlot() const;
     QQuickItem* cheatsheetSlot() const;
+    QQuickItem* scrollTabsSlot() const;
+    QQuickItem* scrollDropIndicatorSlot() const;
 
     // overlayPhysScreen != nullptr is the sentinel for "main overlay
     // mode is active on this screen" - set in createOverlayWindow,
@@ -84,6 +100,22 @@ struct PerScreenOverlayState
     QRect zoneSelectorGeometry;
 };
 
+/// Per-screen layout-family filter used for the zone selector. `manual`
+/// enables PhosphorZones layout entries, `autotile` enables algorithm
+/// previews, and `templates` enables native scrolling-template cards. The
+/// first two default true and the third false, so the unnarrowed answer is
+/// "every non-template family". The resolver narrows to a single family
+/// when the screen has an explicit assignment.
+struct LayoutIncludeFlags
+{
+    bool manual = true;
+    bool autotile = true;
+    /// Native scrolling-template entries — default false: only a
+    /// live-Templates (scrolling) screen offers them, and it offers ONLY
+    /// them.
+    bool templates = false;
+};
+
 /// Shared property-push parameters for layout-OSD content. Used by both
 /// OverlayService::showLayoutOsdImpl (PhosphorZones::Layout* path) and the
 /// showLayoutOsd(QString,...) overload (autotile / pre-built-zones
@@ -99,6 +131,10 @@ struct LayoutOsdContentParams
     bool autoAssign = false; ///< per-layout autoAssign flag (raw, pre-OR with global)
     bool globalAutoAssign = false; ///< master "auto-assign for all layouts" toggle (#370)
     bool locked = false; ///< draws lock badge + " (Locked)" suffix
+    /// True on a live-Templates (scrolling) screen: the layout shown is the
+    /// screen's sizing TEMPLATE, and the OSD captions it "Column template"
+    /// so a template pick never reads as a snap-layout switch.
+    bool isTemplate = false;
     qreal screenAspectRatio = 16.0 / 9.0;
     QString aspectRatioClass = QStringLiteral("any");
     bool showMasterDot = false;

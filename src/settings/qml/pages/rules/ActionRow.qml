@@ -427,6 +427,9 @@ ColumnLayout {
                     if (modelData.kind === "snappingLayout")
                         return paramEditors._snappingLayoutEditor;
 
+                    if (modelData.kind === "scrollingTemplate")
+                        return paramEditors._scrollingTemplateEditor;
+
                     if (modelData.kind === "tilingAlgorithm")
                         return paramEditors._tilingAlgorithmEditor;
 

@@ -98,9 +98,11 @@ Rectangle {
         fixedHeightSpin.value = zone.fixedHeight !== undefined ? zone.fixedHeight : 50;
     }
 
-    // Same imperative-sync idiom for the appearance controls: QQC2 severs their
-    // declarative bindings on the first user interaction (and the writes below
-    // finish the job), so without this re-sync a selection change would keep
+    // Same imperative-sync idiom for the appearance controls. Note what does
+    // the severing: a user CLICK does NOT sever a checked/value binding (the
+    // control writes its value from C++) — it is THIS function's own imperative
+    // writes that do, exactly as syncGeometryControls above says. So without
+    // this re-sync a selection change would keep
     // showing the previous zone's values and the next edit would stamp them
     // onto the new zone. The sliders and spinboxes expose sync functions
     // because the severed binding lives on their internal control.
@@ -369,14 +371,14 @@ Rectangle {
                 }
 
                 AppearanceSpinBox {
-                    Kirigami.FormData.label: i18nc("@label", "Border radius:")
+                    Kirigami.FormData.label: i18nc("@label", "Corner radius:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     from: 0
                     to: 50
                     spinValue: propertyPanel.defaultBorderRadius
                     defaultValue: propertyPanel.defaultBorderRadius
                     spinEnabled: editorController !== null
-                    accessibleName: i18nc("@label", "Border radius for all selected zones")
+                    accessibleName: i18nc("@label", "Corner radius for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Set corner radius for all selected zones (0-50)")
                     onSpinValueModified: function (newValue) {
                         if (editorController)
@@ -428,7 +430,7 @@ Rectangle {
 
                     visible: panelMode === "single"
                     Kirigami.FormData.label: i18nc("@label", "Name:")
-                    // Mirrors PlasmaZones::MaxLayoutNameLength (core/constants.h),
+                    // Mirrors PlasmaZones::MaxLayoutNameLength (core/types/constants.h),
                     // same client-side cap as TopBar's layout name field.
                     maximumLength: 40
                     text: selectedZone ? (selectedZone.name || "") : ""
@@ -794,14 +796,14 @@ Rectangle {
                 AppearanceSpinBox {
                     id: borderRadiusSpinBox
 
-                    Kirigami.FormData.label: i18nc("@label", "Border radius:")
+                    Kirigami.FormData.label: i18nc("@label", "Corner radius:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     from: 0
                     to: 50
                     spinValue: selectedZone ? selectedZone.borderRadius : propertyPanel.defaultBorderRadius
                     defaultValue: propertyPanel.defaultBorderRadius
                     spinEnabled: Boolean(selectedZone) && Boolean(editorController)
-                    accessibleName: i18nc("@label", "Border radius in pixels")
+                    accessibleName: i18nc("@label", "Corner radius in pixels")
                     toolTipText: i18nc("@info:tooltip", "Set zone corner radius in pixels (0-50)")
                     onSpinValueModified: function (newValue) {
                         if (selectedZoneId && editorController)

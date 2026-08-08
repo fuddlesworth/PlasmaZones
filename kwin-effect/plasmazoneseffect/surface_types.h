@@ -15,6 +15,7 @@
 
 #include <PhosphorSurface/SurfaceShaderContract.h>
 
+#include <core/region.h>
 #include <opengl/glframebuffer.h>
 #include <opengl/glshader.h>
 #include <opengl/gltexture.h>
@@ -237,9 +238,6 @@ struct SurfaceFoldPlan
     /// The clock this fold pushes as iTime — the window's OWN, which stops while it is
     /// not animating. Never a raw shared-clock read. See SurfaceMultipassState.
     float foldTime = 0.0f;
-    /// Can the window capture be reused across frames? False under a live transition,
-    /// which re-captures every frame.
-    bool captureCacheable = true;
     /// Which texture the capture belongs in THIS fold — compositeTex[0] when no pack
     /// compiles (nothing folds, so the capture is the composite), captureTex otherwise.
     /// A chain can cross that line at runtime, and a capture cached on the wrong side of
@@ -455,18 +453,42 @@ struct SurfaceMultipassState
     std::unique_ptr<KWin::GLFramebuffer> backdropFbo;
     QSize backdropSize;
     /// Valid sub-rect of backdropTex in TOP-DOWN normalized coords (xy=min,
-    /// zw=size) — the part actually blitted (canvas ∩ output). Zero-size
-    /// means "no capture this frame" and pushes uHasBackdrop = 0.
+    /// zw=size) — the part actually blitted (canvas ∩ output ∩ damage). Zero-size
+    /// means "no capture this frame" and pushes uHasBackdrop = 0. INVARIANT:
+    /// always fully inside backdropWritten, so a pack clamping into it can
+    /// never sample a texel still holding the allocation clear.
     QVector4D backdropRect;
 
-    /// Every output that has blitted into the CURRENT accumulation generation.
+    /// Texture-pixel region of backdropTex written since its allocation clear.
+    ///
+    /// backdropRect is one rect, but the captures feeding it are damage-clipped
+    /// slices that can be DISJOINT — and a bounding-box union of disjoint slices
+    /// on a freshly-cleared texture spans gap texels that still hold the
+    /// transparent clear, which packs would then sample as black patches in the
+    /// frost. So every successful blit records its destination here (grown by
+    /// 1 px to absorb the inward source rounding at fractional scale), and the
+    /// published backdropRect is only ever a rect this region fully contains —
+    /// the capture falls back to a smaller covered rect otherwise. Reset with
+    /// the texture's allocation clear; after the first full-canvas capture it
+    /// collapses to one rect covering the texture and the containment checks
+    /// are trivially true.
+    KWin::Region backdropWritten;
+
+    /// Every output that has blitted a FULL canvas slice into the CURRENT
+    /// accumulation generation.
     ///
     /// This, and NOT a clock, is what separates one generation from the next. A canvas
     /// straddling several outputs is blitted once per output, and those slices must UNION
-    /// into one valid rect — but a blit from an output ALREADY in this generation is the next
-    /// frame for that output and must RESTART the rect, or a window that has moved keeps
-    /// claiming canvas it no longer captures. Outputs have independent frame clocks, so no
-    /// clock can tell those two cases apart.
+    /// into one valid rect — but a FULL slice from an output ALREADY in this generation is
+    /// the next frame for that output and must RESTART the rect, or a window that has moved
+    /// keeps claiming canvas it no longer captures. Outputs have independent frame clocks,
+    /// so no clock can tell those two cases apart.
+    ///
+    /// Only FULL slices (damage covering the whole visible canvas) participate: the capture
+    /// is clipped to the frame's damage region, and a partial slice unions without touching
+    /// this set — restarting on one would collapse the valid rect to a damage sliver.
+    /// Contraction still happens promptly, because full slices are routine (the ~30fps
+    /// backdrop driver damages the whole canvas; animations force full repaints).
     ///
     /// A SET, not "the last output that blitted". With two outputs both covering the canvas
     /// the blits alternate A, B, A, B — so "different from the last one" is true every single
@@ -610,6 +632,18 @@ struct WindowDecoration
     /// other path reads the value through packParamValues like any pack
     /// param.
     double foldedOpacity = 1.0;
+
+    /// Every drawing pack in the chain declares `interiorOpaque` (its output
+    /// never thins a texel inside the natural frame rect — shadow/glow, whose
+    /// halo is confined to the transparent margin). Computed by the
+    /// updateWindowDecoration chain sweep; a pack the registry does not know
+    /// draws nothing and cannot thin the interior, so it does not veto.
+    /// prePaintWindow uses this (with foldedOpacity at rest) to SKIP
+    /// setTranslucent(): the client's own opaque region stays truthful for
+    /// such a chain, and keeping it preserves KWin's occlusion culling —
+    /// both its damage-cull and paint-cull halves (verified against the KWin
+    /// 6.7.3 sources, workspacescene.cpp collectDamage/paintSimpleScreen).
+    bool chainInteriorOpaque = false;
 
     /// Damage bookkeeping for padded chains across window moves/resizes:
     /// KWin damages the window's own old/new rects on a geometry change, but

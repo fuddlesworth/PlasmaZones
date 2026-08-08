@@ -16,22 +16,23 @@ layout(location = 0) out vec4 fragColor;
 
 void main() {
     vec2 fragCoord = vFragCoord;
-    vec2 res = max(iResolution.xy, vec2(1.0));
-    vec2 uv = fragCoord / res;
 
     float bloomRadius = customParams[2].x >= 0.0 ? customParams[2].x : 3.0;
     float bloomStrength = customParams[2].y >= 0.0 ? customParams[2].y : 0.25;
     float blend = customParams[2].z >= 0.0 ? customParams[2].z : 0.6;
 
-    vec2 px = 1.0 / res;
     float r = bloomRadius * 0.5;
 
-    // 5-tap cross blur on channel 1 (distorted layer) for glow
+    // 5-tap cross blur on channel 1 (distorted layer) for glow.
+    // channelUv takes PIXEL coordinates and divides by the channel's own
+    // resolution itself (multipass.glsl), so the tap offsets are expressed
+    // in raw pixels — dividing them by iResolution first collapsed all five
+    // taps onto one texel and made bloomRadius a no-op.
     vec4 c1 = texture(iChannel1, channelUv(1, fragCoord));
-    vec4 b1 = texture(iChannel1, channelUv(1, fragCoord + vec2(r * px.x, 0.0)));
-    vec4 b2 = texture(iChannel1, channelUv(1, fragCoord + vec2(-r * px.x, 0.0)));
-    vec4 b3 = texture(iChannel1, channelUv(1, fragCoord + vec2(0.0, r * px.y)));
-    vec4 b4 = texture(iChannel1, channelUv(1, fragCoord + vec2(0.0, -r * px.y)));
+    vec4 b1 = texture(iChannel1, channelUv(1, fragCoord + vec2(r, 0.0)));
+    vec4 b2 = texture(iChannel1, channelUv(1, fragCoord + vec2(-r, 0.0)));
+    vec4 b3 = texture(iChannel1, channelUv(1, fragCoord + vec2(0.0, r)));
+    vec4 b4 = texture(iChannel1, channelUv(1, fragCoord + vec2(0.0, -r)));
     vec4 blur = (c1 * 2.0 + b1 + b2 + b3 + b4) / 6.0;
 
     vec4 ch0 = texture(iChannel0, channelUv(0, fragCoord));

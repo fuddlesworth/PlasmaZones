@@ -20,28 +20,27 @@ Q_LOGGING_CATEGORY(lcAnimationShader, "phosphoranimationshaders.effect")
 ///   * `"anchor"`     → Anchor (default; FBO == captured anchor)
 ///   * `"surface"`    → Surface (FBO == QQuickWindow contentItem)
 ///
-/// Returns `true` on success and writes through `outExtent`; returns
-/// `false` for an unknown / malformed string and emits a `qCWarning`
-/// so a typo in metadata.json surfaces on the journal rather than
-/// degrading silently. Caller keeps the struct's default value
-/// (Anchor) on failure.
-bool parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& outExtent)
+/// Writes through `outExtent` on success and leaves it alone otherwise, so a
+/// caller that passes a struct field already holding the default (Anchor)
+/// needs no failure branch — which is why this reports nothing. An unknown or
+/// malformed string emits a `qCWarning` here, so a typo in metadata.json
+/// surfaces on the journal rather than degrading silently.
+void parseFboExtent(const QString& raw, AnimationShaderEffect::FboExtentKind& outExtent)
 {
     const QString s = raw.trimmed();
     if (s.isEmpty()) {
-        return false;
+        return;
     }
     if (s.compare(QLatin1String("anchor"), Qt::CaseInsensitive) == 0) {
         outExtent = AnimationShaderEffect::FboExtentKind::Anchor;
-        return true;
+        return;
     }
     if (s.compare(QLatin1String("surface"), Qt::CaseInsensitive) == 0) {
         outExtent = AnimationShaderEffect::FboExtentKind::Surface;
-        return true;
+        return;
     }
     qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: unrecognised fboExtent" << raw
                                  << "Accepted forms are \"anchor\" and \"surface\". Falling back to defaults.";
-    return false;
 }
 
 /// Emit the internal `FboExtentKind` as a `fboExtent` string. Inverse
@@ -205,13 +204,14 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.version = obj.value(QLatin1String("version")).toString();
     e.category = obj.value(QLatin1String("category")).toString();
     // `appliesTo` (array of event-class tokens). Only the documented
-    // vocabulary — "geometry" / "appearance" / "desktop" / "move" — is
-    // accepted; an unknown token is a typo or a foreign import and is dropped
-    // with a warning so it neither restricts the picker on a class that
-    // doesn't exist nor round-trips the typo back to disk via toJson. An array
-    // that validates down to empty is indistinguishable from "universal",
-    // which is the correct fallback (the effect applies everywhere except the
-    // opt-in desktop and move classes — see shaderEffectAppliesToEventPath).
+    // vocabulary — "geometry" / "appearance" / "desktop" / "move" / "strip" —
+    // is accepted; an unknown token is a typo or a foreign import and is
+    // dropped with a warning so it neither restricts the picker on a class
+    // that doesn't exist nor round-trips the typo back to disk via toJson. An
+    // array that validates down to empty is indistinguishable from
+    // "universal", which is the correct fallback (the effect applies
+    // everywhere except the opt-in desktop, move and strip classes — see
+    // shaderEffectAppliesToEventPath).
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
         const QJsonValue appliesVal = obj.value(QLatin1String("appliesTo"));
@@ -223,25 +223,31 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
             qCWarning(lcAnimationShader) << "AnimationShaderEffect::fromJson: appliesTo for effect" << e.id
                                          << "is not an array; ignoring it (pack treated as universal).";
         }
+        // Validated against the exported vocabulary, not a hand-copied list:
+        // a class token added to ProfilePaths becomes accepted here and named
+        // in the diagnostic without touching this loop.
+        const QStringList validTokens = PP::allEventClassTokens();
         const QJsonArray appliesArr = appliesVal.toArray();
         for (const QJsonValue& v : appliesArr) {
             const QString token = v.toString().trimmed();
-            if (token == PP::EventClassGeometry || token == PP::EventClassAppearance || token == PP::EventClassDesktop
-                || token == PP::EventClassMove) {
+            if (validTokens.contains(token)) {
                 if (!e.appliesTo.contains(token))
                     e.appliesTo.append(token);
             } else if (!token.isEmpty()) {
                 qCWarning(lcAnimationShader)
                     << "AnimationShaderEffect::fromJson: unknown appliesTo token" << token << "for effect" << e.id
-                    << "— accepted values are \"geometry\", \"appearance\", \"desktop\" and \"move\"; dropping.";
+                    << "— accepted values are" << qPrintable(validTokens.join(QLatin1String(", "))) << "; dropping.";
             }
         }
     }
-    // Shared shape guard for the array-valued fields, hoisted from the
-    // appliesTo-specific check: a present-but-non-array value (a bare string
-    // is the plausible author typo) silently reduces to empty via toArray(),
-    // and the parameters/textures/bufferShaders fields deserve the same
-    // journal signal appliesTo gets. Returns the array (empty on mismatch).
+    // Shared shape guard for the array-valued fields, modelled on the
+    // appliesTo check above: a present-but-non-array value (a bare string is
+    // the plausible author typo) silently reduces to empty via toArray(), and
+    // the parameters/textures/bufferShaders fields deserve the same journal
+    // signal appliesTo gets. Returns the array (empty on mismatch). appliesTo
+    // keeps its own copy rather than calling this because its consequence is
+    // different enough to say out loud: an ignored appliesTo does not leave
+    // the field empty, it makes the pack UNIVERSAL.
     const auto arrayOrWarn = [&obj, &e](const char* key) -> QJsonArray {
         const QJsonValue v = obj.value(QLatin1String(key));
         if (!v.isUndefined() && !v.isArray()) {
@@ -267,8 +273,8 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     for (const QJsonValue& v : bufArr) {
         if (e.bufferShaderPaths.size() >= AnimationShaderContract::kMaxBufferPasses) {
             qCWarning(lcAnimationShader).nospace()
-                << "AnimationShaderEffect " << obj.value(QLatin1String("id")).toString() << ": bufferShaders declares "
-                << bufArr.size() << " passes; the contract budget is " << AnimationShaderContract::kMaxBufferPasses
+                << "AnimationShaderEffect " << e.id << ": bufferShaders declares " << bufArr.size()
+                << " passes; the contract budget is " << AnimationShaderContract::kMaxBufferPasses
                 << " — surplus passes dropped";
             break;
         }
@@ -453,8 +459,27 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
         return false;
     if (author != other.author || version != other.version || category != other.category)
         return false;
-    if (appliesTo != other.appliesTo)
-        return false;
+    // appliesTo compares as a SET, not a sequence. It is a set everywhere it
+    // is consumed — every reader asks "does it contain X" — so two packs
+    // declaring the same classes in different order are behaviourally
+    // identical, and reporting them unequal made a metadata reorder look like
+    // a content change to every equality-gated path (registry reload
+    // diffing, the settings dirty check). fromJson already dedupes, so a
+    // sorted copy is a faithful set comparison; both lists are at most the
+    // five class tokens, so the sort is free.
+    //
+    // The one consumer that used to care about order was the shader
+    // browser's type badge, which read appliesTo[0]; it now picks by catalog
+    // order (ShaderBrowserPage._effectTypeKey), so nothing observes the
+    // declaration order any more.
+    {
+        QStringList mine = appliesTo;
+        QStringList theirs = other.appliesTo;
+        mine.sort();
+        theirs.sort();
+        if (mine != theirs)
+            return false;
+    }
     if (fragmentShaderPath != other.fragmentShaderPath || vertexShaderPath != other.vertexShaderPath)
         return false;
     if (sourceDir != other.sourceDir || isUserEffect != other.isUserEffect)
@@ -513,6 +538,16 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // pins full-output repaints for the whole drag.
     if (cls == PP::EventClassMove)
         return effect.appliesTo.contains(cls);
+    // The strip class (the scrolling strip's view leg) is opt-in for the same
+    // structural reason as move: the view spring retargets continuously under
+    // wheel scrolling, so there is no discrete from/to leg for a crossfade
+    // pack to play — only a pack consuming the strip inputs (uStrip /
+    // iStripMotion / iStripRect, declared via `appliesTo: ["strip"]`)
+    // decorates the live per-output capture. A universal or single-surface
+    // pack on the strip row would install a dead full-output pass for every
+    // scroll.
+    if (cls == PP::EventClassStrip)
+        return effect.appliesTo.contains(cls);
     // Universal effect (no declared constraint) runs on every single-surface path.
     if (effect.appliesTo.isEmpty())
         return true;
@@ -520,18 +555,26 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // concrete class AND the effect doesn't list it. An ambiguous row
     // (mixed ancestor / non-window path → empty class) is left compatible
     // so the picker never dims an effect on a row it can't classify — EXCEPT
-    // effects that provably cannot drive anything the row cascades to:
-    //   • A desktop-declaring effect. Its two-texture (from/to) contract must
-    //     never be offered on a non-desktop or ambiguous row, where its second
-    //     sampler is unbound. This is the inverse of the universal-excluded-
-    //     from-desktop rule above, keeping the desktop opt-in symmetric.
-    //   • An effect declaring neither geometry nor appearance (i.e. move-only,
-    //     once desktop is excluded). The move leaf takes no inherited shader
-    //     (ShaderProfileTree::resolve), so an ancestor row can only ever feed
-    //     geometry / appearance legs — a move-only pack there is runtime-dead.
+    // an effect that declares NEITHER geometry NOR appearance, which is to
+    // say a pack that is exclusively one of the three opt-in classes
+    // (desktop / move / strip).
+    //
+    // What an ambiguous row can actually feed is only the geometry and
+    // appearance legs beneath it. The move leaf takes no inherited shader at
+    // all (ShaderProfileTree::resolve leaf isolation), and while the desktop
+    // and strip leaves DO inherit — so a screen-level-only pack assigned at
+    // `global` would in fact be picked up and run — offering it on a row that
+    // spans mostly single-surface events advertises a behaviour it does not
+    // have there. So for those two this is picker POLICY (assign it on the
+    // leaf that runs it) rather than a deadness proof, while for move-only it
+    // is a genuine proof.
+    //
+    // The test is on the single-surface classes rather than on the opt-in
+    // ones so a HYBRID keeps working: a pack declaring ["strip",
+    // "appearance"] is live on every appearance leg under an ambiguous row,
+    // and excluding it by its strip token would deny it the assignment its
+    // appearance leg earns.
     if (cls.isEmpty()) {
-        if (effect.appliesTo.contains(PP::EventClassDesktop))
-            return false;
         return effect.appliesTo.contains(PP::EventClassGeometry) || effect.appliesTo.contains(PP::EventClassAppearance);
     }
     return effect.appliesTo.contains(cls);
@@ -542,8 +585,8 @@ bool shaderEffectIsCompositorOnly(const AnimationShaderEffect& effect)
     namespace PP = PhosphorAnimation::ProfilePaths;
     // Universal packs (no declared constraint) run on every single-surface
     // path, daemon overlays included. A constrained pack reaches the daemon
-    // only through the appearance class — desktop / geometry / move events
-    // exist solely inside the kwin-effect.
+    // only through the appearance class — desktop / geometry / move / strip
+    // events exist solely inside the kwin-effect.
     return !effect.appliesTo.isEmpty() && !effect.appliesTo.contains(PP::EventClassAppearance);
 }
 

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "configdefaults_screens.h"
+#include "configdefaults_scrolling.h"
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -21,7 +21,7 @@ namespace PlasmaZones {
  *   int cols = ConfigDefaults::gridColumns();  // Returns 5
  *   int rows = ConfigDefaults::maxRows();      // Returns 4
  */
-class ConfigDefaults : public ConfigDefaultsScreens
+class ConfigDefaults : public ConfigDefaultsScrolling
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -85,6 +85,19 @@ public:
         return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
     }
     static bool autotileDragInsertToggle()
+    {
+        return false;
+    }
+    // Scrolling twins of the autotile drag-insert pair (stored under
+    // Scrolling.Behavior with the same generic Triggers/ToggleActivation
+    // keys). Declared here beside the trigger family rather than in
+    // configdefaults_scrolling.h because makeSingleTriggerList lives on the
+    // derived class and the base header cannot call it.
+    static QVariantList scrollingDragInsertTriggers()
+    {
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
+    }
+    static bool scrollingDragInsertToggle()
     {
         return false;
     }
@@ -398,20 +411,29 @@ public:
     PLASMAZONES_EXPORT static QString legacyConfigFilePath();
 
     /**
-     * Read the rendering backend from the config file on disk.
+     * One-shot read of the Rendering group from the config file on disk,
+     * parsing config.json once for both boot-time values.
      *
-     * Primary path: reads Rendering/Backend from config.json (the
-     * renderingGroup()/backendKey() accessors). Falls back to the legacy
-     * plasmazonesrc INI (v1 key) when the JSON config is absent, unparseable,
-     * or doesn't carry the key — in practice the pre-migration window, since
-     * a successful migration renames the INI away. This helper provides a
-     * single canonical read used by daemon, editor, and Settings.
+     * Backend: reads Rendering/Backend (the renderingGroup()/backendKey()
+     * accessors), falling back to the legacy plasmazonesrc INI (v1 key) when
+     * the JSON config is absent, unparseable, or doesn't carry the key — in
+     * practice the pre-migration window, since a successful migration renames
+     * the INI away. Returns a normalized token ("auto", "vulkan", "opengl").
+     *
+     * GPU pin: reads Rendering/Gpu with no INI fallback (the key postdates
+     * the v1 INI format, so an INI can never carry it). Returns "auto" or a
+     * normalized "vendor:device" hex pair.
      *
      * Safe to call before QCoreApplication exists (raw file access, no
-     * config backend construction).
-     * Returns the normalized backend string ("auto", "vulkan", or "opengl").
+     * config backend construction). Used by the daemon and editor mains.
      */
-    PLASMAZONES_EXPORT static QString readRenderingBackendFromDisk();
+    struct RenderingBootConfig
+    {
+        QString backend;
+        QString gpuDevice;
+    };
+    PLASMAZONES_EXPORT static RenderingBootConfig readRenderingConfigFromDisk();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Settings
     // ═══════════════════════════════════════════════════════════════════════════
@@ -606,19 +628,6 @@ public:
     {
         return {};
     }
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Ordering Settings
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static QStringList snappingLayoutOrder()
-    {
-        return {};
-    }
-    static QStringList tilingAlgorithmOrder()
-    {
-        return {};
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Editor Settings
     // ═══════════════════════════════════════════════════════════════════════════
@@ -936,11 +945,15 @@ public:
     }
     static QString autotileIncMasterCountShortcut()
     {
-        return QStringLiteral("Meta+Shift+]");
+        // NOT Meta+Shift+] — Shift+symbol chords never fire on Wayland
+        // (KWin consumes Shift in the keysym translation; see
+        // toggleCheatsheetShortcut). Meta+Ctrl+[ ] belong to the rotate
+        // pair; = and - are the free count-adjust idiom.
+        return QStringLiteral("Meta+Ctrl+=");
     }
     static QString autotileDecMasterCountShortcut()
     {
-        return QStringLiteral("Meta+Shift+[");
+        return QStringLiteral("Meta+Ctrl+-");
     }
     static QString autotileRetileShortcut()
     {

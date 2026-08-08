@@ -119,7 +119,7 @@ private Q_SLOTS:
         m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetectorRegIntegration(nullptr);
         m_registry = new PhosphorEngine::WindowRegistry(nullptr);
-        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
         m_snapState = new PhosphorSnapEngine::SnapState(QString(), nullptr);
         m_service->setSnapState(m_snapState);
         m_service->setWindowRegistry(m_registry);

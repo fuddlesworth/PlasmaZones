@@ -57,6 +57,17 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
                                   screenId);
     } else {
         m_windowTracker->unsnapForFloat(windowId);
+        // Own store FIRST — this engine is the sole owner of its float bit,
+        // the same ownership rule the daemon's float writer documents for
+        // autotile and scrolling. The routed WTS write below dispatches on the
+        // screen's CURRENT mode, which mid-transition can resolve to the
+        // engine still releasing the window: its writer then no-ops, and its
+        // change gate reads the FOREIGN engine's bit — so snap's own store
+        // never recorded the float, the chrome said floating, and the next
+        // toggle read "not floating". With the own-write applied the WTS call
+        // is a no-op whenever the routing agrees; it stays for the unwired
+        // legacy path's bookkeeping.
+        setFloating(windowId, true);
         m_windowTracker->setWindowFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         applyFloatGeometryUnlessMinimized(windowId, screenId);
@@ -126,6 +137,9 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
         // zone onto B (zone lookup spans all layouts), and the suspension
         // confinement can never fire because home == live by construction.
         m_windowTracker->unsnapForFloat(windowId);
+        // Own store first — see performToggleFloat's float branch for why the
+        // routed WTS write alone cannot be trusted to land here.
+        setFloating(windowId, true);
         m_windowTracker->setWindowFloating(windowId, true);
         Q_EMIT windowFloatingChanged(windowId, true, screenId);
         // Guarded: the minimize path reaches here via setWindowFloatingForScreen
@@ -568,6 +582,10 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
                     qCWarning(PhosphorSnapEngine::lcSnapEngine)
                         << "handoffReceive: cross-desktop handoff with wasFloating=true for" << ctx.windowId
                         << "— clearing the float before the slot assignment";
+                    // Own store first, same ownership rule as every float
+                    // write in this file: the routed WTS clear can no-op or
+                    // misroute mid-transition.
+                    setFloating(ctx.windowId, false);
                     m_windowTracker->setWindowFloating(ctx.windowId, false);
                 }
                 SnapState* targetState = stateForWindowOnScreen(ctx.windowId, ctx.toScreenId);
@@ -577,7 +595,13 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
                     targetState->assignWindowToZone(ctx.windowId, ctx.sourceZoneIds.first(), ctx.toScreenId,
                                                     ctx.toDesktop);
                 }
-                if (auto placement = capturePlacement(ctx.windowId)) {
+                // Gate at the DESTINATION desktop: the daemon routed this
+                // handoff here because (screen, toDesktop) is snapping, but
+                // the screen's visible desktop may be a tiling one, and the
+                // plain capture's current-desktop gate then refused — so the
+                // durable record silently kept the OLD desktop and the next
+                // login restored the window there.
+                if (auto placement = capturePlacementAtDesktop(ctx.windowId, ctx.toDesktop)) {
                     placement->virtualDesktop = ctx.toDesktop;
                     m_windowTracker->placementStore().record(std::move(*placement));
                 } else {
@@ -615,6 +639,19 @@ void SnapEngine::handoffReceive(const HandoffContext& ctx)
         // unmanaged windows — keeping its live frame. Broadcast not-floating
         // so subscribers that last heard the source mode's state converge
         // (the adaptor's last-broadcast gate dedups when they already agree).
+        //
+        // Residence is RECORDED, not just broadcast. guardedHandoff verifies
+        // the adoption with isWindowTracked() after this returns, and a free
+        // arrival satisfies neither the snapped nor the floating arm — without
+        // the screen-assignment write the deliberate free adoption read as a
+        // REFUSAL and the window bounced straight back to the source engine.
+        // handoffRelease clears this symmetrically (clearScreenAndDesktop).
+        stateForWindowOnScreen(ctx.windowId, ctx.toScreenId)
+            ->recordResidence(ctx.windowId, ctx.toScreenId, currentDesktop);
+        // Own store first (a re-adoption of a window snap once floated could
+        // still carry the bit); the routed WTS clear follows for the shared
+        // bookkeeping.
+        setFloating(ctx.windowId, false);
         m_windowTracker->setWindowFloating(ctx.windowId, false);
         Q_EMIT windowFloatingChanged(ctx.windowId, false, ctx.toScreenId);
         return;
@@ -645,9 +682,16 @@ void SnapEngine::handoffRelease(const QString& windowId)
     if (state->isFloating(windowId)) {
         state->setFloating(windowId, false);
     }
-    // The destination engine now owns the window. unassignWindow / setFloating
-    // above cleared its zone/screen/desktop and floating bit — but NOT the
-    // pre-float capture, which is deliberately PRESERVED (see
+    // Residence entries go unconditionally. unassignWindow clears them, but it
+    // only runs for a SNAPPED window; a window that was merely FLOATING kept
+    // the screen/desktop that setFloatingOnScreen wrote, and those survive
+    // forgetWindow. Reverse-map reads never saw them, but raw store scans do —
+    // windowsOnScreenAndDesktop feeds tryCrossDesktopFocus, so snap could
+    // offer and activate a window the destination engine now owns.
+    state->clearScreenAndDesktop(windowId);
+    // The destination engine now owns the window. The calls above cleared its
+    // zone, screen, desktop and floating bit — but NOT the pre-float capture,
+    // which is deliberately PRESERVED (see
     // testHandoffRelease_preservesPreFloatCapture): a future return handoff may
     // consult it for size restoration. Finally drop the reverse-map ownership
     // record so this engine no longer claims the window.

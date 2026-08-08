@@ -7,6 +7,8 @@
 #include <PhosphorCompositor/IGeometryHandler.h>
 #include <PhosphorCompositor/IDragHandler.h>
 #include <PhosphorCompositor/ILifecycleHandler.h>
+#include <PhosphorProtocol/DragTypes.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowTypes.h>
 #include <PhosphorProtocol/ZoneTypes.h>
 
@@ -29,6 +31,9 @@ public:
 
     bool isDaemonReady() const
     {
+        // "Ready" means REACHABLE: probeDaemonAvailable sets this without
+        // wiring the signal subscriptions (only a successful registerBridge
+        // does). Callers needing the signal stream must register.
         return m_daemonReady;
     }
 
@@ -58,9 +63,23 @@ public:
     void notifyWindowActivated(const QString& windowId, const QString& screenId);
 
     // Drag operations (plugin → daemon)
-    void dragStarted(const QString& windowId, const QString& screenId, const QRect& geometry);
-    void dragMoved(const QString& windowId, int cursorX, int cursorY);
-    void dragStopped(const QString& windowId, const QString& screenId, const QString& zoneId);
+    /// Canonical drag surface, mirroring org.plasmazones.WindowDrag. The
+    /// daemon decides and the plugin applies the verdict verbatim, so both
+    /// ends of the drag are round trips: beginDrag delivers its DragPolicy
+    /// through dragPolicyReceived and endDrag its DragOutcome through
+    /// dragOutcomeReceived. Wire those signals before starting a drag. A
+    /// payload that fails its own validationError() is dropped with a
+    /// warning rather than emitted. updateDragCursor is the fire-and-forget
+    /// hot path; the caller throttles it (~30Hz) and only sends it when the
+    /// policy asked for streaming. On updateDragCursor and endDrag,
+    /// @p modifiers / @p mouseButtons are the compositor's live
+    /// keyboard/button state, 0 when unknown; beginDrag takes only
+    /// @p mouseButtons.
+    void beginDrag(const QString& windowId, const QRect& frameGeometry, const QString& startScreenId,
+                   int mouseButtons = 0);
+    void updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers = 0, int mouseButtons = 0);
+    void endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers = 0, int mouseButtons = 0,
+                 bool cancelled = false);
 
     // Screen notifications (plugin → daemon)
     void notifyCursorScreenChanged(const QString& screenId);
@@ -73,8 +92,15 @@ public:
     void queryVirtualScreens(const QString& screenId);
     void pruneStaleWindows(const QStringList& liveWindowIds);
 
-    // Daemon availability probe (async — emits daemonReady if responsive)
-    void probeDaemonAvailable(int timeoutMs = 3000);
+    // Daemon availability probe (async — emits daemonReady if responsive).
+    // The default comes from the shared constant rather than a literal so the
+    // two cannot drift.
+    //
+    // NOTE: this entry point currently has NO caller in the repo. The
+    // compositor plugin reaches readiness through registerBridge instead.
+    // Kept as part of the library's public surface, but do not read the
+    // constant's own doc as evidence of a live probe site.
+    void probeDaemonAvailable(int timeoutMs = PhosphorProtocol::Service::DaemonReadyProbeTimeoutMs);
 
 Q_SIGNALS:
     void daemonReady();
@@ -89,6 +115,13 @@ Q_SIGNALS:
 
     void settingsChanged();
     void virtualScreensChanged(const QString& screenId);
+
+    /// Daemon's reply to beginDrag. Not emitted if the call failed or the
+    /// policy did not validate.
+    void dragPolicyReceived(const QString& windowId, const PhosphorProtocol::DragPolicy& policy);
+    /// Daemon's reply to endDrag. Not emitted if the call failed or the
+    /// outcome did not validate.
+    void dragOutcomeReceived(const QString& windowId, const PhosphorProtocol::DragOutcome& outcome);
 
     void snapAssistReady(const QString& windowId, const QString& screenId,
                          const PhosphorProtocol::EmptyZoneList& zones);
@@ -105,7 +138,7 @@ private Q_SLOTS:
     void handleApplyGeometriesBatch(const PhosphorProtocol::WindowGeometryList& geometries, const QString& action);
     void handleRaiseWindows(const QStringList& windowIds);
     void handleActivateWindow(const QString& windowId);
-    void handleDragPolicyChanged(const QString& windowId, int newPolicy);
+    void handleDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy);
     void handleWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void handleRestoreSizeDuringDrag(const QString& windowId, int width, int height);
     void handleMoveWindowToZone(const QString& windowId, const QString& screenId, int x, int y, int w, int h);
@@ -123,6 +156,7 @@ private:
     ILifecycleHandler* m_lifecycleHandler = nullptr;
 
     bool m_daemonReady = false;
+    bool m_daemonSignalsConnected = false;
     bool m_registrationInFlight = false;
     QString m_sessionId;
 };

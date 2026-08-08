@@ -16,6 +16,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 namespace PlasmaZones {
 
@@ -119,8 +120,54 @@ void UnifiedLayoutController::setAutotileLayoutSource(PhosphorLayout::ILayoutSou
     m_cacheValid = false;
 }
 
+void UnifiedLayoutController::ensureTemplateStoreSubscription() const
+{
+    PhosphorZones::ScrollingTemplateStore* store =
+        m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr;
+    if (!store) {
+        // Reached on an explicit unwire of a still-live store
+        // (setScrollingTemplateStore(nullptr) in Daemon teardown and in the
+        // settings controller, both of which run before the store object
+        // dies) or on a swap. Destruction alone does NOT come through here:
+        // the registry holds a raw borrow that would dangle, while our own
+        // QPointer auto-nulls and the latch guard below would never fire.
+        // Drop the subscription AND the latch: a cached list built with the
+        // old store's cards is stale the moment the store goes, and leaving
+        // the latch set means a later re-install of the SAME pointer would
+        // hit the `store == m_subscribedTemplateStore` early return below and
+        // keep running on a connection whose sender may already be gone.
+        // Guarded on having latched something so the ordinary no-store case
+        // (scrolling never used) stays a pure no-op and does not invalidate
+        // a valid cache on every layouts() call.
+        if (m_subscribedTemplateStore) {
+            QObject::disconnect(m_templateStoreConnection);
+            m_subscribedTemplateStore = nullptr;
+            m_cacheValid = false;
+        }
+        return;
+    }
+    if (store == m_subscribedTemplateStore) {
+        return;
+    }
+    QObject::disconnect(m_templateStoreConnection);
+    m_subscribedTemplateStore = store;
+    // Anything cached before the store was reachable was built without its
+    // template cards (or with the previous store's), so the rebind has to
+    // drop it. The templatesChanged subscription only covers mutations from
+    // here on.
+    m_cacheValid = false;
+    m_templateStoreConnection =
+        connect(store, &PhosphorZones::ScrollingTemplateStore::templatesChanged, this, [this]() {
+            m_cacheValid = false;
+        });
+}
+
 QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
 {
+    // Template cards come from the registry's store, which has its own
+    // change signal — without this the cached list keeps a deleted or
+    // renamed template until some other invalidator happened to fire.
+    ensureTemplateStoreSubscription();
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
         // and mode-based filtering (manual-only vs autotile-only).
@@ -137,7 +184,8 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
             PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
-            m_autotileLayoutSource);
+            m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, m_includeScrollingTemplates,
+            m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr);
 
         m_cachedScreenDesktop = desktop;
         m_cacheValid = true;
@@ -186,12 +234,21 @@ void UnifiedLayoutController::cycle(bool forward)
     const auto list = layouts();
     if (list.isEmpty()) {
         qCWarning(lcDaemon) << "cycle: layout list is empty (manual=" << m_includeManualLayouts
-                            << "autotile=" << m_includeAutotileLayouts << ")";
+                            << "autotile=" << m_includeAutotileLayouts << "templates=" << m_includeScrollingTemplates
+                            << ")";
         return;
     }
 
     int currentIndex = findCurrentIndex();
     if (currentIndex < 0) {
+        // No current selection (a fresh Templates screen with no template,
+        // or an unmatched id): the first FORWARD press applies the first
+        // entry rather than skipping past it to the second; backward wraps
+        // to the last, which clamping to 0 already produces.
+        if (forward) {
+            applyLayoutByIndex(0);
+            return;
+        }
         currentIndex = 0;
     }
 
@@ -208,6 +265,18 @@ void UnifiedLayoutController::cycle(bool forward)
                      << "to=" << (nextIndex < list.size() ? list[nextIndex].displayName : QStringLiteral("?"));
 
     applyLayoutByIndex(nextIndex);
+}
+
+QString UnifiedLayoutController::displayIdForAssignment(const QString& screenId, const QString& assignmentId) const
+{
+    if (m_layoutManager && !screenId.isEmpty() && PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
+        // Shared authority with OverlayService::activeLayoutIdForScreen:
+        // template UUID when one resolves, else the sentinel (== the
+        // assignment id we were handed, matching no card).
+        return m_layoutManager->scrollingDisplayIdForContext(
+            screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity);
+    }
+    return assignmentId;
 }
 
 void UnifiedLayoutController::syncFromExternalState(std::optional<QString> overrideId)
@@ -254,10 +323,15 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
         // clears rather than leaving the previous screen's id latched.
         // currentVirtualDesktopForScreen already falls back to the registry's
         // global desktop for an empty screen id, so no branch is needed for it.
+        // displayIdForAssignment substitutes the template UUID for the
+        // "scrolling:" sentinel so a Templates screen cycles relative to its
+        // current template instead of restarting from the first entry.
         setCurrentLayoutId(
             m_layoutManager && !screenId.isEmpty()
-                ? m_layoutManager->assignmentIdForScreen(
-                      screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity)
+                ? displayIdForAssignment(
+                      screenId,
+                      m_layoutManager->assignmentIdForScreen(
+                          screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity))
                 : QString());
     }
 }
@@ -287,25 +361,37 @@ void UnifiedLayoutController::setCurrentActivity(const QString& activity)
     }
 }
 
-void UnifiedLayoutController::setLayoutFilter(bool includeManual, bool includeAutotile)
+void UnifiedLayoutController::setLayoutFilter(bool includeManual, bool includeAutotile, bool includeScrollingTemplates)
 {
-    if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile) {
+    if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile
+        && m_includeScrollingTemplates == includeScrollingTemplates) {
         return;
     }
     m_includeManualLayouts = includeManual;
     m_includeAutotileLayouts = includeAutotile;
+    m_includeScrollingTemplates = includeScrollingTemplates;
     m_cacheValid = false;
 }
 
 bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& preview)
 {
     // Handle autotile entries: assign autotile ID to the current screen.
-    // The daemon's layoutAssigned handler calls updateAutotileScreens() which
+    // The daemon's layoutAssigned handler calls updateEngineScreens() which
     // derives per-screen autotile state from assignments automatically.
     if (preview.isAutotile()) {
+        // Defence in depth: every list a Templates screen sees drops the
+        // autotile cards upstream (the include resolver and the mode-derived
+        // filters), but this branch would flip the screen off its engine via
+        // assignLayoutById("autotile:…") if one ever slipped through, so
+        // refuse here rather than rely on the filters alone.
+        if (m_currentLayoutSupport == PhosphorEngine::IPlacementEngine::LayoutSupport::Templates) {
+            qCWarning(lcDaemon) << "applyEntry: refusing autotile entry" << preview.id
+                                << "on a Templates screen — algorithms are not templates";
+            return false;
+        }
         if (m_autotileEngine && m_layoutManager) {
             QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(preview.id);
-            // Assign layout FIRST so that layoutAssigned → updateAutotileScreens()
+            // Assign layout FIRST so that layoutAssigned → updateEngineScreens()
             // updates per-screen overrides before setAlgorithm's deferred retile.
             // Without this ordering, setAlgorithm's retile uses stale per-screen
             // overrides (old algorithm), producing wrong zone geometries.
@@ -330,21 +416,86 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
         return false;
     }
 
+    // Native scrolling-template entry. Written to the CURRENT (screen,
+    // desktop, activity) tuple, like the autotile and manual branches around
+    // it — a picker press applies to the context the user is looking at, and
+    // an activity-scoped context must not have its entry cleared out from
+    // under it.
+    //
+    // This is the one convention split with
+    // LayoutRegistry::applyScrollingTemplateToScreen, which the quick-slot and
+    // D-Bus paths still use: that helper writes the empty-activity entry and
+    // clears the activity-keyed one, so a press there applies across
+    // activities. Do not collapse the two without deciding which semantics the
+    // quick slots should have.
+    if (preview.isScrollingTemplate) {
+        if (!m_layoutManager || m_currentScreenName.isEmpty()) {
+            return false;
+        }
+        const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName);
+        // The resolver-first-then-cascade double check this branch has always
+        // been documented to make (see setCurrentLayoutSupport): the LIVE
+        // capability must be Templates AND the cascade mode Scrolling.
+        // Otherwise a template card that slipped past the include filters would
+        // flip the screen's mode through assignScrollingTemplate, which is the
+        // mirror of what the autotile and manual branches refuse.
+        if (m_currentLayoutSupport != PhosphorEngine::IPlacementEngine::LayoutSupport::Templates
+            || m_layoutManager->modeForScreen(m_currentScreenName, desktop, m_currentActivity)
+                != PhosphorZones::AssignmentEntry::Scrolling) {
+            qCWarning(lcDaemon) << "applyEntry: refusing scrolling template" << preview.id
+                                << "on a screen that is not live in scrolling mode";
+            return false;
+        }
+        // Store validation stays at this site because assignScrollingTemplate
+        // DOWNGRADES an unknown id to "no template" rather than refusing, and
+        // a mis-routed press must read as "nothing happened" instead of
+        // clearing the context's template. Same refusal
+        // applyScrollingTemplateToScreen performs for its own callers.
+        const auto templateUuid = Utils::parseUuid(preview.id);
+        PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+        if (!templateUuid || (store && !store->contains(*templateUuid))) {
+            qCWarning(lcDaemon) << "applyEntry: refusing unknown scrolling template" << preview.id;
+            return false;
+        }
+        m_layoutManager->assignScrollingTemplate(m_currentScreenName, desktop, m_currentActivity,
+                                                 templateUuid->toString());
+        setCurrentLayoutId(preview.id);
+        qCInfo(lcDaemon) << "Applied scrolling template=" << preview.displayName << "screen=" << m_currentScreenName;
+        Q_EMIT scrollingTemplateApplied(preview.id, m_currentScreenName);
+        return true;
+    }
+
     // Manual layout: assign the UUID to the current screen.
     // If the previous assignment was autotile, it gets replaced and
-    // updateAutotileScreens() will remove the screen from autotile set.
+    // updateEngineScreens() will remove the screen from autotile set.
     auto uuidOpt = Utils::parseUuid(preview.id);
     if (uuidOpt && m_layoutManager) {
         PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
+                const int desktop = m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName);
+                // Double check, resolver-first-then-cascade (the
+                // resolvePerScreenLayoutInclude pattern): the LIVE capability
+                // must be Templates AND the cascade mode Scrolling. Since the
+                // native-template pivot a manual layout is NOT an input on
+                // such a screen (templates are their own ScrollingTemplate
+                // objects), so refuse rather than write a dangling layout
+                // uuid into the template slot — the store-validated
+                // assignment would silently clear it. The router-downgraded
+                // case (live snapping under a scrolling assignment) still
+                // applies as an ordinary snapping assignment below.
+                if (m_currentLayoutSupport == PhosphorEngine::IPlacementEngine::LayoutSupport::Templates
+                    && m_layoutManager->modeForScreen(m_currentScreenName, desktop, m_currentActivity)
+                        == PhosphorZones::AssignmentEntry::Scrolling) {
+                    qCWarning(lcDaemon) << "applyEntry: refusing manual layout" << preview.id
+                                        << "on a Templates screen — layouts are not scrolling templates";
+                    return false;
+                }
                 // Write to the current context (screen, desktop, activity).
                 // Only the per-context assignment is stored — the global
                 // activeLayout pointer is NOT updated so that other screens
                 // and contexts keep their existing fallback layout.
-                m_layoutManager->assignLayout(m_currentScreenName,
-                                              m_layoutManager->currentVirtualDesktopForScreen(m_currentScreenName),
-                                              m_currentActivity, layout);
+                m_layoutManager->assignLayout(m_currentScreenName, desktop, m_currentActivity, layout);
             }
             setCurrentLayoutId(preview.id);
             qCInfo(lcDaemon) << "Applied unified layout=" << preview.displayName << "screen=" << m_currentScreenName;

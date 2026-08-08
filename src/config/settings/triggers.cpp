@@ -38,8 +38,8 @@ P_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey
 P_STORE_GET(bool, zoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, bool)
 P_STORE_SET_BOOL(setZoneSpanToggleMode, snappingBehaviorZoneSpanGroup, toggleActivationKey, zoneSpanToggleModeChanged)
 
-// Shared helper for the three "plain" trigger-list setters (activation,
-// snap-assist, autotile-insert). Post-write compare — the schema's
+// Shared helper for the four "plain" trigger-list setters (activation,
+// snap-assist, autotile-insert, scrolling-insert in settings/scrolling.cpp). Post-write compare — the schema's
 // canonicalTriggerList validator drops non-map entries, strips unknown keys,
 // and caps the list. A pre-write equality check against the stored canonical
 // form would fire a spurious changed signal whenever the caller passed a
@@ -192,11 +192,16 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
                    triggers.mid(0, MaxTriggersPerAction));
 
     // Sync legacy modifier member from first trigger with a non-zero modifier.
-    // Derive from the validator-coerced post-write list so a
-    // {modifier: 99} entry in the input doesn't leak past the clamp.
-    const QVariantList afterTriggers = zoneSpanTriggers();
+    // Derive from the validator-coerced STORED list (readVariant), never from
+    // the synthesizing zoneSpanTriggers() getter: a default-equal write is
+    // stored as key ABSENCE under sparse persistence, and the getter would
+    // then synthesize from the not-yet-synced Modifier key — feeding the OLD
+    // modifier back into this sync and silently reverting the user's edit
+    // with no NOTIFY.
+    const QVariantList storedTriggers =
+        m_store->readVariant(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey()).toList();
     DragModifier synced = DragModifier::Disabled;
-    for (const auto& t : afterTriggers) {
+    for (const auto& t : storedTriggers) {
         const int mod = t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt();
         if (mod != 0) {
             synced = static_cast<DragModifier>(qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
@@ -208,6 +213,10 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
     const int afterModifier =
         m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey());
 
+    // The observable compare runs AFTER the modifier sync, so a pruned-key
+    // getter (which synthesizes from Modifier) reads the freshly synced
+    // value rather than the stale one.
+    const QVariantList afterTriggers = zoneSpanTriggers();
     const bool triggersChanged = afterTriggers != beforeTriggers;
     const bool modifierChanged = afterModifier != beforeModifier;
     if (!triggersChanged && !modifierChanged) {
@@ -330,7 +339,7 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 }
 
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
-// Largest group — seven sub-groups. defaultAutotileAlgorithm passes through
+// Three sub-groups (Algorithm, Behavior, Gaps) plus the top-level toggle. defaultAutotileAlgorithm passes through
 // PhosphorTiles::AlgorithmRegistry for validation; per-algorithm settings round-trip as a
 // JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
 

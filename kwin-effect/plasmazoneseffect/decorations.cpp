@@ -12,7 +12,7 @@
 
 #include <epoxy/gl.h>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
 #include "shader_internal.h"
 #include "surface_fold.h"
@@ -27,6 +27,7 @@
 
 #include <QColor>
 #include <QGuiApplication>
+#include <QLoggingCategory>
 #include <QPalette>
 #include <QtMath> // qCeil, resolving the chain's outer padding
 #include <QTimer> // deferDecorationTeardownWhileAnimated poll
@@ -36,6 +37,8 @@
 #include <utility>
 
 namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace {
 
@@ -281,7 +284,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
     // Rule-resolved decoration-chain override: a matched
     // OverrideDecorationChain rule REPLACES the tree's user packs wholesale
-    // (its empty-chain sentinel blocks decoration outright), and its
+    // (its empty-chain sentinel strips the CUSTOM packs and falls back to
+    // easy mode's config-backed layers — see the mode split below; turning
+    // decorations off entirely is ExcludeDecorations' job), and its
     // per-pack params override the tree profile's map below. A rule chain may
     // name any pack, "border" / "opacity-tint" included, and the tree's
     // per-layer disable set deliberately does not apply — a
@@ -450,6 +455,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     int outerPadding = 0;
     bool needsBackdrop = false;
+    // AND over the chain's DRAWING packs: a registry-unknown pack draws
+    // nothing, so it neither qualifies nor vetoes. An all-unknown chain folds
+    // nothing and presents the raw capture, whose interior is exactly the
+    // client's content — interior-opaque by construction, so `true` is the
+    // right answer there too.
+    bool chainInteriorOpaque = true;
     // Theme colours for the pack flag resolver (below). Accent / inactive come
     // from the daemon-plumbed border colours (same source the plain-border layer
     // uses); background / foreground come from the compositor's palette, which
@@ -467,6 +478,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
         // Any needsBackdrop pack in the chain switches the window onto the
         // composite path with a per-frame backdrop capture (see paintWindow).
         needsBackdrop = needsBackdrop || eff.needsBackdrop;
+        chainInteriorOpaque = chainInteriorOpaque && eff.interiorOpaque;
         QVariantMap packOverrides = allPackParams.value(packId).toMap();
         // Honour the pack's host-consumed theme flags (border useThemeNeutral /
         // useSystemAccent, glow/shadow useThemeTint) via the shared resolver, so
@@ -495,6 +507,17 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Defensive cap: a hostile/typo'd pack can't request an absurd canvas.
     wb.outerPadding = qBound(0, outerPadding, PhosphorSurfaceShaders::kMaxDecorationOuterPaddingPx);
     wb.needsBackdrop = needsBackdrop;
+    wb.chainInteriorOpaque = chainInteriorOpaque;
+    if (chainInteriorOpaque && !chain.isEmpty()) {
+        // interiorOpaque comes verbatim from installable pack metadata (an
+        // XDG_DATA_HOME boundary, "input validation at system boundaries"): a
+        // third-party pack that declares it while thinning interior texels
+        // produces stale-framebuffer ghosting behind this window with nothing
+        // else naming the cause. This line makes the symptom attributable to
+        // the chain that asserted the contract.
+        qCDebug(lcEffect) << "decoration chain declares interiorOpaque (occlusion hint kept) for" << windowId << ":"
+                          << chain;
+    }
     // The plain opacity-tint layer folds the window's resolved opacity
     // (config default, SetOpacity rule winning) into its pack param — the
     // chain BAKES the window's opacity. The flag's one runtime job is the
@@ -735,7 +758,7 @@ QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId) const
     // sole render gate (see updateWindowDecoration) — there is no separate show-border
     // gate. Autotile-first precedence; falls back to window.floating for an
     // unmanaged window.
-    if (m_autotileHandler->isTiledWindow(windowId)) {
+    if (m_tilingHandler->isTiledWindow(windowId)) {
         return QStringLiteral("window.tiled");
     }
     if (m_snapHandler->isTiledWindow(windowId)) {

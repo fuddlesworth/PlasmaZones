@@ -1,9 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): LayoutRegistry is the single owner of
+// layout storage, per-context assignments, quick slots, and the context
+// resolve cascade, and this is an INSTALLED public header — carving the
+// class in two would be an API break for third-party consumers the library
+// exists to serve. The implementation is already split by concern across
+// src/layoutregistry_*.cpp, and the member ordering here encodes which
+// state each of those files owns.
+
 #pragma once
 
 #include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/ContextResolveKey.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutSettingsStore.h>
@@ -20,6 +29,8 @@
 #include <optional>
 
 namespace PhosphorZones {
+
+class ScrollingTemplateStore;
 
 /**
  * @brief Triple-axis key for the Combined-context batch API.
@@ -104,8 +115,10 @@ public:
      *                entry containing that subdirectory, so system copies
      *                (in @c /usr/share/<subdir>) provide built-ins while
      *                the user-writable copy overrides them. Required -
-     *                asserted non-empty. Quick-layout slots persist to a
-     *                @c quicklayouts.json sibling file in this directory.
+     *                asserted non-empty. Quick-layout slots do NOT live here:
+     *                they persist to a @c quicklayouts.json sibling of the
+     *                rule store's file, so their location survives a later
+     *                @ref setLayoutDirectory call.
      * @param parent Qt parent.
      *
      * @note Required post-construction call order. The constructor does NOT
@@ -309,7 +322,7 @@ public:
      *
      * The token is stamped onto every windowless context WindowQuery this
      * registry builds (assignment, gap, lock, overlay, default-assignment,
-     * tiling-params), so an orientation rule can drive any context slot — for example a different
+     * tiling-params, scrolling-params), so an orientation rule can drive any context slot — for example a different
      * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
      * screen geometry alone, independent of the resolved layout, so it carries no
      * recursion risk (unlike an active-layout query). The daemon wires this to
@@ -396,6 +409,57 @@ public:
     void setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const AssignmentEntry& entry);
 
+    /// Assign @p templateId as the context's scrolling TEMPLATE (the native
+    /// ScrollingTemplate whose vocabularies and blueprint the engine
+    /// consumes) and flip the mode to Scrolling. The sibling fields survive
+    /// per the lossless-toggle contract, and activeLayoutId() stays the bare
+    /// "scrolling:" sentinel. An id unknown to the wired store is stored as
+    /// "no template" (empty), matching the resolver's deleted-template
+    /// degrade. Impl in layoutregistry_assignments.cpp.
+    void assignScrollingTemplate(const QString& screenId, int virtualDesktop, const QString& activity,
+                                 const QString& templateId);
+    /// The resolved ScrollingTemplate for a scrolling context, by value —
+    /// invalid when the cascade has no Scrolling entry, the entry names no
+    /// template and the default-template provider answers nothing, or the
+    /// named template no longer exists in the store (deleted-template
+    /// fallback: "no template").
+    ScrollingTemplate scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
+                                                  const QString& activity) const override;
+
+    /// Wire the native template store (borrowed, post-construction like the
+    /// other injected collaborators; pass nullptr on teardown). Without a
+    /// store every template resolve answers "no template".
+    void setScrollingTemplateStore(ScrollingTemplateStore* store)
+    {
+        m_scrollingTemplateStore = store;
+    }
+    ScrollingTemplateStore* scrollingTemplateStore() const override
+    {
+        return m_scrollingTemplateStore;
+    }
+
+    /// Provider for the DEFAULT scrolling template id (a config setting the
+    /// daemon owns): consulted when a Scrolling context's cascade entry
+    /// names no template. Same injected-provider pattern as the screen
+    /// orientation provider; registries without one (settings/KCM local
+    /// views) simply resolve no default.
+    void setDefaultScrollingTemplateProvider(std::function<QString()> provider)
+    {
+        m_defaultScrollingTemplateProvider = std::move(provider);
+    }
+
+    /// The RULES-VISIBLE ActiveLayout value the context resolvers stamp onto
+    /// their windowless queries: the assignment id, except that a Scrolling
+    /// context with a resolved template substitutes the PREFIXED
+    /// "scrolling:<templateUuid>" (LayoutId::makeScrollingId) — parity with
+    /// autotile's "autotile:<algorithmId>" stamp, so a rule can target one
+    /// template. Assignment ids on every other surface stay the bare
+    /// sentinel. Public so the daemon can push the same value to the effect
+    /// for window-domain (appearance/animation) rule queries — both rule
+    /// pipelines must see one ActiveLayout vocabulary.
+    /// Impl in layoutregistry_contextresolve.cpp.
+    QString rulesVisibleActiveLayoutId(const QString& screenId, int virtualDesktop, const QString& activity) const;
+
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
 
@@ -414,13 +478,28 @@ public:
 
     /// Resolve the per-context gap override for (screen, desktop, activity) by
     /// evaluating a windowless WindowQuery through the RuleEvaluator and
-    /// reading the gap action slots (ZonePadding / OuterGap /
+    /// reading the gap action slots (InnerGap / OuterGap /
     /// UsePerSideOuterGap / per-side). Unlike @ref resolveAssignmentEntry this
     /// is a PER-SLOT read across all matching context rules (not a single
     /// winning rule), so independent gap rules compose and there is no
     /// engine-mode gate. Returns an all-unset @ref ContextGapOverride when no
     /// matching rule fills a gap slot. Same owner-thread affinity as the rest
     /// of the registry.
+    /// An EMPTY @p mode is a supported caller shape meaning "mode-agnostic".
+    /// It is not the same as a mode that happens to be empty: the resolver
+    /// structurally excludes Field::Mode in that case, so neither a positive
+    /// `Mode Equals x` nor a negated `None{Mode Equals x}` rule participates.
+    /// Without that exclusion the negated form would match every context.
+    ///
+    /// The exclusion is a WHOLE-TREE test, so it also drops a rule that merely
+    /// mentions Mode in an unrelated branch — `Any{Mode Equals "tiling",
+    /// ScreenId Equals "DP-1"}` is invisible to a mode-agnostic call even
+    /// though its ScreenId branch would legitimately match. Deliberate: it
+    /// fails safe (a rule goes unapplied) rather than open (a negated rule
+    /// fires everywhere), and a per-branch test cannot be done without
+    /// evaluating the tree, which is the thing being avoided. The same applies
+    /// to the assignment / lock / overlay / default-assignment resolvers,
+    /// which are unconditionally mode-agnostic.
     ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                           const QString& mode = QString()) const override;
 
@@ -465,6 +544,17 @@ public:
     ContextTilingParams resolveContextTilingParams(const QString& screenId, int virtualDesktop,
                                                    const QString& activity) const;
 
+    /// Resolve the per-context scrolling parameter overrides (default column
+    /// width / focused-column centering / default column display) for
+    /// (screen, desktop, activity) — a per-slot read like
+    /// @ref resolveContextTilingParams, and uncached for the same reason (screen /
+    /// layout changes, not the hot per-cursor path). The daemon layers the
+    /// returned values onto the scrolling engine's per-screen parameters, with
+    /// config as the base. Concrete (not on the interface): the daemon holds a
+    /// concrete LayoutRegistry.
+    ContextScrollingParams resolveContextScrollingParams(const QString& screenId, int virtualDesktop,
+                                                         const QString& activity) const;
+
     /// The screen-orientation token from @ref m_screenOrientationProvider ("portrait"
     /// / "landscape"), or an empty string when the provider is unset or returns
     /// nullopt. Shared by @ref stampScreenOrientation (the query value) and the
@@ -481,9 +571,14 @@ public:
 
     /// Stamp the screen-orientation token onto @p query from
     /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
-    /// returns nullopt). Called at every windowless-context query build site so a
-    /// @c Field::ScreenOrientation predicate can match regardless of which
-    /// context slot (assignment / gap / lock / overlay) is being resolved.
+    /// returns nullopt). Used by the two UNCACHED param resolvers
+    /// (tiling-params, scrolling-params); the five cached resolvers assign
+    /// @ref screenOrientationToken directly, because they must fold the very
+    /// same token into their cache key and re-reading the provider could hand
+    /// the query a token the key does not describe. Either way every
+    /// windowless-context query carries the token, so a
+    /// @c Field::ScreenOrientation predicate matches regardless of which
+    /// context slot is being resolved.
     /// Orientation is geometry-derived and layout-independent, so this is safe to
     /// call from the assignment cascade (no recursion, unlike an active-layout read).
     void stampScreenOrientation(PhosphorRules::WindowQuery& query, const QString& screenId) const
@@ -519,9 +614,20 @@ public:
     Q_INVOKABLE bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                            const QString& activity = QString()) const;
 
+    /// The EXPLICIT assignment entry pinned by this exact context tuple's
+    /// rule, or a default entry when none exists. Unlike the cascade
+    /// resolvers this never falls back to wider scopes or defaults — it is
+    /// the UI's explicit-vs-resolved discriminator (the Monitors page must
+    /// not re-pin a cascade default as explicit when carrying sibling-mode
+    /// fields through a mode toggle). Like @ref hasExplicitAssignment it is
+    /// blind to the rule's @c enabled flag; see its definition comment.
+    AssignmentEntry exactContextEntry(const QString& screenId, int virtualDesktop, const QString& activity) const;
+
     /// Raw assignment id for a (screen, desktop, activity) context.
-    /// Returns the stored string (manual-layout UUID or
-    /// @c "autotile:<algorithmId>") without resolving to a @ref Layout*.
+    /// Returns the stored string (manual-layout UUID,
+    /// @c "autotile:<algorithmId>", or the bare @c "scrolling:" sentinel)
+    /// without resolving to a @ref Layout*. An explicit mode-only Snapping
+    /// pin settles as an EMPTY id (no layout identity exists for it).
     /// On cascade-miss, falls through to the level-1 global defaults
     /// (snap provider first, then autotile provider; see
     /// @ref setDefaultLayoutIdProvider /
@@ -611,10 +717,19 @@ public:
                                     const QString& activity = QString()) const;
     QString tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString()) const override;
+    /// Raw template-field sibling of the two getters above: NOT mode-gated,
+    /// so a dormant template preserved on a non-Scrolling context (the
+    /// lossless-toggle contract) reads back. The mode-gated
+    /// @ref scrollingTemplateForContext is the resolver the engine push and
+    /// picker use; this is the field-inspection twin, parity with
+    /// snappingLayoutForScreen returning a preserved layout in autotile mode.
+    QString scrollingTemplateLayoutForScreen(const QString& screenId, int virtualDesktop = 0,
+                                             const QString& activity = QString()) const;
 
     /// Flip mode to @c Snapping for every entry currently in @c Autotile
-    /// (preserves @c snappingLayout + @c tilingAlgorithm). Emits
-    /// @c layoutAssigned per affected screen; one save at end.
+    /// (preserves @c snappingLayout + @c tilingAlgorithm +
+    /// @c scrollingTemplateLayout). Emits @c layoutAssigned per affected
+    /// screen; one save at end.
     void clearAutotileAssignments();
 
     /// Batch setters - clear existing, set new, save once at end.
@@ -630,26 +745,39 @@ public:
     /// batches.
     void setAllCombinedAssignments(const QHash<CombinedAssignmentKey, QString>& assignments);
 
-    QHash<QPair<QString, int>, QString> desktopAssignments() const;
-    QHash<QPair<QString, QString>, QString> activityAssignments() const;
+    /// The three projection readers return the FULL AssignmentEntry per
+    /// context (mode + all three payload fields), so consumers see the
+    /// scrolling template beside the activeLayoutId() the batch setters
+    /// round-trip on. The setters stay id-string-keyed: the template travels
+    /// through assignScrollingTemplate / setScrollingTemplateLayout, and the
+    /// batch rebuild preserves it from the stored entry.
+    QHash<QPair<QString, int>, AssignmentEntry> desktopAssignments() const;
+    QHash<QPair<QString, QString>, AssignmentEntry> activityAssignments() const;
     /// Strict Combined-context reader. See @ref setAllCombinedAssignments
     /// for the round-trip contract. Returns ONLY rules with all three
     /// dimensions pinned (screen + desktop + activity).
-    QHash<CombinedAssignmentKey, QString> combinedAssignments() const;
+    QHash<CombinedAssignmentKey, AssignmentEntry> combinedAssignments() const;
 
     // ─── Quick-layout slots (1..9) ────────────────────────────────────────
     //
-    // Quick slots are keyed by tiling mode: Snapping slots hold manual-layout
-    // UUIDs, Autotile slots hold autotile algorithm IDs. The two sets are
-    // independent so the same Meta+Alt+N can map to a zone layout in snapping
-    // mode and an autotile algorithm in autotile mode.
+    // Quick slots are keyed by tiling mode, one INDEPENDENT array per mode
+    // (see @ref slotIndexFor: Snapping 0, Autotile 1, Scrolling 2). Snapping
+    // slots hold manual-layout UUIDs, Autotile slots hold autotile algorithm
+    // IDs, and Scrolling slots hold native ScrollingTemplate UUIDs. The three
+    // sets are independent so the same Meta+Alt+N can map to a zone layout in
+    // snapping mode, an algorithm in autotile mode, and a template in
+    // scrolling mode. applyQuickLayout's scrolling arm routes its slot id to
+    // applyScrollingTemplateToScreen — the press changes the screen's
+    // template, never the engine.
 
-    /// quicklayouts.json top-level keys: one nested slot object per tiling
-    /// mode. This is the ONLY on-disk shape — there is no flat legacy variant.
+    /// quicklayouts.json top-level keys: one nested slot object per slot
+    /// ARRAY ("snapping", "autotile", "scrolling"). This is the ONLY on-disk
+    /// shape — there is no flat legacy variant.
     /// Shared with a consumer's v3→v4 schema migration, which writes the same
     /// nested format, so reader and migration cannot drift.
     static constexpr QLatin1String QuickSlotsSnappingKey{"snapping"};
     static constexpr QLatin1String QuickSlotsAutotileKey{"autotile"};
+    static constexpr QLatin1String QuickSlotsScrollingKey{"scrolling"};
 
     Q_INVOKABLE Layout* layoutForShortcut(AssignmentEntry::Mode mode, int number) const;
     Q_INVOKABLE void applyQuickLayout(AssignmentEntry::Mode mode, int number, const QString& screenId);
@@ -657,13 +785,36 @@ public:
     void setAllQuickLayoutSlots(AssignmentEntry::Mode mode, const QHash<int, QString>& slots);
     QHash<int, QString> quickLayoutSlots(AssignmentEntry::Mode mode) const
     {
-        return m_quickLayoutSlots[modeIndex(mode)];
+        return m_quickLayoutSlots[slotIndexFor(mode)];
     }
 
     // ─── Layout cycling ───────────────────────────────────────────────────
 
     Q_INVOKABLE void cycleToPreviousLayout(const QString& screenId);
     Q_INVOKABLE void cycleToNextLayout(const QString& screenId);
+
+    /// Commit @p templateId as @p screenId's scrolling template on the
+    /// screen's OWN desktop (the template twin of applyLayoutToScreen's
+    /// per-screen commit; quick slots and the picker route here). Refuses
+    /// an empty screen, a malformed id, or an id the wired store does not
+    /// know. Impl beside applyLayoutToScreen.
+    bool applyScrollingTemplateToScreen(const QString& screenId, const QString& templateId);
+
+    /// Drop @p id from every assignment rule's @c SetSnappingLayout and
+    /// @c SetScrollingTemplate actions, and from every quick-slot array —
+    /// the id-keyed scrub BOTH deletion flows drive: layout deletion
+    /// (removeLayout calls it) and native template deletion (the D-Bus delete
+    /// verb calls it; the two id namespaces are disjoint UUID sets, so one
+    /// walk is exact for both).
+    /// A rule that still carries meaningful intent (an Autotile engine-mode,
+    /// a preserved tilingAlgorithm, or the other surviving layout slot) is
+    /// rebuilt with only the referencing slots cleared — the mode + remaining
+    /// intent survives, preserving mode-toggle losslessness. A rule left with
+    /// nothing but a default (Snapping) engine-mode and no payload is dropped
+    /// entirely. The quick-slot sweep spans all three mode arrays (disjoint id
+    /// namespaces again) and rewrites quicklayouts.json when it removes
+    /// anything. Returns true if the rule set or any quick slot changed.
+    bool purgeLayoutIdFromAssignments(const QString& layoutId);
 
     // ─── Built-in layouts ─────────────────────────────────────────────────
 
@@ -684,25 +835,26 @@ public:
     {
         m_currentVirtualDesktop = desktop;
     }
-    /// This screen's current virtual desktop, falling back to the global
-    /// m_currentVirtualDesktop when no per-output value is set (#648).
+    /// This screen's current virtual desktop, resolved through the injected
+    /// provider (the daemon wires it to the VirtualDesktopManager — ONE
+    /// authority, no push-updated mirror to lag) and falling back to the
+    /// global m_currentVirtualDesktop when no provider is installed
+    /// (KCM/editor-hosted registries) or the provider has no answer (#648).
     int currentVirtualDesktopForScreen(const QString& screenId) const override
     {
-        const auto it = m_screenVirtualDesktop.constFind(screenId);
-        return it != m_screenVirtualDesktop.constEnd() ? it.value() : m_currentVirtualDesktop;
-    }
-    /// Record a single screen's current virtual desktop (per-output virtual
-    /// desktops). Pushed by the daemon's per-screen desktop handler.
-    void setCurrentVirtualDesktopForScreen(const QString& screenId, int desktop)
-    {
-        if (!screenId.isEmpty() && desktop >= 1) {
-            m_screenVirtualDesktop.insert(screenId, desktop);
+        if (m_currentVirtualDesktopProvider) {
+            if (const auto desktop = m_currentVirtualDesktopProvider(screenId); desktop && *desktop >= 1) {
+                return *desktop;
+            }
         }
+        return m_currentVirtualDesktop;
     }
-    /// Drop a screen's per-output desktop, reverting it to the global value.
-    void clearCurrentVirtualDesktopForScreen(const QString& screenId)
+    /// Inject the per-screen desktop resolver above. Same pattern and
+    /// main-thread contract as @ref setScreenOrientationProvider; the daemon
+    /// installs it at service init and clears it before teardown.
+    void setCurrentVirtualDesktopProvider(std::function<std::optional<int>(const QString& screenId)> provider)
     {
-        m_screenVirtualDesktop.remove(screenId);
+        m_currentVirtualDesktopProvider = std::move(provider);
     }
     void setCurrentActivity(const QString& activity)
     {
@@ -758,12 +910,30 @@ private:
     QString layoutSettingsFilePath() const;
     void readQuickLayouts();
     void writeQuickLayouts();
-    /// Map a tiling mode to its @ref m_quickLayoutSlots array index.
-    /// Only Snapping and Autotile carry quick slots; any other value
-    /// clamps to Snapping.
-    static constexpr int modeIndex(AssignmentEntry::Mode mode)
+    /// How many quick-layout slots one mode carries, i.e. the legal slot
+    /// numbers are 1..QuickSlotCount. The ONE authority for the bound: both
+    /// writers validate against it and the persistence reader walks it, so a
+    /// raise cannot half-land. Mirrors
+    /// PhosphorProtocol::Service::QuickLayoutSlotCount by hand, since this
+    /// library does not depend on phosphor-protocol — the same way
+    /// MinTemplateFraction repeats the engine's floor. Raising one side without
+    /// the other makes the extra slots unreadable, not corrupt.
+    static constexpr int QuickSlotCount = 9;
+    /// Map a tiling mode to its @ref m_quickLayoutSlots array index — the
+    /// ONE authority every quick-slot entry point (read, apply, shortcut
+    /// lookup, both writers) consults. Scrolling owns its OWN array since
+    /// the native-template pivot: its slots hold ScrollingTemplate ids (a
+    /// distinct UUID namespace from manual layouts), so sharing the
+    /// snapping array would make one slot number mean two different objects
+    /// depending on the pressed screen's mode. A slot press changes the
+    /// template, never the engine. Total function: every mode maps to an
+    /// array index, so callers index unconditionally.
+    static constexpr int slotIndexFor(AssignmentEntry::Mode mode)
     {
-        return mode == AssignmentEntry::Autotile ? 1 : 0;
+        if (mode == AssignmentEntry::Autotile) {
+            return 1;
+        }
+        return mode == AssignmentEntry::Scrolling ? 2 : 0;
     }
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
@@ -782,7 +952,13 @@ private:
      * applyQuickLayout and cycleLayoutImpl were open-coding before the
      * extraction.
      */
-    void applyLayoutToScreen(const QString& screenId, Layout* layout);
+    /// @return true when the assignment was applied. A Scrolling-mode screen
+    /// is REFUSED outright (returns false without writing anything): since the
+    /// native-template pivot a manual Layout* is neither a placement nor a
+    /// template on such a screen, so applying one would either flip the screen
+    /// off the scrolling engine or clear its template. Templates are committed
+    /// through @ref applyScrollingTemplateToScreen instead.
+    bool applyLayoutToScreen(const QString& screenId, Layout* layout);
     /// One-time idempotent fold of the retired autotile-overrides.json into the
     /// unified layout-settings.json sidecar; deletes the legacy file when done.
     void migrateLegacyAutotileOverrides();
@@ -797,8 +973,8 @@ private:
     /// layout / tiling action slots of the resolved action set. The winner of
     /// each slot is the highest-priority matching rule (priority wins, ties by
     /// list order). Returns nullopt when no rule of any shape fills any of the
-    /// three slots, so a genuine miss stays distinguishable and routes to the
-    /// gated default. @p screenId is taken verbatim — connector / VS fallback is
+    /// four assignment slots, so a genuine miss stays distinguishable and
+    /// routes to the gated default. @p screenId is taken verbatim — connector / VS fallback is
     /// the caller's (layoutForScreen) retry loop.
     ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
@@ -830,8 +1006,9 @@ private:
 
     /// True if a rule whose match is exactly the context shape
     /// (context-only All{ScreenId==,VirtualDesktop==,Activity==} for the
-    /// pinned dims) exists in the rule set and carries an engine-mode action.
-    /// A disabled rule still counts — see @ref findExactContextRule.
+    /// pinned dims) exists in the rule set — carrying ANY assignment-family
+    /// action (a layout-only rule counts; see the shape-fallback note on
+    /// @ref findExactContextRule). A disabled rule still counts.
     bool hasExactContextRule(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
     /// Find the exact-shape context rule for a (screen, desktop, activity)
@@ -844,9 +1021,33 @@ private:
     /// The scan ignores the rule's @c enabled state (so an upsert updates a
     /// disabled rule in place rather than appending a duplicate) but rejects
     /// any match carrying a window-property leaf — only a pure context-only
-    /// match is an exact context rule.
+    /// match is an exact context rule. NOTE: the shape fallback also claims
+    /// a LAYOUT-ONLY rule (one with no SetEngineMode action); an explicit
+    /// KCM assignment for that tuple then rebuilds it as a full
+    /// assignment-slot rule — deliberate, since an explicit per-context assignment owns its
+    /// tuple, but it does mean a hand-authored "set the layout without
+    /// forcing the mode" rule loses that property on the next KCM write.
     const PhosphorRules::Rule* findExactContextRule(const QString& screenId, int virtualDesktop,
                                                     const QString& activity) const;
+
+    /// True when @p entry is a payload-less Snapping resolution anchored by
+    /// an ENABLED exact-context rule carrying a SetEngineMode action — the
+    /// Monitors page's mode-only pin. Shared by assignmentIdForScreen and
+    /// assignmentEntryForScreen so the two cascade visitors settle
+    /// identically (see the definition for the full rationale).
+    bool hasExplicitSnappingModePin(const QString& screenId, int virtualDesktop, const QString& activity,
+                                    const AssignmentEntry& entry) const;
+
+    /// The stored-cascade walk behind both storedAssignmentIdForScreen and
+    /// assignmentIdForScreen. Returns a DISENGAGED optional for a genuine
+    /// cascade miss and an ENGAGED one for a hit — including an engaged
+    /// EMPTY string when the chain settles on an explicit mode-only Snapping
+    /// pin (which has no layout identity to report). The two states must stay
+    /// distinguishable: assignmentIdForScreen appends the level-1 default
+    /// tail, and collapsing "settled empty" into "miss" would make an
+    /// explicit Snapping pin report the default tier's autotile id.
+    std::optional<QString> resolveStoredAssignmentId(const QString& screenId, int virtualDesktop,
+                                                     const QString& activity) const;
 
     /// Find the id of the exact-shape context rule for a (screen, desktop,
     /// activity) tuple, or a null QUuid if none exists.
@@ -854,7 +1055,22 @@ private:
 
     /// Upsert a context assignment rule: replace the exact-shape rule if one
     /// exists, else add a new one. Persists through the store.
-    void upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
+    ///
+    /// @return true when a write was ISSUED to the store (the update arm does
+    /// not re-check RuleSet::updateRule's own result — the rule is known to
+    /// exist because the upsert just found it). An update whose
+    /// rebuilt rule equals the stored one returns FALSE without writing —
+    /// RuleSet::updateRule has no equality check, so an identical re-apply
+    /// would otherwise bump the revision (dropping every context cache and
+    /// rewriting rules.json) and make the caller emit layoutAssigned for a
+    /// layout that did not change.
+    ///
+    /// The return reports whether the STORE was written. Callers must NOT gate
+    /// @c layoutAssigned on it: that signal is the sole trigger for
+    /// updateEngineScreens() and updateLayoutFilter(), so an idempotent
+    /// re-apply issued precisely to force a re-derive must still fan out.
+    /// Gating it is what broke the scrolling-to-snapping restore once already.
+    bool upsertAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity,
                               const AssignmentEntry& entry);
 
     /// Remove the exact-shape context assignment rule for a tuple, if any.
@@ -867,22 +1083,16 @@ private:
     /// @c layoutAssigned per stored screen. @p decode maps a hash key to its
     /// cascade context, @p valid rejects an ill-formed context for the
     /// family, @p familyMatches selects which existing rules to drop,
-    /// @p emitDesktop / @p emitActivity are the context the closing
-    /// @c layoutAssigned signal is computed under, and @p label names the
-    /// family in log output. Only ever instantiated from
-    /// layoutregistry_batch.cpp, where it is defined alongside its callers.
+    /// @p emitDesktop is the desktop the closing @c layoutAssigned signal is
+    /// computed under, and @p label names the family in log output. There is
+    /// no activity counterpart: the emit payload always resolves under the
+    /// CURRENT activity, because @c layoutAssigned carries no activity of its
+    /// own and its consumers read it as the screen's live layout. Only ever
+    /// instantiated from layoutregistry_batch.cpp, where it is defined
+    /// alongside its callers.
     template<typename KeyT, typename DecodeFn, typename ValidFn, typename FamilyFn>
     void applyBatchAssignments(const QHash<KeyT, QString>& assignments, DecodeFn decode, ValidFn valid,
-                               FamilyFn familyMatches, int emitDesktop, const QString& emitActivity, const char* label);
-
-    /// Drop @p layoutId from every assignment rule's @c SetSnappingLayout
-    /// action when a snap layout is deleted. A rule that still carries
-    /// meaningful intent (an Autotile engine-mode, or a preserved
-    /// tilingAlgorithm) is rebuilt with only the snapping layout cleared —
-    /// the mode + tiling intent survives, preserving mode-toggle
-    /// losslessness. A rule left with nothing but a default (Snapping)
-    /// engine-mode is dropped entirely. Returns true if the rule set changed.
-    bool purgeSnappingLayoutFromAssignments(const QString& layoutId);
+                               FamilyFn familyMatches, int emitDesktop, const char* label);
 
     /// Synthesize the level-1 global default into an AssignmentEntry,
     /// IGNORING the global suppress setting. Three-tier precedence:
@@ -917,59 +1127,21 @@ private:
     AssignmentEntry resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
                                                             const QString& activity) const;
 
-    /// True iff an enabled engine-mode assignment rule matches the (screen,
-    /// desktop, activity) context — i.e. the user authored an explicit
-    /// per-context assignment, even one that sets only the mode with
-    /// no layout. Such a rule overrides the global suppress setting (the
-    /// context is managed, never suppressed). Mirrors the connector /
+    /// True iff ANY enabled assignment-family rule matches the (screen,
+    /// desktop, activity) context — an engine-mode rule, a layout-only
+    /// rule, or an algorithm-only rule all count (the implementation asks
+    /// resolveAssignmentEntry, which resolves per slot). Any of them is an
+    /// explicit authored intent for the context, so any of them overrides
+    /// the global suppress setting (the context is managed, never
+    /// suppressed). Mirrors the connector /
     /// virtual-screen fallback chain of @ref assignmentIdForScreen so a rule
     /// keyed by the physical/connector id still matches a virtual-screen query.
     bool hasMatchingAssignmentRule(const QString& screenId, int virtualDesktop, const QString& activity) const;
 
-    /// Lookup key for @c m_contextResolveCache. Mirrors the parameters of
-    /// @ref resolveAssignmentEntry — three independent context dimensions
-    /// the windowless cascade walks (screen id, virtual desktop, activity).
-    /// Field-equal + per-field hash composition is enough: every dimension is
-    /// part of the cascade identity.
-    struct ContextResolveKey
-    {
-        QString screenId;
-        int virtualDesktop = 0;
-        QString activity;
-        // A free-form fourth key dimension, used by the context resolvers that
-        // share the ContextResolveKey type but never the same cache container. It
-        // folds in every non-rule-set input the resolved value depends on, so a
-        // change in one yields a fresh entry rather than a stale hit:
-        //   - gap cascade: contextCacheKeyToken(mode, activeLayout, orientation) —
-        //     the SAME (screen, desktop, activity) resolves DIFFERENT gaps per
-        //     placement mode, active layout, and screen orientation.
-        //   - lock / default-assignment / overlay: contextCacheKeyToken with an
-        //     empty mode (they are mode-agnostic) plus activeLayout (except
-        //     default-assignment, which omits it to avoid recursion) and orientation.
-        //   - assignment resolver: "twc:N|or:<token>" — the tiled-window-count and
-        //     the screen orientation (it does not read the active layout).
-        // Each resolver owns its own cache hash, so the token vocabularies never
-        // collide.
-        QString mode;
-        bool operator==(const ContextResolveKey& other) const noexcept
-        {
-            return virtualDesktop == other.virtualDesktop && screenId == other.screenId && activity == other.activity
-                && mode == other.mode;
-        }
-    };
-    friend size_t qHash(const LayoutRegistry::ContextResolveKey& key, size_t seed) noexcept
-    {
-        // ::qHash routes to the global Qt qHash overloads — without the leading
-        // qualifier ADL would pick up @c qHash(LayoutAssignmentKey&) (declared
-        // in @c AssignmentEntry.h alongside this header) and fail to convert
-        // each field. Mirrors the same pattern @c LayoutAssignmentKey itself uses.
-        size_t h = seed;
-        h = ::qHash(key.screenId, h);
-        h = ::qHash(key.virtualDesktop, h);
-        h = ::qHash(key.activity, h);
-        h = ::qHash(key.mode, h);
-        return h;
-    }
+    /// Lookup key for the context-resolver caches below. Hoisted to
+    /// PhosphorZones/ContextResolveKey.h (a self-contained value type with
+    /// its own qHash); the alias keeps existing qualified uses compiling.
+    using ContextResolveKey = PhosphorZones::ContextResolveKey;
 
     /// Shared revision-invalidated memoization for the five context resolvers
     /// (@ref resolveAssignmentEntry, @ref resolveContextGaps,
@@ -1006,7 +1178,7 @@ private:
     }
 
     /// The rule-derived slot resolution cached by @ref resolveAssignmentEntry.
-    /// Holds ONLY what the rule set produced for each of the three independent
+    /// Holds ONLY what the rule set produced for each of the four independent
     /// slots. Given a fixed cache key the value is a pure function of the rule
     /// set (the cache's revision-invalidation contract). The live tiled-window
     /// count and the screen orientation are the non-rule-set inputs that affect
@@ -1017,15 +1189,16 @@ private:
     /// in AFTER the cache returns, so a default-setting change is reflected
     /// immediately without a rule-set revision bump (a settings edit produces
     /// none). @c modeEntry is engaged when an engine-mode rule won (it carries
-    /// that rule's mode plus its own layout tokens); when disengaged the caller
+    /// that rule's mode plus its own payload tokens); when disengaged the caller
     /// bases the entry on the live global default for the context.
-    /// @c snappingLayout / @c tilingAlgorithm are engaged when a layout rule
-    /// filled that slot, and override the base's field.
+    /// @c snappingLayout / @c tilingAlgorithm / @c scrollingTemplate are engaged
+    /// when a payload rule filled that slot, and override the base's field.
     struct RuleSlotResolution
     {
         std::optional<AssignmentEntry> modeEntry;
         std::optional<QString> snappingLayout;
         std::optional<QString> tilingAlgorithm;
+        std::optional<QString> scrollingTemplate;
     };
 
     /// Cache of @ref resolveAssignmentEntry's rule-derived resolution keyed by
@@ -1092,6 +1265,14 @@ private:
     /// onto every windowless context query so a Field::ScreenOrientation predicate
     /// can match. See @ref setScreenOrientationProvider.
     std::function<std::optional<QString>(const QString& screenId)> m_screenOrientationProvider;
+    /// Borrowed native scrolling-template store (see setScrollingTemplateStore);
+    /// null in registries that never wire one (some tests) — every template
+    /// resolve then answers "no template".
+    ScrollingTemplateStore* m_scrollingTemplateStore = nullptr;
+    /// Empty = provider unset. The DEFAULT scrolling template id consulted
+    /// when a Scrolling cascade entry names no template (see
+    /// setDefaultScrollingTemplateProvider).
+    std::function<QString()> m_defaultScrollingTemplateProvider;
     /// Empty = provider unset (legacy behaviour). Returns true when
     /// the user has snapping mode enabled in settings, regardless of
     /// whether a global default snap layout id is configured. See
@@ -1114,18 +1295,21 @@ private:
     Layout* m_activeLayout = nullptr;
     Layout* m_previousLayout = nullptr; ///< Active layout before last setActiveLayout (for resnap)
     /// Quick-layout slots keyed by mode: index 0 = Snapping (zone-layout
-    /// UUIDs), index 1 = Autotile (autotile algorithm IDs). Each maps slot
-    /// number (1..9) → layout/algorithm ID. See @ref modeIndex.
-    QHash<int, QString> m_quickLayoutSlots[2];
+    /// UUIDs), index 1 = Autotile (autotile algorithm IDs), index 2 =
+    /// Scrolling (native ScrollingTemplate UUIDs) — see @ref slotIndexFor,
+    /// the one authority for this mapping. Each maps slot number (1..9) →
+    /// layout / algorithm / template ID.
+    QHash<int, QString> m_quickLayoutSlots[3];
     /// Per-layout settings sidecar (layout-settings.json), keyed by layout UUID.
     /// Settings are split out of the structural layout file on save and merged
     /// back in on load — see layoutregistry_persistence.cpp.
     LayoutSettingsStore m_layoutSettings;
     int m_currentVirtualDesktop = 1;
-    /// Per-screen current virtual desktop (screenId → 1-based) under Plasma 6.7
-    /// per-output virtual desktops (#648). Empty unless the daemon pushes
-    /// per-screen values, so resolveLayoutForScreen falls back to the global.
-    QHash<QString, int> m_screenVirtualDesktop;
+    /// Per-screen current-desktop resolver under Plasma 6.7 per-output
+    /// virtual desktops (#648). The daemon wires it to the
+    /// VirtualDesktopManager; unset (KCM/editor hosts) falls back to the
+    /// global m_currentVirtualDesktop.
+    std::function<std::optional<int>(const QString&)> m_currentVirtualDesktopProvider;
     QString m_currentActivity;
 };
 

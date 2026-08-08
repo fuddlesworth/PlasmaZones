@@ -3,6 +3,8 @@
 
 #include <PhosphorCompositor/DaemonClient.h>
 #include <PhosphorProtocol/ClientHelpers.h>
+#include <PhosphorProtocol/DragMarshalling.h>
+#include <PhosphorProtocol/Registration.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
@@ -13,12 +15,21 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
+#include <QLoggingCategory>
 
 namespace PhosphorCompositor {
+
+Q_LOGGING_CATEGORY(lcDaemonClient, "phosphor.compositor.daemonclient", QtWarningMsg)
 
 DaemonClient::DaemonClient(QObject* parent)
     : QObject(parent)
 {
+    // The struct-typed subscriptions below (WindowGeometryList,
+    // EmptyZoneList, DragPolicy) demarshal silently to garbage unless the
+    // wire types are registered in this process. Idempotent, so a host
+    // that already registered pays nothing.
+    PhosphorProtocol::registerWireTypes();
+
     m_serviceWatcher = new QDBusServiceWatcher(
         PhosphorProtocol::Service::Name, QDBusConnection::sessionBus(),
         QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
@@ -34,6 +45,13 @@ DaemonClient::DaemonClient(QObject* parent)
 DaemonClient::~DaemonClient()
 {
     disconnectDaemonSignals();
+    // The ctor's daemonReady subscription is not part of the per-session
+    // connect/disconnect pair (it must survive re-registration), so drop it
+    // here explicitly — Qt would tear it down with the receiver anyway, but
+    // the symmetry keeps every bus connection visibly paired.
+    QDBusConnection::sessionBus().disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                             PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                             QStringLiteral("daemonReady"), this, SLOT(onDaemonReadySignal()));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -72,7 +90,23 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
         int peerVersion = reply.argumentAt<1>();
 
         if (m_sessionId == QLatin1String("REJECTED")) {
+            // No session was established: a later reader must not see the
+            // wire sentinel as a live session id.
+            m_sessionId.clear();
             Q_EMIT bridgeRejected(QStringLiteral("Daemon rejected registration"));
+            return;
+        }
+
+        // Reject an under-versioned DAEMON symmetrically: the daemon's gate
+        // covers an old client, but a client newer than the daemon would
+        // otherwise register and then hear nothing on the renamed v5
+        // lifecycle surface — the exact silent failure the version bump
+        // exists to prevent.
+        if (peerVersion < PhosphorProtocol::Service::MinPeerApiVersion) {
+            m_sessionId.clear(); // rejected: no live session id to expose
+            Q_EMIT bridgeRejected(QStringLiteral("Daemon API version %1 is older than the minimum supported %2")
+                                      .arg(peerVersion)
+                                      .arg(PhosphorProtocol::Service::MinPeerApiVersion));
             return;
         }
 
@@ -88,20 +122,20 @@ void DaemonClient::registerBridge(const QString& compositorId, int apiVersion, c
 
 void DaemonClient::notifyWindowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
 {
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Autotile,
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Tiling,
                                                 QStringLiteral("windowOpened"),
                                                 {windowId, screenId, minWidth, minHeight});
 }
 
 void DaemonClient::notifyWindowOpenedBatch(const PhosphorProtocol::WindowOpenedList& windows)
 {
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Autotile,
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Tiling,
                                                 QStringLiteral("windowsOpenedBatch"), {QVariant::fromValue(windows)});
 }
 
 void DaemonClient::notifyWindowClosed(const QString& windowId)
 {
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Autotile,
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::Tiling,
                                                 QStringLiteral("windowClosed"), {windowId});
 }
 
@@ -115,23 +149,68 @@ void DaemonClient::notifyWindowActivated(const QString& windowId, const QString&
 // Drag operations (plugin → daemon)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void DaemonClient::dragStarted(const QString& windowId, const QString& screenId, const QRect& geometry)
+void DaemonClient::beginDrag(const QString& windowId, const QRect& frameGeometry, const QString& startScreenId,
+                             int mouseButtons)
 {
-    PhosphorProtocol::ClientHelpers::sendOneWay(
-        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragStarted"),
-        {windowId, screenId, geometry.x(), geometry.y(), geometry.width(), geometry.height()});
+    auto* watcher =
+        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("beginDrag"),
+                                        {windowId, frameGeometry.x(), frameGeometry.y(), frameGeometry.width(),
+                                         frameGeometry.height(), startScreenId, mouseButtons}),
+                                    this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (w->isError()) {
+            qCWarning(lcDaemonClient) << "beginDrag failed for" << windowId << ":" << w->error().message();
+            return;
+        }
+        QDBusPendingReply<PhosphorProtocol::DragPolicy> reply = *w;
+        if (!reply.isValid()) {
+            return;
+        }
+        const PhosphorProtocol::DragPolicy policy = reply.value();
+        const QString invalid = policy.validationError();
+        if (!invalid.isEmpty()) {
+            qCWarning(lcDaemonClient) << "beginDrag returned an invalid policy for" << windowId << ":" << invalid;
+            return;
+        }
+        Q_EMIT dragPolicyReceived(windowId, policy);
+    });
 }
 
-void DaemonClient::dragMoved(const QString& windowId, int cursorX, int cursorY)
+void DaemonClient::updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
 {
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
-                                                QStringLiteral("dragMoved"), {windowId, cursorX, cursorY});
+                                                QStringLiteral("updateDragCursor"),
+                                                {windowId, cursorX, cursorY, modifiers, mouseButtons});
 }
 
-void DaemonClient::dragStopped(const QString& windowId, const QString& screenId, const QString& zoneId)
+void DaemonClient::endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
+                           bool cancelled)
 {
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
-                                                QStringLiteral("dragStopped"), {windowId, screenId, zoneId});
+    auto* watcher =
+        new QDBusPendingCallWatcher(PhosphorProtocol::ClientHelpers::asyncCall(
+                                        PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("endDrag"),
+                                        {windowId, cursorX, cursorY, modifiers, mouseButtons, cancelled}),
+                                    this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (w->isError()) {
+            qCWarning(lcDaemonClient) << "endDrag failed for" << windowId << ":" << w->error().message();
+            return;
+        }
+        QDBusPendingReply<PhosphorProtocol::DragOutcome> reply = *w;
+        if (!reply.isValid()) {
+            return;
+        }
+        const PhosphorProtocol::DragOutcome outcome = reply.value();
+        const QString invalid = outcome.validationError();
+        if (!invalid.isEmpty()) {
+            qCWarning(lcDaemonClient) << "endDrag returned an invalid outcome for" << windowId << ":" << invalid;
+            return;
+        }
+        Q_EMIT dragOutcomeReceived(windowId, outcome);
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -239,7 +318,11 @@ void DaemonClient::onDaemonReadySignal()
 
 void DaemonClient::onServiceRegistered()
 {
-    // Daemon process appeared — wait for daemonReady signal before registering
+    // Daemon process appeared — wait for daemonReady signal before
+    // registering. The disconnect-then-reconnect pair below keeps the
+    // subscription SINGULAR across repeated service (re)registrations:
+    // QDBusConnection::connect stacks duplicate match rules, and a daemon
+    // that restarts N times would otherwise deliver daemonReady N times.
     QDBusConnection::sessionBus().disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                              PhosphorProtocol::Service::Interface::LayoutRegistry,
                                              QStringLiteral("daemonReady"), this, SLOT(onDaemonReadySignal()));
@@ -263,6 +346,15 @@ void DaemonClient::onServiceUnregistered()
 
 void DaemonClient::connectDaemonSignals()
 {
+    // Idempotence guard: registerBridge can succeed more than once without
+    // an intervening onServiceUnregistered, and QDBusConnection::connect
+    // stacks duplicate match rules — every handler would then fire twice
+    // per signal.
+    if (m_daemonSignalsConnected) {
+        return;
+    }
+    m_daemonSignalsConnected = true;
+
     auto bus = QDBusConnection::sessionBus();
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
@@ -295,7 +387,7 @@ void DaemonClient::connectDaemonSignals()
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragPolicyChanged"), this,
-                SLOT(handleDragPolicyChanged(QString, int)));
+                SLOT(handleDragPolicyChanged(QString, PhosphorProtocol::DragPolicy)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("snapAssistReady"), this,
@@ -329,6 +421,8 @@ void DaemonClient::connectDaemonSignals()
 
 void DaemonClient::disconnectDaemonSignals()
 {
+    m_daemonSignalsConnected = false;
+
     auto bus = QDBusConnection::sessionBus();
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("applyGeometryRequested"), this,
@@ -353,7 +447,7 @@ void DaemonClient::disconnectDaemonSignals()
                    QStringLiteral("reapplyWindowGeometriesRequested"), this, SIGNAL(reapplyGeometriesRequested()));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("dragPolicyChanged"), this,
-                   SLOT(handleDragPolicyChanged(QString, int)));
+                   SLOT(handleDragPolicyChanged(QString, PhosphorProtocol::DragPolicy)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("snapAssistReady"), this,
                    SLOT(handleSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
@@ -426,10 +520,12 @@ void DaemonClient::handleActivateWindow(const QString& windowId)
     }
 }
 
-void DaemonClient::handleDragPolicyChanged(const QString& windowId, int newPolicy)
+void DaemonClient::handleDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy)
 {
     if (m_dragHandler) {
-        m_dragHandler->onDragPolicyChanged(windowId, newPolicy);
+        // The IDragHandler API predates the structured policy; forward the
+        // routing verdict (the bypass reason) as its integer code.
+        m_dragHandler->onDragPolicyChanged(windowId, static_cast<int>(newPolicy.bypassReason));
     }
 }
 
@@ -467,6 +563,10 @@ void DaemonClient::handleSnapAssistReady(const QString& windowId, const QString&
     Q_EMIT snapAssistReady(windowId, screenId, zones);
 }
 
+// NOTE: a successful probe reports ready WITHOUT wiring the daemon signal
+// subscriptions — only registerBridge's success path calls
+// connectDaemonSignals. The probe is a liveness check, not a session
+// bring-up; callers that need the signal stream must still register.
 void DaemonClient::probeDaemonAvailable(int timeoutMs)
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(

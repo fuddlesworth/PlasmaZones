@@ -96,6 +96,9 @@ SettingsFlickable {
     // pickers read `screens` and `activities`.
     readonly property QtObject _editorAppSettings: QtObject {
         readonly property var layouts: settingsController.layouts
+        // Backs the ActiveLayout match leaf's picker and the read-only tree's
+        // id-to-name resolution. Without it both degrade to raw wire ids.
+        readonly property var activeLayoutMatchOptions: settingsController.activeLayoutMatchOptions
         readonly property var screens: settingsController.screens
         readonly property var activities: settingsController.activities
         // Backs the RouteToDesktop action's virtual-desktop picker.

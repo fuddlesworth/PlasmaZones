@@ -5,15 +5,20 @@
 #include "helpers.h"
 #include "config/settings.h"
 #include "core/platform/logging.h"
+#include "core/resolve/screenmoderouter.h"
 #include "core/types/constants.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
 #include "daemon/overlayservice.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
+// Complete type needed to emit focusWindowRequested on the tab-click path —
+// daemon.h forward declares TilingAdaptor only.
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 
 #include <PhosphorEngine/PlacementEngineBase.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorScreens/Manager.h>
@@ -21,6 +26,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -44,9 +50,11 @@ void Daemon::initializeUnifiedController()
     // Registry injected explicitly (not reached via engine->algorithmRegistry()):
     // keeps DI contract visible at the call site and lets unit tests stub the
     // engine without losing algorithm enumeration.
+    // No Qt parent: unique_ptr owns the lifetime, per the convention the
+    // constructor's init list states (daemon.cpp).
     m_unifiedLayoutController =
         std::make_unique<UnifiedLayoutController>(m_layoutManager.get(), m_settings.get(), m_screenManager.get(),
-                                                  m_algorithmRegistry.get(), m_autotileEngine.get(), this);
+                                                  m_algorithmRegistry.get(), m_autotileEngine.get(), nullptr);
 
     // Share the daemon's bundle-owned autotile source with the controller
     // so its internal layout cache's autotile half is populated from the
@@ -70,7 +78,7 @@ void Daemon::connectLayoutSignals()
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Derive initial per-screen autotile state from assignments
-    updateAutotileScreens();
+    updateEngineScreens();
 
     // Set initial layout filter
     updateLayoutFilter();
@@ -99,10 +107,11 @@ void Daemon::connectLayoutSignals()
         });
     }
 
-    // Note: autotileEnabledChanged, snappingEnabledChanged, and perScreenAutotileSettingsChanged
-    // are handled by the consolidated settingsChanged handler (lives in
+    // Note: autotileEnabledChanged, snappingEnabledChanged, scrollingEnabledChanged,
+    // perScreenAutotileSettingsChanged, and perScreenScrollingSettingsChanged are all
+    // handled by the consolidated settingsChanged handler (lives in
     // init_services.cpp since the daemon file split — single-pass processing).
-    // Individual autotile signals only fire from runtime setters, where settingsChanged also
+    // Individual per-mode signals only fire from runtime setters, where settingsChanged also
     // fires and handles the transitions — no separate handlers needed.
 
     // Re-derive autotile screens and layout filter when assignments change
@@ -126,7 +135,7 @@ void Daemon::connectLayoutSignals()
     // start() calls this one FIRST (lifecycle.cpp), so the clear lives here
     // and connectOverlaySignals() only appends.
     //
-    // Scope note: this list covers the four connections below.
+    // Scope note: this list covers every connection appended below.
     // initializeAutotile()'s eight shortcut lambdas get the same treatment
     // from their own list, because start() calls it BEFORE this function
     // clears here, so a shared list would drop them right after install.
@@ -138,11 +147,46 @@ void Daemon::connectLayoutSignals()
         disconnect(c);
     }
     m_restartScopedConnections.clear();
+    // Native template edits (store CRUD: save, delete, duplicate, rescan)
+    // re-derive the engine screens so a scrolling screen whose assigned
+    // template changed gets its vocabulary and blueprint re-pushed
+    // (updateScrollingScreens runs per pass; the identical-set retile makes
+    // the push take effect). The pre-pivot zone-layout-edit watcher is gone
+    // with the mined-vocabulary model: a LAYOUT edit can no longer affect a
+    // template. The recompute is cheap and store mutations are user-paced,
+    // so no per-screen template-id matching is needed here.
+    //
+    // The per-screen active-assignment snapshot is re-diffed for the same
+    // reason: store CRUD can retarget or clear a context's template without
+    // touching its assignment id, and the KCM apply's template-only OSD gate
+    // reads the snapshot's templateId. Its changed-set return is ignored, as
+    // at the other refresh-only call sites.
+    if (m_scrollingTemplateStore) {
+        m_restartScopedConnections << connect(m_scrollingTemplateStore.get(),
+                                              &PhosphorZones::ScrollingTemplateStore::templatesChanged, this, [this]() {
+                                                  updateEngineScreens();
+                                                  // Refresh the snapshot's templateId — see above.
+                                                  diffActiveAssignments();
+                                                  // Relay to the D-Bus surface so the settings app
+                                                  // refreshes its template views on store CRUD.
+                                                  if (m_layoutAdaptor) {
+                                                      Q_EMIT m_layoutAdaptor->scrollingTemplatesChanged();
+                                                  }
+                                              });
+    }
     m_restartScopedConnections << connect(
         m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
         [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
-            updateAutotileScreens();
+            updateEngineScreens();
             updateLayoutFilter();
+            // Re-prime the active-assignment snapshot: layoutAssigned is the
+            // tail of every registry assignment write (applyLayoutById and
+            // setAssignmentEntryDirect alike), and the rule backing the entry
+            // was stored before the emit. Capturing the post-write ids here
+            // makes the deferred rulesChanged reconcile diff empty for
+            // self-inflicted writes — its apply pass is reserved for external
+            // rule edits, which never pass through here.
+            diffActiveAssignments();
 
             // Sync unified controller cycling index when assignment affects current desktop.
             const int curDesktop = currentDesktopForScreen(screenId);
@@ -158,7 +202,10 @@ void Daemon::connectLayoutSignals()
             }
             const QString assignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, curDesktop, currentActivity());
-            m_unifiedLayoutController->syncFromExternalState(assignmentId);
+            // Template substitution for the "scrolling:" sentinel — see
+            // displayIdForAssignment.
+            m_unifiedLayoutController->syncFromExternalState(
+                m_unifiedLayoutController->displayIdForAssignment(focusedScreenId, assignmentId));
         });
 
     // Connect unified layout controller signals for OSD display
@@ -199,6 +246,27 @@ void Daemon::connectLayoutSignals()
                 }
             });
 
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::scrollingTemplateApplied, this,
+            [this](const QString& templateId, const QString& screenId) {
+                if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
+                    m_overlayService->hideSnapAssist();
+                }
+                // Startup gate + deferred show: same rationale as the
+                // layoutApplied handler above.
+                if (!m_running || !m_scrollingTemplateStore) {
+                    return;
+                }
+                if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+                    QTimer::singleShot(0, this, [this, templateId, screenId]() {
+                        if (!m_scrollingTemplateStore) {
+                            return;
+                        }
+                        showScrollingTemplateOsd(m_scrollingTemplateStore->templateById(QUuid::fromString(templateId)),
+                                                 screenId);
+                    });
+                }
+            });
+
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,
             [this](const QString& algorithmName, int windowCount) {
                 Q_UNUSED(windowCount)
@@ -236,7 +304,7 @@ void Daemon::connectLayoutSignals()
     // ScreenModeRouter + AssignmentEntry::Mode, and the router is a plain
     // query class with no change signal — a mode switch normally lands as an
     // applied layout (the toggle-autotile handler routes through
-    // applyLayoutById), so these two are the mode-change edge the sheet can
+    // applyLayoutById), so these three are the mode-change edge the sheet can
     // observe. The one exception, the bare suppressed-default autotile entry
     // written directly, calls refreshCheatsheetIfVisible itself at its write
     // site. refreshCheatsheetIfVisible re-resolves the mode for the
@@ -249,6 +317,11 @@ void Daemon::connectLayoutSignals()
             [this](PhosphorZones::Layout*) {
                 refreshCheatsheetIfVisible();
             });
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::scrollingTemplateApplied, this,
+            [this](const QString&, const QString&) {
+                refreshCheatsheetIfVisible();
+            });
+
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,
             [this](const QString&, int) {
                 refreshCheatsheetIfVisible();
@@ -276,6 +349,21 @@ void Daemon::connectOverlaySignals()
     // shortcuts (NextLayout / QuickLayoutN) and the explicit Layout Picker
     // (Meta+Alt+Space by default) for that.
 
+    // A clicked tab is a focus request, nothing more. Asking the compositor to
+    // activate the window (the same channel the engine's own
+    // activateWindowRequested uses) rather than poking the strip directly
+    // keeps ONE owner of "which tab is showing": the strip learns about it
+    // through windowFocused, exactly as it does for a keyboard focus walk or
+    // an alt-tab. Reaching into the strip here would make the click a second
+    // writer that could disagree with the compositor about what is focused.
+    m_restartScopedConnections << connect(m_overlayService.get(), &IOverlayService::scrollTabActivated, this,
+                                          [this](const QString& windowId) {
+                                              if (!m_tilingAdaptor || windowId.isEmpty()) {
+                                                  return;
+                                              }
+                                              Q_EMIT m_tilingAdaptor->focusWindowRequested(windowId);
+                                          });
+
     // Connect Snap Assist selection: fetch authoritative zone geometry from service (same as
     // keyboard navigation) to avoid overlay coordinate drift/overlap bugs, then forward to effect
     // Same restart-duplication guard as connectLayoutSignals (see there).
@@ -292,20 +380,38 @@ void Daemon::connectOverlaySignals()
                     effectiveScreenId = effectiveIds.first();
                 }
             }
-            // Snap assist is a manual-mode concept; ignore if the TARGET screen uses autotile.
-            if (isAutotileScreen(effectiveScreenId)) {
-                return;
+            // Snap assist is a manual-mode concept; ignore if the TARGET
+            // screen is owned by a tiling-family engine (autotile OR
+            // scrolling — both place windows themselves). Router-first with
+            // the engine-set fallback for the (wiring-bug-only) null case.
+            if (!effectiveScreenId.isEmpty()) {
+                const bool engineOwned = m_screenModeRouter
+                    ? !m_screenModeRouter->isSnapMode(effectiveScreenId)
+                    : (isAutotileScreen(effectiveScreenId)
+                       || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(effectiveScreenId)));
+                if (engineOwned) {
+                    return;
+                }
             }
-            // If the window is being pulled from a sibling virtual screen that uses
-            // autotile, notify the engine so it removes the window from the source
-            // screen's tiling tree and retiles the remaining windows.
-            if (m_autotileEngine && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+            // If the window is being pulled from a sibling virtual screen an
+            // ENGINE owns (autotile or scrolling), release it from that
+            // engine so the source screen reflows without the ghost. Routed
+            // through the router + windowClosed on whichever engine tracks
+            // the window — naming m_autotileEngine directly here was the
+            // pre-third-engine shape and left scroll columns stale.
+            if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
                 const QString sourceScreen = m_windowTrackingAdaptor->service()->screenForWindow(windowId);
-                if (!sourceScreen.isEmpty() && sourceScreen != effectiveScreenId && isAutotileScreen(sourceScreen)) {
-                    m_autotileEngine->windowClosed(windowId);
-                    // Clear autotile-floated marker immediately — windowClosed removes
-                    // the window from the engine but doesn't clear the WTS flag.
-                    m_autotileEngine->clearModeSpecificFloatMarker(windowId);
+                if (!sourceScreen.isEmpty() && sourceScreen != effectiveScreenId) {
+                    for (PhosphorEngine::PlacementEngineBase* engine : {m_autotileEngine.get(), m_scrollEngine.get()}) {
+                        if (engine && engine->isActiveOnScreen(sourceScreen) && engine->isWindowTracked(windowId)) {
+                            engine->windowClosed(windowId);
+                            // Clear the mode-float marker immediately — windowClosed
+                            // removes the window from the engine but doesn't clear
+                            // the WTS flag.
+                            engine->clearModeSpecificFloatMarker(windowId);
+                            break;
+                        }
+                    }
                 }
             }
             QRect geometry;
@@ -373,6 +479,19 @@ void Daemon::connectOverlaySignals()
         connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_windowDragAdaptor,
                 &WindowDragAdaptor::handleWindowClosed, Qt::UniqueConnection);
     }
+    if (m_tilingAdaptor) {
+        // Same fan-out for TilingAdaptor's per-window caches: the effect
+        // gates its Tiling.windowClosed relay on the close screen still
+        // being engine-managed, so this in-process hook is the unconditional
+        // teardown for the dedup cache and any parked open. PMF +
+        // UniqueConnection for the same restart-stacking reason as above.
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowClosedNotification, m_tilingAdaptor,
+                &TilingAdaptor::onTrackedWindowDestroyed, Qt::UniqueConnection);
+        // And the prune-path backstop for windows that die without any close
+        // signal (instance-id key space; see the signal doc).
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::stalePruned, m_tilingAdaptor,
+                &TilingAdaptor::pruneStaleFloatBroadcasts, Qt::UniqueConnection);
+    }
 }
 
 void Daemon::finalizeStartup()
@@ -385,8 +504,9 @@ void Daemon::finalizeStartup()
 
     // Now that AutotileEngine::loadState has restored autotile placement records,
     // re-run the exclusion-rule prune so any loaded WindowPlacement records for apps
-    // an Exclude rule covers are dropped from the unified store. The init-prologue
-    // priming call (daemon.cpp's setExcludeRuleSet/setRules/prune sequence, run
+    // an Exclude or ExcludePlacement rule covers are dropped from the unified
+    // store. The init-prologue priming call (init_engines.cpp's
+    // setExcludeRuleSet/setRules/prune sequence, run
     // synchronously before the rulesChanged subscription wires) already pruned what
     // was loaded then; this re-run covers records that landed during the later
     // autotile load. Patterns derive from the unified Rule store via
@@ -544,7 +664,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
     // Restore geometry: applyGeometryForFloat prefers pre-snap (the window's
     // original position before any zone snapping) over pre-autotile (autotile tiling).
     // Pre-autotile persists across float/unfloat cycles (the effect's exact-match
-    // contains-guard in saveAndRecordPreAutotileGeometry prevents overwriting), so
+    // contains-guard in saveAndRecordPreTileGeometry prevents overwriting), so
     // every float restores to the same original position. The effect does NOT apply
     // geometry on float — the daemon is the single source.
     if (floating && m_windowTrackingAdaptor) {
@@ -587,6 +707,14 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
                          << screenId << ")";
         m_snapEngine->handoffRelease(windowId);
     }
+    // Scroll twin of the release above: autotile taking ownership must also
+    // evict any stale scroll tracking (handoffRelease is a no-op when the
+    // engine doesn't track the window, same screen-agnostic rationale).
+    if (m_scrollEngine && m_scrollEngine->isWindowTracked(windowId)) {
+        qCInfo(lcDaemon) << "Cross-engine handoff: releasing scroll state for" << windowId << "(autotile screen"
+                         << screenId << ")";
+        m_scrollEngine->handoffRelease(windowId);
+    }
     if (floating) {
         m_windowTrackingAdaptor->setWindowFloating(windowId, true);
         m_autotileEngine->markModeSpecificFloated(windowId);
@@ -604,6 +732,45 @@ void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floatin
     }
     // Deliberately no applyGeometryForFloat and no navigation OSD — this is
     // a silent sync of engine↔WTS state, not a user-visible float action.
+}
+
+void Daemon::syncScrollFloatStatePassive(const QString& windowId, bool floating, const QString& screenId)
+{
+    // Scroll twin of syncAutotileFloatStatePassive; see the header for why the
+    // engine routes its own-initiative float transitions here instead of
+    // through windowFloatingChanged.
+    if (!m_scrollEngine || !m_windowTrackingAdaptor) {
+        return;
+    }
+    PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    if (!wts) {
+        return;
+    }
+    // Cross-engine handoff, screen-agnostic for the same reason as the autotile
+    // twin: handoffRelease is a no-op when the engine does not track the window,
+    // and a stale same-screen-id comparison used to skip the cleanup.
+    if (m_snapEngine && m_snapEngine->isWindowTracked(windowId)) {
+        qCInfo(lcDaemon) << "Cross-engine handoff: releasing snap state for" << windowId << "(scrolling screen"
+                         << screenId << ")";
+        m_snapEngine->handoffRelease(windowId);
+    }
+    if (m_autotileEngine && m_autotileEngine->isWindowTracked(windowId)) {
+        qCInfo(lcDaemon) << "Cross-engine handoff: releasing autotile state for" << windowId << "(scrolling screen"
+                         << screenId << ")";
+        m_autotileEngine->handoffRelease(windowId);
+    }
+    if (floating) {
+        m_windowTrackingAdaptor->setWindowFloating(windowId, true);
+        m_scrollEngine->markModeSpecificFloated(windowId);
+        const QString preFloatScreen = wts->preFloatScreen(windowId);
+        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
+            wts->clearPreFloatZone(windowId);
+        }
+    } else {
+        m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+        m_scrollEngine->clearModeSpecificFloatMarker(windowId);
+    }
+    // Deliberately no applyGeometryForFloat and no navigation OSD.
 }
 
 void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId)

@@ -149,10 +149,17 @@ PhosphorUi.SettingsAppWindow {
             // for unrelated reasons: one could not read the daemon's slot map,
             // the other could not clear an override while a discard still owns
             // it. Naming the daemon on the second would be a false explanation.
-            const title = settingsController.app.registry.pageData(page).title || "";
+            const resetData = settingsController.app.registry.pageData(page);
+            const title = (resetData && resetData.title) ? resetData.title : "";
             const named = title.length > 0;
             if (reason === "overrides-not-cleared") {
                 window.showToast(named ? i18n("Some settings on %1 are still being saved, so it was left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so it was left unchanged. Try again in a moment."));
+                return;
+            }
+            // A failed factory reset is a config WRITE failure, not a daemon
+            // problem; naming the service here would be a false explanation.
+            if (reason === "reset-not-written") {
+                window.showToast(i18n("Your settings could not be written, so nothing was reset."));
                 return;
             }
             window.showToast(named ? i18n("Could not reach the PlasmaZones service, so %1 was left unchanged.", title) : i18n("Could not reach the PlasmaZones service, so this page was left unchanged."));
@@ -163,7 +170,8 @@ PhosphorUi.SettingsAppWindow {
         // override file still being written), so there is no daemon-unreachable
         // branch to distinguish here.
         function onPageDiscardFailed(page, reason) {
-            const title = settingsController.app.registry.pageData(page).title || "";
+            const discardData = settingsController.app.registry.pageData(page);
+            const title = (discardData && discardData.title) ? discardData.title : "";
             const named = title.length > 0;
             window.showToast(named ? i18n("Some settings on %1 are still being saved, so they were left unchanged. Try again in a moment.", title) : i18n("Some settings on this page are still being saved, so they were left unchanged. Try again in a moment."));
         }
@@ -253,6 +261,11 @@ PhosphorUi.SettingsAppWindow {
             // Declared inline in Main.qml, so it can reach `window` to feed the
             // page-step shortcut guard while the results dropdown is open.
             onSearchOpenChanged: window._searchOpen = searchOpen
+            // Same latch hazard the profile switcher below documents: a header
+            // delegate torn down with the dropdown open would leave the
+            // suppression flag stuck true and kill nav shortcuts for the
+            // session.
+            Component.onDestruction: window._searchOpen = false
             // App-level action results. Ids come from seedSearchCatalog
             // (searchcatalog.cpp); dispatch lives here because actions act
             // on window chrome the library knows nothing about.
@@ -423,6 +436,12 @@ PhosphorUi.SettingsAppWindow {
         // over _mainItems / _childItems for this — the framework now
         // exposes the same lookup as one Q_INVOKABLE on the controller.
         window._drillIntoActivePage();
+
+        // Seed the profile-aware Save footer. The store only emits
+        // profilesChanged on a later edit, so without this first read the
+        // footer says the generic "Unsaved changes" for the whole session
+        // when nothing touches the profile list.
+        window._refreshPendingProfileName();
     }
 
     // Drill into the deepest non-collapsible ancestor of the current
@@ -530,7 +549,7 @@ PhosphorUi.SettingsAppWindow {
             // titles list when the error array is empty (older
             // domains that don't emit per-domain text).
             if (errors && errors.length > 0)
-                window.showToast(i18n("Save did not complete: %1", errors.join("; ")));
+                window.showToast(i18n("Save did not complete. %1", errors.join(". ")));
             else if (titles.length === 0)
                 window.showToast(i18n("Save did not complete. Some pages still have unsaved changes."));
             else
@@ -544,8 +563,8 @@ PhosphorUi.SettingsAppWindow {
             // errors array, but mirror the apply-on-close guard shape
             // here so a future library refactor that loosens that
             // check can't surface a `null.join(...)` runtime error.
-            const detail = (errors && errors.length > 0) ? errors.join("; ") : i18n("(no details)");
-            window.showToast(i18n("Discard did not complete: %1", detail));
+            const detail = (errors && errors.length > 0) ? errors.join(". ") : i18n("No details were reported.");
+            window.showToast(i18n("Discard did not complete. %1", detail));
         }
 
         target: window
@@ -572,6 +591,11 @@ PhosphorUi.SettingsAppWindow {
 
         function onAutotileEnabledChanged() {
             if (!appSettings.autotileEnabled && window.sidebar.currentParentId === "tiling")
+                window.sidebar.drillOut();
+        }
+
+        function onScrollingEnabledChanged() {
+            if (!appSettings.scrollingEnabled && window.sidebar.currentParentId === "scrolling")
                 window.sidebar.drillOut();
         }
 
@@ -901,6 +925,12 @@ PhosphorUi.SettingsAppWindow {
             // The inline enable toggles must stay with them.
             readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
             readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
+            // Scrolling fully mirrors its two siblings now: a SimpleOnly
+            // condensed leaf (scrolling-simple) in simple mode, and in
+            // advanced mode a real drill parent ("scrolling") over the
+            // View/Columns/Window leaves — the parent row carries the
+            // inline enable toggle, exactly like the snapping/tiling arms.
+            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || entry.pageId === "scrolling-simple")
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers
@@ -914,10 +944,14 @@ PhosphorUi.SettingsAppWindow {
             readonly property string dirtyScopeId: entry ? settingsController.dirtyScopeFor(entry.pageId) : ""
             // The section-toggle's own scope, deliberately NOT dirtyScopeId.
             // pendingSection feeds discardPage() / beginExternalEdit() and a
-            // subtitle that names one of exactly two features, so it must stay
-            // bounded to the two ids those consumers handle. dirtyScopeId is an
-            // unbounded walk result and could hop past them.
-            readonly property string sectionId: isSnapping ? "snapping" : "tiling"
+            // subtitle that names one of exactly three features, so it must
+            // stay bounded to the three ids those consumers handle.
+            // dirtyScopeId is an unbounded walk result and could hop past them.
+            // Spelled out rather than defaulting to "scrolling" in the else
+            // branch: the three flags are not exhaustive over every row, and
+            // an empty id is a visibly inert scope rather than a silent write
+            // to scrollingEnabled from a row that is none of the three.
+            readonly property string sectionId: isSnapping ? "snapping" : (isTiling ? "tiling" : (isScrolling ? "scrolling" : ""))
             readonly property bool isCollapsibleHeader: entry && entry._isCollapsibleHeader === true
             readonly property bool isCollapsibleExpanded: isCollapsibleHeader && entry._isExpanded === true
             property int _dirtyTick: 0
@@ -979,12 +1013,12 @@ PhosphorUi.SettingsAppWindow {
                 }
             }
 
-            // ── Snapping / Tiling toggle ────────────────────────────
+            // ── Snapping / Tiling / Scrolling toggle ────────────────
             SettingsSwitch {
                 id: sectionToggle
 
-                visible: trailingRow.isSnapping || trailingRow.isTiling
-                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : false)
+                visible: trailingRow.isSnapping || trailingRow.isTiling || trailingRow.isScrolling
+                checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : (trailingRow.isScrolling ? appSettings.scrollingEnabled : false))
                 accessibleName: trailingRow.entry ? trailingRow.entry.title : ""
                 onToggled: function (newValue) {
                     // Disabling from the sidebar is a destructive shortcut
@@ -1015,8 +1049,10 @@ PhosphorUi.SettingsAppWindow {
                     settingsController.beginExternalEdit(trailingRow.sectionId);
                     if (trailingRow.isSnapping)
                         appSettings.snappingEnabled = newValue;
-                    else
+                    else if (trailingRow.isTiling)
                         appSettings.autotileEnabled = newValue;
+                    else if (trailingRow.isScrolling)
+                        appSettings.scrollingEnabled = newValue;
                     settingsController.endExternalEdit();
                 }
             }

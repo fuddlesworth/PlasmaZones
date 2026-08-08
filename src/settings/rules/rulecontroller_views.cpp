@@ -124,12 +124,12 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         // disable for one engine mask the disable for the engine the screen
         // actually runs, on nothing better than store order.
         QSet<QString> disabledEngineModes;
-        // Engine mode + BOTH layout tokens come from ONE rule: the highest-
+        // Engine mode + ALL layout tokens come from ONE rule: the highest-
         // priority rule on this screen carrying a SetEngineMode action — the
         // daemon's per-screen assignment winner. LayoutRegistry::
         // resolveContextAssignment picks it via highestPriorityMatch filtered to
         // `hasEngineModeAction(rule) && !isCatchAll`, then entryFromRuleMatchActions
-        // reads the whole entry from that one rule, keeping BOTH layout tokens so
+        // reads the whole entry from that one rule, keeping ALL layout tokens so
         // the active mode picks which applies. A bare layout rule with NO
         // SetEngineMode is never that winner, so the daemon never applies its
         // layout — and neither does the tile. Tracking engineMode and the layout
@@ -140,6 +140,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         QString engineMode;
         QString snappingLayout;
         QString tilingAlgorithm;
+        QString scrollingTemplate;
         // Layout-lock state from the highest-priority matching `LockContext`
         // rule on this screen. `lockResolved` is the first-wins guard (indices
         // are priority-DESC, so the first LockContext rule seen is the winner of
@@ -246,7 +247,7 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
             }
             // Engine/layout: capture from the FIRST rule (highest priority) that
             // carries a SetEngineMode action — the assignment winner. Read its
-            // mode AND both layout tokens together so the tile can never compose
+            // mode AND every layout token together so the tile can never compose
             // a layout from a different rule than the engine, nor surface a bare
             // layout rule (no SetEngineMode) the daemon's assignment discards.
             if (!s.assignmentResolved && ruleHasEngineMode) {
@@ -258,6 +259,8 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
                         s.snappingLayout = a.params.value(PhosphorRules::ActionParam::LayoutId).toString();
                     else if (a.type == ActionType::SetTilingAlgorithm)
                         s.tilingAlgorithm = a.params.value(PhosphorRules::ActionParam::Algorithm).toString();
+                    else if (a.type == ActionType::SetScrollingTemplate)
+                        s.scrollingTemplate = a.params.value(PhosphorRules::ActionParam::LayoutId).toString();
                 }
             }
         }
@@ -290,16 +293,18 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
         tile[QStringLiteral("screenId")] = screenId;
         // Show the assignment winner's layout, picked by ITS engine mode — a
         // snapping engine shows the winner's snapping layout, an autotile engine
-        // its algorithm, scrolling neither — mirroring how the daemon's
-        // AssignmentEntry (which carries both tokens) is consumed. No assignment
+        // its algorithm, a scrolling engine its template layout — mirroring how
+        // the daemon's AssignmentEntry (which carries all three tokens) is
+        // consumed. No assignment
         // winner (no rule with a SetEngineMode action) → no engine pin → no
         // layout label, so a bare layout rule the daemon's cascade discards never
         // resurfaces. modeFromWireString defaults an unrecognised token to
         // Snapping, matching entryFromRuleMatchActions.
         QString layoutLabel;
-        // Track WHICH lookup applies — split prevents a UUID-shaped algorithm
-        // token from resolving via the snapping path (or a tokenised layoutId
-        // via the tiling path) just because both were wired to one resolver.
+        // Track WHICH lookup applies. Three engine families feed two lookups:
+        // the tiling one is kept separate so a UUID-shaped algorithm token
+        // cannot resolve through the layouts model, and a tokenised layout or
+        // template id cannot resolve through the algorithm list.
         const RuleModel::LabelLookup* labelLookup = nullptr;
         if (summary.assignmentResolved) {
             const auto mode = PhosphorZones::modeFromWireString(summary.engineMode)
@@ -310,8 +315,13 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
             } else if (mode == PhosphorZones::AssignmentEntry::Autotile) {
                 layoutLabel = summary.tilingAlgorithm;
                 labelLookup = &m_tilingAlgorithmLookup;
+            } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
+                // The snapping lookup reads the shared layouts model, which
+                // carries the native template rows keyed by their raw UUID, so
+                // it resolves a template id to its display name too.
+                layoutLabel = summary.scrollingTemplate;
+                labelLookup = &m_snappingLayoutLookup;
             }
-            // Scrolling: no layout/algorithm to label.
         }
         // The token is the raw layoutId / algorithm name from the rule's
         // action params — resolve it to a user-facing label when a lookup
@@ -403,33 +413,81 @@ QVariantList RuleController::validationIssuesForJson(const QVariantMap& ruleJson
     // editor. The previous shape `continue`'d past invalid entries,
     // which made the validator's `issue.actionIndex` point at the wrong
     // QML editor row (every malformed entry above an issue shifted
-    // subsequent indices down by one). The placeholder's empty type
-    // maps to the default `Window` domain via `ActionRegistry::domainFor`'s
-    // unregistered-type fallback, so the validator's only check
-    // (`domain == Context && !matchIsContextOnly`) never trips on it —
-    // no spurious issue is recorded against the placeholder slot.
+    // subsequent indices down by one).
+    //
+    // A placeholder is NOT inert to the whole validator. Its empty type maps
+    // to the default `Window` domain via `ActionRegistry::domainFor`'s
+    // unregistered-type fallback, so the context/match check never trips on
+    // it, but the co-located-Exclude check flags every non-Exclude action by
+    // index and would name the placeholder with an empty action label. The
+    // issue loop below drops empty-type issues for that reason.
+    //
+    // A rejected payload on an action whose TYPE is registered is a different
+    // case and gets its own issue: that is an unfilled picker (the rule
+    // templates seed empty screen / layout / algorithm ids), and saving would
+    // drop the action silently because `Rule::fromJson` rejects it the same
+    // way this loop does.
+    struct RejectedPayload
+    {
+        int index;
+        QString type;
+    };
+    QList<RejectedPayload> rejected;
     const QJsonValue actionsValue = obj.value(QLatin1String("actions"));
     if (actionsValue.isArray()) {
+        int index = 0;
         for (const QJsonValue& v : actionsValue.toArray()) {
             if (v.isObject()) {
-                if (const auto action = RuleAction::fromJson(v.toObject())) {
+                const QJsonObject actionObj = v.toObject();
+                if (const auto action = RuleAction::fromJson(actionObj)) {
                     probe.actions.append(*action);
+                    ++index;
                     continue;
+                }
+                const QString type = actionObj.value(QLatin1String("type")).toString();
+                if (!type.isEmpty()) {
+                    rejected.append({index, type});
                 }
             }
             // Malformed action (non-object JSON or descriptor-rejected
             // payload) — preserve a placeholder so index alignment with
             // the editor's actions array stays intact.
             probe.actions.append(RuleAction{});
+            ++index;
         }
     }
 
     QVariantList out;
+    for (const RejectedPayload& entry : rejected) {
+        QVariantMap m;
+        m[QStringLiteral("code")] = static_cast<int>(PhosphorRules::ValidationIssue::Code::IncompleteActionPayload);
+        m[QStringLiteral("actionIndex")] = entry.index;
+        m[QStringLiteral("actionType")] = entry.type;
+        m[QStringLiteral("actionLabel")] = RuleAuthoring::actionTypeLabel(entry.type);
+        // English, like the library's own issue messages: the UI localises
+        // from the code.
+        m[QStringLiteral("message")] =
+            QStringLiteral("Action `%1` has an incomplete or invalid payload and would be dropped on save.")
+                .arg(entry.type);
+        out.append(m);
+    }
     for (const PhosphorRules::ValidationIssue& issue : probe.validationIssues()) {
+        if (issue.actionType.isEmpty()) {
+            // A placeholder slot the user has not given a type yet. The
+            // editor's own completeness gate blocks saving it and names it
+            // properly; surfacing it here as well would print an issue with
+            // no action name in it.
+            continue;
+        }
         QVariantMap m;
         m[QStringLiteral("code")] = static_cast<int>(issue.code);
         m[QStringLiteral("actionIndex")] = issue.actionIndex;
         m[QStringLiteral("actionType")] = issue.actionType;
+        // Friendly picker label for the same action, so the status bar can
+        // name the action the way the picker did instead of echoing the raw
+        // wire token ("excludePlacement") into user-facing prose. Falls back
+        // to the wire token for an unknown type.
+        m[QStringLiteral("actionLabel")] = RuleAuthoring::actionTypeLabel(issue.actionType);
         m[QStringLiteral("message")] = issue.message;
         out.append(m);
     }

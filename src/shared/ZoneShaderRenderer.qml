@@ -27,6 +27,13 @@ Item {
         zoneShaderItem.reloadShader();
     }
 
+    // Drop the shader item's GPU resources while the overlay sits idle
+    // (called by the daemon's idle quiesce, after the grace window). They
+    // rebuild lazily on the next painted frame.
+    function releaseIdleGraphicsResources() {
+        zoneShaderItem.releaseIdleGraphicsResources();
+    }
+
     ZoneShaderItem {
         id: zoneShaderItem
 
@@ -34,8 +41,7 @@ Item {
         // Render to a private layer FBO so multipass shaders' buffer passes
         // get an isolated rendering context. Without this, the scene graph's
         // batch renderer internal pass-tracking state desynchronizes when the
-        // render node manages its own passes. Matches the working editor
-        // preview pattern (ShaderSettingsDialog.qml layer.enabled).
+        // render node manages its own passes.
         layer.enabled: shaderSource.toString() !== ""
         layer.textureMirroring: ShaderEffectSource.NoMirroring
         shaderSource: root.safeConfig.shaderSource || ""
@@ -43,6 +49,7 @@ Item {
         bufferShaderPaths: (root.safeConfig.bufferShaderPaths && root.safeConfig.bufferShaderPaths.length > 0) ? Array.from(root.safeConfig.bufferShaderPaths) : (root.safeConfig.bufferShaderPath ? [root.safeConfig.bufferShaderPath] : [])
         bufferFeedback: root.safeConfig.bufferFeedback || false
         bufferScale: root.safeConfig.bufferScale ?? 1
+        halfFloatBuffers: root.safeConfig.halfFloatBuffers ?? true
         bufferWrap: root.safeConfig.bufferWrap || "clamp"
         zones: root.safeConfig.zones || []
         hoveredZoneIndex: root.safeConfig.hoveredZoneIndex ?? -1

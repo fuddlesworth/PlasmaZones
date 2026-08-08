@@ -114,15 +114,18 @@ QVariantList ruleTemplates()
     // smart gaps already ships as a plain autotile setting
     // (AutotileConfig::smartGaps, Settings → Tiling), and such a rule would
     // silently never fire anyway — the gap resolver (resolveContextGaps in
-    // layoutregistry_assignments.cpp) never stamps tiledWindowCount into its
+    // layoutregistry_contextresolve.cpp) never stamps tiledWindowCount into its
     // context query; only resolveAssignmentEntry does, which is why
     // TiledWindowCount works for algorithm-switch rules but not gap rules.
     QVariantList out;
     out.append(entry(QLatin1String("layoutOnMonitor"), PhosphorI18n::tr("Set a layout on a monitor"),
                      PhosphorI18n::tr("Pick a snapping layout to use on one monitor."), QLatin1String("view-grid")));
     out.append(entry(QLatin1String("algorithmOnMonitor"), PhosphorI18n::tr("Set a tiling algorithm on a monitor"),
-                     PhosphorI18n::tr("Pick an autotile algorithm to use on one monitor."),
+                     PhosphorI18n::tr("Pick a tiling algorithm to use on one monitor."),
                      QLatin1String("view-list-tree")));
+    out.append(entry(QLatin1String("scrollingOnMonitor"), PhosphorI18n::tr("Use scrolling mode on a monitor"),
+                     PhosphorI18n::tr("Switch one monitor to the scrolling placement mode."),
+                     QLatin1String("view-list-details")));
     out.append(entry(QLatin1String("lockLayoutOnMonitor"), PhosphorI18n::tr("Lock the layout on a monitor"),
                      PhosphorI18n::tr("Pin the active layout on one monitor so it can't be switched. This is the "
                                       "rule-driven version of the lock-layout shortcut."),
@@ -142,10 +145,15 @@ QVariantList ruleTemplates()
                      QLatin1String("monitor")));
     out.append(entry(QLatin1String("floatApp"), PhosphorI18n::tr("Float an app"),
                      PhosphorI18n::tr("Keep one application's windows floating instead of tiled. The windows stay "
-                                      "managed, unlike a full exclusion."),
+                                      "managed, so they can still be dragged into a zone."),
                      QLatin1String("window-restore")));
-    out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from tiling"),
-                     PhosphorI18n::tr("Keep one application's windows out of the snap and autotile engines entirely."),
+    out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from placement"),
+                     PhosphorI18n::tr("Keep one application's windows out of tiling, snapping, and scrolling. "
+                                      "Borders, decoration packs, and animations still apply."),
+                     QLatin1String("edit-delete-remove")));
+    out.append(entry(QLatin1String("undecorateApp"), PhosphorI18n::tr("Remove decorations from an app"),
+                     PhosphorI18n::tr("Turn off borders and decoration packs for one application's windows. "
+                                      "Tiling, snapping, scrolling, and animations still apply."),
                      QLatin1String("edit-delete-remove")));
     out.append(entry(QLatin1String("excludeSmallFromAnimations"), PhosphorI18n::tr("Don't animate small windows"),
                      PhosphorI18n::tr("Skip open and close animations for windows narrower than a chosen width. Handy "
@@ -182,6 +190,20 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         algoAction.type = QString::fromLatin1(ActionType::SetTilingAlgorithm);
         algoAction.params.insert(ActionParam::Algorithm, QString());
         rule.actions.append(algoAction);
+    } else if (templateId == QLatin1String("scrollingOnMonitor")) {
+        rule.name = PhosphorI18n::tr("Scrolling mode on monitor");
+        rule.priority = kContextBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QString());
+        // Assignment flow like the algorithm template, but mode-only on
+        // purpose. SetScrollingTemplate exists and is deliberately not seeded
+        // here: a scrolling screen with no template is a legitimate end state,
+        // and leaving the action out keeps the quick-start immediately savable.
+        // The user adds the template action from the action picker when wanted.
+        RuleAction engineMode;
+        engineMode.type = QString::fromLatin1(ActionType::SetEngineMode);
+        engineMode.params.insert(ActionParam::Mode,
+                                 PhosphorZones::modeToWireString(PhosphorZones::AssignmentEntry::Scrolling));
+        rule.actions.append(engineMode);
     } else if (templateId == QLatin1String("lockLayoutOnMonitor")) {
         rule.name = PhosphorI18n::tr("Lock layout on monitor");
         rule.priority = kContextBandBase;
@@ -241,11 +263,29 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         action.type = QString::fromLatin1(ActionType::Float);
         rule.actions.append(action);
     } else if (templateId == QLatin1String("excludeApp")) {
-        rule.name = PhosphorI18n::tr("Exclude an app from tiling");
+        // The id predates the ExcludePlacement retarget and is not persisted
+        // anywhere (newRuleFromTemplate returns plain rule JSON), so it keeps
+        // its historical spelling.
+        rule.name = PhosphorI18n::tr("Exclude an app from placement");
         rule.priority = kApplicationBandBase;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        // ExcludePlacement, not the blanket Exclude: the template's title and
+        // description promise a placement-only exclusion, and stripping
+        // decorations/animations too was the pre-split behavior of the only
+        // action available then. Rules already created from this template keep
+        // their stored blanket action.
         RuleAction action;
-        action.type = QString::fromLatin1(ActionType::Exclude);
+        action.type = QString::fromLatin1(ActionType::ExcludePlacement);
+        rule.actions.append(action);
+    } else if (templateId == QLatin1String("undecorateApp")) {
+        rule.name = PhosphorI18n::tr("Remove decorations from an app");
+        rule.priority = kApplicationBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        // The decoration mirror of excludeApp: ExcludeDecorations strips the
+        // border + surface-pack chain only (SetHideTitleBar owns the title
+        // bar; placement and animations untouched).
+        RuleAction action;
+        action.type = QString::fromLatin1(ActionType::ExcludeDecorations);
         rule.actions.append(action);
     } else if (templateId == QLatin1String("excludeSmallFromAnimations")) {
         rule.name = PhosphorI18n::tr("Don't animate small windows");

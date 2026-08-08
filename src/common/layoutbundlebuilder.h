@@ -10,6 +10,7 @@ class LayoutSourceBundle;
 }
 
 namespace PhosphorZones {
+class ScrollingTemplateStore;
 class IZoneLayoutRegistry;
 }
 
@@ -19,9 +20,10 @@ class ITileAlgorithmRegistry;
 
 namespace PlasmaZones {
 
-/// Populate a @c FactoryContext with the two registries every
-/// PlasmaZones composition root (daemon, editor, settings) owns and
-/// drive @c buildFromRegistered over it.
+/// Populate a @c FactoryContext with the layout registries a PlasmaZones
+/// composition root (daemon, editor, settings) owns — manual zone layouts,
+/// tiling algorithms and, where the root has one, native scrolling templates —
+/// and drive @c buildFromRegistered over it.
 ///
 /// Centralises the "standard" context wiring so a future service
 /// addition touches one helper instead of three near-identical call
@@ -41,14 +43,20 @@ namespace PlasmaZones {
 ///                     composition root (daemon, editor, settings)
 ///                     hosts a manual-layout registry; passing nullptr
 ///                     would silently skip the zones provider, leaving
-///                     the bundle with only autotile entries (no
-///                     in-tree caller wants this). If a future caller
+///                     the bundle with only the autotile and template
+///                     entries (no in-tree caller wants this). If a future caller
 ///                     legitimately needs the no-zones case, drop the
 ///                     assert and add a test that exercises the path.
 /// @param tileAlgorithms Borrowed — caller owns. Required: see note
 ///                     above; same reasoning applies symmetrically.
-PLASMAZONES_EXPORT void buildStandardLayoutSourceBundle(PhosphorLayout::LayoutSourceBundle& bundle,
-                                                        PhosphorZones::IZoneLayoutRegistry* zoneLayouts,
-                                                        PhosphorTiles::ITileAlgorithmRegistry* tileAlgorithms);
+/// @param scrollingTemplates Borrowed — caller owns; may be null in roots
+///                     with no template store (the provider is then
+///                     skipped and the bundle carries no template
+///                     entries).
+PLASMAZONES_EXPORT void
+buildStandardLayoutSourceBundle(PhosphorLayout::LayoutSourceBundle& bundle,
+                                PhosphorZones::IZoneLayoutRegistry* zoneLayouts,
+                                PhosphorTiles::ITileAlgorithmRegistry* tileAlgorithms,
+                                PhosphorZones::ScrollingTemplateStore* scrollingTemplates = nullptr);
 
 } // namespace PlasmaZones

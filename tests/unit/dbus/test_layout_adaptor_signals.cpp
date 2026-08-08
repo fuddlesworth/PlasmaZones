@@ -5,22 +5,26 @@
  * @file test_layout_adaptor_signals.cpp
  * @brief LayoutAdaptor signal emission contract tests.
  *
- * Pins the rule (Phase 1.2 of refactor/dbus-performance): property
- * mutations (setLayoutHidden, setLayoutAutoAssign, setLayoutAspectRatioClass)
- * emit `layoutChanged` but NEVER `layoutListChanged` — the list hasn't
- * changed. layoutListChanged is reserved for genuine add/delete/reload
- * operations (onLayoutsChanged, notifyLayoutListChanged).
+ * Pins the rule: property mutations (setLayoutHidden, setLayoutAutoAssign,
+ * setLayoutAspectRatioClass) emit the compact `layoutPropertyChanged` and
+ * NOTHING else. Neither the heavyweight `layoutChanged(json)` nor
+ * `layoutListChanged` may fire, because neither the serialised layout nor the
+ * list is what the mutation changed. layoutListChanged stays reserved for
+ * genuine add/delete/reload operations (onLayoutsChanged,
+ * notifyLayoutListChanged).
  *
- * Subscribers (SettingsController) wire both signals to the same reload
- * slot, so dropping the redundant list-changed emission is behavior-
- * preserving on the client side but shaves one D-Bus marshal + slot
- * invocation per property mutation.
+ * Subscribers reload from the property payload, so narrowing the emission is
+ * behavior-preserving on the client side and saves a full layout marshal per
+ * property mutation.
  */
 
 #include <QTest>
 #include <QSignalSpy>
 
+#include <limits>
+
 #include "dbus/layoutadaptor/layoutadaptor.h"
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include "config/configbackends.h"
@@ -300,6 +304,58 @@ private Q_SLOTS:
 
         // Clear the dangling local-registry pointer before it goes out of scope.
         m_adaptor->setAlgorithmRegistry(nullptr);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Boundary guard sweep: every per-desktop slot funnels through
+    // validDesktopArg (0 is the base/all-desktops context, negatives are
+    // never a desktop number). A slot that skips the guard would push a
+    // negative desktop into the registry's assignment keys, where it is
+    // unreachable by any real context and only surfaces as a phantom entry
+    // in the settings app. Pinned as one sweep so a NEW per-desktop slot
+    // that forgets the guard fails here rather than shipping.
+    // ─────────────────────────────────────────────────────────────────
+    void testNegativeDesktopArg_isRefusedBySlot_data()
+    {
+        QTest::addColumn<int>("virtualDesktop");
+        QTest::newRow("minus one") << -1;
+        QTest::newRow("far negative") << -4096;
+        QTest::newRow("int min") << std::numeric_limits<int>::min();
+    }
+
+    void testNegativeDesktopArg_isRefusedBySlot()
+    {
+        QFETCH(int, virtualDesktop);
+
+        const QString screen = QStringLiteral("DP-1");
+        const QString activity = QStringLiteral("act-1");
+        // Baseline of stored assignment state: no writer below may change it.
+        const QString baseline = m_adaptor->getAllScreenAssignments();
+
+        // Readers answer their documented default rather than querying the
+        // registry with a nonsense key.
+        QVERIFY(m_adaptor->getLayoutForScreenDesktop(screen, virtualDesktop).isEmpty());
+        QVERIFY(!m_adaptor->hasExplicitAssignmentForScreenDesktop(screen, virtualDesktop));
+        QCOMPARE(m_adaptor->getModeForScreenDesktop(screen, virtualDesktop),
+                 static_cast<int>(PhosphorZones::AssignmentEntry::Snapping));
+        QVERIFY(m_adaptor->getSnappingLayoutForScreenDesktop(screen, virtualDesktop).isEmpty());
+        QVERIFY(m_adaptor->getTilingAlgorithmForScreenDesktop(screen, virtualDesktop).isEmpty());
+        QVERIFY(m_adaptor->getLayoutForScreenDesktopActivity(screen, virtualDesktop, activity).isEmpty());
+
+        // Writers are no-ops.
+        m_adaptor->assignLayoutToScreenDesktop(screen, virtualDesktop, m_layoutId);
+        m_adaptor->clearAssignmentForScreenDesktop(screen, virtualDesktop);
+        m_adaptor->assignLayoutToScreenDesktopActivity(screen, virtualDesktop, activity, m_layoutId);
+        m_adaptor->clearAssignmentForScreenDesktopActivity(screen, virtualDesktop, activity);
+        m_adaptor->setAssignmentEntry(screen, virtualDesktop, activity,
+                                      static_cast<int>(PhosphorZones::AssignmentEntry::Autotile), QString(),
+                                      QStringLiteral("dwindle"));
+
+        QCOMPARE(m_adaptor->getAllScreenAssignments(), baseline);
+        // A valid desktop still writes, so the sweep above proves refusal
+        // rather than an inert fixture.
+        m_adaptor->assignLayoutToScreenDesktop(screen, 1, m_layoutId);
+        QVERIFY(m_adaptor->hasExplicitAssignmentForScreenDesktop(screen, 1));
     }
 
 private:

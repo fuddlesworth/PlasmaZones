@@ -6,23 +6,24 @@
 // translation unit, no API change.
 //
 // Group covers:
-//   * getVirtualScreenConfig / applyVirtualScreenConfig
-//   * removeVirtualScreenConfig
+//   * getVirtualScreenConfig — the one direct daemon read.
 //   * Staged variants (stage*, hasStaged*, getStaged*) that live on
-//     m_staging rather than going through the daemon directly.
+//     m_staging rather than going through the daemon directly. Every WRITE
+//     goes through these; the flush to the daemon is StagingService's job,
+//     driven by save().
 
 #include "settingscontroller.h"
-
-#include "core/platform/logging.h"
-#include "settings/utils/virtualscreenutils.h"
 
 #include "settings/utils/dbusutils.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QDBusMessage>
-#include <QLoggingCategory>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 namespace PlasmaZones {
 
@@ -53,51 +54,6 @@ QVariantList SettingsController::getVirtualScreenConfig(const QString& physicalS
         }
     }
     return {};
-}
-
-void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens)
-{
-    QJsonObject root;
-    root[QLatin1String("physicalScreenId")] = physicalScreenId;
-
-    QJsonArray screensArr;
-    for (int i = 0; i < screens.size(); ++i) {
-        PhosphorScreens::VirtualScreenDef def =
-            VirtualScreenUtils::variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
-        if (!def.isValid()) {
-            qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i
-                                << "region:" << def.region;
-            continue;
-        }
-        QJsonObject screenObj;
-        screenObj[QLatin1String("index")] = def.index;
-        screenObj[QLatin1String("displayName")] = def.displayName;
-        screenObj[QLatin1String("region")] = QJsonObject{{::PhosphorZones::ZoneJsonKeys::X, def.region.x()},
-                                                         {::PhosphorZones::ZoneJsonKeys::Y, def.region.y()},
-                                                         {::PhosphorZones::ZoneJsonKeys::Width, def.region.width()},
-                                                         {::PhosphorZones::ZoneJsonKeys::Height, def.region.height()}};
-        screensArr.append(screenObj);
-    }
-    root[QLatin1String("screens")] = screensArr;
-
-    QString json = QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
-    const QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Screen),
-                               QStringLiteral("setVirtualScreenConfig"), {physicalScreenId, json});
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        // Surface the daemon rejection — Pass-4 hardened the layout
-        // setters against silent-error swallowing but applyVirtualScreen
-        // Config and its removeVirtualScreenConfig forwarder are still
-        // Q_INVOKABLE reachable from QML / D-Bus and would otherwise
-        // leave the user with no feedback on a failed save.
-        qCWarning(lcConfig) << "applyVirtualScreenConfig failed for" << physicalScreenId << ":" << reply.errorMessage();
-        Q_EMIT virtualScreenConfigFailed(physicalScreenId, reply.errorMessage());
-    }
-}
-
-void SettingsController::removeVirtualScreenConfig(const QString& physicalScreenId)
-{
-    applyVirtualScreenConfig(physicalScreenId, {});
 }
 
 void SettingsController::stageVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens)

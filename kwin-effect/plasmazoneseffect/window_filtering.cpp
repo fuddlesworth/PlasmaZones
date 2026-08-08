@@ -8,6 +8,7 @@
 #include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleEvaluator.h>
 
+#include <core/output.h>
 #include <effect/effecthandler.h>
 #include <window.h>
 #include <workspace.h>
@@ -17,7 +18,7 @@
 
 #include <optional>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/navigationhandler.h"
 #include "window_query.h"
 
@@ -72,7 +73,33 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
     if (!kw) {
         return fallback;
     }
+    // Off-screen poison guard: the scrolling engine parks off-viewport
+    // columns and hidden tabs ENTIRELY outside every screen rect, so a
+    // capture that runs while the frame is parked (float toggle on a parked
+    // tile, unminimize-unfloat, cross-screen transfer) would persist an
+    // off-screen rect as the window's restore geometry and the window would
+    // later restore off-screen. A rect intersecting no screen is never a
+    // legitimate free geometry — return invalid so the caller skips the
+    // capture entirely (this is the shared chokepoint for both engines'
+    // free-geometry capture paths). The restore rects below get the same
+    // check: KWin records geometryRestore from the live frame, so a
+    // maximize while parked snapshots the parked rect too.
+    const auto onAnyScreen = [](const QRectF& rect) {
+        if (!KWin::effects) {
+            // No compositor context to verify against (teardown); treat as
+            // on-screen rather than discarding a possibly-good capture.
+            return true;
+        }
+        for (const auto* screen : KWin::effects->screens()) {
+            if (rect.intersects(QRectF(screen->geometry()))) {
+                return true;
+            }
+        }
+        return false;
+    };
+    bool restoreBranchEntered = false;
     if (kw->isFullScreen()) {
+        restoreBranchEntered = true;
         // A window maximized and THEN made fullscreen has a fullscreenGeometryRestore()
         // equal to the maximized (full work-area) rect, so it would still float back
         // maximized-sized. When the pre-fullscreen state was itself maximized, prefer
@@ -80,19 +107,29 @@ QRectF PlasmaZonesEffect::freeGeometryForCapture(KWin::EffectWindow* w, const QR
         // restore rect, before giving up to the fallback.
         if (kw->maximizeMode() != KWin::MaximizeRestore) {
             const QRectF unmaximized(kw->geometryRestore());
-            if (unmaximized.width() > 0 && unmaximized.height() > 0) {
+            if (unmaximized.width() > 0 && unmaximized.height() > 0 && onAnyScreen(unmaximized)) {
                 return unmaximized;
             }
         }
         const QRectF restore(kw->fullscreenGeometryRestore());
-        if (restore.width() > 0 && restore.height() > 0) {
+        if (restore.width() > 0 && restore.height() > 0 && onAnyScreen(restore)) {
             return restore;
         }
     } else if (kw->maximizeMode() != KWin::MaximizeRestore) {
+        restoreBranchEntered = true;
         const QRectF restore(kw->geometryRestore());
-        if (restore.width() > 0 && restore.height() > 0) {
+        if (restore.width() > 0 && restore.height() > 0 && onAnyScreen(restore)) {
             return restore;
         }
+    }
+    // A maximized/fullscreen window whose restore rects were all rejected
+    // must NOT fall through to the live frame — that IS the full-monitor
+    // rect this function exists to keep out of the free-geometry store.
+    if (restoreBranchEntered) {
+        return QRectF();
+    }
+    if (!onAnyScreen(fallback)) {
+        return QRectF();
     }
     return fallback;
 }
@@ -120,9 +157,63 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
-    PhosphorRules::WindowQuery query =
-        ruleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
-                     m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    // Id-taking overload: the scroll override resolves off the window id, and
+    // this funnel already holds it.
+    const QString screenId = getWindowScreenId(w, windowId);
+    PhosphorRules::WindowQuery query = ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
+                                                    m_tilingHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    // Scroll-managed windows ride the same tile-request pipeline as autotile,
+    // so ruleQueryFor derives "tiling" from the tiled bit; re-stamp from the
+    // per-screen engine discriminator so a `Mode Equals "scrolling"` window
+    // rule matches strip-managed windows.
+    //
+    // Bring-up hazard, accepted deliberately: m_scrollingScreens is empty until
+    // the daemon's scrollingScreens reply lands, so a scroll-managed window
+    // resolved in that window stamps "tiling". Mode gets no seeded twin like
+    // ActiveLayout's — holding every Mode rule out of the evaluator until the
+    // set arrives would also disarm them for genuinely floating and snapped
+    // windows, whose Mode is correct from the first frame, and the field is
+    // engaged either way so no negation hazard is opened. The self-correction
+    // is setScrollingScreens' invalidateAllRuleCaches plus its border sweep,
+    // which drop and rebuild every verdict memoised against the empty set once
+    // the reply lands.
+    if (query.mode == QLatin1String("tiling") && m_tilingHandler->isScrollingScreen(screenId)) {
+        query.mode = QStringLiteral("scrolling");
+    }
+    // Stamp the rules-visible active layout the daemon pushed for this
+    // window's screen (snapping UUID / "autotile:<algo>" /
+    // "scrolling:<templateUuid>" / bare sentinel) so window-domain rules can
+    // match Field::ActiveLayout with the same vocabulary as the daemon's
+    // context rules. Replaces the engaged-empty stamp ruleQueryFor left,
+    // which made every negated ActiveLayout rule fire for every window.
+    // Unconditional by design: the bring-up window where the map is not yet
+    // seeded is covered one layer up, by holding ActiveLayout-referencing
+    // rules out of the evaluator entirely (TilingHandler::activeLayoutsSeeded).
+    // A gate here could not help — the field resolves engaged either way.
+    query.activeLayout = m_tilingHandler->activeLayoutForScreen(screenId);
+    // Stamp the screen orientation from the resolved screen id. ruleQueryFor
+    // leaves the field to us whenever it is handed an id: its own derivation
+    // is centre-based, which answers for the wrong monitor (or not at all) for
+    // a scroll strip's windows parked off-screen beside their column. The id
+    // is authoritative for those — it comes from the engine's own per-window
+    // screen override. An id that resolves to no output (a screen that just
+    // disconnected) falls back to the centre-derived answer.
+    QString orientation;
+    if (const KWin::LogicalOutput* output = outputForScreenId(screenId)) {
+        if (const QRect g = output->geometry(); g.isValid()) {
+            orientation = g.height() > g.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
+        }
+    }
+    // The centre-derived fallback is skipped when ruleQueryFor already stamped
+    // one: it takes that branch for exactly the empty-screenId case, from the
+    // same helper on the same frame, so re-running it would recompute a value
+    // that is already in the query (a screenAt walk per rule query).
+    if (orientation.isEmpty() && query.screenOrientation.isEmpty()) {
+        orientation = centreScreenOrientation(w);
+    }
+    if (!orientation.isEmpty()) {
+        query.screenOrientation = orientation;
+    }
     applyOwnLayerFlags(query, windowId);
     return query;
 }
@@ -337,12 +428,13 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
         return rejectedBecause(rejectReason, "keep-above window");
     }
 
-    // Check user-authored / migrated Exclude rules (needed for drag gating —
+    // Check user-authored / migrated exclusion rules (needed for drag gating —
     // daemon also enforces these for keyboard navigation, but the effect
     // must filter for drag operations and lifecycle reporting).
-    // `m_snappingExclusionRuleSet` mirrors the Exclude-shaped slice of the
-    // unified Rule store, refreshed on every rulesChanged via
-    // loadRuleAnimationsFromDbus (see shader_config_dbus.cpp).
+    // `m_snappingExclusionRuleSet` mirrors the placement-exclusion slice
+    // (Exclude ∪ ExcludePlacement) of the unified Rule store, refreshed on
+    // every rulesChanged via loadRuleAnimationsFromDbus (see
+    // shader_config_dbus.cpp).
     if (isExcludedBySnappingRule(w)) {
         return rejectedBecause(rejectReason, "user exclusion rule match");
     }
@@ -374,6 +466,28 @@ bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w) const
         return cached->isExcluded();
     }
     return m_snappingExclusionEvaluator.resolveCached(windowId, ruleQuery(w)).isExcluded();
+}
+
+bool PlasmaZonesEffect::isExcludedByDecorationRule(KWin::EffectWindow* w) const
+{
+    // Mirrors isExcludedBySnappingRule over the decoration slice (Exclude ∪
+    // ExcludeDecorations): empty-slice fast path, then the per-window verdict
+    // cache. The cache shares the snapping evaluator's freshness contract —
+    // revision-keyed for rule edits, cleared by the same placement /
+    // class-swap invalidation paths (flushPendingRuleInvalidations,
+    // invalidateAllRuleCaches, the metadataChanged lambda).
+    if (m_decorationExclusionRuleSet.isEmpty()) {
+        return false;
+    }
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return m_decorationExclusionEvaluator.resolve(ruleQuery(w)).isExcluded();
+    }
+    if (std::optional<PhosphorRules::ResolvedActions> cached =
+            m_decorationExclusionEvaluator.resolveCachedIfPresent(windowId)) {
+        return cached->isExcluded();
+    }
+    return m_decorationExclusionEvaluator.resolveCached(windowId, ruleQuery(w)).isExcluded();
 }
 
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
@@ -577,12 +691,13 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
         return false;
     }
 
-    // User Exclude rules — reuse the SAME snapping exclusion slice
-    // shouldHandleWindow gates on, so a window the user excluded from
-    // management is not decorated either (preserves prior behavior, since the
-    // decoration path used to run through shouldHandleWindow). No dedicated
-    // decoration rule slice, so no new rule action.
-    if (isExcludedBySnappingRule(w)) {
+    // User exclusion rules — the dedicated decoration slice (Exclude ∪
+    // ExcludeDecorations). Blanket Exclude still strips decorations, keeping
+    // the behavior from when this gate reused the snapping slice; the scoped
+    // ExcludeDecorations strips only decorations, and the scoped
+    // ExcludePlacement (which lives in the SNAPPING slice, not this one)
+    // deliberately leaves decorations alone.
+    if (isExcludedByDecorationRule(w)) {
         return false;
     }
 

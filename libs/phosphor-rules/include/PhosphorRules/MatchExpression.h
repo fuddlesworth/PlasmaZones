@@ -127,6 +127,20 @@ public:
     /// not). An empty composite references nothing and returns false.
     bool referencesAnyField(const QSet<Field>& fields) const;
 
+    /// True if a leaf predicate on one of @p fields appears anywhere INSIDE a
+    /// `none{}` negation (at any nesting depth).
+    ///
+    /// This is the negation-polarity guard for resolvers whose query cannot
+    /// answer a field. An absent field makes its leaf evaluate FALSE, which is
+    /// the safe, inert outcome for a positive leaf — but `none{}` matches when
+    /// no child matched, so the same absence makes a NEGATED leaf match
+    /// unconditionally: `none{AppId == firefox}` on a windowless context query
+    /// matches every context. A resolver that does not stamp a field must
+    /// therefore exclude rules that NEGATE it; positive references stay
+    /// admitted, because inert-false is exactly the documented behaviour for
+    /// them and an `any{}` rule's other branches may legitimately fire.
+    bool negatesAnyField(const QSet<Field>& fields) const;
+
     /**
      * @brief Evaluate this expression against @p query.
      *

@@ -162,12 +162,12 @@ QString fieldDescription(Field f)
     case Field::CaptionNormal:
         return PhosphorI18n::tr("The window's title without the application-name suffix the window manager adds.");
     case Field::IsFloating:
-        return PhosphorI18n::tr("Whether the window has been floated out of tiling (snap or autotile).");
+        return PhosphorI18n::tr("Whether the window has been floated out of tiling (snapping or tiling mode).");
     case Field::IsSnapped:
         return PhosphorI18n::tr(
             "Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).");
     case Field::IsTiled:
-        return PhosphorI18n::tr("Whether the window is managed by the autotile engine.");
+        return PhosphorI18n::tr("Whether the window is managed by the tiling engine.");
     case Field::Zone:
         return PhosphorI18n::tr("The zone the window is snapped into (manual-zone mode only).");
     case Field::ScreenId:
@@ -177,7 +177,7 @@ QString fieldDescription(Field f)
     case Field::Activity:
         return PhosphorI18n::tr("The KDE Activity the window is on.");
     case Field::Mode:
-        return PhosphorI18n::tr("The engine mode the window is placed by (snapping or tiling).");
+        return PhosphorI18n::tr("The engine mode the window is placed by (snapping, tiling or scrolling).");
     case Field::TiledWindowCount:
         return PhosphorI18n::tr(
             "How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as "
@@ -189,8 +189,9 @@ QString fieldDescription(Field f)
             "algorithm on a rotated screen.");
     case Field::ActiveLayout:
         return PhosphorI18n::tr(
-            "The layout currently active on the monitor. Lets a rule change gaps, the overlay or the lock state for "
-            "the screen showing a given layout. It cannot change which layout is assigned (that would be circular).");
+            "The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change "
+            "gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change "
+            "which layout is assigned (that would be circular).");
     }
     return QString();
 }
@@ -275,7 +276,8 @@ struct ClosedTokenOption
 QList<ClosedTokenOption> modeOptions()
 {
     return {{QStringLiteral("snapping"), PhosphorI18n::tr("Snapping")},
-            {QStringLiteral("tiling"), PhosphorI18n::tr("Tiling")}};
+            {QStringLiteral("tiling"), PhosphorI18n::tr("Tiling")},
+            {QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling", "tiling mode name")}};
 }
 QList<ClosedTokenOption> orientationOptions()
 {
@@ -316,6 +318,11 @@ QString orientationLabel(const QString& orientationToken)
     return closedTokenLabel(orientationOptions(), orientationToken);
 }
 
+QString templateDisplayLabel(const QString& templateName)
+{
+    return PhosphorI18n::tr("Template: %1").arg(templateName);
+}
+
 QString enumOptionLabel(const QString& type, const QString& key, const QString& wireValue)
 {
     namespace ActionParam = PhosphorRules::ActionParam;
@@ -324,10 +331,13 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Snapping");
         }
         if (wireValue == QLatin1String("autotile")) {
-            return PhosphorI18n::tr("Autotile");
+            // Label "Tiling" like the Mode predicate options — one
+            // user-facing word for the engine; only the wire tokens differ
+            // ("autotile" action vs "tiling" match, a frozen vocabulary).
+            return PhosphorI18n::tr("Tiling");
         }
         if (wireValue == QLatin1String("scrolling")) {
-            return PhosphorI18n::tr("Scrolling");
+            return PhosphorI18n::tr("Scrolling", "tiling mode name");
         }
     }
     if (type == ActionType::OverrideOverlayStyle && key == ActionParam::Value) {
@@ -363,6 +373,72 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
         }
         if (wireValue == PhosphorRules::DragBehaviorToken::Reorder) {
             return PhosphorI18n::tr("Reorder in stack");
+        }
+    }
+    if (type == ActionType::SetCenterFocusedColumn && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::CenterFocusedColumnToken::Never) {
+            return PhosphorI18n::tr("Never");
+        }
+        if (wireValue == PhosphorRules::CenterFocusedColumnToken::Always) {
+            return PhosphorI18n::tr("Always");
+        }
+        if (wireValue == PhosphorRules::CenterFocusedColumnToken::OnOverflow) {
+            return PhosphorI18n::tr("On overflow");
+        }
+    }
+    if (type == ActionType::SetScrollDefaultColumnDisplay && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::ColumnDisplayToken::Normal) {
+            return PhosphorI18n::tr("Normal");
+        }
+        if (wireValue == PhosphorRules::ColumnDisplayToken::Tabbed) {
+            return PhosphorI18n::tr("Tabbed");
+        }
+    }
+    if (type == ActionType::SetTabIndicatorStyle && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::TabIndicatorStyleToken::Chips) {
+            return PhosphorI18n::tr("Titled chips");
+        }
+        if (wireValue == PhosphorRules::TabIndicatorStyleToken::Bar) {
+            return PhosphorI18n::tr("Segment bar");
+        }
+    }
+    if (type == ActionType::SetTabIndicatorPosition && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::TabIndicatorPositionToken::Left) {
+            return PhosphorI18n::tr("Left");
+        }
+        if (wireValue == PhosphorRules::TabIndicatorPositionToken::Right) {
+            return PhosphorI18n::tr("Right");
+        }
+        if (wireValue == PhosphorRules::TabIndicatorPositionToken::Top) {
+            return PhosphorI18n::tr("Top");
+        }
+        if (wireValue == PhosphorRules::TabIndicatorPositionToken::Bottom) {
+            return PhosphorI18n::tr("Bottom");
+        }
+    }
+    if (type == ActionType::OpenColumnPlacement && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::ColumnPlacementToken::NewColumn) {
+            return PhosphorI18n::tr("New column");
+        }
+        if (wireValue == PhosphorRules::ColumnPlacementToken::Consume) {
+            return PhosphorI18n::tr("Consume into focused column");
+        }
+    }
+    if (type == ActionType::SetScrollInsertPosition && key == ActionParam::Value) {
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::RightOfActive) {
+            return PhosphorI18n::tr("Right of the focused column");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::LeftOfActive) {
+            return PhosphorI18n::tr("Left of the focused column");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::First) {
+            return PhosphorI18n::tr("Start of the strip");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::Last) {
+            return PhosphorI18n::tr("End of the strip");
+        }
+        if (wireValue == PhosphorRules::ScrollInsertPositionToken::IntoActiveColumn) {
+            return PhosphorI18n::tr("Into the focused column");
         }
     }
     if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
@@ -486,10 +562,13 @@ QVariantList matchFields()
             }
             entry[QStringLiteral("options")] = options;
         } else if (f == Field::ActiveLayout) {
-            // The value is a layout id (snap UUID or "autotile:<algo>"). The QML
-            // editor swaps this for a layout-picker ComboBox driven by
-            // `settingsController.layouts` (like the screen / activity pickers), so
-            // the user picks a friendly name while the wire value stays the id.
+            // The value is a layout id (snap UUID, "autotile:<algo>", the
+            // bare "scrolling:" sentinel of a template-less Scrolling
+            // context, or the prefixed "scrolling:<uuid>" template stamp).
+            // The QML editor swaps this for a layout-picker ComboBox driven
+            // by `settingsController.activeLayoutMatchOptions` (like the
+            // screen / activity pickers), so the user picks a friendly name
+            // while the wire value stays the id.
             kind = QStringLiteral("layout");
         }
         entry[QStringLiteral("valueKind")] = kind;
@@ -507,12 +586,16 @@ QVariantList operatorsForField(int fieldValue)
     }
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
-    if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ActiveLayout) {
-        // These are string-valued but their vocabulary is a closed single-select
-        // dropdown (placement mode, portrait/landscape, a concrete layout id) — only
-        // an exact-token Equals is meaningful. A substring / regex against a closed
-        // token set (or a layout UUID) is a footgun the picker cannot author
-        // sensibly. Mirrors the WindowType enum treatment.
+    if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ActiveLayout
+        || field == Field::Zone) {
+        // These are string-valued but their vocabulary is closed or opaque
+        // (placement mode, portrait/landscape, a concrete layout id, a zone
+        // UUID) — only an exact-token Equals is meaningful. A substring or
+        // regex against a closed token set, a layout UUID, or a zone UUID is a
+        // footgun the picker cannot author sensibly. Mirrors the WindowType
+        // enum treatment. Zone has no picker of its own yet, so its value is
+        // still a hand-typed brace-wrapped UUID; restricting the operators at
+        // least stops a partial-UUID Contains from silently matching nothing.
         ops = {Operator::Equals};
     } else if (PhosphorRules::fieldIsString(field)) {
         ops = {Operator::Equals, Operator::Contains, Operator::StartsWith, Operator::EndsWith, Operator::Regex};

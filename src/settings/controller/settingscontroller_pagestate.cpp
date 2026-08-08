@@ -405,8 +405,11 @@ bool SettingsController::isPageDirty(const QString& page) const
     // Quick Shortcuts pages: dirty iff a quick-slot edit is staged for the
     // mode. Same shared-classifier gate as the ordering pages above.
     if (isShortcutsPage(page)) {
-        return page == QLatin1String("snapping-shortcuts") ? m_staging.hasStagedSnappingQuickSlots()
-                                                           : m_staging.hasStagedTilingQuickSlots();
+        if (page == QLatin1String("snapping-shortcuts"))
+            return m_staging.hasStagedSnappingQuickSlots();
+        if (page == QLatin1String("scrolling-shortcuts"))
+            return m_staging.hasStagedScrollingQuickSlots();
+        return m_staging.hasStagedTilingQuickSlots();
     }
 
     // Virtual Screens page: dirty iff any physical screen has a staged

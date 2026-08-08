@@ -43,14 +43,20 @@ private Q_SLOTS:
         QCOMPARE(e.height, 4);
     }
 
-    // DragPolicy and DragOutcome round-trips are covered by test_compositor_common
-    // (they require full D-Bus message transport for nested types like EmptyZoneList).
+    // DragPolicy and DragOutcome have NO wire round-trip coverage anywhere.
+    // This comment used to claim test_compositor_common covered them; it does
+    // not — tests/unit/compositor-common/test_wire_types.cpp does not include
+    // DragMarshalling.h and names neither type. The gap matters more for these
+    // two than for their neighbours, because DragPolicy's marshaller is the
+    // one that does a real transform (enum to legacy wire string) and its
+    // declared shape lives only in a code comment. Covering them needs full
+    // D-Bus message transport, for the nested types they carry.
 
     void testBypassReasonWireStringRoundTrip()
     {
         const QVector<DragBypassReason> all{
             DragBypassReason::None,
-            DragBypassReason::AutotileScreen,
+            DragBypassReason::EngineOwnedScreen,
             DragBypassReason::SnappingDisabled,
             DragBypassReason::ContextDisabled,
             DragBypassReason::LayoutSuppressed,
@@ -96,10 +102,40 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
+    void testTileRequestValidationStacking()
+    {
+        TileRequestEntry e;
+        e.windowId = QStringLiteral("w");
+        e.screenId = QStringLiteral("s");
+        e.width = 100;
+        e.height = 100;
+        e.stacking = QStringLiteral("firstOnTop");
+        QVERIFY(e.validationError().isEmpty());
+        e.stacking = QStringLiteral("lastOnTop");
+        QVERIFY(e.validationError().isEmpty());
+        e.stacking = QStringLiteral("sideways");
+        QVERIFY(e.validationError().contains(QStringLiteral("stacking")));
+    }
+
+    void testTileRequestValidationScrollEdge()
+    {
+        TileRequestEntry e;
+        e.windowId = QStringLiteral("w");
+        e.screenId = QStringLiteral("s");
+        e.width = 100;
+        e.height = 100;
+        e.scrollEdge = QStringLiteral("left");
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("right");
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("up");
+        QVERIFY(e.validationError().contains(QStringLiteral("scrollEdge")));
+    }
+
     void testDragPolicyValidationAutotileNoScreen()
     {
         DragPolicy p;
-        p.bypassReason = DragBypassReason::AutotileScreen;
+        p.bypassReason = DragBypassReason::EngineOwnedScreen;
         p.screenId.clear();
         QVERIFY(!p.validationError().isEmpty());
     }
@@ -145,11 +181,13 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 4 alongside setWindowMetadata's signature widening
-        // (4 args → 9 args) so a stale effect can't silently send the old
-        // wire format and crash on marshalling.
-        QCOMPARE(Service::ApiVersion, 4);
-        QCOMPARE(Service::MinPeerApiVersion, 4);
+        // Bumped to 9 alongside Snap.resolveWindowRestore's isOpenPath
+        // in-arg, for the same reason v6-v8 were bumped: Qt matches
+        // signatures before demarshalling, so an older effect's four-arg
+        // call would silently never match the widened slot — both sides must
+        // move together.
+        QCOMPARE(Service::ApiVersion, 9);
+        QCOMPARE(Service::MinPeerApiVersion, 9);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.

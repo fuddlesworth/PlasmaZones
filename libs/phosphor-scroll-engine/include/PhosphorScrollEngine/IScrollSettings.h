@@ -1,0 +1,111 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <QObject>
+#include <QStringList>
+
+namespace PhosphorEngine {
+
+/// Settings surface the scrolling engine reads, injected by the daemon via
+/// PlacementEngineBase::setEngineSettings (qobject_cast at point of use,
+/// mirroring IAutotileSettings). The gap accessors deliberately mirror the
+/// shared Tiling.Gaps values — the implementing settings object forwards
+/// them, so scrolling and autotile screens read one gap model without this
+/// library depending on the tile-engine headers.
+class IScrollSettings
+{
+public:
+    virtual ~IScrollSettings() = default;
+
+    virtual int scrollingInnerGap() const = 0;
+    virtual bool scrollingUsePerSideOuterGap() const = 0;
+    virtual int scrollingOuterGap() const = 0;
+    virtual int scrollingOuterGapTop() const = 0;
+    virtual int scrollingOuterGapBottom() const = 0;
+    virtual int scrollingOuterGapLeft() const = 0;
+    virtual int scrollingOuterGapRight() const = 0;
+    /// Whether newly opened windows take focus (Scrolling.Behavior).
+    virtual bool scrollingFocusNewWindows() const = 0;
+    /// StickyWindowHandling as int (0 = treat as normal, 1 = restore only,
+    /// 2 = ignore all) — the shared PhosphorEngine enum's wire values.
+    /// RestoreOnly and IgnoreAll both keep sticky windows out of the strip
+    /// (insertion is active management); the engine's desktop-pin logic is
+    /// deliberately not gated on this.
+    virtual int scrollingStickyWindowHandling() const = 0;
+    /// Whether the strip's layout math honours client minimum sizes (column
+    /// width floor, tile height floor, interactive-resize floor). The
+    /// work-area-oversized float escape ignores this and always fires.
+    virtual bool scrollingRespectMinimumSize() const = 0;
+    /// Zero the outer gaps when the strip holds a single column (shared
+    /// Tiling.Gaps/SmartGaps value, forwarded like the gaps).
+    virtual bool scrollingSmartGaps() const = 0;
+
+    /// CenterFocusedColumn as int (0 = never, 1 = always, 2 = on-overflow).
+    virtual int scrollingCenterFocusedColumn() const = 0;
+    virtual bool scrollingAlwaysCenterSingleColumn() const = 0;
+    /// Crop mode for partial edge columns (see ConfigDefaults). DEFAULTED,
+    /// not pure: the safe clamp is the answer for every implementor that has
+    /// not heard of the option, including the test stubs.
+    virtual bool scrollingCropStraddlers() const
+    {
+        return false;
+    }
+    /// Default width for new columns: kind (0 = proportion, 1 = fixed px,
+    /// 2 = client decides, 3 = preset index) + value (proportion in [0,1]
+    /// or pixels) + the preset index the Preset kind resolves.
+    virtual int scrollingDefaultColumnWidthKind() const = 0;
+    virtual qreal scrollingDefaultColumnWidthValue() const = 0;
+    virtual int scrollingDefaultColumnWidthPresetIndex() const = 0;
+    /// Default height intent for fresh tiles: kind (0 = auto, 1 = fixed px,
+    /// 2 = preset index) + fixed pixel value + preset index. Matches
+    /// WindowHeight::Kind 1:1 (DefaultHeightKind).
+    virtual int scrollingDefaultWindowHeightKind() const = 0;
+    virtual qreal scrollingDefaultWindowHeightValue() const = 0;
+    virtual int scrollingDefaultWindowHeightPresetIndex() const = 0;
+    /// ScrollInsertPosition as int (0 = right of active, 1 = left of
+    /// active, 2 = first, 3 = last, 4 = into active column).
+    virtual int scrollingInsertPosition() const = 0;
+    /// ColumnDisplay new columns open in (0 = normal, 1 = tabbed).
+    virtual int scrollingDefaultColumnDisplay() const = 0;
+    /// Preset proportion lists, serialized as decimal strings. These are the
+    /// FALLBACK vocabulary: a screen whose context resolves a template layout
+    /// gets a per-screen replacement list pushed through the TEMPLATE channel
+    /// (ScrollPerScreenKeys::presetColumnWidths / presetWindowHeights), which
+    /// wholesale replaces the matching list here for that screen.
+    virtual QStringList scrollingPresetColumnWidths() const = 0;
+    virtual QStringList scrollingPresetWindowHeights() const = 0;
+
+    // ── Tab indicator geometry (Scrolling.TabIndicator) ──────────────────
+    //
+    // Only the subset that changes resolved rects lives here; it lands in
+    // ScrollLayoutParams::tabIndicator (TabIndicatorParams, ScrollTypes.h,
+    // where each field is documented in full). The indicator's PAINT settings
+    // — style, gaps between tabs, corner radius, the three colours — are
+    // deliberately absent: they never affect layout, so the daemon reads them
+    // through its own ISettings and applies them to the overlay directly. Keep
+    // that split when adding a knob, or this library grows a dependency on how
+    // the indicator happens to be drawn.
+
+    /// Master switch. Off, no indicator rect resolves and nothing is reserved.
+    virtual bool scrollingTabIndicatorEnabled() const = 0;
+    /// Skip the indicator for a tabbed column holding a single tile.
+    virtual bool scrollingTabIndicatorHideWhenSingleTab() const = 0;
+    /// Reserve the indicator out of the column instead of drawing beside it.
+    virtual bool scrollingTabIndicatorPlaceWithinColumn() const = 0;
+    /// Gap between indicator and window; NEGATIVE puts it over the window.
+    virtual int scrollingTabIndicatorGap() const = 0;
+    /// Indicator thickness. EXACT for every style, chips included: content
+    /// that does not fit clips rather than growing the indicator, which is what
+    /// keeps PlaceWithinColumn's reservation honest. See TabIndicatorParams.
+    virtual int scrollingTabIndicatorWidth() const = 0;
+    /// Indicator length as a proportion of the column extent beside it.
+    virtual qreal scrollingTabIndicatorLengthProportion() const = 0;
+    /// Which column edge the indicator runs along (TabIndicatorPosition).
+    virtual int scrollingTabIndicatorPosition() const = 0;
+};
+
+} // namespace PhosphorEngine
+
+Q_DECLARE_INTERFACE(PhosphorEngine::IScrollSettings, "org.plasmazones.IScrollSettings")

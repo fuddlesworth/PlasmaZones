@@ -133,7 +133,7 @@ public:
      * pruneStatesForDesktop(). The m_states map itself stays private; per-screen
      * lookup is available through tilingStateForScreen(screenId). (Design notes
      * on why the older screenStates() accessor was removed live above the
-     * definition in AutotileEngine.cpp.)
+     * definition in src/autotileengine/algorithm_state.cpp.)
      */
     QSet<int> desktopsWithActiveState() const override;
 
@@ -284,7 +284,7 @@ public:
      * @brief Set the current virtual desktop for per-desktop tiling state
      *
      * Swaps the active PhosphorTiles::TilingState set without releasing windows. Must be
-     * called BEFORE updateAutotileScreens() on desktop switch so the engine
+     * called BEFORE updateEngineScreens() on desktop switch so the engine
      * resolves states for the correct desktop.
      *
      * @param desktop Virtual desktop number (1-based from KWin)
@@ -299,7 +299,7 @@ public:
      * currentKeyForScreen() resolves that screen's per-(screen, desktop) state. Does
      * NOT migrate windows between states — the other desktop's state stays put so it
      * reappears when the screen returns. Like setCurrentDesktop(), call BEFORE
-     * updateAutotileScreens() so the new key resolves.
+     * updateEngineScreens() so the new key resolves.
      */
     void setCurrentDesktopForScreen(const QString& screenId, int desktop) override;
 
@@ -317,7 +317,7 @@ public:
      * @brief Set the current activity for per-activity tiling state
      *
      * Swaps the active PhosphorTiles::TilingState set without releasing windows. Must be
-     * called BEFORE updateAutotileScreens() on activity switch so the engine
+     * called BEFORE updateEngineScreens() on activity switch so the engine
      * resolves states for the correct activity.
      *
      * @param activity Activity ID (empty string for no activity)
@@ -359,11 +359,11 @@ public:
     /**
      * @brief Prune PhosphorTiles::TilingState entries for a permanently removed monitor
      *
-     * Removes every state whose key.screenId belongs to the removed physical
-     * monitor (including its virtual sub-screens), plus their tuned-flag /
-     * script-stash / scheduling / context residue. updateAutotileScreens only
-     * tears down the CURRENT (desktop, activity) context, so without this the
-     * removed monitor's other contexts' states leak for the session. Mirrors
+     * Prune every TilingState (all desktops/activities) whose screen is the
+     * removed physical output or one of its virtual sub-screens.
+     * updateEngineScreens only reaps CURRENT-context states, so without
+     * this the sibling-context states of an unplugged monitor would leak
+     * and resurface ghost tiles when the connector returns. Mirrors
      * SnapEngine::pruneStatesForRemovedScreen.
      */
     void pruneStatesForRemovedScreen(const QString& physicalScreenId) override;
@@ -502,7 +502,10 @@ public:
      * UNSET (default) no window is rule-floated. Clear with `{}` before destroying
      * any state the closure captured.
      */
-    using FloatPredicate = std::function<bool(const QString& windowId)>;
+    /// Takes the OPENING SCREEN as well, so the resolver can stamp ScreenId
+    /// and derive Mode — without which a rule pairing either with Float is
+    /// silently inert.
+    using FloatPredicate = std::function<bool(const QString& windowId, const QString& screenId)>;
 
     void setFloatPredicate(FloatPredicate predicate)
     {
@@ -510,6 +513,14 @@ public:
     }
 
     // Cross-engine handoff (see PhosphorEngine/IPlacementEngine.h for contract)
+    // Layout capability (see IPlacementEngine's Layout capability section)
+    /// Autotile algorithms appear as cards in the layout picker / quick
+    /// slots, so this engine is a placement-layout consumer too.
+    LayoutSupport layoutSupport() const override
+    {
+        return LayoutSupport::Placement;
+    }
+
     QString engineId() const override
     {
         return QStringLiteral("autotile");
@@ -561,6 +572,23 @@ public:
     // PerScreenConfigResolver. The daemon supplies the screen's current-context
     // gap overrides so tiled windows honour context gap rules like snapping does.
     void setContextGapProvider(std::function<QVariantMap(const QString& screenId)> provider);
+
+    /// Scrolling-mode resolver for windowOpened's cross-screen tile-restore
+    /// defer term, invoked as (screenId, virtualDesktop, activity). Must
+    /// answer whether the RECORDED context resolves to Scrolling mode AND
+    /// the scroll engine is actually live on that screen: the CLAIMING side
+    /// (ScrollEngine::claimCrossScreenReopen) requires the recorded home in
+    /// its live screen set on top of the mode verdict, so a defer keyed on
+    /// mode alone would stand down for a window scroll then declines,
+    /// leaving it unmanaged. Only the daemon sees both engines, hence the
+    /// injection. Unset → this defer term is off; the snap term (which reads
+    /// this engine's own layout manager) is unaffected. Same
+    /// clear-before-destroy contract as setContextGapProvider.
+    void setScrollingModeResolver(
+        std::function<bool(const QString& screenId, int desktop, const QString& activity)> resolver)
+    {
+        m_scrollingModeResolver = std::move(resolver);
+    }
 
     // Mark the active (screen, desktop, activity) state's split ratio / master
     // count as user-tuned so propagateGlobalSplitRatio/MasterCount leaves it
@@ -746,7 +774,7 @@ public:
      *
      * @param delta Amount to increase (default 0.05 = 5%)
      */
-    Q_INVOKABLE void increaseMasterRatio(qreal delta = 0.05) override;
+    Q_INVOKABLE void increaseMasterRatio(qreal delta = kDefaultSplitRatioStep) override;
 
     /**
      * @brief Decrease the master area ratio
@@ -755,7 +783,7 @@ public:
      *
      * @param delta Amount to decrease (default 0.05 = 5%)
      */
-    Q_INVOKABLE void decreaseMasterRatio(qreal delta = 0.05) override;
+    Q_INVOKABLE void decreaseMasterRatio(qreal delta = kDefaultSplitRatioStep) override;
 
     /**
      * @brief Set master ratio globally (config + every state, every desktop)
@@ -916,8 +944,11 @@ public:
      *
      * @param windowId Window identifier from KWin
      * @param shouldFloat True to float, false to unfloat
-     * @param screenId Authoritative current screen (unused: autotile re-tiles
-     *        fresh on the window's live screen); present to match the interface.
+     * @param screenId Accepted to satisfy the shared interface and unused —
+     *        autotile resolves the screen from its own per-window tracking,
+     *        which the focus-driven migration keeps current; see the rationale
+     *        block in float_handoff.cpp's setWindowFloat and the interface
+     *        contract in IPlacementEngine.h.
      */
     Q_INVOKABLE void setWindowFloat(const QString& windowId, bool shouldFloat,
                                     const QString& screenId = QString()) override;
@@ -971,7 +1002,9 @@ public:
      * @brief Notify the engine that a new window was added
      *
      * Called by Daemon when KWin reports a new window. Triggers retiling
-     * if autotile is enabled and window is tileable.
+     * if autotile is enabled and window is tileable. A no-op when
+     * @p screenId names a screen this engine does not own — the claiming
+     * engine (scrolling/snap) handles the open instead.
      *
      * @param windowId Window identifier from KWin
      * @param screenId Screen where the window appeared
@@ -980,6 +1013,19 @@ public:
      */
     using IPlacementEngine::windowOpened;
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
+    /// Cross-screen session reclaim (see IPlacementEngine for the base
+    /// contract). This implementation: first-observation gate by TilingState
+    /// MEMBERSHIP; a shouldTileWindow precondition (autotile's open path
+    /// REFUSES untileable windows after keying, unlike scroll's, which
+    /// floats them — an optimistic claim would phantom-key the window);
+    /// decides via the store's live-instance-excluding peekForReclaim;
+    /// requires the recorded home in the LIVE autotile set AND the record's
+    /// (desktop, activity) to equal the home screen's current key; returns
+    /// the REAL adoption outcome verified by membership, sweeping the
+    /// phantom key on a refusal.
+    bool claimCrossScreenReopen(const QString& windowId, const QString& openingScreenId, int minWidth,
+                                int minHeight) override;
+    QString heldScreenForWindow(const QString& windowId) const override;
 
     /**
      * @brief Update a window's minimum size at runtime
@@ -991,7 +1037,8 @@ public:
      * @param minWidth New minimum width in pixels (0 if unconstrained)
      * @param minHeight New minimum height in pixels (0 if unconstrained)
      */
-    void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight);
+    void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight) override;
+    QSize windowMinimumSize(const QString& windowId) const override;
 
     /**
      * @brief Notify the engine that a window was closed
@@ -1032,14 +1079,28 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Begin a drag-insert preview for a window already tiled on a screen.
+     * @brief Begin a drag-insert preview on @p screenId, ADOPTING the window
+     * when necessary.
      *
-     * Captures the window's current position so it can be restored on cancel.
-     * While a preview is active, applyTiling() skips emitting geometry for the
-     * dragged window — KWin's interactive move remains in control — but still
-     * animates the other windows shifting to leave a gap at the preview index.
+     * Handles four entry modes, not just "already tiled here": a window
+     * tracked on a DIFFERENT screen is migrated in (its prior state is
+     * cleaned and the source screen retiled), a FLOATING window on the same
+     * screen is unfloated in place (overflow mark cleared), and a wholly
+     * UNTRACKED window is adopted fresh. When adoption pushes past
+     * effectiveMaxWindows, the last tiled neighbour is EVICTED by floating
+     * (commit reports it via windowsBatchFloated). Callers that must not
+     * adopt (e.g. "floating windows drag free") gate on isWindowTiled
+     * themselves — the daemon's reorder seed does exactly that.
      *
-     * @return true if the window is tiled on the screen and preview was started.
+     * Captures the window's prior position so cancel can restore it. While
+     * a preview is active, applyTiling() skips emitting geometry for the
+     * dragged window — KWin's interactive move remains in control — but
+     * still animates the other windows shifting to leave a gap at the
+     * preview index.
+     *
+     * @return true when a preview started (all adoption modes included);
+     * false on an empty id, a non-autotile screen, a missing state, or the
+     * post-setup tiledWindowIndex < 0 rollback.
      */
     bool beginDragInsertPreview(const QString& rawWindowId, const QString& screenId) override;
 
@@ -1049,8 +1110,21 @@ public:
      * Moves the dragged window within PhosphorTiles::TilingState to the new index (clamped
      * to [0, tiledWindowCount()-1]) and retiles. No-op if the index hasn't
      * changed from the last update.
+     *
+     * Engine-local int form — autotile's native slot vocabulary IS a flat
+     * tiled-only index, so internal callers and tests keep the honest unit.
+     * The IPlacementEngine struct override below delegates here.
      */
-    void updateDragInsertPreview(int insertIndex) override;
+    void updateDragInsertPreview(int insertIndex);
+
+    /**
+     * @brief IPlacementEngine drop-target form: `primary` is the tiled-only
+     * insert index; `secondary`/`newSlot` are meaningless for a flat stack
+     * and ignored. An INVALID target is ignored outright — NOT clamped the
+     * way the int form clamps a negative index; a caller crossing the
+     * polymorphic seam must not rely on the int form's clamping contract.
+     */
+    void updateDragInsertPreview(const DragInsertTarget& target) override;
 
     /**
      * @brief Commit the active drag-insert preview.
@@ -1083,8 +1157,17 @@ public:
      * test: cursor-over-own-zone returns its current index (stable identity),
      * preventing an oscillating shuffle where moving to a neighbour slot
      * immediately re-matches under the cursor every dragMoved tick.
+     *
+     * Engine-local int form (see updateDragInsertPreview); the struct
+     * override below wraps it for IPlacementEngine callers.
      */
-    int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
+    int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const;
+
+    /**
+     * @brief IPlacementEngine drop-target form: wraps the flat index into
+     * DragInsertTarget::primary (invalid when the screen has no state).
+     */
+    DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
 
     /**
      * @brief Query whether a drag-insert preview is currently active.
@@ -1096,6 +1179,8 @@ public:
 
     /**
      * @brief Get the window ID of the active drag-insert preview, or empty.
+     * Test seam — no production caller; the daemon compares against its own
+     * dragged-window id instead (ScrollEngine's twin carries the same note).
      */
     QString dragInsertPreviewWindowId() const
     {
@@ -1108,6 +1193,19 @@ public:
     QString dragInsertPreviewScreenId() const override
     {
         return m_dragInsertPreview ? m_dragInsertPreview->targetScreenId : QString();
+    }
+
+    /**
+     * @brief The screen the previewed window sat on before begin adopted it.
+     *
+     * Empty without a preview, and empty when begin took the window from
+     * untracked (hadPriorState false), in which case there is nothing to
+     * restore it to and no prior screen to speak of.
+     */
+    QString dragInsertPreviewPriorScreenId() const override
+    {
+        return m_dragInsertPreview && m_dragInsertPreview->hadPriorState ? m_dragInsertPreview->priorKey.screenId
+                                                                         : QString();
     }
 
     /**
@@ -1149,16 +1247,12 @@ Q_SIGNALS:
     // windowsReleased(const QStringList&, const QSet<QString>&) — inherited
     //   from PlacementEngineBase. Replaces windowsReleasedFromTiling.
 
-    /**
-     * @brief Emitted when a window's floating state changes due to a user action
-     *
-     * User-intent semantics: the downstream handler restores pre-tile geometry,
-     * shows the navigation OSD, etc. Emitted from performToggleFloat and
-     * setWindowFloat (explicit user/caller toggles).
-     *
-     * windowFloatingChanged, activateWindowRequested, and navigationFeedback
-     * are inherited from PlacementEngineBase.
-     */
+    // windowFloatingChanged (emitted from performToggleFloat and
+    // setWindowFloat with user-intent semantics: the downstream handler
+    // restores pre-tile geometry, shows the navigation OSD, etc.),
+    // activateWindowRequested, and navigationFeedback are inherited from
+    // PlacementEngineBase. Plain comments, not a doxygen block — this class
+    // declares no signal of those names for a doc block to attach to.
 
     // windowFloatingStateSynced and windowsBatchFloated are inherited from
     // PlacementEngineBase. Autotile-specific documentation: windowFloatingStateSynced
@@ -1260,7 +1354,9 @@ private:
      *
      * Captures every window's placement into the unified record, drops the
      * overflow set (AFTER capture — the discriminator needs it), appends the
-     * released windows, clears the pending-order bookkeeping, and
+     * released windows, drops their min-size entries (they are screen-capped,
+     * so a stale entry would lay a returning window out against the cap of
+     * the screen it left), clears the pending-order bookkeeping, and
      * deleteLater()s the state. Callers own the divergent parts: removing
      * the state from m_states (they iterate it) and the per-path
      * override policy — toggle-off drops only the resolver's in-memory
@@ -1270,11 +1366,25 @@ private:
      *        share one screenId (the orphaned-VS loop spans every
      *        desktop/activity context); the overflow bucket is keyed per
      *        screenId only, so the caller must drain once per screen AFTER
-     *        all of that screen's states are captured.
+     *        all of that screen's states are captured. Pass false ALSO when
+     *        the screen SURVIVES and only some of its contexts are going
+     *        away (the removed-desktop / removed-activity prunes): draining
+     *        there would strip the current desktop's overflow windows of
+     *        their overflow classification, and capturePlacement would later
+     *        mis-record them as USER floats, so they stick floating instead
+     *        of re-tiling.
+     * @param clearScreenOrderMaps Whether to drop the three SCREEN-keyed seed
+     *        bookkeeping maps (pending order, generation, strict flag). True
+     *        is right when the whole screen is going away. Pass false for a
+     *        context-scoped prune on a surviving screen, or deleting one
+     *        virtual desktop would destroy an in-flight strict seed order for
+     *        that screen on the CURRENT desktop and its windows would be
+     *        inserted in arbitrary order.
      * @return Whether the state released any managed windows.
      */
     bool releaseScreenStateForTeardown(const QString& screenId, PhosphorTiles::TilingState* state,
-                                       QStringList& releasedWindows, bool drainOverflow = true);
+                                       QStringList& releasedWindows, bool drainOverflow = true,
+                                       bool clearScreenOrderMaps = true);
 
     /**
      * @brief Shared key-migration body for focus-driven window moves.
@@ -1476,6 +1586,8 @@ private:
     QSet<QString> m_autotileFloatedWindows;
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
+    /// See setScrollingModeResolver.
+    std::function<bool(const QString& screenId, int desktop, const QString& activity)> m_scrollingModeResolver;
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     /// Borrowed cross-surface resolver (neighbouring output / desktop lookup);
@@ -1514,7 +1626,7 @@ private:
 
     /// The float state @p windowId must be inserted with: the live state it
     /// carried across a migration, else the open-time "Float this app" rule.
-    bool insertShouldFloat(const QString& windowId) const;
+    bool insertShouldFloat(const QString& windowId, const QString& screenId) const;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
@@ -1636,7 +1748,7 @@ private:
     // desktop overrides (#648), the sticky-desktop pin, the current activity, and
     // the "ever set" arming flags. Used by tilingStateForScreen() to construct
     // the owning key via currentKeyForScreen(). Fed by setCurrentDesktop()/
-    // setCurrentActivity()/setCurrentDesktopForScreen() BEFORE updateAutotileScreens()
+    // setCurrentActivity()/setCurrentDesktopForScreen() BEFORE updateEngineScreens()
     // runs on a desktop/activity switch.
     PhosphorEngine::ScreenContextTracker m_context;
 

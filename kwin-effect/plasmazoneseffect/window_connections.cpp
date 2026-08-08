@@ -16,7 +16,7 @@
 #include <QPointer>
 #include <QTimer>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/screenchangehandler.h"
 
@@ -64,18 +64,20 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         if (window && !window->isOnCurrentDesktop() && !window->isOnAllDesktops()) {
             const QString windowId = getWindowId(window);
             const QString screenId = getWindowScreenId(window);
-            if (m_autotileHandler->isAutotileScreen(screenId)) {
+            if (m_tilingHandler->isManagedScreen(screenId)) {
                 // Save pre-autotile geometry before onWindowClosed clears it.
                 // When the window is re-added on the target desktop, this preserved
                 // geometry is used instead of the current (tiled) frame position.
-                m_autotileHandler->savePreAutotileForDesktopMove(windowId);
+                m_tilingHandler->savePreTileForDesktopMove(windowId);
 
                 // Title-bar state is rule-driven (no autotile decoration claim
                 // to release): KWin's off-desktop noBorder reset is corrected on
                 // desktop return by updateAllDecorations → resyncWindow for any
-                // rule-owned window. onWindowClosed below only clears effect-side
-                // tracking (shared with the genuine-close path).
-                m_autotileHandler->onWindowClosed(windowId, screenId);
+                // rule-owned window. releaseWindowTracking, NOT onWindowClosed:
+                // the window is alive and merely moving desktops, so the close
+                // relay's capture and its ledger append must not fire (the
+                // preserved pre-tile geometry above is the state that matters).
+                m_tilingHandler->releaseWindowTracking(windowId, screenId);
                 removeWindowDecoration(windowId);
                 qCInfo(lcEffect) << "Window moved off current desktop, removed from autotile:" << windowId;
             }
@@ -96,9 +98,27 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (!safeW || safeW->isDeleted()) {
                 return;
             }
+            // Daemon-driven geometry applies must not be mistaken for user
+            // moves (symmetric with the frameGeometryChanged VS-crossing
+            // handler below). This matters for the scrolling engine: parked
+            // columns sit ENTIRELY outside the screen rect, so on a
+            // multi-head layout the parked frame's centre can land on the
+            // neighbouring output — KWin fires outputChanged and, without
+            // this guard, the parked window would be handed to the other
+            // screen's engine mid-apply.
+            if (m_daemonGate.inGeometryApply) {
+                return;
+            }
             const QString newScreenId = getWindowScreenId(safeW);
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
             m_trackedScreenPerWindow[safeW] = newScreenId;
+            // A cross-screen move changes the Mode/screenId inputs of the
+            // window's cached rule verdict (tiling vs scrolling screens
+            // especially); nothing else invalidates it when the window stays
+            // tiled through the move.
+            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId) {
+                invalidateRuleCacheForStateChange(getWindowId(safeW));
+            }
 
             // Detect involuntary moves up front: when a monitor drops out
             // (DPMS standby on Wayland, hotplug-unplug) KWin reassigns the
@@ -129,7 +149,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // protected and KWin's orphan-reassignment got mistaken for the
             // window genuinely entering autotile.
             if (!involuntaryMove) {
-                m_autotileHandler->handleWindowOutputChanged(safeW);
+                m_tilingHandler->handleWindowOutputChanged(safeW);
             }
 
             // For snapping→snapping cross-screen moves: notify the daemon which
@@ -142,10 +162,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // (float, unsnap, size restore, pre-tile cleanup) and handles them
             // in dragStopped() with richer context.
             // Skip involuntary moves: see the involuntaryMove computation above.
-            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId
-                && !m_autotileHandler->isAutotileScreen(oldScreenId)
-                && !m_autotileHandler->isAutotileScreen(newScreenId) && !m_dragTracker->isDragging()
-                && !involuntaryMove) {
+            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId && !m_tilingHandler->isManagedScreen(oldScreenId)
+                && !m_tilingHandler->isManagedScreen(newScreenId) && !m_dragTracker->isDragging() && !involuntaryMove) {
                 const QString windowId = getWindowId(safeW);
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
@@ -162,7 +180,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         //
         // VS crossing detection uses PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing()
         // (<PhosphorIdentity/VirtualScreenId.h>) — the same predicate used by
-        // autotilehandler/tiling.cpp.
+        // tilinghandler/tiling.cpp.
         connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_daemonGate.virtualScreensReady) {
                 return;
@@ -181,6 +199,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 return;
             }
             m_trackedScreenPerWindow[safeW] = newScreenId;
+            // A VS crossing changes the same rule-match inputs the physical
+            // outputChanged handler invalidates for (screenId, and the Mode
+            // stamp when the two VSes run different engines) — without this
+            // a Mode/screen-pinned appearance rule keeps its stale cached
+            // verdict after a cross-VS transfer.
+            invalidateRuleCacheForStateChange(getWindowId(safeW));
 
             // Skip during drag — the drag system owns state transitions.
             // Autotile drag handles VS transfers via the drag-policy-changed path.
@@ -194,17 +218,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // windows it already tracks (m_notifiedWindows). Only untracked
             // windows (snapping-mode entering an autotile VS) need delegation.
             const QString windowId = getWindowId(safeW);
-            if (m_autotileHandler->isTrackedWindow(windowId)) {
+            if (m_tilingHandler->isTrackedWindow(windowId)) {
                 return;
             }
 
             // Delegate autotile handling for untracked cross-VS transitions
             // (snapping→autotile). The autotile handler's own detection only
             // covers windows it already tracks.
-            m_autotileHandler->handleWindowOutputChanged(safeW);
+            m_tilingHandler->handleWindowOutputChanged(safeW);
 
             // For snapping→snapping cross-VS moves: notify the daemon
-            if (!m_autotileHandler->isAutotileScreen(oldScreenId) && !m_autotileHandler->isAutotileScreen(newScreenId)
+            if (!m_tilingHandler->isManagedScreen(oldScreenId) && !m_tilingHandler->isManagedScreen(newScreenId)
                 && !m_screenChangeHandler->isScreenChangeInProgress()) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("windowScreenChanged"),
@@ -265,9 +289,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // OverrideAnimation* rule for the post-rename class silently
         // never applies (Electron/CEF/Steam family). pushLatest already
         // refreshes the daemon's WindowRegistry record; mirror that
-        // refresh on the effect's local resolver cache. Caption /
-        // desktops / activities / role changes don't feed the
-        // WindowClass matcher so they don't need the cache drop.
+        // refresh on the effect's local resolver cache. Desktop / activity /
+        // role changes get their own invalidation connects below.
+        //
+        // CAPTION is the deliberate exception: Title and CaptionNormal ARE
+        // matchable fields stamped live into the query, so a Title-scoped
+        // verdict IS knowingly left stale until the next natural invalidation
+        // (focus change, placement change, rule edit). A per-caption clear is
+        // strictly worse than the staleness: terminals and browsers rewrite
+        // their title every frame, and each clear drops the GLOBAL per-window
+        // cache — one noisy terminal would cold-start every other window's
+        // verdict at title-tick rate.
         auto invalidateRuleCache = [this, safeW]() {
             // Gate each clear on its own rule set, mirroring the sibling
             // invalidation in slotWindowActivated: the no-rules case pays
@@ -275,10 +307,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (!m_shaderManager.animationRuleSet().isEmpty()) {
                 m_shaderManager.animationRuleEvaluator().clearCache();
             }
-            // The exclusion verdict cache keys on the same frozen id and the
+            // The exclusion verdict caches key on the same frozen id and the
             // WindowClass matcher — a class swap can flip an Exclude verdict.
             if (!m_snappingExclusionRuleSet.isEmpty()) {
                 m_snappingExclusionEvaluator.clearCache();
+            }
+            if (!m_decorationExclusionRuleSet.isEmpty()) {
+                m_decorationExclusionEvaluator.clearCache();
             }
             // The cache drop alone revives nothing: appearance slots (opacity,
             // tint, border colour) bake into the decoration at
@@ -295,6 +330,14 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 if (safeW->isOnCurrentDesktop()) {
                     updateWindowDecoration(wid, safeW);
                 }
+                // Title-bar override rides the same appearance resolve as the
+                // decoration re-fold, but updateWindowDecoration deliberately
+                // does not resolve it (decorations.cpp documents the split) —
+                // without this, a SetHideTitleBar rule keyed to the real
+                // post-swap class waits for the next focus-driven sweep.
+                // Outside the desktop gate, matching updateAllDecorations:
+                // title-bar state is persistent and survives desktop switches.
+                reconcileRuleHiddenTitleBar(wid, safeW);
                 reconcileRuleWindowLayer(wid, safeW);
             }
         };
@@ -309,6 +352,26 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         connect(kw, &KWin::Window::desktopsChanged, this, pushLatest);
         connect(kw, &KWin::Window::activitiesChanged, this, pushLatest);
         connect(kw, &KWin::Window::windowRoleChanged, this, pushLatest);
+        // VirtualDesktop and Activity are matchable rule fields stamped live
+        // into the per-window query, but the verdict caches key on
+        // (windowId, ruleSet revision) — neither moves on a desktop or
+        // activity move, so a `WHEN VirtualDesktop Equals N` exclusion or
+        // appearance verdict would pin stale across the move. Enqueue the
+        // coalesced per-window invalidation, mirroring the outputChanged
+        // handler; the flush clears the caches and re-drives decoration /
+        // title bar / layer for exactly this window.
+        auto invalidateForContextMove = [this, safeW]() {
+            if (safeW && !safeW->isDeleted()) {
+                invalidateRuleCacheForStateChange(getWindowId(safeW));
+            }
+        };
+        connect(kw, &KWin::Window::desktopsChanged, this, invalidateForContextMove);
+        connect(kw, &KWin::Window::activitiesChanged, this, invalidateForContextMove);
+        // WindowRole is likewise matchable and stamped live; role changes are
+        // rare (X11 clients setting WM_WINDOW_ROLE post-map), so the heavier
+        // immediate class-swap invalidation is fine here and keeps the
+        // identity-change family on one code path.
+        connect(kw, &KWin::Window::windowRoleChanged, this, invalidateRuleCache);
 
         // Diagnostic dump on identity change — but ONLY for class / desktop-file,
         // never caption. CEF/Electron apps (Steam included) map with a
@@ -596,8 +659,8 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     });
 
     // Track when user manually unmaximizes a monocle-maximized window
-    connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, m_autotileHandler.get(),
-            &AutotileHandler::slotWindowMaximizedStateChanged);
+    connect(w, &KWin::EffectWindow::windowMaximizedStateChanged, m_tilingHandler.get(),
+            &TilingHandler::slotWindowMaximizedStateChanged);
 
     // Departure-rect capture for the maximize morph wiring below. KWin
     // guarantees windowMaximizedStateAboutToChange fires before the
@@ -620,7 +683,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             });
 
     // window.maximize / window.unmaximize shader transition. Sibling lambda
-    // to the AutotileHandler hookup above (autotile drives the snap-back
+    // to the TilingHandler hookup above (autotile drives the snap-back
     // logic; we drive the shader leg).
     //
     // KWin emits windowMaximizedStateChanged once per axis flip — a
@@ -648,6 +711,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     return; // intermediate axis-only flip, no shader
                 }
                 m_shaderManager.m_lastFullyMaximized.insert(window, fullyMaximized);
+                // IsMaximized is a matchable rule field with the same
+                // cache-key staleness as IsMinimized (see the minimizedChanged
+                // metadata lambda below) — invalidate on the genuine
+                // full-maximize edge, after the tracking write and before the
+                // interactive-gesture early return (the verdict must refresh
+                // even when the shader is skipped).
+                invalidateRuleCacheForStateChange(getWindowId(window));
                 // Drag-restore guard: KWin unmaximizes a window mid interactive
                 // move when the user grabs the maximized title bar and pulls
                 // ("restore on drag"). The drag already owns the visuals — the
@@ -692,12 +762,12 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             });
 
     // Track when a monocle-maximized window goes fullscreen
-    connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_autotileHandler.get(),
-            &AutotileHandler::slotWindowFullScreenChanged);
+    connect(w, &KWin::EffectWindow::windowFullScreenChanged, m_tilingHandler.get(),
+            &TilingHandler::slotWindowFullScreenChanged);
 
     // Autotile: center undersized Wayland windows as soon as they commit constrained size
-    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_autotileHandler.get(),
-            &AutotileHandler::slotWindowFrameGeometryChanged);
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_tilingHandler.get(),
+            &TilingHandler::slotWindowFrameGeometryChanged);
 
     // Single windowFrameGeometryChanged lambda combining the effect-side
     // per-tick work: deferred maximize completion, first-frame suppression
@@ -707,7 +777,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // are independent so collapsing them just runs one capture+vtable
     // hop per tick instead of two. The autotile-handler connection
     // immediately above is kept separate because it dispatches to a slot
-    // on a different receiver (`m_autotileHandler.get()`).
+    // on a different receiver (`m_tilingHandler.get()`).
     //
     // Body 1 — first-frame open suppression release: a window withheld
     // from compositing on open (see RestoreSuppression) is released the
@@ -832,14 +902,46 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             return;
         }
         pushWindowMetadata(safeW.data());
+        // IsMinimized is a matchable rule field stamped live into the
+        // per-window query, but the verdict caches key on (windowId, ruleSet
+        // revision) — neither moves on a minimize edge, so an
+        // `IsMinimized`-scoped exclusion or appearance verdict would pin
+        // stale (buildWindowMap consults the placement gate for minimized
+        // windows, so the wrong verdict IS produced and cached). The managed
+        // paths' float-flip invalidation only covers engine-managed windows
+        // and only when the float bit actually flips; this covers every
+        // window on every edge, coalesced by the flush.
+        invalidateRuleCacheForStateChange(getWindowId(safeW.data()));
     });
 
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
-    connect(w, &KWin::EffectWindow::minimizedChanged, m_autotileHandler.get(),
-            &AutotileHandler::slotWindowMinimizedChanged);
+    connect(w, &KWin::EffectWindow::minimizedChanged, m_tilingHandler.get(),
+            &TilingHandler::slotWindowMinimizedChanged);
 
     // Snap mode: track minimize/unminimize to float/unfloat snapped windows
     connect(w, &KWin::EffectWindow::minimizedChanged, this, &PlasmaZonesEffect::slotWindowMinimizedChanged);
+
+    // Refresh the registry on every urgency edge, for the same reason as the
+    // minimize edge above: WindowMetadata::isDemandingAttention would
+    // otherwise sit at whatever the last unrelated push snapshotted, and a
+    // stale urgency is worse than none — the tab indicator would keep a tab
+    // lit long after the window stopped asking for attention, or never light
+    // it at all. The signal lives on KWin::Window, not EffectWindow, so this
+    // connection needs the underlying window; a window without one (no
+    // KWin::Window backing) simply never reports urgency, which the daemon
+    // reads as "not urgent". The EffectWindow is captured weakly; the
+    // KWin::Window is only the signal SENDER and is not captured at all, and
+    // passing `this` as the context object means Qt drops the connection when
+    // either the sender or the effect is destroyed.
+    if (KWin::Window* underlying = w->window()) {
+        connect(underlying, &KWin::Window::demandsAttentionChanged, this,
+                [this, safeW = QPointer<KWin::EffectWindow>(w)]() {
+                    if (!safeW || safeW->isDeleted()) {
+                        return;
+                    }
+                    pushWindowMetadata(safeW.data());
+                });
+    }
 }
 
 void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, const QRectF& departureFrame)
@@ -860,14 +962,27 @@ void PlasmaZonesEffect::beginMaximizeShaderMorph(KWin::EffectWindow* window, con
     // satisfies both families with the same values, and keeps the grid
     // anchoring contract intact (apply() builds the deform grid on
     // iToRect == the live frame).
+    bool ownsMaximizeLeg = false;
     tryBeginShaderForEvent(window, PhosphorAnimation::ProfilePaths::WindowMaximize, animationDurationMs(),
-                           /*reverse=*/false);
+                           /*reverse=*/false, /*holdCloseGrab=*/false, /*holdAddedGrab=*/false,
+                           /*animateMinimized=*/false, &ownsMaximizeLeg);
     // Geometry-morph endpoints — sibling of the drag-snap wiring in
     // drag_snap.cpp. window.maximize is a geometry-contract event, so every
     // assignable pack derives its drawn rect from iFromRect/iToRect; leaving
     // them default-invalid pushes zero vec4s and a morph pack masks every
     // fragment outside a 0×0 rect at the origin — the window paints fully
     // transparent for the whole leg and pops in on teardown.
+    //
+    // Gate on the IDENTITY verdict, not on findTransition liveness: with no
+    // window.maximize pack assigned, tryBeginShaderForEvent installs nothing
+    // and findTransition hands back whatever unrelated leg is in flight
+    // (window.open on a self-maximizing app is the reachable case). Writing
+    // morph endpoints onto that leg re-anchors its drawn rect mid-flight and
+    // — for a non-morph leg — switches it into morph mode. Same rule as the
+    // heldMove stamp on the drag path.
+    if (!ownsMaximizeLeg) {
+        return;
+    }
     auto* st = m_shaderManager.findTransition(window);
     if (!st || !st->cached || st->cached->iFromRectLoc < 0) {
         return;

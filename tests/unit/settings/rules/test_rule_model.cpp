@@ -116,6 +116,8 @@ private Q_SLOTS:
     void boolMatchConditionRendersOnOff();
     void shaderAndCurveLabelsResolveThroughLookups();
     void routeActionsRenderFriendlyLabels();
+    void scrollingActionsRenderDistinctLabels();
+    void actionLabelPrefixesAreUnique();
 };
 
 void TestRuleModel::rolesExposed()
@@ -164,6 +166,20 @@ void TestRuleModel::sectionDerivation()
     gap.params.insert(ActionParam::Value, 12);
     screenGap.actions = {gap};
     QCOMPARE(RuleModel::sectionFor(screenGap), RuleModel::Section::Monitor);
+
+    // Same shape for a per-monitor scrolling override: a ScreenId leaf plus a
+    // context-domain scrolling action and no LayoutEngine action still reads
+    // as Monitor & Layout. Mirrors the gap row above — the classifier goes
+    // through hasContextAction, so a scrolling action left out of that
+    // predicate would silently drop these rules to Advanced.
+    Rule screenScroll;
+    screenScroll.id = QUuid::createUuid();
+    screenScroll.match = MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-2"));
+    RuleAction columnWidth;
+    columnWidth.type = QString(ActionType::SetScrollDefaultColumnWidth);
+    columnWidth.params.insert(ActionParam::Value, 0.5);
+    screenScroll.actions = {columnWidth};
+    QCOMPARE(RuleModel::sectionFor(screenScroll), RuleModel::Section::Monitor);
 }
 
 void TestRuleModel::compositeGraduatesToAdvanced()
@@ -371,11 +387,14 @@ void TestRuleModel::actionSummaryRendersAllEngineModes()
     // the i18n surface may add prefixes ("Engine: ") but the casing of
     // the engine name is the load-bearing contract.
     QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
-    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    // "Tiling" is the one user-facing word for the autotile engine across
+    // the rule editor (the wire token stays "autotile").
+    QVERIFY2(s1.contains(QStringLiteral("Tiling")), qPrintable(s1));
     QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
     // Negative assertion: no summary should leak the lowercase wire
     // token — that would indicate the i18n branch fell through.
     QVERIFY2(!s2.contains(QStringLiteral("scrolling")), qPrintable(s2));
+    QVERIFY2(!s1.contains(QStringLiteral("autotile")), qPrintable(s1));
 }
 
 void TestRuleModel::disableEngineNamesTheModeBeingDisabled()
@@ -403,7 +422,7 @@ void TestRuleModel::disableEngineNamesTheModeBeingDisabled()
     const QString s1 = model.data(model.index(1, 0), RuleModel::ActionSummaryRole).toString();
     const QString s2 = model.data(model.index(2, 0), RuleModel::ActionSummaryRole).toString();
     QVERIFY2(s0.contains(QStringLiteral("Snapping")), qPrintable(s0));
-    QVERIFY2(s1.contains(QStringLiteral("Autotile")), qPrintable(s1));
+    QVERIFY2(s1.contains(QStringLiteral("Tiling")), qPrintable(s1));
     QVERIFY2(s2.contains(QStringLiteral("Scrolling")), qPrintable(s2));
     // The three labels must be pairwise-distinct — otherwise a user with
     // multiple disable rules sees ambiguous "Disabled" rows.
@@ -732,6 +751,116 @@ void TestRuleModel::routeActionsRenderFriendlyLabels()
     });
     model.refreshLabels();
     QCOMPARE(summaryAt(0), QStringLiteral("Open on monitor: LG Ultra HD · DP-2"));
+}
+
+void TestRuleModel::scrollingActionsRenderDistinctLabels()
+{
+    // Pin the summaries of the three scrolling actions added by the
+    // per-window/insert-position work. The two heights share
+    // scrollFractionPercent with the column-width pair, so a copy-pasted
+    // branch that renders the wrong prefix (or reuses the width prefix)
+    // reads plausibly in the rules list but names the wrong axis.
+    const auto ruleWith = [](QLatin1StringView type, const QJsonValue& value) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 200;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        RuleAction action;
+        action.type = QString(type);
+        if (!value.isNull()) {
+            action.params.insert(ActionParam::Value, value);
+        }
+        rule.actions = {action};
+        return rule;
+    };
+
+    RuleModel model;
+    model.setRules({
+        ruleWith(ActionType::SetScrollDefaultWindowHeight, 0.5),
+        ruleWith(ActionType::OpenWindowHeight, 0.5),
+        ruleWith(ActionType::SetScrollInsertPosition, QStringLiteral("last")),
+        ruleWith(ActionType::SetScrollDefaultWindowHeight, 2.0), // out of range
+        ruleWith(ActionType::OpenWindowHeight, true), // wrong type
+        ruleWith(ActionType::SetScrollInsertPosition, QStringLiteral("middle")), // unknown token
+        // The column-width pair renders alongside these three; their labels
+        // must stay distinguishable from the height pair's.
+        ruleWith(ActionType::SetScrollDefaultColumnWidth, 0.5),
+        ruleWith(ActionType::OpenColumnWidth, 0.5),
+    });
+
+    const auto summaryAt = [&](int row) {
+        return model.data(model.index(row, 0), RuleModel::ActionSummaryRole).toString();
+    };
+
+    QCOMPARE(summaryAt(0), QStringLiteral("Window height: 50%"));
+    QCOMPARE(summaryAt(1), QStringLiteral("Open at height: 50%"));
+    // The insert-position token resolves through the shared enumOptionLabel,
+    // so pin the prefix and the no-raw-token contract rather than the
+    // option text (which the enum-label layer owns).
+    QVERIFY2(summaryAt(2).startsWith(QStringLiteral("Insert new windows: ")), qPrintable(summaryAt(2)));
+    QVERIFY2(!summaryAt(2).contains(QStringLiteral("last")), qPrintable(summaryAt(2)));
+    // Reject paths render the (invalid) marker rather than a plausible number.
+    QVERIFY2(summaryAt(3).contains(QStringLiteral("invalid")), qPrintable(summaryAt(3)));
+    QVERIFY2(summaryAt(4).contains(QStringLiteral("invalid")), qPrintable(summaryAt(4)));
+    QVERIFY2(summaryAt(5).contains(QStringLiteral("invalid")), qPrintable(summaryAt(5)));
+    // The height pair must not borrow the width pair's wording.
+    QCOMPARE(summaryAt(6), QStringLiteral("Column width: 50%"));
+    QCOMPARE(summaryAt(7), QStringLiteral("Open at width: 50%"));
+    QVERIFY(summaryAt(0) != summaryAt(6));
+    QVERIFY(summaryAt(1) != summaryAt(7));
+}
+
+void TestRuleModel::actionLabelPrefixesAreUnique()
+{
+    // Canary for the duplicate-label class: two registered action types that
+    // render the same summary make their rules indistinguishable in the rules
+    // list, and nothing else in the suite would notice. Build one rule per
+    // registered type (no params — the placeholder/invalid branch, which is
+    // the shape a duplicated copy-paste produces) and assert the resulting
+    // labels are pairwise distinct.
+    //
+    // The three RouteTo*/zone actions legitimately share a family prefix only
+    // through their VALUE, so comparing whole labels at the no-value shape is
+    // the right granularity: it is exactly the text a user sees before
+    // filling the value in.
+    const QStringList types = ActionRegistry::instance().registeredTypes();
+    QVERIFY(!types.isEmpty());
+
+    QList<Rule> rules;
+    rules.reserve(types.size());
+    for (const QString& type : types) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 100;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("firefox"));
+        RuleAction action;
+        action.type = type;
+        rule.actions = {action};
+        rules.append(rule);
+    }
+
+    RuleModel model;
+    model.setRules(rules);
+    QCOMPARE(model.rowCount(), types.size());
+
+    // Accumulate every collision before reporting, so one duplicate does not
+    // hide the rest.
+    QHash<QString, QString> labelToType;
+    QStringList collisions;
+    for (int row = 0; row < model.rowCount(); ++row) {
+        const QString label = model.data(model.index(row, 0), RuleModel::ActionSummaryRole).toString();
+        QVERIFY2(!label.isEmpty(), qPrintable(types.at(row)));
+        // A label that is just the wire type means actionLabel fell through
+        // to the raw-type fallback — a missing branch, not a duplicate.
+        QVERIFY2(label != types.at(row), qPrintable(types.at(row)));
+        const auto existing = labelToType.constFind(label);
+        if (existing != labelToType.cend()) {
+            collisions.append(QStringLiteral("%1 == %2 (%3)").arg(*existing, types.at(row), label));
+        } else {
+            labelToType.insert(label, types.at(row));
+        }
+    }
+    QVERIFY2(collisions.isEmpty(), qPrintable(collisions.join(QStringLiteral("; "))));
 }
 
 QTEST_MAIN(TestRuleModel)

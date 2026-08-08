@@ -1,6 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION: this header is over 1400 lines, past the 1150 hard
+// ceiling.
+// The exception was granted in the same pull request that carried the file
+// past the ceiling (the scroll tab strip), so it is a live decision rather
+// than settled precedent, and it is recorded here for that reason.
+//
+// The case for it: OverlayService is the single façade every overlay surface
+// goes through — zone overlay, selector, snap assist, OSD, cheatsheet, the
+// scroll tab strip and the scrolling drop indicator — so its members are the
+// per-screen state and per-role
+// wiring those surfaces share. The implementation is already split by surface
+// across daemon/overlayservice/*.cpp; splitting the class DECLARATION would
+// scatter the per-screen ownership and teardown-order contract the member
+// ordering encodes, exactly as documented on daemon.h.
+
 #pragma once
 
 #include <QElapsedTimer>
@@ -13,6 +28,7 @@
 #include <QSize>
 #include <QString>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -102,7 +118,11 @@ class OverlayService : public IOverlayService
     Q_OBJECT
 
     Q_PROPERTY(bool visible READ isVisible NOTIFY visibilityChanged)
-    Q_PROPERTY(bool zoneSelectorVisible READ isZoneSelectorVisible NOTIFY zoneSelectorVisibilityChanged)
+    // No zoneSelectorVisible property: nothing reads one. The selector is
+    // never exposed to QML as a bound property, so the property only ever
+    // wrapped IOverlayService::isZoneSelectorVisible() and its
+    // zoneSelectorVisibilityChanged notification, both of which remain and
+    // are the supported way to observe it.
 
 public:
     /// Per-screen overlay state (window pointers, physical screen references,
@@ -170,7 +190,7 @@ public:
 
     /// Inject the daemon-owned tile-algorithm registry. Required when
     /// autotile entries should appear in @ref visibleLayoutCount /
-    /// @ref layoutListForScreen output. Borrowed - caller owns it and
+    /// @ref buildLayoutsList output. Borrowed - caller owns it and
     /// must keep it alive for the service's lifetime.
     void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
 
@@ -186,6 +206,48 @@ public:
     /// "set-once after construction" discipline used by every other
     /// setAutotileLayoutSource call site keeps the contract uniform.
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
+
+    /// Scroll-mode zone model for the navigation OSD: returns one entry per
+    /// VISIBLE strip tile ({id: windowId, zoneNumber: the tile's 1-based slot
+    /// in strip order}) for a scrolling screen, empty otherwise. A window with
+    /// no visible tile carries no entry at all, so the list is not a census of
+    /// the strip's windows. Daemon-injected
+    /// (the overlay stays engine-agnostic); when it answers non-empty, the
+    /// navigation OSD uses it in place of the layout's zone list so the
+    /// "Zone %1" copy resolves and no snap layout is required on a
+    /// scrolling screen. Same clear-before-destroy contract as the other
+    /// injected closures.
+    using ScrollZonesProvider = std::function<QVariantList(const QString& screenId)>;
+    void setScrollZonesProvider(ScrollZonesProvider provider)
+    {
+        m_scrollZonesProvider = std::move(provider);
+    }
+
+    /// The LIVE layout capability of the engine owning a screen, as the int
+    /// value of IPlacementEngine::LayoutSupport (0 = None, 1 = Placement,
+    /// 2 = Templates). Daemon-injected so the overlay stays engine-agnostic
+    /// and routes through the router's live-engine answer, which correctly
+    /// downgrades a disabled or switched-off scrolling assignment to
+    /// snapping — the raw assignmentId cannot see that downgrade.
+    /// Consumers: resolvePerScreenLayoutInclude empties the layout list only
+    /// for None (a Templates screen swaps the manual list for the native
+    /// template cards); activeLayoutIdForScreen takes its template arm only when
+    /// the live answer is Templates; isSnappingContextInactive suppresses
+    /// the snap overlay for a scrolling assignment only when the scroll
+    /// engine actually owns the screen. Unset falls back to the
+    /// assignment-based resolution. Same clear-before-destroy contract as
+    /// the other injected closures.
+    using LayoutSupportResolver = std::function<int(const QString& screenId)>;
+    void setLayoutSupportResolver(LayoutSupportResolver resolver)
+    {
+        m_layoutSupportResolver = std::move(resolver);
+    }
+    /// Int codes of the resolver's answer — hand-mirrored values of
+    /// IPlacementEngine::LayoutSupport (this header does not include the
+    /// engine interface).
+    static constexpr int LayoutSupportNone = 0;
+    static constexpr int LayoutSupportPlacement = 1;
+    static constexpr int LayoutSupportTemplates = 2;
     PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -200,12 +262,15 @@ public:
     void setCurrentActivity(const QString& activityId);
 
     /**
-     * @brief Set which layout types appear in the zone picker
+     * @brief Seed which layout types appear in the zone picker
      *
-     * When autotile mode is active, show only dynamic layouts.
-     * When manual mode is active, show only manual layouts.
-     * The autotile feature gate (KCM setting) controls whether dynamic layouts
-     * are ever visible.
+     * A global SEED only: the per-screen truth is
+     * resolvePerScreenLayoutInclude, which narrows these flags per screen.
+     * Autotile screens keep only the algorithm cards, snapping screens keep
+     * only the manual list, a Templates (scrolling) screen gets native
+     * scrolling-template cards and neither of the other two families, and a
+     * LayoutSupport::None engine gets nothing at all. The autotile feature
+     * gate (KCM setting) controls whether dynamic layouts are ever visible.
      */
     void setLayoutFilter(bool includeManual, bool includeAutotile);
 
@@ -267,6 +332,20 @@ public:
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
     void showLockedLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
+    /// The native scrolling-template OSD: no Layout* backs a
+    /// ScrollingTemplate, so the caller supplies the template id, name and
+    /// blueprint-derived preview zones (the daemon's
+    /// scrollingTemplatePreviewZones projection). Always captioned as a
+    /// template; @p locked renders the lock badge (the locked-preview twin
+    /// of showLockedLayoutOsd).
+    void showScrollingTemplateOsd(const QString& id, const QString& name, const QVariantList& zones,
+                                  const QString& screenId = QString(), bool locked = false);
+    /// The card always wears the failure glyph "dialog-cancel". Both callers
+    /// (showContextDisabledOsd and showNotAssignedOsd) explain why a
+    /// requested change had no effect, which is what the glyph says. A
+    /// positive announcement does not belong on this card at all — the
+    /// scrolling mode switch, which briefly did reuse it, now renders its own
+    /// strip preview.
     void showDisabledOsd(const QString& reason, const QString& screenId = QString());
 
     /**
@@ -280,12 +359,37 @@ public:
      * first layout switch OSD or keyboard navigation action appears
      * instantly instead of blocking the event loop.
      *
-     * Idempotent - subsequent calls are no-ops thanks to the
-     * m_notificationsWarmed latch and per-screen window guard.
+     * Idempotent for the SAME screen set: the m_notificationsWarmed latch
+     * and the per-screen window guard make a repeat call a no-op for screens
+     * already warmed. A screen that appeared since the last call is still
+     * warmed on the next one, which is the point of calling it again after a
+     * hotplug rather than only once at start.
      */
     void warmUpNotifications();
 
 private:
+    /**
+     * @brief The isAnyModeLocked mode lens the LAYOUT PICKER reads a lock
+     * through, for @p screenId.
+     *
+     * Answers 2 (scrolling) on a Templates screen, else -1 (both modes).
+     * On a Templates screen the lock that matters is the scrolling one: the
+     * -1 both-mode default would let an unrelated snapping lock block
+     * template picks while the actual scrolling lock went unread. Every
+     * picker site must use this — the show path and the live lock re-push
+     * disagreeing means a picker opens unlocked and then latches locked (or
+     * the reverse) on the next rule edit. The ZONE SELECTOR is deliberately
+     * NOT a caller: it stays on -1 because it shows the snap zone overlay,
+     * whose lock is the snapping one.
+     */
+    int pickerLockModeFor(const QString& screenId) const
+    {
+        if (m_layoutSupportResolver && m_layoutSupportResolver(screenId) == LayoutSupportTemplates) {
+            return 2;
+        }
+        return -1;
+    }
+
     /**
      * @brief Install the QGuiApplication::screenAdded hook for the
      * notification overlay so hot-plugged monitors get a per-screen window
@@ -365,18 +469,121 @@ public:
     // Daemon-mediated push: the caller resolves the catalog + current mode
     // (per-screen tri-state) and hands them in; the service owns only slot
     // lifecycle. `currentMode` is "snapping" | "autotile" | "scrolling";
-    // `autotileAvailable` mirrors the global feature gate (when false the
-    // Autotile group hides regardless of mode).
+    // `autotileAvailable` / `scrollingAvailable` mirror the global feature
+    // gates (when false the matching group hides regardless of mode — the
+    // mode string alone lags the engine teardown on a disable).
+    // `layoutsAvailable` is the bound screen's engine capability
+    // (IPlacementEngine::layoutSupport): when false the catalog rows
+    // tagged "layouts" hide, because those shortcuts answer with a
+    // "not available" OSD on that screen.
     void showCheatsheet(const QString& screenId, const QVariantList& model, const QString& currentMode,
-                        bool autotileAvailable);
+                        bool autotileAvailable, bool scrollingAvailable, bool layoutsAvailable,
+                        bool layoutsAreTemplates);
     void hideCheatsheet() override;
     bool isCheatsheetVisible() const override;
+
+    /// Replay source for a consumer created after the announcements it missed.
+    /// Returns m_scrollTabSurfaceIds, which is the same record the change gate
+    /// reads, so the two can never disagree about what the compositor believes.
+    QHash<QString, quint32> liveScrollTabSurfaces() const override
+    {
+        return m_scrollTabSurfaceIds;
+    }
     /// Re-push model/mode into an already-visible cheatsheet (live refilter
     /// on mode switch or rebind). No-op when hidden — the next show
     /// re-resolves everything anyway.
-    void refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable);
+    void refreshCheatsheet(const QVariantList& model, const QString& currentMode, bool autotileAvailable,
+                           bool scrollingAvailable, bool layoutsAvailable, bool layoutsAreTemplates);
     /// Screen the visible cheatsheet is bound to; empty when hidden.
     QString cheatsheetScreenId() const;
+
+    /// Screen the visible layout picker is bound to; empty when hidden.
+    /// The picker-apply handler re-binds the controller to THIS screen
+    /// before applying — the controller's currentScreenName is a single
+    /// mutable slot that desktop switches and cycle presses on other
+    /// screens retarget while the picker sits open.
+    QString layoutPickerScreenId() const
+    {
+        return m_layoutPickerScreenId;
+    }
+
+    /// Tab indicators for tabbed scrolling columns on @p screenId (per
+    /// screen, NOT a singleton). @p strips is a list of maps with x / y /
+    /// width / height (absolute px, converted to shell coordinates here),
+    /// position, and tabs ({windowId, title, active, urgent, colors?} list);
+    /// empty hides the screen's indicators. `windowId` is load-bearing — it is
+    /// what a tab click relays back to focus that window.
+    ///
+    /// Each tab is a click target; the surface stays click-through outside the
+    /// indicator rects via the per-screen input region built here.
+    ///
+    /// The rects are always the POST-scroll ones and are written plainly, with
+    /// no motion state alongside them. The indicators have a wl_surface to
+    /// themselves and the compositor slides it by the scrolling strip's view
+    /// offset, so they ride a scroll the same way the columns do.
+    void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
+
+    /// Drop-target indicator for a scrolling drag re-insert on @p screenId
+    /// (per screen, NOT a singleton — a drag can cross screens). @p rect is
+    /// the absolute-px slot the dragged window would land in, converted to
+    /// shell coordinates here; an invalid or empty rect hides the indicator.
+    ///
+    /// Purely display: unlike the tab strips this installs NO input region,
+    /// because it is painted underneath a cursor that is mid-drag and taking
+    /// input there would break the drag it exists to describe.
+    ///
+    /// Scrolling needs a drawn indicator where autotile needs none. Autotile's
+    /// feedback IS its live restructure, but the scroll engine detaches once at
+    /// drag start and applies structure at drop, precisely because restructuring
+    /// live slid the strip out from under a stationary cursor. So the target has
+    /// to be painted rather than enacted.
+    void updateScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate) override;
+
+    /// Per-context PAINT overrides for @p screenId's tab indicator, resolved
+    /// from the SetTabIndicator* context rules and layered over the config
+    /// values when the indicator is drawn. Keyed by the overlay SLOT's own
+    /// property names (tabStyle, gapsBetweenTabs, cornerRadius, activeColor,
+    /// inactiveColor, urgentColor); an absent key falls through to config.
+    /// Those names must match ScrollTabShell's scrollTabsSlot exactly —
+    /// setProperty on an undeclared name silently creates a dead dynamic
+    /// property instead of failing.
+    ///
+    /// Only the paint half arrives here. The indicator's GEOMETRY overrides go
+    /// to the scrolling engine instead, because they change resolved rects and
+    /// the engine has to size the column around them.
+    ///
+    /// An empty map clears the screen's overrides. Replays the cached strips
+    /// so a rule change repaints a live indicator immediately, for the same
+    /// reason the paint-settings hooks do.
+    void setScrollTabIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
+
+    /// Per-screen drop-indicator PAINT overrides from context rules, keyed by
+    /// the QML property names the slot reads so the layering is one value()
+    /// per property. An empty map clears the screen's overrides.
+    ///
+    /// Unlike the tab-strip twin this does NOT replay: the indicator only
+    /// exists while a drag is in flight, and the next rect push during that
+    /// drag re-reads the overrides. A rule change landing between drags is
+    /// picked up by the drag that follows, which is the only time anyone can
+    /// see it.
+    void setScrollDropIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
+
+    /// Per-DRAG drop-indicator colour overrides, resolved from the dragged
+    /// window's rules at drag start. Outranks the per-context map above, which
+    /// outranks the settings, which fall back to the theme. Cleared with an
+    /// empty map when the drag ends; there is no screen key because exactly
+    /// one window is dragged at a time.
+    void setScrollDropIndicatorWindowOverrides(const QVariantMap& overrides) override;
+
+    /// Re-push every screen's cached strip model through
+    /// updateScrollTabStrips, whose own enabled check turns the replay into a
+    /// show (toggle on) or an animated hide (toggle off). Needed because the
+    /// engine's tabStripsChanged is change-latched and stays silent until the
+    /// next structural change, so nothing else would repaint after the toggle
+    /// moves. Called from the scrollingTabIndicatorEnabledChanged hook and from
+    /// updateSettings, which covers the batch-setSettings case where the
+    /// per-key signal never fires.
+    void replayScrollTabStrips();
 
     /// Forwarders to the active picker slot's QML moveSelection /
     /// confirmSelection functions. Used by global-accel callbacks
@@ -427,6 +634,11 @@ public Q_SLOTS:
 
 private Q_SLOTS:
     void onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId, const QString& geometryJson);
+    /// A tab of the scrolling indicator was clicked. Relays the canonical
+    /// window id up as scrollTabActivated; the daemon focuses that window, so
+    /// the tab it belongs to becomes the shown one through the ordinary focus
+    /// path rather than by reaching into the strip from here.
+    void onScrollTabActivated(const QString& windowId);
     void onLayoutPickerSelected(const QString& layoutId);
     /// Receiver for the unified passive shell's `osdDismissRequested`
     /// QML signal. Resolves the emitting shell window via `sender()`,
@@ -510,10 +722,12 @@ private:
     void dismissOverlayWindow(const QString& screenId);
     void updateOverlayWindow(const QString& screenId, QScreen* physScreen);
 
-    // Move a live overlay entry from oldKey to newKey. Used when the effective
-    // screen id for the same physical monitor flips between a virtual variant
-    // ("...:115107/vs:0") and the bare physical id ("...:115107"), so the
-    // existing QQuickWindow + VkSwapchainKHR is reused instead of torn down.
+    // Move a live overlay entry from oldKey to newKey, so the existing
+    // QQuickWindow + VkSwapchainKHR is reused instead of torn down. SAME
+    // FLAVOR ONLY: both keys virtual ("...:115107/vs:0" → "...:115107/vs:1")
+    // or both bare physical. A virtual↔physical flip is refused, because it
+    // changes the surface's anchor set and several compositors ignore
+    // post-attach set_anchor — the caller falls back to destroy + recreate.
     // Returns true if a rekey happened.
     bool rekeyOverlayState(const QString& oldKey, const QString& newKey);
 
@@ -553,22 +767,29 @@ private:
     ///   the same split axis the live tiler will render. Empty (default)
     ///   keeps the legacy square-canvas behaviour for screen-agnostic
     ///   consumers.
+    ///
+    /// PRECONDITION shared with @ref visibleLayoutCount: the algorithm registry
+    /// must be wired before either is called. The two enumerate autotile rows
+    /// through DIFFERENT paths — a non-empty canvas walks the registry
+    /// directly, an empty one (which visibleLayoutCount always passes) walks
+    /// the layout source — so with a null registry and a wired source this one
+    /// contributes no autotile rows while the count still does, and the
+    /// keep-visible bar gets sized for a row set the popup does not render. The
+    /// daemon wires it in initServices (setAlgorithmRegistry), before any popup
+    /// can open, so this holds for every live caller.
     QVariantList buildLayoutsList(const QString& screenId = QString(), QSize autotilePreviewCanvas = {}) const;
-    /// Per-screen layout-family filter used for the zone selector.
-    /// `manual` enables PhosphorZones layout entries; `autotile` enables
-    /// algorithm previews. Both default-true is "show everything"; the
-    /// resolver narrows to a single family when the screen has an
-    /// explicit assignment.
-    struct LayoutIncludeFlags
-    {
-        bool manual = true;
-        bool autotile = true;
-    };
+    /// Defined in overlayservice_types.h (hoisted with the other value
+    /// types); aliased so existing OverlayService::LayoutIncludeFlags
+    /// references keep working.
+    using LayoutIncludeFlags = PlasmaZones::LayoutIncludeFlags;
     /// Resolve the per-screen include filter. buildLayoutsList (the popup
     /// model) and visibleLayoutCount (used by isNearTriggerEdge to size
     /// the keep-visible bar) both go through here so the trigger geometry
-    /// matches the rendered popup row count.
-    LayoutIncludeFlags resolvePerScreenLayoutInclude(const QString& screenId) const;
+    /// matches the rendered popup row count. @p resolvedIdOut, when
+    /// non-null, receives the id the decision was made for (connector
+    /// names are normalized to identity ids) — callers must build their
+    /// layout lists with that id so gate and rows agree.
+    LayoutIncludeFlags resolvePerScreenLayoutInclude(const QString& screenId, QString* resolvedIdOut = nullptr) const;
     // overlayOverride is resolved once per screen by the caller (screen-invariant
     // across zones) and threaded in, rather than re-resolved per zone.
     QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
@@ -586,16 +807,28 @@ private:
     /// The id the layout picker / zone selector highlights as active on @p
     /// screenId. In autotile mode this is the resolved "autotile:<algorithm>"
     /// assignment id (matching the autotile cards); in snapping mode it is the
-    /// resolved Layout's UUID (matching the manual cards). Snapping resolves
+    /// resolved Layout's UUID (matching the manual cards); on a LIVE Templates
+    /// (scrolling) screen it is the context's resolved TEMPLATE layout UUID, so
+    /// the picker highlights the template card, or the bare "scrolling:"
+    /// sentinel when no template is assigned, which matches no card.
+    /// Snapping resolves
     /// through resolveScreenLayout() so its fallback chain is preserved, while
     /// autotile uses the assignment id directly because no Layout object backs
     /// an algorithm.
     QString activeLayoutIdForScreen(const QString& screenId) const;
 
-    /// True when the snapping overlay must NOT show on @p screenId for the current
-    /// desktop/activity: either the context is on a disable list, OR its default
-    /// layout assignment is suppressed (the global "don't assign by default"
-    /// setting, or a per-context rule) and nothing is explicitly assigned.
+    /// True when the snapping overlay must NOT show on @p screenId for the
+    /// current desktop/activity. THREE conditions, any one of which is enough:
+    /// the context is on a disable list; its default layout assignment is
+    /// suppressed (the global "don't assign by default" setting, or a
+    /// per-context rule) with nothing explicitly assigned; or the context
+    /// resolves to an ENGINE mode. The third catches a bare or suppressed
+    /// autotile context and a LIVE Templates (scrolling) one, neither of
+    /// which is in the excluded-screens set, so without it the snap overlay
+    /// surfaced on a screen the user had just switched away from snapping.
+    /// The scrolling half consults the live capability resolver: a scrolling
+    /// ASSIGNMENT downgraded to snapping by the router really does snap
+    /// windows into zones, so it keeps its overlay (#724 class).
     /// Consumed by the OVERLAY activation sites; the zone SELECTOR is
     /// deliberately disabled-list-only (isSnappingContextDisabled) — a
     /// suppressed-default context still allows an explicit drag to pick a
@@ -642,17 +875,82 @@ private:
     //
     // ~OverlayService explicitly resets m_shellHost AFTER draining
     // m_screenStates and BEFORE implicit member destruction, so the lib
-    // dtor's PreDestroyCallback re-fire (for any entry the explicit
-    // drain missed) runs while m_screenStates and friends are still
-    // alive. The decl order below (m_screenStates before m_shellHost)
-    // also makes reverse-destruction order safe - m_shellHost
-    // (declared later) destroys FIRST, while m_screenStates is still
-    // alive - even if a future change removes the explicit reset.
+    // dtor's PreDestroyCallback re-fire (for entries the drain missed)
+    // runs while m_screenStates and friends are still alive. The decl
+    // order (m_screenStates before m_shellHost) keeps reverse-destruction
+    // safe even if a future change removes the explicit reset.
     QHash<QString, PerScreenOverlayState> m_screenStates;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
+    /// Twin host for the scrolling tab indicators' own per-screen surface,
+    /// keyed the same way and torn down at the same call sites. They are not
+    /// slots on the passive shell because the compositor SLIDES their surface
+    /// with the strip, and a surface translates as a whole — see
+    /// PhosphorRoles::ScrollTabShell. Declared next to m_shellHost so the
+    /// destruction-order rationale above covers both.
+    std::unique_ptr<PhosphorOverlay::ShellHost> m_tabShellHost;
+
+    // Scroll tab-strip bookkeeping. Below m_shellHost deliberately: these
+    // are plain per-screen maps with no teardown dependency on either
+    // neighbour, so they must not sit between m_screenStates and m_shellHost
+    // and break up the declaration-order rationale above.
+    /// Per-screen generation guard for the scroll tab-strip animated hide:
+    /// bumped per updateScrollTabStrips call so a hide completion that lost
+    /// the race to a newer non-empty update no-ops instead of tearing down
+    /// a repopulated slot. Retained after teardown (monotonic).
+    QHash<QString, quint64> m_scrollTabsHideGuard;
+    /// Screens with a hide in flight; the show path treats these as not
+    /// visible so a mid-hide repopulation re-runs beginShow.
+    QSet<QString> m_scrollTabsHidePending;
+    /// Last non-empty strip model per screen, cached regardless of the
+    /// enable toggle so re-enabling the indicator can replay it (the
+    /// engine's tabStripsChanged is change-latched and stays silent).
+    QHash<QString, QVariantList> m_lastScrollTabStrips;
+    /// Per-screen drop-indicator paint overrides (see
+    /// setScrollDropIndicatorOverrides).
+    QHash<QString, QVariantMap> m_scrollDropIndicatorOverrides;
+    /// Per-DRAG drop-indicator colour overrides from the dragged window's
+    /// rules (see setScrollDropIndicatorWindowOverrides). Not per screen: one
+    /// window is dragged at a time, and the entry lives only for that drag.
+    QVariantMap m_scrollDropIndicatorWindowOverrides;
+    /// Per-screen tab-indicator paint overrides (see
+    /// setScrollTabIndicatorOverrides). Screens with no context rule carry no
+    /// entry, so the common case costs one empty-hash lookup.
+    QHash<QString, QVariantMap> m_scrollTabIndicatorOverrides;
+    /// Window-local rects of the live tab indicators per screen, handed to the
+    /// tab shell as its input region so clicks land on a tab but fall through
+    /// everywhere else. Rebuilt from each strip update; cleared with the
+    /// screen's strips.
+    QHash<QString, QRegion> m_scrollTabInputRegions;
+    /// Last announced wl_surface object id per screen's tab-indicator surface.
+    /// The change gate for scrollTabSurfaceChanged, and the record of what the
+    /// compositor currently believes, so teardown knows whether it owes a
+    /// retraction.
+    QHash<QString, quint32> m_scrollTabSurfaceIds;
+
+    /// Per-screen generation guard for the drop indicator's animated hide,
+    /// same contract as m_scrollTabsHideGuard: a hide completion that lost the
+    /// race to a newer rect must no-op rather than tear down a repopulated
+    /// slot. A drag pushes rects at pointer rate, so this race is the common
+    /// case here, not the exotic one. Retained after teardown (monotonic) —
+    /// must never restart, which is why unwirePassiveShellSlots erases the two
+    /// maps below but deliberately not this one.
+    QHash<QString, quint64> m_scrollDropIndicatorHideGuard;
+    /// Screens with a drop-indicator hide in flight; the show path treats
+    /// these as not visible so a mid-hide repopulation re-runs beginShow.
+    QSet<QString> m_scrollDropIndicatorHidePending;
+    /// Last rect pushed per screen, in SHELL-LOCAL px (already shifted by the
+    /// screen origin) — the space that is actually painted, so a screen move
+    /// invalidates the entry instead of comparing equal. Change-gate only: a
+    /// drag re-pushes the same target on every tick, and without this each tick
+    /// would re-write the QML properties, re-assert the shell's click-through
+    /// flag and re-run a surface sync. An entry is written only once the update
+    /// has passed every bail, so it records what is genuinely on screen.
+    QHash<QString, QRect> m_lastScrollDropIndicatorRect;
 
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
+    ScrollZonesProvider m_scrollZonesProvider;
+    LayoutSupportResolver m_layoutSupportResolver;
     /// Borrowed from Daemon. stop() detaches this even when init never reached start().
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =
@@ -821,10 +1119,13 @@ private:
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
     void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
-    /// Tear down the per-screen passive overlay shell. Deletes the
-    /// shell PhosphorLayer::Surface (and its QQuickWindow + every slot
-    /// QQuickItem owned by it). Called from
-    /// `destroyAllWindowsForPhysicalScreen` on screen hot-plug cleanup.
+    /// Tear down BOTH of the screen's shells, tab shell first. Deletes each
+    /// PhosphorLayer::Surface (and its QQuickWindow + every slot QQuickItem
+    /// owned by it). Despite the name this is the tab shell's ONLY teardown
+    /// path, which is why the two are paired here rather than at each caller.
+    /// Called from `destroyAllWindowsForPhysicalScreen` on hot-plug cleanup and
+    /// from the virtual-screen reconfiguration branches of
+    /// `onVirtualScreensChanged`.
     void destroyPassiveShell(const QString& screenId);
 
     /// Lazily create the per-screen PassiveOverlayShell + return the
@@ -851,6 +1152,43 @@ private:
     /// half-destroyed scene graph. Runs from inside ShellHost::destroyShell
     /// before the library schedules the shell surface for deletion.
     void unwirePassiveShellSlots(const QString& screenId);
+
+    /// Lazily create the per-screen ScrollTabShell + return the state entry
+    /// (or nullptr if creation failed). The twin of @ref ensurePassiveShellFor
+    /// for the tab indicators' exclusive surface; called only from the strip
+    /// update path, so a screen that never shows a tabbed column never
+    /// materialises one.
+    PerScreenOverlayState* ensureScrollTabShellFor(const QString& effectiveId, QScreen* physScreen);
+
+    /// PostCreate / PreDestroy hooks registered with @c m_tabShellHost, the
+    /// twins of @ref wirePassiveShellSlots and @ref unwirePassiveShellSlots.
+    /// The tab shell hosts exactly one slot and forwards exactly one signal,
+    /// so both are correspondingly short.
+    void wireScrollTabShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState);
+    void unwireScrollTabShellSlots(const QString& screenId);
+
+    /// Reconcile the tab shell's mapped state and input region for @p
+    /// effectiveId. Simpler than its passive-shell counterpart because the
+    /// surface hosts one display-only slot: it is mapped exactly while that
+    /// slot is visible, never grabs input wholesale, and takes clicks only on
+    /// the indicator rects.
+    void syncScrollTabShellSurfaceState(const QString& effectiveId);
+
+    /// Publish (or retract, with @p window null) the wl_surface object id of
+    /// @p screenId's tab-indicator surface. Change-gated, so the re-assert on
+    /// every SHOW costs one hash compare. Not on every strip update: an
+    /// already-visible indicator returns before reaching the announce.
+    void announceScrollTabSurface(const QString& screenId, QQuickWindow* window);
+
+    /// Drop @p screenId's now-dead ShellState entry on BOTH hosts. Destroying a
+    /// shell only zeroes its fields; the entry survives, so hot-plug cycles
+    /// would accumulate dead keys without this.
+    void removeShellStates(const QString& screenId);
+
+    /// Clear sticky creation-failure sentinels on both hosts for every screen
+    /// id rooted on @p physicalScreenId (the bare id and its `/vs:N` children),
+    /// so a replug of the same monitor can create its shells again.
+    void clearShellFailuresForPhysicalScreen(const QString& physicalScreenId);
 
     /// Slot-hide animation completion - flips the OSD slot Item's
     /// `visible` to false once the SurfaceAnimator's hide leg settles,

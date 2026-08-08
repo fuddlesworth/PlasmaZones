@@ -311,6 +311,16 @@ Q_SIGNALS:
 
 private:
     void initializeRegistry();
+    /// The per-mode slices of the registry, split into
+    /// settingsadaptor_registry_snapping.cpp,
+    /// settingsadaptor_registry_autotile.cpp and
+    /// settingsadaptor_registry_scrolling.cpp for file size. Each is called
+    /// only by initializeRegistry and fills the same getter / setter / schema
+    /// maps; which key lives in which slice follows the boundary rule
+    /// documented in those files' banners.
+    void initializeRegistrySnapping();
+    void initializeRegistryAutotile();
+    void initializeRegistryScrolling();
 
     /**
      * @brief Schedule a debounced save
@@ -367,6 +377,12 @@ private:
     bool m_cachedAvailableShadersValid = false;
     QHash<QString, QVariantMap> m_cachedShaderInfo;
     QHash<QString, QVariantMap> m_cachedShaderDefaults;
+    /// Memoized JSON array of animation-shader search paths. A member, not a
+    /// function-local static: as a static it lived for the whole process, so a
+    /// mid-session XDG_DATA_HOME change was never picked up, it survived
+    /// detach(), and neither refreshShaders() nor invalidateShaderCaches()
+    /// could clear it. Empty means "not yet resolved".
+    QString m_cachedShaderSearchPaths;
 };
 
 } // namespace PlasmaZones

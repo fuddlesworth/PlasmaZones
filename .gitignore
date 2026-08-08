@@ -356,3 +356,4 @@ translations/.qml-stubs/
 
 # Python bytecode from scripts/
 __pycache__/
+scratchpad/

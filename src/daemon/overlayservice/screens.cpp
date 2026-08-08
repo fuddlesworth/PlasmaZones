@@ -159,8 +159,17 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             continue;
         }
         const auto& state = it.value();
+        // The tab shell is tested too, and it is not redundant with the passive
+        // shell beside it: a screen can hold a tab shell and nothing else. The
+        // tab shell is created straight from the strip path, while the passive
+        // shell is created lazily on a slot show and its prewarm is skipped
+        // when shaders and animations are both off. Missing that case left the
+        // whole key unvisited, so no PreDestroy ran, no retraction was
+        // announced, and a layer surface stayed mapped for a monitor that was
+        // gone with its id still published to the compositor.
         if (state.overlayPhysScreen == screen || state.zoneSelectorPhysScreen == screen
-            || (state.shell && state.shell->physScreen() == screen)) {
+            || (state.shell && state.shell->physScreen() == screen)
+            || (state.tabShell && state.tabShell->physScreen() == screen)) {
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
             destroyPassiveShell(id);
@@ -170,14 +179,18 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             // our iterator through the PreDestroyCallback's m_screenStates
             // re-entry.
             auto postIt = m_screenStates.constFind(id);
-            if (postIt == m_screenStates.constEnd() || !postIt->shell || !postIt->shell->shellSurface()) {
+            const bool passiveGone =
+                postIt == m_screenStates.constEnd() || !postIt->shell || !postIt->shell->shellSurface();
+            const bool tabGone =
+                postIt == m_screenStates.constEnd() || !postIt->tabShell || !postIt->tabShell->shellSurface();
+            if (passiveGone && tabGone) {
                 m_screenStates.remove(id);
                 // Symmetric drop on the lib side - destroyPassiveShell
                 // only zeroes the ShellState fields, the entry itself
-                // survives in ShellHost's m_states. Without this drop,
+                // survives in the host's m_states. Without this drop,
                 // many hot-plug cycles slowly grow the lib's map with
                 // dead keys.
-                m_shellHost->removeState(id);
+                removeShellStates(id);
             }
 
             resetModalSingletonsForDestroyedId(id);
@@ -189,20 +202,8 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     // (above, via destroyPassiveShell) tears the slots down with
     // it. No separate cleanup needed.
 
-    // Drop notification-window "creation failed" sentinels for screen ids
-    // rooted on this physical screen. Without this, if the same physical
-    // monitor is reconnected (hot-plug cycle) it inherits the stale flag
-    // and we silently refuse to recreate the OSD. Matching is prefix-based
-    // because virtual-screen ids embed the physical id as the prefix.
     const QString physId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-    if (!physId.isEmpty()) {
-        const QString vsPrefix = physId + PhosphorIdentity::VirtualScreenId::Separator;
-        for (const QString& flagged : m_shellHost->failureScreenIds()) {
-            if (flagged == physId || flagged.startsWith(vsPrefix)) {
-                m_shellHost->clearFailure(flagged);
-            }
-        }
-    }
+    clearShellFailuresForPhysicalScreen(physId);
 
     // Drop the dedup sentinel for this physical screen so a hot-plug cycle
     // doesn't suppress the first navigation OSD on the reconnected monitor
@@ -285,26 +286,22 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
             }
         }
         for (const QString& key : virtualKeysToDestroy) {
-            m_shellHost->destroyShell(key);
-            m_shellHost->removeState(key);
+            destroyPassiveShell(key);
+            removeShellStates(key);
             m_screenStates.remove(key);
             resetModalSingletonsForDestroyedId(key);
         }
         destroyOverlayWindow(physicalScreenId);
         destroyZoneSelectorWindow(physicalScreenId);
         destroyPassiveShell(physicalScreenId);
-        m_shellHost->removeState(physicalScreenId);
+        removeShellStates(physicalScreenId);
         m_screenStates.remove(physicalScreenId);
         resetModalSingletonsForDestroyedId(physicalScreenId);
         // Drop sticky creation-failure flags rooted on the now-removed
         // physical monitor. Without this, a same-name replug would
         // inherit the stale flag and silently refuse to recreate.
         // Mirrors the symmetric clear in destroyAllWindowsForPhysicalScreen.
-        for (const QString& flagged : m_shellHost->failureScreenIds()) {
-            if (flagged == physicalScreenId || flagged.startsWith(prefix)) {
-                m_shellHost->clearFailure(flagged);
-            }
-        }
+        clearShellFailuresForPhysicalScreen(physicalScreenId);
         return;
     }
 
@@ -324,7 +321,7 @@ void OverlayService::onVirtualScreensChanged(const QString& physicalScreenId)
         // survives until the monitor is physically removed (bounded but
         // pointless, and destroyAllWindowsForPhysicalScreen skips it
         // because every field it matches on was just zeroed).
-        m_shellHost->removeState(physicalScreenId);
+        removeShellStates(physicalScreenId);
         m_screenStates.remove(physicalScreenId);
         // A modal open on the pre-split bare-physId shell just lost its
         // slot. The later destroyAllWindowsForPhysicalScreen loop CANNOT

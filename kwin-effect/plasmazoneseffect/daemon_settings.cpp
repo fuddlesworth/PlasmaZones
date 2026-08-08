@@ -3,9 +3,10 @@
 
 #include "plasmazoneseffect.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 #include <PhosphorAnimation/AnimationLimits.h>
@@ -38,10 +39,10 @@ void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCInfo(lcEffect) << "settingsChanged: reloading settings";
     loadCachedSettings();
-    // Note: loadAutotileSettings() is intentionally NOT called here.
-    // Autotile screen changes are tracked via the dedicated autotileScreensChanged
-    // D-Bus signal (→ slotAutotileScreensChanged), which is authoritative.
-    // Calling loadAutotileSettings on every settingsChanged causes redundant
+    // Note: m_tilingHandler->loadSettings() is intentionally NOT called here.
+    // Autotile screen changes are tracked via the dedicated managedScreensChanged
+    // D-Bus signal (→ slotScreensChanged), which is authoritative.
+    // Calling m_tilingHandler->loadSettings on every settingsChanged causes redundant
     // full window re-notification (N D-Bus windowOpened calls + retile round)
     // on every algorithm/gap/setting change — the daemon already retiles and
     // emits windowsTiled directly for those changes.
@@ -61,7 +62,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     //
     // Transient exclusion and min-size are handled by the daemon. Exclusion lists are
     // cached here for drag-operation gating (shouldHandleWindow).
-    m_triggersLoaded = false; // Permissive until new triggers arrive (#175)
+    // Permissive until new triggers arrive (#175). Fail-open by design: if
+    // the dragActivationTriggers reply never lands (transport error — the
+    // ClientHelpers layer logs a warning), the flag stays false until the
+    // NEXT settingsChanged broadcast re-runs this load. The cost of that
+    // window is unconditional per-tick forwarding, never a dead drag.
+    m_triggersLoaded = false;
 
     // excludedApplications / excludedWindowClasses are GONE — the v4
     // migration folded those lists into the unified Rule store, and
@@ -97,16 +103,19 @@ void PlasmaZonesEffect::loadCachedSettings()
     // settings used before they folded into rules. Both are re-fetched on every
     // settingsChanged, so an accent / colour-scheme change repaints accent-
     // following borders without a relog.
+    // Both reject an invalid parse: an older daemon's valid-empty reply for an
+    // unknown key builds an INVALID QColor, which would discard the live accent
+    // for the hardcoded fallback and cost a full border sweep to do it.
     loadSettingAsync(QStringLiteral("highlightColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
-        if (m_borderAccentColor != c) {
+        if (c.isValid() && m_borderAccentColor != c) {
             m_borderAccentColor = c;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("inactiveColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
-        if (m_borderInactiveColor != c) {
+        if (c.isValid() && m_borderInactiveColor != c) {
             m_borderInactiveColor = c;
             scheduleBorderSweep();
         }
@@ -129,8 +138,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     // a reply that ARRIVES but is not a bool: an older daemon on the other end of the
     // bus, a mid-restart half-answer, a getter returning the invalid-variant fallback.
     // QVariant("").toBool() is false, so an unguarded read there would force these off,
-    // which is merely redundant for a default-false setting but INVERTS the
-    // default-true PauseWhenIdle. Same guard the audio loaders below use.
+    // INVERTING both settings — AnimateFocusedOnly and PauseWhenIdle are each
+    // default-true. Same guard the audio loaders below use.
     loadSettingAsync(QStringLiteral("decorationAnimateFocusedOnly"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
             return;
@@ -166,6 +175,13 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
+        // Type-guard every bool loader in this file, not only the default-true
+        // ones: a reply that ARRIVES but is not a bool (an older daemon's
+        // valid-empty answer for an unknown key) coerces to false, and a
+        // default's polarity is not a contract that survives an edit.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.showBorder != b) {
             m_windowAppearanceDefault.showBorder = b;
@@ -214,21 +230,28 @@ void PlasmaZonesEffect::loadCachedSettings()
             scheduleBorderSweep();
         }
     });
+    // Empty-reply guard — see windowBorderScope above. An empty colour maps to
+    // nullopt in decoration_appearance, so a valid-empty skew reply would drop
+    // the configured colour outright and sweep every border to do it.
     loadSettingAsync(QStringLiteral("windowBorderColorActive"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.activeColor != s) {
+        if (!s.isEmpty() && m_windowAppearanceDefault.activeColor != s) {
             m_windowAppearanceDefault.activeColor = s;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("windowBorderColorInactive"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.inactiveColor != s) {
+        if (!s.isEmpty() && m_windowAppearanceDefault.inactiveColor != s) {
             m_windowAppearanceDefault.inactiveColor = s;
             scheduleBorderSweep();
         }
     });
     loadSettingAsync(QStringLiteral("hideWindowTitleBars"), [this](const QVariant& v) {
+        // Type-guard — see showWindowBorder above.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.hideTitleBar != b) {
             m_windowAppearanceDefault.hideTitleBar = b;
@@ -246,6 +269,10 @@ void PlasmaZonesEffect::loadCachedSettings()
     // Plain opacity+tint layer (the border's opacity analogue) — same
     // change-detect + sweep pattern as the border keys above.
     loadSettingAsync(QStringLiteral("showWindowOpacityTint"), [this](const QVariant& v) {
+        // Type-guard — see showWindowBorder above.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         const bool b = v.toBool();
         if (m_windowAppearanceDefault.showOpacityTint != b) {
             m_windowAppearanceDefault.showOpacityTint = b;
@@ -286,7 +313,8 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("windowTintColor"), [this](const QVariant& v) {
         const QString s = v.toString();
-        if (m_windowAppearanceDefault.tintColor != s) {
+        // Empty-reply guard — see windowBorderColorActive above.
+        if (!s.isEmpty() && m_windowAppearanceDefault.tintColor != s) {
             m_windowAppearanceDefault.tintColor = s;
             scheduleBorderSweep();
         }
@@ -311,6 +339,10 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
+        // Type-guard — see showWindowBorder above.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_snapAssistHandler->setEnabled(v.toBool());
     });
     // Audio-reactive surface decorations and animation packs: the same daemon
@@ -322,7 +354,11 @@ void PlasmaZonesEffect::loadCachedSettings()
     // enable-reply could start cava on defaults and each later parameter
     // reply would immediately restart it.
     loadSettingAsync(QStringLiteral("enableAudioVisualizer"), [this](const QVariant& v) {
-        m_enableAudioVisualizer = v.toBool();
+        // Type-guard the assignment but still sync, matching loadAudioBool below:
+        // the coalesced sync has to run for the replies that DID land.
+        if (v.typeId() == QMetaType::Bool) {
+            m_enableAudioVisualizer = v.toBool();
+        }
         scheduleEffectAudioSync();
     });
     // The full CAVA parameter set (Shaders.Audio), mirrored into
@@ -406,6 +442,23 @@ void PlasmaZonesEffect::loadCachedSettings()
             return;
         }
         m_windowAnimator->setEnabled(v.toBool());
+        // The strip view follows the master toggle rather than carrying one of
+        // its own: with animations off, a scroll should place the strip
+        // outright, which is exactly what a disabled view animator does.
+        m_stripViewAnimator->setEnabled(v.toBool());
+        if (!v.toBool()) {
+            // Disarm the strip shader pass with the springs it decorates.
+            // setEnabled(false) clears the animator's motions OUTSIDE the
+            // paint bracket, and the pass's lazy reap runs only from
+            // postPaintScreen — which needs isActive() true. With every
+            // spring gone and no other clause holding, an armed entry would
+            // otherwise retain its output-sized capture texture until the
+            // next scroll. reset() makes its own GL context current, so it
+            // is safe from this D-Bus reply path; the dropped shader cache
+            // recompiles on the next scroll, which is negligible against a
+            // settings toggle.
+            m_stripTransition.reset();
+        }
         // The animations master toggle is part of the suppression predicate
         // for every group: with animations off none of our packs run, so
         // KWin's own minimize / maximize / show-desktop effects must come
@@ -418,7 +471,15 @@ void PlasmaZonesEffect::loadCachedSettings()
         // to 500ms, making shader transitions like matrix run far
         // faster than the daemon path's identical setting (the daemon
         // honours the full 2000ms range via the same constants).
-        const int d = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, v.toInt(),
+        // &ok gate like every sibling int loader: an older daemon's valid-empty
+        // reply for an unknown key coerces to 0 and would clamp to the minimum
+        // instead of leaving the seeded default alone.
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        const int d = qBound(PhosphorAnimation::Limits::MinAnimationDurationMs, raw,
                              PhosphorAnimation::Limits::MaxAnimationDurationMs);
         m_windowAnimator->setDuration(d);
         m_cachedAnimationDuration = d;
@@ -427,16 +488,51 @@ void PlasmaZonesEffect::loadCachedSettings()
         // Polymorphic curve parse — handles bare bezier, named easing,
         // and "spring:..." in one path so Spring can drive snap motion
         // end-to-end without a settings-side branch.
-        m_windowAnimator->setCurve(m_curveRegistry.create(v.toString()));
+        // Reject an empty spec (an older daemon's valid-empty answer for an
+        // unknown key): create("") yields the default Easing and would silently
+        // replace the user's configured curve, spring included, for the session.
+        const QString spec = v.toString();
+        if (spec.isEmpty()) {
+            return;
+        }
+        // The strip view is NOT set here: it resolves its profile per batch
+        // through the motion cascade, whose base IS this animator's profile, so
+        // the global curve reaches it either way and a scrolling.view override
+        // can still win.
+        m_windowAnimator->setCurve(m_curveRegistry.create(spec));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {
-        m_windowAnimator->setMinDistance(qBound(0, v.toInt(), 200));
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        m_windowAnimator->setMinDistance(qBound(0, raw, 200));
     });
     loadSettingAsync(QStringLiteral("animationSequenceMode"), [this](const QVariant& v) {
-        m_cachedAnimationSequenceMode = qBound(0, v.toInt(), 1);
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        // validIntOr, not qBound: an unknown FUTURE mode (2) must fall back to
+        // the shipped DEFAULT, not clamp onto the nearest known value. Clamping
+        // silently enters Cascade for a mode that might mean anything, which is
+        // the trap the autotileDragBehavior loader below already documents
+        // ("unknown values clamp to the safe default rather than the
+        // highest-known value").
+        m_cachedAnimationSequenceMode = (raw == PhosphorAnimation::Limits::SequenceModeAllAtOnce
+                                         || raw == PhosphorAnimation::Limits::SequenceModeCascade)
+            ? raw
+            : PhosphorAnimation::Limits::DefaultAnimationSequenceMode;
     });
     loadSettingAsync(QStringLiteral("animationStaggerInterval"), [this](const QVariant& v) {
-        m_cachedAnimationStaggerInterval = qBound(PhosphorAnimation::Limits::MinAnimationStaggerIntervalMs, v.toInt(),
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
+        m_cachedAnimationStaggerInterval = qBound(PhosphorAnimation::Limits::MinAnimationStaggerIntervalMs, raw,
                                                   PhosphorAnimation::Limits::MaxAnimationStaggerIntervalMs);
     });
 
@@ -564,21 +660,43 @@ void PlasmaZonesEffect::loadCachedSettings()
     // slotSettingsChanged callback (QDBusConnection::connect silently accepts
     // duplicates, so the connection set would grow unbounded over the effect's
     // lifetime).
+    // Type-guard — see showWindowBorder above.
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_cachedToggleActivation = v.toBool();
     });
     loadSettingAsync(QStringLiteral("autotileDragInsertToggle"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_cachedAutotileDragInsertToggle = v.toBool();
     });
+    loadSettingAsync(QStringLiteral("scrollingDragInsertToggle"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_cachedScrollingDragInsertToggle = v.toBool();
+    });
     loadSettingAsync(QStringLiteral("zoneSpanToggleMode"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_cachedZoneSpanToggleMode = v.toBool();
     });
     loadSettingAsync(QStringLiteral("autotileDragBehavior"), [this](const QVariant& v) {
         // Clamp unknown values to the safe default (Float) rather than the
         // highest known value — an older effect build against a newer daemon
         // must not silently map e.g. a future `ReorderAcrossScreens=2` onto
-        // the nearest mode it happens to recognize.
-        const int raw = v.toInt();
+        // the nearest mode it happens to recognize. A non-int reply is a skew
+        // artefact rather than a mode choice, so it keeps the seeded default
+        // instead of being coerced to 0 and re-decided as Float.
+        bool ok = false;
+        const int raw = v.toInt(&ok);
+        if (!ok) {
+            return;
+        }
         switch (raw) {
         case static_cast<int>(EffectAutotileDragBehavior::Float):
             m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
@@ -592,6 +710,9 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     loadSettingAsync(QStringLiteral("zoneSelectorEnabled"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_cachedZoneSelectorEnabled = v.toBool();
     });
 
@@ -630,7 +751,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         // This D-Bus reply lands between frames where the compositor GL context is not
         // guaranteed current, and the cached packs own GLShaders plus user GLTextures
         // whose destruction issues glDelete* — make the context current first, same
-        // discipline as the effectsChanged clears in lifecycle.cpp.
+        // discipline as the effectsChanged clears in lifecycle_wiring.cpp.
         //
         // The result is CAPTURED, not discarded. The only false case is compositor
         // teardown, where GL is going away and the driver reclaims the objects whatever
@@ -663,12 +784,95 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
 
+    // Type-guard — see showWindowBorder above.
     loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
-        m_autotileHandler->setFocusFollowsMouse(v.toBool());
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_tilingHandler->setFocusFollowsMouse(v.toBool());
+    });
+
+    // Note the guard's failure direction is the permissive one here: a
+    // swallowed reply leaves the flag false, i.e. scanout stays allowed while
+    // the engine may already commit true rects. Accepted — the only skew
+    // source is a daemon mid-restart, and crop mode's enable-order gap (see
+    // blocksDirectScanout) already covers that shape. The change-gate plus
+    // repaint makes a real flip take effect without waiting for incidental
+    // damage, since blocksDirectScanout is only re-evaluated on frames.
+    loadSettingAsync(QStringLiteral("scrollingCropStraddlers"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        const bool crop = v.toBool();
+        if (m_cachedScrollCropStraddlers != crop) {
+            m_cachedScrollCropStraddlers = crop;
+            if (KWin::effects) {
+                KWin::effects->addRepaintFull();
+            }
+        }
+    });
+
+    loadSettingAsync(QStringLiteral("scrollingFocusFollowsMouse"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_tilingHandler->setScrollingFocusFollowsMouse(v.toBool());
+    });
+
+    // Type-guard matters doubly here: scrollingWheelFocusEnabled defaults to
+    // TRUE, so a non-bool reply would invert it and tear down the registered
+    // Meta+wheel QActions for the duration of the skew.
+    loadSettingAsync(QStringLiteral("scrollingWheelFocusEnabled"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_tilingHandler->setWheelFocusEnabled(v.toBool());
+    });
+
+    loadSettingAsync(QStringLiteral("scrollingWheelFocusInverted"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_tilingHandler->setWheelFocusInverted(v.toBool());
     });
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
         m_snapHandler->setFocusFollowsMouse(v.toBool());
+    });
+
+    // Drag-insert TRIGGER LISTS, cached beside the toggles above: the
+    // hold-mode triggers must be visible to shouldForwardDragTicks, or a
+    // drag that starts on a snap screen and crosses onto an engine screen
+    // with only the insert trigger held never forwards a tick — the daemon
+    // then never sees the crossing, never flips the policy, and hold-mode
+    // drag-insert (the shipped default: Alt, toggle off) is unreachable
+    // from off-engine starts.
+    //
+    // Through the member wrapper, like the other ~50 loaders in this function.
+    // The helper only invokes the callback on a VALID reply, so an error never
+    // clobbers a previously-parsed list. A valid reply carrying nothing does
+    // reach us — an older daemon answering an unknown key — and parses to an
+    // empty list that silently makes hold-mode drag-insert unreachable. That
+    // is diagnosable only from a log line, so both loaders emit one, matching
+    // the all-zero-triggers warning dragActivationTriggers already carries.
+    loadSettingAsync(QStringLiteral("autotileDragInsertTriggers"), [this](const QVariant& v) {
+        m_parsedAutotileDragInsertTriggers =
+            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        if (m_parsedAutotileDragInsertTriggers.isEmpty()) {
+            qCWarning(lcEffect) << "autotileDragInsertTriggers parsed to an EMPTY list — hold-mode drag-insert is "
+                                   "unreachable for autotile until a trigger is configured";
+        }
+    });
+    loadSettingAsync(QStringLiteral("scrollingDragInsertTriggers"), [this](const QVariant& v) {
+        m_parsedScrollingDragInsertTriggers =
+            TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+        if (m_parsedScrollingDragInsertTriggers.isEmpty()) {
+            qCWarning(lcEffect) << "scrollingDragInsertTriggers parsed to an EMPTY list — hold-mode drag-insert is "
+                                   "unreachable for scrolling until a trigger is configured";
+        }
     });
 
     // dragActivationTriggers — uses shared TriggerParser for QDBusArgument deserialization

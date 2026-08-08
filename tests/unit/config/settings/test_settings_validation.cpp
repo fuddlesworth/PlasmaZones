@@ -14,6 +14,10 @@
  *     max-size cap at MaxTriggersPerAction is enforced.
  *  4. validIntOr enum validator -- unknown enum value snaps to the safe
  *     default rather than the nearest in-range neighbour.
+ *  5. clampDouble validator -- window opacity / tint strength scalars.
+ *  6. validStringOr closed-set validator -- the three scope token settings.
+ *  7. validBorderColorOr -- hex / "accent" border and tint colour strings.
+ *  8. Decorations.Performance -- absent-group defaults and reset() round-trip.
  */
 
 #include <QTest>
@@ -174,6 +178,10 @@ private Q_SLOTS:
                  "PauseWhenIdle defaults to TRUE. A false here means something is reading the absent key as a "
                  "value rather than falling back — which is exactly how it shipped inverted once.");
         QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
+        QVERIFY2(settings.decorationAnimateFocusedOnly(),
+                 "AnimateFocusedOnly defaults to TRUE (flipped in PR #872), putting it in the exact absent-key "
+                 "inversion risk class the PauseWhenIdle pin above exists for. The symbolic QCOMPARE below cannot "
+                 "catch a regression that flips the ConfigDefaults value itself.");
         QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
     }
@@ -199,14 +207,20 @@ private Q_SLOTS:
         QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
 
-        // Flip every key away from its default (120 is in-range and distinct from the
-        // default of 30).
-        settings.setDecorationPauseWhenIdle(false);
-        settings.setDecorationAnimateFocusedOnly(true);
+        // Flip AnimateFocusedOnly FIRST while PauseWhenIdle STAYS at its
+        // default (both are true since PR #872): asserting the two bools on
+        // different values at this point is what catches a cross-wired
+        // getter/setter pair — with both flipped together, a copy-paste key
+        // swap in the storescalars macros passes every compare. PauseWhenIdle
+        // is flipped in a SECOND step so its reset leg below is exercised
+        // too. (120 is in-range and distinct from the default of 30.)
+        settings.setDecorationAnimateFocusedOnly(false);
         settings.setDecorationIdleTimeoutSec(120);
-        QCOMPARE(settings.decorationPauseWhenIdle(), false);
-        QCOMPARE(settings.decorationAnimateFocusedOnly(), true);
+        QCOMPARE(settings.decorationPauseWhenIdle(), true);
+        QCOMPARE(settings.decorationAnimateFocusedOnly(), false);
         QCOMPARE(settings.decorationIdleTimeoutSec(), 120);
+        settings.setDecorationPauseWhenIdle(false);
+        QCOMPARE(settings.decorationPauseWhenIdle(), false);
 
         settings.reset();
         QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
@@ -430,7 +444,17 @@ private Q_SLOTS:
 
     /**
      * The "accent" sentinel is a valid border-colour value (the effect resolves it
-     * to the live system colour), so validation must leave it untouched.
+     * to the live system colour) and must pass validation.
+     *
+     * COVERAGE LIMIT, stated so nobody trusts this beyond what it proves: every
+     * string-colour key defaults to "accent", so a validator that DROPPED the
+     * sentinel and fell back to the schema default would also return "accent"
+     * and still pass. The sentinel branch is therefore covered only indirectly —
+     * the hex legs above are what prove the validator preserves a non-default
+     * valid value rather than blanket-snapping. There is no in-tree way to make
+     * this assertion falsifiable (the validator is TU-local and sparse
+     * persistence deletes a default-equal write), so the test stands as a
+     * smoke check that "accent" does not trip the invalid-colour path.
      */
     void testReadValidatedBorderColor_accentPreserved()
     {
@@ -487,7 +511,10 @@ private Q_SLOTS:
 
     /**
      * The "accent" sentinel is a valid tint-colour value (the effect resolves it to the
-     * live system colour), so validation must leave it untouched.
+     * live system colour) and must pass validation. Same coverage limit as the
+     * border-colour sibling above: the sentinel equals the default, so this is a
+     * smoke check that "accent" avoids the invalid-colour path, not proof the
+     * validator preserves it — the hex leg carries that proof.
      */
     void testReadValidatedTintColor_accentPreserved()
     {

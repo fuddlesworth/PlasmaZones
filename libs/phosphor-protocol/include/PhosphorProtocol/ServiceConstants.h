@@ -20,10 +20,11 @@ inline constexpr QLatin1String ObjectPath("/PlasmaZones");
 /// because the daemon validates the bound on the D-Bus boundary while the
 /// settings app walks it in its Quick Shortcuts reset loop, and the two live
 /// in different trees. Kept here so those two cannot drift. Note the
-/// LayoutManager backend in phosphor-zones (layoutregistry.cpp) enforces the
-/// same 1..9 bound with its own literal: it deliberately does not depend on
-/// phosphor-protocol, so that site is not covered by this constant and must be
-/// updated in step by hand if the count ever changes.
+/// phosphor-zones mirror, `LayoutRegistry::QuickSlotCount` (LayoutRegistry.h),
+/// enforces the same 1..9 bound as its own named constant: that library
+/// deliberately does not depend on phosphor-protocol, so the two are not
+/// covered by one definition and must be updated in step by hand if the count
+/// ever changes.
 inline constexpr int QuickLayoutSlotCount = 9;
 
 namespace Interface {
@@ -31,13 +32,25 @@ inline constexpr QLatin1String Settings("org.plasmazones.Settings");
 inline constexpr QLatin1String WindowDrag("org.plasmazones.WindowDrag");
 inline constexpr QLatin1String WindowTracking("org.plasmazones.WindowTracking");
 inline constexpr QLatin1String Overlay("org.plasmazones.Overlay");
+// Shared tiling-family engine pipeline (autotile + scrolling). Renamed
+// from org.plasmazones.Autotile when the scrolling engine joined; the
+// project ships daemon and effect together, so no wire compatibility
+// alias is kept.
+inline constexpr QLatin1String Tiling("org.plasmazones.Tiling");
+// Engine-specific sibling interfaces (autotile verbs / scrolling screen
+// set). Listed so this namespace stays a complete index of published
+// interfaces even though the adaptors' Q_CLASSINFO must repeat the
+// literal (macro argument).
 inline constexpr QLatin1String Autotile("org.plasmazones.Autotile");
+inline constexpr QLatin1String Scrolling("org.plasmazones.Scrolling");
 inline constexpr QLatin1String LayoutRegistry("org.plasmazones.LayoutRegistry");
 inline constexpr QLatin1String Screen("org.plasmazones.Screen");
 inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
 inline constexpr QLatin1String Snap("org.plasmazones.Snap");
 inline constexpr QLatin1String Rules("org.plasmazones.Rules");
+inline constexpr QLatin1String Control("org.plasmazones.Control");
+inline constexpr QLatin1String Shader("org.plasmazones.Shader");
 }
 
 /// D-Bus error names returned via `QDBusMessage::createErrorReply`. Centralised
@@ -69,6 +82,10 @@ inline constexpr QLatin1String DecorationProfileTree("decorationProfileTree");
 /// disengaged, mirroring window_query.cpp's engage-only-when-known contract.
 namespace WindowMetadataKey {
 inline constexpr QLatin1String IsMinimized("isMinimized");
+/// Urgency (KWin's demandsAttention). Like IsMinimized, and unlike the
+/// point-in-time fields, the effect re-pushes full metadata on every edge, so
+/// a consumer may rely on it staying current.
+inline constexpr QLatin1String IsDemandingAttention("isDemandingAttention");
 inline constexpr QLatin1String IsFullscreen("isFullscreen");
 inline constexpr QLatin1String IsSticky("isSticky");
 inline constexpr QLatin1String IsMaximized("isMaximized");
@@ -141,8 +158,46 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       path resolves live. A stale effect sending an older form would fail
 //       marshalling, so the bridge handshake rejects mismatched peers up front.
 //
-inline constexpr int ApiVersion = 4;
-inline constexpr int MinPeerApiVersion = 4;
+//   v5: the org.plasmazones.Autotile lifecycle surface moved wholesale to
+//       the engine-neutral org.plasmazones.Tiling interface (property
+//       managedScreens, signal managedScreensChanged), with engine-specific
+//       verbs split onto org.plasmazones.Autotile / org.plasmazones.Scrolling.
+//       A v4 effect would pass the handshake and then silently receive
+//       nothing on the renamed surface, so both sides must move together.
+//   v6: TileRequestEntry gained a trailing scrollEdge field, widening the
+//       windowsTileRequested signal from a(siiiissbbs) to a(siiiissbbss).
+//       Qt's signal hooks are signature-matched before demarshalling, so a
+//       v5 effect's slot would simply never fire on the widened payload —
+//       ALL tiling silently dead until logout — which is exactly the
+//       failure mode the handshake exists to surface up front.
+//   v7: TileRequestEntry gained a trailing viewDeltaX field, widening the
+//       windowsTileRequested signal from a(siiiissbbss) to a(siiiissbbssi).
+//       It carries how far a scrolling strip's VIEW slid, so the effect can
+//       spring that once per output and move the strip rigidly instead of
+//       starting an independent per-window spring for each column. Same
+//       signature-matching failure mode as v6: a v6 effect's slot would never
+//       fire on the widened payload, killing all tiling until logout, so the
+//       handshake has to reject the pairing up front.
+//   v8: TileRequestEntry gained visualX / visualY / hasVisualPos, widening
+//       windowsTileRequested from a(siiiissbbssi) to a(siiiissbbssiiib). A
+//       parked scrolling column commits below the union of all outputs but has
+//       to be SEEN travelling while the view slides, so the safe commit and the
+//       paint position are now separate answers. Same signature-matched
+//       failure mode as v6 and v7.
+//   v9: Snap.resolveWindowRestore gained three in-args — isOpenPath,
+//       minWidth, minHeight. The cross-screen tile reclaim hangs off this
+//       slot, and two of its drivers are NOT opens (the unminimize of a
+//       daemon-restart orphan and the pending-restores sweep); without the
+//       flag the daemon could not tell them apart, and unminimizing a window
+//       teleported it across monitors. The min sizes exist because a reclaim
+//       ADOPTS the window into a strip/layout, and the adopting engine
+//       evaluates its oversized/float verdict exactly once from them — the
+//       tiling channel has always carried them, and passing 0,0 here left an
+//       oversized window tiled for the session. Same signature-matched
+//       failure mode as v6-v8: an old effect's four-arg call no longer
+//       matches the widened slot.
+inline constexpr int ApiVersion = 9;
+inline constexpr int MinPeerApiVersion = 9;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

@@ -106,7 +106,7 @@ private Q_SLOTS:
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsSession(nullptr);
         m_zoneDetector = new StubZoneDetectorSession(nullptr);
-        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
         m_engine->setEngineSettings(m_settings);
         m_service->setSnapState(m_engine->snapState());
@@ -124,7 +124,11 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        // Detach BOTH borrowed pointers before the engine dies so the service
+        // never holds a dangling SnapEngine* (same discipline as
+        // wta_convenience_fixture.h).
         m_service->setSnapState(nullptr);
+        m_service->setSnapEngine(nullptr);
         delete m_engine;
         m_engine = nullptr;
         delete m_service;
@@ -304,7 +308,7 @@ private Q_SLOTS:
         vdm.updateScreenDesktop(screen, 3); // DP-1 is viewing desktop 3
 
         SnapState state(QString(), nullptr);
-        PhosphorPlacement::WindowTrackingService service(m_layoutManager, m_zoneDetector, nullptr, &vdm);
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, &vdm);
         service.setSnapState(&state);
 
         const QString winDesk3 = QStringLiteral("app1|111");
@@ -339,7 +343,7 @@ private Q_SLOTS:
         ScriptedVdm vdm; // scriptedDesktop stays 0: no screen desktop known
 
         SnapState state(QString(), nullptr);
-        PhosphorPlacement::WindowTrackingService service(m_layoutManager, m_zoneDetector, nullptr, &vdm);
+        PhosphorPlacement::WindowTrackingService service(m_layoutManager, nullptr, &vdm);
         service.setSnapState(&state);
 
         const QString winDesk2 = QStringLiteral("app1|111");

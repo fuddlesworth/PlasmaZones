@@ -29,7 +29,8 @@
 #include <QTimer>
 #include <QVarLengthArray>
 
-#include "autotilehandler/autotilehandler.h"
+#include "input_filter.h"
+#include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
 #include "handlers/dragtracker.h"
 #include "compositor/compositorbridge.h"
@@ -37,6 +38,7 @@
 #include "handlers/screenchangehandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -47,7 +49,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 PlasmaZonesEffect::PlasmaZonesEffect()
     : OffscreenEffect()
-    , m_autotileHandler(std::make_unique<AutotileHandler>(this))
+    , m_tilingHandler(std::make_unique<TilingHandler>(this))
     , m_snapHandler(std::make_unique<SnapHandler>(this))
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
@@ -63,8 +65,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // mid-migration, (c) test paths that don't drive KWin::effects.
     , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
+    , m_stripViewAnimator(std::make_unique<StripViewAnimator>())
     , m_shaderManager(this)
     , m_desktopTransition(this)
+    , m_stripTransition(this)
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(*this))
     , m_decorationManager(std::make_unique<DecorationManager>(*m_compositorBridge))
@@ -109,6 +113,9 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     // KWin::effects access), so it is fine to run here even though this can be
     // reached from the destructor before the KWin::effects teardown guards.
     m_desktopTransition.reset();
+    // Same for the strip pass (no claim to release, but its capture textures
+    // and compiled shaders free under the same context discipline).
+    m_stripTransition.reset();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
                                                 QStringLiteral("clearForCompositorReconnect"));
@@ -375,10 +382,10 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         // doesn't churn border items during the restore burst (see the
         // daemon-loss site above); restoreAll() covers every owner kind
         // including rule overrides.
-        m_autotileHandler->clearTiledTracking();
+        m_tilingHandler->clearTiledTracking();
         m_snapHandler->clearSnapTracking();
         m_decorationManager->restoreAll();
-        m_autotileHandler->restoreAllMonocleMaximized();
+        m_tilingHandler->restoreAllMonocleMaximized();
         restoreAllRuleWindowLayers();
         clearAllDecorations();
     }

@@ -81,9 +81,16 @@ vec4 slabComposite(vec4 window, vec4 pane) {
 }
 
 // Additive outer-margin composite (glow / shadow halo `col` at coverage `a`
-// over `base`).
+// over `base`). Coverage is bounded by the FREE alpha so the premultiplied
+// invariant (rgb <= a) survives strength > 1: haloFalloff can hand in up to
+// strength * (1 - baseAlpha), and clamping only the alpha sum while adding
+// col * a to rgb unclamped produced a clipped oversaturated ring where a
+// bright halo overlapped a partially transparent base (a KWin decoration
+// shadow texel). With ca so bounded the alpha is an exact sum and needs no
+// clamp; at strength <= 1 the maths is unchanged.
 vec4 marginComposite(vec4 base, vec3 col, float a) {
-    return vec4(base.rgb + col * a, clamp(base.a + a, 0.0, 1.0));
+    float ca = min(a, 1.0 - clamp(base.a, 0.0, 1.0));
+    return vec4(base.rgb + col * ca, base.a + ca);
 }
 
 // The border family's shared band assembly: the OUTER-radius rounded-rect SDF

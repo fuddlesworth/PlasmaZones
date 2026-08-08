@@ -15,6 +15,7 @@
 // as settingscontroller.cpp, separate translation unit, no API change.
 
 #include "settingscontroller.h"
+#include "version.h"
 
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
@@ -100,7 +101,7 @@ void SettingsController::buildApplicationController()
     // ── Block 2: per-feature configuration ──
     regVirtual(QStringLiteral("display"), QString(), PhosphorI18n::tr("Display"), QString(),
                QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
-    // Placement groups the two placement modes (Snapping / Tiling) as an
+    // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
     // inline-collapsible category, matching Display. Divider after it (i.e.
     // above Animations) sets the placement categories apart from the
     // Animations / Rules pages that follow.
@@ -159,14 +160,20 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("about"), QString(), PhosphorI18n::tr("About"), QStringLiteral("AboutPage.qml"),
                QStringLiteral("help-about"));
 
-    // Placement children — the two placement modes. They keep their own
-    // drill-down behaviour (collapsible=false) and their inline enable toggles
-    // (keyed by pageId "snapping"/"tiling" in Main.qml's trailing delegate);
-    // only their parent changed from top-level to "placement".
+    // Placement children — the three placement modes. They keep their own
+    // drill-down behaviour (collapsible=false) and their inline enable toggles;
+    // only their parent changed from top-level to "placement". Main.qml's
+    // trailing delegate keys those toggles off SIX ids, each parent plus its
+    // "-simple" counterpart, because simple mode renders the condensed leaf's
+    // own pageId in the row the toggle has to stay on.
     regVirtual(QStringLiteral("snapping"), QStringLiteral("placement"), PhosphorI18n::tr("Snapping"), QString(),
                QStringLiteral("view-split-left-right"));
     regVirtual(QStringLiteral("tiling"), QStringLiteral("placement"), PhosphorI18n::tr("Tiling"), QString(),
                QStringLiteral("window-duplicate"));
+    // Not view-list-details: that glyph is the Rules page's, and the rail
+    // showing it twice reads as two views of the same thing.
+    regVirtual(QStringLiteral("scrolling"), QStringLiteral("placement"), PhosphorI18n::tr("Scrolling"), QString(),
+               QStringLiteral("distribute-horizontal-equal"));
 
     // Display children
     regVirtual(QStringLiteral("virtualscreens"), QStringLiteral("display"), PhosphorI18n::tr("Virtual Screens"),
@@ -280,6 +287,41 @@ void SettingsController::buildApplicationController()
                PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/tiling/TilingQuickShortcutsPage.qml"),
                QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
+    // Scrolling children — the third placement mode's own section, the peer
+    // of Snapping and Tiling above (its sidebar row carries the same inline
+    // enable toggle). The SimpleOnly condensed page leads, mirroring its two
+    // siblings; its advanced counterpart is the Columns page, the first of the
+    // Columns / Window split described below.
+    regVirtual(QStringLiteral("scrolling-simple"), QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling"),
+               QStringLiteral("pages/scrolling/ScrollingSimplePage.qml"), QStringLiteral("distribute-horizontal-equal"),
+               /*collapsible=*/false,
+               /*divider=*/true, PV::SimpleOnly, QStringLiteral("scrolling-columns"));
+    // The advanced tree mirrors Tiling's per-concern split: Columns
+    // (fresh-column/tile defaults + presets), Tabs (the tab indicator's own
+    // thirteen-knob family), and Window (window handling plus the Focus and
+    // view card, which carries viewport centering and the Meta+wheel gesture —
+    // those follow focus, so they sit with it rather than on a View leaf of
+    // their own). Columns is the simple page's counterpart, like
+    // tiling-simple ↔ tiling-algorithm.
+    regVirtual(QStringLiteral("scrolling-columns"), QStringLiteral("scrolling"), PhosphorI18n::tr("Columns"),
+               QStringLiteral("pages/scrolling/ScrollingColumnsPage.qml"), QStringLiteral("view-file-columns"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly, QStringLiteral("scrolling-simple"));
+    // Ordered between Columns and Window because that is the order the three
+    // read in: which columns are tabbed (Columns), how a tabbed one is marked
+    // (Tabs), how the strip treats windows generally (Window).
+    regVirtual(QStringLiteral("scrolling-tabs"), QStringLiteral("scrolling"), PhosphorI18n::tr("Tabs"),
+               QStringLiteral("pages/scrolling/ScrollingTabsPage.qml"), QStringLiteral("tab-detach"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("scrolling-window"), QStringLiteral("scrolling"), PhosphorI18n::tr("Window"),
+               QStringLiteral("pages/scrolling/ScrollingWindowPage.qml"), QStringLiteral("preferences-system-windows"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("scrolling-shortcuts"), QStringLiteral("scrolling"), PhosphorI18n::tr("Quick Shortcuts"),
+               QStringLiteral("pages/scrolling/ScrollingQuickShortcutsPage.qml"), QStringLiteral("bookmark"),
+               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+
     // Animations children — Transitions / Motion / Library categories drill in.
     // The simple-mode surface leads: a SimpleOnly leaf that replaces the whole
     // per-event tree when the user is in simple mode. In advanced mode it is
@@ -302,9 +344,10 @@ void SettingsController::buildApplicationController()
                /*collapsible=*/true);
     // Motion — movement and geometry events. Window motion (maximize / snap /
     // layout switch) carries the geometry shader contract, so its page still
-    // shows a shader picker; the held drag is its own opt-in `move` class on
-    // the Window Dragging child page; side panels, widgets and the editor are
-    // timing/curve only.
+    // shows a shader picker. Two children carry an opt-in class of their own:
+    // the held drag is the `move` class on the Window Dragging page, and the
+    // strip's view spring is the `strip` class on the Scrolling page. Side
+    // panels, widgets and the editor are timing/curve only.
     regVirtual(QStringLiteral("animations-motion"), QStringLiteral("animations"), PhosphorI18n::tr("Motion"), QString(),
                QStringLiteral("chronometer"), /*collapsible=*/true);
     regVirtual(QStringLiteral("animations-library"), QStringLiteral("animations"), PhosphorI18n::tr("Library"),
@@ -324,6 +367,18 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("animations-desktops"), QStringLiteral("animations-transitions"),
                PhosphorI18n::tr("Desktop"), QStringLiteral("pages/animations/AnimationsDesktopsPage.qml"),
                QStringLiteral("virtual-desktops"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+
+    // First among Motion's children because the strip's view is the coarsest
+    // subject here — one leg moves every window on the screen — and the rows
+    // below it narrow from there to a single window's motion.
+    //
+    // Icon matches the Placement → Scrolling row rather than the Snapping one:
+    // this page configures that section's motion, and the rail showing the
+    // same glyph for two unrelated rows is what the note above the Snapping
+    // registration warns against.
+    regVirtual(QStringLiteral("animations-scrolling"), QStringLiteral("animations-motion"),
+               PhosphorI18n::tr("Scrolling"), QStringLiteral("pages/animations/AnimationsScrollingPage.qml"),
+               QStringLiteral("distribute-horizontal-equal"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     regVirtual(QStringLiteral("animations-window-motion"), QStringLiteral("animations-motion"),
                PhosphorI18n::tr("Window Motion"), QStringLiteral("pages/animations/AnimationsWindowMotionPage.qml"),
@@ -455,21 +510,6 @@ void SettingsController::buildApplicationController()
     });
 }
 
-void SettingsController::setDismissedUpdateVersion(const QString& version)
-{
-    if (m_dismissedUpdateVersion != version) {
-        m_dismissedUpdateVersion = version;
-        QSettings appSettings;
-        appSettings.setValue(ConfigDefaults::settingsAppDismissedUpdateVersionKey(), version);
-        Q_EMIT dismissedUpdateVersionChanged();
-    }
-}
-
-void SettingsController::dismissUpdate()
-{
-    setDismissedUpdateVersion(m_updateChecker.latestVersion());
-}
-
 // Highest version among m_whatsNewEntries, using QVersionNumber so "1.10.0"
 // sorts after "1.9.0" (plain string compare gets that wrong). Entries come
 // from the bundled whatsnew.json resource in no guaranteed order.
@@ -500,6 +540,14 @@ bool SettingsController::hasUnseenWhatsNew() const
     // mis-order "1.10" vs "1.9", so go through QVersionNumber.
     const QVersionNumber latestV = QVersionNumber::fromString(latest);
     const QVersionNumber seenV = QVersionNumber::fromString(m_lastSeenWhatsNewVersion);
+    // Belt-and-braces: the ctor already clamps m_whatsNewEntries to
+    // VERSION_STRING (settingscontroller.cpp), so latestV can only exceed
+    // the running version if that filter regresses. Same version source on
+    // both sides, so the two can never disagree.
+    const QVersionNumber appV = QVersionNumber::fromString(VERSION_STRING);
+    if (!appV.isNull() && appV < latestV) {
+        return false;
+    }
     return seenV < latestV;
 }
 

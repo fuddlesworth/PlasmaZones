@@ -160,6 +160,18 @@ SnapState::UnassignResult SnapState::unassignWindow(const QString& rawWindowId)
     return clearZoneAssignment(canonicalizeForLookup(rawWindowId), /*preserveScreenAndDesktop=*/false);
 }
 
+bool SnapState::clearScreenAndDesktop(const QString& rawWindowId)
+{
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    // Both removals run unconditionally, in their own statements. Folding
+    // them into one `a.remove(...) || b.remove(...)` would let short-circuit
+    // evaluation skip the desktop removal whenever the screen one succeeded,
+    // silently leaking the desktop entry.
+    const bool screenRemoved = m_windowScreenAssignments.remove(windowId) > 0;
+    const bool desktopRemoved = m_windowDesktopAssignments.remove(windowId) > 0;
+    return screenRemoved || desktopRemoved;
+}
+
 SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& rawWindowId, bool preserveScreenAndDesktop)
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
@@ -189,6 +201,26 @@ QString SnapState::screenForWindow(const QString& rawWindowId) const
 {
     const QString windowId = canonicalizeForLookup(rawWindowId);
     return m_windowScreenAssignments.value(windowId);
+}
+
+void SnapState::recordResidence(const QString& rawWindowId, const QString& screenId, int virtualDesktop)
+{
+    if (rawWindowId.isEmpty() || screenId.isEmpty()) {
+        return;
+    }
+    const QString windowId = canonicalizeForLookup(rawWindowId);
+    bool changed = false;
+    if (m_windowScreenAssignments.value(windowId) != screenId) {
+        m_windowScreenAssignments[windowId] = screenId;
+        changed = true;
+    }
+    if (m_windowDesktopAssignments.value(windowId, -1) != virtualDesktop) {
+        m_windowDesktopAssignments[windowId] = virtualDesktop;
+        changed = true;
+    }
+    if (changed) {
+        Q_EMIT stateChanged();
+    }
 }
 
 int SnapState::desktopForWindow(const QString& rawWindowId) const

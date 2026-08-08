@@ -8,8 +8,10 @@
  * Tests cover:
  * 1. clearFloatingForSnap: returns false for non-floating, true for floating,
  *    clears preFloatZone, idempotent, empty windowId
- * 2. resolveUnfloatGeometry: returns result with zones for snapped-then-floated window,
- *    found=false for no pre-float zone, found=false for empty windowId
+ * 2. resolveUnfloatGeometry: found=false for no pre-float zone, for an empty
+ *    windowId, and (because this suite is guiless and has no QScreen) for a
+ *    snapped-then-floated window whose capture is intact but cannot be turned
+ *    into a rect. The found=true path lives in test_snap_unfloat_fallback.cpp.
  */
 
 #include <QTest>
@@ -52,73 +54,11 @@ using StubSettingsClearFloat = StubSettings;
 // Stub PhosphorZones::Zone Detector
 // =========================================================================
 
-class StubZoneDetectorClearFloat : public PhosphorZones::IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorClearFloat(QObject* parent = nullptr)
-        : PhosphorZones::IZoneDetector(parent)
-    {
-    }
-    PhosphorZones::Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(PhosphorZones::Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    PhosphorZones::Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(PhosphorZones::Zone*) override
-    {
-    }
-    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
+// Nothing here exercises detection — SnapEngine only stores the detector — so
+// the shared inert stub does. createTestLayout comes from the same header.
+#include "helpers/StubZoneDetector.h"
 
-private:
-    PhosphorZones::Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helper
-// =========================================================================
-
-static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new PhosphorZones::Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
+using StubZoneDetectorClearFloat = PlasmaZones::StubZoneDetector;
 
 // =========================================================================
 // Test Class
@@ -135,7 +75,7 @@ private Q_SLOTS:
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsClearFloat(nullptr);
         m_zoneDetector = new StubZoneDetectorClearFloat(nullptr);
-        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, nullptr);
+        m_service = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
         m_engine = new SnapEngine(m_layoutManager, m_service, m_zoneDetector, nullptr, nullptr);
         m_engine->setEngineSettings(m_settings);
         m_service->setSnapState(m_engine->snapState());
@@ -153,7 +93,11 @@ private Q_SLOTS:
 
     void cleanup()
     {
+        // Detach BOTH borrowed pointers before the engine dies so the service
+        // never holds a dangling SnapEngine* (same discipline as
+        // wta_convenience_fixture.h).
         m_service->setSnapState(nullptr);
+        m_service->setSnapEngine(nullptr);
         delete m_engine;
         m_engine = nullptr;
         delete m_service;
@@ -235,32 +179,36 @@ private Q_SLOTS:
     // resolveUnfloatGeometry
     // =====================================================================
 
-    void testResolveUnfloatGeometry_snappedThenFloated()
+    void testResolveUnfloatGeometry_snappedThenFloated_yieldsNothingWithoutAScreen()
     {
-        // Snap a window, then float it, then resolve unfloat geometry
+        // This suite is QTEST_GUILESS_MAIN, so there is no QGuiApplication and
+        // therefore no QScreen. resolveUnfloatGeometry finds the pre-float zone
+        // but cannot turn it into a rect, so it reports found=false and returns
+        // the zone list empty. That is the whole behaviour this slot can pin:
+        // the pre-float capture itself is intact, and the geometry stage fails
+        // closed rather than emitting a garbage rect.
+        //
+        // The found==true path (a real screen resolving the zone) is covered by
+        // test_snap_unfloat_fallback.cpp.
         QString windowId = QStringLiteral("firefox|22222222-0000-0000-0000-000000000001");
 
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
         m_service->unsnapForFloat(windowId);
         m_service->setWindowFloating(windowId, true);
 
-        // Pre-float zone should be recorded
+        // The pre-float capture is the input resolveUnfloatGeometry reads.
         QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
+        QCOMPARE(m_service->preFloatZones(windowId), QStringList{m_zoneIds[0]});
 
         UnfloatResult result = m_engine->resolveUnfloatGeometry(windowId, QStringLiteral("DP-1"));
 
-        // The result should have the correct zoneIds regardless of whether
-        // geometry could be resolved (headless has no QScreen).
-        // In headless mode, zoneGeometry returns invalid QRect -> found=false.
-        // What we can verify: the method does not crash, and if it finds
-        // a result, the zoneIds are correct.
-        if (result.found) {
-            QCOMPARE(result.zoneIds, QStringList{m_zoneIds[0]});
-            QVERIFY(result.geometry.isValid());
-            QVERIFY(!result.screenId.isEmpty());
-        }
-        // In headless mode, found=false is acceptable — geometry requires QScreen
-        Q_UNUSED(result);
+        QCOMPARE(result.found, false);
+        QVERIFY(result.zoneIds.isEmpty());
+        QVERIFY(!result.geometry.isValid());
+
+        // Failing to resolve must not consume the capture — a later unfloat on
+        // a session that does have a screen still has its home zone.
+        QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[0]);
     }
 
     void testResolveUnfloatGeometry_noPreFloatZone()

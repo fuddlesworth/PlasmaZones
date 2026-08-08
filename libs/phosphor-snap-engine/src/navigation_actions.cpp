@@ -302,16 +302,19 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    if (isWindowExcludedForAction(windowId, QStringLiteral("move"), ctx.screenId)) {
+    // Resolved BEFORE the exclusion check so its feedback names the same
+    // screen every other emission in this function uses — the raw ctx
+    // screen targeted the wrong monitor's OSD on multi-head.
+    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
+    if (isWindowExcludedForAction(windowId, QStringLiteral("move"), screenId)) {
         return;
     }
-    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     PhosphorProtocol::MoveTargetResult result = resolver->getMoveTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         // At a zone-layout boundary with no neighbour output, the resolver
         // deferred the decision to us — try crossing to the adjacent desktop.
         if (result.reason == QLatin1String("no_adjacent_zone")) {
-            // A neighbour OUTPUT in autotile mode → hand the window to autotile.
+            // A neighbour OUTPUT in a tiling mode → hand the window to that engine.
             if (tryCrossModeOutput(windowId, direction, screenId, /*swap=*/false)) {
                 return;
             }
@@ -365,10 +368,13 @@ void SnapEngine::spanFocusedInDirection(const QString& direction, const Navigati
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    if (isWindowExcludedForAction(windowId, QStringLiteral("span"), ctx.screenId)) {
+    // Resolved BEFORE the exclusion check so its feedback names the same
+    // screen every other emission in this function uses — the raw ctx
+    // screen targeted the wrong monitor's OSD on multi-head.
+    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
+    if (isWindowExcludedForAction(windowId, QStringLiteral("span"), screenId)) {
         return;
     }
-    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     const SpanTargetResult result = resolver->getSpanTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         // Unlike move, a span boundary is a hard stop — a span is a set of
@@ -413,12 +419,22 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         return false;
     }
 
-    // If the target desktop on this screen is a DIFFERENT mode (autotile), snap
-    // has no zone to land in — hand the window to the autotile engine via the
-    // daemon cross-mode handoff, which inserts it into the target desktop's stack.
+    // If the target desktop on this screen is a DIFFERENT mode (autotile or
+    // scrolling), snap has no zone to land in — hand the window to that engine
+    // via the daemon cross-mode handoff, which inserts it into the target
+    // desktop's stack or strip.
+    //
+    // The question is "is the target NOT snapping", not "is it autotile": for a
+    // scrolling target, layoutForScreen answers defaultLayout() for any
+    // non-Snapping entry, so the fall-through below WOULD resolve a zone id and
+    // geometry and snap the window over a scroll-owned desktop, clobbering the
+    // scroll engine's record via the placement store's mutual-exclusivity
+    // invariant. This mirrors the neighbour-tiling gate installed in
+    // SnapEngine::ensureTargetResolver, where testing for Autotile alone was
+    // itself the shipped bug.
     if (m_layoutManager
         && m_layoutManager->modeForScreen(screenId, targetDesktop, currentActivity())
-            == PhosphorZones::AssignmentEntry::Autotile) {
+            != PhosphorZones::AssignmentEntry::Snapping) {
         // Deliberately do NOT touch SnapState / the placement store here: the
         // daemon's handleCrossModeMove resolves this engine as the source and
         // calls handoffRelease(windowId) on it, vacating the snap zone before the
@@ -451,6 +467,20 @@ bool SnapEngine::tryCrossDesktopMove(const QString& windowId, const QString& dir
         // intended no-op for an untracked window.
         if (!stateForWindow(windowId)->reassignDesktop(windowId, targetDesktop)) {
             return false;
+        }
+        // Refresh the durable record too, exactly as the zone-resolved branch
+        // below does. Without it SnapState says targetDesktop while the record
+        // keeps the old one, and the next login restores the window to the
+        // desktop it was moved off.
+        if (m_windowTracker) {
+            if (auto placement = capturePlacement(windowId)) {
+                placement->virtualDesktop = targetDesktop;
+                m_windowTracker->placementStore().record(std::move(*placement));
+            } else {
+                qCDebug(PhosphorSnapEngine::lcSnapEngine)
+                    << "tryCrossDesktopMove: capturePlacement miss for" << windowId
+                    << "— placement-store desktop not updated to" << targetDesktop;
+            }
         }
         Q_EMIT windowDesktopMoveRequested(windowId, targetDesktop);
         Q_EMIT navigationFeedback(true, QStringLiteral("move"), QStringLiteral("desktop:") + direction, QString(),
@@ -517,14 +547,17 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    if (isWindowExcludedForAction(windowId, QStringLiteral("swap"), ctx.screenId)) {
+    // Resolved BEFORE the exclusion check so its feedback names the same
+    // screen every other emission in this function uses — the raw ctx
+    // screen targeted the wrong monitor's OSD on multi-head.
+    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
+    if (isWindowExcludedForAction(windowId, QStringLiteral("swap"), screenId)) {
         return;
     }
-    const QString screenId = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     PhosphorProtocol::SwapTargetResult result = resolver->getSwapTargetForWindow(windowId, direction, screenId);
     if (!result.success) {
         // At a zone-layout boundary with no SNAP neighbour, the resolver deferred
-        // to us. A cross-MONITOR swap onto an autotile neighbour is a two-way
+        // to us. A cross-MONITOR swap onto a tiling neighbour is a two-way
         // exchange (both surfaces are visible). Swap is NOT extended across
         // virtual desktops — exchanging with a window on a desktop you can't see
         // is meaningless; use move to send a window to another desktop. So a
@@ -591,10 +624,13 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const NavigationContext& 
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    if (isWindowExcludedForAction(windowId, QStringLiteral("snap"), ctx.screenId)) {
+    // Resolved BEFORE the exclusion check so its feedback names the same
+    // screen every other emission in this function uses — the raw ctx
+    // screen targeted the wrong monitor's OSD on multi-head.
+    const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
+    if (isWindowExcludedForAction(windowId, QStringLiteral("snap"), effectiveScreen)) {
         return;
     }
-    const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     PhosphorProtocol::MoveTargetResult result =
         resolver->getSnapToZoneByNumberTarget(windowId, zoneNumber, effectiveScreen);
     if (!result.success) {
@@ -634,10 +670,13 @@ void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
                                   effectiveScreenId(ctx, m_navState));
         return;
     }
-    if (isWindowExcludedForAction(windowId, QStringLiteral("push"), ctx.screenId)) {
+    // Resolved BEFORE the exclusion check so its feedback names the same
+    // screen every other emission in this function uses — the raw ctx
+    // screen targeted the wrong monitor's OSD on multi-head.
+    const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
+    if (isWindowExcludedForAction(windowId, QStringLiteral("push"), effectiveScreen)) {
         return;
     }
-    const QString effectiveScreen = resolveNavScreen(m_navState, windowId, m_windowTracker, ctx.screenId);
     PhosphorProtocol::MoveTargetResult result = resolver->getPushTargetForWindow(windowId, effectiveScreen);
     if (!result.success) {
         return;
@@ -683,8 +722,20 @@ void SnapEngine::restoreFocusedWindow(const NavigationContext& ctx)
     }
     uncommitSnap(windowId);
     if (m_windowTracker) {
-        m_windowTracker->clearFreeGeometry(windowId);
+        // Screen-scoped: this restore consumes exactly one screen's
+        // float-back, and the all-screens form destroyed the position
+        // remembered for every OTHER monitor (the distinct-monitor memory
+        // the store's collapse deliberately preserves).
+        m_windowTracker->clearFreeGeometry(windowId, screenId);
     }
+    // Snapping has only TWO states, so a window that just lost its snap must be
+    // marked floating. Leaving it in neither made isWindowTracked answer false,
+    // which made capturePlacement return nullopt, which left the STALE SNAPPED
+    // record intact under the capture orchestrator's no-engine contract — the
+    // window re-snapped to the zone it was just restored out of on next login.
+    stateForWindowOnScreen(windowId, screenId)
+        ->setFloatingOnScreen(windowId, screenId, currentVirtualDesktopForScreen(screenId));
+    Q_EMIT windowFloatingChanged(windowId, true, screenId);
     Q_EMIT applyGeometryRequested(windowId, result.x, result.y, result.width, result.height, QString(), screenId,
                                   false);
 }

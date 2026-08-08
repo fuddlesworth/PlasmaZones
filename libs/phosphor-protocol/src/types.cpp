@@ -38,7 +38,7 @@ QString toWireString(DragBypassReason r)
     switch (r) {
     case DragBypassReason::None:
         return {};
-    case DragBypassReason::AutotileScreen:
+    case DragBypassReason::EngineOwnedScreen:
         return kBypassAutotileScreen;
     case DragBypassReason::SnappingDisabled:
         return kBypassSnappingDisabled;
@@ -56,7 +56,7 @@ DragBypassReason bypassReasonFromWireString(const QString& s)
         return DragBypassReason::None;
     }
     if (s == kBypassAutotileScreen) {
-        return DragBypassReason::AutotileScreen;
+        return DragBypassReason::EngineOwnedScreen;
     }
     if (s == kBypassSnappingDisabled) {
         return DragBypassReason::SnappingDisabled;
@@ -103,6 +103,23 @@ QString TileRequestEntry::validationError() const
     if (!stacking.isEmpty() && stacking != QLatin1String("firstOnTop") && stacking != QLatin1String("lastOnTop")) {
         return QStringLiteral("TileRequestEntry: invalid stacking '%1' (windowId=%2)").arg(stacking, windowId);
     }
+    // scrollEdge is optional (empty = not a scrolling placement). Same
+    // reasoning as stacking: the effect re-anchors a window's animation origin
+    // on any non-empty value, so an unrecognised string would silently move
+    // the window's apparent entry side. Reject it at the unmarshal boundary.
+    if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")) {
+        return QStringLiteral("TileRequestEntry: invalid scrollEdge '%1' (windowId=%2)").arg(scrollEdge, windowId);
+    }
+    // viewDeltaX, visualX, visualY and hasVisualPos are deliberately NOT
+    // validated here, unlike their neighbours. All four are PAINT hints rather
+    // than placement inputs: the committed rect stands on its own whatever they
+    // say, so an absurd value costs one wild slide or one column drawn in the
+    // wrong place for a leg, and rejecting the entry would instead drop a
+    // perfectly good placement over a cosmetic field. Each consumer defends
+    // itself where the damage would be — the effect clamps the delta before it
+    // reaches either the spring or the per-window origin, and the JSON hop
+    // requires the visual pair to be present, numeric and paired with a tiled
+    // placement before it sets the flag.
     return {};
 }
 
@@ -133,15 +150,15 @@ QString BridgeRegistrationResult::validationError() const
 
 QString DragPolicy::validationError() const
 {
-    // The only strong invariant: an AutotileScreen bypass must carry the
-    // autotile screen id, because the effect uses it to scope retroactive
+    // The only strong invariant: an EngineOwnedScreen bypass must carry the
+    // owning engine's screen id, because the effect uses it to scope retroactive
     // bypass state and the post-drag float target. Every other bypass reason
     // (SnappingDisabled, ContextDisabled, LayoutSuppressed) may be emitted
     // with an empty screenId when beginDrag was called with an empty
     // startScreenId — the producer code in drag_protocol.cpp deliberately
     // tolerates that.
-    if (bypassReason == DragBypassReason::AutotileScreen && screenId.isEmpty()) {
-        return QStringLiteral("DragPolicy: AutotileScreen bypass requires non-empty screenId");
+    if (bypassReason == DragBypassReason::EngineOwnedScreen && screenId.isEmpty()) {
+        return QStringLiteral("DragPolicy: EngineOwnedScreen bypass requires non-empty screenId");
     }
     return {};
 }
@@ -205,8 +222,8 @@ QDebug operator<<(QDebug debug, DragBypassReason r)
     case DragBypassReason::None:
         debug << "DragBypassReason::None";
         break;
-    case DragBypassReason::AutotileScreen:
-        debug << "DragBypassReason::AutotileScreen";
+    case DragBypassReason::EngineOwnedScreen:
+        debug << "DragBypassReason::EngineOwnedScreen";
         break;
     case DragBypassReason::SnappingDisabled:
         debug << "DragBypassReason::SnappingDisabled";

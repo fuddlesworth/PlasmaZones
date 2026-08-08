@@ -179,6 +179,17 @@ struct DaemonGateState
     /// stale call doesn't leave the gate stuck and silently swallow the
     /// new daemon's daemonReady signal.
     bool bridgeRegistrationInFlight = false;
+    /// Monotonic id of the registration attempt the gate above belongs to.
+    /// Bumped when a call is sent AND when the daemon vanishes, and captured
+    /// by each reply lambda. Without it a dead daemon's reply cleared the gate
+    /// belonging to a LIVE registration: the daemon dies with a call in
+    /// flight, serviceUnregistered clears the gate, the new daemon's
+    /// daemonReady starts a second call, and then the first call's error reply
+    /// lands and clears the gate out from under it — leaving a third
+    /// daemonReady free to start a concurrent third registration, which is
+    /// exactly the duplicate-state-push the gate exists to prevent. Never
+    /// restarted; a monotonic counter is the whole mechanism.
+    quint64 bridgeRegistrationGeneration = 0;
     bool readyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 
     bool virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
@@ -203,7 +214,7 @@ struct DaemonGateState
     /// advanced, and the z-order restore drops only when every screen it
     /// targeted has advanced. Per-screen, not global, so a batch on
     /// one output never strands an in-flight cascade on another — mirrors the
-    /// autotile cascade guard (m_autotileStaggerGenByScreen).
+    /// autotile cascade guard (m_tileStaggerGenByScreen).
     QHash<QString, uint64_t> batchGenByScreen;
     int pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
     uint64_t vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
@@ -233,6 +244,14 @@ struct IdCacheState
     // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
     // Cleared on screen geometry changes (add/remove/reconfigure).
     QHash<QString, QString> screenIdCache;
+
+    // Connected physical screen ids (outputScreenId per KWin output),
+    // rebuilt lazily after every screenIdCache invalidation. Lets the
+    // scroll-override path (getWindowScreenId — a per-candidate call inside
+    // both focus-follows-mouse stacking walks) test output liveness with a
+    // set lookup instead of an O(outputs) string-building scan per call.
+    QSet<QString> connectedPhysicalIds;
+    bool connectedPhysicalIdsValid = false;
 
     // Window ID cache: EffectWindow* → "appId|uuid" (populated on first getWindowId call,
     // cleared in slotWindowClosed/windowDeleted). Eliminates 3-5 QString allocations per

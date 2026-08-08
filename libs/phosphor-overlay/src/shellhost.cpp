@@ -163,7 +163,8 @@ void ShellHost::destroyShell(const QString& screenId)
     state->slots.clear();
 }
 
-void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing)
+void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool anyInputGrabbing,
+                                 const QRegion& partialInputRegion)
 {
     auto it = m_states.find(screenId);
     if (it == m_states.end() || !it.value()->m_shellSurface || !it.value()->m_shellWindow) {
@@ -210,10 +211,60 @@ void ShellHost::syncSurfaceState(const QString& screenId, bool anyVisible, bool 
     // shell click-through, so background windows stay interactable
     // for the non-modal slot's lifetime instead of eating every click
     // on every screen for several seconds.
-    const bool wantTransparent = !anyInputGrabbing;
+    //
+    // Three states, not two, since partial regions landed:
+    //
+    //   modal up                  -> whole surface takes input (no mask).
+    //   no modal, region non-empty -> input ONLY inside the region.
+    //   no modal, region empty     -> click-through, as before.
+    //
+    // The Qt flag and the mask are NOT independent: with
+    // WindowTransparentForInput set, Qt hands the compositor an empty input
+    // region no matter what mask is installed, so the partial case must clear
+    // the flag first. Deriving both from one branch here keeps them from
+    // disagreeing — a disagreement means either a dead control or the daemon
+    // eating the desktop's clicks.
+    // anyVisible is part of the derivation, not just of the show/hide above: a
+    // region installed on a surface with nothing visible is an invisible click
+    // trap. Under keepMappedOnHide the hide() at the top of this function sets
+    // WindowTransparentForInput, and without this term the partial branch would
+    // immediately clear it again and install a region over a surface the user
+    // cannot see.
+    const bool wantPartial = anyVisible && !anyInputGrabbing && !partialInputRegion.isEmpty();
+    // The grab term is spelled `anyVisible && anyInputGrabbing` rather than
+    // bare `anyInputGrabbing` so the derivation does not rest on callers
+    // guaranteeing that a grabbing slot is also a visible one. Nothing in this
+    // library enforces that, and if it were ever false the bare form would hand
+    // an invisible surface the whole screen's clicks.
+    const bool wantTransparent = !(anyVisible && anyInputGrabbing) && !wantPartial;
     if (s.m_shellWindow->flags().testFlag(Qt::WindowTransparentForInput) != wantTransparent) {
         s.m_shellWindow->setFlag(Qt::WindowTransparentForInput, wantTransparent);
     }
+    // QWindow::setMask reaches wl_surface.set_input_region through the Qt
+    // Wayland platform window (our layer shell is a SHELL INTEGRATION, so the
+    // window underneath is a normal QWaylandWindow and the standard path
+    // applies). An EMPTY mask means "no mask" to Qt, i.e. the whole surface —
+    // which is exactly what the modal and click-through cases want, since the
+    // flag decides those.
+    // Set UNCONDITIONALLY, with no compare at this layer. The re-assert exists
+    // for one case: a re-created platform window starts with an empty mask,
+    // and a compare against the QWindow-side value we last handed it would
+    // answer "already applied" and leave the new surface with no input region
+    // at all.
+    //
+    // Cost is not a concern here regardless: every caller is on a structural
+    // edge (slot show, hide completion, screen add/remove, strip relayout),
+    // never on a paint or frame-callback path. QWaylandWindow does hold the
+    // state needed to elide a redundant request — qwaylandwindow_p.h (Qt 6.11)
+    // carries separate mMask and mInputRegion members behind a shared
+    // updateInputRegion() — so an unchanged region is expected not to reach the
+    // compositor, but that elision lives in qwaylandwindow.cpp and is not
+    // verified here. QWindow::setMask itself does no comparing.
+    //
+    // The re-assert is not needed for a flag round trip either, since the
+    // platform window still holds the mask across one — this is about window
+    // re-creation specifically.
+    s.m_shellWindow->setMask(wantPartial ? partialInputRegion : QRegion());
 }
 
 bool ShellHost::rekey(const QString& oldKey, const QString& newKey)

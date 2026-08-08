@@ -29,13 +29,15 @@ namespace {
 // per session and return shouldSnap=false rather than handing back wrong coordinates.
 // The effect treats shouldSnap=false as "no snap" and leaves the window where KWin placed
 // it, which is the same fallback as if the slot had never been called.
-bool isSnapReadyOrWarn(PhosphorPlacement::WindowTrackingService* service, const char* method)
+// @p warned is the CALLER's latch, not a function-local static: a static here
+// is process-wide, so in a ctest binary the first fixture to hit this path
+// would swallow the warning for every fixture after it.
+bool isSnapReadyOrWarn(PhosphorPlacement::WindowTrackingService* service, const char* method, bool& warned)
 {
     auto* mgr = service ? service->screenManager() : nullptr;
     if (!mgr || mgr->isPanelGeometryReady()) {
         return true;
     }
-    static bool warned = false;
     if (!warned) {
         warned = true;
         qCWarning(lcDbusWindow) << method << "called before panel geometry ready — returning no-snap."
@@ -66,7 +68,7 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
         return;
     }
 
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToLastZone")) {
+    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToLastZone", m_snapNotReadyWarned)) {
         return;
     }
 
@@ -99,7 +101,7 @@ void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowSc
         return;
     }
 
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToAppRule")) {
+    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToAppRule", m_snapNotReadyWarned)) {
         return;
     }
 
@@ -132,7 +134,7 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
         return;
     }
 
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToEmptyZone")) {
+    if (!isSnapReadyOrWarn(m_adaptor->service(), "snapToEmptyZone", m_snapNotReadyWarned)) {
         return;
     }
 
@@ -158,7 +160,8 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
 // no remaining caller (the effect uses resolveWindowRestore).
 
 void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky, int windowKind,
-                                       int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
+                                       bool isOpenPath, int minWidth, int minHeight, int& snapX, int& snapY,
+                                       int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
@@ -176,7 +179,7 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         return;
     }
 
-    if (!isSnapReadyOrWarn(m_adaptor->service(), "resolveWindowRestore")) {
+    if (!isSnapReadyOrWarn(m_adaptor->service(), "resolveWindowRestore", m_snapNotReadyWarned)) {
         return;
     }
 
@@ -193,10 +196,43 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // with no SnapToZone) takes effect here, deliberately AFTER the snap/float
         // restore has had its chance: a SnapToZone restore or a remembered snap
         // already returned shouldSnap=true above (so the route never fights a snap),
-        // and the explicit route wins over a remembered float position (it applies
-        // the final geometry). A route WITH SnapToZone moved+snapped on the target
-        // via the placement directive and never reaches here.
-        m_adaptor->applyOpenScreenRouting(windowId, screenId);
+        // and the explicit route wins over a remembered float position AND over
+        // the cross-screen reclaim below (it applies the final geometry). A
+        // route WITH SnapToZone moved+snapped on the target via the placement
+        // directive and never reaches here.
+        const bool routed = m_adaptor->applyOpenScreenRouting(windowId, screenId);
+        // Cross-screen tiling-engine reclaim — gated on the ENGINE's explicit
+        // defer verdict, never on a bare no-snap: an exclusion refusal, a
+        // disabled context, or an ordinary no-match must not hand the window
+        // to a reclaim those gates already settled. This is the channel that
+        // covers arrivals on SNAP-mode screens, which the tiling dispatch
+        // never hears about — the engine whose TILED slot the record carries
+        // adopts the window into its recorded home and its retile moves it
+        // there. (Managed-screen arrivals reach the reclaim through
+        // TilingAdaptor::dispatchOpenToClaimingEngine instead; windows that
+        // fail the effect's canSnapRestore gate never reach this slot at
+        // all — see setCrossScreenTileReclaim's contract.) isOpenPath keeps
+        // the two NON-open drivers of this slot (the unminimize of a
+        // daemon-restart orphan, the pending-restores sweep) from
+        // teleporting a window the user merely unminimized.
+        if (result.deferredToTilingEngine && !routed) {
+            const bool reclaimed = isOpenPath && m_crossScreenTileReclaim
+                && m_crossScreenTileReclaim(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+            if (!reclaimed) {
+                // Non-open, or DECLINED (the claims ask stricter questions —
+                // live sets, context equality, tileability — than the
+                // defer): the engine's defer skipped its float terminal on
+                // the promise someone would manage the window, so restore
+                // the no-match float default rather than leaving it with no
+                // state in any engine.
+                m_engine->applyNoMatchFloatDefault(windowId, screenId);
+            }
+        }
+        // A matched route is deliberately NOT followed by the float default:
+        // the route already applied final geometry on its TARGET screen, and
+        // writing float state here would record the SPAWN screen — the one
+        // the window is leaving. The route owns the placement, which is what
+        // the defer's "someone will manage it" promise needed.
         return;
     }
 
@@ -228,7 +264,7 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     }
 
     // Disabled-context gate. The interactive drag path (WindowDragAdaptor)
-    // and autotile (Daemon::updateAutotileScreens) already refuse to place
+    // and autotile (Daemon::updateEngineScreens) already refuse to place
     // windows on a monitor / desktop / activity the user marked disabled.
     // The auto-snap-on-open restore path — every snapTo* / resolveWindowRestore
     // slot funnels through here — did not, so windows still snapped on a
@@ -263,6 +299,19 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
         }
     }
 
+    // A shouldSnap result can carry an empty zoneId; committing it would
+    // record a snap to no zone (the drop path refuses the same shape).
+    // Refused BEFORE any out-param write or side effect: the callers reply
+    // over D-Bus with whatever landed in the out-params, so writing the
+    // geometry (or marking auto-snapped) first would ship shouldSnap=true
+    // for a snap that never committed — the applySnapResult doc's
+    // "leaves the out-params at 0 / false" contract.
+    const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
+    if (zoneIds.first().isEmpty()) {
+        qCWarning(lcDbusWindow) << "shouldSnap resolved an empty zone id for" << windowId << "- skipping";
+        return false;
+    }
+
     snapX = result.geometry.x();
     snapY = result.geometry.y();
     snapWidth = result.geometry.width();
@@ -275,7 +324,6 @@ bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windo
     // windowFloatingClearedForSnap which the adaptor relays as
     // windowFloatingChanged), assigns to zone(s), emits state change.
     m_adaptor->service()->markAsAutoSnapped(windowId);
-    const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
     if (zoneIds.size() > 1) {
         m_engine->commitMultiZoneSnap(windowId, zoneIds, result.screenId, SnapIntent::AutoRestored,
                                       result.virtualDesktop);

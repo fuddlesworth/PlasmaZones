@@ -50,7 +50,7 @@ private:
         // id. The id derives from the context tuple, not the name.
         return ContextRuleBridge::makeAssignmentRule(screenId, screenId, 0, QString(), QStringLiteral("snapping"),
                                                      QStringLiteral("{11111111-2222-3333-4444-555555555555}"),
-                                                     QString(), ContextRuleBridge::kContextBandBase);
+                                                     QString(), ContextRuleBridge::kContextBandBase, QString());
     }
 
     static void writeRaw(const QTemporaryDir& dir, const QString& json)

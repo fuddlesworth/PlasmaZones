@@ -3,7 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/navigationhandler.h"
 #include "handlers/snapassisthandler.h"
@@ -159,10 +159,6 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     if (!safeWindow || safeWindow->isDeleted()) {
                         break;
                     }
-                    const QString dropScreenId = getWindowScreenId(safeWindow);
-                    if (dropScreenId.isEmpty()) {
-                        break;
-                    }
                     // Only run the float transition (which restores the
                     // pre-autotile size) when the window was TILED at drag
                     // start. A window that was already floating is merely being
@@ -172,13 +168,42 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // (setWindowFloatingForScreen) below still runs so a
                     // cross-screen move updates the daemon's float tracking.
                     if (!startedFloating) {
-                        m_autotileHandler->handleDragToFloat(safeWindow, windowId);
+                        m_tilingHandler->handleDragToFloat(safeWindow, windowId);
+                    } else {
+                        // Already floating at drag start, but the SCROLL
+                        // tiled set can still hold the window (a daemon
+                        // float that raced the drag start): clear it, or
+                        // the tracked-screen override below pins the drop
+                        // to the source strip. Idempotent, geometry
+                        // untouched.
+                        m_tilingHandler->clearWindowTiledAllScreens(windowId);
                     }
                     // Window is now floating — drop it from snapping's set.
                     m_snapHandler->clearWindowSnapped(windowId);
-                    // Now floating — flips the Mode / IsSnapped / IsFloating rule
-                    // fields; re-resolve now instead of waiting for the broadcast.
+                    // The window is floating now — the Mode / IsSnapped /
+                    // IsFloating rule fields have already flipped, so
+                    // re-resolve before anything can bail out below. Waiting
+                    // until after the drop-screen resolve left the cache
+                    // holding the pre-float answer whenever the screen came
+                    // back empty.
                     invalidateRuleCacheForStateChange(windowId);
+                    // Resolve the drop screen only AFTER the float cleanup
+                    // above cleared tiled membership: while the window was
+                    // still scroll-tiled, getWindowScreenId answers from the
+                    // engine override and would pin a cross-monitor drag-out
+                    // to the SOURCE strip's screen instead of where the user
+                    // actually dropped it.
+                    const QString dropScreenId = getWindowScreenId(safeWindow);
+                    if (dropScreenId.isEmpty()) {
+                        break;
+                    }
+                    // Keep the tiling handler's notified-screen record on the
+                    // screen the window was actually dropped on. Neither float
+                    // path above touches it, so after a cross-screen float drag
+                    // it still names the source and the next outputChanged
+                    // would diff against a screen the window already left.
+                    // No-op for a window the handler does not track.
+                    m_tilingHandler->updateNotifiedScreen(windowId, dropScreenId);
                     // Note: m_dragActivation.floatedWindowIds is intentionally NOT re-set here.
                     // See dragStopped handler — the marker is cleared at drag end
                     // because the daemon's drag-end float path (setWindowFloat →
@@ -216,11 +241,11 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // Drag-drop snap committed — record in snapping's border set,
                     // but only for a resolved snap-mode screen. An empty
                     // (unresolved) or autotile-managed screen is owned by
-                    // AutotileHandler, so recording it here would double-track the
+                    // TilingHandler, so recording it here would double-track the
                     // window — same discriminator as the other snap-commit paths.
                     if (const QString scr =
                             !outcome.targetScreenId.isEmpty() ? outcome.targetScreenId : getWindowScreenId(safeWindow);
-                        !scr.isEmpty() && !m_autotileHandler->isAutotileScreen(scr)) {
+                        !scr.isEmpty() && !m_tilingHandler->isManagedScreen(scr)) {
                         // Defensively clear any stale local float flag before
                         // recording the snap — a surviving flag poisons the
                         // next pre-tile capture and wrongly exempts the window

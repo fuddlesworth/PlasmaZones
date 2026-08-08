@@ -29,7 +29,13 @@ Item {
 
     // ── Data properties ───────────────────────────────────────────────────
     property bool success: true
-    property string action: "" // one of the tokens handled by successMessage() / failureMessage(): "rotate", "move", "span", "focus", "swap", "push", "restore", "float", "snap", "cycle", "focus_master", "swap_master", "master_ratio", "master_count", "retile", "resnap", "snap_assist", "snap_all", "swap_vs", "rotate_vs"
+    // One of the tokens handled by successMessage() and/or failureMessage():
+    // "rotate", "move", "span", "focus", "swap", "push", "restore", "float",
+    // "snap", "cycle", "focus_master", "swap_master", "master_ratio",
+    // "master_count", "retile", "resnap", "resize", "tabbed", "snap_assist",
+    // "snap_all", "swap_vs", "rotate_vs", "layout" ("layout" is failure-only
+    // by producer contract; see failureMessage).
+    property string action: ""
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/tiled/unfloated/overflow)
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
@@ -50,6 +56,11 @@ Item {
     // break the shell binding, so it stays declared.
     property color highlightColor: Kirigami.Theme.highlightColor
     property color errorColor: Kirigami.Theme.negativeTextColor
+    // User overlay font settings, forwarded by PassiveOverlayShell's
+    // navigationOsdComp and written by the C++ nav-OSD show path — the same
+    // contract every other content body on this slot follows.
+    property string fontFamily: ""
+    property real fontSizeScale: 1
     /// Message type scale. Kirigami has no OSD-headline constant, so the
     /// factor is named here rather than buried in the Label binding.
     readonly property real messageFontScale: 1.3
@@ -103,11 +114,18 @@ Item {
             if (reason === "no_window_in_zone" || reason === "no_neighbor")
                 return i18n("No window in that direction");
 
+            // The scroll engine's universal "the strip has nothing there"
+            // refusal: pressing move/focus at the strip's edge is the
+            // ordinary single-monitor case, and the zone fallthrough below
+            // would name zones a scrolling screen does not have.
+            if (reason === "no_target")
+                return i18n("No window in that direction");
+
             if (reason === "swap_failed")
                 return i18n("Could not move the window");
 
             if (action === "span" && reason === "not_supported")
-                return i18n("Spanning is not available in autotile mode");
+                return i18n("Spanning is not available in this mode");
 
             if (isInternalReason)
                 return unavailableText;
@@ -116,6 +134,12 @@ Item {
         } else if (action === "push") {
             if (reason === "no_window")
                 return noWindowText;
+
+            // Autotile and scrolling report the intent as unsupported; the
+            // zone fallthrough below would wrongly promise an empty zone
+            // exists in modes that have no zones.
+            if (reason === "not_supported")
+                return i18n("Pushing to an empty zone is not available in this mode");
 
             if (isInternalReason)
                 return unavailableText;
@@ -134,6 +158,11 @@ Item {
             if (reason === "already_at_position")
                 return i18n("Window is already in that position");
 
+            // Scrolling: the digit named a strip position that does not
+            // exist right now.
+            if (reason === "no_target")
+                return i18n("No window in that position");
+
             return unavailableText;
         } else if (action === "float") {
             if (reason === "no_active_window" || reason === "no_focused_window" || reason === "no_window" || reason === "window_not_tracked" || reason === "invalid_window")
@@ -147,7 +176,7 @@ Item {
             if (reason === "single_window")
                 return i18n("No other window in this zone");
 
-            if (reason === "no_neighbor")
+            if (reason === "no_neighbor" || reason === "no_target")
                 return i18n("No other window");
 
             if (reason === "not_snapped")
@@ -216,10 +245,16 @@ Item {
             // vanished before placement.
             return i18n("That window is no longer available");
         } else if (action === "snap_all") {
+            // Mode-neutral on purpose: BOTH producers reach this arm — the
+            // scrolling strip emits navigationFeedback directly, and snap's
+            // snap_all arrives via the KWin effect's reportNavigationFeedback
+            // relay (snaphandler.cpp) with the same tokens — and the OSD is
+            // not told the mode. Same resolution as the shortcut's neutral
+            // "Arrange All Windows" label in the catalog.
             if (reason === "no_unsnapped_windows")
-                return i18n("All windows are already in zones");
+                return i18n("All windows are already arranged");
 
-            return i18n("Could not snap windows to zones");
+            return i18n("Could not arrange the windows");
         } else if (action === "swap_vs") {
             if (reason === "no_subdivision" || reason === "not_virtual")
                 return i18n("No virtual screen split on this monitor");
@@ -247,6 +282,35 @@ Item {
                 return i18n("Virtual screen rotation failed");
 
             return i18n("No virtual screens to rotate");
+        } else if (action === "layout") {
+            // Daemon-level gate: a layout-selection shortcut (picker, cycle,
+            // quick slot, layout lock) fired on a screen whose engine has no
+            // layout concept (IPlacementEngine::layoutSupport is None), or
+            // one whose engine browses templates and has none to offer.
+            // no_templates means the template store is empty, which the user
+            // can act on; not_supported is the capability-less engine. The
+            // fallthrough keeps any future reason from rendering the generic
+            // "Failed".
+            if (reason === "no_templates")
+                return i18n("No column templates available");
+
+            return i18n("Layouts are not available in this mode");
+        } else if (action === "resize") {
+            // Scrolling width/height verbs. no_target for the preset cycle
+            // means the vocabulary offers no other value (a single-entry
+            // template list is refused by design, not broken).
+            if (reason === "no_target")
+                return i18n("Column is already at that size");
+
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            return i18n("Resizing is unavailable");
+        } else if (action === "tabbed") {
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            return i18n("Tabbing is unavailable");
         } else if (action === "focus_master")
             return i18n("No windows to focus");
         else if (action === "swap_master") {
@@ -262,7 +326,10 @@ Item {
     }
 
     /// Success copy for the current action, including the zone numbers and
-    /// direction arrows the reason token carries.
+    /// direction arrows the reason token carries. No "layout" arm on
+    /// purpose: that action is failure-only by producer contract. All three
+    /// emitters (Daemon::showLayoutsUnavailableOsd, and the two no_templates
+    /// sites in shortcuts_wiring.cpp and start.cpp) hardcode success=false.
     function successMessage(): string {
         if (action === "rotate") {
             const arrow = rotationArrow(reason);
@@ -354,6 +421,10 @@ Item {
             return count ? i18n("Master count → %1", count) : i18n("Master count changed");
         } else if (action === "retile") {
             return i18n("Layout refreshed");
+        } else if (action === "resize") {
+            return i18n("Resized");
+        } else if (action === "tabbed") {
+            return i18n("Tabbed display toggled");
         } else if (action === "swap_vs") {
             const vsSwapArrow = directionArrow(reason);
             return glyphed(vsSwapArrow, i18n("Virtual screens swapped"));
@@ -443,8 +514,14 @@ Item {
         }
     }
 
-    Accessible.name: i18n("Navigation feedback")
-    Accessible.description: i18n("Brief feedback when using keyboard navigation to move or focus windows between zones")
+    // The DYNAMIC message is the announcement (the ignored label below
+    // carries no a11y payload of its own); the static explanation rides in
+    // the description. Same composed-parent shape as CheatsheetContent's
+    // shortcutRow: the parent that justifies the child's ignore is the
+    // parent that carries the content, so it needs the role too.
+    Accessible.role: Accessible.StaticText
+    Accessible.name: root.messageText
+    Accessible.description: i18n("Brief feedback for keyboard window and layout actions")
 
     // Auto-dismiss timer + idempotency latch. See OsdDismissable.qml for
     // why the latch is needed (timer-fire and click both race to dismiss).
@@ -475,12 +552,17 @@ Item {
         Label {
             id: messageLabel
 
-            Accessible.name: root.messageText
+            // The root Item announces messageText (with the StaticText
+            // role); without ignoring this label a screen reader walks the
+            // same text twice (the sibling cheatsheet marks composed
+            // children the same way).
+            Accessible.ignored: true
             anchors.top: parent.top
             anchors.topMargin: Kirigami.Units.gridUnit * 1.5
             anchors.horizontalCenter: parent.horizontalCenter
             text: root.messageText
-            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * root.messageFontScale
+            font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
+            font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * root.messageFontScale * root.fontSizeScale)
             font.weight: Font.Medium
             color: root.success ? root.textColor : root.errorColor
             horizontalAlignment: Text.AlignHCenter

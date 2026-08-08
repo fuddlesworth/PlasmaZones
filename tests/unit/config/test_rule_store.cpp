@@ -47,7 +47,7 @@ private:
         PWR::Rule rule =
             PWR::ContextRuleBridge::makeAssignmentRule(screenId, screenId, 0, QString(), QStringLiteral("snapping"),
                                                        QStringLiteral("{11111111-2222-3333-4444-555555555555}"),
-                                                       QString(), PWR::ContextRuleBridge::kContextBandBase);
+                                                       QString(), PWR::ContextRuleBridge::kContextBandBase, QString());
         if (priorityHint >= 0) {
             rule.priority = priorityHint;
         }
@@ -312,6 +312,7 @@ private Q_SLOTS:
         // sneak past the spy. updateRule + setRulePriority + setAllRules
         // each emit a single rulesChanged(true) on success.
         QVERIFY(store.addRule(makeRule(QStringLiteral("DP-3"))));
+        QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.takeFirst().at(0).toBool(), true);
 
         PWR::Rule updated = store.ruleSet().rules().first();

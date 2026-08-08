@@ -16,6 +16,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "placementlogging.h"
 #include <QScreen>
@@ -26,7 +27,7 @@ namespace PhosphorPlacement {
 
 namespace {
 
-static QRect clampToRect(const QRect& geometry, const QRect& bounds)
+QRect clampToRect(const QRect& geometry, const QRect& bounds)
 {
     QRect adjusted = geometry;
     if (adjusted.right() > bounds.right()) {
@@ -67,10 +68,18 @@ void WindowTrackingService::windowClosed(const QString& windowId, PhosphorEngine
     // and not be auto-snapped when reopened.
     QStringList zoneIds = snapState ? snapState->zonesForWindow(windowId) : QStringList{};
     QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
-    // With the engine resolver wired (production) this is the engine's answer
-    // directly; the full-windowId-then-appId fallback applies only to the
-    // legacy unwired path inside isWindowFloating.
-    bool isFloating = isWindowFloating(windowId);
+    // SNAP's own float bit, not the mode-routed read. The candidate here is
+    // snap-owned by construction — it came from snapState->zonesForWindow —
+    // and the routed read dispatches on the screen's CURRENT mode. On a screen
+    // in Autotile the window's autotile float verdict would then decide
+    // whether its SNAPPING PendingRestore is written: float it with Meta+F in
+    // autotile, close it, and the snap restore is silently dropped even though
+    // its snapping-mode verdict was never "floating". Third instance of this
+    // family; the resnap pair was fixed the same way.
+    // snapState above IS the same store this read needs; the point of the
+    // comment is the SOURCE (snap's own float bit, never the mode-routed
+    // isWindowFloating), not a second lookup.
+    bool isFloating = snapState && snapState->isFloating(windowId);
     if (!zoneId.isEmpty() && !zoneId.startsWith(kZoneSelectorIdPrefix)
         && !isFloating
         // A whitespace-only / whitespace-bearing appId is a corrupt window
@@ -249,9 +258,19 @@ void WindowTrackingService::onLayoutChanged()
 
         auto addToBuffer = [&](const QString& windowIdOrStableId, const QStringList& zoneIdList,
                                const QString& screenId, int vd) {
-            // Skip ALL floating windows. Floating persists across mode toggles —
-            // floating windows should stay at their current position, not be resnapped.
-            if (windowIdOrStableId.isEmpty() || isWindowFloating(windowIdOrStableId)) {
+            // SNAP's own float bit, not the mode-routed read — the same rule
+            // as resnap.cpp's two candidate passes and windowClosed above.
+            // The layer is engine-agnostic, but this QUESTION is not: the
+            // candidate set is snap-owned (zone assignments), so the float
+            // choice that decides whether a resnap overrides it is the
+            // SNAPPING-mode verdict. The routed read dispatches on the
+            // screen's current mode, so on a screen mid-flip a foreign
+            // engine's float bit would decide a snap-owned candidate's fate.
+            // (A pending entry keyed by appId resolves no per-window float
+            // either way — identical outcome to the old read there.)
+            const PhosphorSnapEngine::SnapState* snapFloat =
+                windowIdOrStableId.isEmpty() ? nullptr : snapForWindow(windowIdOrStableId);
+            if (windowIdOrStableId.isEmpty() || (snapFloat && snapFloat->isFloating(windowIdOrStableId))) {
                 return;
             }
             if (addedIds.contains(windowIdOrStableId)) {
@@ -386,14 +405,17 @@ void WindowTrackingService::onLayoutChanged()
 
     // Remove stale assignments: check each window against its screen's effective layout
     // (not just the global active), so per-screen assignments aren't incorrectly purged.
-    // Skip windows on autotile screens — their zone assignments must survive the
-    // autotile period so resnapCurrentAssignments() can restore them when tiling is toggled off.
+    // Skip windows on screens a NON-SNAPPING engine owns (autotile or scrolling) —
+    // neither engine uses zones, and the zone assignments must survive their whole
+    // period so resnapCurrentAssignments() can restore them when the screen goes
+    // back to snapping.
     // Skip windows on OTHER virtual desktops — their zone assignments belong to that
     // desktop's layout and must not be purged when the current desktop's layout changes.
     const QString currentActivity = m_layoutManager->currentActivity();
 
-    // Cache autotile status per screen to avoid redundant lookups (O(screens) instead of O(windows))
-    QHash<QString, bool> screenIsAutotile;
+    // Cache the non-snapping status per screen to avoid redundant lookups
+    // (O(screens) instead of O(windows))
+    QHash<QString, bool> screenIsNonSnapping;
 
     QStringList toRemove;
     // Multi-zone windows where SOME zones survived the layout change: we
@@ -440,12 +462,19 @@ void WindowTrackingService::onLayoutChanged()
                 return;
             }
 
-            // If this screen's assignment is autotile, preserve zone assignments for resnap
-            auto cached = screenIsAutotile.constFind(windowScreen);
-            if (cached == screenIsAutotile.constEnd()) {
-                QString assignmentId =
+            // If a non-snapping engine owns this screen, preserve the zone
+            // assignments for resnap. Scrolling counts alongside autotile: it has
+            // no layout entity either (its id is the bare "scrolling:" sentinel),
+            // so resolveLayoutForScreen below would resolve some unrelated
+            // cascade layout and prune every assignment the screen is holding for
+            // its eventual return to snapping.
+            auto cached = screenIsNonSnapping.constFind(windowScreen);
+            if (cached == screenIsNonSnapping.constEnd()) {
+                const QString assignmentId =
                     m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
-                cached = screenIsAutotile.insert(windowScreen, PhosphorLayout::LayoutId::isAutotile(assignmentId));
+                cached = screenIsNonSnapping.insert(windowScreen,
+                                                    PhosphorLayout::LayoutId::isAutotile(assignmentId)
+                                                        || PhosphorLayout::LayoutId::isScrolling(assignmentId));
             }
             if (*cached) {
                 return;
@@ -761,14 +790,30 @@ bool WindowTrackingService::isWindowInAutotileMode(const QString& windowId) cons
     return m_autotileModePredicate && m_autotileModePredicate(windowId);
 }
 
-void WindowTrackingService::setAutotileTiledPredicate(AutotileTiledPredicate predicate)
+void WindowTrackingService::setEngineTiledPredicate(EngineTiledPredicate predicate)
 {
-    m_autotileTiledPredicate = std::move(predicate);
+    m_engineTiledPredicate = std::move(predicate);
 }
 
-bool WindowTrackingService::isWindowAutotileTiled(const QString& windowId) const
+bool WindowTrackingService::isWindowEngineTiled(const QString& windowId) const
 {
-    return m_autotileTiledPredicate && m_autotileTiledPredicate(windowId);
+    return m_engineTiledPredicate && m_engineTiledPredicate(windowId);
+}
+
+void WindowTrackingService::setModeEngineIdResolver(ModeEngineIdResolver resolver)
+{
+    m_modeEngineIdResolver = std::move(resolver);
+}
+
+QString WindowTrackingService::owningModeEngineId(const QString& windowId, const QString& screenId) const
+{
+    if (m_modeEngineIdResolver) {
+        const QString resolved = m_modeEngineIdResolver(windowId, screenId);
+        if (!resolved.isEmpty()) {
+            return resolved;
+        }
+    }
+    return QString(PhosphorEngine::WindowPlacement::snapEngineId());
 }
 
 PhosphorEngine::WindowRegistry* WindowTrackingService::windowRegistry() const

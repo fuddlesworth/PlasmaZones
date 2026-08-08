@@ -12,7 +12,7 @@
 
 #include <QLoggingCategory>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "handlers/dragtracker.h"
 #include "handlers/snaphandler.h"
 
@@ -24,9 +24,14 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
                                          Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
                                          Qt::KeyboardModifiers oldmodifiers)
 {
-    Q_UNUSED(oldmodifiers)
-
-    const bool modifiersChanged = (m_currentModifiers != modifiers);
+    // modifiersChanged selects the BRANCH below (a real keyboard transition
+    // forwards a modifier-change D-Bus call; pointer noise must not), and
+    // the event's own before/after pair is the only honest signal for that.
+    // KWin (verified against 6.7.3's three mouseChanged emit sites) passes
+    // its live modifier cache for BOTH slots on pointer/button events and
+    // the real (new, old) pair only on keyboardModifiersChanged — it never
+    // reports a spurious 0 while a key is held.
+    const bool modifiersChanged = (modifiers != oldmodifiers);
     const bool buttonsChanged = (oldbuttons != buttons);
 
     // Wake any hover-reactive decoration. Its repaint driver stands down once the folded
@@ -41,15 +46,23 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     }
 
     if (buttonsChanged && m_dragTracker->isDragging()) {
-        qCInfo(lcEffect) << "mouseChanged buttons:" << static_cast<int>(oldbuttons) << "->"
-                         << static_cast<int>(buttons);
+        qCDebug(lcEffect) << "mouseChanged buttons:" << static_cast<int>(oldbuttons) << "->"
+                          << static_cast<int>(buttons);
     }
 
+    // The caches are assigned UNCONDITIONALLY, like the buttons always were:
+    // `modifiers` is KWin's authoritative live state on all three emit
+    // paths, so every event is a free resync. Gating the write on
+    // modifiersChanged made the cache write-only-on-transition, and with
+    // key-repeat suppressed compositor-side a modifier held at effect load
+    // (or across a compositor restart) had NO second event to correct the
+    // NoModifier initializer — and KWin exposes no modifier accessor to
+    // seed from.
+    m_currentModifiers = modifiers;
+    m_currentMouseButtons = buttons;
     if (modifiersChanged) {
-        m_currentModifiers = modifiers;
         qCDebug(lcEffect) << "Modifiers changed to" << static_cast<int>(modifiers);
     }
-    m_currentMouseButtons = buttons;
 
     if (m_dragTracker->isDragging()) {
         if ((oldbuttons & Qt::LeftButton) && !(buttons & Qt::LeftButton)) {
@@ -81,10 +94,11 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // of modifier-change events during a drag no longer causes the
             // overlay destroy/create churn that prompted discussion #310's
             // sibling regression.
-            const bool bypassed = m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen
-                || m_dragBypassedForAutotile;
+            const bool bypassed =
+                m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen
+                || m_dragBypassedForEngine;
             const bool shouldForward =
-                bypassed || detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
+                bypassed || shouldForwardDragTicks() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
             if (shouldForward) {
                 PhosphorProtocol::ClientHelpers::fireAndForget(
                     this, PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
@@ -128,7 +142,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     // Focus follows mouse: activate autotile window under cursor when not dragging.
     // Reuse effectiveScreenId computed above to avoid redundant resolveEffectiveScreenId call.
     if (!m_dragTracker->isDragging() && output) {
-        m_autotileHandler->handleCursorMoved(pos, effectiveScreenId);
+        m_tilingHandler->handleCursorMoved(pos, effectiveScreenId);
         // Snapping FFM runs alongside autotile FFM. The two are disjoint: autotile FFM
         // bails when the cursor screen is not an autotile screen, and snapping FFM only
         // acts on windows in the snap tiled set (which live on snapping-mode screens), so
@@ -138,13 +152,17 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
 }
 
 void PlasmaZonesEffect::applyStaggeredOrImmediate(int count, const std::function<void(int)>& applyFn,
-                                                  const std::function<void()>& onComplete)
+                                                  const std::function<void()>& onComplete, bool forceImmediate)
 {
     // Convert the D-Bus-sourced int to the typed enum at this boundary;
     // the library API only accepts SequenceMode. Unknown ints fall back
     // to AllAtOnce — same behaviour as Profile::fromJson.
+    //
+    // forceImmediate overrides the user's choice rather than being folded into
+    // it: the caller is not expressing a preference, it is stating that this
+    // batch cannot be split without tearing, so the setting has nothing to say.
     const PhosphorAnimation::SequenceMode mode =
-        (m_cachedAnimationSequenceMode == static_cast<int>(PhosphorAnimation::SequenceMode::Cascade))
+        (!forceImmediate && m_cachedAnimationSequenceMode == static_cast<int>(PhosphorAnimation::SequenceMode::Cascade))
         ? PhosphorAnimation::SequenceMode::Cascade
         : PhosphorAnimation::SequenceMode::AllAtOnce;
     PhosphorAnimation::applyStaggeredOrImmediate(this, count, mode, m_cachedAnimationStaggerInterval, applyFn,

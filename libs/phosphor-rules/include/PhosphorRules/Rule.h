@@ -42,15 +42,40 @@ struct PHOSPHORRULES_EXPORT ValidationIssue
         /// resolution (window fields are absent on the windowless query), so
         /// the action's slot is never filled.
         ContextActionWithWindowMatch = 0,
-        /// A terminal action (Exclude / ExcludeAnimations) on the same rule as
-        /// one or more non-terminal slot-filling actions (border / opacity /
-        /// animation override, but also gap / overlay / engine actions). A
-        /// terminal action stops the evaluator's resolve walk the moment it
-        /// matches, so the co-located action's slot may be dropped (and
-        /// lower-priority rules suppressed for the window). Split the exclusion
-        /// onto its own rule. (Name kept for wire stability; the check is not
-        /// limited to Tag::Effect actions.)
+        /// The blanket `Exclude` on the same rule as one or more other
+        /// slot-filling actions (border / opacity / animation override, but
+        /// also gap / overlay / engine actions). `Exclude` is in every
+        /// full-store evaluator's terminal scope, so it stops the resolve walk
+        /// the moment it matches: the co-located action's slot may be dropped
+        /// and lower-priority rules are suppressed for the window. Split the
+        /// exclusion onto its own rule. The SCOPED exclusions
+        /// (ExcludePlacement / ExcludeDecorations / ExcludeAnimations) are not
+        /// flagged — an evaluator outside their slice skips them entirely
+        /// (RuleEvaluator::setTerminalActionScope), so mixing one with an
+        /// action of another domain is authorable. (Name kept for wire
+        /// stability; the check is not limited to Tag::Effect actions.)
         TerminalActionWithEffectActions = 1,
+        /// Two or more SAME-TYPE actions on one rule resolve to the same
+        /// slot. Slot decoding is single-winner per (rule, type), so at most
+        /// one of the duplicates takes effect (which one depends on the
+        /// consumer's decode order) and the rest are dead weight. Distinct
+        /// types sharing a slot (the SetSnappingLayout / SetTilingAlgorithm
+        /// lossless pair) are NOT flagged. The flagged shape is what a buggy
+        /// rule rebuild accretes, so surfacing it keeps such growth from
+        /// surviving save/load silently.
+        DuplicateSlotActions = 2,
+        /// An action whose type is registered but whose params the descriptor
+        /// rejects — most often a picker the author has not filled in yet
+        /// (a rule template seeds an empty screen / layout / algorithm id).
+        /// Such an action is DROPPED by `RuleAction::fromJson`, so saving the
+        /// rule would silently lose it.
+        ///
+        /// Never produced by @ref Rule::validationIssues: a Rule already holds
+        /// parsed actions, so a rejected payload cannot reach it. It is the
+        /// settings editor's live check over the working rule's raw JSON,
+        /// which is the only place the pre-parse shape exists. Declared here
+        /// so the code vocabulary the UI switches on has one home.
+        IncompleteActionPayload = 3,
     };
 
     Code code = Code::ContextActionWithWindowMatch;
@@ -97,7 +122,9 @@ struct PHOSPHORRULES_EXPORT Rule
     /// every action validates against the registry.
     bool isValid() const;
 
-    /// True if any of this rule's actions is terminal (Exclude).
+    /// True if any of this rule's actions is terminal (one of the Exclude
+    /// family — Exclude / ExcludePlacement / ExcludeAnimations /
+    /// ExcludeDecorations).
     bool hasTerminalAction() const;
 
     /**
@@ -108,15 +135,18 @@ struct PHOSPHORRULES_EXPORT Rule
      * action's @ref ActionDomain against the match expression's domain and
      * surfaces combinations that compile and load but silently never fire.
      *
-     * Produces two codes:
+     * Produces three codes:
      *  - @ref ValidationIssue::Code::ContextActionWithWindowMatch — a
      *    context-domain action paired with a match that references any
      *    window-property field. Detected via
      *    `MatchExpression::isContextOnly()`; an empty catch-all match is
      *    context-only and so is compatible.
      *  - @ref ValidationIssue::Code::TerminalActionWithEffectActions — a terminal
-     *    action (Exclude / ExcludeAnimations) co-located with any non-terminal
+     *    action (any of the Exclude family) co-located with any non-terminal
      *    slot-filling action, which the terminal action's early-out may drop.
+     *  - @ref ValidationIssue::Code::DuplicateSlotActions — two same-type
+     *    actions on the same rule resolving to the same slot; slot decoding
+     *    is single-winner per type, so all but one duplicate are dead weight.
      *
      * An empty list means no issues — the rule is well-formed at both layers.
      */

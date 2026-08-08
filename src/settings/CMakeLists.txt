@@ -19,7 +19,9 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dir
 set(plasmazones_settings_SRCS
     main.cpp
     search/searchcatalog.h
+    search/searchcatalog_p.h
     search/searchcatalog.cpp
+    search/searchcatalog_animations.cpp
     search/searchproviders.h
     search/searchproviders.cpp
     utils/registryshaderpreviewbackend.h
@@ -34,7 +36,9 @@ set(plasmazones_settings_SRCS
     controller/settingscontroller_pagetopology.cpp
     controller/settingscontroller_layouts.cpp
     controller/settingscontroller_session.cpp
-    # Per-screen autotile/snapping/zone-selector override wrappers.
+    # Whole-config export/import + KZones import (split from _session).
+    controller/settingscontroller_transfer.cpp
+    # Per-screen autotile/scrolling/zone-selector/gap override wrappers.
     controller/settingscontroller_perscreen.cpp
     controller/settingscontroller_ordering.cpp
     # Virtual-screen lifecycle methods (getVirtualScreenConfig +
@@ -145,6 +149,8 @@ set(plasmazones_settings_SRCS
     pages/tilingalgorithmcontroller.cpp
     pages/tilingbehaviorcontroller.h
     pages/tilingbehaviorcontroller.cpp
+    pages/scrollingbehaviorcontroller.h
+    pages/scrollingbehaviorcontroller.cpp
     # PhosphorControl integration scaffold. PageAdapter wraps existing
     # plain-QObject page controllers so they can be registered with
     # PhosphorControl::PageRegistry without changing each controller's
@@ -161,6 +167,8 @@ set(plasmazones_settings_SRCS
     # daemon's org.plasmazones.Rules adaptor.
     rules/rulemodel.h
     rules/rulemodel.cpp
+    # Label tables + summaries, split from rulemodel.cpp for file-size.
+    rules/rulemodel_labels.cpp
     rules/rulecontroller.h
     rules/rulecontroller.cpp
     # Read-only / projection methods of RuleController — sections,
@@ -218,6 +226,8 @@ set(plasmazones_settings_SRCS
     utils/screenhelper.cpp
     utils/screenprovider.h
     utils/screenprovider.cpp
+    utils/gpudevicelist.h
+    utils/gpudevicelist.cpp
     utils/dbusutils.h
 )
 
@@ -314,6 +324,21 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/snapping/SnappingDragTriggerRow.qml
         qml/pages/tiling/TilingWindowHandlingCard.qml
         qml/pages/tiling/TilingFocusCard.qml
+        # Scrolling: the condensed simple page, the three advanced leaves
+        # (Columns / Tabs / Window), the quick-shortcuts page binding
+        # templates to the quick digits, the cards both surfaces share, and
+        # the theme-fallback colour row, hosted three times by the Tabs page
+        # and twice by the drop-indicator card.
+        qml/pages/scrolling/ScrollingSimplePage.qml
+        qml/pages/scrolling/ScrollingColumnsPage.qml
+        qml/pages/scrolling/ScrollingTabsPage.qml
+        qml/pages/scrolling/ScrollingWindowPage.qml
+        qml/pages/scrolling/ScrollingQuickShortcutsPage.qml
+        qml/pages/scrolling/ScrollingWindowHandlingCard.qml
+        qml/pages/scrolling/ScrollingDragInsertCard.qml
+        qml/pages/scrolling/ScrollingDropIndicatorCard.qml
+        qml/pages/scrolling/ScrollingFocusCard.qml
+        qml/pages/scrolling/ThemeFallbackColorRow.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.
         qml/pages/decoration/WindowAppearancePage.qml
@@ -412,6 +437,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsOsdsPage.qml
         qml/pages/animations/AnimationsOverlaysPage.qml
         qml/pages/animations/AnimationsDesktopsPage.qml
+        qml/pages/animations/AnimationsScrollingPage.qml
         qml/pages/animations/AnimationsEditorPage.qml
         qml/pages/animations/AnimationsSidePanelsPage.qml
         qml/pages/animations/AnimationsWidgetsPage.qml
@@ -478,9 +504,11 @@ qt_add_qml_module(plasmazones-settings
         qml/components/SettingsFlickable.qml
         qml/js/AlgorithmCapabilities.js
         qml/js/SearchAnchorHelpers.js
+        qml/js/PresetList.js
         qml/components/SettingsButtonGroup.qml
         qml/components/ColorSwatchRow.qml
         qml/pages/layouts/NewLayoutDialog.qml
+        qml/pages/layouts/ScrollingTemplateEditorDialog.qml
         qml/pages/tiling/NewAlgorithmDialog.qml
         qml/pages/wizard/WizardStepIndicator.qml
         qml/pages/wizard/WizardFooter.qml

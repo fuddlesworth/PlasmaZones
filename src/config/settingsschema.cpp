@@ -3,7 +3,10 @@
 
 #include "settingsschema.h"
 
+#include <QColor>
+
 #include "settingsschemachoices.h"
+#include "settingsschema_p.h"
 
 #include "configdefaults.h"
 #include "configmigration.h"
@@ -12,8 +15,11 @@
 
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <QtGlobal>
 #include <PhosphorScreens/ScreenIdentity.h>
+
+#include <iterator>
 
 using namespace Qt::StringLiterals;
 
@@ -40,6 +46,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendActivationSchema(s);
     appendBehaviorSchema(s);
     appendAutotilingSchema(s);
+    appendScrollingSchema(s);
     appendWindowsSchema(s);
     appendGapsSchema(s);
     appendDecorationsSchema(s);
@@ -49,32 +56,14 @@ PhosphorConfig::Schema buildSettingsSchema()
 
 // ─── Validator helpers ──────────────────────────────────────────────────────
 // Common coercion patterns factored to keep group schemas readable. Return
-// the same function-object type as KeyDef::validator.
+// the same function-object type as KeyDef::validator. The ones the scrolling
+// TU shares live in settingsschema_p.h; the rest are local to this file.
+
+using SchemaValidators::clampDouble;
+using SchemaValidators::clampInt;
+using SchemaValidators::validIntOr;
 
 namespace {
-auto clampInt(int minVal, int maxVal)
-{
-    return [minVal, maxVal](const QVariant& v) -> QVariant {
-        return qBound(minVal, v.toInt(), maxVal);
-    };
-}
-
-auto clampDouble(double minVal, double maxVal)
-{
-    return [minVal, maxVal](const QVariant& v) -> QVariant {
-        const double d = v.toDouble();
-        // qBound on NaN is unspecified — it decays to qMin/qMax comparisons,
-        // all false for NaN, so a corrupt "nan" in the config would land on an
-        // arbitrary bound depending on argument order. NaN is not a value, so
-        // pin it deterministically to the minimum rather than leaving it to
-        // that pathology.
-        if (qIsNaN(d)) {
-            return minVal;
-        }
-        return qBound(minVal, d, maxVal);
-    };
-}
-
 /// Fall back to @p fallback when the value is an invalid color. Defaults
 /// in the schema are already valid, so this mostly protects against
 /// garbage in the on-disk file.
@@ -83,19 +72,6 @@ auto validColorOr(QColor fallback)
     return [fallback](const QVariant& v) -> QVariant {
         const QColor c = v.value<QColor>();
         return c.isValid() ? QVariant::fromValue(c) : QVariant::fromValue(fallback);
-    };
-}
-
-/// Snap-to-default enum validator: accept a value only if it appears in the
-/// explicit valid set, otherwise return @p fallback. Used for enums where
-/// qBound would silently reinterpret out-of-range values as the nearest
-/// neighbour — that's the exact bug the effect-side cache loader avoids,
-/// and both readers must agree (see testAutotile*_unknownValueClampsToFloat).
-auto validIntOr(std::initializer_list<int> valid, int fallback)
-{
-    return [valid = QVector<int>(valid), fallback](const QVariant& v) -> QVariant {
-        const int raw = v.toInt();
-        return valid.contains(raw) ? raw : fallback;
     };
 }
 
@@ -149,16 +125,32 @@ QVariant canonicalCommaList(const QVariant& v)
     return QVariant(parts.join(QLatin1Char(',')));
 }
 
+/// Both this cap and Settings::MaxTriggersPerAction resolve to
+/// ConfigDefaults::maxTriggersPerAction() — single source of truth, no
+/// drift possible because neither TU carries its own literal.
+constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
+
+} // namespace
+
 /// Canonicalize a trigger list: cap size, coerce each entry to a
 /// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
 /// every write so the flush loop enforces the cap even when the setter
 /// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
 ///
-/// Both this file's cap and Settings::MaxTriggersPerAction resolve to
-/// ConfigDefaults::maxTriggersPerAction() — single source of truth, no
-/// drift possible because neither TU carries its own literal.
-constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
+/// See the header. Namespace scope so settingsschema_scrolling.cpp can reach
+/// it for the five colour keys that carry the empty sentinel.
+QVariant canonicalThemeFallbackColor(const QVariant& v)
+{
+    const QString s = v.toString();
+    if (s.isEmpty() || QColor::isValidColorName(s)) {
+        return s;
+    }
+    return QString();
+}
 
+/// Namespace scope (declared in settingsschema.h): shared with
+/// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
+/// scrolling drag-insert trigger list.
 QVariant canonicalTriggerList(const QVariant& v)
 {
     const QVariantList raw = v.toList();
@@ -183,6 +175,8 @@ QVariant canonicalTriggerList(const QVariant& v)
     }
     return QVariant(out);
 }
+
+namespace {
 
 /// Canonicalize a per-algorithm settings map: round-trip through
 /// @c AutotileConfig so each algorithm's settings are validated against
@@ -387,8 +381,8 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Rendering ──────────────────────────────────────────────────────────────
-// Single-key group selecting the GPU backend. The validator coerces any
-// unknown string to a known value via ConfigDefaults::normalizeRenderingBackend
+// Two keys: the graphics API backend token and the GPU device pin. Each has
+// its own coercing validator (normalizeRenderingBackend / normalizeGpuDevice)
 // so hand-edited configs can't persist garbage.
 
 void appendRenderingSchema(PhosphorConfig::Schema& schema)
@@ -403,6 +397,17 @@ void appendRenderingSchema(PhosphorConfig::Schema& schema)
              return QVariant(CD::normalizeRenderingBackend(v.toString()));
          },
          tokenChoices(CD::renderingBackendOptions())},
+        // Gpu is a free string, not a token enum: the legal values are the
+        // machine's GPUs ("auto" or a "vendor:device" hex PCI pair), so there
+        // are no declared choices — the picker enumerates DRM render nodes at
+        // runtime. The validator still coerces malformed strings to "auto".
+        {CD::gpuKey(),
+         CD::gpuDevice(),
+         QMetaType::QString,
+         {},
+         [](const QVariant& v) {
+             return QVariant(CD::normalizeGpuDevice(v.toString()));
+         }},
     };
 }
 
@@ -450,11 +455,12 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Shortcuts ──────────────────────────────────────────────────────────────
-// Three sub-groups: Global (editor/settings launchers, zone navigation,
-// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation),
-// Tiling (autotile master/ratio/count controls + retile toggle), Editor
-// (zone editor shortcuts — duplicate, split, fill). All QString keys, no
-// validators needed.
+// TWO sub-groups: Global (editor/settings launchers, zone navigation,
+// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation)
+// and Tiling (autotile master/ratio/count controls + retile toggle). All
+// QString keys, no validators needed. There is no Editor group here — the
+// zone editor's shortcuts are not part of the daemon's schema; EditorController
+// owns its own settings in a separate process.
 
 namespace {
 // Helper: append a string KeyDef with no validator. Cuts the noise in the
@@ -475,12 +481,19 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::toggleCheatsheetKey(), CD::toggleCheatsheetShortcut());
     addShortcut(globals, CD::previousLayoutKey(), CD::previousLayoutShortcut());
     addShortcut(globals, CD::nextLayoutKey(), CD::nextLayoutShortcut());
-    const QString quickDefaults[9] = {
+    const QString quickDefaults[] = {
         CD::quickLayout1Shortcut(), CD::quickLayout2Shortcut(), CD::quickLayout3Shortcut(),
         CD::quickLayout4Shortcut(), CD::quickLayout5Shortcut(), CD::quickLayout6Shortcut(),
         CD::quickLayout7Shortcut(), CD::quickLayout8Shortcut(), CD::quickLayout9Shortcut(),
     };
-    for (int i = 0; i < 9; ++i) {
+    // Bound by the protocol constant, not a local 9: quickLayoutKey() qFatals
+    // outside [1, QuickLayoutSlotCount], so a raised constant with a stale
+    // local literal would silently declare too few keys and a LOWERED one
+    // would abort at startup. The static_assert makes the defaults array
+    // track the constant at compile time instead.
+    static_assert(std::size(quickDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "quick-layout defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::quickLayoutKey(i + 1), quickDefaults[i]);
     }
     addShortcut(globals, CD::moveWindowLeftKey(), CD::moveWindowLeftShortcut());
@@ -502,12 +515,15 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::spanWindowRightKey(), CD::spanWindowRightShortcut());
     addShortcut(globals, CD::spanWindowUpKey(), CD::spanWindowUpShortcut());
     addShortcut(globals, CD::spanWindowDownKey(), CD::spanWindowDownShortcut());
-    const QString snapToZoneDefaults[9] = {
+    const QString snapToZoneDefaults[] = {
         CD::snapToZone1Shortcut(), CD::snapToZone2Shortcut(), CD::snapToZone3Shortcut(),
         CD::snapToZone4Shortcut(), CD::snapToZone5Shortcut(), CD::snapToZone6Shortcut(),
         CD::snapToZone7Shortcut(), CD::snapToZone8Shortcut(), CD::snapToZone9Shortcut(),
     };
-    for (int i = 0; i < 9; ++i) {
+    // Same protocol-constant bound as the quick-layout loop above.
+    static_assert(std::size(snapToZoneDefaults) == PhosphorProtocol::Service::QuickLayoutSlotCount,
+                  "snap-to-zone defaults array must cover every protocol slot");
+    for (int i = 0; i < PhosphorProtocol::Service::QuickLayoutSlotCount; ++i) {
         addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i]);
     }
     addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut());
@@ -537,6 +553,11 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString},
         {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
     };
+
+    // Shortcuts.Scrolling is declared by the scrolling TU (split out for
+    // file-size) but still assembled from here, so the whole Shortcuts.*
+    // family has one entry point.
+    appendScrollingShortcutsSchema(schema);
 }
 
 // ─── Editor ─────────────────────────────────────────────────────────────────
@@ -798,8 +819,9 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingGroup()] = {
         {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool},
     };
-    // Snapping.Behavior owns two scalar keys directly (Triggers, ToggleActivation);
-    // the SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
+    // Snapping.Behavior owns FOUR scalar keys directly — Triggers,
+    // ToggleActivation, FocusNewWindows and FocusFollowsMouse — while the
+    // SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {
         {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
@@ -858,8 +880,10 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
          CD::snappingStickyWindowHandling(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                  static_cast<int>(StickyWindowHandling::IgnoreAll)),
+         validIntOr({static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                     static_cast<int>(StickyWindowHandling::RestoreOnly),
+                     static_cast<int>(StickyWindowHandling::IgnoreAll)},
+                    CD::snappingStickyWindowHandling()),
          intChoices({{static_cast<int>(StickyWindowHandling::TreatAsNormal), "treatAsNormal"_L1},
                      {static_cast<int>(StickyWindowHandling::RestoreOnly), "restoreOnly"_L1},
                      {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},
@@ -923,7 +947,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          CD::autotileInsertPosition(),
          QMetaType::Int,
          {},
-         clampInt(CD::autotileInsertPositionMin(), CD::autotileInsertPositionMax()),
+         validIntOr({static_cast<int>(AutotileInsertPosition::End),
+                     static_cast<int>(AutotileInsertPosition::AfterFocused),
+                     static_cast<int>(AutotileInsertPosition::AsMaster)},
+                    CD::autotileInsertPosition()),
          intChoices({{static_cast<int>(AutotileInsertPosition::End), "end"_L1},
                      {static_cast<int>(AutotileInsertPosition::AfterFocused), "afterFocused"_L1},
                      {static_cast<int>(AutotileInsertPosition::AsMaster), "asMaster"_L1}})},
@@ -935,8 +962,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          CD::autotileStickyWindowHandling(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                  static_cast<int>(StickyWindowHandling::IgnoreAll)),
+         validIntOr({static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                     static_cast<int>(StickyWindowHandling::RestoreOnly),
+                     static_cast<int>(StickyWindowHandling::IgnoreAll)},
+                    CD::autotileStickyWindowHandling()),
          intChoices({{static_cast<int>(StickyWindowHandling::TreatAsNormal), "treatAsNormal"_L1},
                      {static_cast<int>(StickyWindowHandling::RestoreOnly), "restoreOnly"_L1},
                      {static_cast<int>(StickyWindowHandling::IgnoreAll), "ignoreAll"_L1}})},

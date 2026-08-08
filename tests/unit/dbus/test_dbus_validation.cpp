@@ -173,18 +173,18 @@ private Q_SLOTS:
     void dragPolicy_autotileBypassRequiresScreenId()
     {
         PhosphorProtocol::DragPolicy p;
-        p.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         p.captureGeometry = true;
         // screenId empty
         const QString err = p.validationError();
         QVERIFY(!err.isEmpty());
-        QVERIFY(err.contains(QStringLiteral("AutotileScreen bypass requires non-empty screenId")));
+        QVERIFY(err.contains(QStringLiteral("EngineOwnedScreen bypass requires non-empty screenId")));
     }
 
     void dragPolicy_autotileBypass_valid()
     {
         PhosphorProtocol::DragPolicy p;
-        p.bypassReason = PhosphorProtocol::DragBypassReason::AutotileScreen;
+        p.bypassReason = PhosphorProtocol::DragBypassReason::EngineOwnedScreen;
         p.screenId = QStringLiteral("HP-1");
         p.captureGeometry = true;
         QVERIFY(p.validationError().isEmpty());
@@ -307,6 +307,38 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
+    void tileRequestEntry_invalidScrollEdge_rejected()
+    {
+        // The effect treats any non-"left" value as right, so an unvalidated
+        // unknown string would silently flip an entry's side — the whitelist
+        // is what makes that a dropped entry instead.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        e.scrollEdge = QStringLiteral("up");
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("scrollEdge")));
+    }
+
+    void tileRequestEntry_scrollEdgeValues_tolerated()
+    {
+        // Empty (no strip motion) and the two screen edges are the only
+        // legal values.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("left");
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("right");
+        QVERIFY(e.validationError().isEmpty());
+    }
+
     // ═════════════════════════════════════════════════════════════════════
     // PhosphorProtocol::BridgeRegistrationResult
     // ═════════════════════════════════════════════════════════════════════
@@ -381,7 +413,7 @@ private Q_SLOTS:
         // Every enum value must round-trip through the wire format.
         const QVector<PhosphorProtocol::DragBypassReason> all{
             PhosphorProtocol::DragBypassReason::None,
-            PhosphorProtocol::DragBypassReason::AutotileScreen,
+            PhosphorProtocol::DragBypassReason::EngineOwnedScreen,
             PhosphorProtocol::DragBypassReason::SnappingDisabled,
             PhosphorProtocol::DragBypassReason::ContextDisabled,
             PhosphorProtocol::DragBypassReason::LayoutSuppressed,
@@ -401,7 +433,8 @@ private Q_SLOTS:
         // still passes if a value's string is typo'd (both directions use the
         // same constant), so pin the literals themselves.
         QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::None), QString());
-        QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::AutotileScreen), QStringLiteral("autotile_screen"));
+        QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::EngineOwnedScreen),
+                 QStringLiteral("autotile_screen"));
         QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::SnappingDisabled),
                  QStringLiteral("snapping_disabled"));
         QCOMPARE(toWireString(PhosphorProtocol::DragBypassReason::ContextDisabled), QStringLiteral("context_disabled"));

@@ -329,6 +329,22 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             if (any) {
                 p.freeGeometryByScreen = remapped;
             }
+            // The MANAGED screen migrates by the same rule as the geometry
+            // keys. Left as the dead physical id, the record became
+            // permanently unrestorable: the reopen accept compares
+            // p.screenId verbatim on both its arms, the stale-state scan
+            // below never reported it (it checks only the geometry keys),
+            // and once the record carries the asking engine's slot the
+            // exact-final gate turned that mismatch into a standing veto.
+            if (!ptZoneIds.isEmpty() && !p.screenId.isEmpty()
+                && !(PhosphorIdentity::VirtualScreenId::isVirtual(p.screenId) && virtualScreenIds.contains(p.screenId))
+                && (p.screenId == physicalScreenId || p.screenId.startsWith(prefix))) {
+                const QString resolved = resolveVirtualScreen(ptZoneIds, p.screenId);
+                if (resolved != p.screenId) {
+                    p.screenId = resolved;
+                    any = true;
+                }
+            }
             return any;
         });
         if (changed > 0) {
@@ -478,6 +494,14 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
         if (any) {
             p.freeGeometryByScreen = remapped;
         }
+        // The MANAGED screen folds back to the physical id by the same rule
+        // — the ToVirtual sibling documents why leaving it stale makes the
+        // record permanently unrestorable through the reopen accept.
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(p.screenId)
+            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(p.screenId) == physicalScreenId) {
+            p.screenId = physicalScreenId;
+            any = true;
+        }
         return any;
     });
     // Mirror the migrateScreenAssignmentsToVirtual sibling: a remapped free-geometry
@@ -607,6 +631,11 @@ WindowTrackingService::physicalScreensWithStaleVirtualAssignments(const QSet<QSt
         for (auto it = p.freeGeometryByScreen.constBegin(); it != p.freeGeometryByScreen.constEnd(); ++it) {
             check(it.key());
         }
+        // The MANAGED screen carries a screen id too — a record whose
+        // p.screenId is a stale virtual id must trigger the migration the
+        // same way a stale geometry key does, or the migration that would
+        // repair it is never invoked.
+        check(p.screenId);
     }
     return result;
 }

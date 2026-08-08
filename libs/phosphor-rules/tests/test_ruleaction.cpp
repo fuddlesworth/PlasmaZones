@@ -30,6 +30,9 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetEngineMode,
     ActionType::SetSnappingLayout,
     ActionType::SetTilingAlgorithm,
+    // Scrolling template — context-domain like its assignment siblings,
+    // decoded by entryFromRuleMatchActions into the AssignmentEntry.
+    ActionType::SetScrollingTemplate,
     ActionType::DisableEngine,
     // Layout lock — context-domain, resolved during the screen/desktop/
     // activity pass (mode-agnostic) like the other context actions.
@@ -72,9 +75,47 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetOverflowBehavior,
     ActionType::SetDragBehavior,
     ActionType::SetAlgorithmParam,
+    // Scrolling parameter overrides are context-domain too — resolved per
+    // screen/desktop/activity and layered onto the scrolling engine's params.
+    ActionType::SetScrollDefaultColumnWidth,
+    ActionType::SetCenterFocusedColumn,
+    ActionType::SetScrollDefaultColumnDisplay,
+    ActionType::SetScrollInsertPosition,
+    ActionType::SetScrollDefaultWindowHeight,
+    // Tab indicator — context-domain. The geometry half is layered onto the
+    // scrolling engine's per-screen map and the paint half onto the overlay,
+    // but both resolve in the same context pass as the scroll params above.
+    ActionType::SetTabIndicatorEnabled,
+    ActionType::SetTabIndicatorStyle,
+    ActionType::SetTabIndicatorPosition,
+    ActionType::SetTabIndicatorHideWhenSingleTab,
+    ActionType::SetTabIndicatorPlaceWithinColumn,
+    ActionType::SetTabIndicatorGap,
+    ActionType::SetTabIndicatorWidth,
+    ActionType::SetTabIndicatorLength,
+    ActionType::SetTabIndicatorGapsBetweenTabs,
+    ActionType::SetTabIndicatorCornerRadius,
+    ActionType::SetTabIndicatorActiveColor,
+    ActionType::SetTabIndicatorInactiveColor,
+    ActionType::SetTabIndicatorUrgentColor,
+    // Drop indicator — context-domain for the whole family, because the
+    // indicator describes an empty SLOT on a screen and a window-matching rule
+    // has no referent for it. The two per-window COLOURS below are the
+    // exception, keyed on the dragged window.
+    ActionType::SetDropIndicatorEnabled,
+    ActionType::SetDropIndicatorColor,
+    ActionType::SetDropIndicatorBorderColor,
+    ActionType::SetDropIndicatorOpacity,
+    ActionType::SetDropIndicatorBorderWidth,
+    ActionType::SetDropIndicatorBorderRadius,
 };
 const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::Exclude,
+    // Scoped exclusion siblings — window-domain like the blanket Exclude:
+    // placement-only (daemon engines + drag gate) and decoration-only
+    // (shouldDecorateWindow) respectively.
+    ActionType::ExcludePlacement,
+    ActionType::ExcludeDecorations,
     ActionType::Float,
     ActionType::SnapToZone,
     // Open-routing actions are window-domain — resolved per window on the
@@ -107,6 +148,21 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     // Stacking-layer override — window-domain, effect-consumed
     // (reconcileRuleWindowLayer maps the token onto keepAbove/keepBelow).
     ActionType::SetWindowLayer,
+    // Scrolling open overrides — window-domain, read on the daemon open path
+    // for the matched window and layered over the context / config defaults.
+    ActionType::OpenColumnWidth,
+    ActionType::OpenTabbed,
+    ActionType::OpenColumnPlacement,
+    ActionType::OpenWindowHeight,
+    // Per-window tab colours — window-domain, resolved per tab when the
+    // daemon builds the indicator model, where they outrank the context trio.
+    ActionType::TabColorActive,
+    ActionType::TabColorInactive,
+    ActionType::TabColorUrgent,
+    // Per-window drop-indicator colours — resolved at drag start from the
+    // DRAGGED window's rules, where they outrank the context pair.
+    ActionType::DropIndicatorColor,
+    ActionType::DropIndicatorBorderColor,
 };
 } // namespace
 
@@ -153,6 +209,38 @@ private Q_SLOTS:
         wrongShape.insert(QString(ActionParam::Chain), QStringLiteral("frosted-glass"));
         const RuleAction nonArray{QString(ActionType::OverrideDecorationChain), wrongShape};
         QVERIFY(!RuleAction::fromJson(nonArray.toJson()).has_value());
+    }
+
+    void testSetScrollingTemplate_roundTripAndRejections()
+    {
+        // The scrolling assignment action at the public boundary, the way its
+        // snapping and tiling siblings are covered. Its layoutId shares the
+        // wire KEY with SetSnappingLayout, so the strict-key and non-empty
+        // checks are what keep a half-authored template action from loading.
+        QJsonObject params;
+        params.insert(QString(ActionParam::LayoutId), QStringLiteral("{2f2a1b3c-0000-4000-8000-0000000000aa}"));
+        const RuleAction a{QString(ActionType::SetScrollingTemplate), params};
+        const auto reloaded = RuleAction::fromJson(a.toJson());
+        QVERIFY(reloaded.has_value());
+        QCOMPARE(*reloaded, a);
+
+        // An empty id is the unfilled-picker shape and is refused, so the
+        // editor cannot save a template action that resolves to nothing.
+        QJsonObject empty;
+        empty.insert(QString(ActionParam::LayoutId), QString());
+        QVERIFY(
+            !RuleAction::fromJson(RuleAction{QString(ActionType::SetScrollingTemplate), empty}.toJson()).has_value());
+
+        // A missing id is refused for the same reason.
+        QVERIFY(!RuleAction::fromJson(RuleAction{QString(ActionType::SetScrollingTemplate), QJsonObject()}.toJson())
+                     .has_value());
+
+        // A stray key is refused whole — strict-key discipline, not a
+        // silent drop of the extra key.
+        QJsonObject stray = params;
+        stray.insert(QString(ActionParam::Algorithm), QStringLiteral("bsp"));
+        QVERIFY(
+            !RuleAction::fromJson(RuleAction{QString(ActionType::SetScrollingTemplate), stray}.toJson()).has_value());
     }
 
     void testJson_typeWrittenInline()
@@ -367,8 +455,8 @@ private Q_SLOTS:
         // test_contextrulebridge.cpp — pinning the rejection here covers
         // that exact regression.
         QJsonObject obj;
-        obj.insert(QLatin1StringView("type"), QString(ActionType::DisableEngine));
-        obj.insert(QLatin1StringView("mode"), QLatin1String("bogus"));
+        obj.insert(QStringLiteral("type"), QString(ActionType::DisableEngine));
+        obj.insert(QStringLiteral("mode"), QStringLiteral("bogus"));
         QVERIFY(!RuleAction::fromJson(obj).has_value());
     }
 
@@ -378,8 +466,8 @@ private Q_SLOTS:
         // load-side validator drops the rule. Mirrors the malformed-payload
         // guarantee documented in `ContextRuleBridge.h::makeDisableRule`.
         QJsonObject obj;
-        obj.insert(QLatin1StringView("type"), QString(ActionType::DisableEngine));
-        obj.insert(QLatin1StringView("mode"), QString());
+        obj.insert(QStringLiteral("type"), QString(ActionType::DisableEngine));
+        obj.insert(QStringLiteral("mode"), QString());
         QVERIFY(!RuleAction::fromJson(obj).has_value());
     }
 
@@ -391,8 +479,8 @@ private Q_SLOTS:
         for (QLatin1StringView token :
              {QLatin1String("snapping"), QLatin1String("autotile"), QLatin1String("scrolling")}) {
             QJsonObject obj;
-            obj.insert(QLatin1StringView("type"), QString(ActionType::DisableEngine));
-            obj.insert(QLatin1StringView("mode"), QString::fromLatin1(token.data(), token.size()));
+            obj.insert(QStringLiteral("type"), QString(ActionType::DisableEngine));
+            obj.insert(QStringLiteral("mode"), QString::fromLatin1(token.data(), token.size()));
             QVERIFY2(RuleAction::fromJson(obj).has_value(), token.data());
         }
     }
@@ -705,145 +793,13 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(bad).has_value());
     }
 
-    // ── autotile parameter actions (context-domain) ──
-
-    void testTilingParamActions_range()
-    {
-        // SetMaxWindows: 1..12, integer count.
-        {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMaxWindows));
-            o.insert(QStringLiteral("value"), 0); // below 1 rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), 13); // above 12 rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), 4.5); // non-integral rejected (not truncated)
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), 4); // in range accepted
-            QVERIFY(RuleAction::fromJson(o).has_value());
-        }
-        // SetSplitRatio: wire is the [0.1, 0.9] ratio.
-        {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetSplitRatio));
-            o.insert(QStringLiteral("value"), 0.05); // below 0.1 rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), 0.95); // above 0.9 rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), QStringLiteral("0.5")); // non-numeric rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), 0.6); // in range accepted
-            QVERIFY(RuleAction::fromJson(o).has_value());
-        }
-        // SetMasterCount: 1..5, integer count.
-        {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetMasterCount));
-            o.insert(QStringLiteral("value"), 0); // below 1 rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), 6); // above 5 rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), 2.5); // non-integral rejected (not truncated)
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("value"), 2); // in range accepted
-            QVERIFY(RuleAction::fromJson(o).has_value());
-        }
-        // SetInsertPosition: closed enum vocabulary.
-        {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetInsertPosition));
-            o.insert(QStringLiteral("value"), QStringLiteral("middle")); // unknown token rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            for (const QLatin1StringView token :
-                 {InsertPositionToken::End, InsertPositionToken::AfterFocused, InsertPositionToken::AsMaster}) {
-                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
-                QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
-            }
-        }
-        // SetOverflowBehavior: closed enum vocabulary.
-        {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetOverflowBehavior));
-            o.insert(QStringLiteral("value"), QStringLiteral("cap")); // unknown token rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            for (const QLatin1StringView token : {OverflowBehaviorToken::Float, OverflowBehaviorToken::Unlimited}) {
-                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
-                QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
-            }
-        }
-        // SetDragBehavior: closed enum vocabulary.
-        {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetDragBehavior));
-            o.insert(QStringLiteral("value"), QStringLiteral("swap")); // unknown token rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            for (const QLatin1StringView token : {DragBehaviorToken::Float, DragBehaviorToken::Reorder}) {
-                o.insert(QStringLiteral("value"), QString::fromLatin1(token));
-                QVERIFY2(RuleAction::fromJson(o).has_value(), token.data());
-            }
-        }
-        // SetAlgorithmParam: requires a non-empty algorithm token; the params blob
-        // is free-form (validated against the algorithm schema at apply time).
-        {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::SetAlgorithmParam));
-            QVERIFY(!RuleAction::fromJson(o).has_value()); // no algorithm → rejected
-            o.insert(QStringLiteral("algorithm"), QString()); // empty → rejected
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-            o.insert(QStringLiteral("algorithm"), QStringLiteral("bsp"));
-            QVERIFY(RuleAction::fromJson(o).has_value()); // algorithm alone → accepted
-            QJsonObject blob;
-            blob.insert(QStringLiteral("ratio"), 0.7);
-            o.insert(QStringLiteral("params"), blob); // params allowed alongside
-            const auto reloaded = RuleAction::fromJson(o);
-            QVERIFY(reloaded.has_value());
-            QCOMPARE(
-                reloaded->params.value(QStringLiteral("params")).toObject().value(QStringLiteral("ratio")).toDouble(),
-                0.7);
-            // An unexpected key is still rejected (strict allowedKeys = {algorithm, params}).
-            o.insert(QStringLiteral("bogus"), 1);
-            QVERIFY(!RuleAction::fromJson(o).has_value());
-        }
-    }
-
-    // ── gap actions (context-domain) ──
-
-    void testGapNumberActions_range()
-    {
-        for (const QLatin1StringView type :
-             {ActionType::SetInnerGap, ActionType::SetOuterGap, ActionType::SetOuterGapTop,
-              ActionType::SetOuterGapBottom, ActionType::SetOuterGapLeft, ActionType::SetOuterGapRight}) {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
-            o.insert(QStringLiteral("value"), -5);
-            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
-            o.insert(QStringLiteral("value"), 600); // > kMaxGap (500)
-            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
-            o.insert(QStringLiteral("value"), 0);
-            QVERIFY2(RuleAction::fromJson(o).has_value(), type.data());
-            o.insert(QStringLiteral("value"), 12);
-            const auto reloaded = RuleAction::fromJson(o);
-            QVERIFY2(reloaded.has_value(), type.data());
-            QCOMPARE(reloaded->params.value(QStringLiteral("value")).toInt(), 12);
-        }
-    }
-
-    void testGapPerSideToggle_requiresBool()
-    {
-        QJsonObject o;
-        o.insert(QStringLiteral("type"), QString(ActionType::SetUsePerSideOuterGap));
-        o.insert(QStringLiteral("value"), QStringLiteral("yes"));
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        o.insert(QStringLiteral("value"), false);
-        QVERIFY(RuleAction::fromJson(o).has_value());
-    }
-
     void testNewActions_rejectStrayKeys()
     {
-        // The new border/gap family all declare `allowedKeys = {Value}`; pin
-        // that an otherwise-valid payload carrying an unexpected extra key is
-        // rejected, so the strict-key path is exercised for this family (not
-        // just for the pre-existing SetEngineMode in testJson_rejectsInvalidParams).
+        // The Value-keyed families (border, gap, tint/layer, scrolling, tab
+        // indicator) all declare `allowedKeys = {Value}`; pin that a payload
+        // carrying an unexpected extra key is rejected, so the strict-key path
+        // is exercised for every one of them (not just for the pre-existing
+        // SetEngineMode in testJson_rejectsInvalidParams).
         const auto rejectsStray = [](QLatin1StringView type, const QJsonValue& goodValue) {
             QJsonObject ok;
             ok.insert(QStringLiteral("type"), QString::fromLatin1(type));
@@ -864,6 +820,16 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetTintStrength, QJsonValue(0.5));
         rejectsStray(ActionType::SetTintColor, QJsonValue(QStringLiteral("#FF0000")));
         rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
+        // All nine scrolling actions declare the same {Value} key set.
+        rejectsStray(ActionType::SetScrollDefaultColumnWidth, QJsonValue(0.5));
+        rejectsStray(ActionType::SetCenterFocusedColumn, QJsonValue(QStringLiteral("always")));
+        rejectsStray(ActionType::SetScrollDefaultColumnDisplay, QJsonValue(QStringLiteral("tabbed")));
+        rejectsStray(ActionType::SetScrollInsertPosition, QJsonValue(QStringLiteral("last")));
+        rejectsStray(ActionType::SetScrollDefaultWindowHeight, QJsonValue(0.5));
+        rejectsStray(ActionType::OpenColumnWidth, QJsonValue(0.5));
+        rejectsStray(ActionType::OpenWindowHeight, QJsonValue(0.5));
+        rejectsStray(ActionType::OpenTabbed, QJsonValue(true));
+        rejectsStray(ActionType::OpenColumnPlacement, QJsonValue(QStringLiteral("consume")));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
         rejectsStray(ActionType::LockContext, QJsonValue(true));
         rejectsStray(ActionType::DefaultLayoutAssignment, QJsonValue(true));
@@ -871,6 +837,29 @@ private Q_SLOTS:
         rejectsStray(ActionType::OverrideOverlayStyle, QJsonValue(QString(OverlayStyleToken::Preview)));
         // SetWindowLayer is the same Value-keyed closed-enum shape.
         rejectsStray(ActionType::SetWindowLayer, QJsonValue(QString(WindowLayerToken::Above)));
+        // The tab-indicator family is the largest Value-keyed group in the
+        // vocabulary. One of each SHAPE covers it: the stray-key path is the
+        // descriptor's, not the validator's, so a bool, a signed-range number,
+        // a fraction, a zero-floored number, a token and a colour exercise
+        // every distinct descriptor form the thirteen are built from.
+        rejectsStray(ActionType::SetTabIndicatorEnabled, QJsonValue(true));
+        rejectsStray(ActionType::SetTabIndicatorGap, QJsonValue(-4));
+        rejectsStray(ActionType::SetTabIndicatorLength, QJsonValue(0.5));
+        rejectsStray(ActionType::SetTabIndicatorGapsBetweenTabs, QJsonValue(2));
+        rejectsStray(ActionType::SetTabIndicatorStyle, QJsonValue(QString(TabIndicatorStyleToken::Bar)));
+        rejectsStray(ActionType::SetTabIndicatorActiveColor, QJsonValue(QStringLiteral("#ff224466")));
+        // …and the window-domain half, which is a separate registration path.
+        rejectsStray(ActionType::TabColorUrgent, QJsonValue(QStringLiteral("#ff884422")));
+        // The drop-indicator family, one per distinct descriptor shape for the
+        // tab indicator's reason: a bool, a colour, a [0,1] fraction and a
+        // zero-floored pixel number are the four forms the six context-domain
+        // actions are built from.
+        rejectsStray(ActionType::SetDropIndicatorEnabled, QJsonValue(true));
+        rejectsStray(ActionType::SetDropIndicatorColor, QJsonValue(QStringLiteral("#ff224466")));
+        rejectsStray(ActionType::SetDropIndicatorOpacity, QJsonValue(0.25));
+        rejectsStray(ActionType::SetDropIndicatorBorderWidth, QJsonValue(2));
+        // …and the window-domain half, which is a separate registration path.
+        rejectsStray(ActionType::DropIndicatorColor, QJsonValue(QStringLiteral("#ff884422")));
     }
 
     void testOverrideOverlay_fromJson()
@@ -949,7 +938,10 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{-1})).has_value()); // negative
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1.5})).has_value()); // non-integral
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{QStringLiteral("1")})).has_value()); // string
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{65})).has_value()); // above the ordinal cap (64)
+        // Above the shared ordinal cap — named, so a future cap change moves
+        // this test with the validator (the RouteToDesktop sibling test uses
+        // MaxVirtualDesktopOrdinal the same way).
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{MaxZoneOrdinal + 1})).has_value());
         // A double far beyond int range must be rejected by the bound BEFORE any
         // narrowing cast (an out-of-range float-to-int cast is UB) — must not crash.
         QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1e18})).has_value());
@@ -957,12 +949,40 @@ private Q_SLOTS:
         // Single zone, span, and the inclusive cap boundary are all accepted.
         QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1})).has_value());
         QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1, 2})).has_value());
-        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{64})).has_value());
+        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{MaxZoneOrdinal})).has_value());
 
         // A key outside allowedKeys ({zones}) is rejected.
         QJsonObject stray = withZones(QJsonArray{1});
         stray.insert(QStringLiteral("value"), 3);
         QVERIFY(!RuleAction::fromJson(stray).has_value());
+    }
+
+    void testScopedExclusions_fromJsonRoundTrip()
+    {
+        // The two scoped exclusion wire strings ("excludePlacement" /
+        // "excludeDecorations") load through the public fromJson boundary —
+        // the path a saved rules.json takes. Both are free-form (empty
+        // allowedKeys opts out of the strict-key check, matching Exclude and
+        // Float), so a bare payload AND a payload carrying a stray future
+        // param both load; that acceptance is the deliberate contract, pinned
+        // here for the first time. A typo in either ActionType constant, or a
+        // future validator tightened away from acceptAny, fails this before
+        // it can break loading saved rules silently.
+        for (const QLatin1StringView type : {ActionType::ExcludePlacement, ActionType::ExcludeDecorations}) {
+            QJsonObject bare;
+            bare.insert(QStringLiteral("type"), QString(type));
+            const auto action = RuleAction::fromJson(bare);
+            QVERIFY2(action.has_value(), type.data());
+            QCOMPARE(action->type, QString(type));
+            const auto roundTripped = RuleAction::fromJson(action->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(roundTripped->type, QString(type));
+
+            QJsonObject stray;
+            stray.insert(QStringLiteral("type"), QString(type));
+            stray.insert(QStringLiteral("futureParam"), QStringLiteral("x"));
+            QVERIFY2(RuleAction::fromJson(stray).has_value(), type.data());
+        }
     }
 
     void testLockContext_fromJsonRoundTrip()

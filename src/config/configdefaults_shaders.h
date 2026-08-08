@@ -41,6 +41,23 @@ public:
         return renderingBackendOptions().contains(normalized) ? normalized : renderingBackend();
     }
 
+    /// GPU the daemon (and editor) render on. "auto" = whatever the driver /
+    /// Qt picks; otherwise a lowercase hex PCI "vendor:device" pair (e.g.
+    /// "1002:164e"). Not an enum — the legal set is whatever GPUs the machine
+    /// has, so the schema stores a free string and the picker enumerates DRM
+    /// render nodes at runtime (GpuDeviceList).
+    static QString gpuDevice()
+    {
+        return QStringLiteral("auto");
+    }
+
+    /// Coerce to "auto" or a well-formed vendor:device hex pair. Anything
+    /// else (hand-edited garbage) falls back to "auto" so startup never acts
+    /// on a string DRI_PRIME / the Vulkan matcher can't parse. Defined in
+    /// configdefaults.cpp so this widely-included header doesn't pull in
+    /// QRegularExpression for one cold-path validator.
+    PLASMAZONES_EXPORT static QString normalizeGpuDevice(const QString& raw);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Shader Settings
     // ═══════════════════════════════════════════════════════════════════════════
@@ -289,12 +306,14 @@ public:
 
     /// Animate only the focused window's decoration; unfocused windows hold their
     /// last composite. Divides the continuous redraw by the number of decorated
-    /// windows on screen. Off by default: it visibly changes what the desktop
-    /// looks like (only the window you are using shimmers), so it is the user's
-    /// call, not ours.
+    /// windows on screen — the single biggest lever this group has while the user
+    /// is still at the machine. ON by default: on integrated GPUs the every-window
+    /// continuous redraw is the difference between a usable desktop and a lagging
+    /// one, and a user who wants every unfocused window shimmering is making the
+    /// deliberate (and cheap-to-make) choice, not the other way around.
     static bool decorationAnimateFocusedOnly()
     {
-        return false;
+        return true;
     }
 
     /// Stop animating the decoration chain once the session has been idle for

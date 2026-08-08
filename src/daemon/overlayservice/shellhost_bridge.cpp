@@ -20,6 +20,8 @@
 
 #include <PhosphorOverlay/ShellHost.h>
 
+#include <PhosphorWayland/SurfaceIdentity.h>
+
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -122,6 +124,116 @@ OverlayService::PerScreenOverlayState* OverlayService::ensurePassiveShellFor(con
     return &pState;
 }
 
+OverlayService::PerScreenOverlayState* OverlayService::ensureScrollTabShellFor(const QString& effectiveId,
+                                                                               QScreen* physScreen)
+{
+    // Same shape as ensurePassiveShellFor above, against the twin host, and
+    // the contract it enforces is the same: a non-null cached pointer always
+    // means a live surface.
+    //
+    // The passive shell's defensive Qt::WindowTransparentForInput assertion has
+    // no twin here. It guards against a modal slot leaving a stale grab behind,
+    // and this surface hosts no modal; the once-only assertion it does need
+    // (before the first frame is primed) lives in wireScrollTabShellSlots.
+    auto* shellState = m_tabShellHost->ensureShell(effectiveId, physScreen);
+    auto returnExistingClearingStaleShell = [this, &effectiveId]() -> PerScreenOverlayState* {
+        auto it = m_screenStates.find(effectiveId);
+        if (it == m_screenStates.end()) {
+            return nullptr;
+        }
+        it->tabShell = nullptr;
+        return &it.value();
+    };
+    if (!shellState || !shellState->shellSurface()) {
+        return returnExistingClearingStaleShell();
+    }
+    auto& pState = m_screenStates[effectiveId];
+    pState.tabShell = shellState;
+    return &pState;
+}
+
+void OverlayService::wireScrollTabShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState)
+{
+    auto* window = shellState.shellWindow();
+    if (!window) {
+        // Same unrecoverable half-wired state ensureShell can leave behind on
+        // the async QML path, and the same two-step recovery: tear the shell
+        // down so the next ensure falls through to the failure-flag check, then
+        // flag it so attempts no-op until a hot-plug clears it. See
+        // wirePassiveShellSlots for the full reasoning.
+        qCWarning(lcOverlay) << "wireScrollTabShellSlots: shellWindow null at PostCreate for screen=" << screenId
+                             << "- tearing down half-wired shell and marking failure";
+        m_tabShellHost->destroyShell(screenId);
+        m_tabShellHost->markFailure(screenId);
+        return;
+    }
+
+    auto* item = qvariant_cast<QQuickItem*>(window->property("scrollTabsSlotItem"));
+    if (!item) {
+        qCWarning(lcOverlay) << "ScrollTabShell on screen=" << screenId
+                             << "did not expose `scrollTabsSlotItem`: scroll tab strips on this screen will fail."
+                             << "Check QML resource.";
+    } else {
+        shellState.slots.insert(PhosphorSlotKeys::ScrollTabs(),
+                                PhosphorOverlay::SlotEntry{item, PhosphorRoles::ScrollTabs});
+    }
+
+    // String-based SIGNAL/SLOT because the source is a QML object's dynamic
+    // signal, which the function-pointer form cannot resolve at compile time.
+    QObject::connect(window, SIGNAL(scrollTabActivated(QString)), this, SLOT(onScrollTabActivated(QString)));
+
+    // Click-through, asserted AFTER the prime. A QQuickWindow starts without
+    // the flag, and priming shows the surface to render its first frame —
+    // Surface::show() clears WindowTransparentForInput, so setting it first
+    // and priming second left the flag off exactly when the surface was up.
+    // A screen-sized surface then took every click on the monitor until the
+    // first strip update ran a sync, and on the path where that update bails
+    // (no slot) it never ran one at all. The passive shell orders these the
+    // same way round, for the same reason.
+    primeSurfaceRenderPipeline(shellState.shellSurface());
+
+    window->setFlag(Qt::WindowTransparentForInput, true);
+}
+
+void OverlayService::unwireScrollTabShellSlots(const QString& screenId)
+{
+    // The lib clears ShellState::slots after this hook, so only the daemon's
+    // parallel bookkeeping is ours to drop. Same keep/drop split as
+    // unwirePassiveShellSlots: m_scrollTabsHideGuard is monotonic and MUST
+    // survive (a restarted counter lets a stale hide completion tear down a
+    // repopulated slot), while the hide-pending bit, the cached model, the
+    // input region and the paint overrides are plain state for a shell that no
+    // longer exists and would otherwise grow by one dead screen per hot-plug.
+    //
+    // Of those, only the overrides are not self-healing: their sole writer is
+    // Daemon::updateScrollingScreens, which runs on a rules/context re-resolve
+    // rather than on a strip update, so a screen that stays in scrolling across
+    // a teardown falls back to the config colours until the next such pass.
+    //
+    // The retraction goes FIRST, and that ordering is load-bearing: this hook
+    // runs before the library schedules the surface for deletion, and Wayland
+    // reuses object ids, so a registration outliving its surface can come to
+    // name an unrelated one and the compositor would slide the wrong thing.
+    announceScrollTabSurface(screenId, nullptr);
+    m_scrollTabsHidePending.remove(screenId);
+    // The strip model SURVIVES, unlike its neighbours. It is the only replay
+    // source the daemon has, and both of its producers are change-latched: the
+    // engine re-emits tabStripsChanged only on a structural change, and
+    // replayScrollTabStrips walks this very map. Dropping it meant a screen
+    // whose shells were destroyed and rebuilt — a monitor power-cycle is the
+    // ordinary case — showed no indicators until the strip's STRUCTURE
+    // happened to change, which for a settled workspace can be a long time.
+    // Keeping it costs one entry per screen id ever seen and makes the replay
+    // self-healing, since updateScrollTabStrips recreates the shell through
+    // ensureScrollTabShellFor. Genuine screen removal drops it below.
+    m_scrollTabInputRegions.remove(screenId);
+    m_scrollTabIndicatorOverrides.remove(screenId);
+    auto it = m_screenStates.find(screenId);
+    if (it != m_screenStates.end()) {
+        it->tabShell = nullptr;
+    }
+}
+
 void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState)
 {
     // Look up the per-content slot Items by their QML object names -
@@ -177,6 +289,8 @@ void OverlayService::wirePassiveShellSlots(const QString& screenId, PhosphorOver
              "main overlay on this screen");
     wireSlot(PhosphorSlotKeys::Cheatsheet(), "cheatsheetSlotItem", PhosphorRoles::Cheatsheet,
              "cheatsheet on this screen");
+    wireSlot(PhosphorSlotKeys::ScrollDropIndicator(), "scrollDropIndicatorSlotItem", PhosphorRoles::ScrollDropIndicator,
+             "scroll drag drop indicator on this screen");
 
     // Wire QML signals → animator-driven slot hide / forward.
     // String-based SIGNAL/SLOT macros are required here because the source
@@ -249,6 +363,12 @@ void OverlayService::warmUpNotifications()
 
 void OverlayService::destroyPassiveShell(const QString& screenId)
 {
+    // Both of the screen's shells go together. Every teardown site names this
+    // one function, so pairing them here is what keeps the tab shell from
+    // outliving the screen it was built for — it has no teardown path of its
+    // own, and a survivor would keep a layer surface mapped on a monitor that
+    // is gone.
+    m_tabShellHost->destroyShell(screenId);
     // Library-side teardown delegated to ShellHost::destroyShell. The
     // PreDestroy callback (wirePassiveShellSlots' inverse) clears every
     // PZ-content sentinel on the daemon's PerScreenOverlayState before
@@ -270,6 +390,24 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // clear the daemon's PZ-content sentinels and disconnect the geom
     // watcher - those are the parallel-state bookkeeping the lib does
     // not know about.
+    //
+    // The tab-indicator maps are NOT cleared here even though they are keyed
+    // the same way: the indicators are not slots on this shell, and
+    // unwireScrollTabShellSlots clears them when THEIR shell goes. Both are
+    // torn down at the same call sites, so doing it in one place keeps the
+    // clears paired with the shell whose destruction actually invalidates them.
+    //
+    // The drop indicator's two per-screen maps DO belong here. Its guard
+    // follows the monotonic EXCEPTION: m_scrollDropIndicatorHideGuard must
+    // never restart, so it stays. Dropping the rect cache
+    // matters for more than the leak — it is the change gate, so a retained
+    // entry would make an identical rect after a shell teardown compare equal
+    // and early-return, and the indicator would silently never show again.
+    m_scrollDropIndicatorHidePending.remove(screenId);
+    m_lastScrollDropIndicatorRect.remove(screenId);
+    // The paint overrides go too, matching the tab twin above. They belong to
+    // the torn-down shell's context, and nothing else drops them.
+    m_scrollDropIndicatorOverrides.remove(screenId);
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
     it->overlayPhysScreen = nullptr;
@@ -277,6 +415,60 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     it->labelsTextureHash = 0;
     it->zoneSelectorPhysScreen = nullptr;
     it->zoneSelectorGeometry = QRect();
+}
+
+void OverlayService::announceScrollTabSurface(const QString& screenId, QQuickWindow* window)
+{
+    // Read the id LATE (from a shown window) rather than at shell creation:
+    // the wl_surface only exists once the QWindow is realised, so an early
+    // read would publish 0 and the indicators would never slide.
+    const quint32 surfaceId = window ? PhosphorWayland::surfaceObjectId(window) : 0;
+    const quint32 previous = m_scrollTabSurfaceIds.value(screenId, 0);
+    if (surfaceId == previous) {
+        return;
+    }
+    if (surfaceId == 0) {
+        m_scrollTabSurfaceIds.remove(screenId);
+    } else {
+        m_scrollTabSurfaceIds.insert(screenId, surfaceId);
+    }
+    Q_EMIT scrollTabSurfaceChanged(screenId, surfaceId);
+}
+
+void OverlayService::removeShellStates(const QString& screenId)
+{
+    // destroyShell only zeroes a ShellState's fields; the entry itself survives
+    // in the host's map, so a hot-plug cycle would slowly grow it with dead
+    // keys. Both hosts share the key space, so both are dropped together.
+    m_shellHost->removeState(screenId);
+    m_tabShellHost->removeState(screenId);
+    // This is the genuine-removal path — the screen's whole entry is going, not
+    // just its surfaces — so the cached strip model goes with it. The shell
+    // teardown hook deliberately keeps that cache so a rebuilt shell can replay
+    // it; without this drop, the entry would outlive the screen itself.
+    m_lastScrollTabStrips.remove(screenId);
+}
+
+void OverlayService::clearShellFailuresForPhysicalScreen(const QString& physicalScreenId)
+{
+    // Drop sticky creation-failure sentinels for every screen id rooted on this
+    // physical monitor. Without this, reconnecting the same monitor inherits
+    // the stale flag and we silently refuse to recreate its shells. Matching is
+    // prefix-based because virtual-screen ids embed the physical id as their
+    // prefix, and the bare physical id is checked for equality.
+    if (physicalScreenId.isEmpty()) {
+        return;
+    }
+    const QString vsPrefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
+    const auto clearOn = [&](PhosphorOverlay::ShellHost& host) {
+        for (const QString& flagged : host.failureScreenIds()) {
+            if (flagged == physicalScreenId || flagged.startsWith(vsPrefix)) {
+                host.clearFailure(flagged);
+            }
+        }
+    };
+    clearOn(*m_shellHost);
+    clearOn(*m_tabShellHost);
 }
 
 void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
@@ -328,11 +520,46 @@ void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)
     // real drag-end via dismissOverlayWindow - that is the right edge
     // for the shell to actually unmap when no other slot is up.
     const bool anyVisible = isVisible(s.osdSlot()) || isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot())
-        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot()) || isVisible(s.cheatsheetSlot());
+        || isVisible(s.zoneSelectorSlot()) || isVisible(s.mainOverlaySlot()) || isVisible(s.cheatsheetSlot())
+        || isVisible(s.scrollDropIndicatorSlot());
     const bool anyInputGrabbing =
         isVisible(s.snapAssistSlot()) || isVisible(s.layoutPickerSlot()) || isVisible(s.cheatsheetSlot());
 
+    // The scroll tab indicators are absent from both predicates on purpose:
+    // they are not slots on this shell at all. Their surface, its mapped state
+    // and its partial input region are the tab shell's own business - see
+    // syncScrollTabShellSurfaceState.
     m_shellHost->syncSurfaceState(effectiveId, anyVisible, anyInputGrabbing);
+
+    // No tab-indicator gate here. Their surface is a sibling of this one on the
+    // same layer and wlr-layer-shell cannot order two surfaces within a layer,
+    // so the compositor would stack the later-created indicators ABOVE this
+    // shell's modal cards. The effect settles it instead, lowering that surface
+    // to the bottom of its layer once per map
+    // (PlasmaZonesEffect::restackScrollTabSurfaces), which restores exactly the
+    // tiers the two had while they shared one surface.
+}
+
+void OverlayService::syncScrollTabShellSurfaceState(const QString& effectiveId)
+{
+    auto it = m_screenStates.constFind(effectiveId);
+    if (it == m_screenStates.constEnd()) {
+        return;
+    }
+    QQuickItem* slot = it->scrollTabsSlot();
+    const bool visible = slot != nullptr && slot->isVisible();
+
+    // The indicators take clicks ONLY where they draw. A tabbed column's
+    // indicator is a few pixels of a mostly-empty screen, so grabbing the whole
+    // surface for it would eat every click on the desktop for as long as any
+    // column stayed tabbed. Absent or hidden, the region is empty and the
+    // surface is click-through.
+    //
+    // anyInputGrabbing is always false here: nothing on this surface is modal,
+    // and passing true would make the library ignore the partial region and
+    // hand the indicators every click on the screen.
+    const QRegion tabRegion = visible ? m_scrollTabInputRegions.value(effectiveId) : QRegion();
+    m_tabShellHost->syncSurfaceState(effectiveId, visible, /*anyInputGrabbing=*/false, tabRegion);
 }
 
 void OverlayService::syncPassiveShellSurfaceStateForSurface(PhosphorLayer::Surface* surface)

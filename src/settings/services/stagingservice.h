@@ -18,14 +18,15 @@ class Settings;
 ///
 /// Covers three staging categories:
 ///   1. **Assignments** — per-(screen × desktop × activity) snapping /
-///      tiling layout assignments, plus full-context clears and the
-///      atomic mode+layout staging used by the Overview page.
+///      tiling layout assignments, plus per-slot clears and the atomic
+///      mode+layout staging used by the Overview page.
 ///   2. **Virtual-screen configurations** — staged virtual screen layouts
 ///      per physical screen, flushed to Settings (for persistence) BEFORE
 ///      `Settings::save()` and to the daemon (via D-Bus) AFTER.
-///   3. **Quick-layout slots** — both snapping and tiling slot writes go
-///      to the daemon's mode-keyed LayoutRegistry via D-Bus (after
-///      `notifyReload`), flushed together by `flushQuickSlotsToDaemon()`.
+///   3. **Quick-layout slots** — the snapping, tiling and scrolling slot
+///      writes all go to the daemon's mode-keyed LayoutRegistry via D-Bus
+///      (after `notifyReload`), flushed together by
+///      `flushQuickSlotsToDaemon()`.
 ///
 /// Orchestrated by SettingsController's save lifecycle — callers are
 /// expected to invoke the flush methods in the right order (persistence
@@ -36,8 +37,7 @@ class Settings;
 class StagingService
 {
 public:
-    /// A single entry in the assignment staging map. `fullCleared` takes
-    /// precedence over individual field clears; `stagedMode` (Overview
+    /// A single entry in the assignment staging map. `stagedMode` (Overview
     /// page's atomic write) takes precedence over the per-field snapping
     /// / tiling fields.
     struct StagedAssignment
@@ -48,7 +48,6 @@ public:
         std::optional<QString> snappingLayoutId;
         std::optional<QString> tilingAlgorithmId;
         std::optional<int> stagedMode;
-        bool fullCleared = false;
     };
 
     StagingService() = default;
@@ -73,14 +72,10 @@ public:
     /// assignment for the same context.
     void stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
 
-    /// Stage a full clear of the (screen × desktop × activity) context.
-    void stageFullClear(const QString& screen, int desktop, const QString& activity);
-
     /// Remove any staged entry for the (screen × desktop × activity)
-    /// context entirely — a true unstage, unlike `stageFullClear`, which
-    /// stages a daemon-side clear that the flush pushes on Apply. After
-    /// this, the flush leaves the context's daemon-side assignment
-    /// untouched. No-op when nothing is staged for the context.
+    /// context entirely — a true unstage. After this, the flush leaves the
+    /// context's daemon-side assignment untouched. No-op when nothing is
+    /// staged for the context.
     void removeStagedAssignment(const QString& screen, int desktop, const QString& activity);
 
     /// Stage a tiling-only clear (flushes as "mode=0 + no layouts",
@@ -115,9 +110,15 @@ public:
 
     /// Flush all staged assignments to the daemon via D-Bus. SettingsController
     /// wraps this with `setSaveBatchMode(true)` + `applyAssignmentChanges` +
-    /// `setSaveBatchMode(false)` to amortise the broadcast cost. Clears the
-    /// staging map on completion.
-    void flushAssignmentsToDaemon();
+    /// `setSaveBatchMode(false)` to amortise the broadcast cost.
+    ///
+    /// Returns false when ANY per-entry call came back as a D-Bus error, and in
+    /// that case the staging map is RETAINED. Clearing it on a failed flush was
+    /// the bug this contract exists to prevent: the retry Save found nothing
+    /// staged, did nothing, and cleared the unsaved badge while the daemon had
+    /// never applied the edits. Every call this method makes is an idempotent
+    /// setter, so re-flushing the whole retained map on the next Save is safe.
+    [[nodiscard]] bool flushAssignmentsToDaemon();
 
     // ── Virtual screen staging ────────────────────────────────────────
 
@@ -148,18 +149,23 @@ public:
     /// Push staged VS configs to the daemon via D-Bus. Runs AFTER
     /// `Settings::save()` but BEFORE `notifyReload` so virtual screen IDs
     /// exist by the time assignments referencing them are processed.
-    /// Clears the staging map on completion.
-    void flushVirtualScreensToDaemon();
+    ///
+    /// Same failure contract as `flushAssignmentsToDaemon`: false when any
+    /// per-screen call errored, and the staging map is retained so the retry
+    /// Save has something to send.
+    [[nodiscard]] bool flushVirtualScreensToDaemon();
 
     // ── Quick layout slots ────────────────────────────────────────────
 
     void stageSnappingQuickSlot(int slotNumber, const QString& layoutId);
     void stageTilingQuickSlot(int slotNumber, const QString& layoutId);
+    void stageScrollingQuickSlot(int slotNumber, const QString& templateId);
 
     /// Returns true if slot has a staged value. Fills @p out with the
     /// staged layout ID (possibly empty).
     bool stagedSnappingQuickSlot(int slotNumber, QString& out) const;
     bool stagedTilingQuickSlot(int slotNumber, QString& out) const;
+    bool stagedScrollingQuickSlot(int slotNumber, QString& out) const;
 
     /// True if any quick-slot edit is staged for the mode. Backs the per-page
     /// dirty check for the Quick Shortcuts pages.
@@ -171,18 +177,27 @@ public:
     {
         return !m_tilingQuickSlots.isEmpty();
     }
+    bool hasStagedScrollingQuickSlots() const
+    {
+        return !m_scrollingQuickSlots.isEmpty();
+    }
 
     /// Drop all staged quick-slot edits for the mode (per-page Discard reverts
     /// to the daemon's saved slots; the getters fall back to the daemon when a
     /// slot is not staged).
     void clearSnappingQuickSlots();
     void clearTilingQuickSlots();
+    void clearScrollingQuickSlots();
 
-    /// Push staged quick-layout slots (both snapping and tiling modes) to the
-    /// daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER `notifyReload`
-    /// so the daemon has the fresh config. Clears both staging maps on
-    /// completion.
-    void flushQuickSlotsToDaemon();
+    /// Push staged quick-layout slots (snapping, tiling and scrolling modes)
+    /// to the daemon's mode-keyed LayoutRegistry via D-Bus. Runs AFTER
+    /// `notifyReload` so the daemon has the fresh config.
+    ///
+    /// Same failure contract as `flushAssignmentsToDaemon`: false when any
+    /// per-slot call errored, and the staging map for the failing mode is
+    /// retained. All three modes are attempted regardless of the others'
+    /// outcome.
+    [[nodiscard]] bool flushQuickSlotsToDaemon();
 
 private:
     StagedAssignment& assignmentEntry(const QString& screen, int desktop, const QString& activity);
@@ -194,6 +209,7 @@ private:
     QHash<QString, QVariantList> m_virtualScreenConfigs;
     QHash<int, QString> m_snappingQuickSlots;
     QHash<int, QString> m_tilingQuickSlots;
+    QHash<int, QString> m_scrollingQuickSlots;
 };
 
 } // namespace PlasmaZones

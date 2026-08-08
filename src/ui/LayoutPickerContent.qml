@@ -182,6 +182,7 @@ Item {
         onClicked: root._requestDismiss()
         Accessible.name: i18n("Dismiss layout picker")
         Accessible.role: Accessible.Button
+        Accessible.onPressAction: root._requestDismiss()
     }
 
     // Main container card
@@ -223,6 +224,8 @@ Item {
         PopupCardTitle {
             id: titleLabel
 
+            fontFamily: root.fontFamily
+            fontSizeScale: root.fontSizeScale
             anchors.top: parent.top
             anchors.topMargin: metrics.paddingSide
             anchors.horizontalCenter: parent.horizontalCenter
@@ -339,14 +342,14 @@ Item {
                             if (root.locked)
                                 return;
 
-                            root.selectedIndex = index;
+                            root.selectedIndex = layoutCard.index;
                             root.confirmSelection();
                         }
                         onEntered: {
                             if (root.locked && !layoutCard.isActive)
                                 return;
 
-                            root.selectedIndex = index;
+                            root.selectedIndex = layoutCard.index;
                         }
                     }
                 }

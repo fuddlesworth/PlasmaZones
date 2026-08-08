@@ -84,10 +84,11 @@ struct PHOSPHORRULES_EXPORT RuleAction
  * input widget without the UI layer hand-maintaining a parallel per-type
  * switch. `kind` is a UI-side hint string (the canonical kinds are
  * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
- * picker-aware kinds `snappingLayout`, `tilingAlgorithm`, `animationEvent`,
- * `shaderEffect`, `overlayShader`, `zoneOrdinals`, `curveEditor`, `screenId`,
- * `virtualDesktop`, `decorationChain`); QML loaders dispatch on it. Labels stay in
- * the GPL settings layer because they need translation through PhosphorI18n::tr —
+ * picker-aware kinds `snappingLayout`, `tilingAlgorithm`,
+ * `scrollingTemplate`, `animationEvent`, `shaderEffect`, `overlayShader`,
+ * `zoneOrdinals`, `curveEditor`, `screenId`, `virtualDesktop`,
+ * `decorationChain`); QML loaders dispatch on it. Labels stay in the GPL
+ * settings layer because they need translation through PhosphorI18n::tr —
  * the lib only owns the structural part of the schema.
  *
  * The optional fields are populated by kind:
@@ -101,8 +102,10 @@ struct PHOSPHORRULES_EXPORT RuleAction
  *     QColor::HexArgb); seeded by the settings layer's `defaultPayloadFor`
  *     "color" branch (defaultDisplay is a double, so it cannot carry a colour
  *     seed). Shorter `#RGB`/`#RRGGBB` shapes still load for hand-edited values.
- *   - picker-aware kinds carry no schema state — the QML loader knows
- *     to swap in the catalogue-driven ComboBox.
+ *   - picker-aware kinds normally carry no schema state — the QML loader
+ *     knows to swap in the catalogue-driven ComboBox — though one MAY carry
+ *     advisory bounds (RouteToDesktop's `virtualDesktop` declares min/max);
+ *     the loader dispatches on `kind` alone either way.
  */
 struct PHOSPHORRULES_EXPORT ParamSchema
 {
@@ -128,6 +131,16 @@ struct PHOSPHORRULES_EXPORT ParamSchema
 // field edit; no consumer call-site changes. Tags compose via intersection:
 // e.g. the animation-override actions (the 3 Override* actions, NOT
 // ExcludeAnimations) are exactly Tag::Animation ∩ Tag::Effect.
+//
+// RETAINED PUBLIC API: Tag::Border, Tag::Gap, Tag::LayoutEngine and
+// Tag::Overlay currently have no in-tree reader, and `typesWithTag()` has no
+// in-tree call site (tests included) — every consumer that could use them
+// happens to filter by slot instead. They stay for the same reason
+// PhosphorZones::LayoutAssignmentKey does (AssignmentEntry.h): this is an
+// installed LGPL library header whose point is third-party linkage, the tag
+// vocabulary is the documented classification of the action set, and removing
+// an exported constant or query is a source break for consumers we do not
+// control. Deliberately kept, not overlooked.
 namespace Tag {
 /// Actions consumed by the KWin effect's rule set (shader manager +
 /// border appearance + window stacking layer). ExcludeAnimations
@@ -154,7 +167,8 @@ inline constexpr QLatin1StringView Overlay{"overlay"};
  *   - a `validate` predicate run on load,
  *   - the set of param keys the action accepts (`allowedKeys`) — the strict
  *     loader rejects any action carrying a key not in this set,
- *   - whether the action is **terminal** (an `Exclude` action stops evaluation),
+ *   - whether the action is **terminal** (an Exclude-family action stops
+ *     evaluation — see the four Exclude* action types),
  *   - the structural `params` schema consumed by the editor UI,
  *   - the `userAuthorable` visibility flag used by the action-type picker
  *     to filter out actions that are registered for back-compat / loader
@@ -177,7 +191,10 @@ struct PHOSPHORRULES_EXPORT ActionDescriptor
     SlotResolver slotFor;
     /// Returns true if @p params is a well-formed payload for this type.
     Validator validate;
-    /// Terminal actions (Exclude) stop evaluation once their rule matches.
+    /// Terminal actions (the Exclude family: Exclude / ExcludePlacement /
+    /// ExcludeAnimations / ExcludeDecorations) stop evaluation once their
+    /// rule matches — within the evaluator's terminal-action scope, see
+    /// RuleEvaluator::setTerminalActionScope.
     bool terminal = false;
     /// The complete set of param keys this action type accepts. The strict
     /// loader (`RuleAction::fromJson`) rejects an action whose `params`
@@ -203,8 +220,9 @@ struct PHOSPHORRULES_EXPORT ActionDescriptor
     /// UI grouping category for the action-type picker. Actions with the
     /// same category are clustered together; empty means uncategorized.
     QString category{};
-    /// Sort key within a category (lower = earlier). Actions with the same
-    /// displayOrder are sorted by type string.
+    /// Intended sort key within a category (lower = earlier). Advisory only
+    /// today: the shipped picker sorts within a category alphabetically by
+    /// label and no consumer reads this field.
     int displayOrder = 0;
     /// Behavioural tags for consumer-side filtering. Values are from the
     /// `Tag::` namespace constants. Use `ActionRegistry::hasTag()` /
@@ -248,7 +266,7 @@ public:
     /// type is unregistered or its descriptor rejects the params.
     QString slotFor(const RuleAction& action) const;
 
-    /// True if @p action is a terminal action (Exclude).
+    /// True if @p action is a terminal action (one of the Exclude family).
     bool isTerminal(const RuleAction& action) const;
 
     /// True if @p action passes its descriptor's validation.
@@ -288,6 +306,14 @@ namespace ActionType {
 inline constexpr QLatin1StringView SetEngineMode{"setEngineMode"};
 inline constexpr QLatin1StringView SetSnappingLayout{"setSnappingLayout"};
 inline constexpr QLatin1StringView SetTilingAlgorithm{"setTilingAlgorithm"};
+/// Scrolling-mode template for the matched context: a NATIVE
+/// ScrollingTemplate id (its own picker kind, `scrollingTemplate`, with its
+/// own name resolution — not a manual layout). It shares the LayoutId wire
+/// KEY with SetSnappingLayout but the two id namespaces are disjoint, and it
+/// fills its own cascade slot — the lossless mode-toggle contract stores it
+/// BESIDE the snapping layout in one rule, and sharing the layout slot would
+/// shadow one of the pair.
+inline constexpr QLatin1StringView SetScrollingTemplate{"setScrollingTemplate"};
 inline constexpr QLatin1StringView DisableEngine{"disableEngine"};
 /// Lock the active layout for the matched screen/desktop/activity context so
 /// it can't be switched — the rule-driven equivalent of the manual
@@ -310,6 +336,25 @@ inline constexpr QLatin1StringView LockContext{"lockContext"};
 /// `LayoutRegistry::resolveContextDefaultAssignment`, mirroring `LockContext`.
 inline constexpr QLatin1StringView DefaultLayoutAssignment{"defaultLayoutAssignment"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
+/// Exclude a matched window from the placement engines ONLY — snapping,
+/// autotile and scrolling all treat it as unmanaged (open path, drag gate,
+/// keyboard navigation), so it stays floating — while decorations and
+/// animations still apply. The scoped sibling of the blanket `Exclude`,
+/// which additionally strips decorations. Terminal like `Exclude`, and
+/// sliced into the same placement-exclusion set consumers bind
+/// (`ExclusionRules::excludePlacementRulesFrom` returns Exclude ∪
+/// ExcludePlacement rules). Distinct from `Float`, which is an open-path
+/// placement verdict on a MANAGED window (a floated window can still be
+/// dragged into a zone; an excluded one cannot).
+///
+/// Scope enforcement: evaluators bound to the FULL store declare a
+/// terminal-action scope (RuleEvaluator::setTerminalActionScope) so this
+/// action terminates only placement-policy walks — on a mixed rule, its
+/// presence does not cancel animation/appearance or context resolution.
+/// Carries no tags, deliberately: no in-tree tag reader consumes the
+/// exclusion family, and its placement effect flows exclusively through
+/// the slicer.
+inline constexpr QLatin1StringView ExcludePlacement{"excludePlacement"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Snap a matched window into one or more zones on open. Carries a non-empty
 /// list of 1-based zone ordinals (`ActionParam::Zones`); a single ordinal snaps
@@ -391,14 +436,34 @@ inline constexpr QLatin1StringView SetOverlayShowZoneNumbers{"setOverlayShowZone
 /// settings lists by the v3→v4 chain.
 inline constexpr QLatin1StringView ExcludeAnimations{"excludeAnimations"};
 
+/// Disable window decorations (the border + surface-pack chain) on a matched
+/// window — the decoration mirror of `ExcludeAnimations`. The KWin effect's
+/// `shouldDecorateWindow` gate binds the decoration-exclusion slice
+/// (`ExclusionRules::excludeDecorationsRulesFrom`, Exclude ∪
+/// ExcludeDecorations), so the blanket `Exclude` keeps stripping decorations
+/// while this action strips ONLY decorations — placement and animations are
+/// untouched (full-store evaluators enforce this by scoping which terminal
+/// actions they honour, see RuleEvaluator::setTerminalActionScope, so a
+/// mixed rule carrying this action cannot cancel placement or animation
+/// resolution). Like ExcludeAnimations it deliberately omits `Tag::Effect`:
+/// carrying it would admit the rule into the effect's animation rule set,
+/// whose "any match force-animates" opt-in gate must not fire for a
+/// decoration opt-out. Carries `Tag::Border` as classification only — no
+/// in-tree tag reader consumes it, and blanket `Exclude`'s decoration
+/// effect flows exclusively through the slicer, never through tags.
+/// Terminal.
+inline constexpr QLatin1StringView ExcludeDecorations{"excludeDecorations"};
+
 /// Per-window override for floated-position restore on login. A boolean `value`
 /// action: true forces the window's previous floated position (and original
 /// monitor) to be restored, false suppresses it. Engine-neutral — overrides the
 /// per-engine `snappingRestoreFloatedWindowsOnLogin` /
-/// `autotileRestoreFloatedWindowsOnLogin` settings for matched windows. Resolved
-/// by the daemon-injected restore-position predicate and consulted inside both
-/// SnapEngine::resolveWindowRestore and AutotileEngine::insertWindow. Domain
-/// Window (matches window properties).
+/// `autotileRestoreFloatedWindowsOnLogin` / `scrollingRestoreFloatedWindowsOnLogin`
+/// settings for matched windows. Resolved by the daemon-injected
+/// restore-position predicate, which all THREE placement engines take:
+/// consulted inside SnapEngine::resolveWindowRestore,
+/// AutotileEngine::insertWindow and the scroll engine's floating-reopen branch.
+/// Domain Window (matches window properties).
 inline constexpr QLatin1StringView RestorePosition{"restorePosition"};
 
 /// Per-window override for the "restore snapped windows to their zone on login"
@@ -504,32 +569,175 @@ inline constexpr QLatin1StringView SetDragBehavior{"setDragBehavior"};
 /// uniforms. Applied only when the target algorithm is the screen's effective
 /// algorithm; layered over the global per-algorithm config. Context domain.
 inline constexpr QLatin1StringView SetAlgorithmParam{"setAlgorithmParam"};
+
+// ── Per-context scrolling parameter overrides (domain Context) ──
+// Override the global (or per-screen config) scrolling-engine parameters for the
+// matched screen / desktop / activity, the same way the autotile family above
+// overrides the tiling params. Each carries a single `value`.
+/// Width a newly-opened column takes, as a fraction of the work area. Carries a
+/// numeric `ActionParam::Value` (the stored wire value is the fraction; the editor
+/// shows a percent).
+inline constexpr QLatin1StringView SetScrollDefaultColumnWidth{"setScrollDefaultColumnWidth"};
+/// When the scroll viewport re-centres on the focused column. Closed enum token
+/// (`ActionParam::Value`, CenterFocusedColumnToken).
+inline constexpr QLatin1StringView SetCenterFocusedColumn{"setCenterFocusedColumn"};
+/// How a newly-opened column displays its windows: side by side, or stacked as
+/// tabs. Closed enum token (`ActionParam::Value`, ColumnDisplayToken).
+inline constexpr QLatin1StringView SetScrollDefaultColumnDisplay{"setScrollDefaultColumnDisplay"};
+/// Where a fresh-opened window's new column enters the strip. Closed enum
+/// token (`ActionParam::Value`, ScrollInsertPositionToken).
+inline constexpr QLatin1StringView SetScrollInsertPosition{"setScrollInsertPosition"};
+/// Height a newly-opened window takes inside its column, as a fraction of the
+/// work-area height (numeric `ActionParam::Value`, edited as a percent;
+/// committed as a fixed pixel intent against the live work area).
+inline constexpr QLatin1StringView SetScrollDefaultWindowHeight{"setScrollDefaultWindowHeight"};
+
+// ── Per-context tab-indicator overrides (domain Context) ──
+// niri's `tab-indicator` layout block, one action per property so independent
+// context rules cascade per-property (a layout rule can set the position while
+// a theme rule sets the colours, and neither clobbers the other). The GEOMETRY
+// half reaches the scrolling engine through its per-screen override map; the
+// PAINT half is consumed daemon-side and applied to the overlay, matching the
+// split IScrollSettings documents.
+/// Whether tabbed columns show an indicator at all. Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorEnabled{"setTabIndicatorEnabled"};
+/// Title chips or a segment bar. Closed enum token (`ActionParam::Value`,
+/// TabIndicatorStyleToken).
+inline constexpr QLatin1StringView SetTabIndicatorStyle{"setTabIndicatorStyle"};
+/// Which column edge the indicator runs along. Closed enum token
+/// (`ActionParam::Value`, TabIndicatorPositionToken).
+inline constexpr QLatin1StringView SetTabIndicatorPosition{"setTabIndicatorPosition"};
+/// Hide the indicator on a single-window tabbed column. Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorHideWhenSingleTab{"setTabIndicatorHideWhenSingleTab"};
+/// Reserve the indicator out of the column instead of drawing beside it.
+/// Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorPlaceWithinColumn{"setTabIndicatorPlaceWithinColumn"};
+/// Gap between indicator and window in px. Numeric `ActionParam::Value`, and
+/// the one numeric action here whose range is SIGNED — a negative gap draws
+/// the indicator over the window, which is niri's behaviour.
+inline constexpr QLatin1StringView SetTabIndicatorGap{"setTabIndicatorGap"};
+/// Indicator thickness in px. Numeric `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorWidth{"setTabIndicatorWidth"};
+/// Indicator length as a fraction of the column extent. Numeric
+/// `ActionParam::Value` (stored fraction, edited as a percent).
+inline constexpr QLatin1StringView SetTabIndicatorLength{"setTabIndicatorLength"};
+/// Gap between individual tabs in px. Numeric `ActionParam::Value`.
+inline constexpr QLatin1StringView SetTabIndicatorGapsBetweenTabs{"setTabIndicatorGapsBetweenTabs"};
+/// Per-tab corner radius in px. Numeric `ActionParam::Value`, signed like the
+/// gap: -1 is the "fully rounded" sentinel the config layer uses.
+inline constexpr QLatin1StringView SetTabIndicatorCornerRadius{"setTabIndicatorCornerRadius"};
+/// Tab colours. Hex `ActionParam::Value`, same shapes as the border colours.
+inline constexpr QLatin1StringView SetTabIndicatorActiveColor{"setTabIndicatorActiveColor"};
+inline constexpr QLatin1StringView SetTabIndicatorInactiveColor{"setTabIndicatorInactiveColor"};
+inline constexpr QLatin1StringView SetTabIndicatorUrgentColor{"setTabIndicatorUrgentColor"};
+
+// ── Per-context drop-indicator overrides (domain Context) ──
+// The drop-target highlight painted while a drag re-insert is armed. Context
+// domain rather than Window for the same reason as the tab indicator's bulk:
+// the indicator describes an empty SLOT on a screen, not a window, so a rule
+// that matches a window has no referent for it. Every one of these is PAINT —
+// unlike the tab indicator there is no geometry half, because the rect comes
+// from the engine's own layout math and cannot be positioned independently of
+// where the drop lands. They are therefore collected daemon-side and handed
+// straight to the overlay, never through the engine's per-screen override map.
+/// Whether the drop indicator is painted at all. Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView SetDropIndicatorEnabled{"setDropIndicatorEnabled"};
+/// Fill and border colours. Hex `ActionParam::Value`. EMPTY is not expressible
+/// as a rule value — a rule that does not set the colour simply leaves the
+/// setting (and through it the "follow the colour scheme" sentinel) in place.
+inline constexpr QLatin1StringView SetDropIndicatorColor{"setDropIndicatorColor"};
+inline constexpr QLatin1StringView SetDropIndicatorBorderColor{"setDropIndicatorBorderColor"};
+/// Fill opacity, 0.0-1.0. Numeric `ActionParam::Value` (stored fraction,
+/// edited as a percent). The border is always opaque, so this is the fill's
+/// alone — see ScrollDropIndicatorContent.
+inline constexpr QLatin1StringView SetDropIndicatorOpacity{"setDropIndicatorOpacity"};
+/// Border thickness in px. Numeric `ActionParam::Value`. Zero is legal and
+/// means a fill with no edge, so this floors at 0 rather than at 1.
+inline constexpr QLatin1StringView SetDropIndicatorBorderWidth{"setDropIndicatorBorderWidth"};
+/// Corner radius in px. Numeric `ActionParam::Value`. UNSIGNED, unlike the tab
+/// indicator's: there is no pill sentinel here, 0 means square.
+inline constexpr QLatin1StringView SetDropIndicatorBorderRadius{"setDropIndicatorBorderRadius"};
+
+// ── Per-window scrolling open overrides (domain Window) ──
+// Read on the open path for the matched window, layered over the context /
+// config defaults above, so one application can open wide or tabbed without
+// changing the engine's defaults.
+/// Width the opening window's column takes, as a fraction of the work area.
+/// Numeric `ActionParam::Value` (stored fraction, edited as a percent).
+/// Ignored when OpenColumnPlacement resolves to "consume" on a non-empty
+/// strip, because the arrival joins the host column and keeps its width.
+inline constexpr QLatin1StringView OpenColumnWidth{"openColumnWidth"};
+/// Whether the opening window's column starts tabbed. Boolean `ActionParam::Value`.
+inline constexpr QLatin1StringView OpenTabbed{"openTabbed"};
+/// Per-window tab colours — niri's `tab-indicator` WINDOW rule, which recolours
+/// only the matched window's own tab. These outrank the per-context colours
+/// above, which in turn outrank the config, which falls back to the theme:
+/// niri's exact resolution order. Hex `ActionParam::Value`.
+inline constexpr QLatin1StringView TabColorActive{"tabColorActive"};
+inline constexpr QLatin1StringView TabColorInactive{"tabColorInactive"};
+inline constexpr QLatin1StringView TabColorUrgent{"tabColorUrgent"};
+/// Per-window drop-indicator colours, keyed on the DRAGGED window. The only
+/// per-window slice of the drop indicator that has a coherent referent: while
+/// a drag is in flight exactly one window is being dragged, so "show this
+/// colour when dragging Firefox" resolves unambiguously at drag start. The
+/// remaining four properties stay context-only — a per-window opacity or
+/// border width would name the same slot the context rule already describes
+/// with no added meaning. These outrank the per-context colours, which outrank
+/// the config, which falls back to the theme: the tab colours' exact order.
+/// Hex `ActionParam::Value`.
+inline constexpr QLatin1StringView DropIndicatorColor{"dropIndicatorColor"};
+inline constexpr QLatin1StringView DropIndicatorBorderColor{"dropIndicatorBorderColor"};
+/// Whether the opening window starts its own column or is consumed into the
+/// focused one. Closed enum token (`ActionParam::Value`, ColumnPlacementToken).
+inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
+/// Height the opening window takes inside its column, as a fraction of the
+/// work-area height. Numeric `ActionParam::Value` (stored fraction, edited as
+/// a percent). Applies after every insert path, outranking remembered and
+/// default heights the way OpenColumnWidth outranks the width defaults.
+inline constexpr QLatin1StringView OpenWindowHeight{"openWindowHeight"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
 //
 // Param-key vocabulary shared across every wire-shape reader (the registry
-// validators in ruleaction.cpp, the config-layer v3→v4 migration that ports
+// validators in ruleaction_builtins_engine.cpp /
+// ruleaction_builtins_appearance.cpp, the config-layer v3→v4 migration that ports
 // legacy AnimationAppRule entries, the rule-editor UI, and the KWin-effect-
 // side resolvers in `kwin-effect/plasmazoneseffect/shader_resolve.cpp`).
 // A future rename (e.g. `effectId` → `effect_id`) updates one entry here and
 // flows everywhere instead of being hard-coded at four call sites.
 namespace ActionParam {
-// OverrideAnimation{Shader,Timing,Curve} family.
+// OverrideAnimation{Shader,Timing,Curve} family. `Params` is the exception:
+// it is the shared nested-payload key for every action carrying a free-form
+// uniform / parameter blob, so it is also read by SetOverlayShader,
+// OverrideDecorationChain and SetAlgorithmParam.
 inline constexpr QLatin1StringView Event{"event"};
 inline constexpr QLatin1StringView EffectId{"effectId"};
 inline constexpr QLatin1StringView Params{"params"};
 inline constexpr QLatin1StringView Curve{"curve"};
 inline constexpr QLatin1StringView DurationMs{"durationMs"};
-// SetOpacity payload — the wire-encoded opacity is a [0.0, 1.0] double. Also the
-// single colour param key for SetBorderColorActive / SetBorderColorInactive: a
-// `#AARRGGBB` hex string OR the `BorderColorToken::Accent` sentinel, which the
-// consumer resolves to the live system accent.
+// The shared SINGLE-PAYLOAD key: any action whose whole payload is one scalar
+// stores it here, across the appearance, overlay, gap, engine-parameter and
+// per-window-override families. The wire type follows the action's descriptor
+// kind — a [0.0, 1.0] double for the opacity and fraction actions, an integer
+// for the gap and border-metric actions, a bool for the on/off overrides, a
+// `#AARRGGBB` hex string (or the `BorderColorToken::Accent` sentinel, resolved
+// to the live system accent) for the colour actions, and an enum wire token for
+// the token-valued ones.
 inline constexpr QLatin1StringView Value{"value"};
 // SetEngineMode / DisableEngine engine-token key — the wire token vocabulary
 // is `PhosphorZones::modeToWireString(Mode)` (snapping / autotile / scrolling).
 inline constexpr QLatin1StringView Mode{"mode"};
-// SetSnappingLayout layout-id key — wire is a `{uuid-with-braces}` string.
+// SetSnappingLayout / SetScrollingTemplate layout-id key — wire is a
+// `{uuid-with-braces}` string. The two id namespaces are disjoint:
+// SetSnappingLayout carries a manual-layout uuid, SetScrollingTemplate a
+// native scrolling-template uuid. The split is enforced at the CONSUMER, not
+// at load, the same open-vocabulary shape SetEngineMode's `Mode` key uses: the
+// descriptor validator only checks that the string is non-empty, so a layout
+// uuid written into a SetScrollingTemplate action loads fine and then fails to
+// resolve in `LayoutRegistry::scrollingTemplateForContext`, whose template-store
+// lookup degrades an unknown id to "no template" and leaves the engine on its
+// compiled defaults.
 inline constexpr QLatin1StringView LayoutId{"layoutId"};
 // SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
 inline constexpr QLatin1StringView Algorithm{"algorithm"};
@@ -555,23 +763,82 @@ inline constexpr QLatin1StringView Chain{"chain"};
 /// only reach 9); the cap exists purely to reject a grossly malformed hand-edited
 /// payload AND to keep the load-time validator's integrality check from narrowing
 /// an out-of-range double to int (which is UB). Shared by the descriptor validator
-/// (ruleaction.cpp) and the v3→v4 migration so the two stay in lockstep.
+/// (ruleaction_builtins_engine.cpp) and the v3→v4 migration so the two stay in
+/// lockstep.
 inline constexpr int MaxZoneOrdinal = 64;
 
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the
-/// load-time descriptor validators (ruleaction.cpp) and the KWin-effect
+/// load-time descriptor validators (ruleaction_builtins_appearance.cpp for
+/// the per-window pair, ruleaction_builtins_engine.cpp for the overlay
+/// WIDTH — the overlay RADIUS deliberately uses its own wider
+/// `kMaxOverlayBorderRadius`, see ruleaction_builtins_p.h) and the KWin-effect
 /// consumer re-validation (shader_resolve.cpp) stay in lockstep — a
 /// programmatically-built or hand-edited payload out of this range is
 /// rejected at both boundaries rather than drawn.
 inline constexpr double MaxBorderWidth = 10.0;
 inline constexpr double MaxBorderRadius = 20.0;
 
+/// Bounds for a scrolling-engine work-area FRACTION, width or height. The pair
+/// is named for the column-width action it was introduced with, but it now
+/// bounds four actions across both axes: `SetScrollDefaultColumnWidth` and
+/// `OpenColumnWidth` against the work-area WIDTH, `SetScrollDefaultWindowHeight`
+/// and `OpenWindowHeight` against its HEIGHT. One pair, because the axes share
+/// the same "at least a sliver, at most the whole work area" policy. Shared for
+/// the same lockstep reason as the border bounds above: the load-time
+/// descriptor validators (via the private percent pair in
+/// ruleaction_builtins_p.h), the zones-layer context resolver
+/// (layoutregistry_contextresolve.cpp), and the per-window open-params consumer
+/// (windowtrackingadaptor/rules.cpp) all validate against these — a private
+/// copy in any of them would drift by hand-mirroring. A column or window may
+/// legitimately take the whole work area, so the upper bound is 1.0.
+inline constexpr double MinColumnWidthRatio = 0.05;
+inline constexpr double MaxColumnWidthRatio = 1.0;
+
+/// Bounds for the tab-indicator numeric slots. Installed here, next to the
+/// column-width pair and for the same reason: the descriptor validators
+/// (ruleaction_builtins_appearance.cpp) and the per-context consumer
+/// (layoutregistry_contextresolve.cpp) both check against these, so a private
+/// copy in either would drift by hand-mirroring.
+///
+/// Two floors are NEGATIVE and neither is a mistake. A negative GAP draws the
+/// indicator on top of the window, which is niri's documented behaviour. The
+/// corner-radius floor is the config layer's "fully rounded" SENTINEL, not a
+/// real negative radius; the validators admit the whole [-1, max] range rather
+/// than carving out (-1, 0), because every consumer rounds to an int and both
+/// -1 and 0 are meaningful there.
+///
+/// MaxTabIndicatorGap bounds TWO slots: the indicator-to-window gap and the
+/// between-tabs gap (which floors at 0 rather than at the negative). Moving it
+/// moves both.
+inline constexpr double MinTabIndicatorGap = -64.0;
+inline constexpr double MaxTabIndicatorGap = 64.0;
+inline constexpr double MinTabIndicatorWidth = 1.0;
+inline constexpr double MaxTabIndicatorWidth = 64.0;
+inline constexpr double TabIndicatorCornerRadiusPill = -1.0;
+inline constexpr double MaxTabIndicatorCornerRadius = 64.0;
+inline constexpr double MinTabIndicatorLengthRatio = 0.05;
+inline constexpr double MaxTabIndicatorLengthRatio = 1.0;
+
+/// Drop-indicator numeric bounds, mirroring the config layer's
+/// (ConfigDefaults::scrollingDropIndicator*Min/Max) so a rule cannot author a
+/// value the settings page would refuse. Both floors are 0 and neither is a
+/// sentinel: a zero border width is a fill with no edge, and a zero radius is
+/// a square corner. Deliberately NOT shared with the tab-indicator constants
+/// above — the two families' ranges agree today by coincidence of taste, not
+/// by contract, and tying them would make retuning one silently move the other.
+inline constexpr double MinDropIndicatorOpacity = 0.0;
+inline constexpr double MaxDropIndicatorOpacity = 1.0;
+inline constexpr double MinDropIndicatorBorderWidth = 0.0;
+inline constexpr double MaxDropIndicatorBorderWidth = 10.0;
+inline constexpr double MinDropIndicatorBorderRadius = 0.0;
+inline constexpr double MaxDropIndicatorBorderRadius = 50.0;
+
 /// Upper bound for a `RouteToDesktop` 1-based virtual-desktop number. KWin tops
 /// out far below this in practice; the cap exists only to reject a grossly
 /// malformed hand-edited payload and to keep the validator's integrality check
 /// from narrowing an out-of-range double to int (UB). The descriptor validator
-/// (ruleaction.cpp) enforces the bound once, at load; downstream consumers only
+/// (ruleaction_builtins_engine.cpp) enforces the bound once, at load; downstream consumers only
 /// re-check the 1-based lower bound, trusting the load-time upper-bound clamp.
 inline constexpr int MaxVirtualDesktopOrdinal = 1024;
 
@@ -610,6 +877,58 @@ inline constexpr QLatin1StringView Float{"float"}; ///< AutotileDragBehavior::Fl
 inline constexpr QLatin1StringView Reorder{"reorder"}; ///< Reorder (1)
 } // namespace DragBehaviorToken
 
+/// Wire tokens for SetCenterFocusedColumn's `value` param — the closed vocabulary
+/// the descriptor validator, the daemon consumer
+/// (LayoutRegistry::resolveContextScrollingParams maps token → int), and the
+/// settings label layers all read from this single source.
+namespace CenterFocusedColumnToken {
+inline constexpr QLatin1StringView Never{"never"}; ///< never re-centre (0)
+inline constexpr QLatin1StringView Always{"always"}; ///< always re-centre (1)
+inline constexpr QLatin1StringView OnOverflow{"onOverflow"}; ///< re-centre only when the row overflows (2)
+} // namespace CenterFocusedColumnToken
+
+/// Wire tokens for SetScrollDefaultColumnDisplay's `value` param — how a column
+/// lays its windows out. Ints match the scrolling engine's column display mode.
+namespace ColumnDisplayToken {
+inline constexpr QLatin1StringView Normal{"normal"}; ///< windows share the column vertically (0)
+inline constexpr QLatin1StringView Tabbed{"tabbed"}; ///< windows stack as tabs (1)
+} // namespace ColumnDisplayToken
+
+/// Wire tokens for SetTabIndicatorStyle's `value` param. Ints match
+/// ConfigDefaults' TabIndicatorStyle vocabulary.
+namespace TabIndicatorStyleToken {
+inline constexpr QLatin1StringView Chips{"chips"}; ///< a pill of titled chips (0)
+inline constexpr QLatin1StringView Bar{"bar"}; ///< a run of coloured segments (1)
+} // namespace TabIndicatorStyleToken
+
+/// Wire tokens for SetTabIndicatorPosition's `value` param — which column edge
+/// the indicator runs along. Ints match the engine's TabIndicatorPosition.
+namespace TabIndicatorPositionToken {
+inline constexpr QLatin1StringView Left{"left"}; ///< (0)
+inline constexpr QLatin1StringView Right{"right"}; ///< (1)
+inline constexpr QLatin1StringView Top{"top"}; ///< (2)
+inline constexpr QLatin1StringView Bottom{"bottom"}; ///< (3)
+} // namespace TabIndicatorPositionToken
+
+/// Wire tokens for OpenColumnPlacement's `value` param — whether an opening
+/// window starts its own column or joins the focused one.
+namespace ColumnPlacementToken {
+inline constexpr QLatin1StringView NewColumn{"newColumn"}; ///< open in a column of its own
+inline constexpr QLatin1StringView Consume{"consume"}; ///< consume into the focused column
+} // namespace ColumnPlacementToken
+
+/// Wire tokens for SetScrollInsertPosition's `value` param — where a fresh
+/// column enters the strip. Ints match the scrolling engine's
+/// ScrollInsertPosition (rightOfActive 0 … intoActiveColumn 4); the schema
+/// side pins the same spellings (settingsschema_scrolling.cpp intChoices).
+namespace ScrollInsertPositionToken {
+inline constexpr QLatin1StringView RightOfActive{"rightOfActive"};
+inline constexpr QLatin1StringView LeftOfActive{"leftOfActive"};
+inline constexpr QLatin1StringView First{"first"};
+inline constexpr QLatin1StringView Last{"last"};
+inline constexpr QLatin1StringView IntoActiveColumn{"intoActiveColumn"};
+} // namespace ScrollInsertPositionToken
+
 /// Wire tokens for SetWindowLayer's `value` param — the closed vocabulary the
 /// descriptor validator, the KWin-effect consumer (resolveWindowLayer), and the
 /// settings label layers all read from this single source. The tokens map onto
@@ -635,6 +954,11 @@ inline constexpr QLatin1StringView Accent{"accent"};
 namespace ActionSlot {
 inline constexpr QLatin1StringView EngineMode{"engine-mode"};
 inline constexpr QLatin1StringView Layout{"layout"};
+/// Context-domain scrolling-template slot — filled by
+/// `ActionType::SetScrollingTemplate`. Its own slot (not `Layout`): the
+/// lossless assignment set can carry a snapping layout AND a scrolling
+/// template in one rule, and per-slot accumulation would drop one of them.
+inline constexpr QLatin1StringView ScrollingTemplate{"scrolling-template"};
 inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 /// Context-domain layout-lock slot — filled by `ActionType::LockContext`.
 /// A single boolean: a winning rule with `value == true` locks the context.
@@ -703,6 +1027,59 @@ inline constexpr QLatin1StringView InsertPosition{"insert-position"};
 inline constexpr QLatin1StringView OverflowBehavior{"overflow-behavior"};
 inline constexpr QLatin1StringView DragBehavior{"drag-behavior"};
 inline constexpr QLatin1StringView AlgorithmParams{"algorithm-params"};
+// Per-context scrolling parameter slots (one per param). Filled by
+// SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
+// SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
+// SetScrollDefaultWindowHeight, read by
+// LayoutRegistry::resolveContextScrollingParams and layered onto the scrolling
+// engine's per-screen config the way the autotile params are.
+inline constexpr QLatin1StringView ScrollDefaultColumnWidth{"scroll-default-column-width"};
+inline constexpr QLatin1StringView CenterFocusedColumn{"center-focused-column"};
+inline constexpr QLatin1StringView ScrollDefaultColumnDisplay{"scroll-default-column-display"};
+inline constexpr QLatin1StringView ScrollInsertPosition{"scroll-insert-position"};
+inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-window-height"};
+// Per-context tab-indicator slots, one per property so independent context
+// rules cascade per-property. Filled by the SetTabIndicator* actions and read
+// by LayoutRegistry::resolveContextScrollingParams into ContextScrollingParams.
+inline constexpr QLatin1StringView TabIndicatorEnabled{"tab-indicator-enabled"};
+inline constexpr QLatin1StringView TabIndicatorStyle{"tab-indicator-style"};
+inline constexpr QLatin1StringView TabIndicatorPosition{"tab-indicator-position"};
+inline constexpr QLatin1StringView TabIndicatorHideWhenSingleTab{"tab-indicator-hide-when-single-tab"};
+inline constexpr QLatin1StringView TabIndicatorPlaceWithinColumn{"tab-indicator-place-within-column"};
+inline constexpr QLatin1StringView TabIndicatorGap{"tab-indicator-gap"};
+inline constexpr QLatin1StringView TabIndicatorWidth{"tab-indicator-width"};
+inline constexpr QLatin1StringView TabIndicatorLength{"tab-indicator-length"};
+inline constexpr QLatin1StringView TabIndicatorGapsBetweenTabs{"tab-indicator-gaps-between-tabs"};
+inline constexpr QLatin1StringView TabIndicatorCornerRadius{"tab-indicator-corner-radius"};
+inline constexpr QLatin1StringView TabIndicatorActiveColor{"tab-indicator-active-color"};
+inline constexpr QLatin1StringView TabIndicatorInactiveColor{"tab-indicator-inactive-color"};
+inline constexpr QLatin1StringView TabIndicatorUrgentColor{"tab-indicator-urgent-color"};
+// Per-context drop-indicator slots, one per property so independent context
+// rules cascade per-property. Filled by the SetDropIndicator* actions and read
+// by LayoutRegistry::resolveContextScrollingParams into ContextScrollingParams.
+inline constexpr QLatin1StringView DropIndicatorEnabled{"drop-indicator-enabled"};
+inline constexpr QLatin1StringView DropIndicatorColor{"drop-indicator-color"};
+inline constexpr QLatin1StringView DropIndicatorBorderColor{"drop-indicator-border-color"};
+inline constexpr QLatin1StringView DropIndicatorOpacity{"drop-indicator-opacity"};
+inline constexpr QLatin1StringView DropIndicatorBorderWidth{"drop-indicator-border-width"};
+inline constexpr QLatin1StringView DropIndicatorBorderRadius{"drop-indicator-border-radius"};
+// Per-window scrolling open slots (one per property so independent rules
+// cascade per-property). Filled by OpenColumnWidth / OpenTabbed /
+// OpenColumnPlacement / OpenWindowHeight, read on the open path by the
+// scrolling engine.
+inline constexpr QLatin1StringView OpenColumnWidth{"open-column-width"};
+inline constexpr QLatin1StringView OpenTabbed{"open-tabbed"};
+/// Per-window tab-colour slots, filled by the TabColor* window actions and
+/// resolved per tab when the daemon builds the tab-indicator model.
+inline constexpr QLatin1StringView TabColorActive{"tab-color-active"};
+inline constexpr QLatin1StringView TabColorInactive{"tab-color-inactive"};
+inline constexpr QLatin1StringView TabColorUrgent{"tab-color-urgent"};
+/// Per-window drop-indicator colour slots, filled by the DropIndicator*
+/// window actions and resolved at drag start from the DRAGGED window's rules.
+inline constexpr QLatin1StringView DragDropIndicatorColor{"drag-drop-indicator-color"};
+inline constexpr QLatin1StringView DragDropIndicatorBorderColor{"drag-drop-indicator-border-color"};
+inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
+inline constexpr QLatin1StringView OpenWindowHeight{"open-window-height"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader
@@ -747,6 +1124,13 @@ inline constexpr QLatin1StringView DecorationChain{"decoration-chain"};
 /// terminal (e.g. composing with override actions) would start
 /// filling the slot, so the id stays load-bearing for that path.
 inline constexpr QLatin1StringView AnimExclude{"anim-exclude"};
+/// Window-scoped. Declared for ActionDescriptor completeness the same way
+/// AnimExclude is — ExcludeDecorations is `.terminal = true`, so
+/// `RuleEvaluator::resolve` calls `markExcluded()` and breaks before
+/// `fillSlot()` runs. The effect's `shouldDecorateWindow` gates on
+/// `ResolvedActions::isExcluded()` over the dedicated decoration-exclusion
+/// evaluator, never on this slot id.
+inline constexpr QLatin1StringView DecorationExclude{"decoration-exclude"};
 } // namespace ActionSlot
 
 } // namespace PhosphorRules

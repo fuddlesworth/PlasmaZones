@@ -15,7 +15,7 @@
 // Inherits PhosphorLayout::ILayoutSourceRegistry so concrete registries
 // (LayoutManager) carry the unified `contentsChanged` signal that
 // ZonesLayoutSource subscribes to - matching the pattern every other
-// provider library (phosphor-tiles, future phosphor-scrolling, …)
+// provider library (phosphor-tiles, phosphor-scroll-engine, …)
 // follows. Inheriting QObject via the unified base rather than
 // directly keeps ILayoutManager's non-virtual multi-inheritance safe:
 // every path through ILayoutManager reaches QObject exactly once, so
@@ -24,8 +24,10 @@
 #include <phosphorzones_export.h>
 
 #include <PhosphorLayoutApi/ILayoutSourceRegistry.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplate.h>
 
 #include <QJsonObject>
 #include <QString>
@@ -33,6 +35,8 @@
 #include <QVector>
 
 namespace PhosphorZones {
+
+class ScrollingTemplateStore;
 
 /**
  * @brief Enumeration + mutation surface for the in-memory zone-layout
@@ -107,10 +111,54 @@ public:
     /// (desktop, activity) context.
     virtual Layout* resolveLayoutForScreen(const QString& screenId) const = 0;
 
-    /// Raw assignment id (manual-layout UUID or @c "autotile:<algorithmId>")
-    /// for @p screenId, with cascade + level-1 provider fallback.
+    /// Raw assignment id (manual-layout UUID, @c "autotile:<algorithmId>",
+    /// or the bare @c "scrolling:" sentinel) for @p screenId, with cascade +
+    /// level-1 provider fallback. An explicit mode-only Snapping pin settles
+    /// as an EMPTY id (no layout identity exists for it) — see the concrete
+    /// class doc.
     virtual QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
                                           const QString& activity = QString()) const = 0;
+
+    /// The native scrolling-template store wired into this registry, or
+    /// null when none is (lightweight stubs, roots with no template
+    /// feature). Consumers use it for template enumeration (picker lists);
+    /// context RESOLUTION goes through scrollingTemplateForContext below.
+    virtual ScrollingTemplateStore* scrollingTemplateStore() const
+    {
+        return nullptr;
+    }
+
+    /// The resolved scrolling TEMPLATE for a context (the native
+    /// ScrollingTemplate whose vocabularies and blueprint the engine push
+    /// consumes), by value — isValid() is false when the context is not
+    /// Scrolling, names no template and no default template answers, or the
+    /// named template no longer exists in the store. Default invalid so
+    /// lightweight test stubs need not implement the template feature.
+    virtual ScrollingTemplate scrollingTemplateForContext(const QString& screenId, int virtualDesktop,
+                                                          const QString& activity) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(virtualDesktop)
+        Q_UNUSED(activity)
+        return {};
+    }
+
+    /// The id the layout PICKER highlights for a scrolling context: the
+    /// resolved template's bare UUID, or the "scrolling:" sentinel (matches
+    /// no card) when no template resolves. The shared authority for the
+    /// picker-highlight sites (UnifiedLayoutController::displayIdForAssignment
+    /// and OverlayService::activeLayoutIdForScreen) — callers keep their own
+    /// live-capability gates. Distinct from the rules-visible query stamp,
+    /// which uses the PREFIXED "scrolling:<uuid>" form. Non-virtual on
+    /// purpose: a pure convenience over the virtual resolver above.
+    QString scrollingDisplayIdForContext(const QString& screenId, int virtualDesktop, const QString& activity) const
+    {
+        const ScrollingTemplate templ = scrollingTemplateForContext(screenId, virtualDesktop, activity);
+        if (templ.isValid()) {
+            return templ.id.toString();
+        }
+        return QString(PhosphorLayout::LayoutId::ScrollingId);
+    }
 
     /// Effective global default layout (snap-only fallback).
     virtual Layout* defaultLayout() const = 0;
@@ -168,12 +216,15 @@ public:
     /// override (no rule gaps); a registry that does not model context rules —
     /// e.g. a fixture stub — keeps the legacy per-screen/layout/global cascade.
     ///
-    /// @p mode is the placement-mode wire token ("snapping" / "tiling") of the
-    /// engine asking. It is matched against a context rule's `Mode` leaf, so a
-    /// per-mode gap rule (e.g. a wider inner gap only while tiling) resolves for
-    /// the matching engine and stays inert for the other. The snapping geometry
-    /// path passes "snapping"; the autotile path passes "tiling". Left empty for
-    /// a mode-agnostic caller (no Mode leaf then matches).
+    /// @p mode is the placement-mode wire token ("snapping" / "tiling" /
+    /// "scrolling") of the engine asking. It is matched against a context
+    /// rule's `Mode` leaf, so a per-mode gap rule (e.g. a wider inner gap
+    /// only while tiling) resolves for the matching engine and stays inert
+    /// for the others. The snapping geometry path passes "snapping", the
+    /// autotile path "tiling", the scroll engine's provider "scrolling".
+    /// Left empty for a mode-agnostic caller (no Mode leaf then matches).
+    /// An EMPTY @p mode means "mode-agnostic" and excludes Field::Mode
+    /// structurally — see the LayoutRegistry override.
     virtual ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                                   const QString& mode = QString()) const
     {
@@ -247,12 +298,15 @@ Q_SIGNALS:
     // changes").
     void activeLayoutChanged(Layout* layout);
 
-    // Assignment churn. Fires when a (screenId, virtualDesktop)
-    // assignment changes; activity context is intentionally omitted
-    // from the signal - consumers that care about activity-keyed
-    // assignments re-query via @c layoutForScreen with their current
-    // activity. Concrete impl emits only on actual change (matches the
-    // project "emit only when value changes" rule).
+    // Assignment churn. Fires when a (screenId, virtualDesktop) assignment
+    // is WRITTEN; activity context is intentionally omitted from the signal -
+    // consumers that care about activity-keyed assignments re-query via
+    // @c layoutForScreen with their current activity. Deliberately NOT an
+    // emit-on-change signal: the emitters fire unconditionally on every
+    // assignment write, because consumers use it as a re-derive trigger
+    // (engine screen sets, layout filters, template vocabulary pushes) whose
+    // inputs go beyond the (screen, desktop, layout) payload - an identical
+    // payload can still mean a changed template or activity-keyed entry.
     void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
 };
 

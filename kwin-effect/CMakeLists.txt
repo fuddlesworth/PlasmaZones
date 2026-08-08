@@ -48,6 +48,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/plasmazoneseffect.h
     plasmazoneseffect/lifecycle.cpp
     plasmazoneseffect/lifecycle_wiring.cpp
+    plasmazoneseffect/lifecycle_wiring_daemon.cpp
     plasmazoneseffect/decoration_appearance.cpp
     plasmazoneseffect/decorations.cpp
     plasmazoneseffect/decoration_teardown.cpp
@@ -74,7 +75,10 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/drag_end.cpp
     plasmazoneseffect/mesh_sim.cpp
     plasmazoneseffect/mesh_sim.h
+    plasmazoneseffect/input_filter.cpp
+    plasmazoneseffect/input_filter.h
     plasmazoneseffect/paint_pipeline.cpp
+    plasmazoneseffect/scroll_clip.cpp
     plasmazoneseffect/paint_shader_window.cpp
     plasmazoneseffect/paint_capture.cpp
     plasmazoneseffect/paint_internal.h
@@ -97,12 +101,19 @@ set(plasmazones_effect_SRCS
     transitions/desktoptransitionshader.cpp
     transitions/desktoptransitionteardown.cpp
     transitions/desktoptransitionmanager.h
-    autotilehandler/autotilehandler.cpp
-    autotilehandler/autotilehandler.h
-    autotilehandler/signals.cpp
-    autotilehandler/state.cpp
-    autotilehandler/tiling.cpp
-    autotilehandler/wiring.cpp
+    transitions/striptransitionmanager.cpp
+    transitions/striptransitionshader.cpp
+    transitions/striptransitionmanager.h
+    transitions/transitionpasshelpers.cpp
+    transitions/transitionpasshelpers.h
+    tilinghandler/tilinghandler.cpp
+    tilinghandler/tilinghandler.h
+    tilinghandler/minimizefloat.cpp
+    tilinghandler/outputchange.cpp
+    tilinghandler/signals.cpp
+    tilinghandler/state.cpp
+    tilinghandler/tiling.cpp
+    tilinghandler/wiring.cpp
     handlers/snaphandler.cpp
     handlers/snaphandler.h
     handlers/navigationhandler.cpp
@@ -117,6 +128,8 @@ set(plasmazones_effect_SRCS
     compositor/snapassistthumbnailcapture.h
     compositor/windowanimator.cpp
     compositor/windowanimator.h
+    compositor/stripviewanimator.cpp
+    compositor/stripviewanimator.h
     compositor/compositorclock.cpp
     compositor/compositorclock.h
     compositor/deferredwindowcommits.h
@@ -142,16 +155,12 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
 set_source_files_properties(compositor/snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 # All four TUs of DesktopTransitionManager stay out of the Unity blob.
 #
-# None of them fixes a PRESENT collision, and the comments here used to imply
-# otherwise. Every file-local name across the four is unique repo-wide
-# (drawDesktopBlendQuad, translatePackParams, captureFormatFor,
-# allocateOutputTexture), and desktoptransitionmanager.cpp:42 is explicit that
-# its quad helper was given a distinct name from surfacelayers.cpp's
-# drawFullscreenQuad precisely so the blob CANNOT collide — differently-named
-# anonymous-namespace entities never do. The remaining two TUs carry no
-# file-local entity at all: the vertex source in desktoptransitionshader.cpp is
-# a FUNCTION-local static, and desktoptransitionteardown.cpp has no anonymous
-# namespace.
+# None of them fixes a PRESENT collision. The helpers that used to be
+# file-local to these TUs (drawDesktopBlendQuad, translatePackParams,
+# captureFormatFor, allocateOutputTexture) were lifted into the named
+# TransitionPass namespace in transitionpasshelpers.cpp when the strip pass
+# arrived, so the desktop TUs no longer carry anonymous-namespace entities
+# that could collide inside a blob at all.
 #
 # The exclusion is a uniform prophylactic rule instead: this class is split by
 # concern across four files that freely add file-local helpers, and a future one
@@ -162,6 +171,13 @@ set_source_files_properties(transitions/desktoptransitionmanager.cpp PROPERTIES 
 set_source_files_properties(transitions/desktoptransitioncapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(transitions/desktoptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 set_source_files_properties(transitions/desktoptransitionteardown.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# StripTransitionManager's TUs and the shared pass helpers follow the same
+# prophylactic rule as the desktop set above: concern-split TUs that freely
+# add file-local helpers stay out of the blob wholesale rather than being
+# audited for collisions one name at a time.
+set_source_files_properties(transitions/striptransitionmanager.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(transitions/striptransitionshader.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+set_source_files_properties(transitions/transitionpasshelpers.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 
 # Link required libraries
 target_link_libraries(kwin_effect_plasmazones PRIVATE
@@ -176,19 +192,19 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     # direct link, matching the PhosphorAnimation rationale below.
     PhosphorEngine::PhosphorEngine
     PhosphorProtocol::PhosphorProtocol
-    # Explicit link: `compositorclock.h` and `windowanimator.h` directly
-    # include `<PhosphorAnimation/...>`. The dependency is reachable
-    # transitively via `PhosphorCompositor::PhosphorCompositor`, but depending
-    # on a transitive target for a directly-included header is brittle
-    # — a future reshuffle of compositor-common's link graph could drop
-    # the re-export and this target would break mysteriously. Named
-    # here so the link graph matches the include graph.
+    # Explicit link: `compositorclock.h`, `windowanimator.h` and
+    # `stripviewanimator.h` directly
+    # include `<PhosphorAnimation/...>`. PhosphorCompositor does NOT link
+    # PhosphorAnimation, so this is a genuine direct dependency, not a
+    # transitive re-export. Named here so the link graph matches the
+    # include graph.
     PhosphorAnimation::PhosphorAnimation
     # PhosphorRules: the unified LGPL rule engine. The effect resolves
     # its per-window animation overrides AND its exclusion gates through
-    # RuleEvaluator over slices of rules.json — the snap-drag gate
-    # binds to `ExclusionRules::excludeRulesFrom`, the animation gate to
-    # `ExclusionRules::excludeAnimationsRulesFrom`, both filtering the
+    # RuleEvaluator over slices of rules.json — the snap-drag gate binds
+    # `ExclusionRules::excludePlacementRulesFrom`, the decoration gate
+    # `ExclusionRules::excludeDecorationsRulesFrom`, and the animation gate
+    # `ExclusionRules::excludeAnimationsRulesFrom`, all filtering the
     # same unified rule-store push that drives the OverrideAnimation*
     # pipeline. Both the effect and the daemon link this one library so
     # there is exactly one match-code implementation (GPL->LGPL link is

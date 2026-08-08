@@ -42,13 +42,21 @@ namespace PlasmaZones {
 
 QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
 {
+    // The shadow store is keyed on CANONICAL ids (see setFrameGeometry), so a
+    // caller holding the effect's CURRENT composite for a class-mutating app
+    // has to be translated before the lookup or it reads an empty rect.
     return m_frameGeometry.value(shadowWindowId(windowId));
+}
+
+QStringList WindowTrackingAdaptor::knownWindowIds() const
+{
+    return m_frameGeometry.keys();
 }
 
 QString WindowTrackingAdaptor::lastActiveScreenName() const
 {
-    // Prefer the active window's live screen tracking from either engine
-    // over the cached m_lastActiveScreenId. KWin only fires windowActivated
+    // Prefer the active window's live screen tracking from any of the three
+    // engines over the cached m_lastActiveScreenId. KWin only fires windowActivated
     // on focus changes, so a window dragged/snapped/tiled to a different
     // VS without losing focus leaves the cache pointing at the source
     // screen — and the shortcut router would then dispatch (float,
@@ -61,7 +69,9 @@ QString WindowTrackingAdaptor::lastActiveScreenName() const
     //   2. autotile-side screenForTrackedWindow (covers windows that
     //      crossed engines via drag-insert handoff — snap released its
     //      tracking, autotile took ownership)
-    //   3. cached m_lastActiveScreenId (windows neither engine tracks —
+    //   3. scroll-side screenForTrackedWindow (same handoff story for the
+    //      scrolling engine, which owns placement on its own screens)
+    //   4. cached m_lastActiveScreenId (windows no engine tracks —
     //      brand-new windows pre-tile, dialogs, etc.)
     if (!m_lastActiveWindowId.isEmpty()) {
         if (m_snapEngine) {
@@ -72,6 +82,12 @@ QString WindowTrackingAdaptor::lastActiveScreenName() const
         }
         if (m_autotileEngine) {
             const QString tracked = m_autotileEngine->screenForTrackedWindow(m_lastActiveWindowId);
+            if (!tracked.isEmpty()) {
+                return tracked;
+            }
+        }
+        if (m_scrollEngine) {
+            const QString tracked = m_scrollEngine->screenForTrackedWindow(m_lastActiveWindowId);
             if (!tracked.isEmpty()) {
                 return tracked;
             }

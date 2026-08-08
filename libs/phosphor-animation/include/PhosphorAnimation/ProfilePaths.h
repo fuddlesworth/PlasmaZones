@@ -20,7 +20,9 @@ namespace PhosphorAnimation {
 ///   <verb>In / <verb>Out        — directional motion (slideIn, snapIn,
 ///                                 fadeIn …); `switch`, `layoutSwitch` and
 ///                                 `peek` are bidirectional-leg exceptions
-///                                 with no In/Out suffix
+///                                 with no In/Out suffix, and `view`
+///                                 (scrolling.view) is a continuous-motion
+///                                 exception with no legs to name at all
 ///   expand / collapse           — size reveal of inline content (accordion)
 ///   on / off                    — bistable controls (toggle)
 ///   <event>.<variant>           — speed/intensity variants (pulse.fast, tint.fast)
@@ -77,6 +79,14 @@ PHOSPHORANIMATION_EXPORT extern const QString Editor;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapIn;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapOut;
 PHOSPHORANIMATION_EXPORT extern const QString EditorSnapResize;
+
+// scrolling.* — the scrolling strip's VIEW. `scrolling.view` is one leg for
+// the whole strip: the compositor springs it once per output and every column
+// rides that offset, rather than each column springing itself. It is its own
+// root rather than a window.movement.* leaf because its subject is the view
+// and not any window.
+PHOSPHORANIMATION_EXPORT extern const QString Scrolling;
+PHOSPHORANIMATION_EXPORT extern const QString ScrollingView;
 
 // osd.*
 PHOSPHORANIMATION_EXPORT extern const QString Osd;
@@ -154,20 +164,37 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneHighlightBorder;
 PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 
 // ── Event classes ───────────────────────────────────────────────────────
-// A coarse capability axis layered over the path taxonomy: an animation
-// either reshapes a window's GEOMETRY (it has a before-rect and an
-// after-rect) or it changes a surface's APPEARANCE (a single surface fading
-// / scaling / glitching in or out). A geometry-only shader such as
-// window-morph cross-fades `iFromRect → iToRect` and is a silent no-op on an
-// appearance event, so a shader can declare which classes it supports
-// (AnimationShaderEffect::appliesTo) and the settings UI dims the rows it
-// can't drive. These string tokens are the SSOT for that vocabulary —
-// matched verbatim against `appliesTo` entries and `eventClassForPath`.
+// A coarse capability axis layered over the path taxonomy. Two of the five
+// classes are the general ones: an animation either reshapes a window's
+// GEOMETRY (it has a before-rect and an after-rect) or it changes a
+// surface's APPEARANCE (a single surface fading / scaling / glitching in or
+// out). A geometry-only shader such as window-morph cross-fades
+// `iFromRect → iToRect` and is a silent no-op on an appearance event, so a
+// shader declares which classes it supports (AnimationShaderEffect::appliesTo)
+// and the settings UI filters the rows it can't drive. The other three —
+// DESKTOP, MOVE and STRIP — each name a distinct uniform contract a pack must
+// opt into explicitly, and a universal (empty `appliesTo`) pack never reaches
+// them. These string tokens are the SSOT for that vocabulary — matched
+// verbatim against `appliesTo` entries and `eventClassForPath`.
 //
-// Adding a class token? `shaderEffectIsCompositorOnly` (AnimationShaderEffect.h)
-// hardcodes "appearance is the only class that reaches a daemon surface" —
-// a new daemon-driven class must be added there too, or its packs will be
-// silently classified compositor-only and skipped by the daemon.
+// Adding a class token? It is not enough to declare it here. Every one of
+// these must be updated too, and the last three have each already shipped a
+// bug from being missed:
+//   1. `allEventClassTokens()` below — the exported vocabulary. `fromJson`
+//      (animationshadereffect.cpp) validates `appliesTo` against it and the
+//      pack validator's lint lists it in the diagnostic, so both follow for
+//      free once it is here.
+//   2. `shaderEffectAppliesToEventPath` (AnimationShaderEffect.h) — an
+//      opt-in class needs its own branch plus an exclusion in the
+//      ambiguous-row fallback, or it silently behaves as universal.
+//   3. `shaderEffectIsCompositorOnly` (AnimationShaderEffect.h) hardcodes
+//      "appearance is the only class that reaches a daemon surface" — a new
+//      daemon-driven class must be added there, or its packs are silently
+//      classified compositor-only and skipped by the daemon.
+//   4. `_typeCatalog` in ShaderBrowserPage.qml — the browser's type axis.
+//      A missing entry ships an untranslated badge sorted last.
+//   5. `coverageLabel` in AnimationsMotionSetsPage.qml — the coverage chip.
+//      A missing case ships the raw lowercase token.
 
 /// Geometry transitions: snapIn/snapOut, layoutSwitch, maximize — every leg
 /// that carries an old and new rect.
@@ -198,6 +225,30 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassDesktop;
 /// shader from its ancestors (see ShaderProfileTree::resolve).
 PHOSPHORANIMATION_EXPORT extern const QString EventClassMove;
 
+/// Strip transitions: the scrolling strip's view leg (`scrolling.view`). Like
+/// `move`, the motion is CONTINUOUS — wheel scrolling retargets the per-output
+/// view spring on every batch, so there are no discrete from/to legs and a
+/// crossfade pack has nothing to play. Like `desktop`, the pass is per-output
+/// and full-screen: the compositor renders the already-translated scene into
+/// one capture and the pack decorates it (motion blur, smear, edge warp)
+/// driven by offset/velocity uniforms (iStripMotion), converging to the
+/// identity image at settle. A distinct one-scene-sampler contract
+/// (strip_transition.glsl), incompatible with the single-surface and
+/// two-texture pipelines — a shader must opt in explicitly via
+/// `appliesTo: ["strip"]`, and a universal effect does NOT apply here.
+/// A strip-ONLY pack is therefore compositor-only, which is exactly what
+/// `shaderEffectIsCompositorOnly`'s appearance rule concludes. That is a
+/// property of the pack, not of the class: a hybrid `["strip", "appearance"]`
+/// pack is still daemon-routable through its appearance leg.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassStrip;
+
+/// Every event-class token, in the order the classes are declared above.
+/// This is the vocabulary `AnimationShaderEffect::appliesTo` is validated
+/// against and the one the pack validator lints and names in its diagnostic.
+/// Consume it rather than re-spelling the tokens; a hand-maintained copy is
+/// how a new class ends up accepted by one consumer and rejected by another.
+PHOSPHORANIMATION_EXPORT QStringList allEventClassTokens();
+
 /// Classify @p path into an event class, or empty string when the path has
 /// no single class (a mixed ancestor like `window`, or a path outside the
 /// classified families — editor / panel / widget / cursor / shader / global).
@@ -205,7 +256,8 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassMove;
 /// are `appearance`; the window leaves split by motion-vs-lifecycle; the
 /// `window.movement.move` leaf is `move` (held interactive drag) while the
 /// rest of the movement sub-tree is `geometry`; the `desktop` root and every
-/// `desktop.*` leaf are `desktop`; the `window` root itself is mixed → empty.
+/// `desktop.*` leaf are `desktop`; the `scrolling` root and every
+/// `scrolling.*` leaf are `strip`; the `window` root itself is mixed → empty.
 PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 
 /// Full list of built-in paths in taxonomy order.

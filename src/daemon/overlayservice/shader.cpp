@@ -174,8 +174,12 @@ void OverlayService::startShaderAnimation()
         connect(m_shaderUpdateTimer, &QTimer::timeout, this, &OverlayService::updateShaderUniforms);
     }
 
-    // Get frame rate from settings (default 60fps, bounded 30-144)
-    const int frameRate = qBound(30, m_settings ? m_settings->shaderFrameRate() : 60, 144);
+    // Get frame rate from settings (schema already clamps; this re-clamp only
+    // guards the null-settings fallback). Bounds via ConfigDefaults so a
+    // future range change cannot silently diverge from the schema's clamp.
+    const int frameRate = qBound(ConfigDefaults::shaderFrameRateMin(),
+                                 m_settings ? m_settings->shaderFrameRate() : ConfigDefaults::shaderFrameRate(),
+                                 ConfigDefaults::shaderFrameRateMax());
     // Use qRound for more accurate frame timing (e.g., 60fps -> 17ms not 16ms)
     const int interval = qRound(1000.0 / frameRate);
     m_shaderUpdateTimer->start(interval);
@@ -598,8 +602,18 @@ void OverlayService::destroyShaderPreviewWindow()
     m_shaderPreviewScreen = nullptr;
     m_shaderPreviewShaderId.clear();
     m_shaderPreviewScreenId.clear();
-    // Stop shader timer only if main overlay is also not visible
-    if (!m_visible && m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
+    // Stop shader timer only if nothing else is displaying. Use the
+    // warm-idle-aware predicate (not the raw m_visible the pre-idle code
+    // used): with the main overlay warm-idled, m_visible stays true and the
+    // old gate left the 60 Hz loop running for a preview that no longer
+    // exists - with audio-viz disabled nothing else ever stopped it. The
+    // preview pointer was nulled above, so isOverlayDisplaying() reflects
+    // only the main overlay now; a warm resume restarts the loop via
+    // refreshFromIdle. Arm the idle GPU release BEFORE stopping: the quiesce
+    // guard requires an active timer, and stopping first would leave the
+    // warm-idled main slots' shader FBOs pinned until the next drag cycle.
+    if (!isOverlayDisplaying() && m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
+        scheduleIdleQuiesce();
         stopShaderAnimation();
     }
 }

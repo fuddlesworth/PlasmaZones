@@ -10,7 +10,9 @@
 #include <PhosphorProtocol/ServiceConstants.h>
 
 #include <virtualdesktops.h>
+#include <wayland/surface.h>
 #include <window.h>
+#include <workspace.h>
 
 #include <utility>
 
@@ -181,6 +183,14 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         if (props.isMinimized) {
             extended.insert(Key::IsMinimized, *props.isMinimized);
         }
+        // Urgency is read straight off KWin::Window rather than through the
+        // rule query: it is not a rule-matchable field, so adding it to
+        // WindowQuery would grow the predicate vocabulary for a value only the
+        // tab indicator consumes. A window with no underlying KWin::Window
+        // leaves the key absent, which the daemon reads as "not urgent".
+        if (window) {
+            extended.insert(Key::IsDemandingAttention, window->isDemandingAttention());
+        }
         if (props.isFullscreen) {
             extended.insert(Key::IsFullscreen, *props.isFullscreen);
         }
@@ -292,7 +302,23 @@ void PlasmaZonesEffect::flushPendingFrameGeometry()
         // window. QPointer nulls if the window died since the stash; a dead
         // or excluded window contributes no daemon push.
         KWin::EffectWindow* w = it.value().window.data();
-        if (!w || w->isDeleted() || !shouldHandleWindow(w)) {
+        if (!w || w->isDeleted()) {
+            continue;
+        }
+        // Geometry-scoped rules (Width / Height / PositionX / PositionY in a
+        // match) need their cached verdicts refreshed when the frame moves —
+        // handled HERE, once per 50 ms flush and only when such a rule
+        // exists (the set-level gate), never from the per-tick lambda
+        // (discussion #816). Runs before the shouldHandleWindow gate below:
+        // an EXCLUSION verdict can be geometry-scoped too, and an excluded
+        // window's verdict must still refresh even though it contributes no
+        // daemon push. Per-window eviction, NOT the coalesced state-change
+        // helper: that helper's flush clears the GLOBAL animation match
+        // cache, and this edge repeats for a drag's whole duration.
+        if (m_hasGeometryScopedRules) {
+            invalidateRuleCachesForWindowGeometry(it.key(), w);
+        }
+        if (!shouldHandleWindow(w)) {
             continue;
         }
         const QRect& geo = it.value().geometry;
@@ -323,6 +349,115 @@ bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)
     // should treat normally.
     return windowClass.contains(QLatin1String("plasmazonesd"), Qt::CaseInsensitive)
         || windowClass.contains(QLatin1String("plasmazones-editor"), Qt::CaseInsensitive);
+}
+
+bool PlasmaZonesEffect::isScrollTabIndicatorSurface(KWin::EffectWindow* w) const
+{
+    // The daemon draws the scrolling tab indicators into a layer-shell surface
+    // of their own, one per screen, precisely so the paint path can slide it
+    // with the strip. Nothing KWin exposes per window distinguishes it from the
+    // daemon's other overlays — same window class, no caption or role, same
+    // layer, same rect — and the layer-shell scope that names it is not
+    // reachable from an exported API. So the daemon announces the surface's
+    // protocol object id over D-Bus and this matches on that.
+    //
+    // The id ALONE is not a handle. A Wayland object id is unique only among
+    // one client's live objects (PhosphorWayland/SurfaceIdentity.h states the
+    // same contract on the announcing side), and ids start low and grow, so an
+    // ordinary application's surface collides with a daemon id routinely rather
+    // than exotically. A false positive here does not merely mispaint: the
+    // window would take the strip's view offset every frame of every scroll,
+    // forfeit occlusion culling via setTransformed/setTranslucent, and be
+    // permanently lowered to the bottom of its layer by restackScrollTabSurfaces.
+    // So the id match is qualified by the owning client, which for the daemon's
+    // surfaces is exactly what isOwnPassthroughOverlayClass names.
+    //
+    // The empty-set short-circuit is the whole hot path: with no scrolling tab
+    // indicators anywhere (the overwhelmingly common case) this costs one
+    // container check per window per frame. The class comparison is ordered
+    // after the id lookup so only a numeric match ever pays for it.
+    if (m_scrollTabSurfaceIds.isEmpty() || !w) {
+        return false;
+    }
+    KWin::Window* window = w->window();
+    KWin::SurfaceInterface* surface = window ? window->surface() : nullptr;
+    if (!surface || !m_scrollTabSurfaceIds.contains(surface->id())) {
+        return false;
+    }
+    return isOwnPassthroughOverlayClass(w->windowClass());
+}
+
+void PlasmaZonesEffect::restackScrollTabSurfaces()
+{
+    // Put the tab-indicator surfaces at the bottom of their layer, under the
+    // daemon's passive overlay shell.
+    //
+    // Both sit on the same wlr layer and wlr-layer-shell has no ordering
+    // request within one, so the compositor stacks them by creation and the
+    // indicator surface — created lazily, on the first tabbed column — lands on
+    // top. That inverts the tiers the two used to have as slots on ONE surface,
+    // where the indicators deliberately sat under every card: without this the
+    // layout picker, cheatsheet and snap-assist would wear a set of tab bars
+    // across them.
+    //
+    // A client cannot express this, but we are also the compositor, so we
+    // simply say it.
+    //
+    // Re-asserted rather than one-shot. Nothing ACTIVATES a layer surface, but
+    // several paths snapshot the whole stacking order and replay it with
+    // raiseWindow — the tile batch's onComplete, the daemon bring-up, the
+    // output-change handler — and those snapshots are unfiltered, so one taken
+    // before this ran and replayed after would put the indicators back on top.
+    // Each of those sites calls this at the end for that reason, and a surface
+    // that unmaps and comes back arrives through windowAdded, which also does.
+    // Every call re-lowers every indicator, which is harmless: there is one per
+    // output and they never overlap.
+    //
+    // Bottom of the LAYER, not of the screen — the layer bucket is above every
+    // ordinary window either way. The one visible consequence is that the zone
+    // overlay now paints over the indicators during a drag rather than under
+    // them, which is the right way round for a drag preview.
+    if (m_scrollTabSurfaceIds.isEmpty() || !KWin::effects) {
+        return;
+    }
+    auto* ws = KWin::Workspace::self();
+    if (!ws) {
+        return;
+    }
+    for (KWin::EffectWindow* w : KWin::effects->stackingOrder()) {
+        if (!w || w->isDeleted() || !isScrollTabIndicatorSurface(w)) {
+            continue;
+        }
+        if (KWin::Window* kw = w->window()) {
+            // Multiple screens each lower to the very bottom in turn, so they
+            // end up reversed among themselves. That orders surfaces that never
+            // overlap: one per output, each covering only its own.
+            ws->lowerWindow(kw);
+        }
+    }
+}
+
+void PlasmaZonesEffect::onScrollTabSurfaceChanged(const QString& screenId, uint surfaceId)
+{
+    // The set is what the paint path tests, since it already resolves the
+    // output from the window itself and has no screen to look up. The
+    // per-screen map beside it exists solely so an announcement can retract the
+    // id it replaces: the announcement names a screen, not the outgoing id.
+    const quint32 previous = m_scrollTabSurfaceIdsByScreen.value(screenId, 0);
+    if (previous != 0) {
+        m_scrollTabSurfaceIds.remove(previous);
+    }
+    if (surfaceId == 0) {
+        m_scrollTabSurfaceIdsByScreen.remove(screenId);
+        return;
+    }
+    m_scrollTabSurfaceIdsByScreen.insert(screenId, surfaceId);
+    m_scrollTabSurfaceIds.insert(surfaceId);
+    // The usual order: KWin sees the layer surface before the daemon announces
+    // it (the announcement follows the surface being shown), so the window is
+    // already in the stacking order and this is where it gets lowered. The
+    // windowAdded hook covers the other order and any later re-map.
+    restackScrollTabSurfaces();
 }
 
 bool PlasmaZonesEffect::isOwnPassthroughOverlayClass(const QString& windowClass)

@@ -24,9 +24,15 @@ using PhosphorRules::RuleAction;
 
 /// Group an action type into a picker category. Most categories derive
 /// straight from the descriptor's `category` field, so a new action in an
-/// existing category needs no change here. The exception is `layoutEngine`,
-/// which is split by action type into Engine, Snapping, and Tiling (the last
-/// with Algorithm and Behavior submenus via a `/` in the label); a new
+/// existing category needs no change here. Three categories are exceptions and
+/// carry hand-written per-type dispatch: `tabIndicator` and `dropIndicator`
+/// (whose per-window colours must leave the Scrolling bucket so it stays
+/// single-domain) and `layoutEngine`,
+/// which is split by action type into Engine, Snapping, Tiling (the last
+/// with Algorithm and Behavior submenus via a `/` in the label), a
+/// top-level Scrolling (the context-domain scroll knobs), and a
+/// Window/Scrolling submenu (the per-window open actions, which
+/// deliberately cross into the window-domain order band); a new
 /// layoutEngine action lands in Engine unless added to the dispatch below.
 PickerCategory actionCategory(const QString& type)
 {
@@ -35,10 +41,11 @@ PickerCategory actionCategory(const QString& type)
         return {PhosphorI18n::tr("Other"), 99};
     }
     const QString& cat = desc->category;
-    // Two groups, alphabetised within each: the context-domain categories
-    // (resolved per screen/desktop/activity/mode) come first (orders 0-4), then
-    // the window-domain categories (orders 5-7). Keep these orders in lockstep
-    // with each category's action domains in RuleAction.cpp.
+    // Two groups: the context-domain categories (resolved per
+    // screen/desktop/activity/mode) come first (orders 0-5), then the
+    // window-domain categories (orders 6-9). Order within a group is
+    // curated, not alphabetical. Keep these orders in lockstep with each
+    // category's action domains in RuleAction.cpp.
     if (cat == QLatin1String("gap")) {
         return {PhosphorI18n::tr("Gaps"), 0};
     }
@@ -48,7 +55,7 @@ PickerCategory actionCategory(const QString& type)
         // (snapping and tiling) each get their own category, and tiling is
         // further split into Algorithm and Behavior submenus (a `/` in the
         // label, which CategoryMenuButton renders as a nested submenu).
-        if (type == ActionType::SetSnappingLayout || type == ActionType::DefaultLayoutAssignment) {
+        if (type == ActionType::SetSnappingLayout) {
             return {PhosphorI18n::tr("Snapping"), 2};
         }
         if (type == ActionType::SetTilingAlgorithm || type == ActionType::SetAlgorithmParam) {
@@ -59,20 +66,81 @@ PickerCategory actionCategory(const QString& type)
             || type == ActionType::SetDragBehavior) {
             return {PhosphorI18n::tr("Tiling") + QStringLiteral("/") + PhosphorI18n::tr("Behavior"), 3};
         }
-        // Cross-cutting engine controls: SetEngineMode / DisableEngine / LockContext.
+        if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
+            || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::SetScrollInsertPosition
+            || type == ActionType::SetScrollDefaultWindowHeight || type == ActionType::SetScrollingTemplate) {
+            return {PhosphorI18n::tr("Scrolling", "tiling mode name"), 4};
+        }
+        // The per-app open actions are WINDOW-domain: they must sit in the
+        // window block so the picker's context/window divider stays honest
+        // (a mixed top-level category takes its group from the first item
+        // and would render window actions above the divider). Nested under
+        // Window as a Scrolling submenu for discoverability.
+        if (type == ActionType::OpenColumnWidth || type == ActionType::OpenTabbed
+            || type == ActionType::OpenColumnPlacement || type == ActionType::OpenWindowHeight) {
+            // Order 8, the same as plain Window: CategoryMenuButton buckets by
+            // the TOP-LEVEL segment of the category path and orders the buckets
+            // by the smallest order any item in the bucket carries, so
+            // "Window/Scrolling" lands in the Window bucket either way and a
+            // different number here could only ever pull the whole Window
+            // bucket earlier. Orders are per top-level category, not per path:
+            // the Tiling submenus already share 3 with plain Tiling.
+            return {PhosphorI18n::tr("Window") + QStringLiteral("/")
+                        + PhosphorI18n::tr("Scrolling", "tiling mode name"),
+                    8};
+        }
+        // Cross-cutting engine controls: SetEngineMode / DisableEngine /
+        // LockContext / DefaultLayoutAssignment. The last two are
+        // mode-agnostic — they act on whichever engine owns the context — so
+        // they belong here rather than in one engine's bucket.
         return {PhosphorI18n::tr("Engine"), 1};
     }
+    if (cat == QLatin1String("tabIndicator")) {
+        // The three per-window tab colours go to the WINDOW bucket, not the
+        // Scrolling one, for the same reason the open-action branch above
+        // exists: CategoryMenuButton takes a top-level bucket's context/window
+        // group from the first item to create it in sorted order, and draws
+        // the divider from that single group. A mixed-domain bucket therefore
+        // renders some of its actions on the wrong side of the divider — and
+        // because the sort is over TRANSLATED labels, which side breaks is
+        // locale-dependent.
+        //
+        // Co-locating all sixteen under Scrolling reads better as one idea,
+        // but it is not worth silently corrupting the divider for the six
+        // context scroll knobs that share the bucket.
+        if (type == ActionType::TabColorActive || type == ActionType::TabColorInactive
+            || type == ActionType::TabColorUrgent) {
+            return {PhosphorI18n::tr("Window") + QStringLiteral("/") + PhosphorI18n::tr("Tab indicator"), 8};
+        }
+        // Nested under Scrolling, sharing its order 4 so the whole Scrolling
+        // bucket stays put (CategoryMenuButton buckets by the top-level
+        // segment and orders buckets by the smallest order in the bucket).
+        return {PhosphorI18n::tr("Scrolling", "tiling mode name") + QStringLiteral("/")
+                    + PhosphorI18n::tr("Tab indicator"),
+                4};
+    }
+    if (cat == QLatin1String("dropIndicator")) {
+        // Same domain split as tabIndicator directly above, and for the same
+        // divider reason: the two per-window colours go to the Window bucket,
+        // the six context properties nest under Scrolling.
+        if (type == ActionType::DropIndicatorColor || type == ActionType::DropIndicatorBorderColor) {
+            return {PhosphorI18n::tr("Window") + QStringLiteral("/") + PhosphorI18n::tr("Drop indicator"), 8};
+        }
+        return {PhosphorI18n::tr("Scrolling", "tiling mode name") + QStringLiteral("/")
+                    + PhosphorI18n::tr("Drop indicator"),
+                4};
+    }
     if (cat == QLatin1String("overlay")) {
-        return {PhosphorI18n::tr("Overlay"), 4};
+        return {PhosphorI18n::tr("Overlay"), 5};
     }
     if (cat == QLatin1String("animation")) {
-        return {PhosphorI18n::tr("Animation"), 5};
+        return {PhosphorI18n::tr("Animation"), 6};
     }
     if (cat == QLatin1String("appearance") || cat == QLatin1String("borderAppearance")) {
-        return {PhosphorI18n::tr("Appearance"), 6};
+        return {PhosphorI18n::tr("Appearance"), 7};
     }
     if (cat == QLatin1String("windowManagement")) {
-        return {PhosphorI18n::tr("Window"), 7};
+        return {PhosphorI18n::tr("Window"), 8};
     }
     return {PhosphorI18n::tr("Other"), 99};
 }
@@ -96,6 +164,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetTilingAlgorithm && key == ActionParam::Algorithm) {
         return PhosphorI18n::tr("Tiling algorithm");
     }
+    if (type == ActionType::SetScrollingTemplate && key == ActionParam::LayoutId) {
+        return PhosphorI18n::tr("Template layout");
+    }
     if (type == ActionType::SetAlgorithmParam && key == ActionParam::Algorithm) {
         return PhosphorI18n::tr("Algorithm");
     }
@@ -116,6 +187,90 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::SetDragBehavior && key == ActionParam::Value) {
         return PhosphorI18n::tr("Drag behavior");
+    }
+    // Scrolling-engine params (all single-value, keyed ActionParam::Value). The
+    // two width params share a label because the action label already says which
+    // one is the context default and which is the per-window open override.
+    if ((type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::OpenColumnWidth)
+        && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Column width (%)");
+    }
+    if (type == ActionType::SetCenterFocusedColumn && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Centering");
+    }
+    if (type == ActionType::SetScrollDefaultColumnDisplay && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Display");
+    }
+    if (type == ActionType::SetScrollInsertPosition && key == ActionParam::Value) {
+        return PhosphorI18n::tr("New column position");
+    }
+    // The two height params share a label for the same reason the widths do.
+    if ((type == ActionType::SetScrollDefaultWindowHeight || type == ActionType::OpenWindowHeight)
+        && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Window height (%)");
+    }
+    if (type == ActionType::OpenTabbed && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Open in a tabbed column (off = a normal column)");
+    }
+    if (type == ActionType::OpenColumnPlacement && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Placement");
+    }
+    // Tab indicator. The colour actions all share one label: the action label
+    // already names which colour, so repeating it here would read twice.
+    if ((type == ActionType::SetTabIndicatorActiveColor || type == ActionType::SetTabIndicatorInactiveColor
+         || type == ActionType::SetTabIndicatorUrgentColor || type == ActionType::TabColorActive
+         || type == ActionType::TabColorInactive || type == ActionType::TabColorUrgent)
+        && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Color");
+    }
+    if (type == ActionType::SetTabIndicatorEnabled && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show the indicator over tabbed columns");
+    }
+    if (type == ActionType::SetTabIndicatorStyle && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Style");
+    }
+    if (type == ActionType::SetTabIndicatorPosition && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Position");
+    }
+    if (type == ActionType::SetTabIndicatorHideWhenSingleTab && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Hide it when the column holds one window");
+    }
+    if (type == ActionType::SetTabIndicatorPlaceWithinColumn && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Make room for it inside the column");
+    }
+    if (type == ActionType::SetTabIndicatorGap && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Gap (px, negative draws over the window)");
+    }
+    if (type == ActionType::SetTabIndicatorWidth && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Thickness (px)");
+    }
+    if (type == ActionType::SetTabIndicatorLength && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Length (%)");
+    }
+    if (type == ActionType::SetTabIndicatorGapsBetweenTabs && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Gap between tabs (px)");
+    }
+    if (type == ActionType::SetTabIndicatorCornerRadius && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Corner radius (px, -1 is fully rounded)");
+    }
+    // Drop indicator. The two colour pairs share one label for the same reason
+    // the tab colours do: the action label already names which colour it is.
+    if ((type == ActionType::SetDropIndicatorColor || type == ActionType::SetDropIndicatorBorderColor
+         || type == ActionType::DropIndicatorColor || type == ActionType::DropIndicatorBorderColor)
+        && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Color");
+    }
+    if (type == ActionType::SetDropIndicatorEnabled && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show the indicator while dragging");
+    }
+    if (type == ActionType::SetDropIndicatorOpacity && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Fill opacity (%)");
+    }
+    if (type == ActionType::SetDropIndicatorBorderWidth && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Border width (px)");
+    }
+    if (type == ActionType::SetDropIndicatorBorderRadius && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Corner radius (px)");
     }
     if (type == ActionType::DisableEngine && key == ActionParam::Mode) {
         return PhosphorI18n::tr("Engine to disable");
@@ -361,6 +516,9 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetTilingAlgorithm) {
         return PhosphorI18n::tr("Set tiling algorithm");
     }
+    if (type == ActionType::SetScrollingTemplate) {
+        return PhosphorI18n::tr("Set scrolling template");
+    }
     if (type == ActionType::SetMaxWindows) {
         return PhosphorI18n::tr("Set max tiled windows");
     }
@@ -382,6 +540,114 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetAlgorithmParam) {
         return PhosphorI18n::tr("Set algorithm parameter");
     }
+    if (type == ActionType::SetScrollDefaultColumnWidth) {
+        return PhosphorI18n::tr("Set default column width");
+    }
+    if (type == ActionType::SetCenterFocusedColumn) {
+        return PhosphorI18n::tr("Set focused column centering");
+    }
+    if (type == ActionType::SetScrollDefaultColumnDisplay) {
+        return PhosphorI18n::tr("Set default column display");
+    }
+    if (type == ActionType::SetScrollInsertPosition) {
+        return PhosphorI18n::tr("Set new column position");
+    }
+    if (type == ActionType::SetScrollDefaultWindowHeight) {
+        return PhosphorI18n::tr("Set default window height");
+    }
+    if (type == ActionType::OpenColumnWidth) {
+        return PhosphorI18n::tr("Open at column width");
+    }
+    if (type == ActionType::OpenWindowHeight) {
+        return PhosphorI18n::tr("Open at window height");
+    }
+    if (type == ActionType::OpenTabbed) {
+        return PhosphorI18n::tr("Open in a tabbed column");
+    }
+    if (type == ActionType::OpenColumnPlacement) {
+        return PhosphorI18n::tr("Open into column");
+    }
+    // Tab indicator. The labels say "tab indicator" rather than just "tabs" so
+    // they cannot be mistaken for the tabbed-column actions above, which
+    // change how a column BEHAVES rather than how its indicator is drawn.
+    if (type == ActionType::SetTabIndicatorEnabled) {
+        return PhosphorI18n::tr("Show the tab indicator");
+    }
+    if (type == ActionType::SetTabIndicatorStyle) {
+        return PhosphorI18n::tr("Set tab indicator style");
+    }
+    if (type == ActionType::SetTabIndicatorPosition) {
+        return PhosphorI18n::tr("Set tab indicator position");
+    }
+    if (type == ActionType::SetTabIndicatorHideWhenSingleTab) {
+        return PhosphorI18n::tr("Hide the tab indicator for a single tab");
+    }
+    if (type == ActionType::SetTabIndicatorPlaceWithinColumn) {
+        return PhosphorI18n::tr("Place the tab indicator inside the column");
+    }
+    if (type == ActionType::SetTabIndicatorGap) {
+        return PhosphorI18n::tr("Set the gap around the tab indicator");
+    }
+    if (type == ActionType::SetTabIndicatorWidth) {
+        return PhosphorI18n::tr("Set tab indicator thickness");
+    }
+    if (type == ActionType::SetTabIndicatorLength) {
+        return PhosphorI18n::tr("Set tab indicator length");
+    }
+    if (type == ActionType::SetTabIndicatorGapsBetweenTabs) {
+        return PhosphorI18n::tr("Set the gap between tabs");
+    }
+    if (type == ActionType::SetTabIndicatorCornerRadius) {
+        return PhosphorI18n::tr("Set tab corner radius");
+    }
+    if (type == ActionType::SetTabIndicatorActiveColor) {
+        return PhosphorI18n::tr("Set the active tab color");
+    }
+    if (type == ActionType::SetTabIndicatorInactiveColor) {
+        return PhosphorI18n::tr("Set the inactive tab color");
+    }
+    if (type == ActionType::SetTabIndicatorUrgentColor) {
+        return PhosphorI18n::tr("Set the urgent tab color");
+    }
+    if (type == ActionType::TabColorActive) {
+        return PhosphorI18n::tr("Set this window's active tab color");
+    }
+    if (type == ActionType::TabColorInactive) {
+        return PhosphorI18n::tr("Set this window's inactive tab color");
+    }
+    if (type == ActionType::TabColorUrgent) {
+        return PhosphorI18n::tr("Set this window's urgent tab color");
+    }
+    // Drop indicator. "Drop indicator" rather than "drag indicator" so the
+    // labels match the settings card the same properties live on.
+    if (type == ActionType::SetDropIndicatorEnabled) {
+        return PhosphorI18n::tr("Show the drop indicator");
+    }
+    if (type == ActionType::SetDropIndicatorColor) {
+        return PhosphorI18n::tr("Set the drop indicator fill color");
+    }
+    if (type == ActionType::SetDropIndicatorBorderColor) {
+        return PhosphorI18n::tr("Set the drop indicator border color");
+    }
+    if (type == ActionType::SetDropIndicatorOpacity) {
+        return PhosphorI18n::tr("Set the drop indicator fill opacity");
+    }
+    if (type == ActionType::SetDropIndicatorBorderWidth) {
+        return PhosphorI18n::tr("Set the drop indicator border width");
+    }
+    if (type == ActionType::SetDropIndicatorBorderRadius) {
+        return PhosphorI18n::tr("Set the drop indicator corner radius");
+    }
+    // The two per-window colours say "when dragging this window" rather than
+    // "this window's", unlike the tab colours: a tab colour paints ON the
+    // matched window, while these paint a slot elsewhere on screen BECAUSE
+    // that window is the one being dragged.
+    if (type == ActionType::DropIndicatorColor) {
+        return PhosphorI18n::tr("Set the drop indicator fill color when dragging this window");
+    }
+    if (type == ActionType::DropIndicatorBorderColor) {
+        return PhosphorI18n::tr("Set the drop indicator border color when dragging this window");
+    }
     if (type == ActionType::DisableEngine) {
         return PhosphorI18n::tr("Disable engine");
     }
@@ -392,7 +658,16 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Default layout assignment");
     }
     if (type == ActionType::Exclude) {
-        return PhosphorI18n::tr("Exclude window");
+        // The exclusion family shares one shape ("Exclude from <scope>") built
+        // on the app's own umbrella terms: "placement" covers the tiling,
+        // snapping, and scrolling engines (the excludeApp template description
+        // spells that out), "decorations" covers borders and decoration packs.
+        // The blanket form names both scopes so it reads distinctly beside the
+        // placement-only sibling in the same picker bucket.
+        return PhosphorI18n::tr("Exclude from placement and decorations");
+    }
+    if (type == ActionType::ExcludePlacement) {
+        return PhosphorI18n::tr("Exclude from placement");
     }
     if (type == ActionType::Float) {
         return PhosphorI18n::tr("Float window");
@@ -459,6 +734,14 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::ExcludeAnimations) {
         return PhosphorI18n::tr("Exclude from animations");
+    }
+    if (type == ActionType::ExcludeDecorations) {
+        // "Decorations" here means the app's own decorations (borders and
+        // decoration packs), matching the blanket Exclude label. It does NOT
+        // touch the title bar, which KWin's vocabulary also calls the window
+        // decoration; SetHideTitleBar owns that, and the undecorateApp
+        // template description spells out the real scope.
+        return PhosphorI18n::tr("Exclude from decorations");
     }
     if (type == ActionType::SetHideTitleBar) {
         // Affirmative verb phrase like the other boolean action labels (e.g.
@@ -557,7 +840,35 @@ QString boolActionStateLabel(const QString& type, bool on)
     if (type == ActionType::SetOverlayShowZoneNumbers) {
         return on ? PhosphorI18n::tr("Show zone numbers") : PhosphorI18n::tr("Hide zone numbers");
     }
+    if (type == ActionType::OpenTabbed) {
+        // Off is not inert: it forces a normal column even where the context
+        // default is tabbed, so the off phrase names that outcome.
+        return on ? PhosphorI18n::tr("Open in a tabbed column") : PhosphorI18n::tr("Open in a normal column");
+    }
+    // Tab indicator. Each off phrase names an OUTCOME rather than a negation,
+    // for the reason OpenTabbed's does: these override a context or config
+    // value, so switching one off is an instruction, not an absence.
+    if (type == ActionType::SetTabIndicatorEnabled) {
+        return on ? PhosphorI18n::tr("Show the tab indicator") : PhosphorI18n::tr("Hide the tab indicator");
+    }
+    if (type == ActionType::SetTabIndicatorHideWhenSingleTab) {
+        return on ? PhosphorI18n::tr("Hide the tab indicator for a single tab")
+                  : PhosphorI18n::tr("Show the tab indicator for a single tab");
+    }
+    if (type == ActionType::SetTabIndicatorPlaceWithinColumn) {
+        return on ? PhosphorI18n::tr("Tab indicator inside the column")
+                  : PhosphorI18n::tr("Tab indicator beside the column");
+    }
+    // Drop indicator, same outcome-not-negation phrasing as the tab family.
+    if (type == ActionType::SetDropIndicatorEnabled) {
+        return on ? PhosphorI18n::tr("Show the drop indicator") : PhosphorI18n::tr("Hide the drop indicator");
+    }
     return QString();
+}
+
+QString actionTypeLabel(const QString& typeWire)
+{
+    return actionTypeLabelImpl(typeWire);
 }
 
 QVariantList actionTypes()
@@ -569,7 +880,6 @@ QVariantList actionTypes()
         QString type;
         QString categoryLabel;
         int categoryOrder;
-        int displayOrder;
     };
     QList<TypeEntry> entries;
     for (const QString& type : registry.registeredTypes()) {
@@ -578,14 +888,18 @@ QVariantList actionTypes()
             continue;
         }
         const PickerCategory acat = actionCategory(type);
-        entries.append({type, acat.label, acat.order, desc->displayOrder});
+        entries.append({type, acat.label, acat.order});
     }
+    // Sorted only to make this list deterministic across registry iteration
+    // orders. The sole consumer, CategoryMenuButton, re-sorts every item
+    // alphabetically by label and derives its bucket order from the smallest
+    // categoryOrder in each bucket, so nothing downstream can observe a
+    // within-category order chosen here. ActionDescriptor::displayOrder is
+    // deliberately not consulted: honouring it would take a change in the
+    // picker, not another comparator leg here.
     std::sort(entries.begin(), entries.end(), [](const TypeEntry& a, const TypeEntry& b) {
         if (a.categoryOrder != b.categoryOrder) {
             return a.categoryOrder < b.categoryOrder;
-        }
-        if (a.displayOrder != b.displayOrder) {
-            return a.displayOrder < b.displayOrder;
         }
         return a.type < b.type;
     });
@@ -714,12 +1028,14 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // (a 1-based ordinal) before the user picks a desktop.
             payload[key] = 1;
         } else {
-            // Picker kinds (snappingLayout, tilingAlgorithm, animationEvent,
-            // shaderEffect, curveEditor, screenId) and plain strings all start
-            // empty (zoneOrdinals and virtualDesktop are seeded above because their
-            // validators reject an empty value). The user has to choose a value
-            // before the rule is savable, and `canSave` surfaces the gap explicitly.
-            // Seeding a placeholder here would mask the "user has to pick" state.
+            // Picker kinds (snappingLayout, scrollingTemplate, tilingAlgorithm,
+            // animationEvent, shaderEffect, overlayShader, curveEditor,
+            // screenId) and plain
+            // strings all start empty (zoneOrdinals and virtualDesktop are
+            // seeded above because their validators reject an empty value). The
+            // user has to choose a value before the rule is savable, and
+            // `canSave` surfaces the gap explicitly. Seeding a placeholder here
+            // would mask the "user has to pick" state.
             payload[key] = QString();
         }
     }

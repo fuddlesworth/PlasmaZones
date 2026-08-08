@@ -29,7 +29,7 @@
 #include <QTimer>
 #include <QVarLengthArray>
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
 #include "handlers/dragtracker.h"
 #include "compositor/compositorbridge.h"
@@ -37,6 +37,7 @@
 #include "handlers/screenchangehandler.h"
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
+#include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -106,6 +107,36 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
     m_windowAnimator->setClock(m_motionClockFallback.get());
     m_windowAnimator->setOutputClockResolver([this](KWin::LogicalOutput* output) -> PhosphorAnimation::IMotionClock* {
         return clockForOutput(output);
+    });
+    // The strip view rides the same per-output clocks. No fallback clock, and
+    // that asymmetry with the window animator is deliberate: a window with no
+    // resolvable output still has to animate somewhere, but a view offset
+    // belongs to an OUTPUT by definition, so an unresolvable one has nothing
+    // to slide and the batch's geometry stands on its own.
+    //
+    // So this is a raw map lookup rather than clockForOutput(), which falls
+    // back for an unmapped output and would make the sentence above false.
+    // Two things depend on the miss really being a miss: applyBatchDelta's
+    // no-clock branch, which leaves the view at rest through a hotplug race
+    // and is otherwise unreachable, and onScreenRemoved's reap, which matches
+    // by clock pointer and cannot find a leg that bound to the fallback.
+    m_stripViewAnimator->setOutputClockResolver(
+        [this](KWin::LogicalOutput* output) -> PhosphorAnimation::IMotionClock* {
+            if (!output) {
+                return nullptr;
+            }
+            const auto it = m_motionClocksByOutput.find(output);
+            return it == m_motionClocksByOutput.end() ? nullptr : it->second.get();
+        });
+    m_stripViewAnimator->setRepaintRequest([](KWin::LogicalOutput* output) {
+        if (!output || !KWin::effects) {
+            return;
+        }
+        // The whole output, not a swept per-window bound: every column on the
+        // strip is moving, so there is no smaller honest region. This is the
+        // cost the plan accepted for rigid motion, and it is bounded by the
+        // leg's duration.
+        KWin::effects->addRepaint(KWin::Region(output->geometry()));
     });
     m_windowAnimator->setOnAnimationCompleteCallback([this](KWin::EffectWindow* w) {
         // Only tear down ANIMATOR-DRIVEN shader transitions
@@ -201,6 +232,9 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
                 // invalidate the DesktopTransitionManager's parallel compiled-shader
                 // cache too — otherwise the next switch renders with the stale shader.
                 m_desktopTransition.invalidateShaderCache();
+                // …and the strip pass's, for the same reason (a reloaded
+                // `scrolling.view` pack must recompile on the next scroll).
+                m_stripTransition.invalidateShaderCache();
                 // A pack reload can flip a pack's `audio` metadata flag, which
                 // feeds the cava run gate via hasAudioReactiveAnimation().
                 scheduleEffectAudioSync();
@@ -321,7 +355,7 @@ void PlasmaZonesEffect::connectDragTracker()
             // this is an autotile drag.
             //
             // This replaces the previous stale-cache read of
-            // m_autotileHandler->isAutotileScreen() as the single source
+            // m_tilingHandler->isManagedScreen() as the single source
             // of truth for drag-start routing — root cause of the
             // post-settings-reload dead-drag window found in #310 log
             // forensics.
@@ -382,9 +416,9 @@ void PlasmaZonesEffect::connectDragTracker()
                     // fast path below already did this synchronously;
                     // this catches the stale-cache case where the fast
                     // path missed.
-                    if (m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen) {
-                        if (!m_dragBypassedForAutotile) {
-                            m_dragBypassedForAutotile = true;
+                    if (m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen) {
+                        if (!m_dragBypassedForEngine) {
+                            m_dragBypassedForEngine = true;
                             m_dragBypassScreenId = capturedScreenId;
                             qCInfo(lcEffect) << "beginDrag: retroactive autotile bypass for" << capturedWindowId;
                         }
@@ -396,9 +430,49 @@ void PlasmaZonesEffect::connectDragTracker()
                         if (safeW && !safeW->isDeleted() && m_currentDragPolicy.immediateFloatOnStart
                             && !isWindowFloating(capturedWindowId)
                             && !m_dragActivation.floatedWindowIds.contains(capturedWindowId)) {
-                            m_autotileHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
+                            m_tilingHandler->handleDragToFloat(safeW, capturedWindowId, /*immediate=*/true);
                             m_dragActivation.floatedWindowIds.insert(capturedWindowId);
                         }
+                    } else if (m_dragBypassedForEngine
+                               && m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::None) {
+                        // The correction layer must correct BOTH ways: the
+                        // fast path latched the engine bypass from the
+                        // effect's cached union set, but the daemon (the
+                        // authority) answered the CANONICAL SNAP policy.
+                        // Without this clear, effect and daemon stay
+                        // divergent for the whole drag — the effect
+                        // suppresses its snap path while the daemon runs
+                        // zone detection, and the drop can apply an
+                        // untracked snap. Restricted to None: a
+                        // ContextDisabled/SnappingDisabled answer is a DEAD
+                        // drag, and un-bypassing would re-enter snap-path
+                        // cursor streaming on a screen the user disabled.
+                        // Run the same full transition slotDragPolicyChanged
+                        // uses for the autotile→snap flip (tracking drop,
+                        // activation reset, keyboard grab), not just a flag
+                        // clear — a half transition leaves Escape uncaught
+                        // and the snap state uninitialised.
+                        // Guarded on the ID, not the dragged-window pointer:
+                        // the call is id-keyed bookkeeping that never derefs
+                        // the window, and a window that died between drag
+                        // start and this reply must not skip the tracking
+                        // cleanup for a still-valid id. slotDragPolicyChanged's
+                        // equivalent transition guards the same way, and this
+                        // branch claims to run the same full transition.
+                        if (!capturedWindowId.isEmpty()) {
+                            // releaseWindowTracking, NOT onWindowClosed — same
+                            // no-capture rule as drag_snap's transition.
+                            m_tilingHandler->releaseWindowTracking(capturedWindowId, m_dragBypassScreenId);
+                        }
+                        m_dragBypassedForEngine = false;
+                        m_dragBypassScreenId.clear();
+                        m_dragActivation.detected = false;
+                        if (!m_keyboardGrabbed) {
+                            KWin::effects->grabKeyboard(this);
+                            m_keyboardGrabbed = true;
+                        }
+                        qCInfo(lcEffect) << "beginDrag: daemon rejected engine bypass for" << capturedWindowId
+                                         << "- reverting to the snap path";
                     }
                 });
 
@@ -407,15 +481,26 @@ void PlasmaZonesEffect::connectDragTracker()
             // zero latency. The async beginDrag reply above runs as a
             // correction layer for the cases where the cache is stale
             // (post-settings-reload — the #310 scenario).
-            if (m_autotileHandler->isAutotileScreen(startScreenId)) {
-                m_dragBypassedForAutotile = true;
+            if (m_tilingHandler->isManagedScreen(startScreenId)) {
+                m_dragBypassedForEngine = true;
                 m_dragBypassScreenId = startScreenId;
                 // Reorder mode: the daemon owns drag-insert preview for tile
                 // swapping. Skip the synchronous float transition — we want
                 // the tile to stay visually in place while the daemon runs
                 // moveToTiledPosition on each cursor tick. The effect still
                 // flips into bypass state so snap-path logic is suppressed.
-                const bool reorderMode = m_cachedAutotileDragBehavior == EffectAutotileDragBehavior::Reorder;
+                //
+                // Scrolling screens are excluded: the setting is the AUTOTILE
+                // drag behaviour, and there is no drag-insert preview for the
+                // strip — the daemon's scroll branch unconditionally answers
+                // immediateFloatOnStart for a tracked window. Letting a global
+                // Reorder suppress the synchronous float on a scrolling screen
+                // only deferred it to the async beginDrag reply, so the user
+                // dragged a borderless strip-sized tile for the round trip,
+                // which is the exact deferred-visual defect this fast path
+                // exists to prevent.
+                const bool reorderMode = !m_tilingHandler->isScrollingScreen(startScreenId)
+                    && m_cachedAutotileDragBehavior == EffectAutotileDragBehavior::Reorder;
                 // If the window is currently autotile-tiled, restore its
                 // title bar and pre-autotile size NOW (synchronously, during
                 // the interactive move). This mirrors snap mode, where
@@ -426,8 +511,8 @@ void PlasmaZonesEffect::connectDragTracker()
                 //
                 // Guarded on isTrackedWindow so we don't touch windows that
                 // are already floating (not in the autotile tree).
-                if (!reorderMode && m_autotileHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId)) {
-                    m_autotileHandler->handleDragToFloat(w, windowId, /*immediate=*/true);
+                if (!reorderMode && m_tilingHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId)) {
+                    m_tilingHandler->handleDragToFloat(w, windowId, /*immediate=*/true);
                     // Mark as drag-floated so the daemon's pre-tile geometry
                     // restore (applyGeometryForFloat, triggered by the
                     // setWindowFloatingForScreen call at drop) is skipped in
@@ -435,16 +520,35 @@ void PlasmaZonesEffect::connectDragTracker()
                     // where the user drops it, not snap back to a stored rect.
                     m_dragActivation.floatedWindowIds.insert(windowId);
                 }
+                // Honour the DAEMON's grab decision before leaving. This early
+                // return used to skip the grab unconditionally, which was
+                // right when an engine drag had no overlay and nothing Escape
+                // could cancel — the comment that introduced it said exactly
+                // that ("the drag proceeds freely", Feb 2026). Drag-insert
+                // previews and the drop indicator gave it both, so the policy
+                // now asks for a grab under always-on re-insert and this is
+                // where that has to be obeyed.
+                //
+                // The cached fast path can be stale, so it reads the policy
+                // rather than re-deriving: the async beginDrag reply below
+                // corrects the flag, and the correction arm takes the grab
+                // itself if the drag turns out to be a snap one after all.
+                if (m_currentDragPolicy.grabKeyboard && !m_keyboardGrabbed) {
+                    KWin::effects->grabKeyboard(this);
+                    m_keyboardGrabbed = true;
+                }
                 return;
             }
-            m_dragBypassedForAutotile = false;
+            m_dragBypassedForEngine = false;
             m_dragActivation.detected = false;
 
             // beginDrag already initialized daemon-side snap-drag state
-            // (called internally from the adaptor). The effect only needs
-            // to decide whether to grab the keyboard for local Escape
-            // handling.
-            detectActivationAndGrab();
+            // (called internally from the adaptor). Called for its LATCH, not
+            // its answer: it sets m_dragActivation.detected so the per-tick
+            // gates downstream keep forwarding after a mid-drag release. The
+            // grab below is unconditional and is this path's own, which is
+            // why the predicate no longer takes one.
+            shouldForwardDragTicks();
             // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
             // Without this, Escape cancels the interactive move AND the overlay.
             // With the grab, Escape only dismisses the overlay while the drag continues.
@@ -453,43 +557,44 @@ void PlasmaZonesEffect::connectDragTracker()
                 m_keyboardGrabbed = true;
             }
         });
-    connect(
-        m_dragTracker.get(), &DragTracker::dragMoved, this, [this](const QString& windowId, const QPointF& cursorPos) {
-            // Cross-VS flip detection is daemon-owned. The
-            // daemon's updateDragCursor handler computes policy at the
-            // cursor position and emits dragPolicyChanged when it flips.
-            // The effect reacts via slotDragPolicyChanged (see below).
-            //
-            // Here we only forward the cursor to the daemon as a
-            // fire-and-forget call. The daemon-side dispatch handles
-            // both the snap-path overlay updates and the cross-VS
-            // detection in a single round trip.
+    connect(m_dragTracker.get(), &DragTracker::dragMoved, this,
+            [this](const QString& windowId, const QPointF& cursorPos) {
+                // Cross-VS flip detection is daemon-owned. The
+                // daemon's updateDragCursor handler computes policy at the
+                // cursor position and emits dragPolicyChanged when it flips.
+                // The effect reacts via slotDragPolicyChanged (see below).
+                //
+                // Here we only forward the cursor to the daemon as a
+                // fire-and-forget call. The daemon-side dispatch handles
+                // both the snap-path overlay updates and the cross-VS
+                // detection in a single round trip.
 
-            // In autotile bypass — skip snap zone processing locally;
-            // the daemon's updateDragCursor still watches for a flip
-            // BACK to snap mode.
-            const bool bypassed = m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::AutotileScreen
-                || m_dragBypassedForAutotile;
-            if (!bypassed) {
-                // Gate D-Bus calls on activation trigger state so a drag
-                // without any intent to use zones doesn't flood the bus
-                // at 30Hz. This is a local input-event optimization; it
-                // isn't policy and doesn't come from the daemon.
-                if (!detectActivationAndGrab() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
-                    return;
+                // In autotile bypass — skip snap zone processing locally;
+                // the daemon's updateDragCursor still watches for a flip
+                // BACK to snap mode.
+                const bool bypassed =
+                    m_currentDragPolicy.bypassReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen
+                    || m_dragBypassedForEngine;
+                if (!bypassed) {
+                    // Gate D-Bus calls on activation trigger state so a drag
+                    // without any intent to use zones doesn't flood the bus
+                    // at 30Hz. This is a local input-event optimization; it
+                    // isn't policy and doesn't come from the daemon.
+                    if (!shouldForwardDragTicks() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
+                        return;
+                    }
                 }
-            }
 
-            // Forward the cursor to the daemon. For snap drags, this
-            // drives overlay/zone detection. For bypass drags, the
-            // daemon watches the cursor for a cross-VS flip and emits
-            // dragPolicyChanged when the policy changes.
-            PhosphorProtocol::ClientHelpers::fireAndForget(
-                this, PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
-                {windowId, qRound(cursorPos.x()), qRound(cursorPos.y()), static_cast<int>(m_currentModifiers),
-                 static_cast<int>(m_currentMouseButtons)},
-                QStringLiteral("updateDragCursor"));
-        });
+                // Forward the cursor to the daemon. For snap drags, this
+                // drives overlay/zone detection. For bypass drags, the
+                // daemon watches the cursor for a cross-VS flip and emits
+                // dragPolicyChanged when the policy changes.
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    this, PhosphorProtocol::Service::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
+                    {windowId, qRound(cursorPos.x()), qRound(cursorPos.y()), static_cast<int>(m_currentModifiers),
+                     static_cast<int>(m_currentMouseButtons)},
+                    QStringLiteral("updateDragCursor"));
+            });
     connect(m_dragTracker.get(), &DragTracker::dragStopped, this,
             [this](KWin::EffectWindow* w, const QString& windowId, bool cancelled) {
                 // Release keyboard grab before handling drag end
@@ -535,7 +640,7 @@ void PlasmaZonesEffect::connectDragTracker()
 
                 // Clear drag state for the next session.
                 m_currentDragPolicy = PhosphorProtocol::DragPolicy{};
-                m_dragBypassedForAutotile = false;
+                m_dragBypassedForEngine = false;
                 m_dragBypassScreenId.clear();
                 m_dragActivation.detected = false;
             });
@@ -605,6 +710,40 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
                     if (auto* vd = KWin::effects->currentDesktop(out)) {
                         reportScreenDesktop(outputScreenId(out), static_cast<int>(vd->x11DesktopNumber()));
                     }
+                }
+            });
+
+    // The strip view spring is per-OUTPUT while scroll state is
+    // per-(screen, desktop, activity), so a desktop switch orphans any
+    // residual offset: it belongs to the desktop being LEFT, and carrying
+    // it across paints the incoming desktop's columns (and freezes a
+    // shifted outgoing capture into the switch blend). Drop the spring and
+    // the strip shader pass for the switched output(s); the incoming
+    // desktop's own scroll state re-seeds a fresh accumulation on its next
+    // batch. forgetOutput fires no repaint of its own, so damage each
+    // dropped output — with a transition pack assigned the blend repaints
+    // everything anyway, but a pack-less switch relies on this.
+    connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this,
+            [this](KWin::VirtualDesktop* oldDesktop, KWin::VirtualDesktop* newDesktop, KWin::EffectWindow*,
+                   KWin::LogicalOutput* output) {
+                if (!oldDesktop || !newDesktop || oldDesktop == newDesktop) {
+                    return;
+                }
+                const auto dropFor = [this](KWin::LogicalOutput* out) {
+                    if (!out) {
+                        return;
+                    }
+                    m_stripTransition.outputRemoved(out);
+                    m_stripViewAnimator->forgetOutput(out);
+                    KWin::effects->addRepaint(out->geometry());
+                };
+                if (output) {
+                    dropFor(output);
+                    return;
+                }
+                const auto outputs = KWin::effects->screens();
+                for (KWin::LogicalOutput* out : outputs) {
+                    dropFor(out);
                 }
             });
 
@@ -760,6 +899,11 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             // without a preceding close never reaches. No restore is possible
             // (the window is gone); this only keeps the map bounded.
             m_ruleWindowLayerSnapshots.remove(cachedId);
+            // And for the parked-column paint hint, whose normal removal is
+            // also close-path (window_lifecycle) or daemon-teardown. A
+            // stranded entry is never READ back (the paint-side probes key
+            // on a LIVE window's id), so this is purely bounding the map.
+            m_scrollVisualPos.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);
@@ -849,292 +993,17 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // virtual screen absolute geometry)
     connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this, [this]() {
         m_idCaches.screenIdCache.clear();
+        m_idCaches.connectedPhysicalIdsValid = false;
         m_lastEffectiveScreenId.clear();
-    });
-}
-
-void PlasmaZonesEffect::connectDaemonSubscriptions()
-{
-    // Connect to daemon's settingsChanged D-Bus signal. A failed connect is
-    // silent otherwise — check the return so a broken subscription is
-    // debuggable instead of looking like a daemon that never emits.
-    const bool settingsConnected =
-        QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                              PhosphorProtocol::Service::Interface::Settings,
-                                              QStringLiteral("settingsChanged"), this, SLOT(slotSettingsChanged()));
-    if (settingsConnected) {
-        qCInfo(lcEffect) << "Connected to daemon settingsChanged D-Bus signal";
-    } else {
-        qCWarning(lcEffect) << "Failed to connect to daemon settingsChanged D-Bus signal";
-    }
-
-    // Connect to virtual screen changes — daemon emits this when a physical screen's
-    // virtual subdivisions are added, removed, or modified.
-    const bool vsChangedConnected = QDBusConnection::sessionBus().connect(
-        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::Screen, QStringLiteral("virtualScreensChanged"), this,
-        SLOT(onVirtualScreensChanged(QString)));
-    if (vsChangedConnected) {
-        qCInfo(lcEffect) << "Connected to daemon virtualScreensChanged D-Bus signal";
-    } else {
-        qCWarning(lcEffect) << "Failed to connect to daemon virtualScreensChanged D-Bus signal";
-    }
-
-    // Connect to per-event motion-profile-tree changes. The daemon emits
-    // this (separate from settingsChanged) when a per-event animation
-    // duration is edited, so per-event durations apply live instead of
-    // only after a logout/login.
-    const bool motionTreeConnected = QDBusConnection::sessionBus().connect(
-        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("motionProfileTreeChanged"), this,
-        SLOT(slotMotionProfileTreeChanged()));
-    if (motionTreeConnected) {
-        qCInfo(lcEffect) << "Connected to daemon motionProfileTreeChanged D-Bus signal";
-    } else {
-        qCWarning(lcEffect) << "Failed to connect to daemon motionProfileTreeChanged D-Bus signal";
-    }
-
-    // Session idle. The daemon owns the detection (ext-idle-notify-v1 is a Wayland
-    // CLIENT protocol, and this effect lives inside the compositor that serves it),
-    // so the effect only ever sees the resolved boolean and pauses / resumes the
-    // decoration chain on it.
-    const bool idleConnected = QDBusConnection::sessionBus().connect(
-        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::Settings, QStringLiteral("sessionIdleChanged"), this,
-        SLOT(slotSessionIdleChanged(bool)));
-    if (idleConnected) {
-        qCInfo(lcEffect) << "Connected to daemon sessionIdleChanged D-Bus signal";
-    } else {
-        qCWarning(lcEffect) << "Failed to connect to daemon sessionIdleChanged D-Bus signal";
-    }
-
-    // Connect to keyboard navigation D-Bus signals
-    connectNavigationSignals();
-
-    // Connect to autotile D-Bus signals
-    m_autotileHandler->connectSignals();
-    m_autotileHandler->loadSettings();
-
-    // Verify daemon availability asynchronously to avoid blocking the compositor.
-    // CRITICAL: Do NOT use synchronous isServiceRegistered() here. The daemon
-    // registers its D-Bus service name in init() BEFORE start() runs heavy
-    // initialization and BEFORE the event loop begins (main.cpp:88→94→102).
-    // During that window, isServiceRegistered() returns true but the daemon
-    // can't process messages. Any synchronous QDBusInterface creation would
-    // trigger Introspect, blocking KWin for up to the D-Bus timeout (~25s).
-    //
-    // Instead, send an async Introspect — if the daemon responds, it's fully
-    // operational and we trigger slotDaemonReady(). If it can't respond (still
-    // initializing), the call times out harmlessly and we wait for the
-    // daemonReady D-Bus signal instead.
-    {
-        QDBusMessage introspect = QDBusMessage::createMethodCall(
-            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-            QStringLiteral("org.freedesktop.DBus.Introspectable"), QStringLiteral("Introspect"));
-        auto* watcher = new QDBusPendingCallWatcher(
-            QDBusConnection::sessionBus().asyncCall(introspect, PhosphorProtocol::Service::DaemonReadyProbeTimeoutMs),
-            this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            QDBusPendingReply<QString> reply = *w;
-            if (reply.isValid() && !m_daemonGate.serviceRegistered) {
-                // Daemon responded — it's fully operational.
-                // Trigger the same ready flow as the daemonReady signal.
-                slotDaemonReady();
-            }
-        });
-    }
-
-    // Connect to daemon's daemonReady signal — emitted at the end of Daemon::start()
-    // after all initialization is complete and the daemon can process D-Bus messages.
-    // This is the safe point to set m_daemonGate.serviceRegistered and create QDBusInterfaces.
-    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                          PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                          QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
-
-    // Watch for daemon D-Bus service registration and unregistration.
-    // After a daemon restart, m_lastCursorOutput is still valid in the effect
-    // but the daemon's lastCursorScreenName/lastActiveScreenName are empty.
-    // Without this, keyboard shortcuts (rotate, etc.) operate on all screens
-    // because resolveShortcutScreen returns nullptr.
-    //
-    // On Wayland, this watcher uses D-Bus monitoring (not X11 selection),
-    // which works reliably across both sessions.
-    auto* serviceWatcher = new QDBusServiceWatcher(
-        PhosphorProtocol::Service::Name, QDBusConnection::sessionBus(),
-        QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
-    connect(serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
-        qCInfo(lcEffect) << "Daemon service unregistered";
-        m_daemonGate.serviceRegistered = false;
-        // Release the idle latch. m_sessionIdle is daemon-pushed state whose ONLY
-        // route back to false is a sessionIdleChanged(false) broadcast — and a
-        // restarted daemon arms a fresh ext-idle-notify-v1 notification on a seat
-        // that is already active, which never produces an idle->active edge and so
-        // never sends one. Left set, every decorated window's chain would stay
-        // frozen for the rest of the session. Repaint them so a chain paused under
-        // the latch is put back in the paint loop (a paused chain emits no damage
-        // of its own).
-        if (m_sessionIdle) {
-            m_sessionIdle = false;
-            repaintAllDecorations();
-        }
-        // Drop the virtual-screen readiness immediately. The defs from the
-        // previous daemon cycle are now stale; without clearing the flag here,
-        // the windowFrameGeometryChanged VS-crossing detector would keep
-        // resolving against stale virtual-screen boundaries during the gap
-        // between unregistration and the next daemon's fetch. continueDaemonReady
-        // setup re-clears and refetches on bringup; this closes the gap before it.
-        m_daemonGate.virtualScreensReady = false;
-        // The stale floating-window set is dropped further down in this same
-        // handler (clearAllFloatingState beside clearAllZoneState, paired with
-        // the rule-cache invalidation) — no separate clear here.
-        // Also clear the bridge-registration in-flight gate. Without
-        // this, a daemon-restart racing the in-flight registerBridge
-        // reply leaves the gate set: the new daemon's `daemonReady`
-        // signal arrives, slotDaemonReady sees the gate true and
-        // bails, and the gate only clears later when the stale call's
-        // error reply arrives — by which time no further signal will
-        // re-trigger slotDaemonReady. The effect would sit idle
-        // indefinitely. Resetting here keeps the gate authoritative
-        // across daemon restarts.
-        m_daemonGate.bridgeRegistrationInFlight = false;
-        m_daemonGate.readyRestoresDone = false;
-        m_daemonGate.readyWindowStateProcessed = false;
-        m_snapHandler->clearRestoreCache();
-        // Reset the rules-subscription gate so the next daemon's
-        // `rulesChanged` broadcasts can be re-subscribed. Without this,
-        // the daemonReady disconnect+reconnect dance below would re-wire
-        // daemonReady against the new bus name but the rulesChanged
-        // subscription guard would still latch and skip the re-subscribe
-        // — silently dropping rule edits across daemon restarts.
-        //
-        // Disconnect the previous rulesChanged match rule BEFORE flipping
-        // the gate. Qt does not deduplicate match rules (same pitfall the
-        // daemonReady serviceRegistered handler addresses); without this
-        // disconnect, every daemon restart accumulates one extra match
-        // rule, and each rulesChanged emission then dispatches N times
-        // to slotRulesChanged across N restarts. The debounce
-        // collapses the work to a single fetch, but each dispatch still
-        // pays D-Bus delivery + Qt slot invocation.
-        QDBusConnection::sessionBus().disconnect(QString(PhosphorProtocol::Service::Name),
-                                                 QString(PhosphorProtocol::Service::ObjectPath),
-                                                 QString(PhosphorProtocol::Service::Interface::Rules),
-                                                 QStringLiteral("rulesChanged"), this, SLOT(slotRulesChanged()));
-        m_daemonGate.rulesSubscribed = false;
-        // Release any pending first-frame open suppression. Without the
-        // daemon there is no `resolveWindowRestore` reply coming and no
-        // autotile reposition either, so the suppression entry would just
-        // hold the window invisible until its 250ms deadline. Releasing
-        // each entry through endRestoreSuppression also schedules the
-        // per-window repaint so the windows become visible immediately
-        // rather than at the next natural compositor cycle.
-        const auto suppressedWindows = m_restoreSuppress.keys();
-        for (KWin::EffectWindow* sw : suppressedWindows) {
-            endRestoreSuppression(sw);
-        }
-
-        // Restore borderless and monocle-maximized windows — daemon state is
-        // gone. Clear the handlers' tiled tracking FIRST: restoreAll() emits
-        // windowDecorationRestored per window, and the rebuild-on-restore
-        // handler would otherwise recreate a border item for every still-
-        // tracked window only for clearAllDecorations() to destroy it moments
-        // later. With tracking cleared, resolveSurfacePathFor resolves
-        // mode-tracked windows to window.floating during the restore burst and
-        // the handler drops their items. Windows matched by a still-live SetBorder rule
-        // (the rule sets deliberately survive daemon loss, see below) can
-        // still get an item recreated and immediately torn down by
-        // clearAllDecorations() — bounded, invisible churn that is cheaper than
-        // suppressing the handler across the burst.
-        m_autotileHandler->clearTiledTracking();
-        m_snapHandler->clearSnapTracking();
-        // Drop the zone / floating caches that feed the IsSnapped / Zone /
-        // IsFloating rule-match fields. Unlike the exclusion / animation rule
-        // sets (deliberately preserved below), these caches mirror per-window
-        // PLACEMENT state owned by the now-dead daemon session. Keeping them
-        // would let a `WHEN IsSnapped` / `Zone(...)` / `IsFloating` rule match
-        // against stale state during the bringup race until the async
-        // syncZonesFromDaemon / getFloatingWindows re-seed lands. Both are
-        // authoritatively repopulated on daemon-ready.
-        m_navigationHandler->clearAllZoneState();
-        m_navigationHandler->clearAllFloatingState();
-        // The placement caches above feed placement-scoped rule match inputs. A
-        // SetOpacity rule keyed on IsSnapped/IsFloating/Zone caches its verdict
-        // per (windowId, ruleSet revision) — neither moves here — so drop the
-        // whole match cache; any decoration built after this resolves against
-        // the cleared placement. The folded opacity itself reverts with the
-        // decorations (clearAllDecorations below tears down the opacity-tint
-        // layer along with the border), so no repaint or re-fold is needed here.
-        // Also carries the window-layer sweep (see invalidateAllRuleCaches): a
-        // `WHEN IsFloating` layer rule releases its keep-above here (snapshot
-        // restore) instead of stranding it for the daemon-down interval.
+        // A rotation or mode change keeps the same connector and EDID id, so
+        // no per-window outputChanged fires — yet ScreenOrientation is a
+        // matchable rule field stamped live from the output geometry, and
+        // every verdict cache keys on (windowId, ruleSet revision) only.
+        // Drop the caches and sweep the borders so orientation-scoped rules
+        // re-resolve, mirroring the daemon-ready re-seed pattern.
         invalidateAllRuleCaches();
-        m_decorationManager->restoreAll();
-        m_autotileHandler->restoreAllMonocleMaximized();
-        clearAllDecorations();
-        // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
-        // `m_animationExclusionRuleSet`, or the shader manager's animation
-        // rule set. Across a daemon restart the user's last-known rule set
-        // remains authoritative — clearing here would briefly drop every
-        // exclusion / animation override during the bringup race, flashing
-        // un-filtered animations and unstyled snaps until the new daemon
-        // replays its rulesChanged broadcast. The sets get refreshed once
-        // the new daemon's `loadRuleAnimationsFromDbus` reply lands.
+        scheduleBorderSweep();
     });
-    connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
-        qCInfo(lcEffect) << "Daemon registered: waiting for daemonReady signal";
-
-        // DO NOT set m_daemonGate.serviceRegistered = true here.
-        // The daemon registers its D-Bus service name in init(), BEFORE start()
-        // runs heavy initialization and BEFORE the event loop begins. Keep the
-        // flag false until the daemon's own daemonReady signal fires (end of
-        // Daemon::start()), confirming it can handle D-Bus requests.
-
-        // Reconnect daemonReady signal — Qt may cache the old daemon's unique bus
-        // name in match rules, so refresh for the new daemon instance.
-        // Disconnect first to prevent duplicate match rules (Qt doesn't deduplicate),
-        // which would cause slotDaemonReady to fire twice on the same signal.
-        QDBusConnection::sessionBus().disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                                 PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                 QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
-        QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                              PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                              QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
-    });
-
-    // NOTE: daemon state sync (floating windows, cached settings) is NOT done
-    // here. m_daemonGate.serviceRegistered is false at this point (set only by
-    // slotDaemonReady), so any ensureInterface() call would bail out immediately.
-    // All daemon state sync is deferred to slotDaemonReady().
-
-    // Connect to existing windows. Skip close-grabbed dying windows — wiring
-    // per-window connections and seeding screen tracking for a window whose
-    // close already happened would resurrect state nothing cleans up.
-    const auto windows = KWin::effects->stackingOrder();
-    for (KWin::EffectWindow* w : windows) {
-        if (!w || w->isDeleted()) {
-            continue;
-        }
-        setupWindowConnections(w);
-    }
-
-    // The daemon disables KWin's Quick Tile via kwriteconfig6. We don't reserve electric borders
-    // here because that would turn on the edge effect visually; the daemon's config approach
-    // is the right way to prevent Quick Tile from activating.
-
-    // Seed m_lastCursorOutput with the compositor's active screen. This ensures
-    // the daemon has a valid cursor screen even if no mouse movement occurs after login.
-    // slotMouseChanged will overwrite this as soon as the cursor moves.
-    //
-    // The actual D-Bus push to the daemon happens in slotDaemonReady(), which fires
-    // either from the async Introspect callback above (daemon already running) or
-    // from the daemonReady D-Bus signal (daemon starts later). We do NOT push here
-    // to avoid synchronous QDBusInterface creation on the compositor thread.
-    auto* initialScreen = KWin::effects->activeScreen();
-    if (initialScreen) {
-        m_lastCursorOutput = initialScreen->name();
-    }
-
-    qCInfo(lcEffect) << "initialized: C++ effect with D-Bus support and mouseChanged connection";
 }
 
 } // namespace PlasmaZones

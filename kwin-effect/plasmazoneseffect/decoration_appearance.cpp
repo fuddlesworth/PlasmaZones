@@ -10,7 +10,7 @@
 
 #include "plasmazoneseffect.h"
 
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "shader_resolve.h"
 #include "window_query.h"
 
@@ -64,7 +64,7 @@ bool PlasmaZonesEffect::windowMatchesAppearanceScope(const QString& scope, KWin:
         // synchronously before the async windowStateChanged that fills that cache
         // lands, so reading it here would miss a just-snapped window's default
         // border until the next full sweep. The autotile half is already symmetric.
-        return isWindowMarkedSnapped(windowId) || m_autotileHandler->isTiledWindow(windowId);
+        return isWindowMarkedSnapped(windowId) || m_tilingHandler->isTiledWindow(windowId);
     }
     if (scope == WAS::Normal) {
         return windowTypeFor(w) == PhosphorProtocol::WindowType::Normal && !windowIsTransient(w);

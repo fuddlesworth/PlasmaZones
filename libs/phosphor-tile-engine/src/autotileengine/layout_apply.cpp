@@ -1,20 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// Qt headers
-#include <algorithm>
-#include <cmath>
-#include <QDebug>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QScopeGuard>
-#include <QScreen>
-#include <QTimer>
-#include <QVarLengthArray>
+// Own header
+#include <PhosphorTileEngine/AutotileEngine.h>
 
 // Project headers
-#include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorGeometry/GeometryUtils.h>
@@ -37,6 +27,18 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "engine_internal.h"
+
+// Qt and std
+#include <QDebug>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
+#include <QScreen>
+#include <QTimer>
+#include <QVarLengthArray>
+#include <algorithm>
+#include <cmath>
 
 namespace PhosphorTileEngine {
 
@@ -90,9 +92,13 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // Algorithms apply gaps directly using their topology knowledge, eliminating
     // the fragile post-processing step that previously guessed adjacency.
     const bool skipGaps = effectiveSmartGaps(screenId) && windowCount == 1;
-    const int innerGap = skipGaps ? 0 : effectiveInnerGap(screenId);
-    ::PhosphorLayout::EdgeGaps outerGaps =
-        skipGaps ? ::PhosphorLayout::EdgeGaps::uniform(0) : effectiveOuterGaps(screenId);
+    // One resolve for both keys: the two single-key accessors each run a full
+    // LayoutRegistry::resolveContextGaps through the provider, so calling them
+    // in sequence cost two per screen per retile.
+    const auto gaps = skipGaps ? PerScreenConfigResolver::EffectiveGaps{0, ::PhosphorLayout::EdgeGaps::uniform(0)}
+                               : m_configResolver->effectiveGaps(screenId);
+    const int innerGap = gaps.inner;
+    ::PhosphorLayout::EdgeGaps outerGaps = gaps.outer;
 
     // Canonical per-window minimum sizes (logical pixels — same units as zone/
     // screen geometry; do not divide by devicePixelRatio or we under-report).

@@ -6,6 +6,7 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorTileEngine/IAutotileSettings.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
@@ -284,9 +285,15 @@ public:
     void updateLastUsedZone(const QString&, const QString&, const QString&, int) override
     {
     }
-    QString currentAppIdFor(const QString&) const override
+    /// Mirrors production (WindowTrackingService): no registry here, so it
+    /// falls back to parsing the composite id, exactly as the real service
+    /// does when the registry has no entry. Returning an empty string
+    /// instead silently DISABLED every caller that bails on an empty appId
+    /// — including the cross-screen reclaim — so tests passed vacuously
+    /// with nothing to show why.
+    QString currentAppIdFor(const QString& anyWindowId) const override
     {
-        return {};
+        return PhosphorIdentity::WindowId::extractAppId(anyWindowId);
     }
     std::optional<QRect> validatedUnmanagedGeometry(const QString&, const QString&, bool = false) const override
     {
@@ -294,6 +301,18 @@ public:
     }
     void recordFreeGeometry(const QString&, const QString&, const QRect&, bool) override
     {
+    }
+    /// Windows the store's live-instance probe reports as OPEN. Wired below
+    /// with production's extractInstanceId keying so the engine suites see
+    /// the same no-steal exclusion the daemon-wired store applies; tests
+    /// simulating a close remove the instance here, matching the registry
+    /// removal on the real close path.
+    QSet<QString> liveInstances;
+    void wireLiveInstanceProbe()
+    {
+        m_store.setLiveInstanceProbe([this](const QString& windowId) {
+            return liveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(windowId));
+        });
     }
     using PhosphorEngine::IWindowTrackingService::clearFreeGeometry;
     void clearFreeGeometry(const QString&) override

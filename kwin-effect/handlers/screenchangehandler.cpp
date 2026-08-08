@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "screenchangehandler.h"
-#include "autotilehandler/autotilehandler.h"
+#include "tilinghandler/tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -77,6 +77,12 @@ void ScreenChangeHandler::stop()
 
 void ScreenChangeHandler::slotScreenGeometryChanged()
 {
+    // Post-stop() signals are dropped: the handler has released its side of
+    // the daemon conversation and must not restart the debounce or issue
+    // D-Bus work during teardown.
+    if (m_stopped) {
+        return;
+    }
     // Debounce screen geometry changes to prevent rapid-fire updates.
     // virtualScreenGeometryChanged can fire multiple times for monitor
     // connect/disconnect, arrangement changes, resolution changes, etc.
@@ -146,6 +152,9 @@ void ScreenChangeHandler::applyScreenGeometryChange()
 
 void ScreenChangeHandler::slotScreenLayoutChanged()
 {
+    if (m_stopped) {
+        return;
+    }
     // KWin emits screenAdded / screenRemoved before per-window outputChanged
     // signals for windows it reassigns when an output appears or disappears.
     // virtualScreenGeometryChanged — which the geometry-debounce slot above
@@ -169,6 +178,9 @@ void ScreenChangeHandler::slotScreenLayoutChanged()
 
 void ScreenChangeHandler::slotReapplyWindowGeometriesRequested()
 {
+    if (m_stopped) {
+        return;
+    }
     qCInfo(lcScreenChange) << "Daemon requested re-apply of window geometries (e.g. after panel editor close)";
     if (m_reapplyInProgress) {
         m_reapplyPending = true;
@@ -202,7 +214,11 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
         if (self->m_reapplyPending) {
             self->m_reapplyPending = false;
             QTimer::singleShot(0, self, [self]() {
-                if (self) {
+                // m_stopped as well as the QPointer: stop() can run between
+                // this continuation being posted and dispatched, and the
+                // fetch would then issue a D-Bus call during teardown (same
+                // guard the queued client-area report carries).
+                if (self && !self->m_stopped) {
                     self->fetchAndApplyWindowGeometries();
                 }
             });
@@ -260,7 +276,7 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
         }
         if (window && m_effect->shouldHandleWindow(window)) {
             const QString winScreenId = m_effect->getWindowScreenId(window);
-            if (m_effect->m_autotileHandler->isAutotileScreen(winScreenId)) {
+            if (m_effect->m_tilingHandler->isManagedScreen(winScreenId)) {
                 qCDebug(lcScreenChange) << "Skipping autotile-managed window" << entry.windowId << "on screen"
                                         << winScreenId;
                 continue;
@@ -280,7 +296,7 @@ void ScreenChangeHandler::applyWindowGeometries(const PhosphorProtocol::WindowGe
             // window's screen can flip to autotile during the stagger interval,
             // and a snap-path applyWindowGeometry would then fight the autotile
             // engine for placement.
-            if (m_effect->m_autotileHandler->isAutotileScreen(m_effect->getWindowScreenId(e.window))) {
+            if (m_effect->m_tilingHandler->isManagedScreen(m_effect->getWindowScreenId(e.window))) {
                 return;
             }
             qCInfo(lcScreenChange) << "Repositioning window" << m_effect->getWindowId(e.window) << "to" << e.geometry;

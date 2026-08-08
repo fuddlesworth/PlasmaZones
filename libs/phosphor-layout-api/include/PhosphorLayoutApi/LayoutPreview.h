@@ -52,7 +52,10 @@ struct LayoutPreview
     /// Stable identifier for this layout entry. For manual layouts this is
     /// the layout's UUID string (with braces); for autotile entries it's
     /// the prefixed form `"autotile:<algorithmId>"` so manual + autotile
-    /// IDs share a single namespace at the consumer level.
+    /// IDs share a single namespace at the consumer level. Native scrolling
+    /// templates are UUID-shaped too, so the id alone does not tell the two
+    /// UUID families apart — @c isScrollingTemplate is what distinguishes
+    /// them.
     QString id;
 
     /// Human-readable name for the picker UI (i18n'd by the source).
@@ -124,6 +127,13 @@ struct LayoutPreview
     /// populators. Consumers treat this as authoritative — do not
     /// recompute from algorithm flags; that's the source's job.
     bool isSystem = false;
+
+    /// True when this preview backs a native scrolling TEMPLATE (the third
+    /// card family beside manual layouts and autotile algorithms). Template
+    /// ids are UUID-shaped like manual layouts, so this flag — not the id
+    /// form — is the family discriminator; zones carry the blueprint's
+    /// column bands for the shared thumbnail renderer.
+    bool isScrollingTemplate = false;
 
     /// Optional autotile algorithm metadata. Presence is the sole signal
     /// that this preview backs an autotile algorithm rather than a static

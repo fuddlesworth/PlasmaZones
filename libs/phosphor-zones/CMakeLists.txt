@@ -5,17 +5,26 @@
 #
 # Passive data + geometry layer: Zone, Layout, ZoneDetector, ZoneHighlighter,
 # layout JSON serialization, and the IZoneDetector / IZoneLayoutRegistry abstract
-# contracts. Implements PhosphorLayout::ILayoutSource so editor / settings
-# code can render layout previews without depending on the daemon.
+# contracts. It also owns the native scrolling template trio — ScrollingTemplate
+# (the object plus its JSON round trip and normalization), ScrollingTemplateStore
+# (the per-user/system file store) and ScrollingTemplateSource (its
+# ILayoutSource projection) — so scrolling templates are a first-class layout
+# family beside manual layouts. Implements PhosphorLayout::ILayoutSource so
+# editor / settings code can render layout previews without depending on the
+# daemon.
 #
 # This library does NOT include the runtime engine that snaps windows to
 # zones (that's phosphor-snap, future work). It also does NOT include
 # autotile algorithms (phosphor-tile-algo, future work).
 #
-# Self-contained: depends only on Qt6 + PhosphorLayoutApi (PUBLIC) and
-# PhosphorIdentity (PRIVATE — used for virtual-screen id parsing
-# (VirtualScreenId) in geometryutils / layoutregistry_assignments; the dep
-# doesn't leak through any public PhosphorZones header).
+# Dependencies. PUBLIC: Qt6 Core/Gui, PhosphorLayoutApi (the ILayoutSource
+# contract this library implements), PhosphorGeometry, and PhosphorRules
+# (LayoutRegistry's ctor takes a RuleStore, so the type is in a public
+# header). PRIVATE: PhosphorFsLoader (load-path schema validation),
+# PhosphorIdentity (virtual-screen id parsing), and PhosphorScreens::Runtime
+# (ScreenManager geometry queries + assignment-cascade screen-id
+# normalisation). Each edge is annotated at its target_link_libraries entry
+# below.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -61,6 +70,19 @@ if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
     find_package(PhosphorIdentity CONFIG REQUIRED)
 endif()
 
+# PhosphorRules backs the whole assignment cascade (RuleStore + RuleEvaluator);
+# the store type appears in LayoutRegistry.h's ctor signature, so the link edge
+# below is PUBLIC.
+if(NOT TARGET PhosphorRules::PhosphorRules)
+    find_package(PhosphorRules CONFIG REQUIRED)
+endif()
+
+# PhosphorFsLoader supplies the SchemaValidator LayoutRegistry runs layout files
+# through on load.
+if(NOT TARGET PhosphorFsLoader::PhosphorFsLoader)
+    find_package(PhosphorFsLoader CONFIG REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -81,6 +103,10 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ZonesLayoutSource.h
     include/PhosphorZones/ZonesLayoutSourceFactory.h
     include/PhosphorZones/AssignmentEntry.h
+    include/PhosphorZones/ScrollingTemplate.h
+    include/PhosphorZones/ScrollingTemplateStore.h
+    include/PhosphorZones/ScrollingTemplateSource.h
+    include/PhosphorZones/ContextResolveKey.h
     include/PhosphorZones/LayoutRegistry.h
     include/PhosphorZones/LayoutFactory.h
     include/PhosphorZones/LayoutComputeTypes.h
@@ -101,6 +127,9 @@ set(phosphorzones_SRCS
     src/zoneslayoutsourcefactory.cpp
     src/zoneslogging.h
     src/zoneslogging.cpp
+    src/scrollingtemplate.cpp
+    src/scrollingtemplatestore.cpp
+    src/scrollingtemplatesource.cpp
     src/interfaces.cpp
     src/layoutregistry.cpp
     src/layoutregistry_assignments.cpp
