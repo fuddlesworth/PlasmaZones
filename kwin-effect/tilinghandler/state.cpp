@@ -747,7 +747,12 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // with overwrite=true and (b) make the daemon try to tile a window KWin
     // won't let move. The exit-fullscreen slot re-announces it via
     // notifyWindowAdded once it returns to a normal frame.
-    if (w->isFullScreen()) {
+    //
+    // Exempt: a scrolling WINDOWED-FULLSCREEN window. Its fullscreen state
+    // is the effect's own doing and its geometry is the column rect the
+    // daemon still owns, so the rationale above does not apply — and a
+    // re-announce (screen churn, effect bring-up) must not silently drop it.
+    if (w->isFullScreen() && !m_effect->m_windowedFullscreenWindows.contains(m_effect->getWindowId(w))) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (fullscreen)" << m_effect->getWindowId(w);
         return false;
     }
@@ -787,6 +792,19 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
 
 void TilingHandler::applyFloatCleanup(const QString& windowId)
 {
+    // Windowed fullscreen dies on float (the engine clears its tile flag by
+    // taking the window OUT of the strip, so no batch entry ever arrives to
+    // un-flag it here) — drop the client's fullscreen state now or it stays
+    // fullscreen-configured while free-floating.
+    if (m_effect->m_windowedFullscreenWindows.remove(windowId)) {
+        if (KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId)) {
+            if (KWin::Window* kw = w->window(); kw && kw->isFullScreen()) {
+                ++m_suppressFullScreenChanged;
+                kw->setFullScreen(false);
+                --m_suppressFullScreenChanged;
+            }
+        }
+    }
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
     // A floating window is no longer tile-managed on any screen — clear tiled
     // tracking. clearWindowTiledAllScreens re-resolves the window's rules when the

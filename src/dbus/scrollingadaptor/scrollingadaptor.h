@@ -84,6 +84,18 @@ public Q_SLOTS:
     void focusColumn(const QString& screenId, int delta);
 
     /**
+     * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)
+     *
+     * The KWin effect calls this when a windowed-fullscreen client leaves
+     * fullscreen on its own (the app's in-app toggle), so the strip's flag
+     * follows reality. Silent no-op for an unknown window or one whose
+     * flag is not set, same wire-boundary policy as focusColumn.
+     *
+     * @param windowId Window whose flag to clear; an empty string is ignored
+     */
+    void clearWindowedFullscreen(const QString& windowId);
+
+    /**
      * @brief The strip as it currently looks on a screen, for previews
      *
      * Returns a JSON array with ONE OBJECT PER TILE carrying

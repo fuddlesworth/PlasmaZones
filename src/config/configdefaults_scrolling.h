@@ -798,6 +798,13 @@ public:
     {
         return QStringLiteral("Meta+Alt+T");
     }
+    static QString scrollingToggleWindowedFullscreenShortcut()
+    {
+        // Sibling of Meta+Alt+F (maximize column): the F family covers the
+        // make-it-bigger verbs, and Shift+letter is the family's sibling
+        // slot (see scrollingCycleColumnWidthShortcut for the convention).
+        return QStringLiteral("Meta+Alt+Shift+F");
+    }
     static QString scrollingCycleColumnWidthShortcut()
     {
         // The letter pairs in this family follow one convention: a mnemonic

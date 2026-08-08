@@ -807,4 +807,39 @@ bool ScrollStrip::toggleActiveColumnTabbed()
     return true;
 }
 
+bool ScrollStrip::toggleActiveWindowedFullscreen()
+{
+    Tile* tile = activeTileMutable();
+    if (!tile) {
+        return false;
+    }
+    tile->windowedFullscreen = !tile->windowedFullscreen;
+    return true;
+}
+
+bool ScrollStrip::setWindowedFullscreen(const QString& windowId, bool on)
+{
+    const int colIdx = columnOfWindow(windowId);
+    if (colIdx < 0) {
+        return false;
+    }
+    Column& col = m_columns[colIdx];
+    Tile& tile = col.tiles[col.indexOfWindow(windowId)];
+    if (tile.windowedFullscreen == on) {
+        return false;
+    }
+    tile.windowedFullscreen = on;
+    return true;
+}
+
+bool ScrollStrip::isWindowedFullscreen(const QString& windowId) const
+{
+    const int colIdx = columnOfWindow(windowId);
+    if (colIdx < 0) {
+        return false;
+    }
+    const Column& col = m_columns.at(colIdx);
+    return col.tiles.at(col.indexOfWindow(windowId)).windowedFullscreen;
+}
+
 } // namespace PhosphorScrollEngine

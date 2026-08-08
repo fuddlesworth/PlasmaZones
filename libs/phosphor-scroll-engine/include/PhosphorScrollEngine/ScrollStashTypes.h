@@ -30,6 +30,11 @@ struct StashedTile
     /// minimized domain stays round-trippable if the daemon ever drives
     /// it directly; see the seam note on setWindowMinimized.
     bool minimized = false;
+    /// Windowed fullscreen, carried through stash/serialize and RE-APPLIED
+    /// on claim (unlike minimized above): the flag is strip-owned state the
+    /// compositor mirrors, so a restart must hand it back or the client
+    /// stays fullscreen-configured with nothing on record saying so.
+    bool windowedFullscreen = false;
     /// True while THIS tile was staged from the persisted blob and has
     /// not been claimed. Per tile, not per entry: a key co-tenanted by a
     /// returning app and a dead one must age the dead tile out while the

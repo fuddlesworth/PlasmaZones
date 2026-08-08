@@ -30,6 +30,16 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // The emit-gate memory for the windowed-fullscreen flag ages out the same
+    // way; a stale true for a re-used id would only force one redundant emit,
+    // but there is no reason to keep dead ids around.
+    for (auto it = m_lastAppliedWindowedFs.begin(); it != m_lastAppliedWindowedFs.end();) {
+        if (!aliveWindowIds.contains(it.key())) {
+            it = m_lastAppliedWindowedFs.erase(it);
+        } else {
+            ++it;
+        }
+    }
     // The remembered park edge is written only while a window sits parked and
     // consumed when it scrolls back on screen, so a window that DIES parked
     // never consumes its entry; this aliveness sweep reclaims those. Every

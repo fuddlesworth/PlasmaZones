@@ -164,10 +164,25 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     }
 
     // Don't call moveResize() on fullscreen windows, it can crash KWin.
-    // See KDE bugs #429752, #301529, #489546.
+    // See KDE bugs #429752, #301529, #489546 (X11-era; moveResize on a
+    // fullscreen window is spike-verified safe on KWin >= 6.7).
+    //
+    // Two narrow exemptions, both keyed on KWin's REQUESTED state (the
+    // committed isFullScreen() lags a client round-trip):
+    //   - a window in scrolling WINDOWED FULLSCREEN holds fullscreen state
+    //     at its column rect on purpose — geometry applies ARE the feature,
+    //     and every re-apply path (screen change, daemon retile) must keep
+    //     working or KWin's ensureSpecialStateGeometry clobber wins;
+    //   - a window whose fullscreen was just requested OFF (the windowed-
+    //     fullscreen exit) would otherwise have its restoring batch rect
+    //     swallowed while the committed state drains.
     if (window->isFullScreen()) {
-        qCDebug(lcEffect) << "applyGeometry: window is fullscreen, skipping";
-        return;
+        KWin::Window* kwFs = window->window();
+        const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
+        if (requestedFullScreen && !m_windowedFullscreenWindows.contains(getWindowId(window))) {
+            qCDebug(lcEffect) << "applyGeometry: window is fullscreen, skipping";
+            return;
+        }
     }
 
     // For X11/XWayland windows, KWin constrains the frame size to align with

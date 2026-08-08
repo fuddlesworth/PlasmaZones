@@ -110,6 +110,16 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
                                PhosphorEngine::NavigationContext{QString(), screenId});
 }
 
+void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
+{
+    // Same wire-boundary policy as focusColumn: malformed input is a silent
+    // no-op, and the engine's own lookup rejects an untracked window.
+    if (!m_engine || windowId.isEmpty()) {
+        return;
+    }
+    m_engine->clearWindowedFullscreen(windowId);
+}
+
 QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
 {
     // isEmpty kept for the same wire-boundary reason as in focusColumn.

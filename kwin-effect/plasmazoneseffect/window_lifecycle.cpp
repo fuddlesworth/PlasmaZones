@@ -405,6 +405,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     }
     m_windowAnimator->removeAnimation(w);
     m_scrollVisualPos.remove(closingWindowId);
+    // A dying window needs no setFullScreen(false) — just the membership.
+    m_windowedFullscreenWindows.remove(closingWindowId);
 
     // Same value as closingWindowId above: the windowId cache isn't dropped
     // until later in this slot (m_idCaches.windowIdCache.remove near the end), so a

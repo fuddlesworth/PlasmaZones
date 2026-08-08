@@ -127,6 +127,10 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
+        // Scrolling windowed fullscreen. Only meaningful on a tiled entry;
+        // the floating pair is rejected by validationError() below like any
+        // other garbling.
+        entry.windowedFullscreen = obj.value(QLatin1String("windowedFullscreen")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // Absent for every non-scrolling producer, and absent within scrolling

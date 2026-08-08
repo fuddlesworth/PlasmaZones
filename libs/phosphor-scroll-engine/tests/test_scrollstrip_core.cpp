@@ -45,6 +45,8 @@ private Q_SLOTS:
     void tabIndicatorGapKeepsMovingWithinColumn();
     void tabIndicatorRightAndBottomAnchorTheOppositeEdge();
     void tabIndicatorNarrowerThanItsReservationKeepsTheColumn();
+    void windowedFullscreenFlagsActiveTileOnly();
+    void windowedFullscreenTravelsWithConsume();
 };
 
 void TestScrollStripCore::openInsertsColumnAndResizesNothing()
@@ -581,6 +583,57 @@ void TestScrollStripCore::tabIndicatorNarrowerThanItsReservationKeepsTheColumn()
         QVERIFY2(tile.rect.isValid(), "an over-large reservation must not invert the tile rect");
         QCOMPARE(tile.rect, column.rect);
     }
+}
+
+void TestScrollStripCore::windowedFullscreenFlagsActiveTileOnly()
+{
+    ScrollStrip strip;
+    const auto params = defaultParams();
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    const QRect bBefore = rectOf(strip.relayout(params), QStringLiteral("b"));
+
+    // The insert made b the active tile, so the toggle lands on b alone.
+    QVERIFY(strip.toggleActiveWindowedFullscreen());
+    QVERIFY(strip.isWindowedFullscreen(QStringLiteral("b")));
+    QVERIFY(!strip.isWindowedFullscreen(QStringLiteral("a")));
+
+    // Layout-neutral: the resolved rect is byte-identical, and the flag rides
+    // the resolved tile so the apply payload can carry it.
+    const ResolvedStrip r = strip.relayout(params);
+    QCOMPARE(rectOf(r, QStringLiteral("b")), bBefore);
+    bool sawFlagged = false;
+    for (const ResolvedColumn& col : r.columns) {
+        for (const ResolvedTile& tile : col.tiles) {
+            QCOMPARE(tile.windowedFullscreen, tile.windowId == QStringLiteral("b"));
+            sawFlagged = sawFlagged || tile.windowedFullscreen;
+        }
+    }
+    QVERIFY2(sawFlagged, "b's resolved tile must exist, or the per-tile compare above passed vacuously");
+
+    // Toggle off restores; the direct write reports change-or-not honestly.
+    QVERIFY(strip.toggleActiveWindowedFullscreen());
+    QVERIFY(!strip.isWindowedFullscreen(QStringLiteral("b")));
+    QVERIFY(strip.setWindowedFullscreen(QStringLiteral("b"), true));
+    QVERIFY(!strip.setWindowedFullscreen(QStringLiteral("b"), true));
+    QVERIFY(strip.setWindowedFullscreen(QStringLiteral("b"), false));
+    QVERIFY(!strip.setWindowedFullscreen(QStringLiteral("missing"), true));
+}
+
+void TestScrollStripCore::windowedFullscreenTravelsWithConsume()
+{
+    ScrollStrip strip;
+    const auto params = defaultParams();
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.focusWindow(QStringLiteral("a"), params));
+    QVERIFY(strip.toggleActiveWindowedFullscreen());
+
+    // Consume pulls b into a's column; a's flag rides its Tile untouched.
+    QVERIFY(strip.consumeWindowIntoColumn(params));
+    QCOMPARE(strip.columnCount(), 1);
+    QVERIFY(strip.isWindowedFullscreen(QStringLiteral("a")));
+    QVERIFY(!strip.isWindowedFullscreen(QStringLiteral("b")));
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripCore)

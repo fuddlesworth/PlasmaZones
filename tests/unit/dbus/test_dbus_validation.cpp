@@ -323,6 +323,26 @@ private Q_SLOTS:
         QVERIFY(err.contains(QStringLiteral("scrollEdge")));
     }
 
+    void tileRequestEntry_windowedFullscreenOnFloating_rejected()
+    {
+        // The pair is contradictory (the flag means "keeps its column slot")
+        // and the effect would flip KWin fullscreen state on a free window.
+        // The engine never emits it, so its presence is garbling.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.floating = true;
+        e.windowedFullscreen = true;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("windowedFullscreen")));
+        // On a tiled entry the flag is legal.
+        e.floating = false;
+        e.width = 1920;
+        e.height = 1080;
+        QVERIFY(e.validationError().isEmpty());
+    }
+
     void tileRequestEntry_scrollEdgeValues_tolerated()
     {
         // Empty (no strip motion) and the two screen edges are the only

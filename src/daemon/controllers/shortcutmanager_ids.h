@@ -72,6 +72,7 @@ inline constexpr auto kIdScrollConsumeOrExpelLeft = "scroll_consume_or_expel_lef
 inline constexpr auto kIdScrollConsumeOrExpelRight = "scroll_consume_or_expel_right";
 inline constexpr auto kIdScrollCenterColumn = "scroll_center_column";
 inline constexpr auto kIdScrollToggleColumnTabbed = "scroll_toggle_column_tabbed";
+inline constexpr auto kIdScrollToggleWindowedFullscreen = "scroll_toggle_windowed_fullscreen";
 inline constexpr auto kIdScrollCycleColumnWidth = "scroll_cycle_column_width";
 inline constexpr auto kIdScrollCycleColumnWidthBack = "scroll_cycle_column_width_back";
 inline constexpr auto kIdScrollIncreaseColumnWidth = "scroll_increase_column_width";

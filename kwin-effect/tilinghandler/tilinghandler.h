@@ -928,6 +928,11 @@ private:
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
+    /// Suppresses slotWindowFullScreenChanged for the effect's OWN
+    /// setFullScreen calls (windowed fullscreen), mirroring
+    /// m_suppressMaximizeChanged: without it the slot's enter branch sheds
+    /// the very tiling state the flag exists to keep.
+    int m_suppressFullScreenChanged = 0;
     // ── Focus follows mouse ──
     // Per-mode pair: m_focusFollowsMouse is the autotile flag
     // (autotileFocusFollowsMouse), m_scrollingFocusFollowsMouse the

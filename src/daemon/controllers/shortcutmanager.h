@@ -240,6 +240,7 @@ Q_SIGNALS:
     void scrollConsumeOrExpelRequested(int delta);
     void scrollCenterColumnRequested();
     void scrollToggleColumnTabbedRequested();
+    void scrollToggleWindowedFullscreenRequested();
     void scrollCycleColumnWidthRequested(int delta);
     void scrollAdjustColumnWidthRequested(int deltaPercent);
     void scrollMaximizeColumnRequested();

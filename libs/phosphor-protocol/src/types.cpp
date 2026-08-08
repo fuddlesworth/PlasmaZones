@@ -110,6 +110,13 @@ QString TileRequestEntry::validationError() const
     if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")) {
         return QStringLiteral("TileRequestEntry: invalid scrollEdge '%1' (windowId=%2)").arg(scrollEdge, windowId);
     }
+    // Windowed fullscreen is a strip placement by definition (the tile keeps
+    // its column slot), so it cannot ride a floating entry — the effect
+    // would flip KWin fullscreen state on a free window. The engine never
+    // emits the pair; reject it as garbling.
+    if (windowedFullscreen && floating) {
+        return QStringLiteral("TileRequestEntry: windowedFullscreen on a floating entry (windowId=%1)").arg(windowId);
+    }
     // viewDeltaX, visualX, visualY and hasVisualPos are deliberately NOT
     // validated here, unlike their neighbours. All four are PAINT hints rather
     // than placement inputs: the committed rect stands on its own whatever they

@@ -184,8 +184,14 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       to be SEEN travelling while the view slides, so the safe commit and the
 //       paint position are now separate answers. Same signature-matched
 //       failure mode as v6 and v7.
-inline constexpr int ApiVersion = 8;
-inline constexpr int MinPeerApiVersion = 8;
+//   v9: TileRequestEntry gained windowedFullscreen (after floating), widening
+//       windowsTileRequested from a(siiiissbbssiiib) to a(siiiissbbbssiiib).
+//       Scrolling windowed fullscreen: the effect flips KWin fullscreen state
+//       on the client while committing the column rect. Mid-struct insertion,
+//       so BOTH the signature and the field order change — same
+//       signature-matched failure mode as v6 through v8.
+inline constexpr int ApiVersion = 9;
+inline constexpr int MinPeerApiVersion = 9;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

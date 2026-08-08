@@ -571,6 +571,11 @@ struct Tile
     /// Minimized tiles keep their slot/order but are excluded from layout;
     /// unminimize restores the window into the same slot.
     bool minimized = false;
+    /// Windowed fullscreen (niri toggle-windowed-fullscreen): the client is
+    /// told it is fullscreen while the tile keeps its normal column slot.
+    /// Layout ignores this flag entirely — it only rides the apply payload so
+    /// the compositor side can flip the client's fullscreen state.
+    bool windowedFullscreen = false;
     /// Client-reported minimum size (0 = unconstrained). Relayout clamps the
     /// resolved rect to it; a window that cannot honour its slot at all is the
     /// engine's cue to float it instead.
@@ -669,6 +674,9 @@ struct ResolvedTile
     /// True for the non-active tiles of a tabbed column — visually
     /// suppressed, not clickable, represented by the tab strip.
     bool hidden = false;
+    /// Copied from Tile::windowedFullscreen so the apply payload can carry
+    /// it; never influences the resolved rect.
+    bool windowedFullscreen = false;
 };
 
 /// One column's resolved output.

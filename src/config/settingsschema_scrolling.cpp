@@ -415,6 +415,7 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::consumeOrExpelRightKey(), CD::scrollingConsumeOrExpelRightShortcut(), QMetaType::QString},
         {CD::centerColumnKey(), CD::scrollingCenterColumnShortcut(), QMetaType::QString},
         {CD::toggleColumnTabbedKey(), CD::scrollingToggleColumnTabbedShortcut(), QMetaType::QString},
+        {CD::toggleWindowedFullscreenKey(), CD::scrollingToggleWindowedFullscreenShortcut(), QMetaType::QString},
         {CD::cycleColumnWidthKey(), CD::scrollingCycleColumnWidthShortcut(), QMetaType::QString},
         {CD::cycleColumnWidthBackKey(), CD::scrollingCycleColumnWidthBackShortcut(), QMetaType::QString},
         {CD::increaseColumnWidthKey(), CD::scrollingIncreaseColumnWidthShortcut(), QMetaType::QString},

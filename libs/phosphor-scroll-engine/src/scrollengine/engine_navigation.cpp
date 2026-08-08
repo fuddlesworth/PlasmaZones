@@ -848,6 +848,44 @@ void ScrollEngine::toggleColumnTabbed(const QString& screenId)
                               sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
 }
 
+void ScrollEngine::toggleWindowedFullscreen(const QString& screenId)
+{
+    // Hand-expanded (not P_SCROLL_VERB): like toggleColumnTabbed, the op is
+    // layout-neutral and never reads layout params.
+    const QString screen = resolveOperationScreen(screenId);
+    ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("fullscreen"), QStringLiteral("no_windows"), QString(),
+                                  QString(), screen);
+        return;
+    }
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = state->strip().toggleActiveWindowedFullscreen();
+    if (changed) {
+        // The flag never moves a rect; applyLayout's emit-on-change gate has
+        // its own windowed-fullscreen leg (m_lastAppliedWindowedFs) so the
+        // flip reaches the compositor on an otherwise motionless strip.
+        applyLayout(screen, true);
+        Q_EMIT placementChanged(screen);
+    }
+    Q_EMIT navigationFeedback(changed, QStringLiteral("fullscreen"), changed ? QString() : QStringLiteral("no_target"),
+                              sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
+}
+
+void ScrollEngine::clearWindowedFullscreen(const QString& windowId)
+{
+    const QString id = canonicalizeForLookup(windowId);
+    ScrollState* state = stateForWindow(id);
+    if (!state || !state->strip().setWindowedFullscreen(id, false)) {
+        return;
+    }
+    const QString screen = m_states.keyForWindow(id).screenId;
+    if (!screen.isEmpty()) {
+        applyLayout(screen, false);
+        Q_EMIT placementChanged(screen);
+    }
+}
+
 void ScrollEngine::cycleColumnPresetWidth(int delta, const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().cycleActiveColumnPresetWidth(delta, params), "resize");

@@ -336,7 +336,13 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     // Transient for as long as the state lasts; both revert when the window
     // leaves fullscreen. Do not "clean up" the state check out of here without
     // re-adding an equivalent rejection at the snap/tile call sites.
-    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()) {
+    //
+    // Exempt from the fullscreen half only: a scrolling WINDOWED-FULLSCREEN
+    // window. Its fullscreen state is the effect's own doing and it stays a
+    // managed strip tile — dropping it here would stop activation reporting
+    // and tile routing for exactly the window the strip still lays out.
+    const bool fullScreenUnmanageable = w->isFullScreen() && !m_windowedFullscreenWindows.contains(getWindowId(w));
+    if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || fullScreenUnmanageable || w->isSkipSwitcher()) {
         if (rejectReason) {
             *rejectReason = QStringLiteral("special/desktop/dock/fullscreen/skipSwitcher window type");
         }

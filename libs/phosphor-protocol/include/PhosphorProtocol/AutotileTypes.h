@@ -12,7 +12,7 @@
 
 namespace PhosphorProtocol {
 
-/// D-Bus struct for autotile tile requests: (siiiissbbssiiib)
+/// D-Bus struct for autotile tile requests: (siiiissbbbssiiib)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -24,6 +24,11 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     QString screenId;
     bool monocle = false;
     bool floating = false;
+    /// Scrolling mode: windowed fullscreen (niri toggle-windowed-fullscreen).
+    /// The effect tells the client it is fullscreen (KWin fullscreen state)
+    /// while committing the column rect above — the tile never leaves its
+    /// slot. False for every other placement.
+    bool windowedFullscreen = false;
     /// Overlap-layout stacking direction: "firstOnTop" or "lastOnTop".
     /// Empty for non-overlap layouts (the effect leaves z-order alone).
     QString stacking;

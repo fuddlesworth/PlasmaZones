@@ -188,6 +188,7 @@ private Q_SLOTS:
                                                  QStringLiteral("screen-0"),
                                                  true,
                                                  false,
+                                                 true,
                                                  QStringLiteral("lastOnTop"),
                                                  QStringLiteral("right"),
                                                  -240,
@@ -195,11 +196,12 @@ private Q_SLOTS:
                                                  120,
                                                  true};
 
-        // Verify D-Bus signature: (siiiissbbssiiib) = string + 4 ints + 2
-        // strings + 2 bools + stacking + scrollEdge + viewDeltaX + the visual
-        // position pair and its validity flag
+        // Verify D-Bus signature: (siiiissbbbssiiib) = string + 4 ints + 2
+        // strings + 3 bools (monocle, floating, windowedFullscreen) +
+        // stacking + scrollEdge + viewDeltaX + the visual position pair and
+        // its validity flag
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbssiiib)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiib)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
@@ -215,6 +217,7 @@ private Q_SLOTS:
         QCOMPARE(entry.screenId, QStringLiteral("screen-0"));
         QCOMPARE(entry.monocle, true);
         QCOMPARE(entry.floating, false);
+        QCOMPARE(entry.windowedFullscreen, true);
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
         QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
         QCOMPARE(entry.viewDeltaX, -240);
@@ -262,6 +265,7 @@ private Q_SLOTS:
                                                       QStringLiteral("screen-0"),
                                                       true,
                                                       false,
+                                                      true,
                                                       QStringLiteral("lastOnTop"),
                                                       QStringLiteral("left"),
                                                       512,
@@ -360,8 +364,8 @@ private Q_SLOTS:
     void testTileRequestToRect()
     {
         PhosphorProtocol::TileRequestEntry entry{
-            QStringLiteral("app|5"), 15,    25,    640,       480,      QStringLiteral("{z}"),
-            QStringLiteral("s0"),    false, false, QString(), QString()};
+            QStringLiteral("app|5"), 15,    25,    640,   480,       QStringLiteral("{z}"),
+            QStringLiteral("s0"),    false, false, false, QString(), QString()};
         QCOMPARE(entry.toRect(), QRect(15, 25, 640, 480));
     }
 

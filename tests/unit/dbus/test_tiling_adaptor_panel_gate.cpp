@@ -350,7 +350,8 @@ private Q_SLOTS:
             "["
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"left\"},"
-            "{\"windowId\":\"b|2\",\"screenId\":\"S1\",\"x\":600,\"y\":0,\"width\":600,\"height\":800},"
+            "{\"windowId\":\"b|2\",\"screenId\":\"S1\",\"x\":600,\"y\":0,\"width\":600,\"height\":800,"
+            "\"windowedFullscreen\":true},"
             "{\"windowId\":\"c|3\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"up\"},"
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":50,\"y\":0,\"width\":600,\"height\":800,"
@@ -368,6 +369,11 @@ private Q_SLOTS:
         QCOMPARE(requests.at(0).x, 0);
         QCOMPARE(requests.at(1).windowId, QStringLiteral("b|2"));
         QVERIFY(requests.at(1).scrollEdge.isEmpty());
+        // The windowedFullscreen key parses through the same JSON hop (a
+        // producer-side rename would otherwise silently read false), and its
+        // absence on a|1 reads false.
+        QCOMPARE(requests.at(1).windowedFullscreen, true);
+        QCOMPARE(requests.at(0).windowedFullscreen, false);
     }
 };
 

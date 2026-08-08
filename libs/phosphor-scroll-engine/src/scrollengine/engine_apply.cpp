@@ -698,6 +698,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             obj[QLatin1String("y")] = rect.y();
             obj[QLatin1String("width")] = rect.width();
             obj[QLatin1String("height")] = rect.height();
+            if (tile.windowedFullscreen) {
+                obj[QLatin1String("windowedFullscreen")] = true;
+            }
             if (!scrollEdge.isEmpty()) {
                 obj[QLatin1String("scrollEdge")] = scrollEdge;
             }
@@ -764,6 +767,18 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 anyRectMoved = true;
             }
             m_lastAppliedRect.insert(tile.windowId, rect);
+            // The windowed-fullscreen flag rides the same payload but never
+            // moves a rect, so it needs its own leg of the emit-on-change
+            // gate — a toggle on an otherwise motionless strip must still
+            // reach the compositor.
+            if (m_lastAppliedWindowedFs.value(tile.windowId, false) != tile.windowedFullscreen) {
+                anyRectMoved = true;
+            }
+            if (tile.windowedFullscreen) {
+                m_lastAppliedWindowedFs.insert(tile.windowId, true);
+            } else {
+                m_lastAppliedWindowedFs.remove(tile.windowId);
+            }
         }
     }
     if (arr.isEmpty()) {
