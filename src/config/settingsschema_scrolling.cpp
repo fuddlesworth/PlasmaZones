@@ -393,7 +393,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
 // Called from appendShortcutsSchema so the whole Shortcuts.* family is still
 // declared by one entry point.
 //
-// These 21 chords are bindable via the system Shortcuts KCM, because
+// These 31 chords are bindable via the system Shortcuts KCM, because
 // ShortcutManager registers them like every other action. The settings app has
 // no page for editing the chords themselves. Scrolling does have a Quick
 // Shortcuts page (ScrollingQuickShortcutsPage), but like its Snapping and
@@ -426,6 +426,16 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::increaseWindowHeightKey(), CD::scrollingIncreaseWindowHeightShortcut(), QMetaType::QString},
         {CD::decreaseWindowHeightKey(), CD::scrollingDecreaseWindowHeightShortcut(), QMetaType::QString},
         {CD::resetWindowHeightsKey(), CD::scrollingResetWindowHeightsShortcut(), QMetaType::QString},
+        {CD::centerVisibleColumnsKey(), CD::scrollingCenterVisibleColumnsShortcut(), QMetaType::QString},
+        {CD::focusWindowTopKey(), CD::scrollingFocusWindowTopShortcut(), QMetaType::QString},
+        {CD::focusWindowBottomKey(), CD::scrollingFocusWindowBottomShortcut(), QMetaType::QString},
+        {CD::focusColumnLeftKey(), CD::scrollingFocusColumnLeftShortcut(), QMetaType::QString},
+        {CD::focusColumnRightKey(), CD::scrollingFocusColumnRightShortcut(), QMetaType::QString},
+        {CD::focusColumnLeftOrLastKey(), CD::scrollingFocusColumnLeftOrLastShortcut(), QMetaType::QString},
+        {CD::focusColumnRightOrFirstKey(), CD::scrollingFocusColumnRightOrFirstShortcut(), QMetaType::QString},
+        {CD::switchFocusFloatTilingKey(), CD::scrollingSwitchFocusFloatTilingShortcut(), QMetaType::QString},
+        {CD::moveToFloatingKey(), CD::scrollingMoveToFloatingShortcut(), QMetaType::QString},
+        {CD::moveToTilingKey(), CD::scrollingMoveToTilingShortcut(), QMetaType::QString},
     };
 }
 

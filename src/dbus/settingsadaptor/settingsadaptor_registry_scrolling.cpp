@@ -394,6 +394,26 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingDecreaseWindowHeightShortcut)
         REGISTER_CONCRETE_STRING("scrollingResetWindowHeightsShortcut", scrollingResetWindowHeightsShortcut,
                                  setScrollingResetWindowHeightsShortcut)
+        REGISTER_CONCRETE_STRING("scrollingCenterVisibleColumnsShortcut", scrollingCenterVisibleColumnsShortcut,
+                                 setScrollingCenterVisibleColumnsShortcut)
+        REGISTER_CONCRETE_STRING("scrollingFocusWindowTopShortcut", scrollingFocusWindowTopShortcut,
+                                 setScrollingFocusWindowTopShortcut)
+        REGISTER_CONCRETE_STRING("scrollingFocusWindowBottomShortcut", scrollingFocusWindowBottomShortcut,
+                                 setScrollingFocusWindowBottomShortcut)
+        REGISTER_CONCRETE_STRING("scrollingFocusColumnLeftShortcut", scrollingFocusColumnLeftShortcut,
+                                 setScrollingFocusColumnLeftShortcut)
+        REGISTER_CONCRETE_STRING("scrollingFocusColumnRightShortcut", scrollingFocusColumnRightShortcut,
+                                 setScrollingFocusColumnRightShortcut)
+        REGISTER_CONCRETE_STRING("scrollingFocusColumnLeftOrLastShortcut", scrollingFocusColumnLeftOrLastShortcut,
+                                 setScrollingFocusColumnLeftOrLastShortcut)
+        REGISTER_CONCRETE_STRING("scrollingFocusColumnRightOrFirstShortcut", scrollingFocusColumnRightOrFirstShortcut,
+                                 setScrollingFocusColumnRightOrFirstShortcut)
+        REGISTER_CONCRETE_STRING("scrollingSwitchFocusFloatTilingShortcut", scrollingSwitchFocusFloatTilingShortcut,
+                                 setScrollingSwitchFocusFloatTilingShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMoveToFloatingShortcut", scrollingMoveToFloatingShortcut,
+                                 setScrollingMoveToFloatingShortcut)
+        REGISTER_CONCRETE_STRING("scrollingMoveToTilingShortcut", scrollingMoveToTilingShortcut,
+                                 setScrollingMoveToTilingShortcut)
     }
 
 // Clean up macros (local scope; unity-batch hygiene)

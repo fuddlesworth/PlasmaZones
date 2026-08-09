@@ -17,7 +17,7 @@
 
 #include "core/types/constants.h"
 #include "core/types/enums.h"
-#include "configkeys.h"
+#include "configkeys_scrolling.h"
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
@@ -44,7 +44,7 @@ namespace PlasmaZones {
 // Zone-overlay + window-decoration appearance default accessors. Inherited by
 // ConfigDefaultsGaps and ultimately ConfigDefaults, so every ConfigDefaults::foo()
 // call site resolves these static members through inheritance.
-class ConfigDefaultsAppearance : public ConfigKeys
+class ConfigDefaultsAppearance : public ConfigKeysScrolling
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════

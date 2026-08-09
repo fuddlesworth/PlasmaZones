@@ -856,6 +856,62 @@ public:
     {
         return QStringLiteral("Meta+Alt+0");
     }
+    static QString scrollingCenterVisibleColumnsShortcut()
+    {
+        // Shift twin of centerColumn's C: the whole-span variant of the same
+        // centering idea, no new letter consumed from the shrinking pool.
+        return QStringLiteral("Meta+Alt+Shift+C");
+    }
+    static QString scrollingFocusWindowTopShortcut()
+    {
+        // V for vertical: the within-column axis. Shift+V is the opposed
+        // end, per the family's letter+Shift convention.
+        return QStringLiteral("Meta+Alt+V");
+    }
+    static QString scrollingFocusWindowBottomShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+V");
+    }
+    static QString scrollingFocusColumnLeftShortcut()
+    {
+        // Unbound by default: the generic focus chords already walk columns
+        // and cross monitors at the strip edge. These plain variants exist
+        // for users who want niri's exact stop-at-the-edge behaviour and
+        // bind them in the Shortcuts KCM; a default would spend two letters
+        // from the shrinking Meta+Alt pool on a behaviour nothing defaults
+        // to.
+        return QString();
+    }
+    static QString scrollingFocusColumnRightShortcut()
+    {
+        return QString();
+    }
+    static QString scrollingFocusColumnLeftOrLastShortcut()
+    {
+        // Unbound like the plain pair above, and for the same reason: the
+        // wrap variants are alternatives a user binds INSTEAD of the
+        // monitor-crossing default.
+        return QString();
+    }
+    static QString scrollingFocusColumnRightOrFirstShortcut()
+    {
+        return QString();
+    }
+    static QString scrollingSwitchFocusFloatTilingShortcut()
+    {
+        // X as in eXchange the focused layer.
+        return QStringLiteral("Meta+Alt+X");
+    }
+    static QString scrollingMoveToFloatingShortcut()
+    {
+        // Unbound: Meta+F already toggles float, and the explicit one-way
+        // verbs are for users scripting a deterministic direction.
+        return QString();
+    }
+    static QString scrollingMoveToTilingShortcut()
+    {
+        return QString();
+    }
 };
 
 // Compile-time bound checks for the scrolling defaults that declare min/max

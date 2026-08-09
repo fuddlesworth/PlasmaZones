@@ -161,6 +161,24 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollResetWindowHeightsRequested, plainVerb([](Scroll* s, const QString& id) {
         s->resetWindowHeights(id);
     }));
+    wire(&ShortcutManager::scrollCenterVisibleColumnsRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->centerVisibleColumns(id);
+    }));
+    wire(&ShortcutManager::scrollFocusWindowEndRequested, boolVerb([](Scroll* s, const QString& id, bool bottom) {
+        bottom ? s->focusWindowBottom(id) : s->focusWindowTop(id);
+    }));
+    wire(&ShortcutManager::scrollFocusColumnPlainRequested, intVerb([](Scroll* s, const QString& id, int delta) {
+        s->focusColumnPlain(delta, id);
+    }));
+    wire(&ShortcutManager::scrollFocusColumnWrapRequested, intVerb([](Scroll* s, const QString& id, int delta) {
+        s->focusColumnWrap(delta, id);
+    }));
+    wire(&ShortcutManager::scrollSwitchFocusFloatTilingRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->switchFocusBetweenFloatingAndTiling(id);
+    }));
+    wire(&ShortcutManager::scrollMoveToFloatRequested, boolVerb([](Scroll* s, const QString& id, bool floating) {
+        floating ? s->moveFocusedToFloating(id) : s->moveFocusedToTiling(id);
+    }));
 }
 
 } // namespace PlasmaZones

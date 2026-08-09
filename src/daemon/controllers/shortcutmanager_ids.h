@@ -83,6 +83,16 @@ inline constexpr auto kIdScrollCycleWindowHeightBack = "scroll_cycle_window_heig
 inline constexpr auto kIdScrollIncreaseWindowHeight = "scroll_increase_window_height";
 inline constexpr auto kIdScrollDecreaseWindowHeight = "scroll_decrease_window_height";
 inline constexpr auto kIdScrollResetWindowHeights = "scroll_reset_window_heights";
+inline constexpr auto kIdScrollCenterVisibleColumns = "scroll_center_visible_columns";
+inline constexpr auto kIdScrollFocusWindowTop = "scroll_focus_window_top";
+inline constexpr auto kIdScrollFocusWindowBottom = "scroll_focus_window_bottom";
+inline constexpr auto kIdScrollFocusColumnLeft = "scroll_focus_column_left";
+inline constexpr auto kIdScrollFocusColumnRight = "scroll_focus_column_right";
+inline constexpr auto kIdScrollFocusColumnLeftOrLast = "scroll_focus_column_left_or_last";
+inline constexpr auto kIdScrollFocusColumnRightOrFirst = "scroll_focus_column_right_or_first";
+inline constexpr auto kIdScrollSwitchFocusFloatTiling = "scroll_switch_focus_float_tiling";
+inline constexpr auto kIdScrollMoveToFloating = "scroll_move_to_floating";
+inline constexpr auto kIdScrollMoveToTiling = "scroll_move_to_tiling";
 
 // The indexed slot families are prefix-keyed rather than enumerated above.
 // Exported so the id builders below and the cheatsheet catalog's

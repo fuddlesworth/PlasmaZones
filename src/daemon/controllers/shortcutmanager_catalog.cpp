@@ -311,6 +311,46 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones",
                               "Clears manual window heights in the focused column so its windows share the "
                               "height evenly."));
+        add(kIdScrollCenterVisibleColumns, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Center Visible Columns"),
+            QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the fully visible columns sit centered as a group."));
+        add(kIdScrollFocusWindowTop, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Top Window"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the first window of the focused column."));
+        add(kIdScrollFocusWindowBottom, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Bottom Window"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the last window of the focused column."));
+        add(kIdScrollFocusColumnLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left (Edge Stop)"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus one column left and stops at the strip edge. The regular focus "
+                              "shortcut continues onto the next monitor instead."));
+        add(kIdScrollFocusColumnRight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right (Edge Stop)"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus one column right and stops at the strip edge. The regular focus "
+                              "shortcut continues onto the next monitor instead."));
+        add(kIdScrollFocusColumnLeftOrLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left (Wrap)"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves focus one column left, wrapping to the last column at the edge."));
+        add(kIdScrollFocusColumnRightOrFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right (Wrap)"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus one column right, wrapping to the first column at the edge."));
+        add(kIdScrollSwitchFocusFloatTiling, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Switch Floating and Tiled Focus"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus between the floating windows and the tiled columns, returning to "
+                              "the most recent window on each side."));
+        add(kIdScrollMoveToFloating, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Move to Floating"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Makes the focused window float. Unlike the float toggle, it never re-tiles."));
+        add(kIdScrollMoveToTiling, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Move to Tiled"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Returns the focused floating window to its column. Unlike the float toggle, "
+                              "it never floats."));
         return m;
     }();
 

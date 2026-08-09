@@ -247,6 +247,17 @@ Q_SIGNALS:
     void scrollCycleWindowHeightRequested(int delta);
     void scrollAdjustWindowHeightRequested(int deltaPercent);
     void scrollResetWindowHeightsRequested();
+    void scrollCenterVisibleColumnsRequested();
+    /// false = top of the column, true = bottom.
+    void scrollFocusWindowEndRequested(bool bottom);
+    /// Edge-stop adjacent-column focus (the generic focus chords cross
+    /// monitors instead). delta -1 = left, +1 = right; same for the wrap
+    /// variant, which falls through to the far end at the strip edge.
+    void scrollFocusColumnPlainRequested(int delta);
+    void scrollFocusColumnWrapRequested(int delta);
+    void scrollSwitchFocusFloatTilingRequested();
+    /// true = move the focused window to the float layer, false = re-tile it.
+    void scrollMoveToFloatRequested(bool floating);
 
 private:
     struct Entry
