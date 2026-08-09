@@ -911,6 +911,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             m_windowedFullscreenWindows.remove(cachedId);
             m_windowedFsLayerSnapshots.remove(cachedId);
             m_lastReportedMinSize.remove(cachedId);
+            m_scrollCommandedRects.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);

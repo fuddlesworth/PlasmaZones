@@ -975,6 +975,8 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
         }
         restoreWindowedFullscreenLayerDemotion(windowId, kw);
     }
+    // A floating window is free to move itself — stop countering.
+    m_effect->m_scrollCommandedRects.remove(windowId);
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
     // A floating window is no longer tile-managed on any screen — clear tiled
     // tracking. clearWindowTiledAllScreens re-resolves the window's rules when the

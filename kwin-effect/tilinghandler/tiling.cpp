@@ -31,6 +31,7 @@
 #include <window.h>
 #include <workspace.h>
 
+#include <QDateTime>
 #include <QLoggingCategory>
 #include <QScopeGuard>
 #include <QtMath>
@@ -1284,6 +1285,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
             if (!snap.isMonocle && snap.window->isWaylandClient()) {
                 m_tileTargetZones[snap.windowId] = snap.geometry;
+            } else if (!snap.isMonocle && isScrollingScreen(snap.screenId)) {
+                // X11 leg of the reactive repair, deliberately NOT the
+                // Wayland centering machinery (which fights X11's synchronous
+                // configures — the ballooning hazard above): remember the
+                // commanded rect so slotWindowFrameGeometryChanged can
+                // counter an EXTERNAL move. A fresh command resets the
+                // counter-assert burst budget.
+                m_effect->m_scrollCommandedRects.insert(snap.windowId, {snap.geometry, 0, 0});
             }
         },
         onComplete, startedViewLegs);
@@ -1296,12 +1305,48 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         return;
     }
 
-    // Fast bail: skip getWindowId entirely when neither VS detection nor centering needs it
-    if (m_effect->m_virtualScreenDefs.isEmpty() && m_tileTargetZones.isEmpty()) {
+    // Fast bail: skip getWindowId entirely when no consumer below needs it
+    if (m_effect->m_virtualScreenDefs.isEmpty() && m_tileTargetZones.isEmpty()
+        && m_effect->m_scrollCommandedRects.isEmpty()) {
         return;
     }
 
     const QString windowId = m_effect->getWindowId(w);
+
+    // Counter-assert for scroll-managed X11 windows an EXTERNAL mover
+    // relocated. Any frame change landing here outside our own apply
+    // bracket was not ours: X11 clients can reposition themselves through
+    // ConfigureRequests KWin honors, and a Wine game re-asserting its
+    // saved window position was seen live pulling its frame back on-screen
+    // out of the strip's park and straddle placements — sitting over its
+    // neighbour's column until the next user scroll, because the engine's
+    // emit-on-change gate had nothing to say. Re-apply the commanded rect,
+    // without animation (this is enforcement, not motion). The burst
+    // budget (3 per second, reset by every fresh batch command) keeps a
+    // client that re-asserts on every configure from driving an infinite
+    // tug-of-war; when the budget runs out the client wins until the next
+    // batch, which is the pre-existing behavior.
+    if (!w->isWaylandClient() && !m_effect->m_daemonGate.inGeometryApply) {
+        const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
+        if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(m_notifiedWindowScreens.value(windowId))
+            && !(m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
+            const QRect actual = w->frameGeometry().toRect();
+            if (actual != cit->rect) {
+                const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+                if (nowMs - cit->burstStartMs > 1000) {
+                    cit->burstStartMs = nowMs;
+                    cit->burstCount = 0;
+                }
+                if (cit->burstCount < 3) {
+                    ++cit->burstCount;
+                    qCInfo(lcEffect) << "Countering external move of scroll-managed X11 window" << windowId << "from"
+                                     << actual << "back to" << cit->rect;
+                    m_effect->applyWindowGeometry(w, cit->rect, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+                    return;
+                }
+            }
+        }
+    }
 
     // Virtual screen change detection: KWin's outputChanged only fires on
     // physical monitor changes. When a window moves between virtual screens

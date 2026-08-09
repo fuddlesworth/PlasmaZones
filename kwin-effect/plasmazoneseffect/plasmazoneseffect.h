@@ -2020,6 +2020,19 @@ private:
     /// the clamped real frame can never match. Seeded at announce, dropped
     /// beside the other per-window maps on close and the deleted backstop.
     QHash<QString, QSize> m_lastReportedMinSize;
+    /// Per scroll-managed X11 window: the rect the last batch commanded, so
+    /// an EXTERNAL move can be detected and countered. X11 clients can
+    /// reposition themselves through ConfigureRequests KWin honors — a Wine
+    /// game re-asserting its saved window position was seen live undoing
+    /// the strip's parks and straddles (the window crawled back on-screen
+    /// over its neighbour's column, and the engine's emit-on-change gate
+    /// stayed silent because its own rects never moved). Written by the
+    /// batch apply, consumed by TilingHandler::slotWindowFrameGeometryChanged
+    /// (counter-assert with a per-batch burst budget so a client that
+    /// refuses to stay put cannot drive an infinite tug-of-war). Wayland
+    /// windows are covered by m_tileTargetZones instead and never appear
+    /// here. Dropped on close, the deleted backstop, and float cleanup.
+    QHash<QString, ScrollCommandedRect> m_scrollCommandedRects;
     /// wl_surface object ids of the daemon's scrolling tab-indicator surfaces,
     /// announced over D-Bus. The paint path slides these with the strip so the
     /// indicators travel with the columns they label.

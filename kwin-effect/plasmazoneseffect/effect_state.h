@@ -114,6 +114,15 @@ struct WindowLayerSnapshot
     bool keepBelow = false;
 };
 
+/// The rect a scrolling batch last commanded for an X11 window, plus the
+/// counter-assert burst budget. See PlasmaZonesEffect::m_scrollCommandedRects.
+struct ScrollCommandedRect
+{
+    QRect rect;
+    qint64 burstStartMs = 0;
+    int burstCount = 0;
+};
+
 /// Minimize-shader stamp: the time and generation of the transition a minimize
 /// event installed, so a spurious minimize→unminimize pair can cancel the exact
 /// reverse leg. See PlasmaZonesEffect::m_minimizeShaderStamp.
