@@ -986,6 +986,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         kwFs->setFullScreen(true);
                         --m_suppressFullScreenChanged;
                     }
+                    applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                 } else if (snap.isWindowedFullscreen && inSet && !kwFs->isRequestedFullScreen()) {
                     // Flagged, member, yet fullscreen is not even REQUESTED:
                     // the client exited on its own while the daemon gate was
@@ -998,6 +999,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // requested is already true, and a batch landing in that
                     // window must not read the lag as an exit.
                     m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
+                    restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                     qCInfo(lcEffect) << "Windowed-fullscreen deferred reconcile for" << snap.windowId;
                     if (m_effect->m_daemonGate.serviceRegistered) {
                         PhosphorProtocol::ClientHelpers::fireAndForget(
@@ -1009,6 +1011,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // Keep the stored rect current — the strip may have
                     // resized or scrolled the column since the flag went on.
                     m_effect->m_windowedFullscreenWindows.insert(snap.windowId, snap.geometry);
+                    // Re-assert the layer demotion too (change-gated in KWin,
+                    // free in the steady state): a manual keep-flag toggle
+                    // under the hold is re-asserted away on the next batch,
+                    // the same ownership KWin rules claim while they match.
+                    applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                 } else if (!snap.isWindowedFullscreen && inSet) {
                     if (kwFs->isFullScreen()) {
                         ++m_suppressFullScreenChanged;
@@ -1016,6 +1023,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         --m_suppressFullScreenChanged;
                     }
                     m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
+                    restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                 }
             }
 

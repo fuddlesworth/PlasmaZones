@@ -60,6 +60,18 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     if (!m_shaderManager.hasWindowLayerRules() && !m_ruleWindowLayerSnapshots.contains(windowId)) {
         return;
     }
+    // Windowed-fullscreen tiles own their keep flags for the duration of
+    // the hold: the feature keeps keep-below applied to defeat KWin's
+    // active-fullscreen layer promotion (TilingHandler::
+    // applyWindowedFullscreenLayerDemotion), and a rule writing over it
+    // would re-promote the tile above its strip. While flagged the window
+    // is skipped OUTRIGHT — apply and restore both: draining a parked rule
+    // snapshot here would clobber the demotion with the user's flags. The
+    // un-flag paths restore the pre-demotion flags, and the next reconcile
+    // hands ownership back to whatever rule matches.
+    if (m_windowedFullscreenWindows.contains(windowId)) {
+        return;
+    }
     KWin::Window* kw = w->window();
     if (!kw) {
         return;

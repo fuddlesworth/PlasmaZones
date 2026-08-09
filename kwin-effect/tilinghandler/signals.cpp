@@ -864,9 +864,11 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // story, deliberately: the decoration gates undecorate it like any
     // fullscreen window (a client in fullscreen presentation gets no
     // PlasmaZones chrome), which also means IsFullscreen-scoped appearance
-    // rules (SetBorder/SetOpacity/tints) match but render nothing for it —
-    // while SetWindowLayer, which bypasses the decoration path, still
-    // applies. Both are the intended split, not an oversight.
+    // rules (SetBorder/SetOpacity/tints) match but render nothing for it.
+    // SetWindowLayer rules are PAUSED for the window while the flag holds:
+    // the feature owns the keep flags (the layer demotion that defeats
+    // KWin's active-fullscreen promotion), and reconcileRuleWindowLayer
+    // skips members so the two owners never trade flags mid-hold.
     if (w->isFullScreen() && m_effect->m_windowedFullscreenWindows.contains(windowId)) {
         // The generic enter branch's centering-map shed applies to our
         // transition too: a stale zone-centering target consumed against
@@ -901,6 +903,7 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     if (!w->isFullScreen() && m_effect->m_windowedFullscreenWindows.contains(windowId)) {
         if (m_effect->m_daemonGate.serviceRegistered) {
             m_effect->m_windowedFullscreenWindows.remove(windowId);
+            restoreWindowedFullscreenLayerDemotion(windowId, w->window());
             qCInfo(lcEffect) << "Windowed-fullscreen window left fullscreen on its own:" << windowId;
             PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scrolling,
                                                            QStringLiteral("clearWindowedFullscreen"), {windowId},

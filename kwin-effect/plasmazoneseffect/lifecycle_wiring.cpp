@@ -906,8 +906,10 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             m_scrollVisualPos.remove(cachedId);
             // Windowed-fullscreen membership keeps the same backstop pairing
             // (slotWindowClosed removes it first in every ordering KWin
-            // provides; this bounds the map if that ever changes).
+            // provides; this bounds the map if that ever changes). The
+            // keep-flag snapshot rides along.
             m_windowedFullscreenWindows.remove(cachedId);
+            m_windowedFsLayerSnapshots.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);

@@ -2002,6 +2002,19 @@ private:
     /// (close, float cleanup, the release helpers, the windowDeleted
     /// backstop).
     QHash<QString, QRect> m_windowedFullscreenWindows;
+    /// Pre-demotion keep-above/keep-below flags for windowed-fullscreen
+    /// windows. The feature holds keep-below on every flagged window because
+    /// KWin's belongsToLayer() promotes an active fullscreen window to the
+    /// ActiveLayer — and KEEPS it there while the active window sits on a
+    /// different output — stacking the tile above its strip neighbours and
+    /// the daemon's overlay surfaces; keep-below is the one input that layer
+    /// resolve consults before the fullscreen promotion. Written by
+    /// TilingHandler::applyWindowedFullscreenLayerDemotion (snapshot-once) and
+    /// drained by its restore counterpart on every un-flag path; entries for
+    /// closing windows are dropped beside the membership removals. Separate
+    /// from m_ruleWindowLayerSnapshots: reconcileRuleWindowLayer skips flagged
+    /// windows entirely, so the two owners never trade flags mid-hold.
+    QHash<QString, WindowLayerSnapshot> m_windowedFsLayerSnapshots;
     /// wl_surface object ids of the daemon's scrolling tab-indicator surfaces,
     /// announced over D-Bus. The paint path slides these with the strip so the
     /// indicators travel with the columns they label.

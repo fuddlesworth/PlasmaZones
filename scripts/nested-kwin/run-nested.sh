@@ -140,6 +140,11 @@ EXTRA_FLAGS=""
 [ -n "$WIDTH" ] && EXTRA_FLAGS="$EXTRA_FLAGS --width $WIDTH"
 [ -n "$HEIGHT" ] && EXTRA_FLAGS="$EXTRA_FLAGS --height $HEIGHT"
 [ -n "$SCALE" ] && EXTRA_FLAGS="$EXTRA_FLAGS --scale $SCALE"
+# Opt-in Xwayland: X11 clients (Proton games are the ones that matter) take
+# different KWin paths for fullscreen geometry, so X11-specific bugs cannot
+# reproduce in a Wayland-only nested session. Launch X11 test clients with
+# QT_QPA_PLATFORM=xcb after sourcing env.sh.
+[ -n "${PZ_NESTED_XWAYLAND:-}" ] && EXTRA_FLAGS="$EXTRA_FLAGS --xwayland"
 
 exec dbus-run-session -- sh -c "
   {

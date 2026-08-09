@@ -243,6 +243,12 @@ public:
     /// Compositor half: drop KWin fullscreen state under the suppression
     /// counter and an own inGeometryApply bracket. Membership-independent.
     void releaseWindowedFullscreenState(const QString& windowId);
+    /// Hold keep-below on a flagged window (snapshot-once) so KWin's
+    /// active-fullscreen layer promotion cannot stack it above its strip.
+    void applyWindowedFullscreenLayerDemotion(const QString& windowId, KWin::Window* kw);
+    /// Drain the keep-flag snapshot; @p kw may be null for a gone window
+    /// (the snapshot is dropped either way).
+    void restoreWindowedFullscreenLayerDemotion(const QString& windowId, KWin::Window* kw);
     /// Bulk teardown restore (daemon loss, effect unload) — snapshot-and-
     /// clear then release each, the restoreAllMonocleMaximized shape.
     void restoreAllWindowedFullscreen();

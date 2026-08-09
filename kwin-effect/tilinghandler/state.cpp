@@ -116,6 +116,45 @@ void TilingHandler::forgetWindowedFullscreen(const QString& windowId)
     m_effect->m_windowedFullscreenWindows.remove(windowId);
 }
 
+void TilingHandler::applyWindowedFullscreenLayerDemotion(const QString& windowId, KWin::Window* kw)
+{
+    // KWin promotes an active fullscreen window to the ActiveLayer — and
+    // keeps it there while the active window sits on ANOTHER output
+    // (Window::isActiveFullScreen) — which stacks a windowed-fullscreen
+    // tile above every strip neighbour and above the daemon's own overlay
+    // surfaces. Scrolling then slides the incoming column UNDERNEATH the
+    // tile: seen live as the neighbour "not rendering" and windows
+    // overlapping the fullscreen-presented game. The keep-below flag is
+    // the one input belongsToLayer() consults BEFORE the fullscreen
+    // promotion, so holding it keeps the tile stacked with its strip.
+    // Snapshot-once + restore mirrors the SetWindowLayer rule discipline;
+    // reconcileRuleWindowLayer skips flagged windows so the two flag
+    // owners never fight mid-hold.
+    if (!m_effect->m_windowedFsLayerSnapshots.contains(windowId)) {
+        m_effect->m_windowedFsLayerSnapshots.insert(windowId, {kw->keepAbove(), kw->keepBelow()});
+    }
+    kw->setKeepAbove(false);
+    kw->setKeepBelow(true);
+}
+
+void TilingHandler::restoreWindowedFullscreenLayerDemotion(const QString& windowId, KWin::Window* kw)
+{
+    const auto it = m_effect->m_windowedFsLayerSnapshots.find(windowId);
+    if (it == m_effect->m_windowedFsLayerSnapshots.end()) {
+        return;
+    }
+    // Erase BEFORE the setters, the reconcileRuleWindowLayer shape: they
+    // emit KWin signals, and holding a QHash iterator across re-entrant
+    // code is undefined the day a connection routes back into this map.
+    const WindowLayerSnapshot snapshot = *it;
+    m_effect->m_windowedFsLayerSnapshots.erase(it);
+    if (!kw) {
+        return; // window already gone; dropping the snapshot IS the cleanup
+    }
+    kw->setKeepAbove(snapshot.keepAbove);
+    kw->setKeepBelow(snapshot.keepBelow);
+}
+
 void TilingHandler::releaseWindowedFullscreenState(const QString& windowId)
 {
     // Compositor half: drop the client's KWin fullscreen state if it still
@@ -124,10 +163,18 @@ void TilingHandler::releaseWindowedFullscreenState(const QString& windowId)
     // (the bulk restore) both arrive here with the entry already gone.
     KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
     if (!w || w->isDeleted()) {
+        restoreWindowedFullscreenLayerDemotion(windowId, nullptr);
         return;
     }
     KWin::Window* kw = w->window();
-    if (!kw || !kw->isFullScreen()) {
+    if (!kw) {
+        restoreWindowedFullscreenLayerDemotion(windowId, nullptr);
+        return;
+    }
+    // Keep-flag restore runs even when fullscreen is already gone (the
+    // client may have exited on its own before this release landed).
+    restoreWindowedFullscreenLayerDemotion(windowId, kw);
+    if (!kw->isFullScreen()) {
         return;
     }
     // Own inGeometryApply bracket: setFullScreen(false) synchronously emits
@@ -917,13 +964,16 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // un-flag it here) — drop the client's fullscreen state now or it stays
     // fullscreen-configured while free-floating.
     if (m_effect->m_windowedFullscreenWindows.remove(windowId)) {
+        KWin::Window* kw = nullptr;
         if (KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId)) {
-            if (KWin::Window* kw = w->window(); kw && kw->isFullScreen()) {
-                ++m_suppressFullScreenChanged;
-                kw->setFullScreen(false);
-                --m_suppressFullScreenChanged;
-            }
+            kw = w->window();
         }
+        if (kw && kw->isFullScreen()) {
+            ++m_suppressFullScreenChanged;
+            kw->setFullScreen(false);
+            --m_suppressFullScreenChanged;
+        }
+        restoreWindowedFullscreenLayerDemotion(windowId, kw);
     }
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
     // A floating window is no longer tile-managed on any screen — clear tiled
