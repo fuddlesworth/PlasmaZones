@@ -17,6 +17,7 @@
 #include <PhosphorContext/ContextResolver.h>
 #include "config/settings.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
