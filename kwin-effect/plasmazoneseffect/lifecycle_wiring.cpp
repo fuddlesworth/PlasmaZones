@@ -910,6 +910,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             // keep-flag snapshot rides along.
             m_windowedFullscreenWindows.remove(cachedId);
             m_windowedFsLayerSnapshots.remove(cachedId);
+            m_lastReportedMinSize.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);

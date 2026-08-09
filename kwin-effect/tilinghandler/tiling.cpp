@@ -955,6 +955,30 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             } else {
                 m_effect->m_scrollVisualPos.remove(snap.windowId);
             }
+            // Re-report the declared minimum size when it changed since the
+            // last report. KWin exposes minSize with no change signal, and
+            // the one report at announce is too early for clients that set
+            // their size hints AFTER mapping — a Wine game maps hintless,
+            // then pins min size to its configured resolution once the game
+            // is up. From that point KWin clamps every commit to the
+            // minimum, so without this re-report the engine models a column
+            // the real frame can never match (seen live: a full-width game
+            // over a half-width model, overlapping its neighbour). The
+            // daemon's windowMinSizeUpdated widens the column and retiles.
+            // A cache miss (effect-restart adoption, where no announce seeded
+            // it) reports too: the call is idempotent daemon-side, so at
+            // worst it confirms what the engine already holds.
+            {
+                const QSize declared = declaredMinSize(snap.window);
+                const auto lastIt = m_effect->m_lastReportedMinSize.constFind(snap.windowId);
+                if ((lastIt == m_effect->m_lastReportedMinSize.constEnd() || *lastIt != declared)
+                    && m_effect->m_daemonGate.serviceRegistered) {
+                    m_effect->m_lastReportedMinSize.insert(snap.windowId, declared);
+                    PhosphorProtocol::ClientHelpers::fireAndForget(
+                        m_effect, PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowMinSizeUpdated"),
+                        {snap.windowId, declared.width(), declared.height()}, QStringLiteral("windowMinSizeUpdated"));
+                }
+            }
             // Title-bar (borderless) state is driven by rules through the
             // effect's reconcileRuleHiddenTitleBar → DecorationManager path.
 

@@ -368,6 +368,9 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
         saveAndRecordPreTileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
+        // Seed the change-poll cache with the announced value so the batch
+        // consumer's re-report leg only fires when the hints actually move.
+        m_effect->m_lastReportedMinSize.insert(windowId, minSize);
 
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Tiling,

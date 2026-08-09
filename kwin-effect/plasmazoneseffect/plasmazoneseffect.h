@@ -2011,6 +2011,15 @@ private:
     /// from m_ruleWindowLayerSnapshots: reconcileRuleWindowLayer skips flagged
     /// windows entirely, so the two owners never trade flags mid-hold.
     QHash<QString, WindowLayerSnapshot> m_windowedFsLayerSnapshots;
+    /// Last minimum size reported to the daemon per managed window. KWin
+    /// exposes Window::minSize with no change signal, so the batch consumer
+    /// polls it per applied entry and re-reports through
+    /// Tiling.windowMinSizeUpdated when it moved — clients that set their
+    /// size hints after mapping (Wine games pin theirs to the configured
+    /// resolution once up) otherwise leave the engine modelling a column
+    /// the clamped real frame can never match. Seeded at announce, dropped
+    /// beside the other per-window maps on close and the deleted backstop.
+    QHash<QString, QSize> m_lastReportedMinSize;
     /// wl_surface object ids of the daemon's scrolling tab-indicator surfaces,
     /// announced over D-Bus. The paint path slides these with the strip so the
     /// indicators travel with the columns they label.

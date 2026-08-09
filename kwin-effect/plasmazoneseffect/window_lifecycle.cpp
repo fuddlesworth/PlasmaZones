@@ -409,6 +409,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // and the keep-flag snapshot beside it (nothing left to restore onto).
     m_windowedFullscreenWindows.remove(closingWindowId);
     m_windowedFsLayerSnapshots.remove(closingWindowId);
+    m_lastReportedMinSize.remove(closingWindowId);
 
     // Same value as closingWindowId above: the windowId cache isn't dropped
     // until later in this slot (m_idCaches.windowIdCache.remove near the end), so a
