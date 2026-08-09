@@ -92,17 +92,13 @@ public Q_SLOTS:
     /// no-op for every other window.
     void onWindowClosed(KWin::EffectWindow* w);
 
-    /// Pull the daemon's authoritative per-window geometries and re-apply
-    /// them. This is the repair path for geometry KWin changed behind the
-    /// daemon's back — the daemon's emit-on-change gate stays silent when
-    /// its own model never moved, so a push would never come. Public for
-    /// the windowed-fullscreen exit path (TilingHandler), which hits
-    /// exactly that: KWin restores a fullscreen-exiting window to its
-    /// pre-announce full-area rect while the strip's columns are unchanged.
-    void fetchAndApplyWindowGeometries();
-
 private:
     void applyScreenGeometryChange();
+    /// Snap-mode only: resolves the daemon's zone-assigned windows (the
+    /// keep-windows-in-zones repair after a resolution change). Returns
+    /// nothing for scrolling windows — the scrolling fullscreen-exit
+    /// repair goes through Scrolling.reapplyWindowGeometry instead.
+    void fetchAndApplyWindowGeometries();
     void applyWindowGeometries(const PhosphorProtocol::WindowGeometryList& geometries);
 
     /// Push KWin's `clientArea(MaximizeArea)` for every output to the daemon.

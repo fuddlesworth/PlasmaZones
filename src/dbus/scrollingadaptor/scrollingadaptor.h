@@ -98,6 +98,21 @@ public Q_SLOTS:
     void clearWindowedFullscreen(const QString& windowId);
 
     /**
+     * @brief Re-emit a window's true strip rect (compositor repair)
+     *
+     * The KWin effect calls this when the compositor moved a window behind
+     * the engine's back (KWin restores a fullscreen-exiting window to its
+     * pre-fullscreen rect one round-trip after the batch). The engine
+     * evicts the window's emit-gate memory and relayouts its screen, so
+     * the next batch re-carries the rect the gate would otherwise keep
+     * silent. Silent no-op for an unknown window, same wire-boundary
+     * policy as focusColumn.
+     *
+     * @param windowId Window to re-emit; an empty string is ignored
+     */
+    void reapplyWindowGeometry(const QString& windowId);
+
+    /**
      * @brief The strip as it currently looks on a screen, for previews
      *
      * Returns a JSON array with ONE OBJECT PER TILE carrying

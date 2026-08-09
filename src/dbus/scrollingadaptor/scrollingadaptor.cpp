@@ -120,6 +120,17 @@ void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
     m_engine->clearWindowedFullscreen(windowId);
 }
 
+void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
+{
+    // Same wire-boundary policy as clearWindowedFullscreen: malformed input
+    // is a silent no-op, and the engine's own lookup rejects an untracked
+    // window.
+    if (!m_engine || windowId.isEmpty()) {
+        return;
+    }
+    m_engine->reapplyWindowGeometry(windowId);
+}
+
 QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
 {
     // isEmpty kept for the same wire-boundary reason as in focusColumn.

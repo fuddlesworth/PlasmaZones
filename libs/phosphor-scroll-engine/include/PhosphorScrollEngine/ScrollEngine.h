@@ -219,6 +219,10 @@ public:
     /// Compositor-driven reconciliation: the client left fullscreen on its
     /// own, so drop the flag and re-apply that window's screen.
     void clearWindowedFullscreen(const QString& windowId);
+    /// Compositor-driven repair: the compositor moved this window behind
+    /// the engine's back (KWin's fullscreen-exit restore), so evict its
+    /// emit-gate memory and relayout its screen to re-emit the true rect.
+    void reapplyWindowGeometry(const QString& windowId);
     /// delta -1/+1 through the preset width list.
     void cycleColumnPresetWidth(int delta, const QString& screenId);
     /// deltaPercent of the work-area width (e.g. +10 / -10).

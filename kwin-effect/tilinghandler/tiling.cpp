@@ -982,9 +982,26 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // applies.
                     m_effect->m_windowedFullscreenWindows.insert(snap.windowId, snap.geometry);
                     if (!kwFs->isFullScreen()) {
+                        // Seed KWin's fullscreen restore rect with the COLUMN
+                        // rect before the state flips: setFullScreen captures
+                        // fullscreenGeometryRestore from moveResizeGeometry()
+                        // at request time, and for a window this very batch
+                        // scrolled in from a park that is still the PARK rect,
+                        // so the eventual exit would restore the window
+                        // off-screen (seen live with ghostty). The in-stack
+                        // moveResize is never presented: setFullScreen's own
+                        // FullScreenArea moveResize and the geometry apply
+                        // below both land in the same stack. Bracketed like
+                        // releaseWindowedFullscreenState: moveResize emits
+                        // frameGeometryChanged synchronously on X11 and the
+                        // VS-crossing detector must not re-enter.
+                        const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+                        m_effect->m_daemonGate.inGeometryApply = true;
+                        kwFs->moveResize(QRectF(snap.geometry));
                         ++m_suppressFullScreenChanged;
                         kwFs->setFullScreen(true);
                         --m_suppressFullScreenChanged;
+                        m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     }
                     applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                 } else if (snap.isWindowedFullscreen && inSet && !kwFs->isRequestedFullScreen()) {

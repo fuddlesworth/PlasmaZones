@@ -917,6 +917,31 @@ void ScrollEngine::clearWindowedFullscreen(const QString& windowId)
     }
 }
 
+void ScrollEngine::reapplyWindowGeometry(const QString& windowId)
+{
+    const QString id = canonicalizeForLookup(windowId);
+    PhosphorEngine::PlacementStateKey key;
+    ScrollState* state = stateForWindow(id, &key);
+    if (!state) {
+        return;
+    }
+    // The emit-on-change gate compares against the last EMITTED rect, which
+    // stops being the truth the moment the compositor moves the window
+    // behind the engine's back. KWin's fullscreen-exit restore is the known
+    // producer: it re-applies the window's pre-fullscreen rect one client
+    // round-trip AFTER the batch that already placed the tile, and since
+    // the strip's own rects never moved, the gate keeps every later batch
+    // silent and the stray rect stands forever (seen live as a stranded
+    // full-area frame, and as a toggle-off restoring a window to its old
+    // PARK spot off-screen). Evicting the memory makes the next relayout
+    // treat the rect as new and re-emit. Background-context guard as in
+    // clearWindowedFullscreen: a background strip re-emits on activation.
+    m_lastAppliedRect.remove(id);
+    if (!key.screenId.isEmpty() && key == currentKeyForScreen(key.screenId)) {
+        applyLayout(key.screenId, false);
+    }
+}
+
 void ScrollEngine::cycleColumnPresetWidth(int delta, const QString& screenId)
 {
     P_SCROLL_VERB(screenId, state->strip().cycleActiveColumnPresetWidth(delta, params), "resize");

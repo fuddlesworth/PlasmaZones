@@ -7,7 +7,6 @@
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/navigationhandler.h"
-#include "handlers/screenchangehandler.h" // scrolling fullscreen-exit geometry pull
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -966,19 +965,23 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             return;
         }
         markWindowTiled(screenId, windowId);
-        // A scrolling screen's exit needs a geometry PULL, not trust in
-        // KWin's restore: a window that entered fullscreen at (or before)
-        // announce restores to the full area — its fullscreenGeometryRestore
-        // was never a column rect — and the engine's emit-on-change gate
-        // stays silent because ITS rects never moved, so no batch would ever
-        // correct the stranded full-size frame (seen live: a Proton game
-        // exiting its own fullscreen sat over its neighbour indefinitely).
-        // The screen-change fetch is the existing external-clobber repair
-        // path and bypasses the gate entirely.
-        if (isScrollingScreen(screenId)) {
-            if (ScreenChangeHandler* screenChange = m_effect->screenChangeHandler()) {
-                screenChange->fetchAndApplyWindowGeometries();
-            }
+        // A scrolling screen's fullscreen exit must not trust KWin's
+        // restore: KWin re-applies the window's PRE-fullscreen rect one
+        // client round-trip after the strip already placed it (a full-area
+        // rect for a window that went fullscreen before announce, a stale
+        // PARK rect for a windowed-fullscreen toggle-off — both seen
+        // live), and the engine's emit-on-change gate stays silent because
+        // its own rects never moved, so no batch would ever correct the
+        // stray frame. Tell the engine to evict that window's emit-gate
+        // memory and re-emit. (The first attempt pulled
+        // WindowTracking.getUpdatedWindowGeometries here; that method is
+        // snap-mode-only — it resolves zone-assigned windows — and returns
+        // nothing for a scrolling screen, which is why the ghostty
+        // toggle-off strand survived it.)
+        if (isScrollingScreen(screenId) && m_effect->m_daemonGate.serviceRegistered) {
+            PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scrolling,
+                                                           QStringLiteral("reapplyWindowGeometry"), {windowId},
+                                                           QStringLiteral("reapplyWindowGeometry"));
         }
         // Title-bar (borderless) state is driven by rules.
         m_effect->updateAllDecorations();

@@ -29,6 +29,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <method name="reapplyWindowGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Re-emits a window's true strip rect. Called by the KWin effect when the compositor moved the window behind the engine's back (KWin restores a fullscreen-exiting window to its pre-fullscreen rect one client round-trip after the strip already placed it, and the engine's emit-on-change gate would otherwise stay silent forever). The engine evicts the window's emit-gate memory and relayouts its screen so the next batch re-carries the rect. Silent no-op for an unknown window."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to re-emit. An empty string is ignored."/>
+            </arg>
+        </method>
+
         <method name="visibleStripJson">
             <annotation name="org.gtk.GDBus.DocString" value="The strip as it currently looks on a screen: a JSON array of visible tile rects plus zoneNumber, the tile's 1-based visible slot in strip order. Each rect is {x, y, width, height}, 0.0 to 1.0 per axis, normalized against the screen's FULL geometry. The tiles themselves are clipped to the work area after the outer gaps are subtracted, so the fractions show the panel gap and a consumer maps back to pixels by scaling against the screen rectangle. Same basis as the daemon's own OSD strip card. Only what is on screen is listed. Hidden tabs of a tabbed column, minimized tiles, parked columns, and tiles whose intersection with the work area is empty (a stack whose minimum heights overflow the work area resolves its tail below the bottom edge) are all left out and carry no number. A partially visible column is clipped to the work area rather than dropped, with no minimum-visibility threshold: an arbitrarily thin sliver still gets its own number. zoneNumber is the scroll zone number, and the Snap-to-Zone shortcuts cover 1 to 9, so a strip showing more than nine tiles numbers them all but only the first nine have a digit that reaches them. The settings app renders the array where the other modes show a layout thumbnail. Empty array when the screen has no strip or is not scrolling."/>
             <arg name="screenId" type="s" direction="in">

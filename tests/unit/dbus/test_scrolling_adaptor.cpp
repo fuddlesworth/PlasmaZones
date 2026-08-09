@@ -631,6 +631,28 @@ private Q_SLOTS:
         QCOMPARE(placement.count(), 1);
     }
 
+    // reapplyWindowGeometry shares clearWindowedFullscreen's wire-boundary
+    // policy, and its whole point is defeating the emit-on-change gate: a
+    // relayout whose rects never moved is normally silent, and the evict
+    // must make that same relayout re-emit the batch (the compositor moved
+    // the window behind the engine's back, so the gate's memory is stale).
+    void testReapplyWindowGeometry_gatesAndReemits()
+    {
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+
+        QSignalSpy tiled(m_engine, &ScrollEngine::windowsTiled);
+
+        m_adaptor->reapplyWindowGeometry(QString()); // empty id
+        m_adaptor->reapplyWindowGeometry(QStringLiteral("nobody|9")); // unknown window
+        QCOMPARE(tiled.count(), 0);
+
+        // Positive control: nothing in the strip moved, so only the evicted
+        // gate memory explains the re-emission.
+        m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a"));
+        QCOMPARE(tiled.count(), 1);
+    }
+
 public Q_SLOTS:
     void onPropertiesChanged(const QDBusMessage& msg)
     {
