@@ -127,10 +127,12 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // the indicator right after the ANCHOR (the topmost strip window this
     // pass will draw) and skipping its natural layer slot; here the anchor
     // and the pass output's indicator surfaces are picked out of the stacking
-    // order. Windows the scene will not draw this frame cannot anchor — an
-    // anchor that never paints means the injection never runs and the
-    // indicator falls back to its layer slot, which is the visible-but-
-    // mis-stacked failure, the right direction to fail in.
+    // order. The filter drops the windows KWin plainly will not draw
+    // (minimized, hidden, off-desktop); it CANNOT rule out an anchor the scene
+    // culls later as fully occluded, and it does not try. An anchor that never
+    // paints simply means the injection never runs, leaving the indicator on
+    // its layer slot — visible but mis-stacked, which is the right direction to
+    // fail in.
     //
     // The empty-set gate keeps this off the common path: no indicators
     // anywhere, no stacking walk.
@@ -899,20 +901,50 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
         data.setTransformed();
     }
 
-    // The tab-indicator surface is translated off its committed rect for the
+    // Tab-indicator paint flags. Membership in the re-slot set is tested FIRST
+    // and doubles as the surface test: prePaintScreen only ever puts indicator
+    // surfaces in it, so a hit needs no isScrollTabIndicatorSurface call, and a
+    // miss on the empty set costs one hash probe. The animating clause keeps
+    // its own ordering rationale — the cheap animator lookup before the surface
+    // resolve — for the frames where no re-slot is in play.
+    const bool tabIndicatorReslotted = w && m_scrollTabDeferred.contains(w);
+    const bool tabIndicatorSliding = w && m_stripViewAnimator->isAnimatingOn(w->screen())
+        && (tabIndicatorReslotted || isScrollTabIndicatorSurface(w));
+
+    // TRANSFORMED is about WHERE it is drawn, so it is the sliding surface's
+    // flag alone. The indicator is translated off its committed rect for the
     // whole view leg (paintWindow adds the strip's offset to it), so KWin must
-    // stop deciding where it goes from that rect. Marked translucent for the
-    // same reason the transition branch above is: a surface drawn away from its
-    // frame leaves the pixels it vacated uncomposited, and the last presented
-    // frame reads back as a ghost indicator standing still while the real one
-    // slides. Belt AND braces on purpose: by this file's own reading of KWin
-    // 6.7, PAINT_WINDOW_TRANSFORMED already excludes the window from opaque
-    // accumulation, which is what setTranslucent buys — but that reading is
-    // of another project's internals, and the cost of the second flag on an
-    // already-transformed window is zero, so both stay until someone
-    // verifies the claim against KWin's workspacescene.cpp itself.
-    if (w && m_stripViewAnimator->isAnimatingOn(w->screen()) && isScrollTabIndicatorSurface(w)) {
+    // stop deciding where it goes from that rect.
+    if (tabIndicatorSliding) {
         data.setTransformed();
+    }
+    // TRANSLUCENT is about OCCLUSION, and both cases need it.
+    //
+    // Sliding needs it for the reason the transition branch above does: a
+    // surface drawn away from its frame leaves the pixels it vacated
+    // uncomposited, and the last presented frame reads back as a ghost
+    // indicator standing still while the real one slides.
+    //
+    // RE-SLOTTING needs it for a different and load-bearing reason, and it
+    // applies at rest — the common case — not only during a leg. paintWindow
+    // draws this surface early, at the anchor's stacking slot, while KWin still
+    // sees it at the top of the layer bucket. Per this file's own reading of
+    // KWin 6.7's workspacescene.cpp (see the decorated-window note above), a
+    // window that is NOT marked translucent contributes its opaque region to
+    // the accumulation, and `visible -= deviceOpaque` then subtracts that
+    // region from every window BELOW it. A floating window raised over the
+    // strip is below this surface, so it would be culled exactly where the
+    // indicator claims opacity — and it paints AFTER the injected draw, so the
+    // indicator would win there and the mis-stacking this whole mechanism
+    // exists to fix would come straight back.
+    //
+    // In practice the daemon's overlay is a translucent QQuickWindow and
+    // declares no opaque region at all, so the cull does not fire today. That
+    // is a fact about another process's surface, not an invariant this file can
+    // hold, and the failure it guards is silent. Asserting the flag costs
+    // nothing here: there is no opaque indicator content for KWin to cull
+    // behind in the first place.
+    if (tabIndicatorReslotted || tabIndicatorSliding) {
         data.setTranslucent();
     }
 
@@ -1392,17 +1424,25 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         }
     }
 
-    // Direct-drive callers own this latch — TWO of them, and only one is a
+    // Direct-drive callers own this latch — THREE of them, and only one is a
     // capture: the desktop transition's compositeWindowsInto (which drives
     // windows that were never in this frame's scene walk into an offscreen
-    // capture), and the strip pass's top-composite (which drives the
+    // capture), the strip pass's top-composite (which drives the
     // above-strip windows onto the SCREEN target after its quad, once per
-    // frame of every scroll leg). Both drive this paintWindow directly with
-    // the chain iterator at begin(), so continuing the paint chain below
-    // would re-enter this very function (double fold, the animator
-    // transform applied twice) and then drive later effects' paintWindow
-    // hooks without the prePaintWindow they key off. Terminate with a raw
-    // draw instead.
+    // frame of every scroll leg), and injectScrollTabIndicators (which draws
+    // the tab indicators at the anchor's stacking slot instead of their own).
+    // All three drive this paintWindow directly with the chain iterator at
+    // begin(), so continuing the paint chain below would re-enter this very
+    // function (double fold, the animator transform applied twice) and then
+    // drive later effects' paintWindow hooks without the prePaintWindow they
+    // key off. Terminate with a raw draw instead.
+    //
+    // The raw draw skips the rest of the paintWindow chain for the driven
+    // window, which is the accepted trade at all three sites rather than an
+    // oversight — see the chain-continuation note below for what that costs.
+    // For an indicator it costs nothing anyone can see: the later effects that
+    // matter act on toplevels (windowaperture parks WINDOWS, not layer
+    // surfaces), and the surface declares no blur region to lose.
     if (m_directPaintCapture) {
         KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
         return;

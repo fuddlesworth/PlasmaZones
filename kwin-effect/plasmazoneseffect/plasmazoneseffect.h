@@ -2199,12 +2199,15 @@ private:
     bool m_vertexSnappingDisabled = false;
 
     /// True while a direct-drive caller runs paintWindow OUTSIDE KWin's chain
-    /// walk. THREE setters: DesktopTransitionManager::compositeWindowsInto —
+    /// walk. FOUR setters: DesktopTransitionManager::compositeWindowsInto —
     /// the shared tail of both desktop captures, captureDesktop (the switch
-    /// legs) and capturePeekWindowsScene (the peek's windows layer) — and
+    /// legs) and capturePeekWindowsScene (the peek's windows layer) —
     /// StripTransitionManager's top-composite, which draws the above-strip
     /// windows onto the SCREEN target after its quad (not a capture, and
-    /// per-frame for the whole leg). paintWindow's tail then terminates
+    /// per-frame for the whole leg), and injectScrollTabIndicators, which
+    /// draws the tab-indicator surfaces at the anchor's stacking slot rather
+    /// than at their own (also not a capture, and on every frame a strip
+    /// carries a tabbed column). paintWindow's tail then terminates
     /// with effects->drawWindow instead of continuing the paintWindow chain:
     /// the chain iterator sits at begin() in that context, so chaining would
     /// re-enter our own paintWindow (double fold, animator transform applied
