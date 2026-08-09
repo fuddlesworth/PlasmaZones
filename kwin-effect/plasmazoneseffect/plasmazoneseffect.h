@@ -769,6 +769,28 @@ private:
      */
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
 
+    /**
+     * @brief Draw this pass's deferred tab-indicator surfaces into the scene
+     *        walk, at the stacking position the layer-shell protocol denies
+     *        them.
+     *
+     * The indicators live on a wlr-layer-shell surface, and a layer surface is
+     * above every ordinary toplevel by protocol — restackScrollTabSurfaces can
+     * order them within their layer but cannot push them below a window. So a
+     * floating window raised over the strip had the indicator of the column
+     * behind it painted across its content.
+     *
+     * The remedy is compositor-side re-slotting: prePaintScreen picks the
+     * topmost scroll-managed window on the pass output as the paint anchor,
+     * paintWindow calls this right after that anchor's draw completes, and the
+     * indicator's own natural (layer-slot) paint is skipped once drawn here.
+     * Paint order is stacking order, so the indicators composite above every
+     * column but below whatever stacks over the strip — behaving like members
+     * of the window layer even though the protocol has no such placement for
+     * them.
+     */
+    void injectScrollTabIndicators(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport);
+
     TilingHandler* tilingHandler() const
     {
         return m_tilingHandler.get();
@@ -1974,6 +1996,22 @@ private:
     /// surface would come to name an unrelated one.
     QSet<quint32> m_scrollTabSurfaceIds;
     QHash<QString, quint32> m_scrollTabSurfaceIdsByScreen;
+
+    /// Per-output-pass state for the tab-indicator paint re-slotting (see
+    /// injectScrollTabIndicators). Recomputed by prePaintScreen at the top of
+    /// every pass, valid only inside its bracket — the same scope contract as
+    /// m_scrollManagedCache, and for the same reason: one pass guarantees the
+    /// stacking order cannot change under the answer.
+    ///
+    /// The anchor is the topmost scroll-managed window on the pass output that
+    /// the scene will actually draw this frame; the deferred set holds that
+    /// output's indicator surfaces, which paintWindow skips at their natural
+    /// layer slot once drawn; the drawn set records the injection so the skip
+    /// and the fallback (anchor never painted — paint at the natural slot
+    /// after all) cannot disagree.
+    KWin::EffectWindow* m_scrollTabPaintAnchor = nullptr;
+    QSet<KWin::EffectWindow*> m_scrollTabDeferred;
+    QSet<KWin::EffectWindow*> m_scrollTabDrawn;
 
     // Phase 6: per-window shader transitions via OffscreenEffect.
     // Shader/texture cache, LRU eviction, warm-up pipeline, profile tree,
