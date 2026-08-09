@@ -171,6 +171,9 @@ public:
     /// Focus the previous/next non-minimized tile within the active column
     /// (cycles tabs in a tabbed column exactly the same way). @p delta -1/+1.
     bool focusAdjacentTile(int delta);
+    /// Focus the first (@p last false) or last non-minimized tile of the
+    /// active column (niri focus-window-top/bottom). False when already there.
+    bool focusTileAtEnd(bool last);
     /// Make @p windowId the active tile of its (newly active) column.
     /// Externally-driven focus (compositor activation). Returns false when
     /// untracked or already the focused window.
@@ -208,11 +211,10 @@ public:
     bool takeWindow(const QString& windowId, const ScrollLayoutParams& params);
 
     // ── Sizing ───────────────────────────────────────────────────────────────
-    /// Set the active column's width intent, verbatim. TEST SEAM: every
-    /// production width change arrives through the cycle/adjust/maximize
-    /// verbs below, which validate and re-anchor; this one is the direct
-    /// write those verbs are built on and the tests use to reach an exact
-    /// intent.
+    /// Set the active column's width intent, verbatim. The direct write the
+    /// cycle/adjust/maximize verbs below are built on, and the absolute
+    /// set-column-width verb's (and the tests') way to reach an exact intent.
+    /// Callers own validation — nothing here clamps.
     bool setActiveColumnWidth(const ColumnWidth& width);
     /// Cycle the active column through the preset width list. @p delta -1/+1.
     /// Enters the cycle at the nearest preset when the current width is not
@@ -227,10 +229,10 @@ public:
     /// Grow the active column into the on-screen space not covered by any
     /// column at the current view (niri expand-column-to-available-width).
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
-    /// Set the active tile's height intent, verbatim. TEST SEAM, the height
-    /// twin of setActiveColumnWidth: production height changes come through
-    /// the cycle/adjust verbs, or through setWindowHeightIntent on the
-    /// restore paths.
+    /// Set the active tile's height intent, verbatim. The height twin of
+    /// setActiveColumnWidth: the direct write under the cycle/adjust verbs,
+    /// the restore paths' setWindowHeightIntent, and the absolute
+    /// set-window-height verb. Callers own validation.
     bool setActiveWindowHeight(const WindowHeight& height);
     /// Cycle the active tile through the preset height list. @p delta -1/+1.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
@@ -301,6 +303,10 @@ public:
     /// Center the active column in the view (niri center-column).
     /// Returns true when the anchor actually moved.
     bool centerActiveColumn(const ScrollLayoutParams& params);
+    /// Center the span of FULLY visible columns in the view (niri
+    /// center-visible-columns). Falls back to centerActiveColumn when no
+    /// column is fully visible. Returns true when the anchor actually moved.
+    bool centerVisibleColumns(const ScrollLayoutParams& params);
 
     // ── Relayout ─────────────────────────────────────────────────────────────
     /// Resolve every non-minimized tile's absolute pixel rect against

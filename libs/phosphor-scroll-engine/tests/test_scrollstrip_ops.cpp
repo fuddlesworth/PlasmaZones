@@ -81,6 +81,8 @@ private Q_SLOTS:
     void onOverflowIgnoresShiftedPrevIdxOnRemoval();
     void onOverflowAnchorsLeftOfActiveInsertAgainstTheShiftedPrevIdx();
     void firstInsertAnchorsAtTheStripHead();
+    void centerVisibleColumnsCentersTheSpanAndFallsBack();
+    void focusTileAtEndSeeksEndsAndSkipsMinimized();
 };
 
 void TestScrollStripOps::consumePullsNextColumnsWindow()
@@ -1166,6 +1168,78 @@ void TestScrollStripOps::firstInsertAnchorsAtTheStripHead()
     QVERIFY(resolveContains(after, QStringLiteral("n")));
     const QRect nRect = rectOf(after, QStringLiteral("n"));
     QCOMPARE(nRect.x(), (params.workArea.width() - nRect.width()) / 2);
+}
+
+void TestScrollStripOps::centerVisibleColumnsCentersTheSpanAndFallsBack()
+{
+    const auto params = defaultParams();
+    const int workW = params.workArea.width();
+    // Three narrow columns that all fit the viewport: the verb centers the
+    // whole span as a block, not just the active column.
+    ScrollStrip strip;
+    const ColumnWidth narrow = ColumnWidth::makeProportion(0.25);
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), narrow, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), narrow, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindow(QStringLiteral("c"), narrow, ColumnDisplay::Normal, params));
+    QVERIFY(strip.centerVisibleColumns(params));
+    const ResolvedStrip r = strip.relayout(params);
+    QVERIFY(resolveContains(r, QStringLiteral("a")));
+    const int colW = rectOf(r, QStringLiteral("a")).width();
+    const int spanW = 3 * colW + 2 * params.gap;
+    QCOMPARE(rectOf(r, QStringLiteral("a")).x(), (workW - spanW) / 2);
+
+    // Already centered: NO change reported (same contract as
+    // centerActiveColumn — the return value gates relayout and the OSD).
+    QVERIFY(!strip.centerVisibleColumns(params));
+
+    // No column fully visible: columnWidthPx caps every column at the work
+    // area, so the only route there is a view parked BETWEEN columns — the
+    // shape a raw restored anchor can legitimately take (restoreViewAnchor
+    // is deliberately unclamped). The verb then falls back to centering the
+    // ACTIVE column.
+    // Columns at 0.55 of the work area: two of them plus a gap overflow the
+    // viewport, so a view parked 60px into the strip clips a on the left and
+    // b on the right, with c fully off — nothing fully visible.
+    ScrollStrip straddle;
+    const ColumnWidth wideCol = ColumnWidth::makeProportion(0.55);
+    QVERIFY(straddle.insertWindow(QStringLiteral("a"), wideCol, ColumnDisplay::Normal, params));
+    QVERIFY(straddle.insertWindow(QStringLiteral("b"), wideCol, ColumnDisplay::Normal, params));
+    QVERIFY(straddle.insertWindow(QStringLiteral("c"), wideCol, ColumnDisplay::Normal, params));
+    const ResolvedStrip pre = straddle.relayout(params);
+    QVERIFY(resolveContains(pre, QStringLiteral("a")));
+    const int cStripX = 2 * (rectOf(pre, QStringLiteral("a")).width() + params.gap);
+    straddle.restoreViewAnchor(cStripX - 60, params); // viewX = 60
+    QVERIFY(straddle.centerVisibleColumns(params));
+    const ResolvedStrip sr = straddle.relayout(params);
+    QVERIFY(resolveContains(sr, QStringLiteral("c")));
+    const QRect cRect = rectOf(sr, QStringLiteral("c"));
+    QCOMPARE(cRect.x(), (workW - cRect.width()) / 2);
+}
+
+void TestScrollStripOps::focusTileAtEndSeeksEndsAndSkipsMinimized()
+{
+    const auto params = defaultParams();
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
+
+    QVERIFY(strip.focusTileAtEnd(false));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("a"));
+    // Already at the top: no change, same contract as focusAdjacentTile.
+    QVERIFY(!strip.focusTileAtEnd(false));
+    QVERIFY(strip.focusTileAtEnd(true));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
+
+    // A minimized END tile is skipped: top seeks b once a is minimized, and
+    // bottom stops at b once c is minimized too.
+    QVERIFY(strip.setWindowMinimized(QStringLiteral("a"), true, params));
+    QVERIFY(strip.focusTileAtEnd(false));
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("b"));
+    QVERIFY(strip.setWindowMinimized(QStringLiteral("c"), true, params));
+    QVERIFY(!strip.focusTileAtEnd(true)); // b is the last non-minimized tile
+    QCOMPARE(strip.activeWindowId(), QStringLiteral("b"));
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripOps)

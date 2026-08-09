@@ -83,8 +83,18 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
             restore.stackAnchor = sourceColumn.tiles.at(i).windowId;
         }
     }
+    // The strip's active tile is the engine's focus proxy: pulling it into
+    // the float layer moves focus THERE without any compositor round trip
+    // (the window keeps focus; no report will arrive to record the side
+    // change). A non-active float (rules, batch operations) leaves the
+    // focus-side memory alone.
+    const bool wasActiveTile = state->strip().activeWindowId() == windowId;
     state->strip().takeWindow(windowId, params);
     state->addFloating(windowId);
+    if (wasActiveTile) {
+        state->setLastFloatingFocus(windowId);
+        state->setFloatingHasFocus(true);
+    }
     m_floatRestore.insert(windowId, restore);
     m_scrollFloatedWindows.insert(windowId);
     m_lastAppliedRect.remove(windowId);
@@ -114,6 +124,12 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     // strip this window does not live on. The caller's value is the fallback
     // only for a window the reverse map has no key for at all.
     const QString contextScreen = key.screenId.isEmpty() ? screenId : key.screenId;
+
+    // Mirror of floatWindowInternal's focus-side capture: re-tiling the float
+    // that holds focus moves focus back to the strip with no compositor
+    // report (the window keeps focus, only its layer changes). Read before
+    // removeFloating, which clears the lastFloatingFocus slot.
+    const bool wasFloatFocus = state->floatingHasFocus() && state->lastFloatingFocus() == windowId;
 
     if (!state->removeFloating(windowId)) {
         // This engine holds no float for the window — but the SHARED float
@@ -202,6 +218,9 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
             state->strip().setWindowHeightIntent(windowId, restore.height);
         }
         state->strip().focusWindow(windowId, params);
+        if (wasFloatFocus) {
+            state->setFloatingHasFocus(false);
+        }
     }
     m_scrollFloatedWindows.remove(windowId);
     // contextScreen, not the caller's raw screenId — the same fallback form

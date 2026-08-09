@@ -896,6 +896,10 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     if (focusWindowAfter) {
         const QString active = state->strip().activeWindowId();
         if (!active.isEmpty()) {
+            // The engine is about to hand focus to a TILE — the float layer
+            // loses it. windowFocused cannot record this itself: the echo
+            // filter swallows the report before the float bookkeeping runs.
+            state->setFloatingHasFocus(false);
             // Remember the request so windowFocused can tell this
             // activation's echo apart from genuine user focus (the
             // m_pendingSelfActivations doc). Bounded: an effect-side drop

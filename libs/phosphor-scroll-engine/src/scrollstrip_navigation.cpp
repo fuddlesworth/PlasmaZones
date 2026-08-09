@@ -76,6 +76,25 @@ bool ScrollStrip::focusAdjacentTile(int delta)
     return true;
 }
 
+bool ScrollStrip::focusTileAtEnd(bool last)
+{
+    Column* col = activeColumnMutable();
+    if (!col) {
+        return false;
+    }
+    // Same minimized-skip walk as focusAdjacentTile, seeded at the end.
+    const int step = last ? -1 : 1;
+    int target = last ? col->tiles.size() - 1 : 0;
+    while (target >= 0 && target < col->tiles.size() && col->tiles.at(target).minimized) {
+        target += step;
+    }
+    if (target < 0 || target >= col->tiles.size() || target == col->activeTileIdx) {
+        return false;
+    }
+    col->activeTileIdx = target;
+    return true;
+}
+
 bool ScrollStrip::focusWindow(const QString& windowId, const ScrollLayoutParams& params)
 {
     const int colIdx = columnOfWindow(windowId);

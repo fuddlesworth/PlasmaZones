@@ -222,6 +222,30 @@ public:
     void cycleWindowPresetHeight(int delta, const QString& screenId);
     void adjustWindowHeight(qreal deltaPercent, const QString& screenId);
     void resetWindowHeights(const QString& screenId);
+    /// Center the span of fully visible columns (niri center-visible-columns).
+    void centerVisibleColumns(const QString& screenId);
+    /// First/last non-minimized tile of the active column (niri
+    /// focus-window-top/bottom).
+    void focusWindowTop(const QString& screenId);
+    void focusWindowBottom(const QString& screenId);
+    /// Plain adjacent-column focus that stops at the strip edge (niri
+    /// focus-column-left/right). delta -1/+1. The generic focusInDirection
+    /// crosses monitors instead; this is the opt-in edge-stop variant.
+    void focusColumnPlain(int delta, const QString& screenId);
+    /// Adjacent-column focus that wraps to the far end at the strip edge
+    /// (niri focus-column-left-or-last / right-or-first). delta -1/+1.
+    void focusColumnWrap(int delta, const QString& screenId);
+    /// Explicit float / re-tile of the focused window (niri
+    /// move-window-to-floating / move-window-to-tiling); already-there
+    /// presses answer with no_target feedback.
+    void moveFocusedToFloating(const QString& screenId);
+    void moveFocusedToTiling(const QString& screenId);
+    /// niri switch-focus-between-floating-and-tiling.
+    void switchFocusBetweenFloatingAndTiling(const QString& screenId);
+    /// Absolute width/height intents (niri set-column-width/set-window-height
+    /// with an absolute value). D-Bus surface; no shortcut carries a value.
+    void setColumnWidth(const ColumnWidth& width, const QString& screenId);
+    void setWindowHeight(const WindowHeight& height, const QString& screenId);
 
     // ═══════════════════════════════════════════════════════════════════════
     // State access / ordering / tracking

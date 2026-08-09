@@ -157,6 +157,144 @@ void ScrollEngine::resetWindowHeights(const QString& screenId)
                               sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen);
 }
 
+void ScrollEngine::centerVisibleColumns(const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().centerVisibleColumns(params), "center");
+}
+
+void ScrollEngine::focusWindowTop(const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(false), "focus");
+}
+
+void ScrollEngine::focusWindowBottom(const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(true), "focus");
+}
+
+void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().focusAdjacentColumn(delta, params), "focus");
+}
+
+void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
+{
+    // Wrap on refusal (niri focus-column-left-or-last / right-or-first): the
+    // far end is the fallback, not a second op — short-circuit keeps a
+    // successful adjacent step from also wrapping.
+    P_SCROLL_VERB(screenId,
+                  state->strip().focusAdjacentColumn(delta, params)
+                      || (delta < 0 ? state->strip().focusLastColumn(params) : state->strip().focusFirstColumn(params)),
+                  "focus");
+}
+
+void ScrollEngine::setColumnWidth(const ColumnWidth& width, const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().setActiveColumnWidth(width), "resize");
+}
+
+void ScrollEngine::setWindowHeight(const WindowHeight& height, const QString& screenId)
+{
+    P_SCROLL_VERB(screenId, state->strip().setActiveWindowHeight(height), "resize");
+}
+
+void ScrollEngine::moveFocusedToFloating(const QString& screenId)
+{
+    const QString screen = resolveOperationScreen(screenId);
+    ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
+    const QString action = QStringLiteral("float");
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
+        return;
+    }
+    // The float layer holds focus: the focused window is already floating,
+    // and the explicit verb must not answer by floating the strip's stale
+    // active tile instead. no_target keeps the press audible.
+    if (state->floatingHasFocus()) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), state->lastFloatingFocus(), QString(),
+                                  screen);
+        return;
+    }
+    const QString windowId = state->strip().activeWindowId();
+    if (windowId.isEmpty()) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_window"), QString(), QString(), screen);
+        return;
+    }
+    setWindowFloat(windowId, true, screenId);
+}
+
+void ScrollEngine::moveFocusedToTiling(const QString& screenId)
+{
+    const QString screen = resolveOperationScreen(screenId);
+    ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
+    const QString action = QStringLiteral("float");
+    if (!state) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
+        return;
+    }
+    // Only a focused FLOAT can be sent to tiling; a tile answering this verb
+    // is already there.
+    if (!state->floatingHasFocus()) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), state->strip().activeWindowId(),
+                                  QString(), screen);
+        return;
+    }
+    const QString windowId = state->lastFloatingFocus();
+    if (windowId.isEmpty() || !state->isFloating(windowId)) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_window"), QString(), QString(), screen);
+        return;
+    }
+    setWindowFloat(windowId, false, screenId);
+}
+
+void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
+{
+    const QString screen = resolveOperationScreen(screenId);
+    ScrollState* state = screen.isEmpty() ? nullptr : stateForKey(currentKeyForScreen(screen), false);
+    const QString action = QStringLiteral("focus");
+    if (!state) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
+        return;
+    }
+    if (state->floatingHasFocus()) {
+        // Float → tiling. The activation is this engine's own doing, so it is
+        // queued for the windowFocused echo filter like applyLayout's arm
+        // (same cap; the constant is TU-local there).
+        const QString target = state->strip().activeWindowId();
+        if (target.isEmpty()) {
+            Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), state->lastFloatingFocus(), QString(),
+                                      screen);
+            return;
+        }
+        state->setFloatingHasFocus(false);
+        constexpr int kMaxPendingSelfActivations = 16; // engine_apply.cpp's cap
+        m_pendingSelfActivations.append(target);
+        while (m_pendingSelfActivations.size() > kMaxPendingSelfActivations) {
+            m_pendingSelfActivations.removeFirst();
+        }
+        Q_EMIT activateWindowRequested(target);
+        Q_EMIT navigationFeedback(true, action, QStringLiteral("tiling"), state->lastFloatingFocus(), target, screen);
+        return;
+    }
+    // Tiling → float. Deliberately NOT queued as a self-activation echo: the
+    // float branch of windowFocused only records bookkeeping (no strip focus
+    // to rewind), and swallowing the report would leave floatingHasFocus
+    // false after a switch the compositor honoured.
+    QString target = state->lastFloatingFocus();
+    if (target.isEmpty() || !state->isFloating(target)) {
+        const QStringList floats = state->floatingWindows();
+        target = floats.isEmpty() ? QString() : floats.first();
+    }
+    if (target.isEmpty()) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), state->strip().activeWindowId(),
+                                  QString(), screen);
+        return;
+    }
+    Q_EMIT activateWindowRequested(target);
+    Q_EMIT navigationFeedback(true, action, QStringLiteral("floating"), state->strip().activeWindowId(), target,
+                              screen);
+}
+
 #undef P_SCROLL_VERB
 #undef P_SCROLL_RESOLVE
 

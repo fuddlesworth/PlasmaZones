@@ -215,6 +215,53 @@ bool ScrollStrip::centerActiveColumn(const ScrollLayoutParams& params)
     return true;
 }
 
+bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
+{
+    if (m_activeColumnIdx < 0) {
+        return false;
+    }
+    const int workW = params.workArea.width();
+    const int viewX = viewXFor(params);
+    // FULLY visible columns only (niri center-visible-columns): a partially
+    // clipped edge column is exactly what the verb pushes out of the way, so
+    // it must not drag the span. Zero-width (fully minimized) columns carry
+    // no strip position and are skipped the same way stripWidthPx skips them.
+    int spanStart = -1;
+    int spanEnd = -1;
+    for (int i = 0; i < m_columns.size(); ++i) {
+        const int w = columnWidthPx(m_columns.at(i), params);
+        if (w <= 0) {
+            continue;
+        }
+        const int stripX = columnStripX(i, params);
+        const int pos = stripX - viewX;
+        if (pos < 0 || pos + w > workW) {
+            continue;
+        }
+        if (spanStart < 0) {
+            spanStart = stripX;
+        }
+        spanEnd = stripX + w;
+    }
+    if (spanStart < 0) {
+        // Nothing fully visible (a lone over-wide column, or a viewport mid
+        // scroll) — centering the active column is the closest sensible act.
+        return centerActiveColumn(params);
+    }
+    // Anchor the ACTIVE column relative to the centered span: the anchor is
+    // active-relative state (see class doc), so the span center has to be
+    // expressed through it. Deliberately unclamped, like centerActiveColumn:
+    // a centered span near the strip's edge implies out-of-range viewX by
+    // design, and later structural inserts re-clamp when needed.
+    const int newViewX = spanStart - (workW - (spanEnd - spanStart)) / 2;
+    const int anchor = columnStripX(m_activeColumnIdx, params) - newViewX;
+    if (anchor == m_viewAnchor) {
+        return false;
+    }
+    m_viewAnchor = anchor;
+    return true;
+}
+
 ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
 {
     ResolvedStrip out;

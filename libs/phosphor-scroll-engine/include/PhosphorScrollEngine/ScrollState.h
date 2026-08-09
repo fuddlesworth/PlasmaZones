@@ -49,7 +49,32 @@ public:
     }
     bool removeFloating(const QString& windowId)
     {
+        if (m_lastFloatingFocus == windowId) {
+            m_lastFloatingFocus.clear();
+        }
         return m_floating.remove(windowId);
+    }
+
+    /// Focus-side memory for switch-focus-between-floating-and-tiling: the
+    /// float most recently reported focused by the compositor, and whether
+    /// the float layer holds focus RIGHT NOW. Both are fed exclusively by
+    /// genuine focus reports (windowFocused) and the engine's own activation
+    /// arm; neither is serialized — focus history dies with the session.
+    QString lastFloatingFocus() const
+    {
+        return m_lastFloatingFocus;
+    }
+    void setLastFloatingFocus(const QString& windowId)
+    {
+        m_lastFloatingFocus = windowId;
+    }
+    bool floatingHasFocus() const
+    {
+        return m_floatingHasFocus;
+    }
+    void setFloatingHasFocus(bool hasFocus)
+    {
+        m_floatingHasFocus = hasFocus;
     }
 
     /// The strip `viewX` carried by the last geometry batch this state
@@ -152,6 +177,8 @@ private:
     QString m_screenId;
     ScrollStrip m_strip;
     QSet<QString> m_floating;
+    QString m_lastFloatingFocus;
+    bool m_floatingHasFocus = false;
     int m_lastAppliedViewX = 0;
     QRect m_lastAppliedWorkArea;
     bool m_hasLastAppliedViewX = false;

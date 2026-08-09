@@ -742,9 +742,20 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     m_pendingSelfActivations.clear();
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
-    if (!state || state->isFloating(windowId)) {
+    if (!state) {
         return;
     }
+    if (state->isFloating(windowId)) {
+        // Focus-side memory for switchFocusBetweenFloatingAndTiling: a
+        // genuine report naming a float is the only place the engine learns
+        // the float layer holds focus, and which member holds it.
+        state->setLastFloatingFocus(windowId);
+        state->setFloatingHasFocus(true);
+        return;
+    }
+    // A genuine report naming a tile means the float layer lost focus,
+    // whether or not the strip's own focus slot moves below.
+    state->setFloatingHasFocus(false);
     const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
     if (state->strip().focusWindow(windowId, params)) {
         // The focus change may scroll the viewport; never re-activate here
