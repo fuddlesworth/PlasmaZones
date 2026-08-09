@@ -198,6 +198,53 @@ void WindowTrackingAdaptor::handleCrossModeMove(const QString& windowId, const Q
     }
 }
 
+void WindowTrackingAdaptor::handleCrossModeFocus(const QString& targetScreenId, const QString& direction)
+{
+    auto* sourceEngine = qobject_cast<PhosphorEngine::PlacementEngineBase*>(sender());
+    if (!sourceEngine || targetScreenId.isEmpty() || !m_layoutManager) {
+        return;
+    }
+    // Monitor crossings only, so the target context is the neighbour screen's
+    // CURRENT desktop — the same resolution handleCrossModeMove uses with
+    // targetDesktop == 0.
+    const QString activity = m_layoutManager->currentActivity();
+    const PhosphorZones::AssignmentEntry::Mode targetMode =
+        m_layoutManager->modeForScreen(targetScreenId, currentDesktopForScreen(targetScreenId), activity);
+    PhosphorEngine::PlacementEngineBase* targetEngine = nullptr;
+    switch (targetMode) {
+    case PhosphorZones::AssignmentEntry::Autotile:
+        targetEngine = m_autotileEngine.data();
+        break;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        targetEngine = m_scrollEngine.data();
+        break;
+    case PhosphorZones::AssignmentEntry::Snapping:
+        targetEngine = m_snapEngine.data();
+        break;
+    }
+    if (!targetEngine || targetEngine == sourceEngine) {
+        return; // target engine unavailable, or not actually cross-mode
+    }
+    // The entry-edge window facing the source, per the target's own
+    // vocabulary — the same per-engine resolution handleCrossModeSwap uses
+    // for its partner.
+    QString target;
+    if (auto* autotileTarget = qobject_cast<PhosphorTileEngine::AutotileEngine*>(targetEngine)) {
+        target = autotileTarget->entryWindowForCrossing(targetScreenId, direction);
+    } else if (auto* scrollTarget = qobject_cast<PhosphorScrollEngine::ScrollEngine*>(targetEngine)) {
+        target = scrollTarget->entryWindowForCrossing(targetScreenId, direction);
+    } else if (auto* snapTarget = qobject_cast<PhosphorSnapEngine::SnapEngine*>(targetEngine)) {
+        const QString entryZone = snapTarget->entryZoneForCrossing(direction, targetScreenId);
+        if (!entryZone.isEmpty()) {
+            target = snapTarget->windowInZoneOnScreen(entryZone, targetScreenId);
+        }
+    }
+    if (target.isEmpty()) {
+        return; // empty entry edge — nothing to focus
+    }
+    Q_EMIT activateWindowRequested(target);
+}
+
 void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const QString& targetScreenId,
                                                 int targetDesktop, const QString& direction)
 {

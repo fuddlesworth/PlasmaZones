@@ -119,9 +119,56 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
         // Success carries the direction as the reason — the navigation OSD
         // derives its arrow from it (autotile fills the same slot).
         Q_EMIT navigationFeedback(true, action, direction, focusedBefore, state->strip().activeWindowId(), screen);
-    } else {
-        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
+        return;
     }
+    // Horizontal strip edge: cross onto the adjacent output, the parity twin
+    // of moveFocusedInDirection's boundary arm — and of autotile's plain
+    // focus, which already crosses outputs on the same generic chord.
+    if (h != 0 && focusAcrossBoundary(screen, direction, focusedBefore)) {
+        return;
+    }
+    Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
+}
+
+bool ScrollEngine::focusAcrossBoundary(const QString& screenId, const QString& direction, const QString& focusedBefore)
+{
+    if (!m_crossSurfaceResolver) {
+        return false;
+    }
+    const QString target = m_crossSurfaceResolver->neighborOutputInDirection(screenId, direction);
+    if (target.isEmpty() || target == screenId) {
+        return false;
+    }
+    const QString action = QStringLiteral("focus");
+    if (!m_scrollingScreens.contains(target)) {
+        // Different-mode neighbour: the daemon asks that engine for its
+        // entry-edge window and activates it. Optimistic success feedback,
+        // the move arm's convention — announced on the DESTINATION screen.
+        Q_EMIT crossModeFocusRequested(target, direction);
+        Q_EMIT navigationFeedback(true, action, QStringLiteral("screen:") + direction, focusedBefore, QString(),
+                                  target);
+        return true;
+    }
+    const QString entry = entryWindowForCrossing(target, direction);
+    if (entry.isEmpty()) {
+        return false;
+    }
+    ScrollState* targetState = stateForKey(currentKeyForScreen(target), false);
+    if (!targetState) {
+        return false;
+    }
+    // focusWindow may answer false (the entry IS the neighbour's focused
+    // window) — the crossing still happens: applyLayout's activation arm
+    // activates the target strip's active window either way, with the
+    // self-activation echo bookkeeping for free.
+    targetState->strip().focusWindow(entry, layoutParamsForScreen(target));
+    m_activeScreen = target;
+    applyLayout(target, true);
+    Q_EMIT placementChanged(target);
+    // Same "screen:<dir>" reason and destination-screen announcement as the
+    // cross-output move (the snap convention).
+    Q_EMIT navigationFeedback(true, action, QStringLiteral("screen:") + direction, focusedBefore, entry, target);
+    return true;
 }
 
 void ScrollEngine::moveFocusedInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx)

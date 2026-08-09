@@ -8,6 +8,7 @@
 // owns is the feedback contract, the activation/echo bookkeeping and the
 // focus-side float memory.
 
+#include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 
@@ -17,6 +18,26 @@
 #include <QtTest>
 
 using namespace PhosphorScrollEngine;
+
+using ScrollTestUtils::makeProviderEngine;
+
+namespace {
+
+/// S2 sits to the RIGHT of everything; every other direction has no
+/// neighbour. The shape the smoke suite's parking tests use.
+struct RightNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
+{
+    QString neighborOutputInDirection(const QString&, const QString& direction) const override
+    {
+        return direction == QLatin1String("right") ? QStringLiteral("S2") : QString();
+    }
+    int neighborDesktopInDirection(int, const QString&) const override
+    {
+        return 0;
+    }
+};
+
+} // namespace
 
 class TestScrollEngineVerbs : public QObject
 {
@@ -29,6 +50,9 @@ private Q_SLOTS:
     void absoluteWidthAndHeightIntents();
     void moveToFloatingAndBackAnswersEveryPress();
     void switchFocusRoundTripsBetweenLayers();
+    void focusCrossesToTheScrollNeighboursEntryWindow();
+    void focusEdgeWithNoNeighbourReportsNoTarget();
+    void focusOntoAForeignModeNeighbourDefersToTheDaemon();
 
 private:
     static ScrollEngine* makeEngine(QObject* parent)
@@ -230,6 +254,78 @@ void TestScrollEngineVerbs::switchFocusRoundTripsBetweenLayers()
     engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
     QVERIFY(state->floatingHasFocus());
     QCOMPARE(state->lastFloatingFocus(), QStringLiteral("app|b"));
+}
+
+void TestScrollEngineVerbs::focusCrossesToTheScrollNeighboursEntryWindow()
+{
+    RightNeighbourResolver resolver;
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")});
+    engine->setCrossSurfaceResolver(&resolver);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S2"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S2"), 0, 0);
+
+    QSignalSpy activate(engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    PhosphorEngine::NavigationContext ctx;
+    ctx.screenId = QStringLiteral("S1");
+    // a is S1's only column: the strip refuses, and the crossing enters S2
+    // by its LEFT edge — the entry window is b, the leftmost visible tile.
+    engine->focusInDirection(QStringLiteral("right"), ctx);
+    QCOMPARE(activate.count(), 1);
+    QCOMPARE(activate.last().at(0).toString(), QStringLiteral("app|b"));
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    // Announced on the DESTINATION screen, the move arm's convention.
+    QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
+    engine->setCrossSurfaceResolver(nullptr);
+}
+
+void TestScrollEngineVerbs::focusEdgeWithNoNeighbourReportsNoTarget()
+{
+    RightNeighbourResolver resolver; // no LEFT neighbour
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCrossSurfaceResolver(&resolver);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    PhosphorEngine::NavigationContext ctx;
+    ctx.screenId = QStringLiteral("S1");
+    engine->focusInDirection(QStringLiteral("left"), ctx);
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    engine->setCrossSurfaceResolver(nullptr);
+}
+
+void TestScrollEngineVerbs::focusOntoAForeignModeNeighbourDefersToTheDaemon()
+{
+    RightNeighbourResolver resolver;
+    QObject owner;
+    // S2 exists as a neighbour but is NOT a scrolling screen — a
+    // different-mode context this engine holds no state for.
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCrossSurfaceResolver(&resolver);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+
+    QSignalSpy crossFocus(engine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested);
+    QSignalSpy activate(engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    PhosphorEngine::NavigationContext ctx;
+    ctx.screenId = QStringLiteral("S1");
+    engine->focusInDirection(QStringLiteral("right"), ctx);
+    QCOMPARE(crossFocus.count(), 1);
+    QCOMPARE(crossFocus.last().at(0).toString(), QStringLiteral("S2"));
+    QCOMPARE(crossFocus.last().at(1).toString(), QStringLiteral("right"));
+    // The daemon owns the activation; the engine itself activates nothing
+    // and reports optimistic success on the destination.
+    QCOMPARE(activate.count(), 0);
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
+    engine->setCrossSurfaceResolver(nullptr);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineVerbs)

@@ -1272,6 +1272,20 @@ private Q_SLOTS:
                              const QString& direction);
 
     /**
+     * @brief Orchestrate a cross-MODE directional FOCUS crossing.
+     *
+     * Wired to the scroll engine's crossModeFocusRequested (autotile's plain
+     * focus keeps its own same-mode cross-output probe). Resolves the target
+     * mode at the destination context, asks that engine for its entry-edge
+     * window facing the source in @p direction (autotile/scroll:
+     * entryWindowForCrossing; snap: the entry zone's occupant), and activates
+     * it. No window travels and no engine state is touched — the compositor's
+     * focus report updates each engine naturally. An empty entry edge is a
+     * quiet no-op.
+     */
+    void handleCrossModeFocus(const QString& targetScreenId, const QString& direction);
+
+    /**
      * @brief Handle layout change by validating zone assignments
      *
      * When the active layout changes, windows may be assigned to zones that

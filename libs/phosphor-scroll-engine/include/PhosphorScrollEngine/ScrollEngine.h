@@ -886,6 +886,13 @@ private:
     bool moveActiveWindowAcrossBoundary(ScrollState* state, const QString& screenId, const QString& direction,
                                         bool swap, QString* landingScreen = nullptr);
 
+    /// The FOCUS twin of the boundary move: cross focus onto the adjacent
+    /// output. A scroll-mode neighbour is handled in-engine (entry-edge
+    /// window focused + activated); a different-mode neighbour defers to
+    /// the daemon via crossModeFocusRequested. True when a crossing was
+    /// initiated (feedback already emitted, on the destination).
+    bool focusAcrossBoundary(const QString& screenId, const QString& direction, const QString& focusedBefore);
+
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     /// Embedder/test seam: geometry providers consulted when NO

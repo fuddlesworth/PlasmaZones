@@ -126,6 +126,16 @@ Q_SIGNALS:
     void crossModeSwapRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
                                 const QString& direction);
 
+    /// Emitted when a directional FOCUS reaches a monitor boundary whose
+    /// neighbour context runs a DIFFERENT tiling mode — the source engine
+    /// cannot name that surface's entry-edge window (it holds no state for
+    /// the other mode), so it defers to the daemon, which asks the target
+    /// engine for the window facing the source in @p direction and activates
+    /// it. No window travels and no engine state changes; the compositor's
+    /// answering focus report is what updates each engine. Monitor crossings
+    /// only — a focus has no cross-desktop arm.
+    void crossModeFocusRequested(const QString& targetScreenId, const QString& direction);
+
     /// Emitted to sync floating state without restoring geometry.
     /// Passive state-sync: engine-internal divergence correction.
     void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);
