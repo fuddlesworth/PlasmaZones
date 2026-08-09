@@ -48,6 +48,7 @@
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorScrollEngine/ScrollState.h>
 
 #include "dbus/scrollingadaptor/scrollingadaptor.h"
 
@@ -376,6 +377,59 @@ private Q_SLOTS:
         m_adaptor->focusColumn(QStringLiteral("DP-1"), 1);
         QCOMPARE(activateSpy.count(), 2);
         QCOMPARE(activateSpy.at(1).at(0).toString(), QStringLiteral("app|b"));
+    }
+
+    // The absolute setters: focusColumn's ownership gate, silent range
+    // refusal against the ConfigDefaults bounds, and the intent each form
+    // actually writes (width proportion exact, width/height px Fixed, height
+    // proportion a Preset fraction anchor).
+    void testAbsoluteSetters_gateValidateAndApply()
+    {
+        using PhosphorScrollEngine::ColumnWidth;
+        using PhosphorScrollEngine::WindowHeight;
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        auto* state = static_cast<PhosphorScrollEngine::ScrollState*>(m_engine->stateForScreen(QStringLiteral("DP-1")));
+        QVERIFY(state);
+        const auto activeColumn = [state]() -> const PhosphorScrollEngine::Column& {
+            return state->strip().columns().at(state->strip().activeColumnIndex());
+        };
+
+        // Refusals: foreign screen, below the proportion floor, above the
+        // ceiling — none of them may disturb the default width intent.
+        const ColumnWidth before = activeColumn().width;
+        m_adaptor->setColumnWidthProportion(QStringLiteral("HDMI-2"), 0.25);
+        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.01);
+        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 1.5);
+        QCOMPARE(activeColumn().width.kind, before.kind);
+
+        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.25);
+        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Proportion);
+        QCOMPARE(activeColumn().width.proportion, 0.25);
+
+        // Pixel form: out-of-range refused, in-range writes a Fixed intent.
+        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 50);
+        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 20000);
+        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Proportion);
+        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 640);
+        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Fixed);
+        QCOMPARE(activeColumn().width.fixedPx, 640);
+
+        // Height twins: px is Fixed, proportion is the Preset fraction
+        // anchor (heights have no exact-proportion kind).
+        const auto activeHeight = [&activeColumn]() -> const WindowHeight& {
+            const PhosphorScrollEngine::Column& col = activeColumn();
+            return col.tiles.at(col.activeTileIdx).height;
+        };
+        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 50);
+        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Auto);
+        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
+        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
+        QCOMPARE(activeHeight().fixedPx, 300);
+        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.01);
+        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
+        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.5);
+        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Preset);
+        QCOMPARE(activeHeight().presetFraction, 0.5);
     }
 
     // Same ownership gates as focusColumn, plus the payload's mixed-vocabulary

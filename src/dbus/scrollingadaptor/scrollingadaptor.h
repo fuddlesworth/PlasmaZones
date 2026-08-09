@@ -84,6 +84,29 @@ public Q_SLOTS:
     void focusColumn(const QString& screenId, int delta);
 
     /**
+     * @brief Absolute width/height intents for the focused column and window
+     *
+     * The D-Bus home of niri's absolute set-column-width and
+     * set-window-height: a global shortcut carries no value argument, so the
+     * absolute setters live only on this surface. All four share focusColumn's
+     * silent ownership gate, and each refuses out-of-range values silently —
+     * proportions outside the settings UI's proportion range, pixels outside
+     * its fixed range (the width and height fixed ranges happen to agree
+     * today; each is validated against its own accessor). A value equal to
+     * the current intent answers with a no-target OSD, like the step verbs.
+     *
+     * Width proportions are exact (ColumnWidth has a Proportion kind).
+     * Height proportions are NOT: the strip model stores them as a fraction
+     * anchor that snaps to the nearest effective height preset at relayout
+     * (WindowHeight::Preset's value-anchored contract), so an exact height
+     * needs the pixel form.
+     */
+    void setColumnWidthProportion(const QString& screenId, double proportion);
+    void setColumnWidthPixels(const QString& screenId, int px);
+    void setWindowHeightProportion(const QString& screenId, double proportion);
+    void setWindowHeightPixels(const QString& screenId, int px);
+
+    /**
      * @brief The strip as it currently looks on a screen, for previews
      *
      * Returns a JSON array with ONE OBJECT PER TILE carrying

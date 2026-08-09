@@ -3,6 +3,7 @@
 
 #include "scrollingadaptor.h"
 
+#include "config/configdefaults.h"
 #include "core/platform/logging.h"
 
 #include <algorithm>
@@ -108,6 +109,63 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
     }
     m_engine->focusInDirection(delta < 0 ? QStringLiteral("left") : QStringLiteral("right"),
                                PhosphorEngine::NavigationContext{QString(), screenId});
+}
+
+void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double proportion)
+{
+    // Wire-boundary validation in focusColumn's terms: the screen gate keeps
+    // a stray call from being redirected by the engine's screen fallback, and
+    // the range refusal is silent per the interface's documented convention.
+    // The bounds are the same accessors the settings UI and the hand-written
+    // width setter enforce.
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    if (proportion < ConfigDefaults::scrollingDefaultColumnWidthProportionMin()
+        || proportion > ConfigDefaults::scrollingDefaultColumnWidthProportionMax()) {
+        return;
+    }
+    m_engine->setColumnWidth(PhosphorScrollEngine::ColumnWidth::makeProportion(proportion), screenId);
+}
+
+void ScrollingAdaptor::setColumnWidthPixels(const QString& screenId, int px)
+{
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    if (px < ConfigDefaults::scrollingDefaultColumnWidthFixedMin()
+        || px > ConfigDefaults::scrollingDefaultColumnWidthFixedMax()) {
+        return;
+    }
+    m_engine->setColumnWidth(PhosphorScrollEngine::ColumnWidth::makeFixed(px), screenId);
+}
+
+void ScrollingAdaptor::setWindowHeightProportion(const QString& screenId, double proportion)
+{
+    // Heights share the proportion domain with widths (work-area fractions,
+    // and the preset lists use the same 0-1 spellings); there is no separate
+    // height-proportion bound to consult, so the width accessors are the
+    // single source for the fraction range.
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    if (proportion < ConfigDefaults::scrollingDefaultColumnWidthProportionMin()
+        || proportion > ConfigDefaults::scrollingDefaultColumnWidthProportionMax()) {
+        return;
+    }
+    m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makePreset(proportion), screenId);
+}
+
+void ScrollingAdaptor::setWindowHeightPixels(const QString& screenId, int px)
+{
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    if (px < ConfigDefaults::scrollingDefaultWindowHeightMin()
+        || px > ConfigDefaults::scrollingDefaultWindowHeightMax()) {
+        return;
+    }
+    m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makeFixed(px), screenId);
 }
 
 QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
