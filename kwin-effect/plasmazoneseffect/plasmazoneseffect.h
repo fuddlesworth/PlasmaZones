@@ -799,6 +799,10 @@ private:
     {
         return m_snapHandler.get();
     }
+    ScreenChangeHandler* screenChangeHandler() const
+    {
+        return m_screenChangeHandler.get();
+    }
 
     /**
      * @brief Emit navigationFeedback D-Bus signal

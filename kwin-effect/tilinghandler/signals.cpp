@@ -7,6 +7,7 @@
 #include "tilinghandler.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/navigationhandler.h"
+#include "handlers/screenchangehandler.h" // scrolling fullscreen-exit geometry pull
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
@@ -962,6 +963,20 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             return;
         }
         markWindowTiled(screenId, windowId);
+        // A scrolling screen's exit needs a geometry PULL, not trust in
+        // KWin's restore: a window that entered fullscreen at (or before)
+        // announce restores to the full area — its fullscreenGeometryRestore
+        // was never a column rect — and the engine's emit-on-change gate
+        // stays silent because ITS rects never moved, so no batch would ever
+        // correct the stranded full-size frame (seen live: a Proton game
+        // exiting its own fullscreen sat over its neighbour indefinitely).
+        // The screen-change fetch is the existing external-clobber repair
+        // path and bypasses the gate entirely.
+        if (isScrollingScreen(screenId)) {
+            if (ScreenChangeHandler* screenChange = m_effect->screenChangeHandler()) {
+                screenChange->fetchAndApplyWindowGeometries();
+            }
+        }
         // Title-bar (borderless) state is driven by rules.
         m_effect->updateAllDecorations();
         return;

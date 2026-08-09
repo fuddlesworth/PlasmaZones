@@ -628,7 +628,18 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // transient_for set but isPopupWindow false) leaked through an older
     // hand-maintained copy of this list — the shared predicate makes that
     // drift impossible.
-    if (isStructurallyUnmanageableWindowType(w)) {
+    // Fullscreen-on-a-scrolling-screen exception, mirroring the eligibility
+    // exemption: the strip keeps tiling a window through real fullscreen, so
+    // the daemon must keep hearing its focus — otherwise the scrolling verbs
+    // (windowed fullscreen's own toggle first among them) act on whatever
+    // window was reported active BEFORE the game went fullscreen. Seen
+    // live: the toggle pressed over a fullscreen Proton game landed on the
+    // neighbouring terminal. Scoped HERE rather than in the shared
+    // predicate so focus-follows-mouse and the other consumers keep
+    // treating a genuinely fullscreen window as an occluder.
+    const bool fullscreenOnScrollingScreen =
+        w->isFullScreen() && m_tilingHandler->isScrollingScreen(getWindowScreenId(w));
+    if (!fullscreenOnScrollingScreen && isStructurallyUnmanageableWindowType(w)) {
         return;
     }
 
