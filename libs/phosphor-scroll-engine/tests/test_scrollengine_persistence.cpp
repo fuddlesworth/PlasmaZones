@@ -726,10 +726,14 @@ void TestScrollEnginePersistence::windowedFullscreenTogglesEmitAndFloatClears()
 
 void TestScrollEnginePersistence::windowedFullscreenHiddenTabEmitsUnflagged()
 {
-    // The flag is only TOLD to the compositor while the tile is presented: a
-    // hidden tab of a tabbed column keeps the model flag but its batch entry
-    // must not carry the key (the effect would fullscreen a hidden client at
-    // its park). Switching back re-announces it through the gate leg.
+    // The flag rides the tile UNGATED by presentation: a hidden tab (and a
+    // parked column) keeps its client's fullscreen state, so its batch entry
+    // still carries the key. The first design suppressed the flag off-canvas
+    // and every tab switch or scroll past a flagged column cycled the
+    // client's fullscreen presentation, seen live as resize and decoration
+    // flicker. The effect's layer demotion and geometry-bail exemption make
+    // an off-canvas fullscreen client inert, so presentation gating buys
+    // nothing.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
@@ -743,7 +747,7 @@ void TestScrollEnginePersistence::windowedFullscreenHiddenTabEmitsUnflagged()
 
     QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
     // Show the OTHER tab: a becomes the hidden tab of an on-screen tabbed
-    // column, so its entry must arrive without the flag.
+    // column, and its entry must STILL carry the flag.
     engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
     QVERIFY(tiled.count() >= 1);
     bool sawA = false;
@@ -757,7 +761,7 @@ void TestScrollEnginePersistence::windowedFullscreenHiddenTabEmitsUnflagged()
         }
     }
     QVERIFY2(sawA, "the hidden tab must still be in the batch (parked), or the compare is vacuous");
-    QVERIFY(!aFlagged);
+    QVERIFY(aFlagged);
     // The model keeps the flag through the round trip.
     ScrollState* state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);

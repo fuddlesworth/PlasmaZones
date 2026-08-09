@@ -698,14 +698,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             obj[QLatin1String("y")] = rect.y();
             obj[QLatin1String("width")] = rect.width();
             obj[QLatin1String("height")] = rect.height();
-            // The flag is only TOLD to the compositor while the tile is
-            // actually presented: a parked column or a hidden tab commits an
-            // off-canvas rect, and a client holding fullscreen state at a
-            // park is strictly worse than the alternative this gate buys —
-            // scrolling a flagged column out and back (or switching tabs)
-            // cycles the client's fullscreen presentation off and on. The
-            // model keeps the flag either way; only the wire is gated.
-            const bool presentWindowedFs = tile.windowedFullscreen && !tile.hidden && !parkedNow;
+            // The flag rides the tile UNGATED by presentation: a parked
+            // column and a hidden tab keep their client's fullscreen state.
+            // The first design suppressed the flag off-canvas, and every
+            // scroll past a flagged column then cycled the client's
+            // fullscreen presentation off and on — two KWin state flips,
+            // a restore/re-apply configure pair, and a decoration flap per
+            // pass, all visible as resize flicker on the way in and out
+            // (seen live with a flagged terminal). A client holding
+            // fullscreen state at its park is inert: the compositor pins
+            // flagged windows below the normal layer and exempts them from
+            // the fullscreen geometry bail, so the off-canvas rect commits
+            // like any other parked tile's.
+            const bool presentWindowedFs = tile.windowedFullscreen;
             if (presentWindowedFs) {
                 obj[QLatin1String("windowedFullscreen")] = true;
             }
@@ -778,10 +783,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // The windowed-fullscreen flag rides the same payload but never
             // moves a rect, so it needs its own leg of the emit-on-change
             // gate — a toggle on an otherwise motionless strip must still
-            // reach the compositor. The memory tracks the EMITTED value
-            // (presentation-gated above), not the model flag: a park that
-            // suppresses the flag is itself a change the compositor must
-            // hear, and the return from park must re-announce it.
+            // reach the compositor.
             if (m_lastAppliedWindowedFs.contains(tile.windowId) != presentWindowedFs) {
                 anyRectMoved = true;
             }

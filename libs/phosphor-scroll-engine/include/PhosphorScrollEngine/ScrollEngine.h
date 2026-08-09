@@ -958,9 +958,10 @@ private:
     QHash<QString, QRect> m_lastAppliedRect;
     /// Windows whose last EMITTED batch entry carried windowedFullscreen —
     /// the flag's own leg of applyLayout's emit-on-change gate (a toggle
-    /// never moves a rect). Tracks the presentation-gated EMITTED value,
-    /// not the model flag (a parked/hidden tile emits false while the tile
-    /// keeps the flag). A QSet because only "told true" is representable.
+    /// never moves a rect). The emitted value IS the model flag: parks and
+    /// hidden tabs no longer suppress it (suppressing cycled the client's
+    /// fullscreen presentation on every scroll past a flagged column).
+    /// A QSet because only "told true" is representable.
     /// Dropped alongside m_lastAppliedRect on the context-teardown paths
     /// and swept by aliveness in pruneStaleWindows. Elsewhere a stale entry
     /// is self-correcting rather than co-dropped: any path that drops the
