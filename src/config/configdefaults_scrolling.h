@@ -749,6 +749,22 @@ public:
     // Directional focus/move/swap reuse the existing generic navigation
     // shortcuts; only the scroll-specific column vocabulary gets its own
     // chords.
+    //
+    // EXTERNALLY OWNED CHORDS the internal-uniqueness test can NOT catch:
+    // KGlobalAccel silently gives a chord to whichever action registered
+    // first, so a default colliding with a stock KDE app just never fires
+    // for one of the two. Known occupied on a stock Plasma 6 install:
+    //   - Spectacle owns the whole R family: Meta+R and Meta+Shift+R
+    //     (region recording), Meta+Ctrl+R (window recording), Meta+Alt+R
+    //     (screen recording). R is unusable with any Meta-based modifier.
+    //   - Plasma owns Meta+Alt+K and Meta+Alt+L (keyboard layouts),
+    //     Meta+Alt+S (screen reader), Meta+Alt+P (panel focus), and
+    //     Meta+Alt+Arrows (KWin switch-window).
+    //   - KWin core owns Meta+Alt+wheel (desktop switch; axis registrations
+    //     that lose the race are silently dropped).
+    // Check a candidate against this table AND a live session
+    // (~/.config/kglobalshortcutsrc plus kglobalaccel's component list)
+    // before shipping a new default.
     // ═══════════════════════════════════════════════════════════════════════════
 
     static QString scrollingFocusColumnFirstShortcut()
@@ -803,13 +819,16 @@ public:
         // The letter pairs in this family follow one convention: a mnemonic
         // letter for the primary action and Shift on the same letter for the
         // opposed one (I/Shift+I consume/expel, W/Shift+W widen/narrow,
-        // R/Shift+R and H/Shift+H cycle forward/back). R is niri's preset
-        // width mnemonic, H is height.
-        return QStringLiteral("Meta+Alt+R");
+        // D/Shift+D and H/Shift+H cycle forward/back). D as in the column's
+        // Dimensions, H is height. NOT R (niri's preset-width mnemonic):
+        // Spectacle owns the entire Meta-modified R family — see the
+        // externally-owned table in the section banner — and Meta+Alt+R was
+        // a live collision with its screen recording.
+        return QStringLiteral("Meta+Alt+D");
     }
     static QString scrollingCycleColumnWidthBackShortcut()
     {
-        return QStringLiteral("Meta+Alt+Shift+R");
+        return QStringLiteral("Meta+Alt+Shift+D");
     }
     static QString scrollingIncreaseColumnWidthShortcut()
     {
@@ -832,7 +851,7 @@ public:
     }
     static QString scrollingCycleWindowHeightShortcut()
     {
-        // NOT Meta+Alt+Shift+R: that slot is the width cycle's reverse
+        // NOT Meta+Alt+Shift+D: that slot is the width cycle's reverse
         // (see scrollingCycleColumnWidthShortcut for the letter+Shift
         // convention).
         return QStringLiteral("Meta+Alt+H");

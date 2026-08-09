@@ -957,7 +957,11 @@ public:
     }
     static QString autotileRetileShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+R");
+        // T as in re-Tile. NOT Meta+Ctrl+R: Spectacle owns every
+        // Meta-modified R chord (that one is its window recording) — see
+        // the externally-owned table in configdefaults_scrolling.h's
+        // Scrolling Shortcuts banner.
+        return QStringLiteral("Meta+Ctrl+T");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
