@@ -200,6 +200,35 @@ void ActionRegistry::registerBuiltinsEngine()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
+    // ── osd-enabled slot — context-domain override of the OSD toggles. A
+    //    matched context rule shows or hides on-screen displays for its
+    //    screen/desktop/activity: value == false suppresses every OSD there,
+    //    value == true forces them past the per-trigger global toggles
+    //    (showOsdOnLayoutSwitch / showOsdOnDesktopSwitch / showNavigationOsd)
+    //    but NOT past the OsdStyle::None kill switch, which returns before a
+    //    rendering style is chosen. One action, not a per-trigger family: the
+    //    user-level intent is "no popups on this screen" (a projector, a
+    //    recording monitor), which is trigger-agnostic. Live-resolved via
+    //    LayoutRegistry::resolveContextOsdEnabled, mirroring LockContext.
+    //    Seeds FALSE: the trigger toggles default ON, so the meaningful fresh
+    //    rule is "suppress here" — DefaultLayoutAssignment's rationale.
+    //    Category "overlay": it governs the overlay/OSD service surface, not
+    //    an engine.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetOsdEnabled),
+        .slotFor = constantSlot(ActionSlot::OsdEnabled),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 10,
+    });
+
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
     //    `allowedKeys` opts out of the strict-key check so a future Exclude
     //    reason/scope param can be added without a schema bump. ──

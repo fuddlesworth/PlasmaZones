@@ -259,6 +259,54 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextLocked(QStringLiteral("HDMI-2"), 2, QString()));
     }
 
+    // ─── Context OSD override — resolution ────────────────────────────────
+    // resolveContextOsdEnabled reads the boolean OsdEnabled slot off a
+    // matching context rule. Tri-state: nullopt with no rule (follow the
+    // global toggles), explicit true forces OSDs on, explicit false
+    // suppresses them.
+
+    void testContextOsd_resolution()
+    {
+        const auto osdRule = [](const QString& name, PWR::Field field, const QVariant& value, bool enabled) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::SetOsdEnabled);
+            a.params.insert(QString(PWR::ActionParam::Value), enabled);
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 400;
+            r.match = PWR::MatchExpression::makeLeaf(field, PWR::Operator::Equals, value);
+            r.actions = {a};
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        const PWR::Rule hideMonitor =
+            osdRule(QStringLiteral("hide on DP-1"), PWR::Field::ScreenId, QStringLiteral("DP-1"), false);
+        const PWR::Rule forceDesktop =
+            osdRule(QStringLiteral("force on desktop 2"), PWR::Field::VirtualDesktop, 2, true);
+        QVERIFY(f.store->setAllRules({hideMonitor, forceDesktop}));
+
+        // DP-1 resolves an explicit false (suppress) regardless of activity.
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()),
+                 std::optional<bool>(false));
+        // Desktop 2 resolves an explicit true (force) on any other screen.
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("HDMI-2"), 2, QString()),
+                 std::optional<bool>(true));
+        // A context no rule pins resolves nullopt — follow the global toggles.
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("HDMI-1"), 0, QString()), std::nullopt);
+
+        // Revision invalidation: disabling the suppress rule drops the primed
+        // false verdict, while the force rule survives the cache rebuild.
+        PWR::Rule disabled = hideMonitor;
+        disabled.enabled = false;
+        QVERIFY(f.store->setAllRules({disabled, forceDesktop}));
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("HDMI-2"), 2, QString()),
+                 std::optional<bool>(true));
+    }
+
     // ─── Context lock — slot conflict resolution ──────────────────────────
     // When two LockContext rules pin the SAME context with opposing values,
     // the single Locked slot is won by the highest-priority rule (then list

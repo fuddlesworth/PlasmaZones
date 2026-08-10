@@ -523,6 +523,20 @@ public:
     std::optional<bool> resolveContextDefaultAssignment(const QString& screenId, int virtualDesktop,
                                                         const QString& activity) const;
 
+    /// Resolve a per-context override of the OSD toggles for the
+    /// (screen, desktop, activity) context by evaluating a windowless
+    /// WindowQuery and reading the `ActionSlot::OsdEnabled` slot. Per-slot
+    /// read (mirrors @ref resolveContextLocked, including the activeLayout +
+    /// orientation stamping — OSD resolution never runs inside the assignment
+    /// cascade, so there is no recursion hazard): returns the winning
+    /// `SetOsdEnabled` action's boolean `value` (true = force OSDs on past
+    /// the per-trigger toggles, false = suppress them), or @c std::nullopt
+    /// when no matching rule fills the slot (the context then follows the
+    /// global toggles). Same owner-thread affinity as the rest of the
+    /// registry.
+    std::optional<bool> resolveContextOsdEnabled(const QString& screenId, int virtualDesktop,
+                                                 const QString& activity) const;
+
     /// Resolve the per-context overlay-property override (shader / style)
     /// for (screen, desktop, activity) by evaluating a windowless WindowQuery and
     /// reading the OverlayShader / OverlayStyle slots. Per-slot
@@ -1238,6 +1252,15 @@ private:
     /// revision. A @c std::nullopt value (no override rule) is cached too.
     mutable QHash<ContextResolveKey, std::optional<bool>> m_contextDefaultAssignmentCache;
     mutable quint64 m_contextDefaultAssignmentCacheRevision = 0;
+
+    /// Hot-path cache for @ref resolveContextOsdEnabled, keyed and
+    /// revision-invalidated exactly like @c m_contextLockCache. Every OSD
+    /// show gate consults the override (navigation feedback fires per verb),
+    /// so memoizing the per-slot walk collapses repeats to one walk per
+    /// rule-set revision. A @c std::nullopt value (no override rule) is
+    /// cached too.
+    mutable QHash<ContextResolveKey, std::optional<bool>> m_contextOsdCache;
+    mutable quint64 m_contextOsdCacheRevision = 0;
 
     /// Hot-path cache for @ref resolveContextOverlay, keyed and
     /// revision-invalidated exactly like @c m_contextGapCache. The overlay

@@ -510,6 +510,63 @@ private Q_SLOTS:
                 QCOMPARE(roundTripped->params.value(QStringLiteral("value")).toBool(!value), value);
             }
         }
+        // OpenMaximized / OpenFocused / OpenFullscreen: the same strict-bool
+        // shape as OpenTabbed. Both polarities matter — false is a live veto
+        // for each (of a focus-new-windows ON global, of the app's own
+        // fullscreen at open) — so each must survive load as an explicit
+        // value rather than being read as absent.
+        {
+            const QList<std::pair<QLatin1StringView, QLatin1StringView>> boolOpenActions = {
+                {ActionType::OpenMaximized, ActionSlot::OpenMaximized},
+                {ActionType::OpenFocused, ActionSlot::OpenFocused},
+                {ActionType::OpenFullscreen, ActionSlot::OpenFullscreen},
+            };
+            for (const auto& [type, slot] : boolOpenActions) {
+                rejectsMissingValue(type);
+                QJsonObject o;
+                o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+                o.insert(QStringLiteral("value"), QStringLiteral("yes")); // non-bool rejected
+                QVERIFY(!RuleAction::fromJson(o).has_value());
+                o.insert(QStringLiteral("value"), 1); // number rejected (no truthiness coercion)
+                QVERIFY(!RuleAction::fromJson(o).has_value());
+                const QString expectedSlot = QString(slot);
+                for (const bool value : {true, false}) {
+                    o.insert(QStringLiteral("value"), value);
+                    const auto loaded = RuleAction::fromJson(o);
+                    QVERIFY2(loaded.has_value(), type.data());
+                    QCOMPARE(ActionRegistry::instance().slotFor(*loaded), expectedSlot);
+                    const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                    QVERIFY(roundTripped.has_value());
+                    QCOMPARE(*roundTripped, *loaded);
+                    QCOMPARE(roundTripped->params.value(QStringLiteral("value")).toBool(!value), value);
+                }
+            }
+        }
+        // ScrollFactor: numeric multiplier, reject-not-clamp against the
+        // shared Min/MaxScrollFactor bounds — an out-of-range hand-edit must
+        // fail load, not saturate into a 10x scroll.
+        {
+            rejectsMissingValue(ActionType::ScrollFactor);
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::ScrollFactor));
+            o.insert(QStringLiteral("value"), QStringLiteral("0.75")); // string rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), true); // bool rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), MinScrollFactor - 0.01); // below floor
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), MaxScrollFactor + 0.01); // above ceiling
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (const double value : {MinScrollFactor, 0.75, 1.0, 2.0, MaxScrollFactor}) {
+                o.insert(QStringLiteral("value"), value);
+                const auto loaded = RuleAction::fromJson(o);
+                QVERIFY(loaded.has_value());
+                QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::ScrollFactor));
+                const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                QVERIFY(roundTripped.has_value());
+                QCOMPARE(*roundTripped, *loaded);
+            }
+        }
         // SetScrollInsertPosition: the five position tokens; unknown rejected.
         {
             rejectsMissingValue(ActionType::SetScrollInsertPosition);

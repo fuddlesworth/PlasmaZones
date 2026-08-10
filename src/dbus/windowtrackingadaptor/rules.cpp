@@ -301,6 +301,37 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     return globalDefault;
 }
 
+bool WindowTrackingAdaptor::shouldUnfloatFallbackToZone(const QString& windowId, const QString& screenId)
+{
+    // A matched SetUnfloatFallbackToZone rule wins, otherwise the global
+    // setting decides — the rule ?? config layering the SnapEngine's
+    // UnfloatFallbackPredicate contract names.
+    const bool globalDefault = m_settings->snapUnfloatFallbackToZone();
+    if (!m_ruleStore) {
+        return globalDefault;
+    }
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return globalDefault;
+    }
+    // Stamp the CALLER's screen, not screenForWindow: the engine hands us the
+    // RESOLVED restore screen (tracked float screen with output-unplugged
+    // fallback), which is where the fallback zone would land — the screen a
+    // ScreenId-scoped rule should be judged against.
+    stampScreenAndMode(*query, windowId, screenId);
+    ensureRuleEvaluator();
+    // Mid-session resolver: an unfloat fires long after open, so the same
+    // uncached-resolve reasoning as shouldRestoreSizeOnUnsnap above applies
+    // verbatim (resolveCached would return the open-time verdict).
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveFiltered(*query, admissionForStamped(*query));
+    if (const std::optional<PhosphorRules::RuleAction> action =
+            resolved.slot(QString(PhosphorRules::ActionSlot::UnfloatFallbackToZone))) {
+        return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
+    }
+    return globalDefault;
+}
+
 void WindowTrackingAdaptor::stampScreenAndMode(PhosphorRules::WindowQuery& query, const QString& windowId,
                                                const QString& screenId)
 {
@@ -554,6 +585,14 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnPlacement))) {
         const QString token = action->params.value(QString(PhosphorRules::ActionParam::Value)).toString();
         out.insert(ScrollOpenKeys::consume(), token == QLatin1String(PhosphorRules::ColumnPlacementToken::Consume));
+    }
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenMaximized))) {
+        out.insert(ScrollOpenKeys::maximized(),
+                   action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool());
+    }
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenFocused))) {
+        out.insert(ScrollOpenKeys::focused(),
+                   action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool());
     }
     return out;
 }

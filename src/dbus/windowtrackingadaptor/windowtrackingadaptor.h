@@ -800,6 +800,14 @@ public:
     /// WindowDragAdaptor and call through here), so this is public.
     bool shouldRestoreSizeOnUnsnap(const QString& windowId);
 
+    /// Resolve whether an unfloat with no remembered pre-float zone should
+    /// fall back to a zone anyway. A matched SetUnfloatFallbackToZone rule
+    /// wins, otherwise the global `snapUnfloatFallbackToZone` setting
+    /// decides. Consulted by the unfloat-fallback predicate the daemon
+    /// injects into the SnapEngine; @p screenId is the engine's RESOLVED
+    /// restore screen, stamped for ScreenId / Mode scoped rules.
+    bool shouldUnfloatFallbackToZone(const QString& windowId, const QString& screenId);
+
     /// Resolve whether an opening window should start FLOATING because a "Float
     /// this app" rule matched it. Consulted by the float predicate the
     /// daemon injects into BOTH engines (in-process, not via D-Bus). Unlike

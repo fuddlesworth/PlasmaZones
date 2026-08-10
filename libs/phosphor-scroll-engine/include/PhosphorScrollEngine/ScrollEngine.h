@@ -51,6 +51,15 @@ struct ScrollOpenParams
     std::optional<bool> tabbed;
     /// True: join the focused column instead of opening a new one.
     std::optional<bool> consume;
+    /// True: the new column opens at the full work-area width (openMaximized
+    /// rule). Outranks widthFraction and the template blueprint — a maximized
+    /// open IS a width verdict, the stronger one.
+    std::optional<bool> maximized;
+    /// Per-window override of IScrollSettings::scrollingFocusNewWindows
+    /// (openFocused rule). Consumed by windowOpened's focus arm, not by the
+    /// insert itself; the engine's FLOAT exits ignore it (a floated open
+    /// keeps the compositor's own focus verdict).
+    std::optional<bool> focused;
 };
 
 /**
@@ -867,9 +876,13 @@ private:
     /// recorded-slot / plain-insert ladder. Returns false only when every
     /// insert was refused — today that means the strip already holds the
     /// window — in which case nothing about the placement changed and the
-    /// caller must not announce one.
+    /// caller must not announce one. @p outOpenParams, when given, receives
+    /// the per-window open-rule verdict resolved inside (default-constructed
+    /// on the early FLOAT exits, which return before the resolver runs) so
+    /// the caller's focus arm can read the openFocused override without a
+    /// second rule resolve.
     bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidthIn,
-                            int minHeightIn);
+                            int minHeightIn, ScrollOpenParams* outOpenParams = nullptr);
     /// Give a window that floats WITHOUT ever having been a strip tile
     /// (floated at open, or arriving already-floating over the handoff) the
     /// FloatRestore entry the clamp lives in while it floats. column stays

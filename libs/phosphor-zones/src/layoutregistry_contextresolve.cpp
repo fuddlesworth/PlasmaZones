@@ -618,6 +618,54 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
         });
 }
 
+std::optional<bool> LayoutRegistry::resolveContextOsdEnabled(const QString& screenId, int virtualDesktop,
+                                                             const QString& activity) const
+{
+    // Mirror resolveContextLocked: a per-slot read off the evaluator, not the
+    // single-winner assignment walk. The OsdEnabled slot is filled by the
+    // highest-priority matching context rule carrying a SetOsdEnabled action;
+    // we report its boolean value. std::nullopt means "no override rule" —
+    // the caller follows the global OSD toggles.
+    //
+    // Unlike resolveContextDefaultAssignment, activeLayout IS stamped (and
+    // folded into the cache key): OSD resolution never runs inside the
+    // assignment cascade, so there is no recursion hazard, and a rule
+    // scoping OSD visibility on the active layout is legitimate.
+    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
+    const QString orientationToken = screenOrientationToken(screenId);
+    return resolveCachedContext(
+        m_contextOsdCache, m_contextOsdCacheRevision, screenId, virtualDesktop, activity,
+        contextCacheKeyToken(QString(), activeLayoutId, orientationToken), [&]() -> std::optional<bool> {
+            PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            query.screenOrientation = orientationToken;
+            query.activeLayout = activeLayoutId;
+            // Same structural exclusions as resolveContextLocked: Mode and
+            // TiledWindowCount are unstamped here, so a negated leaf on
+            // either would spuriously match every context; window-sourced
+            // fields carry the negation-scoped form of the same guard.
+            const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
+                if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
+                    || r.match.negatesAnyField(PWR::windowSourcedFields())) {
+                    return false;
+                }
+                for (const PWR::RuleAction& action : r.actions) {
+                    if (action.type == QLatin1String(PWR::ActionType::SetOsdEnabled)) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            if (rule != nullptr) {
+                for (const PWR::RuleAction& action : rule->actions) {
+                    if (action.type == QLatin1String(PWR::ActionType::SetOsdEnabled)) {
+                        return action.params.value(PWR::ActionParam::Value).toBool();
+                    }
+                }
+            }
+            return std::nullopt;
+        });
+}
+
 AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,
                                                                         const QString& activity) const
 {

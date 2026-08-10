@@ -92,8 +92,9 @@ public:
     }
     bool scrollingFocusNewWindows() const override
     {
-        return true;
+        return focusNewWindows;
     }
+    bool focusNewWindows = true;
     int scrollingStickyWindowHandling() const override
     {
         return 0;
@@ -221,6 +222,8 @@ private Q_SLOTS:
     void tabIndicatorRejectsAGarbagePositionOverride();
     void templateBlueprintSeedsFirstColumns();
     void openRuleOutranksTemplateBlueprint();
+    void openMaximizedRuleOutranksWidthRuleAndBlueprint();
+    void openFocusedRuleOverridesFocusNewWindows();
     void templateBlueprintNeverResizesExistingColumns();
     void templateBlueprintEntryWithoutDisplayKeepsTheDefault();
 
@@ -817,6 +820,73 @@ void TestScrollEnginePerScreen::openRuleOutranksTemplateBlueprint()
     engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).kind, ColumnWidth::Proportion);
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.25);
+}
+
+void TestScrollEnginePerScreen::openMaximizedRuleOutranksWidthRuleAndBlueprint()
+{
+    // openMaximized is the stronger width verdict: it wins over a width rule
+    // on the same window AND over the blueprint entry the column would have
+    // taken.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap templ;
+    QVariantList blueprint;
+    QVariantMap first;
+    first.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
+    blueprint.append(first);
+    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
+    engine->applyPerScreenConfig(kS1, templ);
+
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.widthFraction = 0.25;
+        params.maximized = true;
+        return params;
+    });
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).kind, ColumnWidth::Proportion);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 1.0);
+}
+
+void TestScrollEnginePerScreen::openFocusedRuleOverridesFocusNewWindows()
+{
+    // Both polarities layer over the global setting: focused=false withholds
+    // strip adoption under a focus-new-windows ON global, focused=true forces
+    // it under an OFF one.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+
+    // Global ON, rule false: the strip keeps the prior active column.
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.focused = false;
+        return params;
+    });
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+
+    // Global OFF, rule true: the arrival is adopted as the active column.
+    settings->focusNewWindows = false;
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.focused = true;
+        return params;
+    });
+    engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+
+    // Global OFF, no rule: the setting stays authoritative.
+    engine->setOpenParamsResolver({});
+    engine->windowOpened(QStringLiteral("app|d"), kS1, 0, 0);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
 }
 
 void TestScrollEnginePerScreen::templateBlueprintNeverResizesExistingColumns()

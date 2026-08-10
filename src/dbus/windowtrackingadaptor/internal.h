@@ -266,6 +266,14 @@ inline QString heightFraction()
 {
     return QStringLiteral("heightFraction");
 }
+inline QString maximized()
+{
+    return QStringLiteral("maximized");
+}
+inline QString focused()
+{
+    return QStringLiteral("focused");
+}
 } // namespace ScrollOpenKeys
 
 } // namespace PlasmaZones

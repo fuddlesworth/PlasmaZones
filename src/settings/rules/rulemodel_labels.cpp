@@ -714,6 +714,17 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return PhosphorI18n::tr("Layer: %1")
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v));
         }
+        if (action.type == ActionType::ScrollFactor) {
+            // Mirror the resolver's reject-not-clamp bounds
+            // (shader_resolve.cpp's resolveScrollFactor): an out-of-range or
+            // non-numeric payload produces no runtime scaling, so the label
+            // must not claim one.
+            const double factor = raw.toDouble();
+            if (!raw.isDouble() || factor < PhosphorRules::MinScrollFactor || factor > PhosphorRules::MaxScrollFactor) {
+                return PhosphorI18n::tr("Scroll speed (invalid)");
+            }
+            return PhosphorI18n::tr("Scroll speed: %1x").arg(QString::number(factor, 'g', 3));
+        }
         // ── overlay-appearance overrides (colours upper-cased hex; opacities
         //    are [0,1] on the wire, shown as a percent to match the editor).
         //    Same staged-payload reject treatment as the tab colours above

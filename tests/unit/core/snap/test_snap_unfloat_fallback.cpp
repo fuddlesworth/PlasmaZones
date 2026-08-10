@@ -248,6 +248,49 @@ private Q_SLOTS:
         m_wts->setSnapState(nullptr);
     }
 
+    // Predicate layering: an installed unfloat-fallback predicate REPLACES the
+    // ISnapSettings read entirely (it implements rule ?? config itself), so a
+    // true verdict enables the fallback over a setting that is OFF and a
+    // false verdict suppresses it over a setting that is ON. The predicate
+    // receives the resolved restore screen.
+    void testFallback_predicateOverridesSettingBothWays()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString firstZone = layout->zones().first()->id().toString();
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|w"), QStringLiteral("DP-1"), 0);
+
+        // Setting OFF, predicate true → fallback found, and the predicate saw
+        // the resolved screen.
+        m_settings->setSnapUnfloatFallbackToZone(false);
+        QString seenScreen;
+        engine.setUnfloatFallbackPredicate([&seenScreen](const QString&, const QString& screenId) {
+            seenScreen = screenId;
+            return true;
+        });
+        const PhosphorEngine::UnfloatResult onResult =
+            engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|w"), QStringLiteral("DP-1"));
+        QVERIFY2(onResult.found, "predicate true overrides a setting that is off");
+        QCOMPARE(onResult.zoneIds, QStringList{firstZone});
+        QCOMPARE(seenScreen, QStringLiteral("DP-1"));
+
+        // Setting ON, predicate false → suppressed.
+        m_settings->setSnapUnfloatFallbackToZone(true);
+        engine.setUnfloatFallbackPredicate([](const QString&, const QString&) {
+            return false;
+        });
+        QVERIFY2(!engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|w"), QStringLiteral("DP-1")).found,
+                 "predicate false suppresses over a setting that is on");
+
+        // Cleared predicate → the setting decides again (historical behaviour).
+        engine.setUnfloatFallbackPredicate({});
+        QVERIFY(engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|w"), QStringLiteral("DP-1")).found);
+        m_wts->setSnapState(nullptr);
+    }
+
     // ── SnapToZone placement-rule precedence ────────────────────────────────
     // A matched SnapToZone rule (the daemon-injected placement-zones resolver) is
     // the highest-priority restore: it overrides a remembered placement record on

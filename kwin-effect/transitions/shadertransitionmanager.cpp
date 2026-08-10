@@ -42,6 +42,8 @@ void ShaderTransitionManager::rebuildAnimationRuleSet()
     // force the per-window query build.
     m_hasOpacityRules = false;
     m_hasWindowLayerRules = false;
+    m_hasOpenFullscreenRules = false;
+    m_hasScrollFactorRules = false;
     for (const PhosphorRules::Rule& rule : m_ruleAnimationRules) {
         if (!rule.enabled) {
             continue;
@@ -51,9 +53,13 @@ void ShaderTransitionManager::rebuildAnimationRuleSet()
                 m_hasOpacityRules = true;
             } else if (action.type == PhosphorRules::ActionType::SetWindowLayer) {
                 m_hasWindowLayerRules = true;
+            } else if (action.type == PhosphorRules::ActionType::OpenFullscreen) {
+                m_hasOpenFullscreenRules = true;
+            } else if (action.type == PhosphorRules::ActionType::ScrollFactor) {
+                m_hasScrollFactorRules = true;
             }
         }
-        if (m_hasOpacityRules && m_hasWindowLayerRules) {
+        if (m_hasOpacityRules && m_hasWindowLayerRules && m_hasOpenFullscreenRules && m_hasScrollFactorRules) {
             break;
         }
     }

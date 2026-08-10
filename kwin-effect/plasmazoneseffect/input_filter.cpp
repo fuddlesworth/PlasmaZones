@@ -11,6 +11,9 @@
 
 #include <QLoggingCategory>
 
+#include <cmath>
+#include <optional>
+
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 namespace PlasmaZones {
@@ -122,7 +125,55 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
     // Scrolling over the invisible overhang must not reach the straddler;
     // consuming (rather than retargeting) matches how the region reads
     // visually — inert until clicked.
-    return overhangTargetAt(event->position) != nullptr;
+    if (overhangTargetAt(event->position) != nullptr) {
+        return true;
+    }
+    // ScrollFactor rule: rescale the event in place and pass it on. Ordering
+    // note: this runs at Popup weight, after the global-shortcut filter, so
+    // the Meta+wheel strip binding is consumed before it can be scaled.
+    applyScrollFactor(event);
+    return false;
+}
+
+void ScrollOverhangInputFilter::applyScrollFactor(KWin::PointerAxisEvent* event)
+{
+    // Fast path: no enabled ScrollFactor rule in the session. Checked BEFORE
+    // the toplevel hit test so the no-rules case pays two pointer reads per
+    // tick, matching the effect's other has*Rules gates.
+    if (!m_effect->m_shaderManager.hasScrollFactorRules()) {
+        m_scrollFactorWindow = nullptr;
+        return;
+    }
+    KWin::Window* target = KWin::input()->findToplevel(event->position);
+    if (!target || target->isDeleted()) {
+        m_scrollFactorWindow = nullptr;
+        return;
+    }
+    if (target != m_scrollFactorWindow) {
+        // Fresh stream: another window's fractional remainder must not leak
+        // into this one's first tick.
+        m_v120ResidueVertical = 0.0;
+        m_v120ResidueHorizontal = 0.0;
+        m_scrollFactorWindow = target;
+    }
+    const std::optional<qreal> factor = m_effect->ruleScrollFactorFor(target->effectWindow());
+    if (!factor || qFuzzyCompare(*factor, 1.0)) {
+        return;
+    }
+    // In-place mutation is the API's natural expression: returning false
+    // hands the mutated struct to the remaining filters, ending at the
+    // forwarding filter that delivers to the client. The smooth delta scales
+    // directly; the discrete deltaV120 carries a per-orientation fractional
+    // residue so a factor below 1 accumulates into full steps instead of
+    // truncating every notch to zero.
+    event->delta *= *factor;
+    if (event->deltaV120 != 0) {
+        qreal& residue = event->orientation == Qt::Vertical ? m_v120ResidueVertical : m_v120ResidueHorizontal;
+        const qreal scaled = event->deltaV120 * *factor + residue;
+        const qint32 emitted = qint32(std::trunc(scaled));
+        residue = scaled - emitted;
+        event->deltaV120 = emitted;
+    }
 }
 
 bool ScrollOverhangInputFilter::touchDown(KWin::TouchDownEvent* event)

@@ -222,6 +222,10 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // re-reconcile when the async float/zone syncs land, via the
     // placement-state flush.
     reconcileRuleWindowLayer(windowId, w);
+    // Fullscreen-at-open rule (OpenFullscreen), applied BEFORE the routing /
+    // announce blocks below so eligibility checks and the placement engines
+    // see the window's final fullscreen state.
+    applyRuleOpenFullscreen(windowId, w);
 
     if (tileableWindow && m_tilingHandler->isScreenQueryPending()) {
         if (tileableAppWindow) {

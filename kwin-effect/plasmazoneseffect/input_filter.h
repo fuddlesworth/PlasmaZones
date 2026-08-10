@@ -77,7 +77,22 @@ private:
     /// @p straddler and not itself hit through a clipped overhang.
     void focusVisibleWindowAt(const QPointF& pos, KWin::Window* straddler);
 
+    /// Rescale @p event's delta/deltaV120 in place when a ScrollFactor rule
+    /// matches the hovered window. Returns nothing — the caller always
+    /// forwards the (possibly mutated) event; scaling never consumes.
+    void applyScrollFactor(KWin::PointerAxisEvent* event);
+
     PlasmaZonesEffect* m_effect;
+    /// Fractional deltaV120 remainder carried between ticks so a factor
+    /// below 1 still accumulates into full v120 steps instead of rounding
+    /// every tick to zero. One residue per axis orientation, reset when the
+    /// hovered window changes so one window's remainder never leaks into
+    /// another's stream.
+    qreal m_v120ResidueVertical = 0.0;
+    qreal m_v120ResidueHorizontal = 0.0;
+    /// The window the residues belong to (by pointer identity; only ever
+    /// compared, never dereferenced).
+    const KWin::Window* m_scrollFactorWindow = nullptr;
     /// Buttons whose PRESS this filter consumed — their releases are consumed
     /// too, even if the cursor has left the overhang, so the client never
     /// sees an unpaired release.

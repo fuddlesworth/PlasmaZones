@@ -335,6 +335,14 @@ inline constexpr QLatin1StringView LockContext{"lockContext"};
 /// daemon reads it as a per-slot overlay at cascade-miss via
 /// `LayoutRegistry::resolveContextDefaultAssignment`, mirroring `LockContext`.
 inline constexpr QLatin1StringView DefaultLayoutAssignment{"defaultLayoutAssignment"};
+/// Per-context override of the OSD toggles for the matched screen/desktop/
+/// activity context. Context domain; boolean `value`: false SUPPRESSES every
+/// on-screen display for the context, true FORCES them past the per-trigger
+/// global toggles (but never past the OsdStyle::None kill switch, which
+/// returns before a rendering style is chosen). With no such rule the context
+/// follows the global toggles. Live-resolved daemon-side via
+/// `LayoutRegistry::resolveContextOsdEnabled`, mirroring `LockContext`.
+inline constexpr QLatin1StringView SetOsdEnabled{"setOsdEnabled"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
 /// Exclude a matched window from the placement engines ONLY — snapping,
 /// autotile and scrolling all treat it as unmanaged (open path, drag gate,
@@ -480,6 +488,16 @@ inline constexpr QLatin1StringView SetRestoreToZoneOnLogin{"setRestoreToZoneOnLo
 /// global `restoreOriginalSizeOnUnsnap` setting is off. Consulted daemon-side on
 /// the drag-out / drop / cursor-left-zones unsnap paths. Domain Window.
 inline constexpr QLatin1StringView SetRestoreSizeOnUnsnap{"setRestoreSizeOnUnsnap"};
+
+/// Per-window override of the "unfloat falls back to a zone" setting. A
+/// boolean `value`: true places a matched window into a zone when it is
+/// unfloated WITHOUT a remembered pre-float zone (last-used, else first
+/// empty, else first zone), even when the global `snapUnfloatFallbackToZone`
+/// setting is off; false suppresses the fallback so the window stays
+/// floating. Resolved mid-session by the daemon-injected unfloat-fallback
+/// predicate inside SnapEngine::resolveFallbackUnfloatGeometry, covering the
+/// live unfloat and the SnapAdaptor restore-calculation twin. Domain Window.
+inline constexpr QLatin1StringView SetUnfloatFallbackToZone{"setUnfloatFallbackToZone"};
 
 /// Per-window stacking-layer override. Carries a closed enum token
 /// (`ActionParam::Value`, WindowLayerToken): `above` keeps the matched window
@@ -695,6 +713,39 @@ inline constexpr QLatin1StringView OpenColumnPlacement{"openColumnPlacement"};
 /// a percent). Applies after every insert path, outranking remembered and
 /// default heights the way OpenColumnWidth outranks the width defaults.
 inline constexpr QLatin1StringView OpenWindowHeight{"openWindowHeight"};
+/// Whether the opening window's column starts maximized (full work-area
+/// width) — niri's `open-maximized`. Boolean `ActionParam::Value`. Wins over
+/// OpenColumnWidth when both match (a maximized open IS a width verdict, the
+/// stronger one). There is no stored "maximized" state in the scroll engine —
+/// full width is simply `ColumnWidth::makeProportion(1.0)` — so a later
+/// un-maximize takes the default-width fallback, matching the manual verb.
+inline constexpr QLatin1StringView OpenMaximized{"openMaximized"};
+/// Per-window override of the "focus new windows" scrolling setting — niri's
+/// `open-focused`. Boolean `ActionParam::Value`: true activates the window on
+/// open even when the global setting is off, false keeps focus (and the
+/// strip's active column) where it was. Read on the same open path as the
+/// other Open* slots and layered over
+/// `IScrollSettings::scrollingFocusNewWindows`.
+inline constexpr QLatin1StringView OpenFocused{"openFocused"};
+/// Fullscreen at open — niri's `open-fullscreen`. Boolean `ActionParam::Value`:
+/// true puts the opening window into real KWin fullscreen, false vetoes the
+/// app's OWN fullscreen request at open (apps that start fullscreen by
+/// default). Unlike the rest of the Open* family this is EFFECT-consumed
+/// (Tag::Effect): only the compositor side can flip KWin's fullscreen state,
+/// and the flip happens at windowAdded, before the window is announced to the
+/// daemon. One-shot open verdict — a rule edit mid-session does not yank an
+/// already-open window into or out of fullscreen. Applies on every screen and
+/// engine mode, not just scrolling.
+inline constexpr QLatin1StringView OpenFullscreen{"openFullscreen"};
+/// Per-window scroll-speed multiplier — niri's `scroll-factor` window rule.
+/// Numeric `ActionParam::Value` in [MinScrollFactor, MaxScrollFactor],
+/// multiplying every wheel / touchpad scroll delta delivered to the matched
+/// window while the pointer is over it (below 1 slows scrolling, above 1
+/// speeds it up). EFFECT-consumed (Tag::Effect): the KWin effect's input
+/// filter rescales the axis event in place before the forwarding filter
+/// hands it to the client. Wayland sessions only — on X11 the input filter
+/// chain is not the client delivery path, so the rule is inert there.
+inline constexpr QLatin1StringView ScrollFactor{"scrollFactor"};
 } // namespace ActionType
 
 // ── Action param keys — canonical wire strings ──
@@ -834,6 +885,16 @@ inline constexpr double MaxDropIndicatorBorderWidth = 10.0;
 inline constexpr double MinDropIndicatorBorderRadius = 0.0;
 inline constexpr double MaxDropIndicatorBorderRadius = 50.0;
 
+/// Bounds for the ScrollFactor multiplier. Shared by the load-time descriptor
+/// validator (ruleaction_builtins_appearance.cpp) and the KWin-effect consumer
+/// re-validation (shader_resolve.cpp's resolveScrollFactor) so the two stay in
+/// lockstep — the usual reject-at-both-boundaries stance. The floor mirrors
+/// niri's practical range (a factor below 1/20th makes scrolling read as
+/// broken); the ceiling keeps a hand-edited payload from turning one wheel
+/// notch into a page-length jump.
+inline constexpr double MinScrollFactor = 0.05;
+inline constexpr double MaxScrollFactor = 10.0;
+
 /// Upper bound for a `RouteToDesktop` 1-based virtual-desktop number. KWin tops
 /// out far below this in practice; the cap exists only to reject a grossly
 /// malformed hand-edited payload and to keep the validator's integrality check
@@ -969,6 +1030,12 @@ inline constexpr QLatin1StringView Locked{"locked"};
 /// `true` forces it through. Read at cascade-miss by
 /// `LayoutRegistry::resolveContextDefaultAssignment`.
 inline constexpr QLatin1StringView DefaultAssignment{"default-assignment"};
+/// Context-domain OSD-visibility override slot — filled by
+/// `ActionType::SetOsdEnabled`. A single boolean (first-matching-rule-wins):
+/// `false` suppresses every OSD for the context, `true` forces them past the
+/// per-trigger global toggles. Read by the daemon's OSD gates via
+/// `LayoutRegistry::resolveContextOsdEnabled`.
+inline constexpr QLatin1StringView OsdEnabled{"osd-enabled"};
 inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Window-scoped open-placement slot — filled by `ActionType::SnapToZone`. A
@@ -989,6 +1056,7 @@ inline constexpr QLatin1StringView RestorePosition{"restore-position"};
 // SetRestoreToZoneOnLogin / SetRestoreSizeOnUnsnap, read daemon-side.
 inline constexpr QLatin1StringView RestoreToZoneOnLogin{"restore-to-zone-on-login"};
 inline constexpr QLatin1StringView RestoreSizeOnUnsnap{"restore-size-on-unsnap"};
+inline constexpr QLatin1StringView UnfloatFallbackToZone{"unfloat-fallback-to-zone"};
 /// Window-scoped stacking-layer slot — filled by `ActionType::SetWindowLayer`,
 /// read by the KWin effect's reconcileRuleWindowLayer.
 inline constexpr QLatin1StringView WindowLayer{"window-layer"};
@@ -1080,6 +1148,10 @@ inline constexpr QLatin1StringView DragDropIndicatorColor{"drag-drop-indicator-c
 inline constexpr QLatin1StringView DragDropIndicatorBorderColor{"drag-drop-indicator-border-color"};
 inline constexpr QLatin1StringView OpenColumnPlacement{"open-column-placement"};
 inline constexpr QLatin1StringView OpenWindowHeight{"open-window-height"};
+inline constexpr QLatin1StringView OpenMaximized{"open-maximized"};
+inline constexpr QLatin1StringView OpenFocused{"open-focused"};
+inline constexpr QLatin1StringView OpenFullscreen{"open-fullscreen"};
+inline constexpr QLatin1StringView ScrollFactor{"scroll-factor"};
 // Per-context overlay-property slots (one per property so independent rules
 // cascade per-property). Filled by the OverrideOverlay* context actions, read
 // by `LayoutRegistry::resolveContextOverlay`. OverlayShader carries the shader

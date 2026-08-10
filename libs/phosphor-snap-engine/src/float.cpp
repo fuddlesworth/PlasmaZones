@@ -458,22 +458,33 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
 {
     UnfloatResult result;
 
-    // Opt-in only: when the setting is off, a no-pre-float-zone unfloat leaves the
-    // window floating (the caller emits feedback). The engine reads the bool via the
-    // settings-agnostic ISnapSettings seam, like moveNewWindowsToLastZone.
-    auto* s = snapSettings();
-    if (!s || !s->unfloatFallbackToZone()) {
-        return result;
-    }
-
     // Resolve the window's effective screen — its tracked float screen, else the
     // caller's fallback. A tracked screen that no longer exists (output unplugged)
     // is discarded in favour of the caller's fallback. Zone geometry is resolved on
     // the resulting screen so the fallback lands where the window currently is.
     // stateForWindow is never null; an untracked window yields an empty
     // tracked screen and the caller's fallback wins.
+    //
+    // Resolved BEFORE the opt-in gate below so the rule predicate receives
+    // the actual restore screen (it stamps ScreenId / derives Mode from it).
     const QString screen = resolveUnfloatScreen(stateForWindow(windowId)->screenForWindow(windowId), fallbackScreen);
     if (screen.isEmpty() || !m_layoutManager) {
+        return result;
+    }
+
+    // Opt-in only: when neither the rule predicate nor the setting says
+    // fall back, a no-pre-float-zone unfloat leaves the window floating (the
+    // caller emits feedback). The injected predicate — when set — implements
+    // the full rule ?? config layering; unset, the engine reads the bool via
+    // the settings-agnostic ISnapSettings seam, like moveNewWindowsToLastZone.
+    bool fallbackEnabled = false;
+    if (m_unfloatFallbackPredicate) {
+        fallbackEnabled = m_unfloatFallbackPredicate(windowId, screen);
+    } else {
+        auto* s = snapSettings();
+        fallbackEnabled = s && s->unfloatFallbackToZone();
+    }
+    if (!fallbackEnabled) {
         return result;
     }
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screen);

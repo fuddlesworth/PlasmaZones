@@ -1885,6 +1885,23 @@ private:
     /// writes mid-hold.
     void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
 
+    /// One-shot fullscreen-at-open verdict for the OpenFullscreen rule:
+    /// true fullscreens the opening window, false vetoes the app's own
+    /// fullscreen request. Called exactly once per window, from
+    /// slotWindowAdded ahead of the routing block, so the announce path and
+    /// the placement engines see the final state. Never re-reconciled — a
+    /// rule edit mid-session leaves open windows alone (niri's
+    /// open-fullscreen contract), which is also why there is no snapshot /
+    /// restore pair here.
+    void applyRuleOpenFullscreen(const QString& windowId, KWin::EffectWindow* w);
+
+    /// The ScrollFactor rule's multiplier for @p w, or nullopt when no
+    /// enabled rule scales it (or none exists at all — the no-rules fast
+    /// path is two pointer reads). Consulted by ScrollOverhangInputFilter's
+    /// pointerAxis per wheel tick; the resolve rides the shared per-window
+    /// evaluator cache (resolveRuleActions), so repeats are a hash lookup.
+    std::optional<qreal> ruleScrollFactorFor(KWin::EffectWindow* w) const;
+
     /// The window's OWN keep-above flag — the app/user-set state, with
     /// written values substituted from the pre-write snapshot while either
     /// flag owner (a SetWindowLayer rule, or the windowed-fullscreen layer

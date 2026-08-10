@@ -41,6 +41,10 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     // screen/desktop/activity pass (LayoutRegistry::resolveContextDefaultAssignment),
     // mode-agnostic like LockContext.
     ActionType::DefaultLayoutAssignment,
+    // OSD-visibility override — context-domain, resolved during the
+    // screen/desktop/activity pass (LayoutRegistry::resolveContextOsdEnabled),
+    // mode-agnostic like LockContext.
+    ActionType::SetOsdEnabled,
     // Gap overrides are context-domain — resolved during the
     // screen/desktop/activity pass, never per-window.
     ActionType::SetInnerGap,
@@ -145,6 +149,7 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     // (managed-restore predicate / drag-out unsnap paths), like RestorePosition.
     ActionType::SetRestoreToZoneOnLogin,
     ActionType::SetRestoreSizeOnUnsnap,
+    ActionType::SetUnfloatFallbackToZone,
     // Stacking-layer override — window-domain, effect-consumed
     // (reconcileRuleWindowLayer maps the token onto keepAbove/keepBelow).
     ActionType::SetWindowLayer,
@@ -154,6 +159,14 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::OpenTabbed,
     ActionType::OpenColumnPlacement,
     ActionType::OpenWindowHeight,
+    ActionType::OpenMaximized,
+    ActionType::OpenFocused,
+    // Effect-consumed open verdict (Tag::Effect, unlike its Open* siblings) —
+    // the KWin effect flips real fullscreen at windowAdded.
+    ActionType::OpenFullscreen,
+    // Effect-consumed scroll-speed multiplier — the input filter rescales
+    // axis events for the hovered window (Wayland sessions only).
+    ActionType::ScrollFactor,
     // Per-window tab colours — window-domain, resolved per tab when the
     // daemon builds the indicator model, where they outrank the context trio.
     ActionType::TabColorActive,
@@ -830,9 +843,15 @@ private Q_SLOTS:
         rejectsStray(ActionType::OpenWindowHeight, QJsonValue(0.5));
         rejectsStray(ActionType::OpenTabbed, QJsonValue(true));
         rejectsStray(ActionType::OpenColumnPlacement, QJsonValue(QStringLiteral("consume")));
+        rejectsStray(ActionType::OpenMaximized, QJsonValue(true));
+        rejectsStray(ActionType::OpenFocused, QJsonValue(true));
+        rejectsStray(ActionType::OpenFullscreen, QJsonValue(true));
+        rejectsStray(ActionType::ScrollFactor, QJsonValue(0.75));
         rejectsStray(ActionType::SetUsePerSideOuterGap, QJsonValue(true));
         rejectsStray(ActionType::LockContext, QJsonValue(true));
         rejectsStray(ActionType::DefaultLayoutAssignment, QJsonValue(true));
+        rejectsStray(ActionType::SetOsdEnabled, QJsonValue(true));
+        rejectsStray(ActionType::SetUnfloatFallbackToZone, QJsonValue(true));
         // OverrideOverlayStyle also declares allowedKeys = {Value}.
         rejectsStray(ActionType::OverrideOverlayStyle, QJsonValue(QString(OverlayStyleToken::Preview)));
         // SetWindowLayer is the same Value-keyed closed-enum shape.

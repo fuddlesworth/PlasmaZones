@@ -19,6 +19,7 @@
 #include <QSet>
 #include <QThreadPool>
 #include <chrono>
+#include <optional>
 #include <memory>
 
 #include "controllers/shortcutmanager.h"
@@ -227,8 +228,11 @@ private:
     /// through showScrollingModeOsd, which applies them (and re-applies them
     /// on the settle dispatch that calls back in here).
     void showScrollingStripPreviewOsd(const QString& screenId);
-    /// True when the setting @p trigger names is on.
-    bool isOsdTriggerEnabled(OsdTrigger trigger) const;
+    /// True when the setting @p trigger names is on, or when a SetOsdEnabled
+    /// rule's true verdict for @p screenId's context forces the trigger past
+    /// an off toggle (the rule's force-ON half; its suppress half lives in
+    /// shouldSuppressOsd). A screenless call reads the toggle alone.
+    bool isOsdTriggerEnabled(OsdTrigger trigger, const QString& screenId = QString()) const;
     /// Stop @p screenId's armed strip-preview settle timer, if any. Called
     /// from every showScrollingModeOsd arm that does NOT arm it, so a toggle
     /// followed by a reconcile cannot land a duplicate card a beat later.
@@ -1236,7 +1240,25 @@ private:
     /// D-Bus object path for `plasma-workspace.target`, resolved by GetUnit.
     QString m_plasmaWorkspaceTargetPath;
 
-    bool shouldSuppressOsd() const;
+    /// Global OSD suppression (shutdown, phantom session, screen-settling
+    /// cooldown), plus — when @p screenId is given — the per-context
+    /// SetOsdEnabled rule: an explicit false verdict for the screen's
+    /// current context suppresses. A screenless call keeps the global
+    /// checks only, so the rule is inert there (fail-open by design). The
+    /// force-ON half of the rule lives in isOsdTriggerEnabled /
+    /// navigationOsdAllowed, which layer it over the per-trigger toggles.
+    bool shouldSuppressOsd(const QString& screenId = QString()) const;
+
+    /// The SetOsdEnabled rule verdict for @p screenId's current context, or
+    /// nullopt with no matching rule (or no screen / registry). Normalizes
+    /// the screen name to the canonical id form itself.
+    std::optional<bool> contextOsdRuleVerdict(const QString& screenId) const;
+
+    /// The navigation-OSD gate: `(rule ?? showNavigationOsd()) &&
+    /// overlay service && !shouldSuppressOsd(screenId)`. A SetOsdEnabled
+    /// rule's true verdict forces navigation feedback past a global
+    /// showNavigationOsd() off; false suppresses via shouldSuppressOsd.
+    bool navigationOsdAllowed(const QString& screenId) const;
 
     /// Async query of systemd's user bus for `plasma-workspace.target` state.
     /// Fail-open on all D-Bus errors. Called once from `start()`.

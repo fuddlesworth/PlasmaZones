@@ -45,19 +45,25 @@ void ActionRegistry::registerBuiltinsAppearance()
         .displayOrder = 9,
     });
 
-    // Two more per-window restore-policy overrides, same shape as RestorePosition
-    // (bool, seeds FALSE because both governing settings default ON — the only
-    // meaningful fresh-rule value is "opt this window OUT"). Consumed daemon-side
-    // (the managed-restore predicate / the drag-out unsnap paths), not the effect.
+    // Three more per-window snap-policy overrides, same bool shape as
+    // RestorePosition, consumed daemon-side (the managed-restore predicate /
+    // the drag-out unsnap paths / the unfloat-fallback predicate), not the
+    // effect. The SEED differs per row: the two restore policies seed FALSE
+    // (their governing settings default ON, so the meaningful fresh rule is
+    // "opt this window OUT"), while the unfloat fallback seeds TRUE (its
+    // global `snapUnfloatFallbackToZone` defaults OFF, so the meaningful
+    // fresh rule is "opt this window IN").
     struct RestorePolicy
     {
         QLatin1StringView type;
         QLatin1StringView slot;
         int order;
+        double seed;
     };
     for (const RestorePolicy& rp : {
-             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 6},
-             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 7},
+             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 6, 0.0},
+             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 7, 0.0},
+             RestorePolicy{ActionType::SetUnfloatFallbackToZone, ActionSlot::UnfloatFallbackToZone, 10, 1.0},
          }) {
         const QString slot = QString(rp.slot);
         registerAction(ActionDescriptor{
@@ -73,7 +79,9 @@ void ActionRegistry::registerBuiltinsAppearance()
             .terminal = false,
             .allowedKeys = {QString(ActionParam::Value)},
             .domain = ActionDomain::Window,
-            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+            .params = {P{.key = QString(ActionParam::Value),
+                         .kind = QStringLiteral("bool"),
+                         .defaultDisplay = rp.seed}},
             .category = QStringLiteral("windowManagement"),
             .displayOrder = rp.order,
         });
@@ -102,6 +110,36 @@ void ActionRegistry::registerBuiltinsAppearance()
                                         QString(WindowLayerToken::Below)}}},
         .category = QStringLiteral("windowManagement"),
         .displayOrder = 8,
+        .tags = {QString(Tag::Effect)},
+    });
+
+    // Per-window scroll-speed multiplier (niri's scroll-factor window rule).
+    // Effect-consumed: the input filter rescales axis events in place while
+    // the pointer hovers the matched window. Wayland sessions only.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ScrollFactor),
+        .slotFor = constantSlot(ActionSlot::ScrollFactor),
+        .validate =
+            [](const QJsonObject& p) {
+                const QJsonValue v = p.value(ActionParam::Value);
+                if (!v.isDouble()) {
+                    return false;
+                }
+                const double d = v.toDouble();
+                return d >= MinScrollFactor && d <= MaxScrollFactor;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        // defaultDisplay 1.0: a fresh rule starts at "no visible change" and
+        // the user deliberately moves off it — SetOpacity's 100% rationale.
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("number"),
+                     .min = MinScrollFactor,
+                     .max = MaxScrollFactor,
+                     .defaultDisplay = 1.0}},
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 11,
         .tags = {QString(Tag::Effect)},
     });
 
@@ -795,6 +833,56 @@ void ActionRegistry::registerBuiltinsAppearance()
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 25,
         .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenMaximized),
+        .slotFor = constantSlot(ActionSlot::OpenMaximized),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 26,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenFocused),
+        .slotFor = constantSlot(ActionSlot::OpenFocused),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        // defaultDisplay 0.0: the global focus-new-windows setting defaults ON,
+        // so the meaningful fresh-rule value is "do not steal focus".
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 27,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+    // Effect-consumed, unlike its Open* siblings: Tag::Effect (not
+    // LayoutEngine) admits the rule into the KWin effect's rule set, where
+    // the open-time fullscreen flip lives. See the ActionType doc.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::OpenFullscreen),
+        .slotFor = constantSlot(ActionSlot::OpenFullscreen),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 28,
+        .tags = {QString(Tag::Effect)},
     });
 
     // ── per-context tab-indicator slots (domain Context) ──

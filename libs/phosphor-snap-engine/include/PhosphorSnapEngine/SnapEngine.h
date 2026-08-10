@@ -303,6 +303,28 @@ public:
     }
 
     /**
+     * @brief Predicate deciding whether an unfloat with NO remembered
+     *        pre-float zone falls back to a zone anyway (the
+     *        SetUnfloatFallbackToZone rule layered over the global
+     *        `unfloatFallbackToZone` setting — the predicate itself
+     *        implements rule ?? config). Daemon-injected, keyed by the live
+     *        windowId plus the RESOLVED restore screen (so the resolver can
+     *        stamp ScreenId and derive Mode), consulted inside
+     *        resolveFallbackUnfloatGeometry — which covers both the live
+     *        user-toggle unfloat and SnapAdaptor::calculateUnfloatRestore.
+     *        When UNSET (default) the engine reads the ISnapSettings bool
+     *        directly, preserving the historical behaviour the unit tests
+     *        rely on. Same lifetime contract as setFloatPredicate — clear
+     *        with `{}` before destroying any state the closure captured.
+     */
+    using UnfloatFallbackPredicate = std::function<bool(const QString& windowId, const QString& screenId)>;
+
+    void setUnfloatFallbackPredicate(UnfloatFallbackPredicate predicate)
+    {
+        m_unfloatFallbackPredicate = std::move(predicate);
+    }
+
+    /**
      * @brief Resolver yielding the open-placement directive — SnapToZone ordinals
      *        plus an optional RouteToScreen target and an optional RouteToDesktop
      *        target — for an opening window because a placement rule matched
@@ -1197,6 +1219,11 @@ private:
     // Rule-driven open-floating gate. Empty until the daemon wires it; while
     // empty no window is rule-floated. See FloatPredicate doc above.
     FloatPredicate m_floatPredicate{};
+
+    // Rule-driven unfloat-fallback gate. Empty until the daemon wires it;
+    // while empty the ISnapSettings bool decides alone. See
+    // UnfloatFallbackPredicate doc above.
+    UnfloatFallbackPredicate m_unfloatFallbackPredicate{};
 
     // Rule-driven open-placement resolver (SnapToZone). Empty until the daemon
     // wires it; while empty no window is rule-snapped. See PlacementZonesResolver

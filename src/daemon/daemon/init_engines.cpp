@@ -1051,7 +1051,7 @@ void Daemon::initEnginesAndWiring()
                 if (floating && m_windowTrackingAdaptor) {
                     m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
                 }
-                if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !shouldSuppressOsd()) {
+                if (navigationOsdAllowed(screenId)) {
                     const QString reason = floating ? QStringLiteral("floated") : QStringLiteral("tiled");
                     m_overlayService->showNavigationOsd(true, QStringLiteral("float"), reason, QString(), QString(),
                                                         screenId);

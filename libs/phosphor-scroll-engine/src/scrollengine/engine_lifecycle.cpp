@@ -65,7 +65,7 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
 }
 
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
-                                      int minWidthIn, int minHeightIn)
+                                      int minWidthIn, int minHeightIn, ScrollOpenParams* outOpenParams)
 {
     // Public-API belt at the one boundary the update path already guards:
     // windowMinSizeUpdated clamps because "a negative floor flows into
@@ -201,8 +201,18 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     if (m_openParamsResolver) {
         openParams = m_openParamsResolver(windowId, screenId);
     }
+    if (outOpenParams) {
+        *outOpenParams = openParams;
+    }
     if (openParams.widthFraction) {
         width = ColumnWidth::makeProportion(qBound<qreal>(MinColumnWidthFraction, *openParams.widthFraction, 1.0));
+    }
+    // A maximized open is the stronger width verdict: it outranks the
+    // fraction arm above and (via ruleMaximized) the template blueprint's
+    // width below, exactly as the manual maximize verb would leave it.
+    const bool ruleMaximized = openParams.maximized.value_or(false);
+    if (ruleMaximized) {
+        width = ColumnWidth::makeProportion(1.0);
     }
     if (openParams.tabbed) {
         display = *openParams.tabbed ? ColumnDisplay::Tabbed : ColumnDisplay::Normal;
@@ -299,7 +309,8 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             if (columnCount < blueprint.size()) {
                 const QVariantMap entry = blueprint.at(columnCount).toMap();
                 const qreal fraction = entry.value(ScrollPerScreenKeys::templateColumnWidth()).toDouble();
-                if (!openParams.widthFraction && fraction >= MinColumnWidthFraction && fraction <= 1.0) {
+                if (!openParams.widthFraction && !ruleMaximized && fraction >= MinColumnWidthFraction
+                    && fraction <= 1.0) {
                     width = ColumnWidth::makeProportion(fraction);
                 }
                 // Guarded on PRESENCE, mirroring the width arm's fall-through:
@@ -621,7 +632,8 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // refused insert means the window is a live tile that may genuinely be
     // parked right now.
     const QString priorParkedEdge = m_parkedScrollEdge.take(windowId);
-    if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight)) {
+    ScrollOpenParams openParams;
+    if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight, &openParams)) {
         // Every insert refused (the strip already holds the window). On a
         // fresh open nothing moved; on the MIGRATION path above the old
         // context already released the window and announced its own retile,
@@ -663,6 +675,11 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     if (auto* settings = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings())) {
         focusNew = settings->scrollingFocusNewWindows();
     }
+    // Per-window openFocused rule layers over the global setting. It carries
+    // both of the setting's effects: false also rewinds the strip's active
+    // column to the pre-insert focus below, true adopts the arrival even
+    // when the global default would not.
+    focusNew = openParams.focused.value_or(focusNew);
     const bool arrivalTookFocus = focusNew && state->strip().activeWindowId() == windowId;
     if (!focusNew && !priorActive.isEmpty() && state->strip().activeWindowId() == windowId
         && state->strip().containsWindow(priorActive)) {

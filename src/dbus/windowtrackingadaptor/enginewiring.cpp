@@ -123,6 +123,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         m_cachedSnapEngine->setManagedRestorePredicate({});
         m_cachedSnapEngine->setExclusionQueryProvider({});
         m_cachedSnapEngine->setFloatPredicate({});
+        m_cachedSnapEngine->setUnfloatFallbackPredicate({});
         m_cachedSnapEngine->setPlacementZonesResolver({});
         // The two cross-engine borrows the live-SnapEngine branch below installs
         // (this adaptor as adjacency resolver, the outgoing AutotileEngine).
@@ -227,6 +228,15 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // global default), so the same resolver serves both engines.
         snap->setFloatPredicate([this](const QString& windowId, const QString& screenId) -> bool {
             return shouldFloatByRule(windowId, screenId);
+        });
+
+        // Unfloat-fallback gate. When an unfloat has no remembered pre-float
+        // zone, a matched SetUnfloatFallbackToZone rule (else the global
+        // setting) decides whether the window falls back into a zone anyway.
+        // The engine hands the RESOLVED restore screen so ScreenId/Mode
+        // scoped rules are judged where the fallback zone would land.
+        snap->setUnfloatFallbackPredicate([this](const QString& windowId, const QString& screenId) -> bool {
+            return shouldUnfloatFallbackToZone(windowId, screenId);
         });
 
         // Open-placement resolver (snap). A matched "Snap this app to zone(s)"
@@ -488,6 +498,12 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                     }
                     if (const auto it = raw.constFind(ScrollOpenKeys::consume()); it != raw.constEnd()) {
                         params.consume = it->toBool();
+                    }
+                    if (const auto it = raw.constFind(ScrollOpenKeys::maximized()); it != raw.constEnd()) {
+                        params.maximized = it->toBool();
+                    }
+                    if (const auto it = raw.constFind(ScrollOpenKeys::focused()); it != raw.constEnd()) {
+                        params.focused = it->toBool();
                     }
                     return params;
                 });

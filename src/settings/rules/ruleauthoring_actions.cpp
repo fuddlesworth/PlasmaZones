@@ -77,7 +77,9 @@ PickerCategory actionCategory(const QString& type)
         // and would render window actions above the divider). Nested under
         // Window as a Scrolling submenu for discoverability.
         if (type == ActionType::OpenColumnWidth || type == ActionType::OpenTabbed
-            || type == ActionType::OpenColumnPlacement || type == ActionType::OpenWindowHeight) {
+            || type == ActionType::OpenColumnPlacement || type == ActionType::OpenWindowHeight
+            || type == ActionType::OpenMaximized || type == ActionType::OpenFocused
+            || type == ActionType::OpenFullscreen) {
             // Order 8, the same as plain Window: CategoryMenuButton buckets by
             // the TOP-LEVEL segment of the category path and orders the buckets
             // by the smallest order any item in the bucket carries, so
@@ -212,6 +214,15 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::OpenTabbed && key == ActionParam::Value) {
         return PhosphorI18n::tr("Open in a tabbed column (off = a normal column)");
     }
+    if (type == ActionType::OpenMaximized && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Open at the full work-area width (off = the default width)");
+    }
+    if (type == ActionType::OpenFocused && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Focus the window when it opens (off = keep the current focus)");
+    }
+    if (type == ActionType::OpenFullscreen && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Open in fullscreen (off = block the app's own fullscreen at open)");
+    }
     if (type == ActionType::OpenColumnPlacement && key == ActionParam::Value) {
         return PhosphorI18n::tr("Placement");
     }
@@ -294,8 +305,17 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetRestoreSizeOnUnsnap && key == ActionParam::Value) {
         return PhosphorI18n::tr("Restore size on unsnap (off = keep zone size)");
     }
+    if (type == ActionType::SetUnfloatFallbackToZone && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Place in a zone when no zone is remembered (off = stay floating)");
+    }
     if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
         return PhosphorI18n::tr("Layer");
+    }
+    if (type == ActionType::ScrollFactor && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Multiplier (below 1 = slower, above 1 = faster)");
+    }
+    if (type == ActionType::SetOsdEnabled && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show on-screen displays here (off = hide them)");
     }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
     // SetHideTitleBar is tri-state at the effect: rule absent = mode decides,
@@ -567,6 +587,15 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::OpenColumnPlacement) {
         return PhosphorI18n::tr("Open into column");
     }
+    if (type == ActionType::OpenMaximized) {
+        return PhosphorI18n::tr("Open maximized");
+    }
+    if (type == ActionType::OpenFocused) {
+        return PhosphorI18n::tr("Focus when opened");
+    }
+    if (type == ActionType::OpenFullscreen) {
+        return PhosphorI18n::tr("Open in fullscreen");
+    }
     // Tab indicator. The labels say "tab indicator" rather than just "tabs" so
     // they cannot be mistaken for the tabbed-column actions above, which
     // change how a column BEHAVES rather than how its indicator is drawn.
@@ -684,8 +713,17 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetRestoreSizeOnUnsnap) {
         return PhosphorI18n::tr("Restore size on unsnap");
     }
+    if (type == ActionType::SetUnfloatFallbackToZone) {
+        return PhosphorI18n::tr("Fall back to a zone on unfloat");
+    }
     if (type == ActionType::SetWindowLayer) {
         return PhosphorI18n::tr("Set window layer");
+    }
+    if (type == ActionType::ScrollFactor) {
+        return PhosphorI18n::tr("Set scroll speed");
+    }
+    if (type == ActionType::SetOsdEnabled) {
+        return PhosphorI18n::tr("Show on-screen displays");
     }
     if (type == ActionType::OverrideAnimationShader) {
         return PhosphorI18n::tr("Override animation shader");
@@ -819,6 +857,10 @@ QString boolActionStateLabel(const QString& type, bool on)
     if (type == ActionType::SetRestoreSizeOnUnsnap) {
         return on ? PhosphorI18n::tr("Restore size on unsnap") : PhosphorI18n::tr("Keep zone size on unsnap");
     }
+    if (type == ActionType::SetUnfloatFallbackToZone) {
+        return on ? PhosphorI18n::tr("Fall back to a zone on unfloat")
+                  : PhosphorI18n::tr("Stay floating when no zone is remembered");
+    }
     if (type == ActionType::SetHideTitleBar) {
         return on ? PhosphorI18n::tr("Hide title bars") : PhosphorI18n::tr("Show title bars");
     }
@@ -840,10 +882,31 @@ QString boolActionStateLabel(const QString& type, bool on)
     if (type == ActionType::SetOverlayShowZoneNumbers) {
         return on ? PhosphorI18n::tr("Show zone numbers") : PhosphorI18n::tr("Hide zone numbers");
     }
+    if (type == ActionType::SetOsdEnabled) {
+        // On is a force, not an absence: it shows the popups here even when
+        // the global toggles are off, so both phrases name outcomes.
+        return on ? PhosphorI18n::tr("Show on-screen displays here") : PhosphorI18n::tr("Hide on-screen displays here");
+    }
     if (type == ActionType::OpenTabbed) {
         // Off is not inert: it forces a normal column even where the context
         // default is tabbed, so the off phrase names that outcome.
         return on ? PhosphorI18n::tr("Open in a tabbed column") : PhosphorI18n::tr("Open in a normal column");
+    }
+    if (type == ActionType::OpenMaximized) {
+        // Off is inert today (there is no context default that maximizes),
+        // but the phrase still names the outcome for symmetry with the family.
+        return on ? PhosphorI18n::tr("Open maximized") : PhosphorI18n::tr("Open at the default width");
+    }
+    if (type == ActionType::OpenFocused) {
+        // Both polarities are live: on forces focus past a focus-new-windows
+        // OFF global, off withholds it past an ON one.
+        return on ? PhosphorI18n::tr("Focus the window when it opens")
+                  : PhosphorI18n::tr("Keep focus where it was when it opens");
+    }
+    if (type == ActionType::OpenFullscreen) {
+        // Off is a veto, not an absence: it blocks the app's own fullscreen
+        // request at open, so the phrase names that outcome.
+        return on ? PhosphorI18n::tr("Open in fullscreen") : PhosphorI18n::tr("Block fullscreen at open");
     }
     // Tab indicator. Each off phrase names an OUTCOME rather than a negation,
     // for the reason OpenTabbed's does: these override a context or config

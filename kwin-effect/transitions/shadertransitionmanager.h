@@ -145,6 +145,26 @@ public:
         return m_hasWindowLayerRules;
     }
 
+    /// True when at least one enabled rule carries an `OpenFullscreen` action.
+    /// Gates the open-time fullscreen reconcile (`applyRuleOpenFullscreen`'s
+    /// fast path) so a session with no such rule pays two pointer reads per
+    /// window open instead of a full WindowQuery build. Recomputed by
+    /// `rebuildAnimationRuleSet()` on every rule-set change.
+    bool hasOpenFullscreenRules() const
+    {
+        return m_hasOpenFullscreenRules;
+    }
+
+    /// True when at least one enabled rule carries a `ScrollFactor` action.
+    /// Gates the input filter's per-axis-event resolve so a session with no
+    /// such rule pays two pointer reads per wheel tick instead of a rule
+    /// resolution. Recomputed by `rebuildAnimationRuleSet()` on every
+    /// rule-set change.
+    bool hasScrollFactorRules() const
+    {
+        return m_hasScrollFactorRules;
+    }
+
     /// Per-event motion-profile tree mirrored from the daemon's
     /// PhosphorProfileRegistry over D-Bus (`motionProfileTree`). Holds
     /// the per-event base durations (window.open, window.close, …) that
@@ -354,6 +374,10 @@ private:
     bool m_hasOpacityRules = false;
     // Same shape for SetWindowLayer. See hasWindowLayerRules().
     bool m_hasWindowLayerRules = false;
+    // Same shape for OpenFullscreen. See hasOpenFullscreenRules().
+    bool m_hasOpenFullscreenRules = false;
+    // Same shape for ScrollFactor. See hasScrollFactorRules().
+    bool m_hasScrollFactorRules = false;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Texture Cache

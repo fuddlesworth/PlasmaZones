@@ -152,6 +152,65 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     kw->setKeepBelow(below);
 }
 
+void PlasmaZonesEffect::applyRuleOpenFullscreen(const QString& windowId, KWin::EffectWindow* w)
+{
+    if (!w || w->isDeleted() || windowId.isEmpty()) {
+        return;
+    }
+    // No-rules fast path, same shape as the layer reconcile above — no
+    // snapshot map to drain here because the verdict is one-shot: it is
+    // applied exactly once, at windowAdded, and never re-reconciled (a rule
+    // edit mid-session must not yank an open window into or out of
+    // fullscreen; that is niri's open-fullscreen contract too).
+    if (!m_shaderManager.hasOpenFullscreenRules()) {
+        return;
+    }
+    // Same structural shield as the layer reconcile: a broad match must
+    // never fullscreen a dock, a notification, or our own overlay. Shielded
+    // windows skip the resolve entirely — with no snapshot to drain there is
+    // no restore branch to route them through.
+    const QString winClass = w->windowClass();
+    if (isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass) || isXdgDesktopPortalSurface(winClass)
+        || w->isDesktop() || w->isDock() || w->isNotification() || w->isCriticalNotification()
+        || w->isOnScreenDisplay()) {
+        return;
+    }
+    const std::optional<bool> verdict = resolveOpenFullscreen(resolveRuleActions(w, windowId));
+    if (!verdict) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    // Gate on the REQUESTED state (synchronous), not the committed one: at
+    // windowAdded a client that mapped fullscreen already carries the
+    // requested bit while the committed state may lag a round-trip. The flip
+    // runs BEFORE the window is announced to the daemon (this is called from
+    // slotWindowAdded ahead of the routing block), so eligibility and the
+    // placement engines see the final state. No m_suppressFullScreenChanged
+    // bracket: that counter guards the windowed-fullscreen hold, which this
+    // window is not part of, and the committed-signal tail for an untracked
+    // window is benign cleanup — the same path a user's own F11 takes.
+    if (*verdict && !kw->isRequestedFullScreen()) {
+        kw->setFullScreen(true);
+    } else if (!*verdict && kw->isRequestedFullScreen()) {
+        kw->setFullScreen(false);
+    }
+}
+
+std::optional<qreal> PlasmaZonesEffect::ruleScrollFactorFor(KWin::EffectWindow* w) const
+{
+    if (!w || w->isDeleted() || !m_shaderManager.hasScrollFactorRules()) {
+        return std::nullopt;
+    }
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return std::nullopt;
+    }
+    return resolveScrollFactor(resolveRuleActions(w, windowId));
+}
+
 void PlasmaZonesEffect::restoreAllRuleWindowLayers()
 {
     const QHash<QString, WindowLayerSnapshot> snapshots = std::exchange(m_ruleWindowLayerSnapshots, {});
