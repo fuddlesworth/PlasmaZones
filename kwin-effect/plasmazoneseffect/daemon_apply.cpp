@@ -538,13 +538,18 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         stillMinimized = live->isMinimized();
         liveWindowId = getWindowId(live);
         liveForOwner = live;
-    } else if (findWindowById(windowId)) {
+    } else if (KWin::EffectWindow* fuzzy = findWindowById(windowId)) {
         // A same-app window exists but the exact instance is not
         // resolvable (drifted or ambiguous id). Default to PRESERVING
         // ownership: wrongly dropping a still-minimized window's marker
         // strands its unminimize, while wrongly keeping it is healed by
-        // the next authoritative edge.
+        // the next authoritative edge. Keep the fuzzy hit as the OWNER
+        // resolve fallback too: with liveForOwner null and an empty
+        // daemon-supplied screenId, the dual-hold repair below would
+        // resolve the conflict to SNAP unconditionally instead of to the
+        // window's actual screen mode.
         stillMinimized = true;
+        liveForOwner = fuzzy;
     }
     m_navigationHandler->setWindowFloating(liveWindowId, isFloating);
     // This slot receives the WindowTracking interface's float signal, which

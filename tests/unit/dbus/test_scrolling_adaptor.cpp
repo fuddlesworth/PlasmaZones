@@ -257,11 +257,12 @@ private Q_SLOTS:
         }
         QVERIFY2(stackedFailures.isEmpty(), qPrintable(stackedFailures.join(QStringLiteral("; "))));
 
-        // Against the ENGINE's numbers, not against the payload's own index.
-        // The adaptor relays VisibleTile::zoneNumber, so comparing each entry
-        // with the tile at the same position is what pins that it relays the
-        // engine's numbering rather than re-deriving one; the ordinals-are-1-
-        // and-2 claim below is the engine's contract, asserted separately.
+        // Cross-check against the ENGINE's numbers. Under this fixture it is
+        // redundant with collectRectMismatches' own tail (the engine stamps
+        // 1..N contiguously by construction, so a re-deriving adaptor would
+        // pass both) — kept as a cheap alignment pin, not as proof the
+        // adaptor relays rather than re-derives; no legal fixture can
+        // distinguish those while visibleTiles numbers contiguously.
         for (int i = 0; i < stackedArr.size(); ++i) {
             QCOMPARE(stackedArr.at(i).toObject().value(QLatin1String("zoneNumber")).toInt(-1),
                      stackedTiles.at(i).zoneNumber);
@@ -659,9 +660,20 @@ private Q_SLOTS:
         QCOMPARE(tiled.count(), 0);
 
         // Positive case: nothing in the strip moved, so only the evicted
-        // gate memory explains the re-emission.
+        // gate memory explains the re-emission — and the batch must actually
+        // CONTAIN the re-applied window (a count alone would pass a
+        // regression that evicted the memory but emitted an unrelated
+        // batch).
         m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a"));
         QCOMPARE(tiled.count(), 1);
+        bool sawA = false;
+        const QJsonArray reBatch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : reBatch) {
+            if (v.toObject().value(QLatin1String("windowId")).toString() == QLatin1String("app|a")) {
+                sawA = true;
+            }
+        }
+        QVERIFY2(sawA, "the re-emitted batch must carry the re-applied window");
     }
 
 public Q_SLOTS:

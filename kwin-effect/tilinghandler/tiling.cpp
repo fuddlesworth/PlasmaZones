@@ -13,6 +13,7 @@
 // mid-pipeline.
 
 #include "tilinghandler.h"
+#include "scrolldecisions.h"
 #include "handlers/dragtracker.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/stripviewanimator.h"
@@ -1081,14 +1082,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // flagged stays untouched: it was never in the set.
             if (KWin::Window* kwFs = snap.window->window()) {
                 const bool inSet = m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
+                // The 5-way decision is pure and unit-tested
+                // (scrolldecisions.h, test_scroll_decisions); this block
+                // only performs the chosen arm's KWin/D-Bus side effects.
+                const ScrollDecisions::WfsDecision wfs = ScrollDecisions::resolveWindowedFullscreenAction(
+                    snap.isWindowedFullscreen, inSet, kwFs->isRequestedFullScreen(),
+                    m_windowedFsClearInFlight.contains(snap.windowId));
                 // A flag-off entry is the authoritative echo of a
                 // clearWindowedFullscreen this effect sent — consume the
-                // in-flight marker unconditionally so a lost clear cannot
-                // latch the adopt guard forever.
-                if (!snap.isWindowedFullscreen) {
+                // in-flight marker so a completed clear cannot latch the
+                // adopt guard.
+                if (wfs.consumeClearMarker) {
                     m_windowedFsClearInFlight.remove(snap.windowId);
                 }
-                if (snap.isWindowedFullscreen && !inSet && !m_windowedFsClearInFlight.contains(snap.windowId)) {
+                if (wfs.action == ScrollDecisions::WfsAction::Adopt) {
                     // Adopt-on-batch: also the effect-restart path, where the
                     // daemon still holds the flag for a window this effect
                     // instance has never seen. The stored rect is what the
@@ -1118,17 +1125,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     }
                     applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
-                } else if (snap.isWindowedFullscreen && inSet && !kwFs->isRequestedFullScreen()) {
+                } else if (wfs.action == ScrollDecisions::WfsAction::DeferredReconcile) {
                     // Flagged, member, yet fullscreen is not even REQUESTED:
                     // the client exited on its own while the daemon gate was
                     // closed, and the exit slot deferred its reconcile to
                     // exactly this moment. Deliver it now — membership
                     // drops, the daemon clears its flag and re-applies —
                     // rather than re-asserting fullscreen against the
-                    // user's exit. Requested state, not committed: during
-                    // our OWN enter round-trip committed lags behind while
-                    // requested is already true, and a batch landing in that
-                    // window must not read the lag as an exit.
+                    // user's exit.
                     m_effect->m_windowedFullscreenWindows.remove(snap.windowId);
                     restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                     qCInfo(lcEffect) << "Windowed-fullscreen deferred reconcile for" << snap.windowId;
@@ -1138,7 +1142,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // failed clear drops it so it cannot latch.
                         dispatchWindowedFullscreenClear(snap.windowId);
                     }
-                } else if (snap.isWindowedFullscreen && inSet) {
+                } else if (wfs.action == ScrollDecisions::WfsAction::Refresh) {
                     // Keep the stored rect current — the strip may have
                     // resized or scrolled the column since the flag went on.
                     m_effect->m_windowedFullscreenWindows.insert(snap.windowId, snap.geometry);
@@ -1147,7 +1151,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // under the hold is re-asserted away on the next batch,
                     // the same ownership KWin rules claim while they match.
                     applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
-                } else if (!snap.isWindowedFullscreen && inSet) {
+                } else if (wfs.action == ScrollDecisions::WfsAction::Release) {
                     // isRequestedFullScreen: an un-flag landing inside our own
                     // enter round-trip (flag on, then off, before the client
                     // acks) must still un-set — the sibling self-heal arm
@@ -1476,14 +1480,12 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(scrollTrackedScreenFor(windowId))
             && !(m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
             const QRect actual = w->frameGeometry().toRect();
-            if (actual != cit->rect) {
+            {
+                // Budget arithmetic is pure and unit-tested
+                // (scrolldecisions.h, test_scroll_decisions).
                 const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-                if (nowMs - cit->burstStartMs > 1000) {
-                    cit->burstStartMs = nowMs;
-                    cit->burstCount = 0;
-                }
-                if (cit->burstCount < 3) {
-                    ++cit->burstCount;
+                if (ScrollDecisions::shouldCounterAssert(cit->burstStartMs, cit->burstCount, nowMs,
+                                                         actual != cit->rect)) {
                     // Copy out of the hash node first: the apply below emits
                     // frameGeometryChanged synchronously on X11 and re-enters
                     // this slot — holding a reference into the node across

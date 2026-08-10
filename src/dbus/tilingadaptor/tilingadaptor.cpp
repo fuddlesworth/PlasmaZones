@@ -126,11 +126,13 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
             entry.y = obj.value(QLatin1String("y")).toInt();
             entry.width = obj.value(QLatin1String("width")).toInt();
             entry.height = obj.value(QLatin1String("height")).toInt();
-            if (entry.width <= 0 || entry.height <= 0) {
-                qCDebug(lcDbusTiling) << "relayTileRequestsJson: invalid geometry for" << entry.windowId;
-                continue;
-            }
         }
+        // No geometry pre-check here: validationError() below owns the
+        // degenerate-rect rejection for non-floating entries (its coverage
+        // is a strict superset of the old `width <= 0 || height <= 0`
+        // check), and routing the drop through it logs at qCWarning — a
+        // producer emitting a zero rect is producer garbling and a bug
+        // report by this boundary's own policy, not debug noise.
         entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
@@ -222,6 +224,13 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
 
 void TilingAdaptor::relayWindowsReleased(const QStringList& windowIds)
 {
+    // The one relay with no change gate — every in-tree producer already
+    // gates on a non-empty list, so this belt only keeps a future producer
+    // from putting pure noise on the bus (the XML documents that no
+    // effect-side subscriber exists today).
+    if (windowIds.isEmpty()) {
+        return;
+    }
     Q_EMIT windowsReleasedFromTiling(windowIds);
 }
 

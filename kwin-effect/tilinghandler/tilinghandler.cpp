@@ -385,6 +385,12 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
                             << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
                         m_notifiedWindows.remove(windowId);
                         m_notifiedWindowScreens.remove(windowId);
+                        // Min-size seed rollback, mirroring the batch error
+                        // arm's rationale: on a failed announce the daemon
+                        // never heard the size, and the cache would
+                        // otherwise record it as sent. (Symmetry only — a
+                        // later re-announce re-seeds it either way.)
+                        m_effect->m_lastReportedMinSize.remove(windowId);
                         // The spawn-provenance marker was consumed above on the
                         // assumption the announce landed. Put it back, or the
                         // re-announce passes knownFreeFloating=false and the floating

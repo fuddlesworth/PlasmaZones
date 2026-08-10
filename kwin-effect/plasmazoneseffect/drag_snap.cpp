@@ -132,6 +132,12 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
 
 void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo)
 {
+    // Null-guarded beside the KWin::effects guard below: every current call
+    // site passes a checked pointer, but the bare deref two lines above a
+    // teardown guard read as an oversight and costs nothing to close.
+    if (!window) {
+        return;
+    }
     window->addRepaintFull();
     // Guard the global compositor repaint requests: this method can run
     // from late D-Bus reply callbacks (callEndDrag → applySnap → here)
@@ -187,6 +193,11 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             && m_windowedFullscreenWindows.contains(getWindowId(window));
         if (requestedFullScreen && !windowedFsMember) {
             qCDebug(lcEffect) << "applyGeometry: window is fullscreen, skipping";
+            // Release the hold-suppression on this bail like the no-op skip
+            // below does: no reposition is coming at all, so a suppressed
+            // window would be withheld from compositing until the hard
+            // 250 ms deadline for nothing.
+            endRestoreSuppression(window);
             return;
         }
     }

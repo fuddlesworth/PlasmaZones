@@ -375,6 +375,9 @@ private Q_SLOTS:
         const QString err = e.validationError();
         QVERIFY(!err.isEmpty());
         QVERIFY(err.contains(QStringLiteral("windowedFullscreen")));
+        // Discriminating substring: "windowedFullscreen" is shared with the
+        // floating rejection, so also pin which message fired.
+        QVERIFY(err.contains(QStringLiteral("monocle")));
         // Without the monocle claim the flag is legal.
         e.monocle = false;
         QVERIFY(e.validationError().isEmpty());

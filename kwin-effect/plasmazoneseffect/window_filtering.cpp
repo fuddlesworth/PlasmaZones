@@ -897,14 +897,21 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
             // app auto-restart) must not suppress the new instance's snap restore.
             continue;
         }
+        // Cheap discriminator FIRST: the class/pid compare is two flag
+        // reads, while a verdict-cache miss in shouldHandleWindow builds
+        // the full ~30-accessor ruleQuery — and this sweep runs per
+        // window-open over the whole stacking order (the O(N²) query-build
+        // case the cache comment names). Both are pure rejects, so the
+        // order is behaviour-neutral.
+        if (other->windowClass() != windowClass || other->pid() == windowPid) {
+            continue;
+        }
         if (!shouldHandleWindow(other)) {
             continue; // Skip non-managed windows
         }
-        if (other->windowClass() == windowClass && other->pid() != windowPid) {
-            // Found another window of the same class with different PID
-            // This means the new window was likely spawned by a different app
-            return true;
-        }
+        // Found another managed window of the same class with a different
+        // PID — the new window was likely spawned by a different app.
+        return true;
     }
 
     return false;

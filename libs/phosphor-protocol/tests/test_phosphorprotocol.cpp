@@ -145,11 +145,16 @@ private Q_SLOTS:
         e.height = 100;
         e.windowedFullscreen = true;
         QVERIFY(e.validationError().isEmpty());
+        // Discriminating substrings on both arms: "windowedFullscreen" alone
+        // is shared by the two rejection messages, so each arm also pins the
+        // partner flag its message names.
         e.floating = true;
         QVERIFY(e.validationError().contains(QStringLiteral("windowedFullscreen")));
+        QVERIFY(e.validationError().contains(QStringLiteral("floating")));
         e.floating = false;
         e.monocle = true;
         QVERIFY(e.validationError().contains(QStringLiteral("windowedFullscreen")));
+        QVERIFY(e.validationError().contains(QStringLiteral("monocle")));
     }
 
     void testDragPolicyValidationAutotileNoScreen()

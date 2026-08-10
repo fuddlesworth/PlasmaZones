@@ -38,4 +38,18 @@ inline constexpr int kMaxTemplateEntries = 16;
 /// same value as the settings validator's kMaxPresetScan (settingsschema_p.h).
 inline constexpr int kMaxTemplateScan = 256;
 
+/// Restore caps: persisted strip blobs are a user-writable system boundary
+/// (the file's own header calls them that), and restoreStripState bounds
+/// every NUMERIC field it reads — these bound the COUNTS the same way. A
+/// hand-edited or corrupted blob with a huge array would otherwise be
+/// staged verbatim into the stash, and restoreFromStripStash walks the
+/// staged columns/tiles on every window open for that key until the
+/// entries age out over three sessions. Values are far above any real
+/// session (keys = screens x desktops x activities; columns and stacked
+/// tiles per strip) so a legitimate blob is never clipped; drops are
+/// logged, never silent.
+inline constexpr int kMaxRestoredKeys = 64;
+inline constexpr int kMaxRestoredColumnsPerKey = 64;
+inline constexpr int kMaxRestoredTilesPerColumn = 32;
+
 } // namespace PhosphorScrollEngine

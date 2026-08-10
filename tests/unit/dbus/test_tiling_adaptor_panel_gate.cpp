@@ -364,7 +364,14 @@ private Q_SLOTS:
             "\"scrollEdge\":\"up\"},"
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":50,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"right\"},"
-            "{\"windowId\":\"d|4\",\"screenId\":\"S1\",\"floating\":true,\"windowedFullscreen\":true}"
+            "{\"windowId\":\"d|4\",\"screenId\":\"S1\",\"floating\":true,\"windowedFullscreen\":true},"
+            "{\"windowId\":\"e|5\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
+            "\"visualX\":100},"
+            "{\"windowId\":\"f|6\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
+            "\"visualX\":4000.5,\"visualY\":10},"
+            "{\"windowId\":\"g|7\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
+            "\"visualX\":-1200,\"visualY\":40},"
+            "{\"windowId\":\"h|8\",\"screenId\":\"S1\",\"floating\":true,\"visualX\":5,\"visualY\":6}"
             "]");
         adaptor.relayTileRequestsJson(json);
 
@@ -377,7 +384,7 @@ private Q_SLOTS:
         // reaches the validator; a reorder that set the flag before parsing
         // floating, or an early continue on the zero geometry, would stop
         // rejecting the pair with no failing test.
-        QCOMPARE(requests.size(), 2);
+        QCOMPARE(requests.size(), 6);
         QCOMPARE(requests.at(0).windowId, QStringLiteral("a|1"));
         QCOMPARE(requests.at(0).scrollEdge, QStringLiteral("left"));
         QCOMPARE(requests.at(0).x, 0);
@@ -388,6 +395,23 @@ private Q_SLOTS:
         // absence on a|1 reads false.
         QCOMPARE(requests.at(1).windowedFullscreen, true);
         QCOMPARE(requests.at(0).windowedFullscreen, false);
+        // The visual-position unmarshal guard, per arm (previously
+        // untested): visualX alone stays unset (the keys are a required
+        // PAIR), a fractional value FAILS CLOSED (the floor check is what
+        // separates 4000.5 decoding to 0-with-the-flag-latched from a clean
+        // reject), a valid integral pair relays (negative x is legal — the
+        // park is off-canvas), and a floating entry never carries one.
+        QCOMPARE(requests.at(2).windowId, QStringLiteral("e|5"));
+        QCOMPARE(requests.at(2).hasVisualPos, false);
+        QCOMPARE(requests.at(3).windowId, QStringLiteral("f|6"));
+        QCOMPARE(requests.at(3).hasVisualPos, false);
+        QCOMPARE(requests.at(4).windowId, QStringLiteral("g|7"));
+        QCOMPARE(requests.at(4).hasVisualPos, true);
+        QCOMPARE(requests.at(4).visualX, -1200);
+        QCOMPARE(requests.at(4).visualY, 40);
+        QCOMPARE(requests.at(5).windowId, QStringLiteral("h|8"));
+        QCOMPARE(requests.at(5).floating, true);
+        QCOMPARE(requests.at(5).hasVisualPos, false);
     }
 };
 

@@ -482,8 +482,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
     // Drop any pending-but-not-yet-flushed frame geometry for the
-    // closing window. The windowDeleted lambda in lifecycle.cpp does
-    // the same removal as belt-and-suspenders against a
+    // closing window. The windowDeleted lambda in lifecycle_wiring.cpp
+    // does the same removal as belt-and-suspenders against a
     // windowFrameGeometryChanged emission re-inserting between this
     // slot and windowDeleted (possible for windows held alive via
     // WindowClosedGrabRole). Daemon would discard a stale
@@ -493,7 +493,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // window set.
     m_pendingFrameGeometry.remove(closedWindowId);
     m_focusFade.remove(closedWindowId);
-    // Symmetric with the `windowDeleted` lambda in `lifecycle.cpp`
+    // Symmetric with the `windowDeleted` lambda in `lifecycle_wiring.cpp`
     // (which removes the same key from `m_frameOpacityCache` after the
     // close-grab unref). Close shaders held via `holdCloseGrab=true`
     // keep the EffectWindow alive past slotWindowClosed and the

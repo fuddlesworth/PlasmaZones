@@ -849,8 +849,10 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // `state`, and `params` into the caller's scope and embed an early return.
 // A helper struct + lambda was considered and rejected: every verb would
 // still need the three names plus the bail-out, and the macro keeps 14 of the
-// 16 verb bodies one line each (toggleColumnTabbed and resetWindowHeights are
-// hand-expanded — neither op reads layout params). The names are part of the
+// 17 verb bodies one line each. Three are hand-expanded: toggleColumnTabbed
+// and resetWindowHeights read no layout params, and toggleWindowedFullscreen
+// diverges further because its feedback carries the resulting state token
+// rather than the shared success shape. The names are part of the
 // macro's documented contract, and both macros are #undef'd at the end of this
 // file.
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)

@@ -43,6 +43,11 @@ private Q_SLOTS:
     void windowedFullscreenHiddenTabStillEmitsFlag();
     void windowedFullscreenMinimizeDropsModeKeeps();
     void windowedFullscreenFuzzyClaimDoesNotTransfer();
+    void restoreDropsMalformedKeysAndBoundsAnchor();
+    void restoreStagesADuplicateWindowIdOnlyOnce();
+    void restoreFocusFallsBackToASurvivingTile();
+    void restoreCapsTilesPerColumn();
+    void backgroundContextClearAndReapplySkipRelayout();
 
 private:
     /// The state for a screen, or nullptr. QVERIFY'd at every call site: a
@@ -726,14 +731,17 @@ void TestScrollEnginePersistence::windowedFullscreenTogglesEmitAndFloatClears()
 
 void TestScrollEnginePersistence::windowedFullscreenHiddenTabStillEmitsFlag()
 {
-    // The flag rides the tile UNGATED by presentation: a hidden tab (and a
-    // parked column) keeps its client's fullscreen state, so its batch entry
-    // still carries the key. The first design suppressed the flag off-canvas
-    // and every tab switch or scroll past a flagged column cycled the
-    // client's fullscreen presentation, seen live as resize and decoration
-    // flicker. The effect's layer demotion and geometry-bail exemption make
-    // an off-canvas fullscreen client inert, so presentation gating buys
-    // nothing.
+    // The flag rides the tile UNGATED by presentation: a hidden tab keeps
+    // its client's fullscreen state, so its batch entry still carries the
+    // key (this test pins the hidden-tab arm; the parked-column case shares
+    // the same ungated emit in engine_apply but is not separately pinned
+    // here). The first design suppressed the flag off-canvas and every tab
+    // switch or scroll past a flagged column cycled the client's fullscreen
+    // presentation, seen live as resize and decoration flicker. The
+    // effect's layer demotion and geometry-bail exemption keep an
+    // off-canvas fullscreen client's GEOMETRY and PAINT inert, so
+    // presentation gating buys nothing there (focus is a separate concern
+    // the demotion does not cover — it is stacking-only).
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
@@ -822,6 +830,220 @@ void TestScrollEnginePersistence::windowedFullscreenFuzzyClaimDoesNotTransfer()
     ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
     QVERIFY(state);
     QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("app|n1")));
+}
+
+void TestScrollEnginePersistence::restoreDropsMalformedKeysAndBoundsAnchor()
+{
+    // keyFromString's boundary rejections (no '|', one '|', non-numeric or
+    // negative desktop, empty screen) plus the viewAnchor sanity bound —
+    // previously unpinned. Built from a real blob so the payload under each
+    // hostile key is well-formed, isolating the KEY parse.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine1->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine1->consumeWindowIntoColumn(QStringLiteral("S1")); // b stacks on a
+    const QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+    const QString goodKey = QStringLiteral("S1|1|");
+    QVERIFY2(blob.contains(goodKey), "fixture assumption: the live key spells S1|1|<empty activity>");
+    QJsonObject payload = blob.value(goodKey).toObject();
+
+    // Hostile anchor rides a well-formed key so the bound is observable.
+    payload.insert(QLatin1String("viewAnchor"), 2147483647.0);
+    QJsonObject hostile;
+    hostile.insert(QStringLiteral("nokey"), payload); // no separator
+    hostile.insert(QStringLiteral("S1|x|"), payload); // non-numeric desktop
+    hostile.insert(QStringLiteral("S1|-2|"), payload); // negative desktop
+    hostile.insert(QStringLiteral("|1|"), payload); // empty screen id
+    hostile.insert(goodKey, payload); // the one legal key
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(hostile);
+    engine2->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    // Only the legal key staged: the stack claim proves the good entry
+    // survived beside the four rejects (a rejected GOOD key would fail
+    // this; an accepted BAD key has no observable strip to disagree with,
+    // which is why the anchor bound below carries the other half).
+    QCOMPARE(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")),
+             engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")));
+    ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(state);
+    // INT_MAX was clamped at the boundary to the documented sanity range.
+    QVERIFY(state->strip().viewAnchor() <= 1000000);
+}
+
+void TestScrollEnginePersistence::restoreStagesADuplicateWindowIdOnlyOnce()
+{
+    // The cross-key claimedWindowIds dedup: two persisted keys both listing
+    // the same window must stage it exactly once, or whichever context
+    // announces second splices the window into a second strip.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|d"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|e"), QStringLiteral("S1"), 0, 0);
+    engine1->windowFocused(QStringLiteral("app|d"), QStringLiteral("S1"));
+    engine1->consumeWindowIntoColumn(QStringLiteral("S1")); // e stacks on d
+    const QJsonObject blob = engine1->serializeStripState();
+    const QString key1 = QStringLiteral("S1|1|");
+    QVERIFY(blob.contains(key1));
+    QJsonObject dup = blob;
+    dup.insert(QStringLiteral("S1|2|"), blob.value(key1)); // same windows, second key
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(dup);
+    // Claim on desktop 1 (iteration order between the two keys is
+    // QJsonObject's, so assert the INVARIANT rather than which key won: the
+    // window is claimed by exactly one context, and the other stages
+    // nothing for it).
+    engine2->windowOpened(QStringLiteral("app|d"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("app|e"), QStringLiteral("S1"), 0, 0);
+    const int col1d = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|d"));
+    QVERIFY(col1d >= 0);
+    // Switch context; a second claim of the SAME ids must not resurrect the
+    // duplicate staging (the windows are live in desktop 1's strip, so a
+    // re-open here is the splice the dedup exists to prevent).
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    QVERIFY(!engine2->isWindowTracked(QStringLiteral("app|d")) || true); // tracking follows contexts; the pin is below
+    engine2->windowOpened(QStringLiteral("app|d"), QStringLiteral("S1"), 0, 0);
+    ScrollState* d2 = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(d2);
+    // Desktop 2's strip holds d as a FRESH single tile (default placement),
+    // not the staged two-window stack: e must not be pulled in beside it.
+    QVERIFY(!d2->strip().containsWindow(QStringLiteral("app|e")));
+}
+
+void TestScrollEnginePersistence::restoreFocusFallsBackToASurvivingTile()
+{
+    // A dangling focusedWindow (its tile dropped or never present) must not
+    // strand the restore: focus falls back to a surviving tile.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|g"), QStringLiteral("S1"), 0, 0);
+    QJsonObject blob = engine1->serializeStripState();
+    const QString key = QStringLiteral("S1|1|");
+    QVERIFY(blob.contains(key));
+    QJsonObject payload = blob.value(key).toObject();
+    payload.insert(QLatin1String("focusedWindow"), QStringLiteral("app|gone"));
+    blob.insert(key, payload);
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    engine2->windowOpened(QStringLiteral("app|f"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("app|g"), QStringLiteral("S1"), 0, 0);
+    ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(state);
+    const QString active = state->strip().activeWindowId();
+    QVERIFY2(active == QStringLiteral("app|f") || active == QStringLiteral("app|g"),
+             "focus must land on a real tile, never the dangling id");
+}
+
+void TestScrollEnginePersistence::restoreCapsTilesPerColumn()
+{
+    // The count caps (enginelimits.h): a corrupt blob column with more tiles
+    // than kMaxRestoredTilesPerColumn stages only the cap; the surplus is
+    // dropped (logged, never staged) instead of walked on every later open.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|h"), QStringLiteral("S1"), 0, 0);
+    QJsonObject blob = engine1->serializeStripState();
+    const QString key = QStringLiteral("S1|1|");
+    QVERIFY(blob.contains(key));
+    QJsonObject payload = blob.value(key).toObject();
+    QJsonArray columns = payload.value(QLatin1String("columns")).toArray();
+    QVERIFY(!columns.isEmpty());
+    QJsonObject col = columns.at(0).toObject();
+    QJsonArray tiles = col.value(QLatin1String("tiles")).toArray();
+    QVERIFY(!tiles.isEmpty());
+    const QJsonObject seedTile = tiles.at(0).toObject();
+    QJsonArray fatTiles;
+    for (int i = 0; i < 40; ++i) { // cap is 32
+        QJsonObject t = seedTile;
+        // DISTINCT appIds: a shared app prefix would let an un-staged tile
+        // past the cap fuzzy-claim a staged sibling's dead slot, which is
+        // exactly the noise this pin must not measure.
+        t.insert(QLatin1String("windowId"), QStringLiteral("a%1|w%1").arg(i));
+        fatTiles.append(t);
+    }
+    col.insert(QLatin1String("tiles"), fatTiles);
+    columns = QJsonArray();
+    columns.append(col);
+    payload.insert(QLatin1String("columns"), columns);
+    blob.insert(key, payload);
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    // Tiles under the cap claim their staged slot (they stack into the one
+    // column); a tile past the cap was never staged, so it opens as a fresh
+    // default-placement column instead.
+    engine2->windowOpened(QStringLiteral("a0|w0"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("a31|w31"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("a35|w35"), QStringLiteral("S1"), 0, 0);
+    const int colW0 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("a0|w0"));
+    const int colW31 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("a31|w31"));
+    const int colW35 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("a35|w35"));
+    QCOMPARE(colW31, colW0);
+    QVERIFY2(colW35 != colW0, "a tile past the cap must not have been staged into the capped column");
+}
+
+void TestScrollEnginePersistence::backgroundContextClearAndReapplySkipRelayout()
+{
+    // The two wire verbs' background-context branches (the live path for a
+    // client leaving fullscreen on a non-current desktop): the model write
+    // lands and placementChanged fires, but NO windowsTiled batch is
+    // emitted for a strip that is not the screen's current context.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine->windowOpened(QStringLiteral("app|bg"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|bg"), QStringLiteral("S1"));
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    ScrollState* d1 = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(d1);
+    QVERIFY(d1->strip().isWindowedFullscreen(QStringLiteral("app|bg")));
+
+    // Switch the screen to desktop 2: app|bg's strip is now background.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    QSignalSpy placement(engine, &ScrollEngine::placementChanged);
+
+    engine->clearWindowedFullscreen(QStringLiteral("app|bg"));
+    QVERIFY2(!d1->strip().isWindowedFullscreen(QStringLiteral("app|bg")),
+             "the model flag must drop on the window's OWN context state");
+    QCOMPARE(tiled.count(), 0);
+    QVERIFY(placement.count() >= 1);
+
+    engine->reapplyWindowGeometry(QStringLiteral("app|bg"));
+    QCOMPARE(tiled.count(), 0);
+
+    // Switching back retiles the mutated strip and the next batch carries
+    // the cleared flag. QTRY: the context-switch retile is queued
+    // (scheduleRetileForScreen), so the spy needs the event loop.
+    engine->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    QTRY_VERIFY(tiled.count() >= 1);
+    bool sawBg = false;
+    bool bgFlagged = true;
+    const QJsonArray batch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    for (const QJsonValue& v : batch) {
+        const QJsonObject o = v.toObject();
+        if (o.value(QLatin1String("windowId")).toString() == QLatin1String("app|bg")) {
+            sawBg = true;
+            bgFlagged = o.value(QLatin1String("windowedFullscreen")).toBool(false);
+        }
+    }
+    QVERIFY2(sawBg, "the window must be in the switch-back batch, or the flag compare is vacuous");
+    QVERIFY(!bgFlagged);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePersistence)

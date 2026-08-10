@@ -316,13 +316,21 @@ private Q_SLOTS:
         QCOMPARE(length->validator(0.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMin());
         QCOMPARE(length->validator(5.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMax());
 
-        // The colours carry no validator: EMPTY is the meaningful "follow the
-        // theme" value, and no closed set can express that alongside hex.
+        // The colours carry canonicalThemeFallbackColor (not a closed set —
+        // EMPTY is the meaningful "follow the theme" value). Pin the
+        // validator like the drop-indicator loop below does: it is the DISK
+        // path's only guard, and without these compares deleting it from the
+        // schema would leave the suite green while junk reached QML as an
+        // invalid QColor and painted black.
         for (const QString& colorKey :
              {ConfigDefaults::activeColorKey(), ConfigDefaults::inactiveColorKey(), ConfigDefaults::urgentColorKey()}) {
             const auto* color = findKey(schema, tabGroup, colorKey);
             QVERIFY2(color, qPrintable(colorKey));
             QVERIFY(color->defaultValue.toString().isEmpty());
+            QVERIFY(color->validator);
+            QVERIFY(color->validator(QStringLiteral("not-a-colour")).toString().isEmpty());
+            QVERIFY(color->validator(QString()).toString().isEmpty());
+            QCOMPARE(color->validator(QStringLiteral("#FF3366CC")).toString(), QStringLiteral("#FF3366CC"));
         }
 
         // The old flat Scrolling/TabStripEnabled key is GONE, not aliased: the

@@ -55,6 +55,21 @@ public Q_SLOTS:
 /// Echoes an a{sv} map. Callers that read such a reply with QVariant::toMap()
 /// silently get an empty map, so this object exists to pin the demarshalling
 /// idiom the settings app relies on (getAllQuickLayoutSlots and its peers).
+/// Echoes a SwapTargetResult — the highest-transposition-risk wire struct
+/// (18 fields with two interleaved int quadruples and five trailing
+/// strings): a swap introduced in operator>> alone keeps the signature
+/// valid and passes every signature-only probe.
+class SwapTargetResultEcho : public QObject
+{
+    Q_OBJECT
+
+public Q_SLOTS:
+    PhosphorProtocol::SwapTargetResult echoEntry(const PhosphorProtocol::SwapTargetResult& entry) const
+    {
+        return entry;
+    }
+};
+
 class VariantMapEcho : public QObject
 {
     Q_OBJECT
@@ -329,6 +344,69 @@ private Q_SLOTS:
         sent.monocle = true;
         sent.windowedFullscreen = false;
         roundTrip(sent);
+
+        bus.unregisterObject(path);
+    }
+
+    void testSwapTargetResultBusRoundtrip()
+    {
+        PhosphorProtocol::registerWireTypes();
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected()) {
+            QSKIP("No session bus available for a wire round-trip");
+        }
+        SwapTargetResultEcho echo;
+        const QString path = QStringLiteral("/test/wiretypes/swaptargetecho");
+        QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+
+        // Every field distinct — the two int quadruples especially, so a
+        // window1/window2 transposition or an x/y/w/h shuffle inside either
+        // quadruple fails on a specific compare.
+        PhosphorProtocol::SwapTargetResult sent;
+        sent.success = true;
+        sent.reason = QStringLiteral("reason-r");
+        sent.windowId1 = QStringLiteral("app|one");
+        sent.x1 = 11;
+        sent.y1 = 12;
+        sent.w1 = 13;
+        sent.h1 = 14;
+        sent.zoneId1 = QStringLiteral("{zone-1}");
+        sent.windowId2 = QStringLiteral("app|two");
+        sent.x2 = 21;
+        sent.y2 = 22;
+        sent.w2 = 23;
+        sent.h2 = 24;
+        sent.zoneId2 = QStringLiteral("{zone-2}");
+        sent.screenName = QStringLiteral("DP-1");
+        sent.sourceZoneId = QStringLiteral("{zone-src}");
+        sent.targetZoneId = QStringLiteral("{zone-dst}");
+        sent.screenName2 = QStringLiteral("DP-2");
+
+        QDBusMessage call =
+            QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
+        call << QVariant::fromValue(sent);
+        const QDBusMessage reply = bus.call(call);
+        QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+        QCOMPARE(reply.arguments().size(), 1);
+        const auto got = qdbus_cast<PhosphorProtocol::SwapTargetResult>(reply.arguments().at(0));
+        QCOMPARE(got.success, sent.success);
+        QCOMPARE(got.reason, sent.reason);
+        QCOMPARE(got.windowId1, sent.windowId1);
+        QCOMPARE(got.x1, sent.x1);
+        QCOMPARE(got.y1, sent.y1);
+        QCOMPARE(got.w1, sent.w1);
+        QCOMPARE(got.h1, sent.h1);
+        QCOMPARE(got.zoneId1, sent.zoneId1);
+        QCOMPARE(got.windowId2, sent.windowId2);
+        QCOMPARE(got.x2, sent.x2);
+        QCOMPARE(got.y2, sent.y2);
+        QCOMPARE(got.w2, sent.w2);
+        QCOMPARE(got.h2, sent.h2);
+        QCOMPARE(got.zoneId2, sent.zoneId2);
+        QCOMPARE(got.screenName, sent.screenName);
+        QCOMPARE(got.sourceZoneId, sent.sourceZoneId);
+        QCOMPARE(got.targetZoneId, sent.targetZoneId);
+        QCOMPARE(got.screenName2, sent.screenName2);
 
         bus.unregisterObject(path);
     }

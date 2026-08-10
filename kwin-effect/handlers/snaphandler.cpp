@@ -435,6 +435,14 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 m_effect->tilingHandler()->adoptMinimizeFloated(windowId, /*untiled=*/true);
             } else {
                 m_minimizeFloatedWindows.insert(windowId);
+                // Refund the retry budget on the countermand's snap-side
+                // re-claim too, matching the ordinary fall-through below:
+                // after three failed retries plus a re-minimize landing
+                // mid-flight, the NEXT unminimize's commit would otherwise
+                // start with zero retries. Kept inside the non-autotile
+                // branch so the refund's documented scoping (never reset by
+                // a screen snap refuses to handle) holds.
+                m_unfloatRetryAttempts.remove(windowId);
             }
             return;
         }
@@ -515,7 +523,14 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 // deadline if no reposition arrives, so the window appears
                 // once, at its snap placement.
                 qCInfo(lcEffect) << "Snap: adopted autotile-mode minimize-float, unfloating immediately:" << windowId;
-                m_effect->beginRestoreSuppression(window);
+                // Daemon-ready gated: commitUnminimizeUnfloat's own early
+                // return on a closed gate would otherwise leave the
+                // suppression armed with nothing dispatched and no
+                // reposition ever coming — the window withheld from
+                // compositing until the hard 250 ms deadline for no reason.
+                if (m_effect->isDaemonReady("snap adopt suppression")) {
+                    m_effect->beginRestoreSuppression(window);
+                }
                 commitUnminimizeUnfloat(window, windowId, screenId);
                 return;
             } else {
