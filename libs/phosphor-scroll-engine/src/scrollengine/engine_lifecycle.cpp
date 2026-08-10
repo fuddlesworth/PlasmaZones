@@ -890,19 +890,49 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     if (!state) {
         return;
     }
-    // Background-context guard, the same one windowClosed and the float paths
-    // carry: a scheduled retile resolves the screen's CURRENT context, so a
-    // min-size report for a window on another desktop would relayout a strip
-    // this change did not touch. The model write still lands; the switch back
-    // retiles the mutated strip.
     // qMax(0, ...): same negative-floor contract as the FloatRestore write
     // above and insertOpenedWindow's boundary clamp — a negative floor flows
     // from here into Tile::minWidth/minHeight, and the relayout slack math
     // is not written for one. (No live crash today; every consumer happens
     // to guard, but this is exported LGPL API and the sibling paths all
     // clamp at the boundary.)
-    if (state->strip().setWindowMinimumSize(windowId, qMax(0, minWidth), qMax(0, minHeight))
-        && key == currentKeyForScreen(key.screenId)) {
+    const int clampedMinWidth = qMax(0, minWidth);
+    const int clampedMinHeight = qMax(0, minHeight);
+    const bool minChanged = state->strip().setWindowMinimumSize(windowId, clampedMinWidth, clampedMinHeight);
+    // Re-run insertOpenedWindow's oversized verdict on the updated clamp. The
+    // open path floats a window whose minimum no column slot can honour, but
+    // clients that pin their size hints AFTER mapping (a Wine game maps
+    // hintless, then pins min to its configured resolution) used to dodge
+    // that verdict on timing alone and stay tiled at a size the strip can
+    // never satisfy — exactly the stranded state the refused-ack latch in
+    // onWindowResized documents waiting on "something else" to heal.
+    // Evaluated whatever minChanged says: an adoption path can seat a tiled
+    // window with an already-oversized clamp, and the effect's idempotent
+    // re-report is then the only revisit this state ever gets.
+    // floatWindowInternal owns the whole transition (slot memory for the
+    // eventual unfloat, float-focus seeding, context-guarded apply,
+    // placementChanged), and the strip write above means the FloatRestore it
+    // captures carries the new clamp. The reverse transition is deliberately
+    // absent — a min that shrinks back below the work area does not
+    // auto-unfloat, because the float may have been rearranged meanwhile and
+    // the manual unfloat path already restores the remembered slot.
+    if (state->strip().containsWindow(windowId)) {
+        const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
+        if (params.workArea.isValid()
+            && (clampedMinWidth > params.workArea.width() || clampedMinHeight > params.workArea.height())) {
+            qCInfo(lcScrollEngine) << "windowMinSizeUpdated:" << windowId << "min" << clampedMinWidth << "x"
+                                   << clampedMinHeight << "outgrew work area" << params.workArea.size() << "on"
+                                   << key.screenId << "— floating (open-time oversized policy)";
+            floatWindowInternal(state, key, windowId, key.screenId);
+            return;
+        }
+    }
+    // Background-context guard, the same one windowClosed and the float paths
+    // carry: a scheduled retile resolves the screen's CURRENT context, so a
+    // min-size report for a window on another desktop would relayout a strip
+    // this change did not touch. The model write still lands; the switch back
+    // retiles the mutated strip.
+    if (minChanged && key == currentKeyForScreen(key.screenId)) {
         scheduleRetileForScreen(key.screenId);
     }
 }
