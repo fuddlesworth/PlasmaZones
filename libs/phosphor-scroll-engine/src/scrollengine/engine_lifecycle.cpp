@@ -330,14 +330,25 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 insertPos == ScrollInsertPosition::IntoActiveColumn ? ScrollInsertPosition::RightOfActive : insertPos);
         }
     }
-    if (inserted && openParams.heightFraction && params.workArea.height() > 0) {
+    if (inserted && openParams.heightFraction) {
         // Per-window open rule wins over every default and remembered
         // height, matching the width/tabbed precedence above. Committed as
         // Fixed pixels against the live work area, the same resolution the
         // adjust verbs use.
-        const qreal fraction = qBound<qreal>(MinWindowHeightFraction, *openParams.heightFraction, 1.0);
-        state->strip().setWindowHeightIntent(
-            windowId, WindowHeight::makeFixed(qMax(1, qRound(fraction * params.workArea.height()))));
+        //
+        // Re-resolved AFTER the insert rather than reusing the params from
+        // the top of this function: with smart gaps the work area depends on
+        // the strip's column count, and an insert that took the strip from
+        // one column to two makes the pre-insert area stale — the committed
+        // pixels are PERSISTED intent, so the error would not self-heal on
+        // the next relayout the way a transient anchor does. The override
+        // pins the resolve to the post-insert count.
+        const ScrollLayoutParams postParams = layoutParamsForScreen(screenId, state->strip().columnCount());
+        if (postParams.workArea.height() > 0) {
+            const qreal fraction = qBound<qreal>(MinWindowHeightFraction, *openParams.heightFraction, 1.0);
+            state->strip().setWindowHeightIntent(
+                windowId, WindowHeight::makeFixed(qMax(1, qRound(fraction * postParams.workArea.height()))));
+        }
     }
     if (!inserted) {
         qCWarning(lcScrollEngine) << "insertOpenedWindow: duplicate window" << windowId;
@@ -611,9 +622,13 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // parked right now.
     const QString priorParkedEdge = m_parkedScrollEdge.take(windowId);
     if (!insertOpenedWindow(state, windowId, screenId, minWidth, minHeight)) {
-        // Every insert refused (the strip already holds the window). Nothing
-        // moved and nothing was adopted, so neither the geometry batch nor
-        // the dirty mark may fire — and the rect memory goes back, because
+        // Every insert refused (the strip already holds the window). On a
+        // fresh open nothing moved; on the MIGRATION path above the old
+        // context already released the window and announced its own retile,
+        // and the only reachable refusal here is "this strip already holds
+        // it", so the window is not stranded either way. Neither the
+        // geometry batch nor the dirty mark may fire for THIS strip — and
+        // the rect memory goes back, because
         // the window is still a live tile: dropped, lastManagedRect answers
         // null and a later float-back captures the COLUMN rect as free
         // geometry, which is the poison this map exists to prevent.
@@ -630,9 +645,18 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         return;
     }
     // Hand the migrated windowed-fullscreen flag to the fresh tile (captured
-    // above, before takeWindow destroyed the old one).
+    // above, before takeWindow destroyed the old one). insertOpenedWindow
+    // returns true on its FLOAT exits too, and a float has no tile to carry
+    // the flag (float and windowed fullscreen are exclusive by design) —
+    // warn about the drop instead of relying on the strip write's silent
+    // no-op, matching the refusal arm's diagnostic above.
     if (migratedWindowedFs) {
-        state->strip().setWindowedFullscreen(windowId, true);
+        if (state->strip().containsWindow(windowId)) {
+            state->strip().setWindowedFullscreen(windowId, true);
+        } else {
+            qCWarning(lcScrollEngine) << "windowOpened:" << windowId
+                                      << "arrived floated — migrated windowed-fullscreen state dropped";
+        }
     }
 
     bool focusNew = true;
@@ -741,6 +765,14 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // reason). pruneStaleWindows reclaims the entry independently.
     m_floatRestore.remove(windowId);
     m_scrollFloatedWindows.remove(windowId);
+    // The parked-edge and windowed-fullscreen apply memories die with the
+    // window: a closed window has no tile left to consume the edge or
+    // compare the flag, and pruneStaleWindows fires only once per session
+    // (bring-up), so without these drops both maps grow by one entry per
+    // qualifying close for the session's lifetime. (m_lastAppliedRect above
+    // is different — it is retained on purpose for the close capture.)
+    m_parkedScrollEdge.remove(windowId);
+    m_lastAppliedWindowedFs.remove(windowId);
 
     if (inStrip && key == currentKeyForScreen(key.screenId)) {
         // Background-context guard: applyLayout resolves the screen's
@@ -758,13 +790,20 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     if (!screenId.isEmpty() && m_scrollingScreens.contains(screenId)) {
         m_activeScreen = screenId;
     }
-    // Self-activation echo filter (the m_pendingSelfActivations doc): a
-    // report answering this engine's own activateWindowRequested carries no
-    // new information — the strip already reflects it, or has legitimately
-    // moved past it on a rapid focus scroll, and focusWindow below would
-    // rewind the active column to the stale echo. Entries ahead of the match
-    // go with it: their echoes were dropped by the effect and can never
-    // arrive after this one on the ordered connection.
+    // Self-activation echo filter, m_pendingSelfActivations' consume side
+    // and the home of its contract: the effect reports EVERY activation
+    // back through notifyWindowFocused, including ones this engine
+    // initiated, and the round trip is asynchronous — on a rapid focus
+    // scroll the strip has already advanced past the echoed window by the
+    // time the report lands, and treating the stale echo as user focus
+    // would rewind the active column below (the next scroll step then
+    // advances from the rewound column and skips one). Entries ahead of the
+    // match go with it: the effect's calls share one ordered D-Bus
+    // connection, so their echoes were dropped (show desktop, window gone)
+    // and can never arrive after this one. The tab-click path never queues
+    // here — its activation goes out via the adaptor's focusWindowRequested,
+    // never this engine's emit, so its echo still drives the strip
+    // (signals.cpp documents that contract).
     if (const int selfIdx = m_pendingSelfActivations.indexOf(windowId); selfIdx >= 0) {
         m_pendingSelfActivations.erase(m_pendingSelfActivations.begin(),
                                        m_pendingSelfActivations.begin() + selfIdx + 1);
@@ -775,9 +814,20 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     m_pendingSelfActivations.clear();
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
-    if (!state || state->isFloating(windowId)) {
+    if (!state) {
         return;
     }
+    if (state->isFloating(windowId)) {
+        // Focus-side memory for switchFocusBetweenFloatingAndTiling: a
+        // genuine report naming a float is the only place the engine learns
+        // the float layer holds focus, and which member holds it.
+        state->setLastFloatingFocus(windowId);
+        state->setFloatingHasFocus(true);
+        return;
+    }
+    // A genuine report naming a tile means the float layer lost focus,
+    // whether or not the strip's own focus slot moves below.
+    state->setFloatingHasFocus(false);
     const ScrollLayoutParams params = layoutParamsForScreen(key.screenId);
     if (state->strip().focusWindow(windowId, params)) {
         // The focus change may scroll the viewport; never re-activate here

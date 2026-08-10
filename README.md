@@ -125,10 +125,10 @@ Full first-run tour: **[Getting started →](https://phosphor-works.github.io/pl
 | Toggle floating | `Meta+F` |
 | Restore window size | `Meta+Alt+Escape` |
 | Scrolling: consume / expel window | `Meta+Alt+I` / `Meta+Alt+Shift+I` |
-| Scrolling: cycle column width | `Meta+Alt+R` |
+| Scrolling: cycle column width forward / back | `Meta+Alt+D` / `Meta+Alt+Shift+D` |
 | Open shortcut cheatsheet | `Meta+Alt+/` |
 
-Full reference — around 85 bindings across core actions, zone movement, snap, layouts, autotile, scrolling, virtual screens, and the editor: **[Keyboard shortcuts →](https://phosphor-works.github.io/plasmazones/shortcuts/)**.
+Full reference — around 100 bindings across core actions, zone movement, snap, layouts, autotile, scrolling, virtual screens, and the editor: **[Keyboard shortcuts →](https://phosphor-works.github.io/plasmazones/shortcuts/)**.
 
 All bindings are rebindable in **System Settings → Shortcuts → PlasmaZones** (KDE). The PlasmaZones settings app rebinds only the layout editor's own shortcuts.
 

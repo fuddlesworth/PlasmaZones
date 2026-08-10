@@ -660,32 +660,9 @@ public:
     P_CONFIG_KEY(rotateVirtualScreensClockwiseKey, "RotateVirtualScreensClockwise")
     P_CONFIG_KEY(rotateVirtualScreensCounterclockwiseKey, "RotateVirtualScreensCounterclockwise")
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Shortcuts.Scrolling
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(focusColumnFirstKey, "FocusColumnFirst")
-    P_CONFIG_KEY(focusColumnLastKey, "FocusColumnLast")
-    P_CONFIG_KEY(moveColumnToFirstKey, "MoveColumnToFirst")
-    P_CONFIG_KEY(moveColumnToLastKey, "MoveColumnToLast")
-    P_CONFIG_KEY(consumeWindowKey, "ConsumeWindow")
-    P_CONFIG_KEY(expelWindowKey, "ExpelWindow")
-    P_CONFIG_KEY(consumeOrExpelLeftKey, "ConsumeOrExpelLeft")
-    P_CONFIG_KEY(consumeOrExpelRightKey, "ConsumeOrExpelRight")
-    P_CONFIG_KEY(centerColumnKey, "CenterColumn")
-    P_CONFIG_KEY(toggleColumnTabbedKey, "ToggleColumnTabbed")
-    P_CONFIG_KEY(toggleWindowedFullscreenKey, "ToggleWindowedFullscreen")
-    P_CONFIG_KEY(cycleColumnWidthKey, "CycleColumnWidth")
-    P_CONFIG_KEY(cycleColumnWidthBackKey, "CycleColumnWidthBack")
-    P_CONFIG_KEY(increaseColumnWidthKey, "IncreaseColumnWidth")
-    P_CONFIG_KEY(decreaseColumnWidthKey, "DecreaseColumnWidth")
-    P_CONFIG_KEY(maximizeColumnKey, "MaximizeColumn")
-    P_CONFIG_KEY(expandColumnKey, "ExpandColumn")
-    P_CONFIG_KEY(cycleWindowHeightKey, "CycleWindowHeight")
-    P_CONFIG_KEY(cycleWindowHeightBackKey, "CycleWindowHeightBack")
-    P_CONFIG_KEY(increaseWindowHeightKey, "IncreaseWindowHeight")
-    P_CONFIG_KEY(decreaseWindowHeightKey, "DecreaseWindowHeight")
-    P_CONFIG_KEY(resetWindowHeightsKey, "ResetWindowHeights")
+    // Shortcuts.Scrolling keys live in configkeys_scrolling.h
+    // (ConfigKeysScrolling, the next link in the inheritance chain) — split
+    // by concern when this file hit its size ceiling.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Tiling

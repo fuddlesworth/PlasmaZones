@@ -145,6 +145,11 @@ public:
                                              bool requireTiledWindows = true);
 
 private:
+    /// "Forward" in cycle/entry-extreme terms: right and down step toward the
+    /// end of the order, left and up toward the start. A static member (not a
+    /// TU-local helper) because both NavigationController TUs share it.
+    static bool isForwardDirection(const QString& direction);
+
     /**
      * @brief Resolve active screen for navigation feedback
      *

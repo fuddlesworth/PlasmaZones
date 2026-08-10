@@ -12,6 +12,7 @@
 
 #include "scrollenginelogging.h"
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -29,17 +30,13 @@ namespace {
 /// scrollEdge field on the tile request does.
 constexpr int kParkMargin = 16;
 
-/// Cap on the self-activation echo queue. The bound exists only to keep a
-/// pathological run of effect-side drops from growing the FIFO without
-/// limit; the full reasoning lives with m_pendingSelfActivations' doc in
-/// ScrollEngine.h.
-constexpr int kMaxPendingSelfActivations = 16;
-
 /// Minimum visible sliver a straddling tile keeps on screen, on BOTH axes:
 /// the horizontal edge clamps and the vertical stack-overflow clamp share
 /// this floor (each raises it to the client's declared minimum under
 /// respectMinimumSize). Hoisted here beside kParkMargin because it governs
 /// two clamp sites, not one loop body.
+/// (The self-activation cap that used to sit here is a ScrollEngine class
+/// constant now — kMaxPendingSelfActivations — shared with the verb TU.)
 constexpr int kMinVisiblePeekPx = 48;
 
 } // namespace
@@ -345,6 +342,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // empty screen forever — and an anchor the re-anchor above already
         // moved is persisted state that has to be marked dirty on this exit
         // too, or the move is never saved.
+        //
+        // The view-delta baseline is INVALIDATED, not left standing: this
+        // state object survives the empty period, and a baseline captured
+        // before it would make the repopulating batch compute a delta
+        // against a coordinate nothing on screen occupies — flying the next
+        // window in from wherever the old view sat. (The arr-empty
+        // interactive-drag bail further down deliberately does NOT clear:
+        // its strip still has resolved columns the compositor is showing.)
+        //
+        // Deliberately no focusWindowAfter activation on this exit either —
+        // there is no tile to activate on an empty resolve, and the caller's
+        // request dies with the batch it was for.
+        state->clearLastAppliedViewX();
         clearTabStripsForScreen(screenId);
         if (anchorMoved) {
             Q_EMIT placementChanged(screenId);
@@ -465,6 +475,13 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         bool anyStayedPut = false;
         for (const ResolvedColumn& column : resolved.columns) {
             for (const ResolvedTile& tile : column.tiles) {
+                // The dragged window's rect memory is deliberately frozen
+                // (the emit loop below skips it), so its stale entry is not
+                // evidence in either direction — the two loops must agree
+                // about which rects are trustworthy.
+                if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
+                    continue;
+                }
                 const auto lastIt = m_lastAppliedRect.constFind(tile.windowId);
                 if (lastIt == m_lastAppliedRect.constEnd()) {
                     continue;
@@ -549,6 +566,20 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // hidden tab of an on-screen column parks WITHOUT an edge, and
             // treating that as "on screen" would consume a remembered
             // departure it is not making.
+            //
+            // m_parkedScrollEdge's write/consume contract lives here, its
+            // producer/consumer pair: written when a window parks WITH a
+            // departure direction, consumed when it comes back on screen;
+            // never-parked windows never appear. Paths that drop a window's
+            // m_lastAppliedRect while it stays alive drop the edge too, with
+            // two deliberate exceptions (the window remains a live tile that
+            // may genuinely be parked right now): windowOpened's re-adoption
+            // TAKES the edge and puts it back on a refused insert, and
+            // onWindowResized's refused-ack arm drops only the rect. The
+            // bring-up aliveness sweep reclaims died-parked entries; one
+            // seam-only gap — an embedder driving strip-level minimize
+            // directly (production models minimize as a float toggle, which
+            // clears) can strand an entry until then.
             if (parkedNow) {
                 if (scrollEdge.isEmpty()) {
                     // Parked with no departure direction. Any edge remembered
@@ -662,7 +693,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                     // scanned-out frame can still show the overhang. That is
                     // the same bypass the clamp exists to avoid, re-accepted
                     // for this one degenerate case.
-                    const QSize tileMin = params.respectMinimumSize ? windowMinimumSize(tile.windowId) : QSize();
+                    // Strip-level lookup: the tile is by construction a strip
+                    // tile of the state in hand, so the engine-level resolve
+                    // (canonicalize + reverse map + float-restore fallback)
+                    // would re-derive what one walk answers.
+                    const QSize tileMin =
+                        params.respectMinimumSize ? state->strip().windowMinimumSize(tile.windowId) : QSize();
                     const int peekFloorX = qMin(screenRect.width(), qMax(kMinVisiblePeekPx, tileMin.width()));
                     if (straddleRight) {
                         const int visible = screenRect.right() + 1 - rect.left();
@@ -709,7 +745,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 park(rect);
                 parkedNow = true;
             } else if (!parkedNow && rect.bottom() > screenRect.bottom()) {
-                const QSize tileMinV = params.respectMinimumSize ? windowMinimumSize(tile.windowId) : QSize();
+                const QSize tileMinV =
+                    params.respectMinimumSize ? state->strip().windowMinimumSize(tile.windowId) : QSize();
                 const int peekFloorY = qMin(screenRect.height(), qMax(kMinVisiblePeekPx, tileMinV.height()));
                 const int visible = screenRect.bottom() + 1 - rect.top();
                 if (visible >= peekFloorY) {
@@ -798,7 +835,16 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // hidden tab shares the active tab's rect, so every inactive tab of
             // every tabbed column would be drawn stacked on the visible one,
             // permanently, on a strip that is not even moving.
-            if (parkedNow && !scrollEdge.isEmpty()) {
+            //
+            // The hidden-tab exclusion is EXPLICIT, not implied by the edge:
+            // a hidden tab of an OFF-SCREEN tabbed column does record its
+            // column's departure edge (the arrival-animation origin when
+            // that tab is activated out of view), and in the tabbed layout
+            // every tile of the column shares one stripRect — painting the
+            // hint for the hidden tabs too would draw all N tabs stacked on
+            // one point while the column travels past. Only the ACTIVE tab
+            // rides the strip; the hidden ones stay at their invisible park.
+            if (parkedNow && !scrollEdge.isEmpty() && !tile.hidden) {
                 obj[QLatin1String("visualX")] = stripRect.x();
                 obj[QLatin1String("visualY")] = stripRect.y();
             }
@@ -832,6 +878,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // only resolved tile is the marked (dragged) window contributes no
         // entries. The behaviour is the same as the empty-strip bail —
         // clear the indicator, persist a moved anchor, emit nothing.
+        // Deliberately no focusWindowAfter activation on this exit either:
+        // the only window that could be activated is the one under the
+        // user's drag, which already holds focus.
         clearTabStripsForScreen(screenId);
         if (anchorMoved) {
             Q_EMIT placementChanged(screenId);
@@ -964,16 +1013,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     if (focusWindowAfter) {
         const QString active = state->strip().activeWindowId();
         if (!active.isEmpty()) {
+            // The engine is about to hand focus to a TILE — the float layer
+            // loses it. windowFocused cannot record this itself: the echo
+            // filter swallows the report before the float bookkeeping runs.
+            // The flag write and the feedback are optimistic — a compositor
+            // that drops the activation leaves the flag false until the next
+            // genuine focus report heals it. Accepted, same as the
+            // switchFocusBetweenFloatingAndTiling twin documents.
+            state->setFloatingHasFocus(false);
             // Remember the request so windowFocused can tell this
-            // activation's echo apart from genuine user focus (the
-            // m_pendingSelfActivations doc). Bounded: an effect-side drop
-            // leaves an entry behind until the clear-on-mismatch reclaims it,
-            // and the cap keeps a pathological run of drops from growing the
-            // queue without limit.
-            m_pendingSelfActivations.append(active);
-            while (m_pendingSelfActivations.size() > kMaxPendingSelfActivations) {
-                m_pendingSelfActivations.removeFirst();
-            }
+            // activation's echo apart from genuine user focus (the echo
+            // contract on windowFocused's drain). Bounded: an effect-side
+            // drop leaves an entry behind until the clear-on-mismatch
+            // reclaims it, and the cap keeps a pathological run of drops
+            // from growing the queue without limit.
+            queueSelfActivation(active);
             Q_EMIT activateWindowRequested(active);
         }
     }
@@ -982,6 +1036,14 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // their own mutation get a second, harmless mark — the dirty flag is
         // idempotent, and gating on a real anchor move keeps this rare.
         Q_EMIT placementChanged(screenId);
+    }
+}
+
+void ScrollEngine::queueSelfActivation(const QString& windowId)
+{
+    m_pendingSelfActivations.append(windowId);
+    while (m_pendingSelfActivations.size() > kMaxPendingSelfActivations) {
+        m_pendingSelfActivations.removeFirst();
     }
 }
 

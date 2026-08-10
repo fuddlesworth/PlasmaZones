@@ -60,6 +60,9 @@ public:
     // IAutotileSettings, ISnapSettings). Engines qobject_cast at point of
     // use to their interface type. No caching, no bridge, no signal wiring
     // inside the engine — the daemon handles change signals externally.
+    // A nullptr is REFUSED with a warning (there is deliberately no unset
+    // path); lifetime is handled by the QPointer member, so a destroyed
+    // settings object reads back null without a teardown-symmetry clear.
     // ═══════════════════════════════════════════════════════════════════════════
 
     void setEngineSettings(QObject* settings);
@@ -125,6 +128,24 @@ Q_SIGNALS:
     /// else the 1-based destination desktop; @p direction is the swap direction.
     void crossModeSwapRequested(const QString& windowId, const QString& targetScreenId, int targetDesktop,
                                 const QString& direction);
+
+    /// Emitted when a directional FOCUS reaches a monitor boundary whose
+    /// neighbour context runs a DIFFERENT tiling mode — the source engine
+    /// cannot name that surface's entry-edge window (it holds no state for
+    /// the other mode), so it defers to the daemon, which asks the target
+    /// engine for the window facing the source in @p direction and activates
+    /// it. No window travels and no engine state changes; the compositor's
+    /// answering focus report is what updates each engine. Monitor crossings
+    /// only — a focus has no cross-desktop arm.
+    ///
+    /// @p handled is an OUT parameter the handler sets true only when it
+    /// actually issued an activation. The connection is DirectConnection by
+    /// contract (enginewiring.cpp), so the emitter reads the verdict on
+    /// return and can report no_target instead of announcing a crossing that
+    /// never happened — an empty neighbour output is an ordinary state for a
+    /// focus, unlike a move, which always has a mover to hand over. A null
+    /// pointer is permitted for callers that do not need the verdict.
+    void crossModeFocusRequested(const QString& targetScreenId, const QString& direction, bool* handled);
 
     /// Emitted to sync floating state without restoring geometry.
     /// Passive state-sync: engine-internal divergence correction.

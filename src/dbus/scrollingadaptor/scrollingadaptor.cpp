@@ -3,6 +3,7 @@
 
 #include "scrollingadaptor.h"
 
+#include "config/configdefaults.h"
 #include "core/platform/logging.h"
 
 #include <algorithm>
@@ -19,6 +20,21 @@
 #include <QVector>
 
 namespace PlasmaZones {
+
+namespace {
+/// The presetVocabularyJson payload keys, in one place so the two writes
+/// cannot drift apart (the sibling payloads use ZoneJsonKeys:: /
+/// ScrollOpenKeys:: the same way). The XML DocString spells them by hand,
+/// per the same kept-in-sync-BY-HAND rule the bounds literals follow.
+inline QLatin1String presetColumnWidthsKey()
+{
+    return QLatin1String("columnWidths");
+}
+inline QLatin1String presetWindowHeightsKey()
+{
+    return QLatin1String("windowHeights");
+}
+} // namespace
 
 ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -68,10 +84,14 @@ QStringList ScrollingAdaptor::scrollingScreens() const
 
 void ScrollingAdaptor::setScrollTabSurface(const QString& screenId, quint32 surfaceId)
 {
-    // No engine POINTER gate, and no change gate either: the producer (the
-    // overlay service) already only calls this on a real change, and re-broadcasting a
-    // value the compositor may have missed is the safe direction for a
-    // registration the compositor cannot re-derive.
+    // No engine POINTER gate, and a deliberate opt-out from the
+    // emit-on-change rule for the non-zero path: the producer (the overlay
+    // service) already only calls this on a real change, and re-broadcasting
+    // a value the compositor may have missed is the safe direction for a
+    // registration the compositor cannot re-derive. The zero path IS gated
+    // on membership below — a retraction for a registration that never
+    // existed is not a re-broadcast of anything, just a spurious event on
+    // the wire.
     //
     // Cleared latch: the overlay connection outlives clearEngine (its
     // context object is this adaptor), and a push landing after the
@@ -83,7 +103,9 @@ void ScrollingAdaptor::setScrollTabSurface(const QString& screenId, quint32 surf
         return;
     }
     if (surfaceId == 0) {
-        m_scrollTabSurfaces.remove(screenId);
+        if (m_scrollTabSurfaces.remove(screenId) == 0) {
+            return;
+        }
     } else {
         m_scrollTabSurfaces.insert(screenId, surfaceId);
     }
@@ -115,6 +137,67 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
     }
     m_engine->focusInDirection(delta < 0 ? QStringLiteral("left") : QStringLiteral("right"),
                                PhosphorEngine::NavigationContext{QString(), screenId});
+}
+
+void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double proportion)
+{
+    // Wire-boundary validation in focusColumn's terms: the screen gate keeps
+    // a stray call from being redirected by the engine's screen fallback, and
+    // the range refusal is silent per the interface's documented convention.
+    // The bounds are the same accessors the settings UI and the hand-written
+    // width setter enforce.
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    // Negated inclusive form rather than "< min || > max": both of those
+    // comparisons are false for NaN, which D-Bus type 'd' can carry, so the
+    // exclusion form would wave a NaN through into the stored intent. The
+    // conjunction is false for NaN by construction.
+    if (!(proportion >= ConfigDefaults::scrollingDefaultColumnWidthProportionMin()
+          && proportion <= ConfigDefaults::scrollingDefaultColumnWidthProportionMax())) {
+        return;
+    }
+    m_engine->setColumnWidth(PhosphorScrollEngine::ColumnWidth::makeProportion(proportion), screenId);
+}
+
+void ScrollingAdaptor::setColumnWidthPixels(const QString& screenId, int px)
+{
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    if (px < ConfigDefaults::scrollingDefaultColumnWidthFixedMin()
+        || px > ConfigDefaults::scrollingDefaultColumnWidthFixedMax()) {
+        return;
+    }
+    m_engine->setColumnWidth(PhosphorScrollEngine::ColumnWidth::makeFixed(px), screenId);
+}
+
+void ScrollingAdaptor::setWindowHeightProportion(const QString& screenId, double proportion)
+{
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    // Height-proportion accessors (they delegate to the width range today;
+    // the separate names keep the two wire contracts independently tunable).
+    // Same negated inclusive form as setColumnWidthProportion: NaN must not
+    // reach the stored intent, and "< min || > max" is false for NaN.
+    if (!(proportion >= ConfigDefaults::scrollingWindowHeightProportionMin()
+          && proportion <= ConfigDefaults::scrollingWindowHeightProportionMax())) {
+        return;
+    }
+    m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makePreset(proportion), screenId);
+}
+
+void ScrollingAdaptor::setWindowHeightPixels(const QString& screenId, int px)
+{
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    if (px < ConfigDefaults::scrollingDefaultWindowHeightMin()
+        || px > ConfigDefaults::scrollingDefaultWindowHeightMax()) {
+        return;
+    }
+    m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makeFixed(px), screenId);
 }
 
 void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
@@ -200,8 +283,8 @@ QString ScrollingAdaptor::presetVocabularyJson(const QString& screenId) const
         return arr;
     };
     QJsonObject obj;
-    obj[QLatin1String("columnWidths")] = toArray(m_engine->effectivePresetColumnWidths(screenId));
-    obj[QLatin1String("windowHeights")] = toArray(m_engine->effectivePresetWindowHeights(screenId));
+    obj[presetColumnWidthsKey()] = toArray(m_engine->effectivePresetColumnWidths(screenId));
+    obj[presetWindowHeightsKey()] = toArray(m_engine->effectivePresetWindowHeights(screenId));
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 

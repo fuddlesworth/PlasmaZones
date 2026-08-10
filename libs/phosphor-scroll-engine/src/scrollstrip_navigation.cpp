@@ -76,6 +76,25 @@ bool ScrollStrip::focusAdjacentTile(int delta)
     return true;
 }
 
+bool ScrollStrip::focusTileAtEnd(bool last)
+{
+    Column* col = activeColumnMutable();
+    if (!col) {
+        return false;
+    }
+    // Same minimized-skip walk as focusAdjacentTile, seeded at the end.
+    const int step = last ? -1 : 1;
+    int target = last ? col->tiles.size() - 1 : 0;
+    while (target >= 0 && target < col->tiles.size() && col->tiles.at(target).minimized) {
+        target += step;
+    }
+    if (target < 0 || target >= col->tiles.size() || target == col->activeTileIdx) {
+        return false;
+    }
+    col->activeTileIdx = target;
+    return true;
+}
+
 bool ScrollStrip::focusWindow(const QString& windowId, const ScrollLayoutParams& params)
 {
     const int colIdx = columnOfWindow(windowId);
@@ -84,14 +103,31 @@ bool ScrollStrip::focusWindow(const QString& windowId, const ScrollLayoutParams&
     }
     Column& col = m_columns[colIdx];
     const int tileIdx = col.indexOfWindow(windowId);
-    if (colIdx == m_activeColumnIdx && col.activeTileIdx == tileIdx) {
+    // A MINIMIZED tile must not become the column's active tile — the
+    // sibling tile-focus walks (focusAdjacentTile, focusTileAtEnd) skip
+    // minimized tiles for exactly the direct-operand hazard the
+    // activeWindowId() contract documents. The column focus still moves so
+    // the caller's column-level intent lands.
+    const bool tileFocusable = tileIdx >= 0 && !col.tiles.at(tileIdx).minimized;
+    if (colIdx == m_activeColumnIdx && (!tileFocusable || col.activeTileIdx == tileIdx)) {
         return false;
     }
     const int prevIdx = m_activeColumnIdx;
     const int oldViewX = viewXFor(params);
-    col.activeTileIdx = tileIdx;
+    if (tileFocusable) {
+        col.activeTileIdx = tileIdx;
+    }
     m_activeColumnIdx = colIdx;
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    // Re-anchor only when the active COLUMN changed. A same-column tile focus
+    // moves no strip geometry (columnWidthPx folds in every non-minimized
+    // tile regardless of activeTileIdx), and running the re-anchor anyway
+    // clamps away the deliberately-unclamped anchors centerActiveColumn /
+    // centerVisibleColumns leave behind — the applyLayout entry point guards
+    // this exact hazard in updateViewForFocus, and the sibling tile-focus
+    // verbs never touch the anchor at all.
+    if (colIdx != prevIdx) {
+        reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    }
     return true;
 }
 

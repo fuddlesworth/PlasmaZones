@@ -512,8 +512,8 @@ public Q_SLOTS:
     /// desktop assignments, the sticky map and legacy float set, both engines'
     /// tracking (via their pruneStaleWindows overrides — TilingState/SnapState
     /// membership, pending orders, min-size and last-rect caches), the
-    /// registry's metadata + canonical entries, and the adaptor's own
-    /// frame-geometry/broadcast shadow maps.
+    /// registry's metadata + canonical entries, the tab-colour memo, and the
+    /// adaptor's own frame-geometry/broadcast shadow maps.
     /// Called by the KWin effect after daemon ready to clean up stale entries
     /// from windows that no longer exist (closed between save and daemon restart).
     void pruneStaleWindows(const QStringList& aliveWindowIds);
@@ -812,9 +812,10 @@ public:
     bool shouldFloatByRule(const QString& windowId, const QString& screenId);
 
     /// Per-window scrolling open-behaviour rule slots (openColumnWidth /
-    /// openTabbed / openColumnPlacement), returned as a loose map so the
-    /// header stays free of scroll-engine types. Keys (present only when the
-    /// slot matched): "widthFraction" (double), "tabbed" (bool), "consume"
+    /// openWindowHeight / openTabbed / openColumnPlacement), returned as a
+    /// loose map so the header stays free of scroll-engine types. Keys
+    /// (present only when the slot matched): "widthFraction" (double),
+    /// "heightFraction" (double), "tabbed" (bool), "consume"
     /// (bool). Resolves UNCACHED, like shouldFloatByRule and unlike the
     /// Restore predicates: the query carries ScreenId and Mode stamps, and the
     /// evaluator cache is keyed on windowId and rule revision alone, so a hit
@@ -1255,6 +1256,29 @@ private Q_SLOTS:
     void handleCrossModeMove(const QString& windowId, const QString& targetScreenId, int targetDesktop,
                              const QString& direction);
 
+private:
+    /**
+     * @brief Body of handleCrossModeMove with the source engine explicit.
+     *
+     * The slot recovers its source from sender(), which is only valid inside
+     * a signal dispatch — the swap handler's no-partner degrade calls this
+     * directly with the engine it already holds, so the degrade keeps working
+     * from any invocation context (tests, invokeMethod), not just a nested
+     * slot call where sender() happens to survive.
+     */
+    void crossModeMoveImpl(PhosphorEngine::PlacementEngineBase* sourceEngine, const QString& windowId,
+                           const QString& targetScreenId, int targetDesktop, const QString& direction);
+
+    /**
+     * @brief The engine owning @p mode, or null when that engine is absent.
+     *
+     * Single mode→engine mapping for the three cross-mode handlers, so a
+     * fourth mode (or engine) is added in one place.
+     */
+    PhosphorEngine::PlacementEngineBase* engineForMode(PhosphorZones::AssignmentEntry::Mode mode) const;
+
+private Q_SLOTS:
+
     /**
      * @brief Orchestrate a cross-MODE directional swap handoff (two-way).
      *
@@ -1270,6 +1294,25 @@ private Q_SLOTS:
      */
     void handleCrossModeSwap(const QString& windowId, const QString& targetScreenId, int targetDesktop,
                              const QString& direction);
+
+    /**
+     * @brief Orchestrate a cross-MODE directional FOCUS crossing.
+     *
+     * Wired to the scroll and autotile engines' crossModeFocusRequested (each
+     * probes its own same-mode neighbour first and defers here only for a
+     * different-mode one). Resolves the target
+     * mode at the destination context, asks that engine for its entry-edge
+     * window facing the source in @p direction (autotile/scroll:
+     * entryWindowForCrossing; snap: the entry zone's occupant), and activates
+     * it. No window travels and no engine state is touched — the compositor's
+     * focus report updates each engine naturally.
+     *
+     * @p handled (nullable) is set true only when an activation was actually
+     * issued. The connection is DirectConnection, so the emitting engine
+     * reads the verdict on return and reports no_target for an empty entry
+     * edge instead of announcing a crossing that never happened.
+     */
+    void handleCrossModeFocus(const QString& targetScreenId, const QString& direction, bool* handled);
 
     /**
      * @brief Handle layout change by validating zone assignments
@@ -1460,15 +1503,6 @@ private:
     // Null until setScreenModeRouter is called (Daemon wires during init).
     ScreenModeRouter* m_screenModeRouter = nullptr;
 
-    // Pure-compute helper that owns snap-mode navigation target
-    // computation. Constructed eagerly in the adaptor constructor with
-    // m_service + m_layoutManager and a feedback callback that forwards
-    // into the adaptor's navigationFeedback signal. The zone detector is
-    // wired late via setZoneDetectionAdaptor which also pushes it into
-    // the resolver. Engine pure: never emits Qt signals directly.
-    // Note: SnapNavigationTargetResolver ownership moved to SnapEngine in
-    // Phase 5E — see SnapEngine::ensureTargetResolver.
-
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service
     //
@@ -1495,16 +1529,17 @@ private:
 
     // Unified window-rule store (daemon-owned, not owned here) + a lazily-built
     // evaluator over its full rule set. One evaluator serves every per-window
-    // resolver: the cacheable ones (shouldRestoreFloatedPosition,
-    // shouldRestoreToZoneOnLogin, placementZonesByRule) share its resolveCached
-    // memo, and the ones that stamp per-call context (shouldFloatByRule,
-    // scrollOpenRuleParams) call resolve() on the same instance, which neither
-    // reads nor seeds that memo. The evaluator self-invalidates
+    // resolver: the cacheable ones share its resolveCached memo, while the
+    // rest stamp per-call context or need a per-query filter and go through
+    // resolve()/resolveFiltered() on the same instance, which neither reads
+    // nor seeds that memo — see rules.cpp for which resolver takes which
+    // path (the enumeration lives with the code, not here, so it cannot go
+    // stale). The evaluator self-invalidates
     // on in-place rule edits via the set revision, so it is built once on first
     // use. Reset in setRuleStore only when the store pointer actually
     // changes (a same-store rebind keeps the evaluator).
     PhosphorRules::RuleStore* m_ruleStore = nullptr;
-    /// Full-store evaluator serving all ten per-window policy resolvers,
+    /// Full-store evaluator serving every per-window policy resolver,
     /// scope-narrowed to the placement-exclusion family — construction and
     /// scope both live in ensureRuleEvaluator() below.
     std::unique_ptr<PhosphorRules::RuleEvaluator> m_ruleEvaluator;

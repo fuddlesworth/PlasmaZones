@@ -45,6 +45,7 @@ add_library(PhosphorTileEngine SHARED
     src/autotileengine/facade.cpp
     src/AutotileConfig.cpp
     src/NavigationController.cpp
+    src/NavigationController_crosssurface.cpp
     src/OverflowManager.cpp
     src/PerScreenConfigResolver.cpp
     src/tileenginelogging.h

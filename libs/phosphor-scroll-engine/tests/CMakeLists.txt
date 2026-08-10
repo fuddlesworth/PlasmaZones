@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 # PhosphorScrollEngine unit tests. Headless throughout: two files exercise
-# the pure strip model, six drive the engine through null daemon dependencies
-# and the geometry-provider seam. None needs a QPA platform, so the strip
-# tests run APPLESS and the engine tests GUILESS (they need an event
-# dispatcher for the coalesced retile and the prunes' deleteLater).
+# the pure strip model, seven drive the engine through null daemon
+# dependencies and the geometry-provider seam. None needs a QPA platform, so
+# by convention the strip tests run APPLESS and the engine tests GUILESS
+# (they need an event dispatcher for the coalesced retile and the prunes'
+# deleteLater) — the convention lives in each file's *_MAIN macro; nothing
+# here enforces it.
 #
 # These route through phosphor_apply_test_isolation like every other
 # libs/phosphor-*/tests tree. Nothing here touches the session bus today, so
@@ -31,6 +33,11 @@ function(pse_add_test _name)
             Qt6::Core
             PhosphorScrollEngine::PhosphorScrollEngine
     )
+    # The shared fixture header rides every target here (it carries no
+    # Q_OBJECT; automoc scans it and produces nothing). Listed inside the
+    # function so adding a test is ONE line below — a separate per-target
+    # list drifted the moment a tenth test forgot its second edit.
+    target_sources(${_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/scrollstriptestutils.h)
     add_test(NAME ${_name} COMMAND ${_name})
     set_tests_properties(${_name} PROPERTIES LABELS "phosphorscrollengine")
     phosphor_apply_test_isolation(${_name})
@@ -44,15 +51,4 @@ pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp)
-
-# Shared fixture header, listed so IDE/target file listings see it (every
-# strip and engine test includes it; it carries no Q_OBJECT, so automoc scans
-# it and produces nothing).
-target_sources(test_scrollstrip_core PRIVATE scrollstriptestutils.h)
-target_sources(test_scrollstrip_ops PRIVATE scrollstriptestutils.h)
-target_sources(test_scrollengine_smoke PRIVATE scrollstriptestutils.h)
-target_sources(test_scrollengine_persistence PRIVATE scrollstriptestutils.h)
-target_sources(test_scrollengine_zonenumbers PRIVATE scrollstriptestutils.h)
-target_sources(test_scrollengine_perscreen PRIVATE scrollstriptestutils.h)
-target_sources(test_scrollengine_draginsert PRIVATE scrollstriptestutils.h)
-target_sources(test_scrollengine_boundary PRIVATE scrollstriptestutils.h)
+pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)

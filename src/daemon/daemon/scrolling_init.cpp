@@ -4,10 +4,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // Daemon — scrolling-mode shortcut wiring
 //
-// Connects the ShortcutManager's scroll-specific column signals to the
-// concrete ScrollEngine. Directional focus/move/swap and float shortcuts are
-// NOT here — they route through the generic navigation handlers
-// (navigation.cpp), which reach the scroll engine via ScreenModeRouter.
+// Connects the ShortcutManager's scroll-specific signals to the concrete
+// ScrollEngine — the column vocabulary, the edge-stop/wrap focus variants,
+// the top/bottom window focus, and the one-way float verbs. The GENERIC
+// directional move/focus/swap chords are not here: they route through the
+// generic navigation handlers (navigation.cpp), which reach the scroll
+// engine via ScreenModeRouter.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
@@ -61,7 +63,10 @@ void Daemon::connectScrollingShortcuts()
         return;
     }
     // Tracked handles, mirroring initializeAutotile: a re-entry must not
-    // stack duplicate lambda connections.
+    // stack duplicate lambda connections. The re-entry is PROSPECTIVE — this
+    // has exactly one call site today (Daemon::start's wiring pass) — but
+    // the mirrored shape keeps a future re-wire from silently double-firing
+    // every verb.
     for (const QMetaObject::Connection& c : std::as_const(m_scrollingShortcutConnections)) {
         disconnect(c);
     }
@@ -163,6 +168,32 @@ void Daemon::connectScrollingShortcuts()
     }));
     wire(&ShortcutManager::scrollResetWindowHeightsRequested, plainVerb([](Scroll* s, const QString& id) {
         s->resetWindowHeights(id);
+    }));
+    wire(&ShortcutManager::scrollCenterVisibleColumnsRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->centerVisibleColumns(id);
+    }));
+    // POLARITY CONTRACT: the emitter passes bottom=false for
+    // kIdScrollFocusWindowTop and true for the Bottom id (shortcutmanager.cpp
+    // table rows); focusTileAtEnd(false) seeks the TOP tile. Swapping this
+    // ternary compiles clean and no test drives the wire, so keep the
+    // polarity next to the branch.
+    wire(&ShortcutManager::scrollFocusWindowEndRequested, boolVerb([](Scroll* s, const QString& id, bool bottom) {
+        bottom ? s->focusWindowBottom(id) : s->focusWindowTop(id);
+    }));
+    wire(&ShortcutManager::scrollFocusColumnPlainRequested, intVerb([](Scroll* s, const QString& id, int delta) {
+        s->focusColumnPlain(delta, id);
+    }));
+    wire(&ShortcutManager::scrollFocusColumnWrapRequested, intVerb([](Scroll* s, const QString& id, int delta) {
+        s->focusColumnWrap(delta, id);
+    }));
+    wire(&ShortcutManager::scrollSwitchFocusFloatTilingRequested, plainVerb([](Scroll* s, const QString& id) {
+        s->switchFocusBetweenFloatingAndTiling(id);
+    }));
+    // POLARITY CONTRACT: the emitter passes floating=true for
+    // kIdScrollMoveToFloating and false for the MoveToTiling id — same
+    // swap-silently hazard as the focus-end wire above.
+    wire(&ShortcutManager::scrollMoveToFloatRequested, boolVerb([](Scroll* s, const QString& id, bool floating) {
+        floating ? s->moveFocusedToFloating(id) : s->moveFocusedToTiling(id);
     }));
 }
 

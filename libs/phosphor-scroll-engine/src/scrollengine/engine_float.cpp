@@ -89,8 +89,18 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
         // after column indices shift (prefer the neighbour above, else below).
         restore.stackAnchor = sourceColumn.anchorSiblingFor(restore.tileIndex);
     }
+    // The strip's active tile is the engine's focus proxy: pulling it into
+    // the float layer moves focus THERE without any compositor round trip
+    // (the window keeps focus; no report will arrive to record the side
+    // change). A non-active float (rules, batch operations) leaves the
+    // focus-side memory alone.
+    const bool wasActiveTile = state->strip().activeWindowId() == windowId;
     state->strip().takeWindow(windowId, params);
     state->addFloating(windowId);
+    if (wasActiveTile) {
+        state->setLastFloatingFocus(windowId);
+        state->setFloatingHasFocus(true);
+    }
     m_floatRestore.insert(windowId, restore);
     m_scrollFloatedWindows.insert(windowId);
     m_lastAppliedRect.remove(windowId);
@@ -124,6 +134,14 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     // strip this window does not live on. The caller's value is the fallback
     // only for a window the reverse map has no key for at all.
     const QString contextScreen = key.screenId.isEmpty() ? screenId : key.screenId;
+
+    // Mirror of floatWindowInternal's focus-side capture: re-tiling the float
+    // that holds focus moves focus back to the strip with no compositor
+    // report (the window keeps focus, only its layer changes). Read before
+    // removeFloating, which clears BOTH focus-memory fields when this window
+    // held them — the capture is what lets the insert-refused restore arm
+    // put the pair back.
+    const bool wasFloatFocus = state->floatingHasFocus() && state->lastFloatingFocus() == windowId;
 
     if (!state->removeFloating(windowId)) {
         // This engine holds no float for the window — but the SHARED float
@@ -191,6 +209,12 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         if (hadSlot) {
             m_floatRestore.insert(windowId, restore);
         }
+        // removeFloating above cleared the focus-memory pair when this window
+        // held it; the window is a float again, so put both halves back.
+        if (wasFloatFocus) {
+            state->setLastFloatingFocus(windowId);
+            state->setFloatingHasFocus(true);
+        }
         return false;
     }
     {
@@ -212,6 +236,9 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
             state->strip().setWindowHeightIntent(windowId, restore.height);
         }
         state->strip().focusWindow(windowId, params);
+        // No setFloatingHasFocus(false) here: removeFloating already cleared
+        // the pair when this window held it (the wasFloatFocus capture above
+        // exists for the refusal arm's restore, not for a second clear).
     }
     m_scrollFloatedWindows.remove(windowId);
     // contextScreen, not the caller's raw screenId — the same fallback form
@@ -250,17 +277,30 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         if (targetScreen.isEmpty()) {
             return;
         }
-        ScrollState* target = stateForKey(currentKeyForScreen(targetScreen), true);
-        if (!target || target->containsWindow(windowId)) {
+        // Look up WITHOUT creating first: the two bail-outs below must not
+        // leave a freshly created empty state behind — an empty state at a
+        // key makes desktopsWithActiveState report the desktop and keeps the
+        // stateless-bookkeeping sweep from reclaiming the screen.
+        ScrollState* target = stateForKey(currentKeyForScreen(targetScreen), false);
+        if (target && target->containsWindow(windowId)) {
             return;
+        }
+        if (!target) {
+            target = stateForKey(currentKeyForScreen(targetScreen), true);
+            if (!target) {
+                return;
+            }
         }
         const ScrollLayoutParams params = layoutParamsForScreen(targetScreen);
         // Same as handoffReceive: the retained close/release rect only has to
         // outlive the capture window, and carrying it into a re-adoption would
         // gate away the first windowsTiled batch for this window. Parked-edge
-        // memory is dropped for the same re-adoption reason.
+        // and windowed-fullscreen memories are dropped for the same
+        // re-adoption reason (the fs drop is a symmetry belt — a stale entry
+        // there could only force one redundant emit, never suppress one).
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
         // Whatever clamp is on record for the window while it floats — the
         // seed a float-at-open left, or a live windowMinSizeUpdated
         // write-through. This route inserts without min sizes, so without the

@@ -533,5 +533,37 @@ P_STORE_SET_STRING(setScrollingDecreaseWindowHeightShortcut, shortcutsScrollingG
 P_STORE_GET(QString, scrollingResetWindowHeightsShortcut, shortcutsScrollingGroup, resetWindowHeightsKey, QString)
 P_STORE_SET_STRING(setScrollingResetWindowHeightsShortcut, shortcutsScrollingGroup, resetWindowHeightsKey,
                    scrollingResetWindowHeightsShortcutChanged)
+P_STORE_GET(QString, scrollingCenterVisibleColumnsShortcut, shortcutsScrollingGroup, centerVisibleColumnsKey, QString)
+P_STORE_SET_STRING(setScrollingCenterVisibleColumnsShortcut, shortcutsScrollingGroup, centerVisibleColumnsKey,
+                   scrollingCenterVisibleColumnsShortcutChanged)
+P_STORE_GET(QString, scrollingFocusWindowTopShortcut, shortcutsScrollingGroup, focusWindowTopKey, QString)
+P_STORE_SET_STRING(setScrollingFocusWindowTopShortcut, shortcutsScrollingGroup, focusWindowTopKey,
+                   scrollingFocusWindowTopShortcutChanged)
+P_STORE_GET(QString, scrollingFocusWindowBottomShortcut, shortcutsScrollingGroup, focusWindowBottomKey, QString)
+P_STORE_SET_STRING(setScrollingFocusWindowBottomShortcut, shortcutsScrollingGroup, focusWindowBottomKey,
+                   scrollingFocusWindowBottomShortcutChanged)
+P_STORE_GET(QString, scrollingFocusColumnLeftShortcut, shortcutsScrollingGroup, focusColumnLeftKey, QString)
+P_STORE_SET_STRING(setScrollingFocusColumnLeftShortcut, shortcutsScrollingGroup, focusColumnLeftKey,
+                   scrollingFocusColumnLeftShortcutChanged)
+P_STORE_GET(QString, scrollingFocusColumnRightShortcut, shortcutsScrollingGroup, focusColumnRightKey, QString)
+P_STORE_SET_STRING(setScrollingFocusColumnRightShortcut, shortcutsScrollingGroup, focusColumnRightKey,
+                   scrollingFocusColumnRightShortcutChanged)
+P_STORE_GET(QString, scrollingFocusColumnLeftOrLastShortcut, shortcutsScrollingGroup, focusColumnLeftOrLastKey, QString)
+P_STORE_SET_STRING(setScrollingFocusColumnLeftOrLastShortcut, shortcutsScrollingGroup, focusColumnLeftOrLastKey,
+                   scrollingFocusColumnLeftOrLastShortcutChanged)
+P_STORE_GET(QString, scrollingFocusColumnRightOrFirstShortcut, shortcutsScrollingGroup, focusColumnRightOrFirstKey,
+            QString)
+P_STORE_SET_STRING(setScrollingFocusColumnRightOrFirstShortcut, shortcutsScrollingGroup, focusColumnRightOrFirstKey,
+                   scrollingFocusColumnRightOrFirstShortcutChanged)
+P_STORE_GET(QString, scrollingSwitchFocusFloatTilingShortcut, shortcutsScrollingGroup, switchFocusFloatTilingKey,
+            QString)
+P_STORE_SET_STRING(setScrollingSwitchFocusFloatTilingShortcut, shortcutsScrollingGroup, switchFocusFloatTilingKey,
+                   scrollingSwitchFocusFloatTilingShortcutChanged)
+P_STORE_GET(QString, scrollingMoveToFloatingShortcut, shortcutsScrollingGroup, moveToFloatingKey, QString)
+P_STORE_SET_STRING(setScrollingMoveToFloatingShortcut, shortcutsScrollingGroup, moveToFloatingKey,
+                   scrollingMoveToFloatingShortcutChanged)
+P_STORE_GET(QString, scrollingMoveToTilingShortcut, shortcutsScrollingGroup, moveToTilingKey, QString)
+P_STORE_SET_STRING(setScrollingMoveToTilingShortcut, shortcutsScrollingGroup, moveToTilingKey,
+                   scrollingMoveToTilingShortcutChanged)
 
 } // namespace PlasmaZones

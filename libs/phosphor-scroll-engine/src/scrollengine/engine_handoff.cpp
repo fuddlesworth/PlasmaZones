@@ -168,6 +168,16 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         // poisons the snap slot with the arrival frame.
         m_scrollFloatedWindows.insert(windowId);
         m_states.setKeyForWindow(windowId, key);
+        if (ctx.heldFocus) {
+            // The arrival holds compositor focus and keeps it across the
+            // handoff, so no focus report will arrive to record the side
+            // change — seed the pair like floatWindowInternal's active-tile
+            // arm, or moveFocusedToTiling answers "Nothing to restore" for
+            // the very float the user is looking at, and the focus switch
+            // activates an arbitrary sorted-order float instead.
+            state->setLastFloatingFocus(windowId);
+            state->setFloatingHasFocus(true);
+        }
         Q_EMIT windowFloatingStateSynced(windowId, true, ctx.toScreenId);
         // The screen's placement changed too (managed set grew), even
         // though no strip geometry moved.

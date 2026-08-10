@@ -485,6 +485,10 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         ctx.toScreenId = newScreenId;
         ctx.fromEngineId = source ? source->engineId() : QString();
         ctx.wasFloating = true;
+        // Canonical-vs-canonical (windowActivated stores the shadow id): the
+        // receive seeds its focus memory from this — a screen change that
+        // never moved focus produces no report to record the side change.
+        ctx.heldFocus = m_lastActiveWindowId == shadowWindowId(windowId);
         ctx.sourceGeometry = m_frameGeometry.value(shadowWindowId(windowId));
         ctx.minSize = source ? source->windowMinimumSize(windowId) : QSize();
         const bool adopted = WindowTrackingInternal::guardedHandoff(source, dest, ctx, trackedScreen);

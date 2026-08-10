@@ -90,11 +90,12 @@ inline constexpr int kMaxPresetScan = 256;
 /// field while the engine silently cycles its built-ins: the accepted-but-dead
 /// divergence this validator exists to prevent.
 ///
-/// @p maxValue is a parameter rather than a literal 1.0 so the proportion
-/// ceiling has exactly one home. Both call sites pass
-/// ConfigDefaults::scrollingDefaultColumnWidthProportionMax(), which is where
-/// that header says the ceiling lives; this TU deliberately does not include
-/// ConfigDefaults, since nothing else here is domain-specific.
+/// @p maxValue is a parameter rather than a literal 1.0 so each domain's
+/// proportion ceiling has exactly one home: the width call site passes
+/// ConfigDefaults::scrollingDefaultColumnWidthProportionMax() and the height
+/// one its delegating twin scrollingWindowHeightProportionMax(), so the two
+/// vocabularies can be retuned independently. This TU deliberately does not
+/// include ConfigDefaults, since nothing else here is domain-specific.
 inline QVariant canonicalProportionList(const QVariant& v, const QString& fallback, double maxValue)
 {
     const auto canonicalize = [maxValue](const QString& raw) {

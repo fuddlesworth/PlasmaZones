@@ -43,13 +43,13 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                                        PhosphorEngine::PlacementEngineBase* autotileEngine,
                                        PhosphorEngine::PlacementEngineBase* scrollEngine)
 {
-    // Disconnect previous autotile engine nav feedback (its other five
+    // Disconnect previous autotile engine nav feedback (its other six
     // signals get their own targeted disconnect blocks below)
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
     // The scroll engine gets the same generic base-signal wiring as the
-    // other two below; drop the SAME six signals, targeted — a blanket
+    // other two below; drop the SAME seven signals, targeted — a blanket
     // disconnect(engine, nullptr, this, nullptr) would also sever
     // connections OTHER classes made with this adaptor as receiver context
     // (concretely the composition root's placementChanged→markDirty
@@ -60,6 +60,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this, nullptr);
         disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
         disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+        disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this, nullptr);
         disconnect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, nullptr);
     }
     // Drop the cross-desktop move relay from BOTH outgoing engines before
@@ -91,10 +92,17 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_snapEngine) {
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+        // Focus is emitted by the scroll and autotile engines (snap has no
+        // directional window-focus vocabulary), so nothing here has a live
+        // connection to drop — but the sweep stays symmetric with the scroll
+        // block above so the day snap gains the emit (and the connect beside
+        // these two), the rewire cannot double-fire handleCrossModeFocus.
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this, nullptr);
     }
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this, nullptr);
     }
     // Drop the snap-specific state signals (snap-mode-only types, connected below
     // on the typed engine) from the outgoing snap engine — same rule. Uses the
@@ -375,6 +383,16 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
     }
 
+    // Cross-MODE directional focus from an autotile boundary: autotile's plain
+    // focus probes its own same-mode neighbour first and defers here only when
+    // the neighbour context runs a different mode. DirectConnection so the
+    // handler's out-param verdict is readable on return (see the scroll twin
+    // below).
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeFocus, Qt::DirectConnection);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Common float-restore geometry channel
     //
@@ -423,6 +441,13 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
+        // Cross-MODE directional FOCUS: emitted by scroll (here) and autotile
+        // (above); each probes its own same-mode neighbour first and defers
+        // only for a different-mode one. Snap has no directional window-focus
+        // vocabulary. DirectConnection so the activation lands within the
+        // navigation call, like the move/swap.
+        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeFocus, Qt::DirectConnection);
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
         if (auto* scroll = m_cachedScrollEngine.data()) {
             // DELIBERATE SCOPE NOTE: of the injections the scroll engine
@@ -471,7 +496,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         } else {
             // A non-ScrollEngine in the scroll slot leaves m_cachedScrollEngine
             // null, so the float predicate and the open-params resolver are
-            // silently skipped while all six generic signals stay wired —
+            // silently skipped while all seven generic signals stay wired —
             // every scrolling Float rule and every open-behaviour rule becomes
             // inert with nothing in the log to say why. The snap slot qFatals
             // on the same mistake; this is at least loud.

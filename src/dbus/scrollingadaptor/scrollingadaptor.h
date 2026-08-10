@@ -24,11 +24,13 @@ namespace PlasmaZones {
  * Provides D-Bus interface: org.plasmazones.Scrolling
  *
  * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin
- * effect uses as its Mode-stamp discriminator, the strip-preview snapshot,
- * the wheel-driven focusColumn verb, the clearWindowedFullscreen
- * reconciliation call (inbound, effect to daemon, when a client leaves
- * fullscreen on its own), and the reapplyWindowGeometry repair call
- * (inbound too, for a fullscreen exit whose strip rects never moved).
+ * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
+ * (with the preset vocabulary beside it), the wheel-driven focusColumn
+ * verb, the four absolute width/height setters for external scripting, the
+ * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
+ * when a client leaves fullscreen on its own), and the
+ * reapplyWindowGeometry repair call (inbound too, for a fullscreen exit
+ * whose strip rects never moved).
  * Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
@@ -75,6 +77,12 @@ public Q_SLOTS:
      * the engine's own screen fallback would otherwise redirect a wheel
      * event from a non-scrolling monitor onto the active scrolling one.
      *
+     * A press at the strip's edge CROSSES onto the adjacent output when
+     * one exists (a different-mode neighbour defers to the daemon, which
+     * activates that engine's entry-edge window), and a press on an EMPTY
+     * scrolling screen crosses the same way instead of dead-ending — so a
+     * wheel notch can legitimately move focus to another monitor.
+     *
      * Every rejection is a SILENT no-op, not an error reply: an empty
      * @p screenId, a screen the engine does not own, and any @p delta
      * other than -1 or +1 all return without acting, so a caller cannot
@@ -86,6 +94,33 @@ public Q_SLOTS:
      *              other value is ignored
      */
     void focusColumn(const QString& screenId, int delta);
+
+    /**
+     * @brief Absolute width/height intents for the focused column and window
+     *
+     * The D-Bus home of niri's absolute set-column-width and
+     * set-window-height: a global shortcut carries no value argument, so the
+     * absolute setters live only on this surface. All four share focusColumn's
+     * silent ownership gate, and each refuses out-of-range values silently —
+     * proportions outside the settings UI's proportion range, pixels outside
+     * its fixed range (the width and height fixed ranges happen to agree
+     * today; each is validated against its own accessor). A value equal to
+     * the current intent answers with a no-target OSD, like the step verbs.
+     *
+     * Width proportions are exact (ColumnWidth has a Proportion kind).
+     * Height proportions are NOT: the strip model stores them as a fraction
+     * anchor that snaps to the nearest effective height preset at relayout
+     * (WindowHeight::Preset's value-anchored contract), so an exact height
+     * needs the pixel form.
+     *
+     * NOTE: nothing in this tree calls these four — they exist FOR external
+     * scripting, like presetVocabularyJson below. Do not re-justify them by
+     * naming an in-tree caller; there is none beyond the contract tests.
+     */
+    void setColumnWidthProportion(const QString& screenId, double proportion);
+    void setColumnWidthPixels(const QString& screenId, int px);
+    void setWindowHeightProportion(const QString& screenId, double proportion);
+    void setWindowHeightPixels(const QString& screenId, int px);
 
     /**
      * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)

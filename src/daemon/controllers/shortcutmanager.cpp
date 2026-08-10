@@ -421,6 +421,61 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollResetWindowHeightsRequested();
      }},
+    {kIdScrollCenterVisibleColumns, &ConfigDefaults::scrollingCenterVisibleColumnsShortcut,
+     &Settings::scrollingCenterVisibleColumnsShortcut, QT_TRANSLATE_NOOP("plasmazones", "Center Visible Columns"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollCenterVisibleColumnsRequested();
+     }},
+    {kIdScrollFocusWindowTop, &ConfigDefaults::scrollingFocusWindowTopShortcut,
+     &Settings::scrollingFocusWindowTopShortcut, QT_TRANSLATE_NOOP("plasmazones", "Focus Top Window in Column"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollFocusWindowEndRequested(false);
+     }},
+    {kIdScrollFocusWindowBottom, &ConfigDefaults::scrollingFocusWindowBottomShortcut,
+     &Settings::scrollingFocusWindowBottomShortcut, QT_TRANSLATE_NOOP("plasmazones", "Focus Bottom Window in Column"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollFocusWindowEndRequested(true);
+     }},
+    {kIdScrollFocusColumnLeft, &ConfigDefaults::scrollingFocusColumnLeftShortcut,
+     &Settings::scrollingFocusColumnLeftShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left, Stopping at the Edge"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollFocusColumnPlainRequested(-1);
+     }},
+    {kIdScrollFocusColumnRight, &ConfigDefaults::scrollingFocusColumnRightShortcut,
+     &Settings::scrollingFocusColumnRightShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right, Stopping at the Edge"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollFocusColumnPlainRequested(1);
+     }},
+    {kIdScrollFocusColumnLeftOrLast, &ConfigDefaults::scrollingFocusColumnLeftOrLastShortcut,
+     &Settings::scrollingFocusColumnLeftOrLastShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left, Wrapping"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollFocusColumnWrapRequested(-1);
+     }},
+    {kIdScrollFocusColumnRightOrFirst, &ConfigDefaults::scrollingFocusColumnRightOrFirstShortcut,
+     &Settings::scrollingFocusColumnRightOrFirstShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right, Wrapping"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollFocusColumnWrapRequested(1);
+     }},
+    {kIdScrollSwitchFocusFloatTiling, &ConfigDefaults::scrollingSwitchFocusFloatTilingShortcut,
+     &Settings::scrollingSwitchFocusFloatTilingShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Switch Focus Between Floating and Tiled"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollSwitchFocusFloatTilingRequested();
+     }},
+    {kIdScrollMoveToFloating, &ConfigDefaults::scrollingMoveToFloatingShortcut,
+     &Settings::scrollingMoveToFloatingShortcut, QT_TRANSLATE_NOOP("plasmazones", "Move Window to Floating"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollMoveToFloatRequested(true);
+     }},
+    {kIdScrollMoveToTiling, &ConfigDefaults::scrollingMoveToTilingShortcut, &Settings::scrollingMoveToTilingShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Move Window to Tiled"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->scrollMoveToFloatRequested(false);
+     }},
 
     // ─── Cheatsheet ────────────────────────────────────────────────────────
     {kIdToggleCheatsheet, &ConfigDefaults::toggleCheatsheetShortcut, &Settings::toggleCheatsheetShortcut,
@@ -617,24 +672,48 @@ void ShortcutManager::settleRegistration(quint64 generation)
     }
     m_registrationInProgress = false;
     qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
-    bool modelAlreadyEmitted = false;
+    // A settle with BOTH dirty settings and queued adhoc ops coalesces onto
+    // ONE backend flush (see applyShortcutUpdates' doc): the rebinds stay
+    // pending, the drain's trailing flush carries them, and only when
+    // nothing was drained does the deferred flush run here. The
+    // cheatsheetModelChanged for the rebinds is emitted AFTER whichever
+    // flush carried them — the model reads the backend's read-back
+    // (effectiveTriggers prefers it), so an emit ahead of the flush would
+    // publish the pre-flush sequences and nothing re-emits until the next
+    // settings save.
+    bool modelEmitted = false;
     if (m_settingsDirty) {
         m_settingsDirty = false;
-        modelAlreadyEmitted = updateShortcuts();
+        const bool rebound = applyShortcutUpdates(/*deferFlush=*/true);
+        // Replay any adhoc (un)registrations that arrived while the initial
+        // batch was in flight. Must run AFTER the in-progress flag is
+        // cleared so each drained op takes the immediate path instead of
+        // re-queuing itself.
+        const bool drainFlushed = drainPendingAdhocOps();
+        if (rebound && !drainFlushed) {
+            m_registry->flush();
+        }
+        if (rebound) {
+            Q_EMIT cheatsheetModelChanged();
+            modelEmitted = true;
+        }
+    } else {
+        drainPendingAdhocOps();
     }
-    // Replay any adhoc (un)registrations that arrived while the initial batch
-    // was in flight. Must run AFTER the in-progress flag is cleared so each
-    // drained op takes the immediate path instead of re-queuing itself.
-    drainPendingAdhocOps();
     // The catalog is first meaningful once the batch has settled (backend
-    // read-back can answer now). One emit per settle: a dirty-settings replay
-    // above may already have re-pushed it.
-    if (!modelAlreadyEmitted) {
+    // read-back can answer now). One emit per settle: the dirty-settings
+    // arm above may already have pushed it post-flush.
+    if (!modelEmitted) {
         Q_EMIT cheatsheetModelChanged();
     }
 }
 
 bool ShortcutManager::updateShortcuts()
+{
+    return applyShortcutUpdates(/*deferFlush=*/false);
+}
+
+bool ShortcutManager::applyShortcutUpdates(bool deferFlush)
 {
     if (m_registrationInProgress) {
         // Defer — the ready() callback above will call us again.
@@ -651,8 +730,12 @@ bool ShortcutManager::updateShortcuts()
     if (!rebindAll()) {
         return false;
     }
-    m_registry->flush();
-    Q_EMIT cheatsheetModelChanged();
+    if (!deferFlush) {
+        m_registry->flush();
+        Q_EMIT cheatsheetModelChanged();
+    }
+    // Deferred: the CALLER owns both the flush and the post-flush emit —
+    // emitting here would publish the pre-flush backend read-back.
     return true;
 }
 
@@ -697,10 +780,11 @@ void ShortcutManager::unregisterShortcuts()
     // everything by closing the session.
     //
     // Deliberately NO cheatsheetModelChanged emit, unlike every other
-    // catalog-changing path. This runs on the daemon stop() path, where the
-    // only consumer (refreshCheatsheetIfVisible) is being torn down alongside
-    // the overlay service; announcing an empty catalog into a half-destroyed
-    // overlay buys nothing, since a live sheet goes away with it.
+    // catalog-changing path. The two callers are the daemon stop() path —
+    // where the only consumer (refreshCheatsheetIfVisible) is being torn
+    // down alongside the overlay service — and setBackendForTesting's
+    // misuse branch, which is a programming-error recovery that no live
+    // overlay should ever observe; neither needs an empty-catalog announce.
     m_entries.clear();
 
     // Tear down the backend so any Portal session is closed and grabs are
@@ -871,10 +955,10 @@ void ShortcutManager::erasePendingAdhocOps(const QString& id)
                             m_pendingAdhocOps.end());
 }
 
-void ShortcutManager::drainPendingAdhocOps()
+bool ShortcutManager::drainPendingAdhocOps()
 {
     if (m_pendingAdhocOps.isEmpty()) {
-        return;
+        return false;
     }
     // Swap so the member queue is empty for the duration; the registration
     // flag is already cleared, so a re-entrant (un)registerAdhocShortcut
@@ -904,6 +988,7 @@ void ShortcutManager::drainPendingAdhocOps()
         }
     }
     m_registry->flush();
+    return true;
 }
 
 bool ShortcutManager::rebindAll()
@@ -932,9 +1017,10 @@ QStringList ShortcutManager::staticShortcutIds()
 void ShortcutManager::buildEntries()
 {
     m_entries.clear();
-    m_entries.reserve(std::size(kStaticEntries) + 2 * kIndexedSlotCount);
+    m_entries.reserve(static_cast<int>(std::size(kStaticEntries)) + 2 * kIndexedSlotCount);
 
     Settings* s = m_settings;
+    ShortcutManager* sm = this;
 
     // Static table — one entry per row.
     for (const auto& src : kStaticEntries) {
@@ -947,7 +1033,6 @@ void ShortcutManager::buildEntries()
         e.currentSeq = [s, curGetter, idCopy] {
             return parseSequence((s->*curGetter)(), idCopy);
         };
-        ShortcutManager* sm = this;
         const auto fire = src.fire;
         e.fire = [sm, fire] {
             fire(sm);

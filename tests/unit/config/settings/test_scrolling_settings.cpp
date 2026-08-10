@@ -1,6 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): this file is just past the 1150 hard
+// ceiling. The case for it: the shortcut-invariant guards (duplicate
+// defaults, Shift+symbol spellings, the schema/manager parity derivations)
+// and the scrolling schema guards read each other's fixtures and pin the
+// SAME defaults table, so a split would duplicate the advertised-chord
+// pins across two files and let them drift apart — the exact defect class
+// this suite exists to prevent. If a genuinely separate concern lands,
+// it takes a sibling rather than growing this.
+
 /**
  * @file test_scrolling_settings.cpp
  * @brief Schema-level guards for the Scrolling group and the
@@ -185,6 +194,31 @@ private Q_SLOTS:
             }
         }
         QVERIFY2(offenders.isEmpty(), qPrintable(offenders.join(QLatin1String("; "))));
+    }
+
+    /// The specific chords the CHANGELOG and README advertise, plus the
+    /// ships-unbound set, pinned by VALUE. The structural guards above
+    /// cannot see a retune that moves an advertised default (or binds a
+    /// deliberately-unbound verb) while staying unique and parseable — this
+    /// is what fails when a shipped doc claim and a default disagree.
+    void advertisedChordValues()
+    {
+        QCOMPARE(ConfigDefaults::scrollingCenterVisibleColumnsShortcut(), QStringLiteral("Meta+Alt+Shift+C"));
+        QCOMPARE(ConfigDefaults::scrollingFocusWindowTopShortcut(), QStringLiteral("Meta+Alt+V"));
+        QCOMPARE(ConfigDefaults::scrollingFocusWindowBottomShortcut(), QStringLiteral("Meta+Alt+Shift+V"));
+        QCOMPARE(ConfigDefaults::scrollingSwitchFocusFloatTilingShortcut(), QStringLiteral("Meta+Alt+X"));
+        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthShortcut(), QStringLiteral("Meta+Alt+D"));
+        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthBackShortcut(), QStringLiteral("Meta+Alt+Shift+D"));
+        QCOMPARE(ConfigDefaults::autotileRetileShortcut(), QStringLiteral("Meta+Ctrl+T"));
+
+        // Ships unbound, per the same docs: the edge-stop/wrap focus
+        // variants and the one-way float verbs.
+        QVERIFY(ConfigDefaults::scrollingFocusColumnLeftShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingFocusColumnRightShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingFocusColumnLeftOrLastShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingFocusColumnRightOrFirstShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingMoveToFloatingShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingMoveToTilingShortcut().isEmpty());
     }
 
     /// The scrolling enums fall back to their DEFAULT on out-of-range input

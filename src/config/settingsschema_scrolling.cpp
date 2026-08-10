@@ -206,8 +206,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::QString,
          {},
          [](const QVariant& v) {
+             // The HEIGHT proportion accessor (a delegating twin of the width
+             // one), so a retune of the width ceiling cannot silently
+             // retarget the height vocabulary.
              return canonicalProportionList(v, CD::scrollingPresetWindowHeights(),
-                                            CD::scrollingDefaultWindowHeightProportionMax());
+                                            CD::scrollingWindowHeightProportionMax());
          }},
         // Default window height trio: kind + fixed pixel value + preset
         // index. Unlike the width pair, the value key serves ONE kind
@@ -393,10 +396,14 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
 // Called from appendShortcutsSchema so the whole Shortcuts.* family is still
 // declared by one entry point.
 //
-// Every chord in this group is bindable via the system Shortcuts KCM,
-// because ShortcutManager registers them like every other action. No count
-// here on purpose: this family's hand-counts have drifted before, and the
-// parity test that guards the group cannot see a number in a comment.
+// Every BOUND chord in this group is bindable via the system Shortcuts KCM,
+// because ShortcutManager registers it like every other action. The
+// deliberately UNBOUND defaults (the edge-stop/wrap focus variants and the
+// one-way float verbs) never register — the registry skips empty sequences —
+// so they do not appear in the KCM; binding one means writing its
+// Shortcuts.Scrolling key (config.json or the settings D-Bus surface). No
+// count here on purpose: this family's hand-counts have drifted before, and
+// the parity test that guards the group cannot see a number in a comment.
 //
 // The settings app has no page for editing the chords themselves. Scrolling
 // does have a Quick Shortcuts page (ScrollingQuickShortcutsPage), but like
@@ -430,6 +437,16 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::increaseWindowHeightKey(), CD::scrollingIncreaseWindowHeightShortcut(), QMetaType::QString},
         {CD::decreaseWindowHeightKey(), CD::scrollingDecreaseWindowHeightShortcut(), QMetaType::QString},
         {CD::resetWindowHeightsKey(), CD::scrollingResetWindowHeightsShortcut(), QMetaType::QString},
+        {CD::centerVisibleColumnsKey(), CD::scrollingCenterVisibleColumnsShortcut(), QMetaType::QString},
+        {CD::focusWindowTopKey(), CD::scrollingFocusWindowTopShortcut(), QMetaType::QString},
+        {CD::focusWindowBottomKey(), CD::scrollingFocusWindowBottomShortcut(), QMetaType::QString},
+        {CD::focusColumnLeftKey(), CD::scrollingFocusColumnLeftShortcut(), QMetaType::QString},
+        {CD::focusColumnRightKey(), CD::scrollingFocusColumnRightShortcut(), QMetaType::QString},
+        {CD::focusColumnLeftOrLastKey(), CD::scrollingFocusColumnLeftOrLastShortcut(), QMetaType::QString},
+        {CD::focusColumnRightOrFirstKey(), CD::scrollingFocusColumnRightOrFirstShortcut(), QMetaType::QString},
+        {CD::switchFocusFloatTilingKey(), CD::scrollingSwitchFocusFloatTilingShortcut(), QMetaType::QString},
+        {CD::moveToFloatingKey(), CD::scrollingMoveToFloatingShortcut(), QMetaType::QString},
+        {CD::moveToTilingKey(), CD::scrollingMoveToTilingShortcut(), QMetaType::QString},
     };
 }
 
