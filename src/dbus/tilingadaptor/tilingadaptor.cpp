@@ -514,6 +514,20 @@ void TilingAdaptor::removeUnclaimedOpen(const QString& windowId)
     }
 }
 
+void TilingAdaptor::removePendingOpen(const QString& windowId)
+{
+    // The panel-geometry deferral queue's twin of removeUnclaimedOpen: a
+    // window that opens and closes inside the startup panel-query window
+    // (splash screens, quickly-dismissed session-restore dialogs) would
+    // otherwise still be dispatched to an engine at panelGeometryReady — a
+    // queued open for a window already reported closed can never be wanted.
+    for (int i = m_pendingOpens.size() - 1; i >= 0; --i) {
+        if (m_pendingOpens.at(i).windowId == windowId) {
+            m_pendingOpens.removeAt(i);
+        }
+    }
+}
+
 bool TilingAdaptor::deferUntilPanelReady(qsizetype incomingCount)
 {
     // Fast path: panel geometry already known, or no PhosphorScreens::ScreenManager at all (tests
@@ -681,6 +695,7 @@ void TilingAdaptor::windowClosed(const QString& windowId)
         m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
     }
     removeUnclaimedOpen(windowId);
+    removePendingOpen(windowId);
     if (!ensurePipeline("windowClosed")) {
         return;
     }
@@ -716,6 +731,7 @@ void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
     // pruneStaleFloatBroadcasts.
     m_lastFloatBroadcast.remove(windowId);
     removeUnclaimedOpen(windowId);
+    removePendingOpen(windowId);
 }
 
 void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
@@ -749,6 +765,7 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
         m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
     }
     removeUnclaimedOpen(windowId);
+    removePendingOpen(windowId);
     if (!ensurePipeline("releaseWindowTracking")) {
         return;
     }

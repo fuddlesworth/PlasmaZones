@@ -449,6 +449,11 @@ private:
     void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                       bool allowCrossScreenClaim = true);
     void removeUnclaimedOpen(const QString& windowId);
+    /// The panel-geometry deferral queue's twin of removeUnclaimedOpen —
+    /// every close path calls both, so a window that opens and closes inside
+    /// the startup panel-query window is never dispatched post-mortem at
+    /// panelGeometryReady.
+    void removePendingOpen(const QString& windowId);
 
 public:
     /**

@@ -15,343 +15,343 @@
         <translation>Добавить зону</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="51"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="52"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="59"/>
         <source>Open Zone Editor</source>
         <translation>Открыть редактор зон</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="56"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="57"/>
         <source>Open Settings</source>
         <translation>Открыть параметры</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="61"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="62"/>
         <source>Previous Layout</source>
         <translation>Предыдущая раскладка</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="66"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="67"/>
         <source>Next Layout</source>
         <translation>Следующая раскладка</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="73"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="74"/>
         <source>Move Window Left</source>
         <translation>Переместить окно влево</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="78"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="79"/>
         <source>Move Window Right</source>
         <translation>Переместить окно вправо</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="83"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="84"/>
         <source>Move Window Up</source>
         <translation>Переместить окно вверх</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="88"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="89"/>
         <source>Move Window Down</source>
         <translation>Переместить окно вниз</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="95"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="96"/>
         <source>Span Window Left</source>
         <translation>Растянуть окно влево</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="100"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="101"/>
         <source>Span Window Right</source>
         <translation>Растянуть окно вправо</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="105"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="106"/>
         <source>Span Window Up</source>
         <translation>Растянуть окно вверх</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="110"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="111"/>
         <source>Span Window Down</source>
         <translation>Растянуть окно вниз</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="117"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="118"/>
         <source>Focus Zone Left</source>
         <translation>Фокус на зону слева</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="122"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="123"/>
         <source>Focus Zone Right</source>
         <translation>Фокус на зону справа</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="127"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="128"/>
         <source>Focus Zone Up</source>
         <translation>Фокус на зону сверху</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="132"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="133"/>
         <source>Focus Zone Down</source>
         <translation>Фокус на зону снизу</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="139"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="140"/>
         <source>Move Window to Empty Zone</source>
         <translation>Переместить окно в пустую зону</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="144"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="145"/>
         <source>Restore Window Size</source>
         <translation>Восстановить размер окна</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="149"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="150"/>
         <source>Toggle Window Floating</source>
         <translation>Переключить плавающий режим окна</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="157"/>
         <source>Swap Window Left</source>
         <translation>Поменять местами с окном слева</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="161"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="162"/>
         <source>Swap Window Right</source>
         <translation>Поменять местами с окном справа</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="166"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="167"/>
         <source>Swap Window Up</source>
         <translation>Поменять местами с окном сверху</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="171"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="172"/>
         <source>Swap Window Down</source>
         <translation>Поменять местами с окном снизу</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="178"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="179"/>
         <source>Swap Virtual Screen Left</source>
         <translation>Поменять виртуальный экран влево</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="183"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="184"/>
         <source>Swap Virtual Screen Right</source>
         <translation>Поменять виртуальный экран вправо</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="188"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="189"/>
         <source>Swap Virtual Screen Up</source>
         <translation>Поменять виртуальный экран вверх</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="193"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="194"/>
         <source>Swap Virtual Screen Down</source>
         <translation>Поменять виртуальный экран вниз</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="201"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="202"/>
         <source>Rotate Virtual Screens Clockwise</source>
         <translation>Повернуть виртуальные экраны по часовой стрелке</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="207"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="208"/>
         <source>Rotate Virtual Screens Counterclockwise</source>
         <translation>Повернуть виртуальные экраны против часовой стрелки</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="214"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="215"/>
         <source>Rotate Windows Clockwise</source>
         <translation>Повернуть окна по часовой стрелке</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="220"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="221"/>
         <source>Rotate Windows Counterclockwise</source>
         <translation>Повернуть окна против часовой стрелки</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="227"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="228"/>
         <source>Cycle Window Forward in Zone</source>
         <translation>Переключить окно в зоне вперёд</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="232"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="233"/>
         <source>Cycle Window Backward in Zone</source>
         <translation>Переключить окно в зоне назад</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="239"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="240"/>
         <source>Reapply Layout to Windows</source>
         <translation>Повторно применить раскладку к окнам</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="244"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="245"/>
         <source>Snap All Windows to Zones</source>
         <translation>Прилепить все окна к зонам</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="249"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="250"/>
         <source>Open Layout Picker</source>
         <translation>Открыть выбор раскладки</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="254"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="255"/>
         <source>Toggle Layout Lock</source>
         <translation>Переключить блокировку раскладки</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="265"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="266"/>
         <source>Cycle Placement Mode</source>
         <translation>Переключить режим размещения</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="270"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="271"/>
         <source>Focus Master Window</source>
         <translation>Фокус на главное окно</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="275"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="276"/>
         <source>Swap with Master</source>
         <translation>Поменять местами с главным окном</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="280"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="281"/>
         <source>Increase Master Ratio</source>
         <translation>Увеличить соотношение главной области</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="285"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="286"/>
         <source>Decrease Master Ratio</source>
         <translation>Уменьшить соотношение главной области</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="290"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="291"/>
         <source>Increase Master Count</source>
         <translation>Увеличить число главных окон</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="295"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="296"/>
         <source>Decrease Master Count</source>
         <translation>Уменьшить число главных окон</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="300"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="301"/>
         <source>Retile Windows</source>
         <translation>Заново разместить окна</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="307"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="308"/>
         <source>Focus First Column</source>
         <translation>Фокус на первый столбец</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="312"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="313"/>
         <source>Focus Last Column</source>
         <translation>Фокус на последний столбец</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="317"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="318"/>
         <source>Move Column to Start</source>
         <translation>Переместить столбец в начало</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="322"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="323"/>
         <source>Move Column to End</source>
         <translation>Переместить столбец в конец</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="327"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="328"/>
         <source>Consume Window into Column</source>
         <translation>Вобрать окно в столбец</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="332"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="333"/>
         <source>Expel Window from Column</source>
         <translation>Вытолкнуть окно из столбца</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="337"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="338"/>
         <source>Consume or Expel Left</source>
         <translation>Вобрать или вытолкнуть влево</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="342"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="343"/>
         <source>Consume or Expel Right</source>
         <translation>Вобрать или вытолкнуть вправо</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="347"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="348"/>
         <source>Center Column</source>
         <translation>Центрировать столбец</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="352"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="353"/>
         <source>Toggle Tabbed Column</source>
         <translation>Переключить столбец с вкладками</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="358"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
         <source>Toggle Windowed Fullscreen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="363"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="364"/>
         <source>Cycle Column Width Preset</source>
         <translation>Переключить предустановку ширины столбца</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="369"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
         <source>Cycle Column Width Preset Back</source>
         <translation>Переключить предустановку ширины столбца назад</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="374"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="375"/>
         <source>Increase Column Width</source>
         <translation>Увеличить ширину столбца</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="379"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="380"/>
         <source>Decrease Column Width</source>
         <translation>Уменьшить ширину столбца</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="384"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="385"/>
         <source>Maximize Column</source>
         <translation>Развернуть столбец</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="393"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="394"/>
         <source>Grow Column into Empty Space</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="398"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="399"/>
         <source>Cycle Window Height Preset</source>
         <translation>Переключить предустановку высоты окна</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="404"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="405"/>
         <source>Cycle Window Height Preset Back</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="409"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="410"/>
         <source>Increase Window Height</source>
         <translation>Увеличить высоту окна</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="414"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="415"/>
         <source>Decrease Window Height</source>
         <translation>Уменьшить высоту окна</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="419"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="420"/>
         <source>Reset Window Heights</source>
         <translation>Сбросить высоты окон</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="426"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="427"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="63"/>
         <source>Open Shortcut Cheatsheet</source>
         <translation>Открыть справку по комбинациям клавиш</translation>
@@ -713,7 +713,7 @@
         <translation>Изменить высоту окна</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="930"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="964"/>
         <source>Apply Layout %1</source>
         <translation>Применить раскладку %1</translation>
     </message>
@@ -986,7 +986,7 @@
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="550"/>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="270"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="289"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
         <translation type="unfinished"></translation>
@@ -1121,7 +1121,7 @@
         <translation>Службы не инициализированы</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="948"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="982"/>
         <source>Snap to Zone %1</source>
         <translation>Прилепить к зоне %1</translation>
     </message>
@@ -4298,7 +4298,6 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="46"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="873"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="39"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="422"/>
         <source>Floating</source>
         <translation>Плавающее</translation>
     </message>
@@ -4306,9 +4305,6 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="44"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="875"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="381"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="414"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="427"/>
         <source>Snapped</source>
         <translation>Прилипшее</translation>
     </message>
@@ -4316,7 +4312,6 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="42"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="877"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="27"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="411"/>
         <source>Tiled</source>
         <translation>Размещённое мозаикой</translation>
     </message>
@@ -5502,7 +5497,6 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="186"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingFocusCard.qml.cpp" line="13"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="13"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="394"/>
         <source>Focus</source>
         <translation>Фокус</translation>
     </message>
@@ -8312,8 +8306,8 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="495"/>
         <location filename="../src/settings/controller/settingscontroller.cpp" line="838"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="364"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="403"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="374"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="413"/>
         <source>Zone %1</source>
         <translation>Зона %1</translation>
     </message>
@@ -18423,18 +18417,13 @@
         <translation>Не назначено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="121"/>
-        <source>Layout indicator</source>
-        <translation>Индикатор раскладки</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="271"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="290"/>
         <source>%1 (Locked)</source>
         <translation>%1 (заблокировано)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="297"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="633"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="663"/>
         <source>Dismiss notification</source>
         <translation>Закрыть уведомление</translation>
     </message>
@@ -18476,21 +18465,21 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="108"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="184"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="226"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="187"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="229"/>
         <source>Window is not in a zone</source>
         <translation>Окно не находится в зоне</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="113"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="229"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="232"/>
         <source>Window is floating</source>
         <translation>Окно плавающее</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="123"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="235"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="238"/>
         <source>No window in that direction</source>
         <translation>В этом направлении нет окна</translation>
     </message>
@@ -18501,7 +18490,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="134"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
         <source>No zone in that direction</source>
         <translation>В этом направлении нет зоны</translation>
     </message>
@@ -18526,60 +18515,93 @@
         <translation>Нет зоны для возврата</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="178"/>
         <source>Floating is unavailable</source>
         <translation>Плавающий режим недоступен</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="178"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="181"/>
         <source>No other window in this zone</source>
         <translation>В этой зоне нет других окон</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="181"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="184"/>
         <source>No other window</source>
         <translation>Нет других окон</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="197"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="200"/>
         <source>Nothing to restore</source>
         <translation>Нечего восстанавливать</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="205"/>
         <source>No windows to rearrange</source>
         <translation>Нет окон для перестроения</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="213"/>
         <source>Master ratio at limit (%1%)</source>
         <translation>Соотношение главного окна на пределе (%1%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="213"/>
         <source>Master count at limit (%1)</source>
         <translation>Число главных окон на пределе (%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="220"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="223"/>
         <source>Nothing to rotate</source>
         <translation>Нечего вращать</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="232"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="235"/>
         <source>Could not swap windows</source>
         <translation>Не удалось поменять окна местами</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="243"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="246"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="349"/>
         <source>Nothing to swap</source>
         <translation>Нечего менять местами</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="247"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="250"/>
         <source>That window is no longer available</source>
         <translation>Это окно больше недоступно</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
+        <source>Already in master position</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="417"/>
+        <source>Restored</source>
+        <comment>@info:status the window&apos;s previous position was restored</comment>
+        <translation type="unfinished">Восстановлено</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="421"/>
+        <source>Tiled</source>
+        <comment>@info:status the window is now tiled (adjective, not a verb)</comment>
+        <translation type="unfinished">Размещённое мозаикой</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="441"/>
+        <source>Focus master window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="443"/>
+        <source>Swapped with master window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="456"/>
+        <source>Resized</source>
+        <comment>@info:status the window was resized</comment>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="129"/>
@@ -18597,108 +18619,103 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="256"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="259"/>
         <source>All windows are already arranged</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="258"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="261"/>
         <source>Could not arrange the windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="261"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="279"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="282"/>
         <source>No virtual screen split on this monitor</source>
         <translation>На этом мониторе нет разделения виртуального экрана</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="267"/>
         <source>Virtual screen no longer exists</source>
         <translation>Виртуальный экран больше не существует</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="269"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="272"/>
         <source>Virtual screen swap failed</source>
         <translation>Не удалось поменять виртуальные экраны местами</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="271"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="274"/>
         <source>No adjacent virtual screen</source>
         <translation>Нет соседнего виртуального экрана</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="283"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="286"/>
         <source>Virtual screen rotation failed</source>
         <translation>Не удалось повернуть виртуальные экраны</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="285"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="288"/>
         <source>No virtual screens to rotate</source>
         <translation>Нет виртуальных экранов для вращения</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="296"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="299"/>
         <source>No column templates available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="298"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="301"/>
         <source>Layouts are not available in this mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="304"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="307"/>
         <source>Column is already at that size</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="309"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="312"/>
         <source>Resizing is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="314"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="319"/>
         <source>Tabbing is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="322"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="327"/>
         <source>Windowed fullscreen is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="332"/>
         <source>No window to move between columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="337"/>
         <source>The column is already centered</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="334"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="339"/>
         <source>Could not refresh the layout</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="341"/>
         <source>No windows to focus</source>
         <translation>Нет окон для передачи фокуса</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="339"/>
-        <source>Already in main position</source>
-        <translation>Уже в главной позиции</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="346"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="351"/>
         <source>Failed</source>
         <translation>Ошибка</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="358"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="368"/>
         <source>Rotated %n window</source>
         <translation>
             <numerusform>Повёрнуто %n окно</numerusform>
@@ -18707,169 +18724,169 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="360"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="370"/>
         <source>Rotated</source>
         <translation>Повёрнуто</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="376"/>
         <source>Moved</source>
         <translation>Перемещено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="383"/>
         <source>Extended into Zone %1</source>
         <translation>Растянуто на зону %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="375"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="385"/>
         <source>Span extended</source>
         <translation>Растягивание расширено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="379"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="425"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="389"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="435"/>
         <source>Snapped into Zone %1</source>
         <translation>Прилеплено к зоне %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="383"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="424"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="437"/>
+        <source>Snapped</source>
+        <comment>@info:status the window was snapped into a zone</comment>
+        <translation type="unfinished">Прилипшее</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="393"/>
         <source>Span reduced</source>
         <translation>Растягивание уменьшено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="388"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="398"/>
         <source>Focus on the master window</source>
         <translation>Фокус на главном окне</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="392"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="402"/>
         <source>Focus on Zone %1</source>
         <translation>Фокус на зоне %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="398"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="404"/>
+        <source>Focus</source>
+        <comment>@info:status focus moved in the pressed direction</comment>
+        <translation type="unfinished">Фокус</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="408"/>
         <source>Zone %1 ↔ Zone %2</source>
         <translation>Зона %1 ↔ зона %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="400"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="410"/>
         <source>Swapped</source>
         <translation>Поменяны местами</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="405"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="415"/>
         <source>Window pushed</source>
         <translation>Окно вытеснено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="407"/>
-        <source>Restored</source>
-        <translation>Восстановлено</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="420"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="430"/>
         <source>Extra windows moved out of the layout</source>
         <translation>Лишние окна перемещены за пределы раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="429"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="432"/>
+        <source>Floating</source>
+        <comment>@info:status the window is now floating (adjective, not a verb)</comment>
+        <translation type="unfinished">Плавающее</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="439"/>
         <source>Next window</source>
         <translation>Следующее окно</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="431"/>
-        <source>Focus main window</source>
-        <translation>Фокус на главном окне</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="433"/>
-        <source>Swapped with main window</source>
-        <translation>Поменяно местами с главным окном</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="448"/>
         <source>Master ratio → %1%</source>
         <translation>Соотношение главного окна → %1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="448"/>
         <source>Master ratio changed</source>
         <translation>Соотношение главного окна изменено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="452"/>
         <source>Master count → %1</source>
         <translation>Число главных окон → %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="452"/>
         <source>Master count changed</source>
         <translation>Число главных окон изменено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="444"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="454"/>
         <source>Layout refreshed</source>
         <translation>Раскладка обновлена</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="446"/>
-        <source>Resized</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="448"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="458"/>
         <source>Tabbed display toggled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="455"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="465"/>
         <source>Windowed fullscreen off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="467"/>
         <source>Windowed fullscreen on</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="459"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="469"/>
         <source>Window moved between columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="471"/>
         <source>Window expelled into its own column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="463"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="473"/>
         <source>Column centered</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="466"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="476"/>
         <source>Virtual screens swapped</source>
         <translation>Виртуальные экраны поменяны местами</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="469"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="479"/>
         <source>Virtual screens rotated</source>
         <translation>Виртуальные экраны повёрнуты</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="471"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="481"/>
         <source>Action completed</source>
         <translation>Действие выполнено</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="523"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="538"/>
         <source>%1 %2</source>
         <comment>@info:status glyph, then the message it labels</comment>
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="560"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="575"/>
         <source>Brief feedback for keyboard window and layout actions</source>
         <translation type="unfinished"></translation>
     </message>

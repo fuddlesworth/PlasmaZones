@@ -15,343 +15,343 @@
         <translation>ზონის დამატება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="51"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="52"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="59"/>
         <source>Open Zone Editor</source>
         <translation>ზონების რედაქტორის გახსნა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="56"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="57"/>
         <source>Open Settings</source>
         <translation>პარამეტრების გახსნა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="61"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="62"/>
         <source>Previous Layout</source>
         <translation>წინა განლაგება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="66"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="67"/>
         <source>Next Layout</source>
         <translation>შემდეგი განლაგება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="73"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="74"/>
         <source>Move Window Left</source>
         <translation>ფანჯრის მარცხნივ გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="78"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="79"/>
         <source>Move Window Right</source>
         <translation>ფანჯრის მარჯვნივ გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="83"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="84"/>
         <source>Move Window Up</source>
         <translation>ფანჯრის მაღლა გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="88"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="89"/>
         <source>Move Window Down</source>
         <translation>ფანჯრის დაბლა გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="95"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="96"/>
         <source>Span Window Left</source>
         <translation>ფანჯრის მარცხნივ გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="100"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="101"/>
         <source>Span Window Right</source>
         <translation>ფანჯრის მარჯვნივ გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="105"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="106"/>
         <source>Span Window Up</source>
         <translation>ფანჯრის მაღლა გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="110"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="111"/>
         <source>Span Window Down</source>
         <translation>ფანჯრის დაბლა გადაფარვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="117"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="118"/>
         <source>Focus Zone Left</source>
         <translation>მარცხენა ზონაზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="122"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="123"/>
         <source>Focus Zone Right</source>
         <translation>მარჯვენა ზონაზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="127"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="128"/>
         <source>Focus Zone Up</source>
         <translation>ზედა ზონაზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="132"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="133"/>
         <source>Focus Zone Down</source>
         <translation>ქვედა ზონაზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="139"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="140"/>
         <source>Move Window to Empty Zone</source>
         <translation>ფანჯრის ცარიელ ზონაში გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="144"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="145"/>
         <source>Restore Window Size</source>
         <translation>ფანჯრის ზომის აღდგენა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="149"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="150"/>
         <source>Toggle Window Floating</source>
         <translation>ფანჯრის მოტივტივეობის გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="156"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="157"/>
         <source>Swap Window Left</source>
         <translation>მარცხენა ფანჯართან გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="161"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="162"/>
         <source>Swap Window Right</source>
         <translation>მარჯვენა ფანჯართან გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="166"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="167"/>
         <source>Swap Window Up</source>
         <translation>ზედა ფანჯართან გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="171"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="172"/>
         <source>Swap Window Down</source>
         <translation>ქვედა ფანჯართან გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="178"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="179"/>
         <source>Swap Virtual Screen Left</source>
         <translation>ვირტუალური ეკრანის მარცხნივ გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="183"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="184"/>
         <source>Swap Virtual Screen Right</source>
         <translation>ვირტუალური ეკრანის მარჯვნივ გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="188"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="189"/>
         <source>Swap Virtual Screen Up</source>
         <translation>ვირტუალური ეკრანის მაღლა გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="193"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="194"/>
         <source>Swap Virtual Screen Down</source>
         <translation>ვირტუალური ეკრანის დაბლა გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="201"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="202"/>
         <source>Rotate Virtual Screens Clockwise</source>
         <translation>ვირტუალური ეკრანების საათის ისრის მიმართულებით მოტრიალება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="207"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="208"/>
         <source>Rotate Virtual Screens Counterclockwise</source>
         <translation>ვირტუალური ეკრანების საათის ისრის საწინააღმდეგოდ მოტრიალება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="214"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="215"/>
         <source>Rotate Windows Clockwise</source>
         <translation>ფანჯრების საათის ისრის მიმართულებით მოტრიალება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="220"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="221"/>
         <source>Rotate Windows Counterclockwise</source>
         <translation>ფანჯრების საათის ისრის საწინააღმდეგოდ მოტრიალება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="227"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="228"/>
         <source>Cycle Window Forward in Zone</source>
         <translation>ზონაში ფანჯრების წინ გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="232"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="233"/>
         <source>Cycle Window Backward in Zone</source>
         <translation>ზონაში ფანჯრების უკან გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="239"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="240"/>
         <source>Reapply Layout to Windows</source>
         <translation>განლაგების ფანჯრებზე თავიდან გადატარება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="244"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="245"/>
         <source>Snap All Windows to Zones</source>
         <translation>ყველა ფანჯრის ზონებთან მიმაგრება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="249"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="250"/>
         <source>Open Layout Picker</source>
         <translation>განლაგების ამრჩევის გახსნა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="254"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="255"/>
         <source>Toggle Layout Lock</source>
         <translation>განლაგების ბლოკირების გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="265"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="266"/>
         <source>Cycle Placement Mode</source>
         <translation>განთავსების რეჟიმის გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="270"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="271"/>
         <source>Focus Master Window</source>
         <translation>მთავარ ფანჯარაზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="275"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="276"/>
         <source>Swap with Master</source>
         <translation>მთავართან გაცვლა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="280"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="281"/>
         <source>Increase Master Ratio</source>
         <translation>მთავარი თანაფარდობის გაზრდა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="285"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="286"/>
         <source>Decrease Master Ratio</source>
         <translation>მთავარი თანაფარდობის შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="290"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="291"/>
         <source>Increase Master Count</source>
         <translation>მთავრების რაოდენობის გაზრდა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="295"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="296"/>
         <source>Decrease Master Count</source>
         <translation>მთავრების რაოდენობის შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="300"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="301"/>
         <source>Retile Windows</source>
         <translation>ფანჯრების თავიდან დაფილვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="307"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="308"/>
         <source>Focus First Column</source>
         <translation>პირველ სვეტზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="312"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="313"/>
         <source>Focus Last Column</source>
         <translation>ბოლო სვეტზე ფოკუსი</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="317"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="318"/>
         <source>Move Column to Start</source>
         <translation>სვეტის დასაწყისში გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="322"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="323"/>
         <source>Move Column to End</source>
         <translation>სვეტის ბოლოში გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="327"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="328"/>
         <source>Consume Window into Column</source>
         <translation>ფანჯრის სვეტში ჩამატება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="332"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="333"/>
         <source>Expel Window from Column</source>
         <translation>ფანჯრის სვეტიდან გამოძევება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="337"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="338"/>
         <source>Consume or Expel Left</source>
         <translation>მარცხნივ ჩამატება ან გამოძევება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="342"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="343"/>
         <source>Consume or Expel Right</source>
         <translation>მარჯვნივ ჩამატება ან გამოძევება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="347"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="348"/>
         <source>Center Column</source>
         <translation>სვეტის ცენტრში მოქცევა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="352"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="353"/>
         <source>Toggle Tabbed Column</source>
         <translation>ჩანართებიანი სვეტის გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="358"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="359"/>
         <source>Toggle Windowed Fullscreen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="363"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="364"/>
         <source>Cycle Column Width Preset</source>
         <translation>სვეტის სიგანის შაბლონების გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="369"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="370"/>
         <source>Cycle Column Width Preset Back</source>
         <translation>სვეტის სიგანის შაბლონების უკან გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="374"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="375"/>
         <source>Increase Column Width</source>
         <translation>სვეტის სიგანის გაზრდა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="379"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="380"/>
         <source>Decrease Column Width</source>
         <translation>სვეტის სიგანის შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="384"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="385"/>
         <source>Maximize Column</source>
         <translation>სვეტის გადიდება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="393"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="394"/>
         <source>Grow Column into Empty Space</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="398"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="399"/>
         <source>Cycle Window Height Preset</source>
         <translation>ფანჯრის სიმაღლის შაბლონების გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="404"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="405"/>
         <source>Cycle Window Height Preset Back</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="409"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="410"/>
         <source>Increase Window Height</source>
         <translation>ფანჯრის სიმაღლის გაზრდა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="414"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="415"/>
         <source>Decrease Window Height</source>
         <translation>ფანჯრის სიმაღლის შემცირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="419"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="420"/>
         <source>Reset Window Heights</source>
         <translation>ფანჯრების სიმაღლეების ჩამოყრა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="426"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="427"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/KeyboardShortcutOverlay.qml.cpp" line="63"/>
         <source>Open Shortcut Cheatsheet</source>
         <translation>მალსახმობების ცნობარის გახსნა</translation>
@@ -713,7 +713,7 @@
         <translation>ფანჯრის სიმაღლის დარეგულირება</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="930"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="964"/>
         <source>Apply Layout %1</source>
         <translation>განლაგების %1 გადატარება</translation>
     </message>
@@ -986,7 +986,7 @@
     </message>
     <message>
         <location filename="../src/daemon/daemon/osd.cpp" line="550"/>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="270"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="289"/>
         <source>Column template — %1</source>
         <comment>OSD caption, %1 is the template name</comment>
         <translation type="unfinished"></translation>
@@ -1121,7 +1121,7 @@
         <translation>სერვისები ინიციალიზებული არაა</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="948"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="982"/>
         <source>Snap to Zone %1</source>
         <translation>მიმაგრება ზონასთან %1</translation>
     </message>
@@ -4295,7 +4295,6 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="46"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="873"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="39"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="422"/>
         <source>Floating</source>
         <translation>მოტივტივე</translation>
     </message>
@@ -4303,9 +4302,6 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="44"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="875"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="381"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="414"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="427"/>
         <source>Snapped</source>
         <translation>მიმაგრებული</translation>
     </message>
@@ -4313,7 +4309,6 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="42"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="877"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="27"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="411"/>
         <source>Tiled</source>
         <translation>დაფილული</translation>
     </message>
@@ -5498,7 +5493,6 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="186"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingFocusCard.qml.cpp" line="13"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="13"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="394"/>
         <source>Focus</source>
         <translation>ფოკუსი</translation>
     </message>
@@ -8308,8 +8302,8 @@
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="495"/>
         <location filename="../src/settings/controller/settingscontroller.cpp" line="838"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="364"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="403"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="374"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="413"/>
         <source>Zone %1</source>
         <translation>ზონა %1</translation>
     </message>
@@ -18384,18 +18378,13 @@
         <translation>მიუნიჭებელი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="121"/>
-        <source>Layout indicator</source>
-        <translation>განლაგების ინდიკატორი</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="271"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="290"/>
         <source>%1 (Locked)</source>
         <translation>%1 (დაბლოკილია)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="297"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="633"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="663"/>
         <source>Dismiss notification</source>
         <translation>შეტყობინების დახურვა</translation>
     </message>
@@ -18437,21 +18426,21 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="108"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="184"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="226"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="187"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="229"/>
         <source>Window is not in a zone</source>
         <translation>ფანჯარა ზონაში არაა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="113"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="229"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="232"/>
         <source>Window is floating</source>
         <translation>ფანჯარა მოტივტივეა</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="123"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="235"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="238"/>
         <source>No window in that direction</source>
         <translation>იმ მიმართულებით ფანჯარა არაა</translation>
     </message>
@@ -18462,7 +18451,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="134"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="241"/>
         <source>No zone in that direction</source>
         <translation>იმ მიმართულებით ზონა არაა</translation>
     </message>
@@ -18487,60 +18476,93 @@
         <translation>დასაბრუნებელი ზონა არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="178"/>
         <source>Floating is unavailable</source>
         <translation>მოტივტივედ გახდომა ხელმისაწვდომი არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="178"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="181"/>
         <source>No other window in this zone</source>
         <translation>ამ ზონაში სხვა ფანჯარა არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="181"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="184"/>
         <source>No other window</source>
         <translation>სხვა ფანჯარა არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="197"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="200"/>
         <source>Nothing to restore</source>
         <translation>აღსადგენი არაფერია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="205"/>
         <source>No windows to rearrange</source>
         <translation>გადასალაგებელი ფანჯარა არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="213"/>
         <source>Master ratio at limit (%1%)</source>
         <translation>მთავარი თანაფარდობა ზღვარზეა (%1%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="210"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="213"/>
         <source>Master count at limit (%1)</source>
         <translation>მთავრების რაოდენობა ზღვარზეა (%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="220"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="223"/>
         <source>Nothing to rotate</source>
         <translation>მოსატრიალებელი არაფერია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="232"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="235"/>
         <source>Could not swap windows</source>
         <translation>ფანჯრების გაცვლა ვერ მოხერხდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="243"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="246"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="349"/>
         <source>Nothing to swap</source>
         <translation>გასაცვლელი არაფერია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="247"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="250"/>
         <source>That window is no longer available</source>
         <translation>ის ფანჯარა აღარ არის ხელმისაწვდომი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
+        <source>Already in master position</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="417"/>
+        <source>Restored</source>
+        <comment>@info:status the window&apos;s previous position was restored</comment>
+        <translation type="unfinished">აღდგენილია</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="421"/>
+        <source>Tiled</source>
+        <comment>@info:status the window is now tiled (adjective, not a verb)</comment>
+        <translation type="unfinished">დაფილული</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="441"/>
+        <source>Focus master window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="443"/>
+        <source>Swapped with master window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="456"/>
+        <source>Resized</source>
+        <comment>@info:status the window was resized</comment>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="129"/>
@@ -18558,108 +18580,103 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="256"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="259"/>
         <source>All windows are already arranged</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="258"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="261"/>
         <source>Could not arrange the windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="261"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="279"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="282"/>
         <source>No virtual screen split on this monitor</source>
         <translation>ამ მონიტორზე ვირტუალური ეკრანის გაყოფა არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="267"/>
         <source>Virtual screen no longer exists</source>
         <translation>ვირტუალური ეკრანი აღარ არსებობს</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="269"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="272"/>
         <source>Virtual screen swap failed</source>
         <translation>ვირტუალური ეკრანის გაცვლა ჩავარდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="271"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="274"/>
         <source>No adjacent virtual screen</source>
         <translation>მიმდებარე ვირტუალური ეკრანი არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="283"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="286"/>
         <source>Virtual screen rotation failed</source>
         <translation>ვირტუალური ეკრანის მოტრიალება ჩავარდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="285"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="288"/>
         <source>No virtual screens to rotate</source>
         <translation>მოსატრიალებელი ვირტუალური ეკრანი არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="296"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="299"/>
         <source>No column templates available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="298"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="301"/>
         <source>Layouts are not available in this mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="304"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="307"/>
         <source>Column is already at that size</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="309"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="312"/>
         <source>Resizing is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="314"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="319"/>
         <source>Tabbing is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="322"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="327"/>
         <source>Windowed fullscreen is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="332"/>
         <source>No window to move between columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="332"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="337"/>
         <source>The column is already centered</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="334"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="339"/>
         <source>Could not refresh the layout</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="341"/>
         <source>No windows to focus</source>
         <translation>ფოკუსირებადი ფანჯარა არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="339"/>
-        <source>Already in main position</source>
-        <translation>უკვე მთავარ პოზიციაშია</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="346"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="351"/>
         <source>Failed</source>
         <translation>ჩავარდა</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="358"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="368"/>
         <source>Rotated %n window</source>
         <translation>
             <numerusform>მოტრიალდა %n ფანჯარა</numerusform>
@@ -18667,169 +18684,169 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="360"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="370"/>
         <source>Rotated</source>
         <translation>მოტრიალდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="376"/>
         <source>Moved</source>
         <translation>გადატანილია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="373"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="383"/>
         <source>Extended into Zone %1</source>
         <translation>გავრცობილია ზონაში %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="375"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="385"/>
         <source>Span extended</source>
         <translation>გავრცობა გაფართოვდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="379"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="425"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="389"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="435"/>
         <source>Snapped into Zone %1</source>
         <translation>მიმაგრებულია ზონაში %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="383"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="424"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="437"/>
+        <source>Snapped</source>
+        <comment>@info:status the window was snapped into a zone</comment>
+        <translation type="unfinished">მიმაგრებული</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="393"/>
         <source>Span reduced</source>
         <translation>გავრცობა შემცირდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="388"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="398"/>
         <source>Focus on the master window</source>
         <translation>ფოკუსი მთავარ ფანჯარაზე</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="392"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="402"/>
         <source>Focus on Zone %1</source>
         <translation>ფოკუსი ზონაზე %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="398"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="404"/>
+        <source>Focus</source>
+        <comment>@info:status focus moved in the pressed direction</comment>
+        <translation type="unfinished">ფოკუსი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="408"/>
         <source>Zone %1 ↔ Zone %2</source>
         <translation>ზონა %1 ↔ ზონა %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="400"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="410"/>
         <source>Swapped</source>
         <translation>გაცვლილია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="405"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="415"/>
         <source>Window pushed</source>
         <translation>ფანჯარა გადაწეულია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="407"/>
-        <source>Restored</source>
-        <translation>აღდგენილია</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="420"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="430"/>
         <source>Extra windows moved out of the layout</source>
         <translation>დამატებითი ფანჯრები განლაგებიდან გატანილია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="429"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="432"/>
+        <source>Floating</source>
+        <comment>@info:status the window is now floating (adjective, not a verb)</comment>
+        <translation type="unfinished">მოტივტივე</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="439"/>
         <source>Next window</source>
         <translation>შემდეგი ფანჯარა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="431"/>
-        <source>Focus main window</source>
-        <translation>ფოკუსი მთავარ ფანჯარაზე</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="433"/>
-        <source>Swapped with main window</source>
-        <translation>გაცვლილია მთავარ ფანჯართან</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="448"/>
         <source>Master ratio → %1%</source>
         <translation>მთავარი თანაფარდობა → %1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="438"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="448"/>
         <source>Master ratio changed</source>
         <translation>მთავარი თანაფარდობა შეიცვალა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="452"/>
         <source>Master count → %1</source>
         <translation>მთავრების რაოდენობა → %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="452"/>
         <source>Master count changed</source>
         <translation>მთავრების რაოდენობა შეიცვალა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="444"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="454"/>
         <source>Layout refreshed</source>
         <translation>განლაგება განახლდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="446"/>
-        <source>Resized</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="448"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="458"/>
         <source>Tabbed display toggled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="455"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="465"/>
         <source>Windowed fullscreen off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="467"/>
         <source>Windowed fullscreen on</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="459"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="469"/>
         <source>Window moved between columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="471"/>
         <source>Window expelled into its own column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="463"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="473"/>
         <source>Column centered</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="466"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="476"/>
         <source>Virtual screens swapped</source>
         <translation>ვირტუალური ეკრანები გაცვლილია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="469"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="479"/>
         <source>Virtual screens rotated</source>
         <translation>ვირტუალური ეკრანები მოტრიალდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="471"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="481"/>
         <source>Action completed</source>
         <translation>მოქმედება დასრულდა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="523"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="538"/>
         <source>%1 %2</source>
         <comment>@info:status glyph, then the message it labels</comment>
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="560"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="575"/>
         <source>Brief feedback for keyboard window and layout actions</source>
         <translation type="unfinished"></translation>
     </message>

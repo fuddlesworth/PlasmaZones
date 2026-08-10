@@ -172,6 +172,9 @@ Item {
             if (reason === "no_pre_float_zone")
                 return i18n("No zone to return to");
 
+            // Also absorbs three named producer tokens the copy reads
+            // correctly for: not_managed (snap + scroll engines' untracked
+            // window), no_focused_screen and no_screen (autotile facade).
             return i18n("Floating is unavailable");
         } else if (action === "cycle") {
             if (reason === "single_window")
@@ -308,7 +311,9 @@ Item {
 
             return i18n("Resizing is unavailable");
         } else if (action === "tabbed") {
-            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+            // no_target: the producer's changed=false leg (toggleActiveColumnTabbed
+            // refuses only when no column is focused), same as the fullscreen twin.
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus" || reason === "no_target")
                 return noWindowText;
 
             return i18n("Tabbing is unavailable");
@@ -336,7 +341,7 @@ Item {
             return i18n("No windows to focus");
         else if (action === "swap_master") {
             if (reason === "already_master")
-                return i18n("Already in main position");
+                return i18n("Already in master position");
 
             if (reason === "no_focus")
                 return noWindowText;
@@ -351,6 +356,11 @@ Item {
     /// purpose: that action is failure-only by producer contract. All three
     /// emitters (Daemon::showLayoutsUnavailableOsd, and the two no_templates
     /// sites in shortcuts_wiring.cpp and start.cpp) hardcode success=false.
+    /// snap_all, snap_assist and resnap are equally failure-only (every
+    /// emitter in snaphandler.cpp, engine_navigation.cpp and the snap
+    /// engine's navigation.cpp sends success=false) and equally arm-less —
+    /// a future success emitter for any of the four needs an arm here or it
+    /// renders as the generic "Action completed".
     function successMessage(): string {
         if (action === "rotate") {
             const arrow = rotationArrow(reason);
@@ -378,7 +388,7 @@ Item {
                 if (targetZoneNumber > 0)
                     return glyphed(spanArrow, i18n("Snapped into Zone %1", targetZoneNumber));
 
-                return glyphed(spanArrow, i18n("Snapped"));
+                return glyphed(spanArrow, i18nc("@info:status the window was snapped into a zone", "Snapped"));
             }
             return glyphed(spanArrow, i18n("Span reduced"));
         } else if (action === "focus") {
@@ -391,7 +401,7 @@ Item {
             if (targetZoneNumber > 0)
                 return glyphed(focusArrow, i18n("Focus on Zone %1", targetZoneNumber));
 
-            return glyphed(focusArrow, i18n("Focus"));
+            return glyphed(focusArrow, i18nc("@info:status focus moved in the pressed direction", "Focus"));
         } else if (action === "swap") {
             const swapArrow = directionArrow(reason);
             if (sourceZoneNumber > 0 && targetZoneNumber > 0)
@@ -404,14 +414,14 @@ Item {
 
             return i18n("Window pushed");
         } else if (action === "restore") {
-            return i18n("Restored");
+            return i18nc("@info:status the window's previous position was restored", "Restored");
         } else if (action === "float") {
             // Show different message based on float state from reason field
             if (reason === "tiled")
-                return i18n("Tiled");
+                return i18nc("@info:status the window is now tiled (adjective, not a verb)", "Tiled");
 
             if (reason === "unfloated")
-                return i18n("Snapped");
+                return i18nc("@info:status the window was snapped into a zone", "Snapped");
 
             // Autotile auto-floats windows that overflow the layout; the
             // generic copy would read as a deliberate float of the focused
@@ -419,18 +429,18 @@ Item {
             if (reason === "overflow")
                 return i18n("Extra windows moved out of the layout");
 
-            return i18n("Floating");
+            return i18nc("@info:status the window is now floating (adjective, not a verb)", "Floating");
         } else if (action === "snap") {
             if (targetZoneNumber > 0)
                 return i18n("Snapped into Zone %1", targetZoneNumber);
 
-            return i18n("Snapped");
+            return i18nc("@info:status the window was snapped into a zone", "Snapped");
         } else if (action === "cycle") {
             return i18n("Next window");
         } else if (action === "focus_master") {
-            return i18n("Focus main window");
+            return i18n("Focus master window");
         } else if (action === "swap_master") {
-            return i18n("Swapped with main window");
+            return i18n("Swapped with master window");
         } else if (action === "master_ratio") {
             // reason format: "increased:65" or "decreased:60"
             const parts = reason.split(":");
@@ -443,7 +453,7 @@ Item {
         } else if (action === "retile") {
             return i18n("Layout refreshed");
         } else if (action === "resize") {
-            return i18n("Resized");
+            return i18nc("@info:status the window was resized", "Resized");
         } else if (action === "tabbed") {
             return i18n("Tabbed display toggled");
         } else if (action === "fullscreen") {
@@ -509,9 +519,14 @@ Item {
         for (let i = 0; i < zones.length; i++) {
             const zone = zones[i];
             const id = zone.zoneId || zone.id || "";
-            // Compare normalized UUIDs to handle format differences
+            // Compare normalized UUIDs to handle format differences.
+            // -1 (drop the number) when the record carries no zoneNumber:
+            // both live producers stamp a positive one, and inventing a
+            // display number from the array index would silently announce a
+            // WRONG number if a producer ever stopped stamping the field
+            // (zone identity is ids, never indices).
             if (normalizeUuid(id) === normalizedTarget)
-                return zone.zoneNumber > 0 ? zone.zoneNumber : (i + 1);
+                return zone.zoneNumber > 0 ? zone.zoneNumber : -1;
         }
         return -1;
     }
@@ -588,7 +603,11 @@ Item {
         // contentHeight, not implicitHeight: it is the height of the text as
         // laid out at its CURRENT width, so the card grows with wrapped lines
         // regardless of how Text's implicit-size machinery treats a wrap.
-        height: messageLabel.contentHeight + Kirigami.Units.gridUnit * 3
+        // Clamped to the output like the width above — many wrapped lines at
+        // fontSizeScale 3.0 on a portrait output would otherwise extend the
+        // centred card past both screen edges (the label's maximumLineCount
+        // degrades the clamped case to an ellipsis instead of a cut line).
+        height: Math.min(messageLabel.contentHeight + Kirigami.Units.gridUnit * 3, root.height > 0 ? root.height - Kirigami.Units.gridUnit * 2 : Number.MAX_VALUE)
         backgroundColor: root.backgroundColor
 
         // Message label - informative text-based feedback
@@ -610,6 +629,12 @@ Item {
             // when unclamped) and AlignHCenter centres short copy anyway.
             width: container.width - Kirigami.Units.gridUnit * 2
             wrapMode: Text.WordWrap
+            // Belt for the card's height clamp: when the clamp engages the
+            // overflow degrades to an ellipsis rather than a horizontally
+            // cut line. 8 lines is far beyond any current copy at normal
+            // scale; only extreme fontSizeScale on a short output hits it.
+            maximumLineCount: 8
+            elide: Text.ElideRight
             text: root.messageText
             font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
             font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * root.messageFontScale * root.fontSizeScale)
@@ -635,5 +660,9 @@ Item {
         onClicked: dismiss.fire()
         Accessible.role: Accessible.Button
         Accessible.name: i18n("Dismiss notification")
+        // Without a press action an assistive client can see the button but
+        // not activate it — same call the click handler makes, same wiring
+        // as every sibling dismiss surface (picker, cheatsheet, snap assist).
+        Accessible.onPressAction: dismiss.fire()
     }
 }

@@ -175,6 +175,12 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     // left claiming a behaviour the screen cannot perform. Category and
     // isTemplate move together — a "Manual" badge beside a "Column template"
     // caption is a contradiction on one card.
+    // Polarity is deliberate and DIFFERS from the `!resolver ||` sibling
+    // sites in overlayservice.cpp: those sit inside an isScrolling(assignment)
+    // arm where the raw read already says scrolling, so missing-resolver
+    // defaults to trusting it. Here there is NO assignment gate — the
+    // resolver alone decides — and `!resolver ||` would classify EVERY
+    // screen, snapping included, as Templates.
     const bool templatesScreen =
         m_layoutSupportResolver && m_layoutSupportResolver(effectiveScreenId) == LayoutSupportTemplates;
     p.category = static_cast<int>(templatesScreen ? PhosphorZones::LayoutCategory::ScrollingTemplate
@@ -332,6 +338,12 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     p.name = name;
     p.zones = zones;
     p.category = category;
+    // Category and isTemplate move together (showLayoutOsdImpl and
+    // showScrollingTemplateOsd both enforce it): derive rather than default,
+    // so a caller passing the ScrollingTemplate category cannot produce the
+    // "Manual badge beside a Column template caption" contradiction. Both
+    // current callers pass Autotile, so this is latent-proofing.
+    p.isTemplate = (category == static_cast<int>(PhosphorZones::LayoutCategory::ScrollingTemplate));
     p.autoAssign = autoAssign;
     // Forward the global master toggle (#370) only for manual layouts.
     // Autotile screens never reach calculateSnapToEmptyZone, so the global
@@ -805,7 +817,15 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // 100 ms shortcut debounce rate. (The window halves that to ~200 ms
     // rather than suppressing the repeat outright — the dedup clock is only
     // stamped on a shown OSD, so a suppressed one does not extend it.)
-    const QString actionKey = action + QLatin1Char(':') + reason;
+    // The fullscreen action's reason is a resulting-state token ("on"/"off")
+    // and its window rides sourceZoneId, so two DIFFERENT windows toggled to
+    // the same state within the window are distinct events — key them apart.
+    // Other actions keep the plain key: their reasons discriminate the event
+    // and their sourceZoneId is a zone, not an identity.
+    QString actionKey = action + QLatin1Char(':') + reason;
+    if (action == QLatin1String("fullscreen")) {
+        actionKey += QLatin1Char(':') + sourceZoneId;
+    }
     const bool dedupEligible = !(success && action == QLatin1String("span"));
     if (dedupEligible && actionKey == m_lastNavigationActionKey && effectiveId == m_lastNavigationScreenId
         && m_lastNavigationTime.isValid() && m_lastNavigationTime.elapsed() < 200) {

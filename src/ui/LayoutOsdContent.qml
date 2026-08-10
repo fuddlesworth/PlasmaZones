@@ -98,12 +98,14 @@ Item {
     property bool isTemplate: false
     property bool disabled: false
     property string disabledReason: ""
-    // The glyph that means "refused" — the one icon the overlay tints grey.
-    readonly property string failureIcon: "dialog-cancel"
-    // Icon for the disabled-style overlay card. The default is the failure
-    // glyph; a positive announcement that reuses this card (the Scrolling
-    // mode switch) overrides it so success does not wear the failure icon.
-    property string disabledIcon: root.failureIcon
+    // Icon for the disabled-style overlay card. This card is refusal-only
+    // by design (overlayservice.h documents it: every producer explains why
+    // a requested change had no effect), so the sole writer restates
+    // "dialog-cancel" per show and the grey tint below is unconditional. A
+    // future positive announcement must NOT reuse this card — it renders
+    // its own content type instead (the scrolling mode switch, which
+    // briefly reused it, now shows its strip preview).
+    property string disabledIcon: "dialog-cancel"
     /// Auto-dismiss request emitted by the dismissTimer / click MouseArea.
     /// The unified shell host re-emits this as its `osdDismissRequested`
     /// signal, which C++ (wirePassiveShellSlots) routes to
@@ -118,7 +120,12 @@ Item {
         dismiss.restart();
     }
 
-    Accessible.name: root.disabled ? root.disabledReason : i18n("Layout indicator")
+    // StaticText role so the name is actually exposed (a bare name on a
+    // roleless Item may never surface), and the name carries the CONTENT —
+    // the layout name with its Locked / Column template decorations — not
+    // just "an OSD appeared". Mirrors NavigationOsdContent's root.
+    Accessible.role: Accessible.StaticText
+    Accessible.name: nameLabel.text
 
     // Auto-dismiss timer + idempotency latch. See OsdDismissable.qml for
     // why the latch is needed (timer-fire and click both race to dismiss).
@@ -180,7 +187,12 @@ Item {
                 isActive: true
                 zonePadding: Math.round(Kirigami.Units.smallSpacing / 2)
                 edgeGap: Math.round(Kirigami.Units.smallSpacing / 2)
-                minZoneSize: 12
+                // 16, not lower: ZonePreview hides zone numbers under a
+                // hard 16 px legibility floor, and this instance shows them
+                // — a smaller floor renders 12-15 px zones as silent
+                // unnumbered boxes (MonitorStatePage raises its floor for
+                // the same coupling).
+                minZoneSize: 16
                 showZoneNumbers: true
                 producesOverlappingZones: root.producesOverlappingZones
                 zoneNumberDisplay: root.zoneNumberDisplay
@@ -226,11 +238,9 @@ Item {
                 source: root.disabledIcon
                 width: Kirigami.Units.iconSizes.large
                 height: Kirigami.Units.iconSizes.large
-                // The grey tint says "this was refused", so it belongs to the
-                // failure glyph alone. A positive announcement that reuses
-                // this card overrides the icon and keeps its own colours
-                // (transparent means no recolour).
-                color: root.disabledIcon === root.failureIcon ? Kirigami.Theme.disabledTextColor : "transparent"
+                // Unconditional grey: the card is refusal-only (see the
+                // disabledIcon note above), so the tint always applies.
+                color: Kirigami.Theme.disabledTextColor
             }
         }
 
@@ -251,8 +261,8 @@ Item {
                 visible: !root.disabled
                 anchors.verticalCenter: parent.verticalCenter
                 category: root.category
-                autoAssign: root.autoAssign === true
-                globalAutoAssign: root.globalAutoAssign === true
+                autoAssign: root.autoAssign
+                globalAutoAssign: root.globalAutoAssign
             }
 
             Label {
@@ -261,7 +271,15 @@ Item {
                 // Cap the name width so a long layout name widens the OSD only up
                 // to this bound, then elides with "…" instead of spilling past the
                 // frame. Short names use their natural width (full text shown).
-                readonly property int maxWidth: Kirigami.Units.gridUnit * 16
+                // The disabled card gets a wider cap: its text is a SENTENCE
+                // built from user data ("Disabled on <desktop name>"), it is
+                // the only thing the card carries (the preview is blanked),
+                // and the name-sized cap elided exactly the words that
+                // identify the refusal.
+                readonly property int maxWidth: root.disabled ? Kirigami.Units.gridUnit * 24 : Kirigami.Units.gridUnit * 16
+                // Kirigami exposes no OSD-headline type constant; same named
+                // factor the nav OSD documents (messageFontScale there).
+                readonly property real nameFontScale: 1.2
 
                 anchors.verticalCenter: parent.verticalCenter
                 text: {
@@ -270,7 +288,7 @@ Item {
                     var name = root.isTemplate ? i18nc("OSD caption, %1 is the template name", "Column template — %1", root.layoutName) : root.layoutName;
                     return root.locked ? i18n("%1 (Locked)", name) : name;
                 }
-                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
+                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * nameFontScale
                 font.weight: Font.Medium
                 color: root.textColor
                 horizontalAlignment: Text.AlignHCenter
@@ -295,5 +313,9 @@ Item {
         onClicked: dismiss.fire()
         Accessible.role: Accessible.Button
         Accessible.name: i18n("Dismiss notification")
+        // Without a press action an assistive client can see the button but
+        // not activate it — same call the click handler makes, same wiring
+        // as every sibling dismiss surface (picker, cheatsheet, snap assist).
+        Accessible.onPressAction: dismiss.fire()
     }
 }

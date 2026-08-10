@@ -428,9 +428,13 @@ void Daemon::updateEngineScreens()
     // retiling them twice (setActiveScreens already did). Diffing gaps here to skip
     // the retile on truly-unrelated edits (appearance/lock/exclude) would have to
     // replicate that exact provider context and risk silently dropping gap
-    // application; the blanket retile is the simple correct choice. Cost is bounded:
-    // rulesChanged fires only on a user rule save, the retile is deferred + coalesced,
-    // and it produces identical geometry (no window movement) when nothing changed.
+    // application; the blanket retile is the simple correct choice. Cost is
+    // bounded by the two clauses that actually hold on every caller (this
+    // runs on every updateEngineScreens entry — desktop/activity switches,
+    // startup, layoutAssigned, settingsChanged, the re-entrancy replay —
+    // not only on a user rule save): the retile is deferred + coalesced,
+    // and it produces identical geometry (no window movement) when nothing
+    // changed.
     for (const QString& screenId : autotileScreens) {
         if (!addedScreens.contains(screenId)) {
             m_autotileEngine->scheduleRetileForScreen(screenId);
@@ -511,17 +515,6 @@ QSet<QString> Daemon::diffActiveAssignments()
         // resolves to the same snapping id and is correctly ignored.
         ActiveAssignmentSnapshot snapshot;
         snapshot.assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        // The resolved template rides the snapshot for the KCM apply's
-        // template-only OSD gate. Mode-gated resolver: empty on every
-        // non-Scrolling context. Deliberately NOT part of the `changed` key —
-        // a template swap moves no windows, so it must not trigger the
-        // resnap/OSD apply below (the engine re-derives its vocabulary via
-        // the unconditional updateEngineScreens either way).
-        const PhosphorZones::ScrollingTemplate templ =
-            m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity);
-        if (templ.isValid()) {
-            snapshot.templateId = templ.id.toString();
-        }
         next.insert(screenId, snapshot);
         if (m_activeAssignmentByScreen.value(screenId).assignmentId != snapshot.assignmentId) {
             changed.insert(screenId);
@@ -973,6 +966,23 @@ void Daemon::processPendingGeometryUpdates()
     }
 
     if (pending->isEmpty()) {
+        // pending is empty only when EVERY effective screen yielded a null
+        // layout (registry holds zero layouts — reachable, the template
+        // store works with zero manual layouts loaded) or an invalid
+        // geometry. The retiles and the settled-panel requery below the
+        // barrier must still run on that configuration — the scrolling half
+        // was hoisted to updateScrollingScreens above for the same reason,
+        // and skipping the autotile retile here left autotile columns
+        // un-adapted to a panel/resolution change in the zero-layouts case.
+        if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+            m_autotileEngine->retile();
+        }
+        if (m_scrollEngine && m_scrollEngine->isEnabled()) {
+            for (const QString& screenId : m_scrollEngine->activeScreens()) {
+                m_scrollEngine->scheduleRetileForScreen(screenId);
+            }
+        }
+        m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
         m_overlayService->updateGeometries();
         m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
         m_reapplyGeometriesTimer.start();
