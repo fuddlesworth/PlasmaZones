@@ -330,32 +330,32 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Schema validColorOr validator (invalid color string)
+    // Schema canonicalThemeFallbackColor validator (invalid color string)
     // =========================================================================
 
     /**
-     * The validColorOr validator must fall back to the schema default when
-     * the stored string fails to parse as a valid QColor. Seeds at
-     * Snapping.Zones.Colors/Highlight and disables useSystemColors so
-     * Settings::load() doesn't call applySystemColorScheme and overwrite the
-     * validated value with a palette-derived tint.
+     * The canonicalThemeFallbackColor validator must snap a stored string that
+     * fails to parse as a valid QColor back to the empty sentinel, so the
+     * colour falls back to following the system palette rather than painting
+     * black. Seeds garbage at Snapping.Zones.Colors/Highlight.
      */
-    void testReadValidatedColor_invalidColor_returnsDefault()
+    void testReadValidatedColor_invalidColor_fallsBackToSentinel()
     {
         IsolatedConfigGuard guard;
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             auto appearance = backend->group(ConfigDefaults::snappingZonesColorsGroup());
-            appearance->writeBool(ConfigDefaults::useSystemKey(), false);
             appearance->writeString(ConfigDefaults::highlightKey(), QStringLiteral("not-a-color"));
             appearance.reset();
             backend->sync();
         }
 
         Settings settings;
-        // Must fall back to the schema default (which is always valid).
-        QCOMPARE(settings.highlightColor(), ConfigDefaults::highlightColor());
+        // The garbage snaps to the sentinel: the stored value reads empty and
+        // the resolved colour follows the palette (a valid colour either way).
+        QCOMPARE(settings.highlightColorRaw(), QString());
+        QVERIFY(settings.highlightColor().isValid());
     }
 
     // =========================================================================

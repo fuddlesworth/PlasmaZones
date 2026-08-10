@@ -370,16 +370,21 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Zone labels"));
     addSection(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("effects"),
                PhosphorI18n::tr("Effects"));
-    addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("systemAccentColor"),
-               PhosphorI18n::tr("System accent color"),
-               {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
+    // The theme/scheme keywords ride the colour rows themselves now that the
+    // all-or-nothing "System accent color" switch is gone: each row's Reset
+    // is the follow-the-scheme affordance.
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("highlightColor"),
                PhosphorI18n::tr("Highlight color"),
-               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("active"), PhosphorI18n::tr("hover")});
+               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("active"), PhosphorI18n::tr("hover"),
+                PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("accent")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("inactiveColor"),
-               PhosphorI18n::tr("Inactive color"), {PhosphorI18n::tr("colour"), PhosphorI18n::tr("unfocused")});
+               PhosphorI18n::tr("Inactive color"),
+               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("theme"),
+                PhosphorI18n::tr("scheme")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("borderColor"),
-               PhosphorI18n::tr("Border color"), {PhosphorI18n::tr("colour"), PhosphorI18n::tr("outline")});
+               PhosphorI18n::tr("Border color"),
+               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("outline"), PhosphorI18n::tr("theme"),
+                PhosphorI18n::tr("scheme")});
     addSetting(
         search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("importColors"),
         PhosphorI18n::tr("Import colors"),

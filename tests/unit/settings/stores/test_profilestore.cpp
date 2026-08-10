@@ -637,15 +637,94 @@ private Q_SLOTS:
 
     /// Pin the profile envelope version to the config schema version.
     ///
-    /// readProfileFile refuses any file stamped with a different version, and
-    /// loadAll drops it — so a ConfigSchemaVersion bump makes every saved
-    /// profile vanish unless the bump ships a profile-envelope migration
-    /// alongside the config one. This pin turns that silent data loss into a
-    /// loud failure at exactly the moment someone bumps the version: extend
-    /// the migration chain to cover profile files, then update this pin.
+    /// readProfileFile migrates a file stamped with an OLDER version (v5 and
+    /// up) forward through the config migration chain, so a bump no longer
+    /// orphans saved profiles — but that only holds while every new step is a
+    /// pure config→config transform the profile-delta path may run. This pin
+    /// fails loudly at exactly the moment someone bumps the version, forcing
+    /// them to confirm the new step qualifies (and add an olderProfile*
+    /// migration test beside olderProfileFileMigratesForward) before
+    /// updating the pin.
     void profileFormatTracksConfigSchemaVersion()
     {
-        QCOMPARE(ConfigSchemaVersion, 5);
+        QCOMPARE(ConfigSchemaVersion, 6);
+    }
+
+    /// A profile file stamped v5 whose delta carries the old zone-colour
+    /// shape loads through the migration path: palette-snapshot colours drop
+    /// (UseSystem was on), pinned colours survive, the UseSystem key is gone,
+    /// and the record is served under the current version.
+    void olderProfileFileMigratesForward()
+    {
+        // A store expecting the CURRENT version, unlike the fixture stores
+        // above (which pin formatVersion 5 for their synthetic groups).
+        ProfileStore::Config config;
+        config.profilesDir = [this]() {
+            return m_dir->path();
+        };
+        config.currentConfig = [this]() {
+            return m_current;
+        };
+        config.defaultConfig = []() {
+            // The shared stub carries _version 5 for the fixture stores; this
+            // store models the CURRENT build, whose defaults blob is stamped
+            // with the live schema version.
+            QJsonObject defaults = baseDefaults();
+            defaults[QStringLiteral("_version")] = ConfigSchemaVersion;
+            return defaults;
+        };
+        config.applyConfig = [this](const QJsonObject& blob) {
+            m_lastApplied = blob;
+            return true;
+        };
+        config.stagedActiveId = [this]() {
+            return m_staged;
+        };
+        config.setStagedActiveId = [this](const QString& id) {
+            m_staged = id;
+        };
+        config.formatVersion = ConfigSchemaVersion;
+
+        const QUuid id = QUuid::createUuid();
+        QJsonObject colors;
+        colors.insert(QStringLiteral("UseSystem"), false);
+        colors.insert(QStringLiteral("Highlight"), QStringLiteral("#80112233"));
+        QJsonObject zones;
+        zones.insert(QStringLiteral("Colors"), colors);
+        QJsonObject snapping;
+        snapping.insert(QStringLiteral("Zones"), zones);
+        QJsonObject delta;
+        delta.insert(QStringLiteral("Snapping"), snapping);
+        QJsonObject file;
+        file.insert(QStringLiteral("_version"), 5);
+        file.insert(QStringLiteral("id"), id.toString());
+        file.insert(QStringLiteral("name"), QStringLiteral("Old"));
+        file.insert(QStringLiteral("config"), delta);
+        const QString path =
+            m_dir->path() + QLatin1Char('/') + id.toString(QUuid::WithoutBraces) + QStringLiteral(".json");
+        {
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(QJsonDocument(file).toJson());
+        }
+
+        ProfileStore store(std::move(config));
+        const QVariantList rows = store.availableProfiles();
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Old"));
+
+        // The served delta went through migrateV5ToV6: the pinned colour
+        // survives, UseSystem is gone.
+        QVERIFY(store.activateProfile(id.toString()));
+        const QJsonObject appliedColors = m_lastApplied.value(QStringLiteral("Snapping"))
+                                              .toObject()
+                                              .value(QStringLiteral("Zones"))
+                                              .toObject()
+                                              .value(QStringLiteral("Colors"))
+                                              .toObject();
+        QCOMPARE(appliedColors.value(QStringLiteral("Highlight")).toString(), QStringLiteral("#80112233"));
+        QVERIFY(!appliedColors.contains(QStringLiteral("UseSystem")));
+        QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
     }
 
     /// When the settings store refuses the staged blob, activation aborts

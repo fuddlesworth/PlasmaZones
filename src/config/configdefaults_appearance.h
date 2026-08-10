@@ -51,10 +51,12 @@ public:
     // Zone Overlay (Snapping.Zones.*) Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static bool useSystemColors()
-    {
-        return true;
-    }
+    // The four zone-colour CONFIG keys are theme-fallback strings whose
+    // schema default is the empty sentinel ("follow the system palette").
+    // These QColor constants are NOT those defaults: they are the resolution
+    // fallbacks Settings::resolvedSystemColor serves when no GUI application
+    // (and therefore no palette) exists, and the shipped constants tests and
+    // headless consumers compare against.
     static QColor highlightColor()
     {
         return ::PhosphorZones::ZoneDefaults::HighlightColor;

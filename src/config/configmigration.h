@@ -73,7 +73,7 @@ namespace PlasmaZones {
 /// bump — the gated resolver already ignored the priority-0 catch-all at
 /// runtime, so the stale rule is pruned from rules.json by finalizeV4Conversion's
 /// idempotent cleanup (see pruneRetiredProviderDefaultRule), not a version step.
-inline constexpr int ConfigSchemaVersion = 5;
+inline constexpr int ConfigSchemaVersion = 6;
 
 class PLASMAZONES_EXPORT ConfigMigration
 {
@@ -227,6 +227,20 @@ public:
     /// consumed v4 per-screen gap keys are stripped. Do NOT add a second
     /// per-screen gap migration step — these are already folded.
     static void migrateV4ToV5(QJsonObject& root);
+
+    /// v5 → v6 schema step. The v5 schema stored the four snapping zone
+    /// colours (`Snapping.Zones.Colors/{Highlight,Inactive,Border}` and
+    /// `Snapping.Zones.Labels/FontColor`) as concrete colours gated by one
+    /// `Snapping.Zones.Colors/UseSystem` bool; when the bool was on, the
+    /// settings layer WROTE palette-derived colours into those keys. v6 makes
+    /// them theme-fallback strings (the scrolling colour convention): EMPTY
+    /// means "follow the system palette", resolved in the getters, and the
+    /// bool is gone. This step removes the four colour keys when UseSystem
+    /// was on (or absent — its v5 default was true), since their stored
+    /// values were palette snapshots rather than user picks; keeps the hex
+    /// strings verbatim when it was off; strips the UseSystem key either
+    /// way; and stamps `_version = 6`.
+    static void migrateV5ToV6(QJsonObject& root);
 
     /// Prune the retired provider-default catch-all assignment rule from
     /// rules.json. Runs from @ref finalizeV4Conversion's idempotent cleanup

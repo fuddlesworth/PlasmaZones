@@ -111,7 +111,7 @@ private Q_SLOTS:
         const QStringList keys{
             QStringLiteral("borderWidth"),
             QStringLiteral("borderRadius"),
-            QStringLiteral("useSystemColors"),
+            QStringLiteral("showZoneNumbers"),
             QStringLiteral("adjacentThreshold"),
             QStringLiteral("pollIntervalMs"),
             QStringLiteral("minimumZoneSizePx"),
@@ -131,7 +131,7 @@ private Q_SLOTS:
         // would be silently replaced by the default. Pin the type here.
         QCOMPARE(result.value(QStringLiteral("borderWidth")).metaType().id(), QMetaType::Int);
         QCOMPARE(result.value(QStringLiteral("adjacentThreshold")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("useSystemColors")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("showZoneNumbers")).metaType().id(), QMetaType::Bool);
         QCOMPARE(result.value(QStringLiteral("overlayDisplayMode")).metaType().id(), QMetaType::Int);
     }
 

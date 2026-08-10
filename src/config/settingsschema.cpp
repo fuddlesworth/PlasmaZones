@@ -64,17 +64,6 @@ using SchemaValidators::clampInt;
 using SchemaValidators::validIntOr;
 
 namespace {
-/// Fall back to @p fallback when the value is an invalid color. Defaults
-/// in the schema are already valid, so this mostly protects against
-/// garbage in the on-disk file.
-auto validColorOr(QColor fallback)
-{
-    return [fallback](const QVariant& v) -> QVariant {
-        const QColor c = v.value<QColor>();
-        return c.isValid() ? QVariant::fromValue(c) : QVariant::fromValue(fallback);
-    };
-}
-
 /// Snap-to-default string-enum validator: the closed-set string analogue of
 /// validIntOr. Accept the value only if it is one of @p valid, otherwise return
 /// @p fallback. Used for closed-set tokens (e.g. the appearance "Apply to" scope)
@@ -95,8 +84,7 @@ auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
 /// Window-border colour validator. The value is a string that is EITHER the
 /// "accent" sentinel (which the effect resolves to the live system colour) OR any
 /// string QColor accepts (a #hex or a named colour, matching what the effect
-/// parses); snap anything else to @p fallback. Kept as a string round-trip
-/// (not validColorOr, which coerces to QColor and would drop the sentinel) so a
+/// parses); snap anything else to @p fallback. Kept as a string round-trip so a
 /// hand-edited garbage colour in the on-disk file can't flow to the effect. The
 /// bare "accent" literal mirrors ConfigDefaults::windowBorderColorActive (the
 /// config layer deliberately avoids pulling PhosphorRules::BorderColorToken in).
@@ -274,15 +262,17 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
 
+    // Theme-fallback colour keys: stored as strings where EMPTY means
+    // "follow the system palette" (the same sentinel the scrolling colour
+    // keys use); Settings resolves in the getters.
     schema.groups[CD::snappingZonesColorsGroup()] = {
-        {CD::useSystemKey(), CD::useSystemColors(), QMetaType::Bool},
-        {CD::highlightKey(), CD::highlightColor(), QMetaType::QColor, {}, validColorOr(CD::highlightColor())},
-        {CD::inactiveKey(), CD::inactiveColor(), QMetaType::QColor, {}, validColorOr(CD::inactiveColor())},
-        {CD::borderKey(), CD::borderColor(), QMetaType::QColor, {}, validColorOr(CD::borderColor())},
+        {CD::highlightKey(), QString(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::inactiveKey(), QString(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::borderKey(), QString(), QMetaType::QString, {}, canonicalThemeFallbackColor},
     };
 
     schema.groups[CD::snappingZonesLabelsGroup()] = {
-        {CD::fontColorKey(), CD::labelFontColor(), QMetaType::QColor, {}, validColorOr(CD::labelFontColor())},
+        {CD::fontColorKey(), QString(), QMetaType::QString, {}, canonicalThemeFallbackColor},
         {CD::fontFamilyKey(), CD::labelFontFamily(), QMetaType::QString},
         {CD::fontSizeScaleKey(),
          CD::labelFontSizeScale(),

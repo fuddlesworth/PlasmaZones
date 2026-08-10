@@ -134,8 +134,12 @@ private Q_SLOTS:
     void testMigrateColors()
     {
         IsolatedConfigGuard guard;
+        // UseSystemColors=false pins the colours as USER picks: the v5→v6
+        // colour conversion keeps pinned colours but drops palette-following
+        // ones, and an absent UseSystemColors defaulted to following.
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
                      QStringLiteral("[Appearance]\n"
+                                    "UseSystemColors=false\n"
                                     "HighlightColor=82,148,226,255\n"
                                     "BorderColor=255,0,0,128\n"));
 
@@ -977,10 +981,15 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     // UseSystemColors=false pins the highlight as a USER pick:
+                     // the v5→v6 colour conversion keeps pinned colours but
+                     // drops palette-following ones, and an absent
+                     // UseSystemColors defaulted to following.
                      QStringLiteral("[Activation]\n"
                                     "SnappingEnabled=true\n"
                                     "\n"
                                     "[Appearance]\n"
+                                    "UseSystemColors=false\n"
                                     "HighlightColor=82,148,226,255\n"
                                     "ActiveOpacity=0.3\n"));
 

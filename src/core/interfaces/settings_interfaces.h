@@ -204,9 +204,10 @@ public:
     virtual OverlayDisplayMode overlayDisplayMode() const = 0;
     virtual void setOverlayDisplayMode(OverlayDisplayMode mode) = 0;
 
-    // Appearance settings
-    virtual bool useSystemColors() const = 0;
-    virtual void setUseSystemColors(bool use) = 0;
+    // Appearance settings. The four zone colours are theme-fallback keys:
+    // the getters return RESOLVED colours (palette-derived while the stored
+    // string is empty), the setters pin a concrete colour. The stored-string
+    // surface lives on the concrete Settings class for the settings UI.
     virtual QColor highlightColor() const = 0;
     virtual void setHighlightColor(const QColor& color) = 0;
     virtual QColor inactiveColor() const = 0;

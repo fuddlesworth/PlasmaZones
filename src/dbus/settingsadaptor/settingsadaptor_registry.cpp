@@ -257,8 +257,10 @@ void SettingsAdaptor::initializeRegistry()
                               disabledActivities, setDisabledActivities)
 #undef REGISTER_PER_MODE_DISABLE
 
-    // Appearance settings
-    REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)
+    // Appearance settings. The zone colours marshal RESOLVED (the getter
+    // serves a concrete palette-derived colour while the stored value is the
+    // empty theme-fallback sentinel), so the wire keeps its concrete-colour
+    // contract; setting one over D-Bus pins a concrete colour.
     REGISTER_COLOR_SETTING("highlightColor", highlightColor, setHighlightColor)
     REGISTER_COLOR_SETTING("inactiveColor", inactiveColor, setInactiveColor)
     REGISTER_COLOR_SETTING("borderColor", borderColor, setBorderColor)

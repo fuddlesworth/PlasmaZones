@@ -77,9 +77,10 @@ QtObject {
     // resolve engine root context properties like `appSettings` by name
     // (tried; it silently fell back and settings previews mismatched the
     // popups). A preview must show what a zone will actually look like:
-    // with useSystemColors on, the pipeline follows the theme anyway; with
-    // custom colors it shows the user's picks. The theme-role expressions
-    // below are the fallback for engines with no injection and no push.
+    // the pipeline's resolved colors follow the palette while a color's
+    // stored theme-fallback value is empty, and show the user's picks
+    // otherwise. The theme-role expressions below are the fallback for
+    // engines with no injection and no push.
     // Lifetime: the injected object must outlive the engine; if it is
     // deleted externally QML nulls this property and the previews fall
     // back to the theme defaults (or go stale), without crashing.

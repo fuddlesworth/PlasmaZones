@@ -264,19 +264,6 @@ void Settings::load()
         Settings::perScreenGapDimensionsDiffer(perScreenAutotileBefore, m_perScreenAutotileSettings);
     const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged || perScreenScrollingChanged;
 
-    if (useSystemColors()) {
-        // The derive routes through the public color setters. Squelch their
-        // per-setter NOTIFY + settingsChanged emissions for this call only:
-        // emitChangedNotifyProperties() below compares the post-derive values
-        // against the pre-reparse snapshot and fires each changed NOTIFY
-        // exactly once, and the aggregate settingsChanged fires once at the
-        // end of load(). eventFilter()'s palette re-derive batches with the
-        // same flag; only setUseSystemColors relies on the setters emitting
-        // normally.
-        QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
-        applySystemColorScheme();
-    }
-
     qCInfo(lcConfig) << "Settings loaded";
 
     // Emit NOTIFY signals for every Q_PROPERTY whose value changed. load()
@@ -663,12 +650,11 @@ bool Settings::applyConfigOverlayStaged(const QJsonObject& fullConfigBlob)
     // captureBaseline() — the store must diverge from the committed baseline so
     // the settings app reports the staged keys as unsaved edits.
     //
-    // Also deliberately no applySystemColorScheme() re-derivation: a profile
-    // captures the zone colours it was saved with, and activation stages those
-    // captured values even when UseSystemColors is on. The live palette is
-    // re-derived on the next load() or palette-change event (app restart, a
-    // Discard-triggered reload, or a theme switch) — save() itself only
-    // commits, it does not re-run the palette derivation.
+    // Zone colours need no special handling here: a profile captures the
+    // STORED theme-fallback strings (concrete hex, or the empty
+    // follow-the-palette sentinel), and the resolved getters re-read the live
+    // palette on every call, so staged sentinel values track the current
+    // theme immediately.
     const QVector<QVariant> propSnapshot = snapshotNotifyProperties();
 
     // importFromJson is additive/overwriting over declared keys; a
@@ -750,41 +736,6 @@ void Settings::captureBaseline()
             groupMap.insert(def.key, m_store->readVariant(it.key(), def.key));
         }
         m_baseline.insert(it.key(), groupMap);
-    }
-}
-
-void Settings::rebaselineDerivedColorKeys()
-{
-    // System-colors mode owns the four zone-color keys: applySystemColorScheme()
-    // DERIVES them from the application palette, so a runtime palette change
-    // writes them through m_store AFTER the settings app captured its baseline
-    // — without this refresh, isKeyModified() reports a phantom unsaved edit
-    // and Discard reverts to the stale pre-switch colors.
-    //
-    // Callable ONLY from the ApplicationPaletteChange path (eventFilter) —
-    // and even there only when the useSystemColors toggle is COMMITTED
-    // (!isKeyModified on the useSystem key). If the toggle is a pending
-    // unsaved edit, the toggle and the colors it derived are ONE user edit
-    // and must stay discardable together; rebaselining mid-edit would let
-    // Discard revert the toggle to off while pinning the palette-derived
-    // colors as the new baseline.
-    //
-    // applySystemColorScheme() is not Q_INVOKABLE (no QML caller), so its
-    // call sites are exactly three; the other two must not rebaseline:
-    // - setUseSystemColors(true) is a USER edit; the toggle and the colors it
-    //   derives must stay discardable together. Rebaselining there would let
-    //   Discard revert the toggle to off while pinning the system-derived
-    //   colors as the new baseline.
-    // - load() derives BEFORE captureBaseline(), so the full baseline already
-    //   carries the derived values.
-    const ConfigKeyList derivedKeys{
-        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::highlightKey()},
-        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::inactiveKey()},
-        {ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::borderKey()},
-        {ConfigDefaults::snappingZonesLabelsGroup(), ConfigDefaults::fontColorKey()},
-    };
-    for (const ConfigKey& gk : derivedKeys) {
-        m_baseline[gk.first].insert(gk.second, m_store->readVariant(gk.first, gk.second));
     }
 }
 

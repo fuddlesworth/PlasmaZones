@@ -47,6 +47,7 @@
 #include <PhosphorZones/ZoneDefaults.h>
 
 #include "config/configdefaults.h"
+#include "config/configmigration.h"
 #include "config/settings.h"
 #include "config/settingsschema.h"
 #include "helpers/IsolatedConfigGuard.h"
@@ -1055,11 +1056,16 @@ private Q_SLOTS:
             Settings seed;
             seed.save();
         }
+        // Sparse persistence: a fully-default config may save as no file (or
+        // an empty one), so start from whatever save() left and stamp the
+        // version so the hand-edited pair reads back without a migration pass.
+        QJsonObject root;
         QFile file(configFile);
-        QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(configFile));
-        QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
-        file.close();
-        QVERIFY2(!root.isEmpty(), "seed Settings::save() wrote no config");
+        if (file.open(QIODevice::ReadOnly)) {
+            root = QJsonDocument::fromJson(file.readAll()).object();
+            file.close();
+        }
+        root[QStringLiteral("_version")] = ConfigSchemaVersion;
 
         QJsonObject group = root.value(ConfigDefaults::scrollingGroup()).toObject();
         group[ConfigDefaults::defaultColumnWidthKindKey()] = kind;

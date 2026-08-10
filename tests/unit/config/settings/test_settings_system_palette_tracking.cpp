@@ -15,25 +15,27 @@
 using namespace PlasmaZones;
 
 /**
- * @brief System-colors mode must TRACK palette changes at runtime.
+ * @brief Palette-following zone colours must TRACK palette changes at runtime.
  *
- * load() derives zone colors from the application palette once; before the
- * eventFilter fix, a running daemon/settings app kept that snapshot forever,
- * so overlays and previews showed the PREVIOUS color scheme until the
- * process restarted (wallpaper-driven schemes change often). This pins:
- * palette change -> colors re-derived (useSystemColors on), and NOT
- * re-derived when the user runs custom colors.
+ * The four zone colours are theme-fallback keys: an EMPTY stored string means
+ * "follow the system palette", resolved in the getters. A palette change must
+ * re-announce the following colours (or a running daemon/settings app keeps
+ * serving the snapshot its bindings read last), must never dirty any config
+ * key (nothing is written), and must stay silent for a colour the user pinned
+ * to a concrete value.
  */
 class TestSettingsSystemPaletteTracking : public QObject
 {
     Q_OBJECT
 
 private Q_SLOTS:
-    void systemColorsFollowPaletteChange()
+    void followingColorsTrackPaletteChange()
     {
         TestHelpers::IsolatedConfigGuard guard;
         Settings settings;
-        settings.setUseSystemColors(true);
+        // Fresh config: all four colours store the empty sentinel and follow.
+        QCOMPARE(settings.highlightColorRaw(), QString());
+        QCOMPARE(settings.labelFontColorRaw(), QString());
 
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
         QSignalSpy inactiveSpy(&settings, &Settings::inactiveColorChanged);
@@ -61,7 +63,7 @@ private Q_SLOTS:
         expectedInactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
         QCOMPARE(settings.inactiveColor(), expectedInactive);
 
-        // The full derive contract: borderColor is QPalette::Mid at
+        // The full resolution contract: borderColor is QPalette::Mid at
         // ZoneDefaults::BorderAlpha; labelFontColor is QPalette::Text
         // verbatim (no alpha override).
         QColor expectedBorder(0x56, 0x78, 0x9A);
@@ -69,9 +71,14 @@ private Q_SLOTS:
         QCOMPARE(settings.borderColor(), expectedBorder);
         QCOMPARE(settings.labelFontColor(), QColor(0xDE, 0xAD, 0xBE));
 
-        // Batched announcement (mirrors load()): one palette event emits each
-        // changed NOTIFY exactly once plus a single aggregate settingsChanged
-        // — never one settingsChanged per color setter.
+        // The stored sentinels are untouched: resolution happens in the
+        // getters, the palette event writes nothing.
+        QCOMPARE(settings.highlightColorRaw(), QString());
+        QCOMPARE(settings.borderColorRaw(), QString());
+
+        // Batched announcement: one palette event emits each following
+        // colour's NOTIFY exactly once plus a single aggregate
+        // settingsChanged.
         QTest::qWait(50); // let any stray duplicate event land before counting
         QCOMPARE(highlightSpy.count(), 1);
         QCOMPARE(inactiveSpy.count(), 1);
@@ -84,9 +91,6 @@ private Q_SLOTS:
     {
         TestHelpers::IsolatedConfigGuard guard;
         Settings settings;
-        settings.setUseSystemColors(true);
-        // Commit the toggle: save() re-captures the baseline, putting the
-        // settings app in its steady state (system colors on, nothing dirty).
         settings.save();
 
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
@@ -94,16 +98,16 @@ private Q_SLOTS:
         // There is no SettingsController unit-test target, so the controller
         // side of the phantom-dirty fix (onSettingsPropertyChanged early-
         // returns while the flag is up) is covered here by pinning the flag
-        // contract it depends on: isApplyingSystemPalette() must be TRUE
-        // inside every zone-color NOTIFY the palette re-derive emits, and
+        // contract it depends on: isAnnouncingPaletteChange() must be TRUE
+        // inside every zone-color NOTIFY the palette event fans out, and
         // false again once the event is handled.
         bool flagUpDuringNotify = false;
         bool notifySeen = false;
         connect(&settings, &Settings::highlightColorChanged, &settings, [&]() {
             notifySeen = true;
-            flagUpDuringNotify = settings.isApplyingSystemPalette();
+            flagUpDuringNotify = settings.isAnnouncingPaletteChange();
         });
-        QVERIFY(!settings.isApplyingSystemPalette());
+        QVERIFY(!settings.isAnnouncingPaletteChange());
 
         QPalette pal = qGuiApp->palette();
         pal.setColor(QPalette::Active, QPalette::Highlight, QColor(0x77, 0x11, 0x99));
@@ -115,62 +119,52 @@ private Q_SLOTS:
         QTRY_VERIFY(highlightSpy.count() >= 1);
         QVERIFY(notifySeen);
         QVERIFY(flagUpDuringNotify);
-        QVERIFY(!settings.isApplyingSystemPalette());
+        QVERIFY(!settings.isAnnouncingPaletteChange());
 
-        // The re-derive is a palette-driven refresh of DERIVED values, not a
-        // user edit — none of the four zone-color keys may count as modified,
-        // or the settings app shows a phantom unsaved-changes footer and
-        // Discard reverts to the stale pre-switch colors.
+        // The palette event is a NOTIFY fan-out over UNCHANGED stored
+        // sentinels — none of the four zone-color keys may count as modified,
+        // or the settings app shows a phantom unsaved-changes footer.
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::highlightKey()));
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::inactiveKey()));
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::borderKey()));
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesLabelsGroup(), ConfigDefaults::fontColorKey()));
     }
 
-    void pendingToggleKeepsColorsDiscardable()
+    void pinnedColorsIgnorePaletteChange()
     {
         TestHelpers::IsolatedConfigGuard guard;
         Settings settings;
-        // Commit a baseline with system colors OFF, then flip the toggle ON
-        // without saving — the toggle is now a PENDING user edit.
-        settings.setUseSystemColors(false);
-        settings.save();
-        settings.setUseSystemColors(true);
-        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey()));
-
-        QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
-
-        QPalette pal = qGuiApp->palette();
-        pal.setColor(QPalette::Active, QPalette::Highlight, QColor(0x31, 0x41, 0x59));
-        qGuiApp->setPalette(pal);
-
-        QTRY_VERIFY(highlightSpy.count() >= 1);
-
-        // While the useSystemColors toggle itself is unsaved, eventFilter()
-        // must NOT rebaseline: the toggle and the colors it derived are ONE
-        // user edit and must stay discardable together. Both the toggle key
-        // and the palette-derived color keys therefore stay modified.
-        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey()));
-        QVERIFY(settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::highlightKey()));
-    }
-
-    void customColorsIgnorePaletteChange()
-    {
-        TestHelpers::IsolatedConfigGuard guard;
-        Settings settings;
-        settings.setUseSystemColors(false);
         settings.setHighlightColor(QColor(0xAA, 0x00, 0xAA, 0x80));
+        QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#80aa00aa"));
 
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
-
+        // The OTHER colours still follow, so the aggregate fires for them; the
+        // pinned highlight itself must stay silent and keep its value.
         QPalette pal = qGuiApp->palette();
         pal.setColor(QPalette::Active, QPalette::Highlight, QColor(0x55, 0x66, 0x77));
         qGuiApp->setPalette(pal);
 
-        // Deliver any pending events, then confirm no re-derivation.
+        // Deliver any pending events, then confirm the pin held.
         QTest::qWait(50);
         QCOMPARE(highlightSpy.count(), 0);
         QCOMPARE(settings.highlightColor(), QColor(0xAA, 0x00, 0xAA, 0x80));
+    }
+
+    void resetRawToSentinelResumesFollowing()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setHighlightColorRaw(QStringLiteral("#FF123456"));
+        QCOMPARE(settings.highlightColor(), QColor(QStringLiteral("#FF123456")));
+
+        // Clearing back to the sentinel is the settings UI's per-row Reset:
+        // the resolved colour immediately follows the live palette again.
+        QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
+        settings.setHighlightColorRaw(QString());
+        QCOMPARE(highlightSpy.count(), 1);
+        QColor expected = qGuiApp->palette().color(QPalette::Active, QPalette::Highlight);
+        expected.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
+        QCOMPARE(settings.highlightColor(), expected);
     }
 };
 

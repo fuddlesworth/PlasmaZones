@@ -78,26 +78,6 @@
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define P_STORE_SET_COLOR(fn, group, key, signal)                                                                      \
-    void Settings::fn(const QColor& value)                                                                             \
-    {                                                                                                                  \
-        const QColor before = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                   \
-        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
-        const QColor after = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                    \
-        if (after == before) {                                                                                         \
-            return;                                                                                                    \
-        }                                                                                                              \
-        /* applySystemColorScheme() derives under this flag in load() AND in                                           \
-           eventFilter()'s palette re-derive: both announce once themselves                                            \
-           (snapshot/diff + a single settingsChanged) — a setter-level                                               \
-           emission here would duplicate both. */                                                                      \
-        if (m_suppressDerivedColorEmissions) {                                                                         \
-            return;                                                                                                    \
-        }                                                                                                              \
-        Q_EMIT signal();                                                                                               \
-        Q_EMIT settingsChanged();                                                                                      \
-    }
-
 #define P_STORE_SET_STRING(fn, group, key, signal)                                                                     \
     void Settings::fn(const QString& value)                                                                            \
     {                                                                                                                  \

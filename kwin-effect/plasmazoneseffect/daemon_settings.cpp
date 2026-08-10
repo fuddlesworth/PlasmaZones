@@ -95,9 +95,10 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     // System colours for window-border rules: the zone highlight / inactive
-    // colours track the Plasma colour scheme (when "use system colours" is on the
-    // daemon keeps them in sync), and they are what a border-colour `accent`
-    // sentinel resolves to in updateWindowDecoration — highlight for the focused
+    // colours track the Plasma colour scheme (the daemon's getters resolve
+    // their theme-fallback keys against the live palette and marshal concrete
+    // colours), and they are what a border-colour `accent` sentinel resolves
+    // to in updateWindowDecoration — highlight for the focused
     // (active) slot, inactive for the unfocused (inactive) slot, mirroring the
     // distinct active/inactive system border colours the per-mode appearance
     // settings used before they folded into rules. Both are re-fetched on every

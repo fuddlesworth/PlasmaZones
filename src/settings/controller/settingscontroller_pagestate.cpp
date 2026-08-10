@@ -246,13 +246,12 @@ void SettingsController::setAdvancedMode(bool advanced)
 
 void SettingsController::onSettingsPropertyChanged()
 {
-    // isApplyingSystemPalette(): a runtime ApplicationPaletteChange re-derive
-    // (Settings::eventFilter) fires the zone-color NOTIFYs, but it is
-    // palette-driven, not a user edit. Settings rebaselines the derived keys
-    // itself, though only when the useSystemColors toggle is committed — a
-    // pending (uncommitted) toggle keeps them discardable. Flipping needsSave
-    // here would show a phantom unsaved-changes footer on every theme switch.
-    if (!m_saving && !m_loading && !m_settings.isApplyingSystemPalette()) {
+    // isAnnouncingPaletteChange(): a runtime ApplicationPaletteChange
+    // (Settings::eventFilter) fires the zone-color NOTIFYs for the colours
+    // that follow the palette, but it is palette-driven, not a user edit, and
+    // writes nothing. Flipping needsSave here would show a phantom
+    // unsaved-changes footer on every theme switch.
+    if (!m_saving && !m_loading && !m_settings.isAnnouncingPaletteChange()) {
         setNeedsSave(true);
     }
 }

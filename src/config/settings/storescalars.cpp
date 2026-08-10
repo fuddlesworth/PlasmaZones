@@ -61,18 +61,58 @@ void Settings::setAudioSpectrumBarCount(int count)
     Q_EMIT settingsChanged();
 }
 // ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
-// Colors group
-P_STORE_GET(bool, useSystemColors, snappingZonesColorsGroup, useSystemKey, bool)
-P_STORE_GET(QColor, highlightColor, snappingZonesColorsGroup, highlightKey, QColor)
-P_STORE_SET_COLOR(setHighlightColor, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
-P_STORE_GET(QColor, inactiveColor, snappingZonesColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setInactiveColor, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
-P_STORE_GET(QColor, borderColor, snappingZonesColorsGroup, borderKey, QColor)
-P_STORE_SET_COLOR(setBorderColor, snappingZonesColorsGroup, borderKey, borderColorChanged)
+// Colors group. Theme-fallback keys: the stored STRING is authoritative
+// (EMPTY = follow the system palette); the QColor getters resolve through
+// resolvedSystemColor and the QColor setters store the concrete #AARRGGBB
+// form, so every non-UI consumer keeps its concrete-colour contract.
+P_STORE_GET(QString, highlightColorRaw, snappingZonesColorsGroup, highlightKey, QString)
+P_STORE_SET_STRING(setHighlightColorRaw, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
+P_STORE_GET(QString, inactiveColorRaw, snappingZonesColorsGroup, inactiveKey, QString)
+P_STORE_SET_STRING(setInactiveColorRaw, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
+P_STORE_GET(QString, borderColorRaw, snappingZonesColorsGroup, borderKey, QString)
+P_STORE_SET_STRING(setBorderColorRaw, snappingZonesColorsGroup, borderKey, borderColorChanged)
+
+QColor Settings::highlightColor() const
+{
+    const QString raw = highlightColorRaw();
+    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Highlight) : QColor(raw);
+}
+void Settings::setHighlightColor(const QColor& color)
+{
+    setHighlightColorRaw(color.name(QColor::HexArgb));
+}
+QColor Settings::inactiveColor() const
+{
+    const QString raw = inactiveColorRaw();
+    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Inactive) : QColor(raw);
+}
+void Settings::setInactiveColor(const QColor& color)
+{
+    setInactiveColorRaw(color.name(QColor::HexArgb));
+}
+QColor Settings::borderColor() const
+{
+    const QString raw = borderColorRaw();
+    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Border) : QColor(raw);
+}
+void Settings::setBorderColor(const QColor& color)
+{
+    setBorderColorRaw(color.name(QColor::HexArgb));
+}
 
 // Labels group
-P_STORE_GET(QColor, labelFontColor, snappingZonesLabelsGroup, fontColorKey, QColor)
-P_STORE_SET_COLOR(setLabelFontColor, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
+P_STORE_GET(QString, labelFontColorRaw, snappingZonesLabelsGroup, fontColorKey, QString)
+P_STORE_SET_STRING(setLabelFontColorRaw, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
+
+QColor Settings::labelFontColor() const
+{
+    const QString raw = labelFontColorRaw();
+    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::LabelFont) : QColor(raw);
+}
+void Settings::setLabelFontColor(const QColor& color)
+{
+    setLabelFontColorRaw(color.name(QColor::HexArgb));
+}
 P_STORE_GET(QString, labelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, QString)
 P_STORE_SET_STRING(setLabelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
 P_STORE_GET(qreal, labelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, double)

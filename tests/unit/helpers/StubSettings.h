@@ -363,19 +363,6 @@ public:
         Q_EMIT overlayDisplayModeChanged();
         Q_EMIT settingsChanged();
     }
-    bool useSystemColors() const override
-    {
-        return m_useSystemColors;
-    }
-    void setUseSystemColors(bool value) override
-    {
-        if (m_useSystemColors == value) {
-            return;
-        }
-        m_useSystemColors = value;
-        Q_EMIT useSystemColorsChanged();
-        Q_EMIT settingsChanged();
-    }
     QColor highlightColor() const override
     {
         return m_highlightColor;
@@ -2538,7 +2525,6 @@ private:
     bool m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
     bool m_snappingEnabled = ConfigDefaults::snappingEnabled();
     bool m_toggleActivation = ConfigDefaults::toggleActivation();
-    bool m_useSystemColors = ConfigDefaults::useSystemColors();
     bool m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();
     bool m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
     bool m_zoneSpanEnabled = ConfigDefaults::zoneSpanEnabled();

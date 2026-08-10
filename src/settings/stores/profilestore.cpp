@@ -4,6 +4,7 @@
 #include "profilestore.h"
 
 #include "config/configkeys.h"
+#include "config/configmigration.h"
 #include "config/settingsvaluelabels.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
@@ -27,6 +28,9 @@ namespace PlasmaZones {
 namespace {
 
 constexpr QLatin1String kProfVersionKey{"_version"};
+// Profiles first shipped in the same release as config schema v5, so no
+// older stamp can name a profile-shaped file this store knows how to read.
+constexpr int kProfOldestReadableVersion = 5;
 constexpr QLatin1String kProfIdKey{"id"};
 constexpr QLatin1String kProfNameKey{"name"};
 constexpr QLatin1String kProfDescriptionKey{"description"};
@@ -119,22 +123,40 @@ bool ProfileStore::readProfileFile(const QString& path, Record* out) const
         qCWarning(lcConfig) << "ProfileStore: failed to parse profile file" << path << ":" << err.errorString();
         return false;
     }
-    const QJsonObject root = doc.object();
+    QJsonObject root = doc.object();
 
-    // Refuse a file stamped with a different schema version rather than
-    // mis-applying config-delta keys whose shape moved between versions.
-    //
-    // There is deliberately no migration chain here YET: profiles ship in the
-    // same release as schema v5, so no older profile file can exist. The
-    // profileFormatTracksConfigSchemaVersion test pins the version so the
-    // next ConfigSchemaVersion bump fails loudly there, forcing that bump to
-    // ship a profile-envelope migration instead of silently orphaning every
-    // saved profile through this refusal.
+    // Refuse a file stamped with an UNKNOWN schema version rather than
+    // mis-applying config-delta keys whose shape moved between versions. A
+    // file stamped with an older version we know (profiles first shipped at
+    // schema v5, so v5 is the floor) is migrated forward in memory instead:
+    // the profile's config delta is group/key-shaped exactly like config.json,
+    // so the same migration chain advances it, and the migrated record is
+    // simply served — the file itself is rewritten on the profile's next
+    // save. The profileFormatTracksConfigSchemaVersion test pins the version
+    // so every future ConfigSchemaVersion bump fails loudly there, forcing
+    // the author to confirm the new step is a pure config→config transform
+    // this path may run (or to extend it when one is not).
     const QJsonValue versionVal = root.value(kProfVersionKey);
-    if (!versionVal.isDouble() || versionVal.toInt() != m_config.formatVersion) {
+    const int fileVersion = versionVal.isDouble() ? versionVal.toInt() : -1;
+    if (fileVersion < kProfOldestReadableVersion || fileVersion > m_config.formatVersion) {
         qCWarning(lcConfig) << "ProfileStore: profile file" << path << "has version" << versionVal
                             << "but this build expects" << m_config.formatVersion << "— refusing";
         return false;
+    }
+    if (fileVersion < m_config.formatVersion) {
+        QJsonObject delta = root.value(kProfConfigKey).toObject();
+        delta[ConfigKeys::versionKey()] = fileVersion;
+        ConfigMigration::runMigrationChainInMemory(delta);
+        // The chain advances to ConfigSchemaVersion; a store configured for a
+        // DIFFERENT target (tests inject formatVersion) cannot use the result.
+        if (delta.value(ConfigKeys::versionKey()).toInt() != m_config.formatVersion) {
+            qCWarning(lcConfig) << "ProfileStore: profile file" << path << "migrated to version"
+                                << delta.value(ConfigKeys::versionKey()).toInt() << "but this store expects"
+                                << m_config.formatVersion << "— refusing";
+            return false;
+        }
+        delta.remove(ConfigKeys::versionKey());
+        root[kProfConfigKey] = delta;
     }
 
     const QUuid id(root.value(kProfIdKey).toString());

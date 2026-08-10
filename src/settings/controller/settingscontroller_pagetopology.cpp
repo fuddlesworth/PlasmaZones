@@ -285,7 +285,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("snapping-overlay-appearance"),
          {
-             {CD::snappingZonesColorsGroup(), CD::useSystemKey()},
              {CD::snappingZonesColorsGroup(), CD::highlightKey()},
              {CD::snappingZonesColorsGroup(), CD::inactiveKey()},
              {CD::snappingZonesColorsGroup(), CD::borderKey()},

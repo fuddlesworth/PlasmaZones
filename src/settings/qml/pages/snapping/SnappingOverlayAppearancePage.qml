@@ -55,86 +55,65 @@ SettingsFlickable {
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    SettingsRow {
-                        title: i18n("System accent color")
-                        searchAnchor: "systemAccentColor"
-                        description: i18n("Use your desktop color scheme for zone colors")
+                    // Each colour follows the desktop colour scheme until the
+                    // user picks one, and resets back per row — the same
+                    // theme-fallback vocabulary as the scrolling and Windows
+                    // pages, replacing the old all-or-nothing "system accent
+                    // color" switch. appSettings.*Raw is the stored string
+                    // (EMPTY = follow); the resolved appSettings.* colour
+                    // previews what the overlay actually draws.
+                    ThemeFallbackColorRow {
+                        title: i18n("Highlight color")
+                        // Overridden because the title already says "color".
+                        swatchAccessibleName: i18nc("@action:button", "Zone highlight color")
+                        searchAnchor: "highlightColor"
+                        description: i18n("Color for the active/hovered zone. Follows the color scheme unless you pick one.")
 
-                        SettingsSwitch {
-                            id: useSystemColorsSwitch
+                        storedColor: appSettings.highlightColorRaw
+                        themeColor: appSettings.highlightColor
+                        picker: zoneColorDialog
+                        onColorChosen: function (hex) {
+                            appSettings.highlightColorRaw = hex;
+                        }
+                    }
 
-                            checked: appSettings.useSystemColors
-                            accessibleName: i18n("Use system accent color")
-                            onToggled: function (newValue) {
-                                appSettings.useSystemColors = newValue;
-                            }
+                    SettingsSeparator {}
+
+                    ThemeFallbackColorRow {
+                        title: i18n("Inactive color")
+                        // See the highlight row above.
+                        swatchAccessibleName: i18nc("@action:button", "Inactive zone color")
+                        searchAnchor: "inactiveColor"
+                        description: i18n("Color for zones that are not hovered. Follows the color scheme unless you pick one.")
+
+                        storedColor: appSettings.inactiveColorRaw
+                        themeColor: appSettings.inactiveColor
+                        picker: zoneColorDialog
+                        onColorChosen: function (hex) {
+                            appSettings.inactiveColorRaw = hex;
+                        }
+                    }
+
+                    SettingsSeparator {}
+
+                    ThemeFallbackColorRow {
+                        title: i18n("Border color")
+                        // See the highlight row above.
+                        swatchAccessibleName: i18nc("@action:button", "Zone border color")
+                        searchAnchor: "borderColor"
+                        description: i18n("Color for zone borders. Follows the color scheme unless you pick one.")
+
+                        storedColor: appSettings.borderColorRaw
+                        themeColor: appSettings.borderColor
+                        picker: zoneColorDialog
+                        onColorChosen: function (hex) {
+                            appSettings.borderColorRaw = hex;
                         }
                     }
 
                     SettingsSeparator {}
 
                     SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
-                        title: i18n("Highlight color")
-                        searchAnchor: "highlightColor"
-                        description: i18n("Color for the active/hovered zone")
-
-                        ColorSwatchRow {
-                            accessibleName: i18nc("@action:button", "Zone highlight color")
-                            color: appSettings.highlightColor
-                            onClicked: {
-                                highlightColorDialog.selectedColor = appSettings.highlightColor;
-                                highlightColorDialog.open();
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {
-                        visible: !useSystemColorsSwitch.checked
-                    }
-
-                    SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
-                        title: i18n("Inactive color")
-                        searchAnchor: "inactiveColor"
-                        description: i18n("Color for zones that are not hovered")
-
-                        ColorSwatchRow {
-                            accessibleName: i18nc("@action:button", "Inactive zone color")
-                            color: appSettings.inactiveColor
-                            onClicked: {
-                                inactiveColorDialog.selectedColor = appSettings.inactiveColor;
-                                inactiveColorDialog.open();
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {
-                        visible: !useSystemColorsSwitch.checked
-                    }
-
-                    SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
-                        title: i18n("Border color")
-                        searchAnchor: "borderColor"
-                        description: i18n("Color for zone borders")
-
-                        ColorSwatchRow {
-                            accessibleName: i18nc("@action:button", "Zone border color")
-                            color: appSettings.borderColor
-                            onClicked: {
-                                borderColorDialog.selectedColor = appSettings.borderColor;
-                                borderColorDialog.open();
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {
-                        visible: !useSystemColorsSwitch.checked
-                    }
-
-                    SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
                         title: i18n("Import colors")
                         searchAnchor: "importColors"
                         description: i18n("Load a color scheme from pywal or a JSON file")
@@ -329,25 +308,21 @@ SettingsFlickable {
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
+                    ThemeFallbackColorRow {
                         title: i18n("Label color")
+                        swatchAccessibleName: i18nc("@action:button", "Zone label text color")
                         searchAnchor: "labelColor"
-                        description: i18n("Text color for zone labels")
+                        description: i18n("Text color for zone labels. Follows the color scheme unless you pick one.")
 
-                        ColorSwatchRow {
-                            accessibleName: i18nc("@action:button", "Zone label text color")
-                            color: appSettings.labelFontColor
-                            onClicked: {
-                                labelFontColorDialog.selectedColor = appSettings.labelFontColor;
-                                labelFontColorDialog.open();
-                            }
+                        storedColor: appSettings.labelFontColorRaw
+                        themeColor: appSettings.labelFontColor
+                        picker: zoneColorDialog
+                        onColorChosen: function (hex) {
+                            appSettings.labelFontColorRaw = hex;
                         }
                     }
 
-                    SettingsSeparator {
-                        visible: !useSystemColorsSwitch.checked
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Font")
@@ -464,38 +439,16 @@ SettingsFlickable {
     }
 
     // =====================================================================
-    // COLOR DIALOGS
+    // COLOR DIALOG — page-level and shared by the four theme-fallback rows,
+    // like the scrolling pages: a page rebuild while a row-scoped dialog is
+    // open would tear the popup down under the user. The rows connect
+    // transiently and write on accept, so no onAccepted lives here.
     // =====================================================================
     ColorDialog {
-        id: highlightColorDialog
+        id: zoneColorDialog
 
         options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Highlight Color")
-        onAccepted: appSettings.highlightColor = selectedColor
-    }
-
-    ColorDialog {
-        id: inactiveColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Inactive Zone Color")
-        onAccepted: appSettings.inactiveColor = selectedColor
-    }
-
-    ColorDialog {
-        id: borderColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Border Color")
-        onAccepted: appSettings.borderColor = selectedColor
-    }
-
-    ColorDialog {
-        id: labelFontColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Label Color")
-        onAccepted: appSettings.labelFontColor = selectedColor
+        title: i18n("Choose Zone Color")
     }
 
     FontPickerDialog {

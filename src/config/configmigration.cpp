@@ -55,10 +55,9 @@ PhosphorConfig::Schema makeMigrationSchema()
     s.version = ConfigSchemaVersion;
     s.versionKey = ConfigKeys::versionKey();
     s.migrations = {
-        {1, &ConfigMigration::migrateV1ToV2},
-        {2, &ConfigMigration::migrateV2ToV3},
-        {3, &ConfigMigration::migrateV3ToV4},
-        {4, &ConfigMigration::migrateV4ToV5},
+        {1, &ConfigMigration::migrateV1ToV2}, {2, &ConfigMigration::migrateV2ToV3},
+        {3, &ConfigMigration::migrateV3ToV4}, {4, &ConfigMigration::migrateV4ToV5},
+        {5, &ConfigMigration::migrateV5ToV6},
     };
     return s;
 }
@@ -441,10 +440,11 @@ bool ConfigMigration::ensureJsonConfigImpl()
     }
 
     qInfo("ConfigMigration: migration complete");
-    // The in-memory chain above ran through migrateV4ToV5, a pure config→config
-    // transform (it folds the per-mode appearance/gap values into the unified
-    // "Windows" / "Gaps" groups in-place and creates no rules), so only the v4
-    // finalizer runs here. finalizeV4Conversion also adopts a legacy
+    // The in-memory chain above ran through migrateV4ToV5 and migrateV5ToV6,
+    // both pure config→config transforms (v5 folds the per-mode
+    // appearance/gap values into the unified "Windows" / "Gaps" groups; v6
+    // converts the snapping zone colours to theme-fallback strings; neither
+    // creates rules), so only the v4 finalizer runs here. finalizeV4Conversion also adopts a legacy
     // windowrules.json as rules.json (a first-step, all-paths action) and prunes
     // the retired provider-default rule.
     return finalizeV4Conversion(jsonPath);
