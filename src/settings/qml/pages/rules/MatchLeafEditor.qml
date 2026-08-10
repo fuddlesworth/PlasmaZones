@@ -322,6 +322,8 @@ RowLayout {
 
             if (leaf._valueKind === "orientation")
                 return orientationValueEditor;
+            if (leaf._valueKind === "colorScheme")
+                return colorSchemeValueEditor;
 
             if (leaf._valueKind === "layout")
                 return layoutValueEditor;
@@ -705,6 +707,42 @@ RowLayout {
                 return String(v);
             }
             Accessible.name: i18n("Screen orientation")
+            onActivated: function (index) {
+                if (currentValue !== leaf.node.value)
+                    leaf._emit(leaf.node.field, leaf.node.op, currentValue);
+            }
+        }
+    }
+
+    Component {
+        id: colorSchemeValueEditor
+
+        WideComboBox {
+            // Colour scheme is a string field whose value IS the wire token
+            // ("light" / "dark"); the options carry {value, wire, label}
+            // triples, same shape as the orientation editor above.
+            readonly property var _options: leaf._fieldEntry !== undefined ? (leaf._fieldEntry.options || []) : []
+
+            model: _options
+            textRole: "label"
+            valueRole: "value"
+            currentIndex: {
+                var target = leaf.node.value;
+                for (var i = 0; i < _options.length; ++i) {
+                    if (_options[i].value === target)
+                        return i;
+                }
+                return -1;
+            }
+            displayText: {
+                if (currentIndex >= 0)
+                    return currentText;
+                var v = leaf.node.value;
+                if (v === undefined || v === null || v === "")
+                    return i18n("Choose a scheme…");
+                return String(v);
+            }
+            Accessible.name: i18n("Color scheme")
             onActivated: function (index) {
                 if (currentValue !== leaf.node.value)
                     leaf._emit(leaf.node.field, leaf.node.op, currentValue);

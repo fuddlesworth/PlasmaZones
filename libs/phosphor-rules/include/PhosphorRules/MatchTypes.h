@@ -67,12 +67,14 @@ enum class Field : int {
     // ── Context active-layout field [39] ─────────────────────────────────
     ActiveLayout = 39, ///< context — the layout id currently resolved for the screen (snap UUID, "autotile:<algo>", or
                        ///< "scrolling:")
+    // ── Context colour-scheme field [40] ─────────────────────────────────
+    ColorScheme = 40, ///< context — "light" / "dark" system colour scheme, session-wide
 };
 
 /// The number of distinct `Field` enumerators. `Field` is a contiguous range
 /// `[0, FieldCount)`; bump this whenever an enumerator is added — round-trip
 /// tests iterate the range using it as the upper bound.
-inline constexpr int FieldCount = static_cast<int>(Field::ActiveLayout) + 1;
+inline constexpr int FieldCount = static_cast<int>(Field::ColorScheme) + 1;
 
 // ── Field descriptor table ──────────────────────────────────────────────────
 // Single source of truth for every field's wire string, value-kind, and
@@ -176,6 +178,15 @@ inline constexpr FieldDescriptor kFieldTable[] = {
     // reading the active layout while resolving it would recurse. Empty
     // (predicate false) where unpopulated.
     {Field::ActiveLayout, QLatin1StringView("activeLayout"), FieldType::String, FieldSource::Context},
+    // [40] — The system colour scheme, "light" / "dark". String-valued (Equals
+    // against the token) and Context-sourced so a scheme rule can drive any
+    // context slot (a darker overlay at night, a different layout for a light
+    // desk setup). Session-wide, not per-screen: the daemon derives it from
+    // the application palette and provides it to the registry, which folds it
+    // into every context query AND every cached resolver's key (a scheme flip
+    // is a non-rule-set input, exactly like orientation). Empty (predicate
+    // false) when no provider is wired.
+    {Field::ColorScheme, QLatin1StringView("colorScheme"), FieldType::String, FieldSource::Context},
 };
 static_assert(sizeof(kFieldTable) / sizeof(kFieldTable[0]) == static_cast<unsigned>(FieldCount),
               "kFieldTable must have one entry per Field");

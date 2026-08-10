@@ -332,6 +332,24 @@ public:
     void setScreenOrientationProvider(std::function<std::optional<QString>(const QString& screenId)> provider);
 
     /**
+     * @brief Inject a callback that reports the system colour scheme
+     * ("light" / "dark"), or std::nullopt when it is unknown (so a
+     * colour-scheme predicate stays inert).
+     *
+     * Session-wide, not per-screen — the scheme is one value for the whole
+     * desktop, so the provider takes no arguments. The token is stamped onto
+     * every windowless context WindowQuery this registry builds AND folded
+     * into every cached resolver's key (see @ref contextCacheKeyToken): a
+     * scheme flip is a non-rule-set input, exactly like a monitor rotation,
+     * so key-based invalidation is what keeps cached verdicts honest across
+     * it. Scheme derives from the application palette alone, independent of
+     * the resolved layout, so it carries no recursion risk and is stamped in
+     * the assignment cascade too. The daemon wires this to a palette read.
+     * Same threading contract as @ref setScreenOrientationProvider.
+     */
+    void setColorSchemeProvider(std::function<std::optional<QString>()> provider);
+
+    /**
      * @brief Inject a callback that returns true when Snapping is the
      * user's preferred default mode (regardless of whether a default
      * snapping layout id is configured).
@@ -600,6 +618,31 @@ public:
         query.screenOrientation = screenOrientationToken(screenId);
     }
 
+    /// The colour-scheme token from @ref m_colorSchemeProvider ("light" /
+    /// "dark"), or an empty string when the provider is unset or returns
+    /// nullopt. Shared by the query stamp and the cache-key fold, the same
+    /// one-read discipline as @ref screenOrientationToken.
+    QString colorSchemeToken() const
+    {
+        if (m_colorSchemeProvider) {
+            if (const auto token = m_colorSchemeProvider()) {
+                return *token;
+            }
+        }
+        return QString();
+    }
+
+    /// Stamp the colour-scheme token onto @p query from
+    /// @ref m_colorSchemeProvider (a no-op when unset). Used by the two
+    /// UNCACHED param resolvers; the cached resolvers assign
+    /// @ref colorSchemeToken directly for the same key-vs-query consistency
+    /// reason @ref stampScreenOrientation documents. Palette-derived and
+    /// layout-independent, so safe from the assignment cascade.
+    void stampColorScheme(PhosphorRules::WindowQuery& query) const
+    {
+        query.colorScheme = colorSchemeToken();
+    }
+
     /// Compose the extra cache-key token a daemon-facing context resolver (gap /
     /// lock / overlay / default-assignment) passes to @ref resolveCachedContext,
     /// folding in the placement @p modeToken (empty for the non-gap resolvers), the
@@ -610,9 +653,10 @@ public:
     /// tiledWindowCount "twc:" token, they must ride the cache KEY rather than the
     /// value, or the change would return a stale hit. See resolveCachedContext.
     static QString contextCacheKeyToken(const QString& modeToken, const QString& activeLayoutId,
-                                        const QString& orientationToken)
+                                        const QString& orientationToken, const QString& colorSchemeToken)
     {
-        return modeToken + QLatin1String("|al:") + activeLayoutId + QLatin1String("|or:") + orientationToken;
+        return modeToken + QLatin1String("|al:") + activeLayoutId + QLatin1String("|or:") + orientationToken
+            + QLatin1String("|cs:") + colorSchemeToken;
     }
 
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
@@ -1288,6 +1332,8 @@ private:
     /// onto every windowless context query so a Field::ScreenOrientation predicate
     /// can match. See @ref setScreenOrientationProvider.
     std::function<std::optional<QString>(const QString& screenId)> m_screenOrientationProvider;
+    /// Session-wide "light" / "dark" provider — see @ref setColorSchemeProvider.
+    std::function<std::optional<QString>()> m_colorSchemeProvider;
     /// Borrowed native scrolling-template store (see setScrollingTemplateStore);
     /// null in registries that never wire one (some tests) — every template
     /// resolve then answers "no template".

@@ -115,6 +115,11 @@ void LayoutRegistry::setTiledWindowCountProvider(
     m_tiledWindowCountProvider = std::move(provider);
 }
 
+void LayoutRegistry::setColorSchemeProvider(std::function<std::optional<QString>()> provider)
+{
+    m_colorSchemeProvider = std::move(provider);
+}
+
 void LayoutRegistry::setScreenOrientationProvider(
     std::function<std::optional<QString>(const QString& screenId)> provider)
 {

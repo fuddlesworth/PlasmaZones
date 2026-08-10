@@ -1853,6 +1853,13 @@ public:
     /// load() and serves stale zone colors until restart.
     bool eventFilter(QObject* watched, QEvent* event) override;
 
+    /// The system colour scheme as a "light" / "dark" token, derived from
+    /// the live application palette's window-background lightness. Empty
+    /// with no GUI application (headless tools), so a ColorScheme match
+    /// predicate stays inert there. Static: the daemon's registry provider
+    /// and eventFilter()'s change detection share this one derivation.
+    static QString systemColorSchemeToken();
+
     /// True while eventFilter() is re-deriving the zone colors from a runtime
     /// ApplicationPaletteChange. The re-derive is palette-driven, not a user
     /// edit — SettingsController::onSettingsPropertyChanged() checks this to
@@ -2068,6 +2075,12 @@ private:
     // outside those synchronous windows — setUseSystemColors relies on the
     // setters emitting normally.
     bool m_suppressDerivedColorEmissions = false;
+
+    // Last-announced "light" / "dark" token for the systemColorSchemeChanged
+    // signal, seeded from the live palette in trackSystemPaletteChanges so
+    // the first ApplicationPaletteChange only announces a real flip. Not a
+    // config value — it never touches the store or dirty tracking.
+    QString m_lastColorSchemeToken;
 
     static QString normalizeUuidString(const QString& uuidStr);
 

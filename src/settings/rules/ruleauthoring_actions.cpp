@@ -972,6 +972,7 @@ QVariantList actionTypes()
         QVariantMap entry;
         entry[QStringLiteral("value")] = e.type;
         entry[QStringLiteral("label")] = actionTypeLabelImpl(e.type);
+        entry[QStringLiteral("description")] = actionDescription(e.type);
         entry[QStringLiteral("params")] = paramsForActionTypeImpl(e.type);
         entry[QStringLiteral("category")] = e.categoryLabel;
         entry[QStringLiteral("categoryOrder")] = e.categoryOrder;

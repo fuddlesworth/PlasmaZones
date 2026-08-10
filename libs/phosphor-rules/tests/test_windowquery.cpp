@@ -38,6 +38,7 @@ private Q_SLOTS:
         q.activity = QStringLiteral("{act}");
         q.screenOrientation = QStringLiteral("portrait");
         q.activeLayout = QStringLiteral("autotile:bsp");
+        q.colorScheme = QStringLiteral("dark");
 
         QCOMPARE(q.valueForField(Field::ScreenId)->toString(), QStringLiteral("DP-1"));
         QCOMPARE(q.valueForField(Field::VirtualDesktop)->toInt(), 3);
@@ -45,6 +46,7 @@ private Q_SLOTS:
         // Context fields, always present — empty when unpopulated by a resolver.
         QCOMPARE(q.valueForField(Field::ScreenOrientation)->toString(), QStringLiteral("portrait"));
         QCOMPARE(q.valueForField(Field::ActiveLayout)->toString(), QStringLiteral("autotile:bsp"));
+        QCOMPARE(q.valueForField(Field::ColorScheme)->toString(), QStringLiteral("dark"));
         // A windowless query carrying only context fields is still not a window.
         QVERIFY(!q.hasWindow());
     }

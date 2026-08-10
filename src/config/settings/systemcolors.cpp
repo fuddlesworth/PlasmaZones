@@ -79,12 +79,41 @@ void Settings::trackSystemPaletteChanges()
                                    "(installEventFilter requires same-thread objects)";
             return;
         }
+        // Seed the colour-scheme token from the live palette so the first
+        // ApplicationPaletteChange only announces a REAL flip, not the
+        // startup read.
+        m_lastColorSchemeToken = Settings::systemColorSchemeToken();
         qGuiApp->installEventFilter(this);
     }
 }
 
+QString Settings::systemColorSchemeToken()
+{
+    // Window-background lightness is the scheme discriminator the desktop
+    // itself uses (a dark scheme is one whose surfaces are dark); the
+    // midpoint split matches how portals classify light vs dark. Empty when
+    // there is no GUI application — the match field then stays inert.
+    if (!qGuiApp) {
+        return QString();
+    }
+    const int lightness = QGuiApplication::palette().color(QPalette::Active, QPalette::Window).lightness();
+    return lightness < 128 ? QStringLiteral("dark") : QStringLiteral("light");
+}
+
 bool Settings::eventFilter(QObject* watched, QEvent* event)
 {
+    if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange) {
+        // ColorScheme match-field feed: derive the light/dark token and
+        // announce a flip. Deliberately BEFORE the useSystemColors gate (the
+        // field must work with custom zone colours too) and OUTSIDE the
+        // squelch / rebaseline machinery below (this is not a config value,
+        // so it must not perturb dirty tracking).
+        const QString schemeToken = Settings::systemColorSchemeToken();
+        if (schemeToken != m_lastColorSchemeToken) {
+            m_lastColorSchemeToken = schemeToken;
+            Q_EMIT systemColorSchemeChanged();
+        }
+    }
     if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange && useSystemColors()) {
         // Derived values, not user edits. TWO mechanisms keep a runtime theme
         // switch from reading as unsaved changes:

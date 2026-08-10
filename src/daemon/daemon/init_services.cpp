@@ -165,6 +165,17 @@ void Daemon::initLayoutAndSettingsWiring()
         }
         return geom.height() > geom.width() ? QStringLiteral("portrait") : QStringLiteral("landscape");
     });
+    // Colour-scheme provider — session-wide "light" / "dark" from the live
+    // application palette, so a Field::ColorScheme rule can drive any context
+    // slot (a darker overlay at night, a scheme-specific layout). Reads live
+    // per call, so there is no daemon-side cache to go stale; the registry's
+    // cached resolvers fold the token into their keys, and the
+    // systemColorSchemeChanged wiring (init_engines.cpp) re-drives applied
+    // state on a flip.
+    m_layoutManager->setColorSchemeProvider([]() -> std::optional<QString> {
+        const QString token = Settings::systemColorSchemeToken();
+        return token.isEmpty() ? std::nullopt : std::optional<QString>(token);
+    });
     // Per-screen current-desktop provider (#648): the registry (and the
     // overlay service through it) resolves per-output desktops straight from
     // the VirtualDesktopManager — ONE authority, replacing the push-updated

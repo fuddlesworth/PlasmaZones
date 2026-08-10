@@ -362,7 +362,7 @@ void TestRuleController::authoringMetadata()
                 || kind == QLatin1String("screen") || kind == QLatin1String("activity")
                 || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop")
                 || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
-                || kind == QLatin1String("layout"));
+                || kind == QLatin1String("layout") || kind == QLatin1String("colorScheme"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }
@@ -531,6 +531,12 @@ void TestRuleController::authoringMetadata()
         const QString label = a.value(QStringLiteral("label")).toString();
         QVERIFY2(!label.isEmpty(), qPrintable(wire));
         QVERIFY2(label != wire, qPrintable(wire));
+        // Description canary: every picker entry carries the info-icon hover
+        // help (actionDescription's if-ladder has no compiler exhaustiveness
+        // like fieldDescription's switch, so this sweep is what keeps it
+        // covering every registered type — an action added without a
+        // description entry fails here by name).
+        QVERIFY2(!a.value(QStringLiteral("description")).toString().isEmpty(), qPrintable(wire));
         actionCategoryOrder.insert(wire, a.value(QStringLiteral("categoryOrder")).toInt());
     }
     QVERIFY(sawFloat);

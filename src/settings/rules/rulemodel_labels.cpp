@@ -83,6 +83,12 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
                                               RuleAuthoring::orientationLabel(predicate.value.toString()));
     }
 
+    // Colour scheme: same closed-vocabulary treatment via the shared table.
+    if (predicate.field == Field::ColorScheme) {
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
+                                              RuleAuthoring::colorSchemeLabel(predicate.value.toString()));
+    }
+
     // Window type is the int underlying the WindowType enum — resolve it to the
     // friendly label ("Window type: Dialog") via the same single-source table the
     // editor dropdown uses, rather than showing the bare int.
@@ -896,6 +902,8 @@ QString RuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Screen orientation");
     case Field::ActiveLayout:
         return PhosphorI18n::tr("Active layout");
+    case Field::ColorScheme:
+        return PhosphorI18n::tr("Color scheme");
     }
     return QString();
 }

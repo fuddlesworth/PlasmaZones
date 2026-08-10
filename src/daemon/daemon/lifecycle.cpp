@@ -459,6 +459,7 @@ void Daemon::stop()
         m_layoutManager->setDefaultAutotileAlgorithmProvider({});
         m_layoutManager->setTiledWindowCountProvider({});
         m_layoutManager->setScreenOrientationProvider({});
+        m_layoutManager->setColorSchemeProvider({});
         m_layoutManager->setCurrentVirtualDesktopProvider({});
         m_layoutManager->setSnappingPreferredProvider({});
         m_layoutManager->setDefaultAssignmentSuppressedProvider({});

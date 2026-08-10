@@ -74,6 +74,11 @@ QString windowTypeLabel(int windowTypeValue);
 /// An unknown token round-trips verbatim.
 QString modeLabel(const QString& modeToken);
 QString orientationLabel(const QString& orientationToken);
+QString colorSchemeLabel(const QString& schemeToken);
+/// One-line hover help for a registered action type — the action-side mirror
+/// of fieldDescription(), rendered by the action row's info icon. Empty for an
+/// unregistered type; the controller test canary keeps the ladder exhaustive.
+QString actionDescription(const QString& type);
 
 /// The display form of a scrolling template's name, marking it as a template
 /// rather than a plain layout. The one consumer is the ActiveLayout match

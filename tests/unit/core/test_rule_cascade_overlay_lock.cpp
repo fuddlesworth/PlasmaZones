@@ -307,6 +307,50 @@ private Q_SLOTS:
                  std::optional<bool>(true));
     }
 
+    // ─── ColorScheme match field — provider stamping + key self-heal ──────
+    // A context rule matching Field::ColorScheme resolves against the
+    // registry's colour-scheme provider, and a provider FLIP re-resolves
+    // through the cache-key fold (no rule-set revision bump involved) —
+    // the exact contract that makes day/night rules live.
+
+    void testContextLock_colorSchemeRuleFollowsProviderFlips()
+    {
+        PWR::RuleAction a;
+        a.type = QString(PWR::ActionType::LockContext);
+        a.params.insert(QString(PWR::ActionParam::Value), true);
+        PWR::Rule darkLock;
+        darkLock.id = QUuid::createUuid();
+        darkLock.name = QStringLiteral("lock in dark");
+        darkLock.enabled = true;
+        darkLock.priority = 400;
+        darkLock.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ColorScheme, PWR::Operator::Equals, QStringLiteral("dark"));
+        darkLock.actions = {a};
+
+        RegistryFixture f = makeRegistryFixture();
+        QVERIFY(f.store->setAllRules({darkLock}));
+
+        QString scheme = QStringLiteral("light");
+        f.registry->setColorSchemeProvider([&scheme]() -> std::optional<QString> {
+            return scheme;
+        });
+
+        // Light: the dark-scoped rule does not match (and the verdict caches).
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
+        // Flip to dark: the cache key changes with the token, so the cached
+        // light verdict cannot be returned stale.
+        scheme = QStringLiteral("dark");
+        QVERIFY(f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
+        // And back.
+        scheme = QStringLiteral("light");
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
+
+        // Provider cleared: the token empties, the predicate goes inert, and
+        // the rule stops matching rather than latching its last verdict.
+        f.registry->setColorSchemeProvider({});
+        QVERIFY(!f.registry->resolveContextLocked(QStringLiteral("DP-1"), 0, QString()));
+    }
+
     // ─── Context lock — slot conflict resolution ──────────────────────────
     // When two LockContext rules pin the SAME context with opposing values,
     // the single Locked slot is won by the highest-priority rule (then list

@@ -585,6 +585,13 @@ Q_SIGNALS:
     void snappingRestoreFloatedWindowsOnLoginChanged();
     void autotileRestoreFloatedWindowsOnLoginChanged();
     void snapUnfloatFallbackToZoneChanged();
+    /// The system colour scheme flipped between light and dark. Derived from
+    /// QEvent::ApplicationPaletteChange in the config layer (the process's
+    /// one palette observer) INDEPENDENTLY of the useSystemColors setting.
+    /// Consumed by the daemon to re-resolve context rules matching the
+    /// ColorScheme field; carries no payload because consumers re-read the
+    /// live palette through the registry's colour-scheme provider.
+    void systemColorSchemeChanged();
     void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();

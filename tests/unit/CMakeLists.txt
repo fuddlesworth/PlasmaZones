@@ -1513,6 +1513,7 @@ add_executable(test_rule_model
     # rulemodel's action summary now shares its boolean polarity phrasing with
     # the editor via RuleAuthoring::boolActionStateLabel.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
 )
 target_link_libraries(test_rule_model
@@ -1539,6 +1540,7 @@ add_executable(test_rule_controller
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
 )
@@ -1566,6 +1568,7 @@ add_executable(test_rule_controller_overview
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
 )

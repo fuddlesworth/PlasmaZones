@@ -536,6 +536,33 @@ void Daemon::initEnginesAndWiring()
             reconcileActiveAssignments();
         });
     });
+
+    // A system colour-scheme flip changes Field::ColorScheme rule verdicts
+    // WITHOUT a rule-set revision bump. The registry's cached context
+    // resolvers self-heal through the |cs: cache-key component; what does not
+    // self-heal is state already applied from an old verdict, so mirror the
+    // rulesChanged re-resolution: reconcile the per-screen assignments (same
+    // deferred pending-flag shape as above) and refresh the live selector /
+    // overlay surfaces. Disconnect-first, same duplicate-stacking rationale
+    // as the rulesChanged block.
+    disconnect(m_settings.get(), &ISettings::systemColorSchemeChanged, this, nullptr);
+    connect(m_settings.get(), &ISettings::systemColorSchemeChanged, this, [this]() {
+        if (m_overlayService) {
+            m_overlayService->refreshContextLockState();
+            m_overlayService->refreshOverlayPropertiesIfShown();
+        }
+        if (m_reconcileAssignmentsPending) {
+            return;
+        }
+        m_reconcileAssignmentsPending = true;
+        QTimer::singleShot(0, this, [this]() {
+            m_reconcileAssignmentsPending = false;
+            if (m_shuttingDown) {
+                return;
+            }
+            reconcileActiveAssignments();
+        });
+    });
     // Prime the snapshot from the initial rule set so the first real rule edit
     // diffs against the live assignments rather than an empty baseline.
     diffActiveAssignments();

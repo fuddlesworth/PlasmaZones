@@ -370,6 +370,37 @@ ColumnLayout {
             }
         }
 
+        // Info icon — per-action hover help, the WHAT-side mirror of the WHEN
+        // leaf editor's field info icon (MatchLeafEditor's fieldInfoIcon).
+        // The description comes off the actionTypeOptions entry for the
+        // row's current type; an unknown / legacy type yields no text, so
+        // the icon simply hides rather than showing an empty bubble.
+        Kirigami.Icon {
+            readonly property string _actionDesc: {
+                var opts = row.actionTypeOptions;
+                for (var i = 0; i < opts.length; ++i) {
+                    if (opts[i].value === row.action.type)
+                        return opts[i].description || "";
+                }
+                return "";
+            }
+
+            visible: _actionDesc !== ""
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            source: "dialog-information"
+            color: Kirigami.Theme.highlightColor
+            Accessible.name: _actionDesc
+            ToolTip.text: _actionDesc
+            ToolTip.visible: actionInfoHover.hovered && _actionDesc !== ""
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+
+            HoverHandler {
+                id: actionInfoHover
+            }
+        }
+
         // Per-row warning chip — surfaces when the action's current type is
         // incompatible with the rule's match. The full message lives in the
         // RuleEditorSheet's InlineMessage (which lists every issue across

@@ -18,7 +18,7 @@ private Q_SLOTS:
         // Canary: the loop bound is derived from FieldCount, not hard-coded.
         // If this fails, an enumerator was added/removed without updating
         // FieldCount in MatchTypes.h.
-        QCOMPARE(FieldCount, 40);
+        QCOMPARE(FieldCount, 41);
         QTest::addColumn<int>("fieldValue");
         for (int v = 0; v < FieldCount; ++v) {
             QTest::addRow("field-%d", v) << v;
@@ -124,6 +124,9 @@ private Q_SLOTS:
         // layout-keyed gap/overlay/assignment rule participates in the cascade.
         QVERIFY(fieldIsContext(Field::ScreenOrientation));
         QVERIFY(fieldIsContext(Field::ActiveLayout));
+        // ColorScheme is the session-wide light/dark context field, stamped
+        // during windowless context resolution AND on daemon window queries.
+        QVERIFY(fieldIsContext(Field::ColorScheme));
 
         // The capability fields added alongside them are window properties, not
         // context, so a rule keying on them is a per-window match.

@@ -11,6 +11,7 @@
 #include <QString>
 #include <QPointer>
 #include <optional>
+#include "config/settings.h"
 #include "core/types/constants.h"
 #include "core/utils/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
@@ -172,6 +173,14 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     query.windowType = meta->windowType;
     query.virtualDesktop = meta->virtualDesktop;
     query.activity = meta->activity;
+    // Colour scheme is session-wide (not window metadata), read straight from
+    // the live palette so a `ColorScheme == dark` clause composes with any
+    // window predicate on the daemon open path. The EFFECT-side query leaves
+    // it unstamped and its admission filter holds such rules out there
+    // (effectNeverStampedFields), so pairing ColorScheme with an
+    // effect-consumed action is inert by design; the daemon-resolved actions
+    // honour it.
+    query.colorScheme = Settings::systemColorSchemeToken();
     // Screen-derived context fields (ScreenId, Mode, ScreenOrientation, ActiveLayout)
     // are intentionally NOT stamped here: the window metadata does not carry the
     // window's screen geometry / active layout, and this daemon-side query feeds the

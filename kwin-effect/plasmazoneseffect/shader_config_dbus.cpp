@@ -104,11 +104,17 @@ constexpr int kRuleFetchTimeoutMs = 5000;
 /// admitted again.
 const QSet<PhosphorRules::Field>& effectNeverStampedFields(bool activeLayoutsSeeded)
 {
+    // ColorScheme is never stamped effect-side (the daemon owns the palette
+    // derivation; kwin's own palette is not the authority), so a rule
+    // referencing it must be held out here for the same negated-leaf reason
+    // as the other two — the daemon-side resolvers still honour it.
     static const QSet<PhosphorRules::Field> seeded = {
         PhosphorRules::Field::TiledWindowCount,
+        PhosphorRules::Field::ColorScheme,
     };
     static const QSet<PhosphorRules::Field> unseeded = {
         PhosphorRules::Field::TiledWindowCount,
+        PhosphorRules::Field::ColorScheme,
         PhosphorRules::Field::ActiveLayout,
     };
     return activeLayoutsSeeded ? seeded : unseeded;
