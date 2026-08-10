@@ -9,14 +9,17 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief One theme-fallback colour row: a swatch, the hex, and a reset.
  *
- * Used by the three tab-indicator colours and by the drop indicator's two
- * (fill and border): five instances across two pages. All of them store EMPTY
- * to mean "follow the colour scheme", which no plain colour control can
- * express — a picker always has some colour selected.
- * So the row pairs the swatch with an explicit Reset that clears back to
- * empty, and previews the theme colour it would fall back to while it is
- * unset. Without that pairing there would be no way back to the default once a
- * colour had been picked.
+ * The standard control for every colour setting whose default is "follow a
+ * system colour". A stored SENTINEL value (empty string by default) means
+ * "follow", which no plain colour control can express — a picker always has
+ * some colour selected. So the row pairs the swatch with an explicit Reset
+ * that clears back to the sentinel, and previews the theme colour it would
+ * fall back to while it is unset. Without that pairing there would be no way
+ * back to the default once a colour had been picked.
+ *
+ * A host whose config key uses a different sentinel (the rules editor's
+ * "accent") sets `sentinel` and `fallbackLabel` to match; the row itself
+ * never interprets the value beyond comparing against the sentinel.
  *
  * The picker itself is PAGE-LEVEL and passed in rather than owned here: a page
  * rebuild while the dialog is open would destroy a row-scoped dialog and tear
@@ -28,10 +31,21 @@ import org.kde.kirigami as Kirigami
 SettingsRow {
     id: root
 
-    /// The stored value: a hex string, or EMPTY for "follow the theme".
+    /// The stored value: a hex string, or `sentinel` for "follow the theme".
     property string storedColor: ""
-    /// What the indicator actually draws while storedColor is empty. Shown as
-    /// the swatch so the row previews the real result rather than a blank.
+    /// The stored value that means "follow the system colour". Empty string
+    /// for the config theme-fallback keys; a host key with a reserved token
+    /// (e.g. "accent") overrides it.
+    property string sentinel: ""
+    /// What the label shows while the sentinel is stored, naming the system
+    /// colour being followed.
+    property string fallbackLabel: i18n("Color scheme")
+    /// What the Reset button announces and its tooltip says.
+    property string resetAccessibleName: i18n("Reset to the color scheme")
+    property string resetToolTip: i18n("Follow the color scheme")
+    /// What the indicator actually draws while storedColor is the sentinel.
+    /// Shown as the swatch so the row previews the real result rather than a
+    /// blank.
     property color themeColor: Kirigami.Theme.highlightColor
     /// The page-level ColorDialog (see the class note). Deliberately `var`
     /// rather than a typed `Dialog`: the row duck-types anything exposing
@@ -46,10 +60,10 @@ SettingsRow {
     /// stutters ("Fill color color").
     property string swatchAccessibleName: i18nc("@action:button", "%1 color", root.title)
 
-    /// Emitted with the chosen `#AARRGGBB`, or an EMPTY string on reset.
+    /// Emitted with the chosen `#AARRGGBB`, or the sentinel on reset.
     signal colorChosen(string hex)
 
-    readonly property bool _followsTheme: root.storedColor.length === 0
+    readonly property bool _followsTheme: root.storedColor === root.sentinel
 
     // Qt's color.toString() drops the alpha channel when fully opaque and
     // keeps it otherwise, so the hex label's width would jump between 6 and 8
@@ -117,7 +131,7 @@ SettingsRow {
         }
 
         QQC2.Label {
-            text: root._followsTheme ? i18n("Color scheme") : root._displayHex(root.storedColor)
+            text: root._followsTheme ? root.fallbackLabel : root._displayHex(root.storedColor)
             color: root._followsTheme ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
             font.family: root._followsTheme ? Kirigami.Theme.defaultFont.family : Kirigami.Theme.fixedWidthFont.family
             Layout.preferredWidth: Kirigami.Units.gridUnit * 6
@@ -130,11 +144,11 @@ SettingsRow {
             enabled: !root._followsTheme
             text: i18n("Reset")
             display: QQC2.AbstractButton.IconOnly
-            Accessible.name: i18n("Reset to the color scheme")
-            onClicked: root.colorChosen("")
+            Accessible.name: root.resetAccessibleName
+            onClicked: root.colorChosen(root.sentinel)
 
             QQC2.ToolTip.visible: hovered
-            QQC2.ToolTip.text: i18n("Follow the color scheme")
+            QQC2.ToolTip.text: root.resetToolTip
         }
     }
 }

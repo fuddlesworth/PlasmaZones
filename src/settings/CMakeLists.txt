@@ -327,8 +327,6 @@ qt_add_qml_module(plasmazones-settings
         # Scrolling: the condensed simple page, the three advanced leaves
         # (Columns / Tabs / Window), the quick-shortcuts page binding
         # templates to the quick digits, the cards both surfaces share, and
-        # the theme-fallback colour row, hosted three times by the Tabs page
-        # and twice by the drop-indicator card.
         qml/pages/scrolling/ScrollingSimplePage.qml
         qml/pages/scrolling/ScrollingColumnsPage.qml
         qml/pages/scrolling/ScrollingTabsPage.qml
@@ -338,7 +336,6 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/scrolling/ScrollingDragInsertCard.qml
         qml/pages/scrolling/ScrollingDropIndicatorCard.qml
         qml/pages/scrolling/ScrollingFocusCard.qml
-        qml/pages/scrolling/ThemeFallbackColorRow.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which
         # also hosts the unified inner/outer gap controls.
         qml/pages/decoration/WindowAppearancePage.qml
@@ -507,6 +504,9 @@ qt_add_qml_module(plasmazones-settings
         qml/js/PresetList.js
         qml/components/SettingsButtonGroup.qml
         qml/components/ColorSwatchRow.qml
+        # The sentinel-fallback colour row: scrolling's tab and drop-indicator
+        # colours today, every follow-the-system colour setting eventually.
+        qml/components/ThemeFallbackColorRow.qml
         qml/pages/layouts/NewLayoutDialog.qml
         qml/pages/layouts/ScrollingTemplateEditorDialog.qml
         qml/pages/tiling/NewAlgorithmDialog.qml
