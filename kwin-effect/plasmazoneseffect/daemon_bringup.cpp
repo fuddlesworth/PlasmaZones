@@ -860,6 +860,17 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("snapAssistReady"), m_snapHandler.get(),
                                           SLOT(slotSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
 
+    // Overlay: the daemon's idle-grace trim just emptied its thumbnail
+    // stores. The capture side's recently-posted dedup set must be dropped in
+    // the same breath, or it keeps skipping re-capture for handles the daemon
+    // no longer holds and snap-assist strands on icons until a daemon restart
+    // (the skip path re-promotes its handles, so the FIFO never rolls them
+    // out on its own).
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::Overlay,
+                                          QStringLiteral("snapAssistThumbnailCacheTrimmed"), m_snapAssistHandler.get(),
+                                          SLOT(slotSnapAssistThumbnailCacheTrimmed()));
+
     // Deliberately not asserting per-connect success: the only failure mode
     // for these QDBusConnection::connect calls is an unregistered custom
     // type, and PhosphorProtocol::registerWireTypes() runs at effect

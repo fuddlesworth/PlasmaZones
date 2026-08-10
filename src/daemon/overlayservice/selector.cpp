@@ -567,6 +567,15 @@ void OverlayService::restoreZoneSelectorAfterHide(const QString& effectiveId)
     if (it == m_screenStates.end()) {
         return;
     }
+    // Do not restore underneath a modal that replaced the one whose hide
+    // completion routed here: the modals dismiss each other (snap-assist ↔
+    // picker), and the dismissed one's ANIMATED hide completion lands after
+    // the replacement has already hidden this screen's selector for its own
+    // show — an unguarded restore would re-show it under the live modal.
+    if ((m_snapAssistVisible && m_snapAssistScreenId == effectiveId)
+        || (m_layoutPickerVisible && m_layoutPickerScreenId == effectiveId)) {
+        return;
+    }
     // The drag may still be active (m_zoneSelectorVisible stays true
     // across temporary slot-hides), and the screen may retain its
     // captured (physScreen, geometry) - re-show in that case.

@@ -110,6 +110,16 @@ Q_SIGNALS:
      * every path through the same emit site.
      */
     void snapAssistDismissed();
+    /**
+     * @brief Emitted when the daemon's idle-grace trim empties its
+     * snap-assist thumbnail stores.
+     *
+     * Forwarded from `IOverlayService::snapAssistThumbnailCacheTrimmed`.
+     * The kwin-effect subscribes and drops its recently-posted dedup set so
+     * the next snap-assist re-captures thumbnails the daemon no longer
+     * holds instead of stranding on icons.
+     */
+    void snapAssistThumbnailCacheTrimmed();
 
 private:
     /**

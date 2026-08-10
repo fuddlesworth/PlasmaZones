@@ -33,8 +33,12 @@ Item {
     property bool shaderAnchor: true
     property var emptyZones: []
     property var candidates: []
-    property int screenWidth: 1920
-    property int screenHeight: 1080
+    // compositorHandle → provider URL map, pushed separately from
+    // `candidates` so a late-arriving thumbnail re-evaluates only the Image
+    // bindings reading the map. Re-pushing the candidates list per thumbnail
+    // destroyed and rebuilt every card delegate (hover reset, dropped
+    // in-flight presses, O(N²) churn during the arrival burst).
+    property var thumbnails: ({})
     // Zone appearance defaults — C++ side overwrites from settings.
     // highlightColor is unused in-file but declared for the
     // writeColorSettings push contract symmetry (all slots receive the trio).
@@ -173,6 +177,10 @@ Item {
 
                         property var candidate: modelData
                         property bool hovered: cardMouse.containsMouse
+                        // Empty string = no thumbnail (icon fallback). The
+                        // map lookup re-evaluates whenever C++ re-pushes
+                        // `thumbnails`, without touching this delegate.
+                        readonly property string thumbnailUrl: (candidateCard.candidate && root.thumbnails && root.thumbnails[candidateCard.candidate.compositorHandle]) ? root.thumbnails[candidateCard.candidate.compositorHandle] : ""
 
                         width: candidateFlow.cardWidth + Kirigami.Units.smallSpacing * 2
                         height: cardContent.height + Kirigami.Units.smallSpacing * 2
@@ -206,16 +214,25 @@ Item {
                                 height: width
 
                                 Image {
+                                    id: thumbImage
+
                                     anchors.fill: parent
-                                    visible: !!(candidateCard.candidate && candidateCard.candidate.thumbnail)
+                                    // Gate on load status too: a URL whose
+                                    // cache entry was evicted or whose GPU
+                                    // import failed loads as Image.Error —
+                                    // without the status check the empty
+                                    // Image stayed visible and the card
+                                    // showed a blank square instead of the
+                                    // icon fallback.
+                                    visible: candidateCard.thumbnailUrl !== "" && thumbImage.status !== Image.Error
                                     fillMode: Image.PreserveAspectFit
-                                    source: (candidateCard.candidate && candidateCard.candidate.thumbnail) ? candidateCard.candidate.thumbnail : ""
+                                    source: candidateCard.thumbnailUrl
                                     cache: true
                                 }
 
                                 Kirigami.Icon {
                                     anchors.fill: parent
-                                    visible: !(candidateCard.candidate && candidateCard.candidate.thumbnail)
+                                    visible: candidateCard.thumbnailUrl === "" || thumbImage.status === Image.Error
                                     source: candidateCard.candidate ? (candidateCard.candidate.icon || "application-x-executable") : "application-x-executable"
                                 }
                             }

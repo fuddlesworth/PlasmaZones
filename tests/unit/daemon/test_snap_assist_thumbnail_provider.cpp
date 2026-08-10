@@ -46,6 +46,7 @@ private Q_SLOTS:
     void nullImageRejected();
     void reinsertProducesNewUrl();
     void lruEvictionAtCapacity();
+    void byteCostBoundsResidency();
     void evictionDropsUrlState();
     void requestImageHonoursRequestedSize();
     void bracedUuidHandleLookup();
@@ -113,6 +114,10 @@ void TestSnapAssistThumbnailProvider::reinsertProducesNewUrl()
 
 void TestSnapAssistThumbnailProvider::lruEvictionAtCapacity()
 {
+    // The cache is BYTE-denominated (CacheMaxBytes = CacheCapacity × 256²
+    // ARGB32), so eviction is exercised with steady-state-sized 256² images:
+    // CacheCapacity of them exactly fill the budget, and each further insert
+    // must push out the oldest.
     SnapAssistThumbnailProvider p;
     const int cap = SnapAssistThumbnailProvider::CacheCapacity;
 
@@ -121,7 +126,7 @@ void TestSnapAssistThumbnailProvider::lruEvictionAtCapacity()
     for (int i = 0; i < cap; ++i) {
         const QString h = brace(QUuid::createUuid());
         handles.append(h);
-        QVERIFY(!p.insert(h, solid(2, 2, Qt::red)).isEmpty());
+        QVERIFY(!p.insert(h, solid(256, 256, Qt::red)).isEmpty());
     }
     // All in cache.
     for (const auto& h : handles) {
@@ -133,7 +138,7 @@ void TestSnapAssistThumbnailProvider::lruEvictionAtCapacity()
     for (int i = 0; i < 4; ++i) {
         const QString h = brace(QUuid::createUuid());
         freshHandles.append(h);
-        QVERIFY(!p.insert(h, solid(2, 2, Qt::blue)).isEmpty());
+        QVERIFY(!p.insert(h, solid(256, 256, Qt::blue)).isEmpty());
     }
 
     int evicted = 0;
@@ -153,6 +158,30 @@ void TestSnapAssistThumbnailProvider::lruEvictionAtCapacity()
     }
 }
 
+void TestSnapAssistThumbnailProvider::byteCostBoundsResidency()
+{
+    // The documented memory bound must hold for oversize images too: a
+    // boundary-ceiling 1024² image costs 16 steady-state slots, so the
+    // budget holds far fewer of them than CacheCapacity — the count-cost
+    // regression this guards against silently multiplied the ~6 MB cap by
+    // 16.
+    SnapAssistThumbnailProvider p;
+    const int bigCostSlots = (1024 * 1024) / (256 * 256); // 16
+    const int fitCount = SnapAssistThumbnailProvider::CacheCapacity / bigCostSlots;
+
+    QStringList handles;
+    for (int i = 0; i < fitCount + 1; ++i) {
+        const QString h = brace(QUuid::createUuid());
+        handles.append(h);
+        QVERIFY(!p.insert(h, solid(1024, 1024, Qt::red)).isEmpty());
+    }
+    // The budget holds only fitCount oversize images: the oldest evicted.
+    QVERIFY(p.urlFor(handles.first()).isEmpty());
+    for (int i = 1; i < handles.size(); ++i) {
+        QVERIFY(!p.urlFor(handles[i]).isEmpty());
+    }
+}
+
 void TestSnapAssistThumbnailProvider::evictionDropsUrlState()
 {
     // Regression guard for the unbounded-growth bug fixed alongside this
@@ -163,13 +192,14 @@ void TestSnapAssistThumbnailProvider::evictionDropsUrlState()
     const int cap = SnapAssistThumbnailProvider::CacheCapacity;
 
     const QString victim = brace(QUuid::createUuid());
-    const QString victimUrl = p.insert(victim, solid(2, 2, Qt::red));
+    const QString victimUrl = p.insert(victim, solid(256, 256, Qt::red));
     QVERIFY(!victimUrl.isEmpty());
 
-    // Push the victim out by inserting cap+1 fresh handles (the +1 is the
-    // one that bumps victim out of the LRU window).
+    // Push the victim out by filling the byte budget with cap fresh
+    // steady-state-sized entries (the last one bumps victim out of the LRU
+    // window).
     for (int i = 0; i < cap; ++i) {
-        QVERIFY(!p.insert(brace(QUuid::createUuid()), solid(2, 2, Qt::green)).isEmpty());
+        QVERIFY(!p.insert(brace(QUuid::createUuid()), solid(256, 256, Qt::green)).isEmpty());
     }
 
     QVERIFY(p.urlFor(victim).isEmpty());

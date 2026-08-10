@@ -571,7 +571,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // the dragStopped/endDrag path would fsync kglobalshortcutsrc while the
         // kwin-effect is still awaiting the endDrag reply — the very drop-path
         // compositor stall this change set out to remove (#167). The grab is
-        // bound lazily by start.cpp's snapAssistShown handler instead, which
+        // bound lazily by shortcuts_wiring.cpp's snapAssistShown handler instead, which
         // fires on the deferred computeAndEmitSnapAssist tick (after the
         // compositor is unblocked) and only when snap assist actually shows
         // with non-empty zones. onSnapAssistDismissed releases it. Deferring to
@@ -581,7 +581,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
 
     // Reset drag state for next operation. No Escape grab is registered on this
     // path: the drag used the kwin-effect's keyboard grab, and snap assist
-    // binds its own grab lazily via snapAssistShown (start.cpp). The default
+    // binds its own grab lazily via snapAssistShown (shortcuts_wiring.cpp). The default
     // unregister is therefore an unconditional no-op here — Registry::unbind
     // ignores an id that was never bound — and snapAssistRequestedOut is left
     // purely as the caller's output flag.

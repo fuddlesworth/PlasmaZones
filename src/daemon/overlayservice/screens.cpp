@@ -246,6 +246,14 @@ void OverlayService::resetModalSingletonsForDestroyedId(const QString& id)
     if (id == m_snapAssistScreenId) {
         m_snapAssistVisible = false;
         m_snapAssistScreenId.clear();
+        // Mirror hideSnapAssist's dismiss bookkeeping: drop the candidate
+        // model and start the idle-grace cache trim. Without this a monitor
+        // unplug while snap-assist was up left the thumbnail caches resident
+        // until the next full show/hide cycle (or forever, if the user
+        // stopped snapping).
+        m_snapAssistCandidates.clear();
+        m_snapAssistThumbnails.clear();
+        scheduleSnapAssistCacheTrim();
         Q_EMIT snapAssistDismissed();
     }
     if (id == m_layoutPickerScreenId) {
