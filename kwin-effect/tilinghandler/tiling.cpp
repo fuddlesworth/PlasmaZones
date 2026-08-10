@@ -279,7 +279,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         entries.append(entry);
     }
 
-    // Disambiguate entries with multiple candidates (same appId)
+    // Disambiguate entries with multiple candidates (same appId). An entry
+    // that matched EXACTLY (one candidate, resolved above) must RESERVE its
+    // window against the fuzzy entries: exact matches are not in the index
+    // below, and without the claimed-set a same-appId fuzzy entry (the
+    // stale-pre-restore-UUID case this file guards in three other places)
+    // could resolve to the SAME window — every per-window map then written
+    // twice for one id, the second apply overwriting the first, and the
+    // window the fuzzy entry was meant for silently never tiled.
+    QSet<KWin::EffectWindow*> claimedByExact;
+    for (const Entry& e : std::as_const(entries)) {
+        if (e.window && e.candidates.isEmpty()) {
+            claimedByExact.insert(e.window);
+        }
+    }
     QHash<QString, QVector<int>> appIdToEntryIndices;
     for (int i = 0; i < entries.size(); ++i) {
         if (!entries[i].candidates.isEmpty()) {
@@ -294,6 +307,9 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 KWin::EffectWindow* best = nullptr;
                 qreal bestDist = 1e9;
                 for (KWin::EffectWindow* c : std::as_const(e.candidates)) {
+                    if (claimedByExact.contains(c)) {
+                        continue;
+                    }
                     QPointF cf = c->frameGeometry().center();
                     qreal d = QPointF(targetCenter - cf).manhattanLength();
                     if (d < bestDist) {
@@ -306,6 +322,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             continue;
         }
         QVector<KWin::EffectWindow*> candidates = entries[indices[0]].candidates;
+        candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+                                        [&claimedByExact](KWin::EffectWindow* c) {
+                                            return claimedByExact.contains(c);
+                                        }),
+                         candidates.end());
         if (candidates.size() != indices.size()) {
             qCDebug(lcEffect) << "Autotile: stableId has" << indices.size() << "entries and" << candidates.size()
                               << "candidates; assigning by position";
@@ -339,10 +360,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         bool hasVisualPos = false;
     };
     QVector<TileSnap> toApply;
+    QSet<KWin::EffectWindow*> applied;
     for (Entry& e : entries) {
         if (!e.window) {
             continue;
         }
+        // Belt behind the claimed-set above: a double-resolve that slips
+        // through must not apply twice — and a WARNED drop shrinks
+        // toApply below tileRequestCount, so the stranded-window log at
+        // the end of this function fires and the case is diagnosable
+        // instead of silent.
+        if (applied.contains(e.window)) {
+            qCWarning(lcEffect) << "Autotile: two batch entries resolved to one window — dropping the second for"
+                                << e.windowId;
+            continue;
+        }
+        applied.insert(e.window);
         // Re-key to the RESOLVED window's live id. The disambiguation above
         // can match a candidate whose uuid differs from the daemon-supplied
         // entry id (stale across a KWin restart), and every write this batch

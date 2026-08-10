@@ -405,10 +405,16 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     }
     m_windowAnimator->removeAnimation(w);
     m_scrollVisualPos.remove(closingWindowId);
-    // A dying window needs no setFullScreen(false) — just the membership,
-    // and the keep-flag snapshot beside it (nothing left to restore onto).
+    // A dying window needs no setFullScreen(false) — just the membership.
+    // The keep-flag snapshot is RESTORED, not discarded: with the close
+    // shader's holdCloseGrab the EffectWindow keeps painting for the
+    // transition, and a bare drop left the corpse playing its close leg at
+    // keepBelow=true — stacked below its strip neighbours instead of where
+    // it visually was. The restore helper erases before its setters and
+    // null-guards, so it is safe on a dying window (and on the
+    // no-close-shader path it degrades to the plain removal).
     m_windowedFullscreenWindows.remove(closingWindowId);
-    m_windowedFsLayerSnapshots.remove(closingWindowId);
+    m_tilingHandler->restoreWindowedFullscreenLayerDemotion(closingWindowId, w->window());
     m_lastReportedMinSize.remove(closingWindowId);
     m_scrollCommandedRects.remove(closingWindowId);
 

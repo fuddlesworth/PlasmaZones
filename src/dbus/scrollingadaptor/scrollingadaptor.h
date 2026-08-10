@@ -208,6 +208,10 @@ private:
     /// than read back from the overlay service so the replay getter answers
     /// from the same values the signal published.
     QHash<QString, quint32> m_scrollTabSurfaces;
+    /// Terminal latch set by clearEngine(): the overlay-service connection
+    /// feeding setScrollTabSurface survives the clear (its context object is
+    /// this adaptor), and a late push must not repopulate the registry.
+    bool m_engineCleared = false;
 };
 
 } // namespace PlasmaZones

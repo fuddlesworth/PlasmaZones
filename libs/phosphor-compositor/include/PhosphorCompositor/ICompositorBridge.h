@@ -49,9 +49,12 @@ struct WindowInfo
     QRectF frameGeometry;
     QSizeF minSize;
     bool isMinimized = false;
-    /// Currently written but read by no consumer. A future reader must
-    /// decide whether a scrolling window in windowed fullscreen counts —
-    /// this field reports the raw KWin state, which answers yes.
+    /// Currently written but read by no consumer. CONTRACT: this field is
+    /// the raw compositor state, so a scrolling window in WINDOWED
+    /// fullscreen reports true (its client holds KWin fullscreen while the
+    /// strip owns its geometry). A consumer that needs to distinguish the
+    /// strip-managed hold from genuine fullscreen must not overload this
+    /// flag — add a distinct isWindowedFullscreen instead.
     bool isFullScreen = false;
     bool isOnCurrentDesktop = true;
     bool isOnCurrentActivity = true;

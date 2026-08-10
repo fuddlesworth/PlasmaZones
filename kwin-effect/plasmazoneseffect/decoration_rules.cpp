@@ -67,13 +67,16 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     // would re-promote the tile above its strip. While flagged the window
     // is skipped OUTRIGHT — apply and restore both: draining a parked rule
     // snapshot here would clobber the demotion with the user's flags. The
-    // un-flag paths restore the pre-demotion flags, and the next reconcile
-    // hands ownership back to whatever rule matches — a bounded wait, not an
-    // open-ended one: every un-flag path (the batch un-flag arm's
-    // onComplete, the client self-exit arm, and the float cleanup's tiled
-    // re-resolve) drives updateAllDecorations, which re-runs this reconcile
-    // for the window on the same edge. A rule that stopped matching DURING
-    // the hold therefore drains its parked snapshot at un-flag time.
+    // un-flag paths restore the pre-demotion flags, and the reconcile-driving
+    // ones (the batch un-flag arm's onComplete, the client self-exit arm, the
+    // float cleanups, the mode-swap/desktop-demote sweeps) run
+    // updateAllDecorations on the same edge, so those drain a parked
+    // snapshot at un-flag time. The snap<->snap screen-leave release
+    // (outputchange.cpp) is the one un-flag path that drives no reconcile of
+    // its own — a snapshot parked there drains at the next natural
+    // updateAllDecorations (any focus change), and restoreAllRuleWindowLayers
+    // covers teardown, so the wait is bounded by the next sweep rather than
+    // by the un-flag edge itself.
     if (m_windowedFullscreenWindows.contains(windowId)) {
         return;
     }

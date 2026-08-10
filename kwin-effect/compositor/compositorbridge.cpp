@@ -71,7 +71,10 @@ QVector<WindowHandle> KWinCompositorBridge::stackingOrder() const
 QString KWinCompositorBridge::windowId(WindowHandle w) const
 {
     auto* ew = toEffectWindow(w);
-    if (!ew)
+    // isDeleted: this file's own invariant (stated at the stackingOrder
+    // filter) — a consumer holding a handle across a close would otherwise
+    // re-pollute the scrubbed id caches via getWindowId.
+    if (!ew || ew->isDeleted())
         return QString();
     return m_effect.getWindowId(ew);
 }
@@ -79,7 +82,7 @@ QString KWinCompositorBridge::windowId(WindowHandle w) const
 QString KWinCompositorBridge::windowScreenId(WindowHandle w) const
 {
     auto* ew = toEffectWindow(w);
-    if (!ew)
+    if (!ew || ew->isDeleted())
         return QString();
     return m_effect.getWindowScreenId(ew);
 }
@@ -164,7 +167,7 @@ WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
 {
     auto* ew = toEffectWindow(w);
     WindowInfo info;
-    if (!ew)
+    if (!ew || ew->isDeleted())
         return info;
 
     info.handle = w;
@@ -227,7 +230,11 @@ bool KWinCompositorBridge::isTileableWindow(WindowHandle w) const
 void KWinCompositorBridge::moveResize(WindowHandle w, const QRectF& geometry)
 {
     auto* ew = toEffectWindow(w);
-    if (!ew)
+    // isDeleted on every ACTION method (matching activateWindow's policy
+    // guard and stackingOrder's filter): a compositor-thread write against
+    // a torn-down window is the one thing a stale consumer-held handle must
+    // never reach.
+    if (!ew || ew->isDeleted())
         return;
     auto* kw = ew->window();
     if (kw) {
@@ -238,7 +245,7 @@ void KWinCompositorBridge::moveResize(WindowHandle w, const QRectF& geometry)
 void KWinCompositorBridge::setNoBorder(WindowHandle w, bool noBorder)
 {
     auto* ew = toEffectWindow(w);
-    if (!ew)
+    if (!ew || ew->isDeleted())
         return;
     auto* kw = ew->window();
     if (kw) {
@@ -249,7 +256,7 @@ void KWinCompositorBridge::setNoBorder(WindowHandle w, bool noBorder)
 void KWinCompositorBridge::setMaximized(WindowHandle w, bool maximized)
 {
     auto* ew = toEffectWindow(w);
-    if (!ew)
+    if (!ew || ew->isDeleted())
         return;
     auto* kw = ew->window();
     if (kw) {
@@ -280,7 +287,7 @@ void KWinCompositorBridge::activateWindow(WindowHandle w)
 void KWinCompositorBridge::raiseWindow(WindowHandle w)
 {
     auto* ew = toEffectWindow(w);
-    if (!ew)
+    if (!ew || ew->isDeleted())
         return;
     auto* kw = ew->window();
     if (kw) {

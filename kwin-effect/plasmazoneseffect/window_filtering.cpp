@@ -731,6 +731,11 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
     // PLUS isFullScreen(), which is decoration-only — do NOT fold the two into
     // one predicate. (Fullscreen is also rejected earlier in
     // updateWindowDecoration, but keep it here so the gate stands alone.)
+    // The fullscreen reject deliberately carries NO windowed-fullscreen
+    // membership exemption: a flagged strip tile presents as fullscreen, and
+    // fullscreen surfaces wear no chrome — borderless-through-the-hold is
+    // the intended presentation, and the un-flag paths' decoration re-drives
+    // bring the chrome back when the hold ends.
     if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass) || isPlasmaShellSurface(windowClass)) {
         return false;
     }

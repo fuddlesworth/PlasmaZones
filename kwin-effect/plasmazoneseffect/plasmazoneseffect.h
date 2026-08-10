@@ -2012,6 +2012,12 @@ private:
     /// travelling with the rest of the strip instead of vanishing the moment
     /// it leaves the viewport. Absent for every window whose committed rect
     /// already IS its paint position, which is almost all of them.
+    /// DAMAGE CONTRACT: adding, changing or removing an entry moves where
+    /// the paint path draws the window, so every mutation site must either
+    /// pair with addRepaint(Full) or sit on a path whose follow-up geometry
+    /// apply (or membership clear that already stopped the relocation)
+    /// provably damages — the batch writer change-gates and damages, and
+    /// the removers each document which half covers them.
     QHash<QString, QPoint> m_scrollVisualPos;
     /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
     /// fullscreen state (set by the effect from the batch flag) while the
@@ -2025,9 +2031,16 @@ private:
     /// committed windowFullScreenChanged signal is where the column rect is
     /// re-asserted, and by then the batch is long gone. Maintained by
     /// TilingHandler's batch consumer and windowFullScreenChanged
-    /// reconciliation, with removals on every per-window teardown path
-    /// (close, float cleanup, the release helpers, the windowDeleted
-    /// backstop).
+    /// reconciliation. Membership is removed by the FORGET helper
+    /// (forgetWindowedFullscreen) and by the direct removals on: close and
+    /// the windowDeleted backstop, both float cleanups (active and passive
+    /// channels), the batch un-flag and deferred-reconcile arms, the
+    /// cross-output transfer, the mode-swap / screen-removal demotes, the
+    /// untile pass, and the bulk drain (restoreAllWindowedFullscreen).
+    /// releaseWindowedFullscreenState removes NOTHING here — it is the
+    /// compositor-state drop only and deliberately never consults this
+    /// hash; every membership removal pairs with a release or a
+    /// layer-demotion restore.
     QHash<QString, QRect> m_windowedFullscreenWindows;
     /// Pre-demotion keep-above/keep-below flags for windowed-fullscreen
     /// windows. The feature holds keep-below on every flagged window because
