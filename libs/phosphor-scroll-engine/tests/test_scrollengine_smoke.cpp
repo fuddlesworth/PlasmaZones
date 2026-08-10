@@ -68,6 +68,7 @@ private Q_SLOTS:
     void pruneRemovedScreenAndActivitiesSweep();
     void stackedTileFloatRoundTripRestoresSlot();
     void scheduledRetileRunsUnderEventLoop();
+    void minSizeOutgrowingWorkAreaFloatsTheWindow();
     void removedScreenReleasesWindows();
     void desktopSwitchAwayPreservesSiblingContextStrips();
     void seedAdoptionClampsViewToStripEnd();
@@ -588,6 +589,55 @@ void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
     QCoreApplication::processEvents();
     QCOMPARE(tiledSpy.count(), 1);
     QVERIFY(tiledSpy.last().at(0).toString().contains(QStringLiteral("\"width\":900")));
+}
+
+void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
+{
+    // windowMinSizeUpdated re-runs insertOpenedWindow's oversized verdict:
+    // a client that pins its min size AFTER mapping (the Wine late-pin
+    // pattern) must reach the same float the open path would have chosen,
+    // instead of staying tiled at a size no column slot can honour. Driven
+    // through the provider fixture so the 1200x800 work area is valid — the
+    // verdict deliberately skips an invalid one.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    QCoreApplication::processEvents();
+
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columnCount(), 2);
+
+    QSignalSpy floatSpy(engine, &ScrollEngine::windowFloatingChanged);
+    // In-bounds growth keeps the window tiled; the column widens instead.
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 900, 0);
+    QVERIFY(!state->isFloating(QStringLiteral("app|a")));
+    QCOMPARE(floatSpy.count(), 0);
+
+    // Past the work-area width: the verdict floats it mid-session.
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 1300, 0);
+    state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(state->isFloating(QStringLiteral("app|a")));
+    QVERIFY(!state->strip().containsWindow(QStringLiteral("app|a")));
+    QCOMPARE(floatSpy.count(), 1);
+    QCOMPARE(floatSpy.last().at(0).toString(), QStringLiteral("app|a"));
+    QCOMPARE(floatSpy.last().at(1).toBool(), true);
+    // Engine-decided float, so it carries the mode marker (the daemon's
+    // mode-transition capture keys off it) and the restore entry holds the
+    // clamp that forced the float.
+    QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|a")));
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(1300, 0));
+
+    // A repeat report is idempotent — already floating, nothing re-fires.
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 1300, 0);
+    QCOMPARE(floatSpy.count(), 1);
+
+    // Shrinking back below the work area does NOT auto-unfloat: the float
+    // may have been rearranged, and the manual unfloat restores the slot.
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 400, 0);
+    QVERIFY(state->isFloating(QStringLiteral("app|a")));
 }
 
 void TestScrollEngineSmoke::removedScreenReleasesWindows()
