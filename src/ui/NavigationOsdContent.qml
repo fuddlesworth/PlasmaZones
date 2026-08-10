@@ -629,12 +629,20 @@ Item {
             // when unclamped) and AlignHCenter centres short copy anyway.
             width: container.width - Kirigami.Units.gridUnit * 2
             wrapMode: Text.WordWrap
-            // Belt for the card's height clamp: when the clamp engages the
-            // overflow degrades to an ellipsis rather than a horizontally
-            // cut line. 8 lines is far beyond any current copy at normal
-            // scale; only extreme fontSizeScale on a short output hits it.
-            maximumLineCount: 8
+            // Belt for the card's height clamp: cap the line count to what
+            // fits the clamped card (output height minus the card's outer
+            // margin and vertical padding), so the overflow degrades to an
+            // ellipsis on the last VISIBLE line rather than a horizontally
+            // cut line. Derived from the label's own line height so the cap
+            // tracks fontSizeScale; unclamped outputs yield a cap far above
+            // any current copy.
+            maximumLineCount: root.height > 0 ? Math.max(1, Math.floor((root.height - Kirigami.Units.gridUnit * 5) / Math.max(1, messageMetrics.lineSpacing))) : 8
             elide: Text.ElideRight
+
+            FontMetrics {
+                id: messageMetrics
+                font: messageLabel.font
+            }
             text: root.messageText
             font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
             font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * root.messageFontScale * root.fontSizeScale)

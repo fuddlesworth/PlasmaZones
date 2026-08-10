@@ -68,8 +68,8 @@ QStringList ScrollingAdaptor::scrollingScreens() const
 
 void ScrollingAdaptor::setScrollTabSurface(const QString& screenId, quint32 surfaceId)
 {
-    // No engine gate, and no change gate either: the producer (the overlay
-    // service) already only calls this on a real change, and re-broadcasting a
+    // No engine POINTER gate, and no change gate either: the producer (the
+    // overlay service) already only calls this on a real change, and re-broadcasting a
     // value the compositor may have missed is the safe direction for a
     // registration the compositor cannot re-derive.
     //

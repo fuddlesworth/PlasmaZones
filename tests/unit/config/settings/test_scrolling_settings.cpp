@@ -41,6 +41,8 @@
 #include <QTest>
 #include <QtNumeric>
 
+#include <utility>
+
 #include <PhosphorConfig/Schema.h>
 // For the drop indicator's radius default, which is deliberately the zone
 // overlay's constant rather than a literal.
@@ -322,10 +324,18 @@ private Q_SLOTS:
         // path's only guard, and without these compares deleting it from the
         // schema would leave the suite green while junk reached QML as an
         // invalid QColor and painted black.
-        for (const QString& colorKey :
-             {ConfigDefaults::activeColorKey(), ConfigDefaults::inactiveColorKey(), ConfigDefaults::urgentColorKey()}) {
+        const std::pair<QString, QString> colourPins[] = {
+            {ConfigDefaults::activeColorKey(), ConfigDefaults::scrollingTabIndicatorActiveColor()},
+            {ConfigDefaults::inactiveColorKey(), ConfigDefaults::scrollingTabIndicatorInactiveColor()},
+            {ConfigDefaults::urgentColorKey(), ConfigDefaults::scrollingTabIndicatorUrgentColor()},
+        };
+        for (const auto& [colorKey, defaultColour] : colourPins) {
             const auto* color = findKey(schema, tabGroup, colorKey);
             QVERIFY2(color, qPrintable(colorKey));
+            // Pin the schema default to the ConfigDefaults accessor the
+            // consumers read, and separately pin that it is EMPTY (the
+            // "follow the theme" value) so neither side can drift alone.
+            QCOMPARE(color->defaultValue.toString(), defaultColour);
             QVERIFY(color->defaultValue.toString().isEmpty());
             QVERIFY(color->validator);
             QVERIFY(color->validator(QStringLiteral("not-a-colour")).toString().isEmpty());

@@ -567,6 +567,15 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     // inGeometryApply bracket, so the synchronous X11 exit signal cannot
     // re-enter the VS-crossing machinery from here.
     if (isFloating) {
+        // Flip the snap facts BEFORE the shed: applyPassiveFloatShed can run
+        // reconcileDecorationOnPlacementFlip, whose contract (decorations.cpp)
+        // requires callers to flip engine facts first so the resolve sees the
+        // new state. clearWindowSnapped drops the ZoneCache entry backing the
+        // IsSnapped/Zone rule facts; it is also the backstop for float paths
+        // that don't emit applyGeometryRequested with an empty zoneId (e.g. a
+        // float toggle with no stored pre-tile geometry) or windowStateChanged
+        // with an empty zone. Idempotent when the window wasn't snap-tracked.
+        m_snapHandler->clearWindowSnapped(liveWindowId);
         m_tilingHandler->applyPassiveFloatShed(liveWindowId);
     }
     // When a window is unfloated (tiled/snapped), clear the drag-float skip flag.
@@ -616,15 +625,7 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
             m_snapHandler->removeMinimizeFloated(liveWindowId);
         }
     } else {
-        // Backstop: a window that becomes floating is no longer snap-managed.
-        // Covers float paths that don't emit applyGeometryRequested with an
-        // empty zoneId (e.g. a float toggle when no pre-tile geometry is
-        // stored, so applyGeometryForFloat sends nothing). Idempotent — a
-        // no-op if the window wasn't snap-tracked.
-        // clearWindowSnapped also drops the ZoneCache entry (the IsSnapped /
-        // Zone rule-fact source), covering float paths that don't emit
-        // windowStateChanged with an empty zone.
-        m_snapHandler->clearWindowSnapped(liveWindowId);
+        // clearWindowSnapped for this branch ran above, before the shed.
 
         // Invalidate any stale instant-restore entry for this app. The snap
         // restore cache (SnapHandler) is a single-shot latency cache populated at

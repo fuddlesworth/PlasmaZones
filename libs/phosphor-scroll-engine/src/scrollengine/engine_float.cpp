@@ -54,11 +54,13 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
         }
         m_scrollFloatedWindows.insert(windowId);
         // Drop the same three per-window memories the main float path below
-        // drops, for the same reasons: a retained rect that happens to equal
-        // the one the strip later resolves defeats applyLayout's
-        // emit-on-change gate (reachable — the drag-preview heal that
-        // manufactures this residue clears neither memory), and a stale park
-        // edge would anchor the arrival animation to the wrong side.
+        // drops: a retained rect that happens to equal the one the strip
+        // later resolves defeats applyLayout's emit-on-change gate
+        // (reachable — the drag-preview heal that manufactures this residue
+        // clears neither memory), a stale park edge would anchor the
+        // arrival animation to the wrong side, and the windowed-fs memory
+        // goes as a symmetry belt (a stale entry there is a set-vs-bool
+        // compare that can only force one redundant emit, never suppress).
         m_lastAppliedRect.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
@@ -307,9 +309,14 @@ void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& 
         // setWindowFloat's no-state arm silently rejects the float. Every
         // other navigation shortcut produces feedback, and a silent
         // shortcut reads as broken — mirrors SnapEngine::toggleWindowFloat
-        // and the autotile facade's not_managed report.
+        // and the autotile facade's not_managed report. Direct callers only:
+        // toggleFocusedFloatAs pre-empts this arm with its own PER-VERB
+        // token (a "Restore" press must not render the Float failure copy),
+        // so this "float" token is never seen through that route. Screen
+        // resolved like every sibling failure emit — the raw hint can be
+        // empty and the OSD would land on the cursor/primary fallback.
         Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("not_managed"), windowId, QString(),
-                                  screenId);
+                                  resolveOperationScreen(screenId));
         return;
     }
     const bool floating = state->isFloating(windowId);

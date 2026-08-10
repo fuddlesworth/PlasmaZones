@@ -854,9 +854,15 @@ void TestScrollEnginePersistence::restoreDropsMalformedKeysAndBoundsAnchor()
     // Hostile anchor rides a well-formed key so the bound is observable.
     payload.insert(QLatin1String("viewAnchor"), 2147483647.0);
     QJsonObject hostile;
-    hostile.insert(QStringLiteral("nokey"), payload); // no separator
-    hostile.insert(QStringLiteral("S1|x|"), payload); // non-numeric desktop
-    hostile.insert(QStringLiteral("S1|-2|"), payload); // negative desktop
+    // QJsonObject iterates in sorted key order, so the malformed keys are
+    // named to sort BEFORE the good key: the restore walks (and rejects)
+    // every one of them before the good key stages, instead of the good key
+    // staging first and the rejects never being order-exercised. The
+    // empty-screen key is the exception — "|" sorts after "S" — so its
+    // rejection is order-unpinned; it still must not stage.
+    hostile.insert(QStringLiteral("Anokey"), payload); // no separator
+    hostile.insert(QStringLiteral("A1|x|"), payload); // non-numeric desktop
+    hostile.insert(QStringLiteral("A2|-2|"), payload); // negative desktop
     hostile.insert(QStringLiteral("|1|"), payload); // empty screen id
     hostile.insert(goodKey, payload); // the one legal key
 
@@ -910,7 +916,6 @@ void TestScrollEnginePersistence::restoreStagesADuplicateWindowIdOnlyOnce()
     // duplicate staging (the windows are live in desktop 1's strip, so a
     // re-open here is the splice the dedup exists to prevent).
     engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 2);
-    QVERIFY(!engine2->isWindowTracked(QStringLiteral("app|d")) || true); // tracking follows contexts; the pin is below
     engine2->windowOpened(QStringLiteral("app|d"), QStringLiteral("S1"), 0, 0);
     ScrollState* d2 = stateFor(engine2, QStringLiteral("S1"));
     QVERIFY(d2);

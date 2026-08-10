@@ -390,7 +390,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 m_effect->m_scrollCommandedRects.remove(wid);
                 anyVisualPosDropped = (m_effect->m_scrollVisualPos.remove(wid) > 0) || anyVisualPosDropped;
             }
-            if (anyVisualPosDropped) {
+            if (anyVisualPosDropped && KWin::effects) {
                 KWin::effects->addRepaintFull();
             }
 
@@ -544,7 +544,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         // `Mode Equals "scrolling"` SetOpacity rule resolves in the paint
         // path, and the border sweep rebuilds decorations rather than the
         // per-frame alpha of windows that have none.
-        if (m_effect->m_shaderManager.hasOpacityRules()) {
+        if (m_effect->m_shaderManager.hasOpacityRules() && KWin::effects) {
             KWin::effects->addRepaintFull();
         }
     }

@@ -44,11 +44,15 @@ inline constexpr int kMaxTemplateScan = 256;
 /// hand-edited or corrupted blob with a huge array would otherwise be
 /// staged verbatim into the stash, and restoreFromStripStash walks the
 /// staged columns/tiles on every window open for that key until the
-/// entries age out over three sessions. Values are far above any real
-/// session (keys = screens x desktops x activities; columns and stacked
-/// tiles per strip) so a legitimate blob is never clipped; drops are
-/// logged, never silent.
-inline constexpr int kMaxRestoredKeys = 64;
+/// entries age out over three sessions. The column/tile caps sit far above
+/// any real strip; the key cap has to clear the full screens x desktops
+/// (KDE allows 20) x activities product, so it is sized for the corrupt
+/// blob (thousands of keys), not the power user — 512 covers 4 outputs x
+/// 20 desktops x 6 activities with headroom. Skipped keys (stash-exists /
+/// live-strip continues) do not consume it, it bounds ONE restore call
+/// (loadState may run more than once; the stash-exists skip covers the
+/// repeat-blob case), and drops are logged, never silent.
+inline constexpr int kMaxRestoredKeys = 512;
 inline constexpr int kMaxRestoredColumnsPerKey = 64;
 inline constexpr int kMaxRestoredTilesPerColumn = 32;
 

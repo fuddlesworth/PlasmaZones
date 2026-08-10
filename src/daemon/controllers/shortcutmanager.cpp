@@ -887,11 +887,11 @@ void ShortcutManager::drainPendingAdhocOps()
     // backend round-trip at the end. The registration flag is already
     // cleared, so nothing re-queues.
     for (auto& op : ops) {
-        // The queue is fed by the public methods, which both reject
-        // colliding ids before queuing — but this direct-unbind arm bypasses
-        // them, so it carries the same guard (an Unregister for a colliding
-        // id here would purge the persistent record the public path
-        // refuses to).
+        // Defence in depth: the queue is fed only by the public methods,
+        // which already reject colliding ids before queuing, so this guard
+        // should never fire. It stays because this direct arm bypasses those
+        // methods, and an Unregister for a colliding id slipping through
+        // would purge the persistent record the public path refuses to.
         if (collidesWithSettingsDrivenId(op.id)) {
             qCWarning(lcShortcuts) << "drainPendingAdhocOps: dropping colliding adhoc op for" << op.id;
             continue;

@@ -278,10 +278,22 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // re-seed reported the NEIGHBOUR as active — the exact wrong-target
     // failure the exemption exists for (the toggle pressed over a
     // fullscreen Proton game landing on the terminal beside it), and no
-    // further windowActivated fires while the game keeps focus.
+    // further windowActivated fires while the game keeps focus. The raw
+    // window still has to be genuinely active-eligible (present, on the
+    // current desktop/activity, not minimized) — those terms came from
+    // getActiveWindow()'s stage-1 predicate, not its shouldHandleWindow
+    // pre-filter, and dropping them would let a minimized or off-desktop
+    // window be reported as active. When the raw candidate is unusable,
+    // fall back to getActiveWindow()'s stacking walk so bring-up still
+    // seeds lastActiveScreenName (the walk's pre-filter only loses the
+    // fullscreen exemption, which cannot matter when the raw active window
+    // was rejected for reasons other than being fullscreen).
     KWin::EffectWindow* activeWindow = KWin::effects ? KWin::effects->activeWindow() : nullptr;
-    if (activeWindow && !activeWindow->isDeleted()) {
+    if (activeWindow && !activeWindow->isDeleted() && !activeWindow->isMinimized() && activeWindow->isOnCurrentDesktop()
+        && activeWindow->isOnCurrentActivity()) {
         notifyWindowActivated(activeWindow);
+    } else if (KWin::EffectWindow* fallback = getActiveWindow()) {
+        notifyWindowActivated(fallback);
     }
 
     // Fetch virtual screen definitions from daemon — needed before any screen ID

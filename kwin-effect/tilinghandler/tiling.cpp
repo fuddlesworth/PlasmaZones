@@ -317,7 +317,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         best = c;
                     }
                 }
-                e.window = best;
+                if (best) {
+                    e.window = best;
+                } else {
+                    // Every candidate was claimed by an exact entry: the drop
+                    // is correct (the alternative is a double-apply) but must
+                    // not be silent — this is the "window never tiled" outcome
+                    // the claimed-set diagnostics exist to surface.
+                    qCWarning(lcEffect) << "Autotile: all fuzzy candidates for" << e.windowId
+                                        << "claimed by exact entries — dropping";
+                }
             }
             continue;
         }
@@ -339,6 +348,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             return a->frameGeometry().x() < b->frameGeometry().x();
         });
         const int n = qMin(sortedIndices.size(), candidates.size());
+        if (n < sortedIndices.size()) {
+            qCWarning(lcEffect) << "Autotile: only" << n << "unclaimed candidates for" << sortedIndices.size()
+                                << "entries — trailing entries dropped";
+        }
         for (int i = 0; i < n; ++i) {
             entries[sortedIndices[i]].window = candidates[i];
         }

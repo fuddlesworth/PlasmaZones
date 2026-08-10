@@ -804,22 +804,27 @@ void SnapHandler::retryVisibleMinimizeFloats()
             // not be silently refunded by an unrelated screen-set change.
             continue;
         }
-        m_unfloatRetryAttempts.remove(windowId);
         const QString screenId = m_effect->getWindowScreenId(window);
         TilingHandler* autotile = m_effect->tilingHandler();
         if (autotile && autotile->isManagedScreen(screenId)) {
             // offerMinimizeEdge, not the void slot: the slot silently
-            // returns on its entry gates (unhandleable, non-tileable), and
-            // with the budget already refunded above a refused transfer
-            // would leave the window floating with no armed timer —
-            // recoverable only by another screen-set change. Both sibling
-            // transfer sites use this exact refusal shape.
+            // returns on its entry gates (unhandleable, non-tileable), and a
+            // refused transfer would otherwise leave the window floating
+            // with no armed timer — recoverable only by another screen-set
+            // change. Both sibling transfer sites use this refusal shape.
+            // The budget refund happens per-arm, AFTER the hop offer: the
+            // autotile adopt path seeds its own budget from
+            // unfloatRetryBudgetUsed(), so refunding before the offer would
+            // hand every adopted window a fresh budget (same rule as the
+            // deferred-commit transfer's refund placement).
             if (!autotile->offerMinimizeEdge(window)) {
                 qCInfo(lcEffect) << "Snap: autotile refused visible-float transfer, re-arming retry:" << windowId;
+                m_unfloatRetryAttempts.remove(windowId);
                 scheduleUnminimizeUnfloatRetry(windowId);
             }
             continue;
         }
+        m_unfloatRetryAttempts.remove(windowId);
         commitUnminimizeUnfloat(window, windowId, screenId);
     }
 }

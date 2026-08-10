@@ -163,6 +163,10 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: Kirigami.Units.gridUnit * 11
             height: Math.round(Kirigami.Units.gridUnit * 11 / root.previewAspectRatio)
+            // The 16 px minZoneSize below INFLATES sub-floor zones, and a
+            // dense layout's inflated zones can extend past this fixed-size
+            // container — keep the overflow inside the card frame.
+            clip: true
 
             // Background for preview area. backgroundColor (not the
             // alternate role) so inactive zone fills stay readable
@@ -268,6 +272,10 @@ Item {
             Label {
                 id: nameLabel
 
+                // The root Item announces this text (Accessible.name binds
+                // nameLabel.text); without ignoring the label a screen
+                // reader walks the same text twice.
+                Accessible.ignored: true
                 // Cap the name width so a long layout name widens the OSD only up
                 // to this bound, then elides with "…" instead of spilling past the
                 // frame. Short names use their natural width (full text shown).

@@ -122,6 +122,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // with the old screen's rect before the destination's first
                 // batch overwrites it. Same hazard the funnel documents.
                 m_effect->m_scrollCommandedRects.remove(windowId);
+            } else if (m_managedScreens.contains(trueSource)) {
                 // Cross-MODE move: window left autotile. Drop effect-side
                 // autotile tracking (daemon already relinquished via
                 // handoffRelease) — else it lingers phantom.
@@ -146,7 +147,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // window, so it pairs with damage like every other remover.
                 m_windowedFsClearInFlight.remove(windowId);
                 m_effect->m_scrollCommandedRects.remove(windowId);
-                if (m_effect->m_scrollVisualPos.remove(windowId) > 0) {
+                if (m_effect->m_scrollVisualPos.remove(windowId) > 0 && KWin::effects) {
                     KWin::effects->addRepaintFull();
                 }
             }

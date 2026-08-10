@@ -938,7 +938,9 @@ void TilingHandler::onDaemonReady()
     // where the paint path draws those windows.
     if (!m_effect->m_scrollVisualPos.isEmpty()) {
         m_effect->m_scrollVisualPos.clear();
-        KWin::effects->addRepaintFull();
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
     }
     m_effect->m_scrollCommandedRects.clear();
     m_effect->m_lastReportedMinSize.clear();

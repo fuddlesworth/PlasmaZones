@@ -70,7 +70,10 @@ int ScrollStrip::columnWidthPx(const Column& c, const ScrollLayoutParams& params
         // minimum — the exact commit-a-width-the-client-refuses hazard the
         // peek floor documents (KWin then regrows the frame from x). Raise
         // the floor by the reservation so the tile, not the column, honours
-        // the minimum. Applied HERE, in the one function every consumer
+        // the minimum (best-effort: the workArea cap at the tail still wins
+        // when minWidth plus the reservation exceeds the output, the same
+        // way it already overrode a bare minWidth wider than the screen).
+        // Applied HERE, in the one function every consumer
         // (columnStripX / stripWidthPx / relayout / the anchor math) goes
         // through, so the strip widens consistently for such columns. The
         // Top/Bottom axis needs nothing: the tabbed branch applies no

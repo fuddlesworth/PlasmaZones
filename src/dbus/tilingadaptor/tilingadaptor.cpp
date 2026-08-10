@@ -203,8 +203,10 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
     // was never produced. No partial-count aggregate on purpose: every
     // non-benign drop already warns individually at its entry, and a count
     // computed from the array size would fold the BENIGN drops (duplicates
-    // and the invalid-geometry bail, both deliberately debug-level) into a
-    // warning that reads as suppressed errors. The same reasoning gates the
+    // and the malformed-visual-position bail, both deliberately debug-level;
+    // degenerate rects route through validationError and warn like any
+    // other validator drop) into a warning that reads as suppressed errors.
+    // The same reasoning gates the
     // aggregate itself on a validator drop having occurred: a batch emptied
     // entirely by benign drops is not suppressed errors either.
     if (requests.isEmpty() && !batchEntries.isEmpty()) {

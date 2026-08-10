@@ -12,13 +12,8 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorScrollEngine/IScrollSettings.h>
 
-#include "enginelimits.h"
 #include "scrollenginelogging.h"
-
-#include <algorithm>
-#include <utility>
 
 namespace PhosphorScrollEngine {
 

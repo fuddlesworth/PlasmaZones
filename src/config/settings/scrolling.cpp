@@ -54,8 +54,10 @@ static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
 // agreement rests on the doc comment in isettings.h. That is the whole
 // unasserted set in THIS indicator's family — the opacity joined the checked
 // ones when it became constexpr. The three tab-indicator colours are equally
-// unasserted for the same non-constexpr reason and are pinned at runtime by
-// test_scrolling_settings.cpp instead.
+// unasserted for the same non-constexpr reason; test_scrolling_settings.cpp
+// pins their SCHEMA defaults (via ConfigDefaults) at runtime, while their
+// ISettings-body agreement, like the drop indicator's, rests on the doc
+// comment in isettings.h.
 static_assert(ConfigDefaults::scrollingDropIndicatorEnabled(),
               "ISettings::scrollingDropIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingDropIndicatorOpacity() == 0.25,

@@ -958,9 +958,9 @@ void Daemon::processPendingGeometryUpdates()
     // engine's current one, and that branch retiles every screen
     // unconditionally (engine_core.cpp, `screens == m_scrollingScreens`) —
     // the same guarantee scrolling.cpp's LOAD-BEARING gate leans on. The
-    // retile loop at the tail of this function is an extra pass that only
-    // runs when the compute barrier below is non-empty (an empty barrier
-    // returns early), so it cannot be the mechanism relied on here.
+    // retile loops below (both the empty-barrier arm's and the tail's) are
+    // extra passes — deferred and coalesced, so they cannot be the
+    // mechanism relied on here either way.
     if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
         updateScrollingScreens(m_scrollEngine->activeScreens());
     }
