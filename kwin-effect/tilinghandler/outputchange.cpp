@@ -103,17 +103,45 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             && m_border.tiledWindowsByScreen.value(sourceScreenId).contains(windowId);
         if (expIt.value().targetScreenId == positional && !stillTiledOnSource) {
             m_expectedOutputMove.erase(expIt);
+            // The cross-mode test reads the MARKER's source, not oldScreenId,
+            // for the same reason stillTiledOnSource does: the destination
+            // engine's placement batch pre-seeds m_notifiedWindowScreens with
+            // the DESTINATION before this echo (daemon_apply's pre-seed runs
+            // for snap placements too), so a scroll→snap handoff would read
+            // oldScreenId == the snapping destination, fail both managed
+            // tests, and fall into the no-cleanup branch — leaving the
+            // window KWin-fullscreen with no owner left to clear it.
+            const QString trueSource = sourceScreenId.isEmpty() ? oldScreenId : sourceScreenId;
             if (m_managedScreens.contains(positional)) {
                 m_notifiedWindowScreens[windowId] = positional;
-            } else if (m_managedScreens.contains(oldScreenId)) {
+            } else if (m_managedScreens.contains(trueSource)) {
                 // Cross-MODE move: window left autotile. Drop effect-side
                 // autotile tracking (daemon already relinquished via
                 // handoffRelease) — else it lingers phantom.
-                cleanupAutotileTracking(windowId, oldScreenId);
+                cleanupAutotileTracking(windowId, trueSource);
             } else {
-                // scroll↔snap / scroll↔scroll: keep the record current so
-                // later diffs measure from the true screen.
+                // snap↔snap (neither side managed by this handler's engines):
+                // keep the record current so later diffs measure from the
+                // true screen. Belt for the transient signal-gap case where a
+                // scrolling source is momentarily outside the managed union:
+                // a windowed-fullscreen member landing here has no strip left
+                // to clear it, so release directly.
                 m_notifiedWindowScreens[windowId] = positional;
+                if (m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+                    forgetWindowedFullscreen(windowId);
+                    releaseWindowedFullscreenState(windowId);
+                }
+                // The per-session scroll companions go with the hold — the
+                // cross-mode branch clears the same set via
+                // cleanupAutotileTracking, and this branch is the same "no
+                // strip left to own it" outcome by another route. The
+                // visual-pos removal changes where the paint path draws the
+                // window, so it pairs with damage like every other remover.
+                m_windowedFsClearInFlight.remove(windowId);
+                m_effect->m_scrollCommandedRects.remove(windowId);
+                if (m_effect->m_scrollVisualPos.remove(windowId) > 0) {
+                    KWin::effects->addRepaintFull();
+                }
             }
             m_effect->updateAllDecorations();
             return;

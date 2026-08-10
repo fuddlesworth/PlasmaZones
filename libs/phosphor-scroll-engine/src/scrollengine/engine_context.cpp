@@ -136,11 +136,15 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // cross-session appId claim, able to hand an unrelated same-app window the
     // dead tile's slot, width and display.
     //
-    // The empty-alive-set bail below is this BOUNDARY's own fail-closed, not
-    // a house rule the sweeps above share: the seed and rect sweeps run
-    // unconditionally, because re-deriving a seed or a rect costs nothing,
-    // while a wiped stash cannot be rebuilt. A premature one-shot report at
-    // login must not take the structure with it.
+    // The empty-alive-set bail below protects the STASH specifically — the
+    // one collection that cannot be rebuilt once wiped. It is a second,
+    // narrower belt: the boundary that actually refuses an empty alive set
+    // is the adaptor (WindowTrackingAdaptor::pruneStaleWindows returns
+    // before reaching this function), so in production the destructive dead
+    // loop above never runs against an empty set. An embedder calling this
+    // exported API directly with an empty set WOULD tear down every strip
+    // while the stash survived; hoisting the bail to cover the dead loop is
+    // a public-API behaviour change deliberately not taken here.
     //
     // A tile staged straight from the persisted blob is EXEMPT until it is
     // claimed. Its id belongs to last session, so no alive set can contain it

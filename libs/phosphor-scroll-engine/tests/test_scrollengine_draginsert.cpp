@@ -62,6 +62,7 @@ private Q_SLOTS:
     void cancelRestoresADefensivelyDetachedWindow();
     void reentrantBeginRestoresPriorWindow();
     void neighbourCloseInvalidatesStaleTarget();
+    void windowedFullscreenSurvivesCancelAndCommit();
 
 private:
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
@@ -1063,6 +1064,41 @@ void TestScrollEngineDragInsert::neighbourCloseInvalidatesStaleTarget()
     // the stale join would have stacked it into c's column instead.
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), (QStringList{QStringLiteral("a"), QStringLiteral("c")}));
     QVERIFY(state->strip().columnOfWindow(QStringLiteral("a")) != state->strip().columnOfWindow(QStringLiteral("c")));
+}
+
+void TestScrollEngineDragInsert::windowedFullscreenSurvivesCancelAndCommit()
+{
+    // The drag capture carries the flag through both exits: Escape (cancel)
+    // restores it with the slot, and a commit re-seats it on the re-inserted
+    // tile. Neither path may drop it silently — the client would stay
+    // fullscreen-presented with the model saying otherwise.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+
+    engine->windowFocused(QStringLiteral("b"), QStringLiteral("S1"));
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    QVERIFY(state->strip().isWindowedFullscreen(QStringLiteral("b")));
+
+    // Cancel path: begin detaches (flag leaves with the tile), cancel
+    // restores tile AND flag.
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    QVERIFY(!state->strip().containsWindow(QStringLiteral("b")));
+    engine->cancelDragInsertPreview();
+    QVERIFY(state->strip().containsWindow(QStringLiteral("b")));
+    QVERIFY(state->strip().isWindowedFullscreen(QStringLiteral("b")));
+
+    // Commit path: the re-inserted tile carries the flag too.
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
+    DragTarget target;
+    target.primary = 0;
+    target.newSlot = true;
+    engine->updateDragInsertPreview(target);
+    engine->commitDragInsertPreview();
+    QVERIFY(state->strip().containsWindow(QStringLiteral("b")));
+    QVERIFY(state->strip().isWindowedFullscreen(QStringLiteral("b")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDragInsert)

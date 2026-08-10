@@ -502,6 +502,10 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         saveAndRecordPreTileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
+        // Seed the last-reported cache like the single-window announce does:
+        // the batch carries the same minSize, and an unseeded entry costs one
+        // redundant windowMinSizeUpdated on the window's first tile batch.
+        m_effect->m_lastReportedMinSize.insert(windowId, minSize);
 
         PhosphorProtocol::WindowOpenedEntry entry;
         entry.windowId = windowId;
@@ -534,6 +538,10 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
                     for (const QString& wid : batchWindowIds) {
                         m_notifiedWindows.remove(wid);
                         m_notifiedWindowScreens.remove(wid);
+                        // The min-size seed rolls back with the tracking: on
+                        // a failed batch the daemon never heard the size,
+                        // and the cache would otherwise record it as sent.
+                        m_effect->m_lastReportedMinSize.remove(wid);
                     }
                     // The consumed spawn-provenance markers roll back with the
                     // tracking — see the single-window handler above.
@@ -566,6 +574,15 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
     // id's first genuine report (the success-path re-arm only runs when the
     // predicate answers).
     m_scrollClipLossReported.remove(windowId);
+    // The commanded-rect entry dies with the tracking too: the cross-output
+    // transfer path otherwise leaves the OLD screen's rect behind, and once
+    // the window is re-announced onto another scrolling screen the
+    // counter-assert could fight one legitimate position with it before the
+    // first batch overwrites it. The parked paint hint goes with it for the
+    // same reason (inert off a scrolling output, but a stale relocation the
+    // moment the window returns to one).
+    m_effect->m_scrollCommandedRects.remove(windowId);
+    m_effect->m_scrollVisualPos.remove(windowId);
     // Windowed fullscreen dies with the tracking: this funnel serves the
     // close path (where slotWindowClosed already removed the membership,
     // making this belt) and the cross-output transfer (where nothing else
@@ -577,6 +594,7 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
         forgetWindowedFullscreen(windowId);
         releaseWindowedFullscreenState(windowId);
     }
+    m_windowedFsClearInFlight.remove(windowId);
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared

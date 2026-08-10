@@ -386,11 +386,24 @@ private:
      * focus-tracking filter and classifyWindowKind(), so they can never drift
      * (discussion #461 item 11).
      *
-     * @param w            window to classify; must be non-null.
-     * @param rejectReason when non-null, set to a human-readable reason on a
-     *                     true return. @see shouldHandleWindow.
+     * The fullscreen term carves out windowed-fullscreen strip members (the
+     * strip keeps tiling them through real KWin fullscreen), and callers can
+     * additionally exempt it wholesale via @p exemptFullscreen — the
+     * activation-reporting path does, for any fullscreen window on a
+     * scrolling screen — WITHOUT bypassing the other terms: a fullscreen
+     * transient/splash/popup stays rejected either way.
+     *
+     * @param w                window to classify; must be non-null.
+     * @param rejectReason     when non-null, set to a human-readable reason on
+     *                         a true return. @see shouldHandleWindow.
+     * @param exemptFullscreen when true, the fullscreen term never fires and
+     *                         the bare transientFor() term is waived too
+     *                         (Wine/Proton toplevels carry transient_for on
+     *                         the real game window); every explicit type
+     *                         term stays authoritative.
      */
-    bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+    bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr,
+                                              bool exemptFullscreen = false) const;
     // Cached placement-exclusion verdict (Exclude ∪ ExcludePlacement slice)
     // consumed by shouldHandleWindow's drag gate. Fast-paths on an empty
     // exclusion slice; otherwise resolves through the exclusion evaluator's
@@ -622,8 +635,12 @@ private:
      * rect is empty. Every candidate — restore rects AND the fallback — passes the
      * off-screen poison guard, so the function can also return an INVALID rect (a frame
      * parked outside every screen by the scrolling engine is never a legitimate free
-     * geometry); callers MUST check isValid() before storing. Shared by the snap and
-     * autotile capture paths, which write the SAME daemon free-geometry store.
+     * geometry). A windowed-fullscreen strip member returns INVALID unconditionally —
+     * its live frame AND its fullscreen restore rect are both tile rects, so it has no
+     * free geometry to offer (which is why this is a const member now, not a static:
+     * the membership check needs the instance). Callers MUST check isValid() before
+     * storing. Shared by the snap and autotile capture paths, which write the SAME
+     * daemon free-geometry store.
      */
     QRectF freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback) const;
 
@@ -1850,23 +1867,30 @@ private:
     /// keepBelowChanged: an instant re-assert would fight the user's own
     /// toggle (the Krohnkite failure mode this feature exists to avoid), so
     /// a manual toggle under an active rule stands until the next natural
-    /// reconcile.
+    /// reconcile. Also NOT applied to windowed-fullscreen strip members: the
+    /// layer demotion owns their keep flags for the hold (see the early
+    /// return in decoration_rules.cpp), so the two flag owners never trade
+    /// writes mid-hold.
     void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
 
     /// The window's OWN keep-above flag — the app/user-set state, with
-    /// rule-written values substituted from the pre-rule snapshot while a
-    /// SetWindowLayer rule owns the window's layer. Consulted by the
+    /// written values substituted from the pre-write snapshot while either
+    /// flag owner (a SetWindowLayer rule, or the windowed-fullscreen layer
+    /// demotion) holds the window's layer; the rule snapshot wins when both
+    /// exist, since only it predates the rule's write. Consulted by the
     /// keep-above overlay-tool gates (shouldHandleWindow / shouldDecorateWindow
     /// / isTileableWindow) and the engine-facing KWinCompositorBridge::windowInfo
     /// export; applyOwnLayerFlags is the query-side counterpart.
     bool windowOwnKeepAbove(KWin::EffectWindow* w) const;
 
-    /// Substitute the pre-rule snapshot's keepAbove/keepBelow pair into
-    /// @p query while a SetWindowLayer rule owns @p windowId's layer, so rule
-    /// output never feeds back into rule input. Shared by ruleQuery (the
-    /// effect's live evaluation path) and pushWindowMetadata (the daemon's
+    /// Substitute the pre-write snapshot's keepAbove/keepBelow pair into
+    /// @p query while either flag owner (a SetWindowLayer rule, or the
+    /// windowed-fullscreen layer demotion) holds @p windowId's layer, so
+    /// neither owner's output feeds back into rule input (rule snapshot
+    /// first when both exist). Shared by ruleQuery (the effect's live
+    /// evaluation path) and pushWindowMetadata (the daemon's
     /// KeepAbove/KeepBelow match inputs) — the one invariant lives in one
-    /// place. No-op with no snapshots (the no-rules case pays one isEmpty).
+    /// place. No-op with no snapshots (the no-rules case pays two isEmpty).
     void applyOwnLayerFlags(PhosphorRules::WindowQuery& query, const QString& windowId) const;
 
     /// Restore every rule-applied window layer to its snapshotted pre-rule

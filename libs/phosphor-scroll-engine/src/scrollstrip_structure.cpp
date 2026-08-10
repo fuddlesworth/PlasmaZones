@@ -809,12 +809,16 @@ bool ScrollStrip::toggleActiveColumnTabbed()
 
 bool ScrollStrip::toggleActiveWindowedFullscreen()
 {
-    Tile* tile = activeTileMutable();
-    if (!tile) {
+    // activeWindowId() already skips a minimized active tile, mirroring
+    // relayout's fallback; toggling the raw activeTileIdx tile could flag
+    // a window that never resolves and so never reaches the compositor —
+    // while the engine verb's read-back (also activeWindowId-keyed) would
+    // report a different window's state.
+    const QString id = activeWindowId();
+    if (id.isEmpty()) {
         return false;
     }
-    tile->windowedFullscreen = !tile->windowedFullscreen;
-    return true;
+    return setWindowedFullscreen(id, !isWindowedFullscreen(id));
 }
 
 bool ScrollStrip::setWindowedFullscreen(const QString& windowId, bool on)

@@ -789,24 +789,45 @@ void ScrollEngine::toggleFocusedFloatAs(const PhosphorEngine::NavigationContext&
     Q_EMIT navigationFeedback(changed, QStringLiteral(actionStr), changed ? QString() : QStringLiteral("no_target"),   \
                               sourceWindow, changed ? state->strip().activeWindowId() : QString(), screen)
 
+// P_SCROLL_VERB with a direction token on SUCCESS instead of the empty
+// reason: the ends verbs know first-vs-last from their own name, and the OSD
+// cannot recover a direction that was never sent (its arrow fell through to
+// the rightward default for a leftward jump). Failure reasons are unchanged.
+#define P_SCROLL_VERB_DIR(screenIdExpr, opExpr, actionStr, dirStr)                                                     \
+    P_SCROLL_RESOLVE(screenIdExpr);                                                                                    \
+    if (!state || state->strip().isEmpty()) {                                                                          \
+        Q_EMIT navigationFeedback(false, QStringLiteral(actionStr), QStringLiteral("no_windows"), QString(),           \
+                                  QString(), screen);                                                                  \
+        return;                                                                                                        \
+    }                                                                                                                  \
+    const QString sourceWindow = state->strip().activeWindowId();                                                      \
+    const bool changed = (opExpr);                                                                                     \
+    if (changed) {                                                                                                     \
+        applyLayout(screen, true);                                                                                     \
+        Q_EMIT placementChanged(screen);                                                                               \
+    }                                                                                                                  \
+    Q_EMIT navigationFeedback(changed, QStringLiteral(actionStr),                                                      \
+                              changed ? QStringLiteral(dirStr) : QStringLiteral("no_target"), sourceWindow,            \
+                              changed ? state->strip().activeWindowId() : QString(), screen)
+
 void ScrollEngine::focusColumnFirst(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusFirstColumn(params), "focus");
+    P_SCROLL_VERB_DIR(screenId, state->strip().focusFirstColumn(params), "focus", "left");
 }
 
 void ScrollEngine::focusColumnLast(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusLastColumn(params), "focus");
+    P_SCROLL_VERB_DIR(screenId, state->strip().focusLastColumn(params), "focus", "right");
 }
 
 void ScrollEngine::moveColumnToFirst(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToFirst(params), "move");
+    P_SCROLL_VERB_DIR(screenId, state->strip().moveActiveColumnToFirst(params), "move", "left");
 }
 
 void ScrollEngine::moveColumnToLast(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToLast(params), "move");
+    P_SCROLL_VERB_DIR(screenId, state->strip().moveActiveColumnToLast(params), "move", "right");
 }
 
 // NOTE on the P_SCROLL_* macros above: they deliberately inject `screen`,
@@ -909,6 +930,9 @@ void ScrollEngine::clearWindowedFullscreen(const QString& windowId)
     // is a different strip, and relayouting it would emit a batch for
     // windows this clear never touched. The cleared flag still reaches the
     // compositor on the context's next activation via the emit-gate leg.
+    // (The emptiness guard is belt only: every resolved state's key carries
+    // a real screen id today, so the model write above cannot in practice
+    // land without its placementChanged.)
     if (!key.screenId.isEmpty()) {
         if (key == currentKeyForScreen(key.screenId)) {
             applyLayout(key.screenId, false);
@@ -996,6 +1020,7 @@ void ScrollEngine::resetWindowHeights(const QString& screenId)
 }
 
 #undef P_SCROLL_VERB
+#undef P_SCROLL_VERB_DIR
 #undef P_SCROLL_RESOLVE
 
 } // namespace PhosphorScrollEngine

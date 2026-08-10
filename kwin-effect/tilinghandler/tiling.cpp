@@ -610,7 +610,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     }
 
     const bool hasApplies = !toApply.isEmpty();
-    auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen, hasApplies]() {
+    // A batch that only touches scrolling screens never needs the stacking
+    // repair: scroll applies commit through moveResize, which does not
+    // restack, and a strip batch carries no overlap groups — so the global
+    // saved-stack restore would raise every window in the workspace on every
+    // scroll tick purely to reimpose the order nothing disturbed.
+    bool scrollOnlyBatch = hasApplies;
+    for (const TileSnap& s : toApply) {
+        if (!isScrollingScreen(s.screenId)) {
+            scrollOnlyBatch = false;
+            break;
+        }
+    }
+    auto onComplete = [this, newTiledByScreen, savedGlobalStack, overlapStackByScreen, gen, genByScreen, hasApplies,
+                       scrollOnlyBatch]() {
         if (m_tileStaggerGeneration != gen) {
             return;
         }
@@ -659,6 +672,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // reads as what it actually gates: the centering-target
                 // cleanup.
                 clearWindowTiledOnScreen(screenId, wid);
+                // The parked-column paint hint dies with the tiled tracking:
+                // a window in a SUPERSEDED batch's entry never reached the
+                // per-entry write (the apply lambda returns on supersession),
+                // and a window this batch no longer carries would otherwise
+                // keep the previous batch's strip position — painted there
+                // for as long as the stale entry survives. The float path
+                // clears its own (applyFloatCleanup); this covers the rest.
+                // The removal changes where the paint path draws the window
+                // (relocated position → nothing), so pair it with damage —
+                // the batch's own applies only damage the regions they
+                // touch, not the vacated relocation.
+                if (m_effect->m_scrollVisualPos.remove(wid) > 0) {
+                    KWin::effects->addRepaintFull();
+                }
                 if (!win || win->isMinimized()) {
                     // A minimized (or vanished) window KEEPS its centering
                     // target: the re-tile on unminimize re-asserts it.
@@ -674,6 +701,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 if (!TilingStateHelpers::isTiledWindow(m_border, wid)) {
                     m_tileTargetZones.remove(wid);
                     m_centeredWaylandZones.remove(wid);
+                    // Windowed fullscreen dies with the untile too: this is
+                    // the one strip exit with no other release owner (float,
+                    // close, cross-output transfer, mode/screen change and
+                    // teardown all have theirs). `untiled` is a local copy,
+                    // so the release's possible re-entry into
+                    // cleanupAutotileTracking cannot invalidate this loop.
+                    if (m_effect->m_windowedFullscreenWindows.contains(wid)) {
+                        forgetWindowedFullscreen(wid);
+                        releaseWindowedFullscreenState(wid);
+                    }
                 }
             }
         }
@@ -683,7 +720,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // saved-order/pending-focus state — nothing moved, so there is no
         // z-order to repair.
         auto* ws = KWin::Workspace::self();
-        if (ws && hasApplies) {
+        if (ws && hasApplies && !scrollOnlyBatch) {
             // Membership index for the overlap restack: window -> the screen
             // whose ordered group it belongs to. Resolved at completion time
             // because QPointers may have gone null since the batch was built.
@@ -826,6 +863,25 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     ws->raiseWindow(kw);
                 }
             }
+        } else if (ws && hasApplies) {
+            // Scroll-only batch: the restack block above is skipped, but two
+            // of its CONSUMES must still happen or state leaks across
+            // batches. The pending-focus id is written on EVERY scrolling
+            // focus verb (slotFocusWindowRequested) and, left unconsumed,
+            // would be spent by the first later non-scroll batch raising a
+            // stale window at an unrelated moment; the raise itself is
+            // redundant here (KWin raises on activation). The saved
+            // stacking order is a one-shot the replay normally consumes —
+            // drop this batch's screens' entries without replaying so a
+            // much-older session's z-order is not re-imposed the first time
+            // the screen leaves scrolling. Supersession guard matches the
+            // replay loop's.
+            m_pendingAutotileFocusWindowId.clear();
+            for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+                if (m_tileStaggerGenByScreen.value(it.key()) == genByScreen.value(it.key())) {
+                    m_savedAutotileStackingOrder.remove(it.key());
+                }
+            }
         }
 
         // After daemon restart, the raise loop above puts all tiled windows on
@@ -842,14 +898,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         }
 
         // Put the tab-indicator surfaces back at the bottom of their layer.
-        // savedGlobalStack is an unfiltered snapshot of the whole stacking
-        // order, so it contains them, and the raise loop above replays it — a
-        // snapshot taken before the lower and replayed after would restore the
-        // pre-lower order and leave the indicators painting across the layout
-        // picker and the cheatsheet. A scroll batch is exactly that window,
-        // since the daemon announces the surface for the same strip change
-        // this batch is applying. Free when no indicator exists: the function
-        // returns on an empty id set.
+        // For non-scroll batches this repairs the saved-stack replay above
+        // (an unfiltered snapshot replayed after the lower would restore the
+        // pre-lower order and leave the indicators painting across the
+        // layout picker and the cheatsheet). Scroll-only batches skip that
+        // replay now, but keep this call: the daemon announces indicator
+        // surfaces for the same strip change this batch applies, and the
+        // re-lower is what puts a freshly announced surface under its
+        // stack. Free when no indicator exists: the function returns on an
+        // empty id set.
         m_effect->restackScrollTabSurfaces();
 
         // Wayland centering is handled reactively by slotWindowFrameGeometryChanged
@@ -999,7 +1056,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // flagged stays untouched: it was never in the set.
             if (KWin::Window* kwFs = snap.window->window()) {
                 const bool inSet = m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
-                if (snap.isWindowedFullscreen && !inSet) {
+                // A flag-off entry is the authoritative echo of a
+                // clearWindowedFullscreen this effect sent — consume the
+                // in-flight marker unconditionally so a lost clear cannot
+                // latch the adopt guard forever.
+                if (!snap.isWindowedFullscreen) {
+                    m_windowedFsClearInFlight.remove(snap.windowId);
+                }
+                if (snap.isWindowedFullscreen && !inSet && !m_windowedFsClearInFlight.contains(snap.windowId)) {
                     // Adopt-on-batch: also the effect-restart path, where the
                     // daemon still holds the flag for a window this effect
                     // instance has never seen. The stored rect is what the
@@ -1044,6 +1108,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                     qCInfo(lcEffect) << "Windowed-fullscreen deferred reconcile for" << snap.windowId;
                     if (m_effect->m_daemonGate.serviceRegistered) {
+                        // Arm the in-flight marker: a batch the daemon emitted
+                        // BEFORE processing this clear can still carry
+                        // flag=true (cross-direction D-Bus has no ordering
+                        // guarantee), and its adopt arm would re-fullscreen
+                        // the window the user just exited. The flag-off echo
+                        // above consumes it.
+                        m_windowedFsClearInFlight.insert(snap.windowId);
                         PhosphorProtocol::ClientHelpers::fireAndForget(
                             m_effect, PhosphorProtocol::Service::Interface::Scrolling,
                             QStringLiteral("clearWindowedFullscreen"), {snap.windowId},
@@ -1284,15 +1355,46 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
 
             if (!snap.isMonocle && snap.window->isWaylandClient()) {
-                m_tileTargetZones[snap.windowId] = snap.geometry;
+                // windowedFullscreen is excluded like monocle: KWin owns the
+                // committed frame during the fullscreen round-trip, and a
+                // stale centering target consumed against the ack's frame
+                // change would raw-moveResize the window to the column origin
+                // at full-output size, bypassing the fullscreen bail and
+                // reaping the animation. (The ack branch in
+                // slotWindowFullScreenChanged re-commits the column rect.)
+                if (!snap.isWindowedFullscreen) {
+                    m_tileTargetZones[snap.windowId] = snap.geometry;
+                }
             } else if (!snap.isMonocle && isScrollingScreen(snap.screenId)) {
                 // X11 leg of the reactive repair, deliberately NOT the
                 // Wayland centering machinery (which fights X11's synchronous
                 // configures — the ballooning hazard above): remember the
-                // commanded rect so slotWindowFrameGeometryChanged can
-                // counter an EXTERNAL move. A fresh command resets the
-                // counter-assert burst budget.
-                m_effect->m_scrollCommandedRects.insert(snap.windowId, {snap.geometry, 0, 0});
+                // rect the apply actually COMMITTED (not the requested batch
+                // rect) so slotWindowFrameGeometryChanged can counter an
+                // EXTERNAL move. The committed frame differs for
+                // size-increment clients (terminals), where applyWindowGeometry
+                // constrains and re-centres — storing the request would make
+                // the counter-assert misread every later frame event as an
+                // external move and burn its burst budget on no-ops forever.
+                //
+                // ONLY on the paths where the apply above committed
+                // synchronously: a mid-user-move apply DEFERS its commit to
+                // windowFinishUserMovedResized, and the non-member fullscreen
+                // bail commits nothing — capturing frameGeometry there would
+                // record the drag-time or pre-apply frame as "commanded" and
+                // have the counter yank the window back to it. Dropping the
+                // entry instead disarms the counter until the next batch.
+                // A fresh command resets the counter-assert burst budget.
+                KWin::Window* kwc = snap.window->window();
+                const bool commitDeferredOrBailed = snap.window->isUserMove() || snap.window->isUserResize()
+                    || (snap.window->isFullScreen() && (!kwc || kwc->isRequestedFullScreen())
+                        && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId));
+                if (commitDeferredOrBailed) {
+                    m_effect->m_scrollCommandedRects.remove(snap.windowId);
+                } else {
+                    m_effect->m_scrollCommandedRects.insert(snap.windowId,
+                                                            {snap.window->frameGeometry().toRect(), 0, 0});
+                }
             }
         },
         onComplete, startedViewLegs);
@@ -1339,9 +1441,21 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                 }
                 if (cit->burstCount < 3) {
                     ++cit->burstCount;
+                    // Copy out of the hash node first: the apply below emits
+                    // frameGeometryChanged synchronously on X11 and re-enters
+                    // this slot — holding a reference into the node across
+                    // re-entrant code is undefined the day anything mutates
+                    // the map from inside that window.
+                    const QRect commanded = cit->rect;
                     qCInfo(lcEffect) << "Countering external move of scroll-managed X11 window" << windowId << "from"
-                                     << actual << "back to" << cit->rect;
-                    m_effect->applyWindowGeometry(w, cit->rect, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+                                     << actual << "back to" << commanded;
+                    // Bracketed like every sibling moveResize site: the
+                    // synchronous re-entry must not fall through to the
+                    // VS-crossing detector for a move the effect itself made.
+                    const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
+                    m_effect->m_daemonGate.inGeometryApply = true;
+                    m_effect->applyWindowGeometry(w, commanded, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+                    m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     return;
                 }
             }
@@ -1582,6 +1696,14 @@ void TilingHandler::reportDiscoveredMinSize(const QString& windowId, int minWidt
 
     qCInfo(lcEffect) << "Discovered min size for" << windowId << ":" << minWidth << "x" << minHeight
                      << "- reporting to daemon for future retiles";
+
+    // This is a SECOND writer of windowMinSizeUpdated carrying a per-axis
+    // pair with 0 in the axis that did not shrink, and the daemon's store
+    // replaces the whole QSize — so a (900, 0) discovery clears a stored
+    // height minimum. Evict the last-reported cache rather than recording
+    // the half-pair as sent: the next batch's change poll then re-asserts
+    // the true declared pair instead of being silenced by its own cache.
+    m_effect->m_lastReportedMinSize.remove(windowId);
 
     PhosphorProtocol::ClientHelpers::fireAndForget(
         m_effect, PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowMinSizeUpdated"),

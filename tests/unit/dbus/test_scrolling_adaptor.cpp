@@ -44,6 +44,10 @@
  *     exactly once (placementChanged discriminates: every refusal returns
  *     before emitting). The null-engine arm rides item 10's clearEngine
  *     sweep like every other slot.
+ * 14. reapplyWindowGeometry refuses an empty and an unknown id silently,
+ *     and its evict makes a rect-stable relayout re-emit — with a control
+ *     first proving that same relayout is silent WITHOUT the evict. Its
+ *     null-engine arm rides the item 10 sweep too.
  */
 
 #include <QTest>
@@ -496,6 +500,7 @@ private Q_SLOTS:
         QVERIFY(m_adaptor->scrollingScreens().isEmpty());
         m_adaptor->focusColumn(QStringLiteral("DP-1"), -1); // must not crash
         m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a")); // must not crash
+        m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a")); // must not crash
     }
 
     // clearEngine also DISCONNECTS: the engine outlives the adaptor's
@@ -647,7 +652,13 @@ private Q_SLOTS:
         m_adaptor->reapplyWindowGeometry(QStringLiteral("nobody|9")); // unknown window
         QCOMPARE(tiled.count(), 0);
 
-        // Positive control: nothing in the strip moved, so only the evicted
+        // Silent control FIRST: a plain relayout with unchanged rects emits
+        // nothing, so the re-emission below is attributable to the evicted
+        // gate memory and not to the relayout itself.
+        m_engine->retile(QStringLiteral("DP-1"));
+        QCOMPARE(tiled.count(), 0);
+
+        // Positive case: nothing in the strip moved, so only the evicted
         // gate memory explains the re-emission.
         m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a"));
         QCOMPARE(tiled.count(), 1);

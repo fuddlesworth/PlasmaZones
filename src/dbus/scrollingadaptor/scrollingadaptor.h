@@ -25,9 +25,11 @@ namespace PlasmaZones {
  *
  * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin
  * effect uses as its Mode-stamp discriminator, the strip-preview snapshot,
- * the wheel-driven focusColumn verb, and the clearWindowedFullscreen
+ * the wheel-driven focusColumn verb, the clearWindowedFullscreen
  * reconciliation call (inbound, effect to daemon, when a client leaves
- * fullscreen on its own). Window lifecycle and tile-request traffic for
+ * fullscreen on its own), and the reapplyWindowGeometry repair call
+ * (inbound too, for a fullscreen exit whose strip rects never moved).
+ * Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
  * for both tiling-family engines, and TilingAdaptor routes per screen.

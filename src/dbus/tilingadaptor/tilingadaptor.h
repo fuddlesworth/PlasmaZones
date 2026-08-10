@@ -188,6 +188,13 @@ public Q_SLOTS:
      * startup/restart and mode toggle-on to avoid per-window D-Bus
      * round-trips.
      *
+     * Trusted-peer boundary: batch size is deliberately unbounded on the
+     * panel-ready path (the deferral queue's kMaxPendingOpens is a depth
+     * valve that processes on overflow, never a drop cap), and the numeric
+     * in-args are sign-clamped only. The KWin effect is the sole producer;
+     * a foreign caller can spend daemon CPU proportional to the batch it
+     * sends, nothing more.
+     *
      * @param entries Array of (windowId, screenId, minWidth, minHeight) structs
      */
     void windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries);

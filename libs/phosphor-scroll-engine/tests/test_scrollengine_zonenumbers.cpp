@@ -76,6 +76,7 @@ private Q_SLOTS:
     void clippedEdgeTilesKeepTheirNumbers();
     void crossOutputMoveKeepsHeightAndAnnouncesOnDestination();
     void crossOutputSwapTradesSlotsWithStackedSource();
+    void windowedFullscreenFeedbackPinsOnOffTokens();
 
 private:
     /// One 1200x800 scrolling output, geometry-provider seam wired.
@@ -633,6 +634,17 @@ void TestScrollEngineZoneNumbers::crossOutputSwapTradesSlotsWithStackedSource()
     QVERIFY2(partnerHeight > 0 && partnerHeight < 800,
              qPrintable(QStringLiteral("expected a preset height, got %1").arg(partnerHeight)));
 
+    // The PARTNER's windowed-fullscreen flag crosses with the trade too —
+    // the swap's partner leg is a separate capture/re-apply pair from the
+    // mover's, and this is its only coverage (the mover leg is pinned by the
+    // move twin above). p is already focused from the height setup above.
+    engine->toggleWindowedFullscreen(QStringLiteral("S2"));
+    {
+        auto* s2State = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S2")));
+        QVERIFY(s2State);
+        QVERIFY(s2State->strip().isWindowedFullscreen(wid("p")));
+    }
+
     engine->windowFocused(wid("b"), QStringLiteral("S1"));
     QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
     engine->swapFocusedInDirection(QStringLiteral("right"),
@@ -640,6 +652,12 @@ void TestScrollEngineZoneNumbers::crossOutputSwapTradesSlotsWithStackedSource()
 
     QCOMPARE(engine->screenForTrackedWindow(wid("b")), QStringLiteral("S2"));
     QCOMPARE(engine->screenForTrackedWindow(wid("p")), QStringLiteral("S1"));
+    auto* s1State = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S1")));
+    QVERIFY(s1State);
+    QVERIFY(s1State->strip().isWindowedFullscreen(wid("p"))); // the partner's flag survived the trade
+    auto* s2StateAfter = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S2")));
+    QVERIFY(s2StateAfter);
+    QVERIFY(!s2StateAfter->strip().isWindowedFullscreen(wid("b")));
     // The trade: p took b's TILE slot beside a. Both windows in column 0 is
     // the whole assertion — a fresh column for p would push a to index 1.
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), wid("a")), 0);
@@ -661,6 +679,29 @@ void TestScrollEngineZoneNumbers::crossOutputSwapTradesSlotsWithStackedSource()
     QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
 
     engine->setCrossSurfaceResolver(nullptr);
+}
+
+void TestScrollEngineZoneNumbers::windowedFullscreenFeedbackPinsOnOffTokens()
+{
+    // The OSD's success arm discriminates on the LITERAL "on"/"off" reason
+    // tokens (an unpinned rename would silently announce "on" for an off
+    // toggle), so pin the full tuple for both directions of the toggle.
+    QObject owner;
+    ScrollEngine* engine = oneScreenEngine(&owner);
+    engine->windowOpened(wid("a"), QStringLiteral("S1"), 0, 0);
+
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 1);
+    QVERIFY(feedback.last().at(0).toBool());
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("fullscreen"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("on"));
+
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 2);
+    QVERIFY(feedback.last().at(0).toBool());
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("fullscreen"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("off"));
 }
 
 // GUILESS, matching the sibling engine suites: the coalesced retile and the

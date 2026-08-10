@@ -624,16 +624,18 @@ void TestScrollStripCore::windowedFullscreenTravelsWithConsume()
 {
     ScrollStrip strip;
     const auto params = defaultParams();
+    // Flag the tile that actually TRAVELS: consume pulls from the column
+    // right of the active one, so b is the moved Tile. The earlier form
+    // flagged the stationary a, which made both assertions trivially true —
+    // deleting the whole-Tile copy in consumeWindowIntoColumn left it green.
     QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
-    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
-    QVERIFY(strip.focusWindow(QStringLiteral("a"), params));
-    QVERIFY(strip.toggleActiveWindowedFullscreen());
-
-    // Consume pulls b into a's column; a's flag rides its Tile untouched.
+    QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params)); // b is active
+    QVERIFY(strip.toggleActiveWindowedFullscreen()); // flags b, the traveller
+    QVERIFY(strip.focusWindow(QStringLiteral("a"), params)); // a's column consumes
     QVERIFY(strip.consumeWindowIntoColumn(params));
     QCOMPARE(strip.columnCount(), 1);
-    QVERIFY(strip.isWindowedFullscreen(QStringLiteral("a")));
-    QVERIFY(!strip.isWindowedFullscreen(QStringLiteral("b")));
+    QVERIFY(strip.isWindowedFullscreen(QStringLiteral("b"))); // the MOVED tile kept its flag
+    QVERIFY(!strip.isWindowedFullscreen(QStringLiteral("a"))); // negative control
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripCore)

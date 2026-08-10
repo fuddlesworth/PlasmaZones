@@ -328,6 +328,11 @@ void ScrollEngine::commitDragInsertPreview()
         // dies with it — floatWindowInternal drops it for the same reason.
         m_lastAppliedRect.remove(p.windowId);
         m_parkedScrollEdge.remove(p.windowId);
+        // Windowed fullscreen dies with the tile — floatWindowInternal drops
+        // this third memory for the same reason, and this arm was the
+        // exception (a stale true only forces one redundant emit, but the
+        // symmetry is the documented contract).
+        m_lastAppliedWindowedFs.remove(p.windowId);
         m_states.setKeyForWindow(p.windowId, p.targetKey);
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);
@@ -707,9 +712,12 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     if (!inserted) {
         return {};
     }
-    // The same two post-insert stamps commit applies, under the same gates —
-    // both change the resolved geometry, so omitting either would reintroduce
-    // a modelling error by the back door.
+    // The layout-affecting post-insert stamps commit applies, under the same
+    // gates — both change the resolved geometry, so omitting either would
+    // reintroduce a modelling error by the back door. Commit's THIRD stamp
+    // (the windowed-fullscreen re-seat) is deliberately absent: the flag is
+    // layout-neutral and never moves a resolved rect, so the probe has
+    // nothing to mirror for it.
     if (p.carried.minWidth > 0 || p.carried.minHeight > 0) {
         probe.setWindowMinimumSize(p.windowId, p.carried.minWidth, p.carried.minHeight);
     }

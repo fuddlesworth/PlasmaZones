@@ -40,7 +40,7 @@ private Q_SLOTS:
     void serializeKeepsAnUnclaimedStashTileBesideALiveStrip();
     void windowedFullscreenSurvivesSerializeRestore();
     void windowedFullscreenTogglesEmitAndFloatClears();
-    void windowedFullscreenHiddenTabEmitsUnflagged();
+    void windowedFullscreenHiddenTabStillEmitsFlag();
     void windowedFullscreenMinimizeDropsModeKeeps();
     void windowedFullscreenFuzzyClaimDoesNotTransfer();
 
@@ -724,7 +724,7 @@ void TestScrollEnginePersistence::windowedFullscreenTogglesEmitAndFloatClears()
 // crossing test, which owns the cross-surface resolver fixture the verb
 // needs.
 
-void TestScrollEnginePersistence::windowedFullscreenHiddenTabEmitsUnflagged()
+void TestScrollEnginePersistence::windowedFullscreenHiddenTabStillEmitsFlag()
 {
     // The flag rides the tile UNGATED by presentation: a hidden tab (and a
     // parked column) keeps its client's fullscreen state, so its batch entry
@@ -760,7 +760,7 @@ void TestScrollEnginePersistence::windowedFullscreenHiddenTabEmitsUnflagged()
             aFlagged = o.value(QLatin1String("windowedFullscreen")).toBool(false);
         }
     }
-    QVERIFY2(sawA, "the hidden tab must still be in the batch (parked), or the compare is vacuous");
+    QVERIFY2(sawA, "the hidden tab must still be in the batch, or the compare is vacuous");
     QVERIFY(aFlagged);
     // The model keeps the flag through the round trip.
     ScrollState* state = stateFor(engine, QStringLiteral("S1"));

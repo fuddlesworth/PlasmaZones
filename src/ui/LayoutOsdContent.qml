@@ -280,11 +280,16 @@ Item {
         }
     }
 
-    // Click the card to dismiss. Anchored to the card (not the whole OSD
-    // slot) so a concurrent modal slot (snap assist, picker) keeps receiving
-    // its own clicks instead of hitting a screen-wide input shield.
-    // dismiss.fire() collapses timer-fire + click into a single
-    // dismissRequested per show cycle via the shared latch.
+    // Click the card to dismiss — BEST-EFFORT only: the OSD's host surface
+    // is input-transparent whenever no modal slot is up (see the
+    // anyInputGrabbing rationale in shellhost_bridge.cpp), so in the common
+    // case this area receives nothing and the timer is the real dismiss.
+    // Clicks land here only while a modal slot has the surface accepting
+    // input; the card anchoring keeps the modal's own clicks out of a
+    // screen-wide shield in that case. dismiss.fire() collapses timer-fire +
+    // click into a single dismissRequested per show cycle via the shared
+    // latch. Keep the MouseArea: the daemon rationale depends on it existing
+    // for the modal-visible case.
     MouseArea {
         anchors.fill: container
         onClicked: dismiss.fire()

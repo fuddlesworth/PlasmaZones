@@ -640,10 +640,16 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // live: the toggle pressed over a fullscreen Proton game landed on the
     // neighbouring terminal. Scoped HERE rather than in the shared
     // predicate so focus-follows-mouse and the other consumers keep
-    // treating a genuinely fullscreen window as an occluder.
+    // treating a genuinely fullscreen window as an occluder. The exemption
+    // waives the fullscreen term AND the bare transientFor() term (Wine and
+    // Proton toplevels carry transient_for on the real game window — the
+    // original live bug); every EXPLICIT type term stays authoritative, so
+    // a fullscreen dialog/splash/popup still cannot pin the daemon's focus
+    // tracking. The residual accepted leak class is "fullscreen, no
+    // explicit type, has a transient parent" — the intended target.
     const bool fullscreenOnScrollingScreen =
         w->isFullScreen() && m_tilingHandler->isScrollingScreen(getWindowScreenId(w));
-    if (!fullscreenOnScrollingScreen && isStructurallyUnmanageableWindowType(w)) {
+    if (isStructurallyUnmanageableWindowType(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)) {
         return;
     }
 

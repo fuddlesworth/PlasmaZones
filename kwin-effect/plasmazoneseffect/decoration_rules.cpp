@@ -68,7 +68,12 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     // is skipped OUTRIGHT — apply and restore both: draining a parked rule
     // snapshot here would clobber the demotion with the user's flags. The
     // un-flag paths restore the pre-demotion flags, and the next reconcile
-    // hands ownership back to whatever rule matches.
+    // hands ownership back to whatever rule matches — a bounded wait, not an
+    // open-ended one: every un-flag path (the batch un-flag arm's
+    // onComplete, the client self-exit arm, and the float cleanup's tiled
+    // re-resolve) drives updateAllDecorations, which re-runs this reconcile
+    // for the window on the same edge. A rule that stopped matching DURING
+    // the hold therefore drains its parked snapshot at un-flag time.
     if (m_windowedFullscreenWindows.contains(windowId)) {
         return;
     }

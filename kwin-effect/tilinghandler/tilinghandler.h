@@ -28,6 +28,7 @@ class QTimer;
 
 namespace KWin {
 class EffectWindow;
+class Window;
 }
 
 namespace PlasmaZones {
@@ -249,8 +250,11 @@ public:
     /// Drain the keep-flag snapshot; @p kw may be null for a gone window
     /// (the snapshot is dropped either way).
     void restoreWindowedFullscreenLayerDemotion(const QString& windowId, KWin::Window* kw);
-    /// Bulk teardown restore (daemon loss, effect unload) — snapshot-and-
-    /// clear then release each, the restoreAllMonocleMaximized shape.
+    /// Bulk restore (daemon loss, effect unload, engine disable, and daemon
+    /// BRING-UP — a straight old-to-new daemon handover emits no
+    /// serviceUnregistered edge, so onDaemonReady drains the dead session's
+    /// holds too) — snapshot-and-clear then release each, the
+    /// restoreAllMonocleMaximized shape.
     void restoreAllWindowedFullscreen();
 
     /// Cleanup: drop all autotile tiled-tracking bookkeeping. Physical
@@ -290,7 +294,11 @@ public:
     QString scrollTrackedScreenFor(const QString& windowId) const;
 
     /// Cheap gate for callers that want to skip scroll-specific work in a
-    /// session with no scrolling screens at all.
+    /// session with no scrolling screens at all. RAW set, deliberately NOT
+    /// the isScrollingScreen intersection — the clip / input-filter /
+    /// screen-override consumers want the conservative answer, and their
+    /// inner predicates re-derive per-window truth anyway (see the rationale
+    /// on scrollTrackedScreenFor in tilinghandler.cpp).
     bool hasScrollingScreens() const
     {
         return !m_scrollingScreens.isEmpty();
@@ -903,6 +911,13 @@ private:
     /// The generation rejects completions from a countermanded older request.
     /// A re-minimize countermand moves the window back to the active set.
     QHash<QString, quint64> m_unfloatInFlight;
+    /// Windows whose clearWindowedFullscreen is dispatched and unechoed —
+    /// the m_unfloatInFlight idiom for the fullscreen-exit reconcile. A batch
+    /// emitted before the daemon processed the clear can still carry
+    /// flag=true; the adopt arm skips members so it cannot re-fullscreen the
+    /// window against the user's exit, and the first flag-off batch entry
+    /// consumes the marker (a lost clear therefore cannot latch it).
+    QSet<QString> m_windowedFsClearInFlight;
     quint64 m_unfloatRequestGeneration = 0;
     QHash<QString, int> m_unfloatRetryAttempts;
     /// Subset of m_minimizeFloatedWindows claimed at batch-announce time

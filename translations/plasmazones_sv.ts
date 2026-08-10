@@ -357,11 +357,11 @@
         <translation>Öppna genvägsöversikten</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="124"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="125"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="127"/>
         <location filename="../src/daemon/daemon/osd.cpp" line="514"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="281"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="341"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="285"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="345"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="72"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="89"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="118"/>
@@ -374,346 +374,346 @@
         <translation>Rullning</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="144"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="145"/>
         <source>Switches this screen to the previous layout in the list.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="147"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="148"/>
         <source>Switches this screen to the next layout in the list.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="150"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="151"/>
         <source>Opens a picker to choose this screen&apos;s layout.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="155"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="156"/>
         <source>Locks this screen&apos;s layout so nothing switches it until unlocked.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="156"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="157"/>
         <source>Locks this screen&apos;s column template so nothing switches it until unlocked.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="165"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="166"/>
         <source>Arrange All Windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="190"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="191"/>
         <source>Move Focus Left</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="192"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="193"/>
         <source>Move Focus Right</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="194"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="195"/>
         <source>Move Focus Up</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="196"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="197"/>
         <source>Move Focus Down</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="213"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="234"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="214"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="235"/>
         <source>Rotate Clockwise</source>
         <translation>Rotera medurs</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="215"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="236"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="216"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="237"/>
         <source>Rotate Counterclockwise</source>
         <translation>Rotera moturs</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="222"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="223"/>
         <source>Cycle Focus Forward</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="224"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="225"/>
         <source>Cycle Focus Backward</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="226"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="227"/>
         <source>Swap Screen Left</source>
         <translation>Byt skärm åt vänster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="228"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="229"/>
         <source>Swap Screen Right</source>
         <translation>Byt skärm åt höger</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="230"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="231"/>
         <source>Swap Screen Up</source>
         <translation>Byt skärm uppåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="232"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="233"/>
         <source>Swap Screen Down</source>
         <translation>Byt skärm nedåt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="248"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="249"/>
         <source>Moves focus to the first column.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="250"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="251"/>
         <source>Moves focus to the last column.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="252"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="253"/>
         <source>Moves the focused column to the first position.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="254"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="255"/>
         <source>Moves the focused column to the last position.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="256"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="257"/>
         <source>Consume Window</source>
         <translation>Ta in fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="257"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="258"/>
         <source>Pulls a window from the column to the right into the focused column, stacking them.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="260"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
         <source>Expel Window</source>
         <translation>Mata ut fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="261"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="262"/>
         <source>Moves the focused window out of a shared column into a new column on the right.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="264"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="265"/>
         <source>Splits the focused window out of a shared column to the left. A window alone in its column merges into the column on the left instead.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="268"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="269"/>
         <source>Splits the focused window out of a shared column to the right. A window alone in its column merges into the column on the right instead.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="272"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="273"/>
         <source>Scrolls the view so the focused column sits centered on the screen.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="274"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="275"/>
         <source>Switches the focused column between stacked windows and tabs.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="276"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="277"/>
         <source>Puts the focused window into its fullscreen presentation while it keeps its place in the column, so it does not cover the screen. Press again to leave it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="281"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="282"/>
         <source>Cycle Column Width</source>
         <translation>Bläddra bland kolumnbredder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="284"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="285"/>
         <source>Cycle Column Width Back</source>
         <translation>Bläddra bakåt bland kolumnbredder</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="288"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="289"/>
         <source>Widens the focused column by the configured step.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="290"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="291"/>
         <source>Narrows the focused column by the configured step.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="300"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="301"/>
         <source>Grow into Empty Space</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="301"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="302"/>
         <source>Grows the focused column to fill the empty space visible on screen. Other columns keep their size.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="306"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="307"/>
         <source>Steps the focused window through the screen&apos;s height presets.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="309"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="310"/>
         <source>Steps the focused window through the screen&apos;s height presets in reverse.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="489"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="490"/>
         <source>Apply Layout %1</source>
         <comment>range of layout slots, e.g. 1-9</comment>
         <translation type="unfinished">Verkställ layout %1</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="601"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="602"/>
         <source>Adjusts the height of the focused window by the configured step.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="305"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="306"/>
         <source>Cycle Window Height</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="145"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="146"/>
         <source>Switches this screen to the previous column template.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="148"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="149"/>
         <source>Switches this screen to the next column template.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="151"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="152"/>
         <source>Opens a picker to choose this screen&apos;s column template. Its column widths become the widths columns cycle through.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="282"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="283"/>
         <source>Steps the focused column through the screen&apos;s width presets.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="285"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="286"/>
         <source>Steps the focused column through the screen&apos;s width presets in reverse.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="297"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="298"/>
         <source>Toggles the focused column between filling the work area and a narrower width.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="308"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="309"/>
         <source>Cycle Window Height Back</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="312"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="313"/>
         <source>Makes the focused window taller by the configured step.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="314"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="315"/>
         <source>Makes the focused window shorter by the configured step.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="316"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="317"/>
         <source>Clears manual window heights in the focused column so its windows share the height evenly.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="458"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="459"/>
         <source>Arrows</source>
         <translation>Piltangenter</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="498"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="499"/>
         <source>Move Window</source>
         <translation>Flytta fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="505"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="506"/>
         <source>Move Focus</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="510"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="511"/>
         <source>Swap Window</source>
         <translation>Byt fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="515"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="516"/>
         <source>Span Window</source>
         <translation>Sträck ut fönster</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="521"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="522"/>
         <source>Swap Screens</source>
         <translation>Byt skärmar</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="529"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="537"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="530"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="538"/>
         <source>Rotate</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="533"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="534"/>
         <source>Cycle Focus</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="587"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="588"/>
         <source>Focus First / Last Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="588"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="589"/>
         <source>Moves focus to the first or last column.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="591"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="592"/>
         <source>Move Column to Start / End</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="592"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="593"/>
         <source>Moves the focused column to the first or last position.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="595"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="596"/>
         <source>Consume or Expel Left / Right</source>
         <translation>Ta in eller mata ut åt vänster/höger</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="596"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="597"/>
         <source>Splits the focused window out of a shared column to that side. A window alone in its column merges into the neighboring column instead.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="600"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="601"/>
         <source>Adjust Window Height</source>
         <translation>Justera fönsterhöjd</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="919"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="930"/>
         <source>Apply Layout %1</source>
         <translation>Verkställ layout %1</translation>
     </message>
@@ -1121,7 +1121,7 @@
         <translation>Tjänsterna är inte initierade</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="937"/>
+        <location filename="../src/daemon/controllers/shortcutmanager.cpp" line="948"/>
         <source>Snap to Zone %1</source>
         <translation>Fäst i zon %1</translation>
     </message>
@@ -1575,8 +1575,8 @@
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="171"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="260"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="280"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="338"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="284"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="342"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="62"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="67"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="181"/>
@@ -1597,7 +1597,7 @@
         <translation>Sammanhang</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="345"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="346"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="96"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="41"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="145"/>
@@ -1646,127 +1646,137 @@
         <translation>Om fönstret visas på alla virtuella skrivbord.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="126"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="127"/>
+        <source>Whether the window is fullscreen.</source>
+        <translation>Om fönstret är i helskärm.</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="128"/>
+        <source>A scrolling window in windowed fullscreen counts as fullscreen here.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="130"/>
         <source>Whether the window is minimized.</source>
         <translation>Om fönstret är minimerat.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="128"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="132"/>
         <source>Whether the window is maximized.</source>
         <translation>Om fönstret är maximerat.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="130"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="134"/>
         <source>Whether the window currently has keyboard focus.</source>
         <translation>Om fönstret för närvarande har tangentbordsfokus.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="132"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="136"/>
         <source>Whether the window is a transient (a dialog or popup owned by another window).</source>
         <translation>Om fönstret är transient (en dialog eller popup som ägs av ett annat fönster).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="134"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="138"/>
         <source>Whether the window is a notification or on-screen display.</source>
         <translation>Om fönstret är en avisering eller en skärmvisning.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="136"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="140"/>
         <source>The window&apos;s width in pixels.</source>
         <translation>Fönstrets bredd i bildpunkter.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="138"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="142"/>
         <source>The window&apos;s height in pixels.</source>
         <translation>Fönstrets höjd i bildpunkter.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="140"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="144"/>
         <source>Whether the window is set to stay above other windows (always on top).</source>
         <translation>Om fönstret är inställt att ligga ovanför andra fönster (alltid överst).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="142"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="146"/>
         <source>Whether the window is set to stay below other windows.</source>
         <translation>Om fönstret är inställt att ligga under andra fönster.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="144"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="148"/>
         <source>Whether the window is hidden from the taskbar.</source>
         <translation>Om fönstret är dolt från aktivitetsfältet.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="146"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="150"/>
         <source>Whether the window is hidden from the pager.</source>
         <translation>Om fönstret är dolt från skrivbordsvisaren.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="148"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="152"/>
         <source>Whether the window is hidden from the window switcher (Alt+Tab).</source>
         <translation>Om fönstret är dolt från fönsterväxlaren (Alt+Tab).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="150"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="154"/>
         <source>Whether the window is a modal dialog.</source>
         <translation>Om fönstret är en modal dialog.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="152"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="156"/>
         <source>Whether the window has a server-side title-bar and border.</source>
         <translation>Om fönstret har en serverbaserad namnlist och kant.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="154"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="158"/>
         <source>Whether the window can be resized.</source>
         <translation>Om fönstret kan storleksändras.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="160"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="164"/>
         <source>The window&apos;s left-edge X position in pixels.</source>
         <translation>X-positionen för fönstrets vänsterkant i bildpunkter.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="162"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="166"/>
         <source>The window&apos;s top-edge Y position in pixels.</source>
         <translation>Y-positionen för fönstrets överkant i bildpunkter.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="164"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="168"/>
         <source>The window&apos;s title without the application-name suffix the window manager adds.</source>
         <translation>Fönstrets titel utan det programnamnssuffix som fönsterhanteraren lägger till.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="168"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="172"/>
         <source>Whether the window is snapped into a zone (manual-zone mode, where tiled windows are not snapped).</source>
         <translation>Om fönstret är fäst i en zon (manuellt zonläge, där panelindelade fönster inte är fästa).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="173"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="177"/>
         <source>The zone the window is snapped into (manual-zone mode only).</source>
         <translation>Zonen som fönstret är fäst i (endast manuellt zonläge).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="175"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="179"/>
         <source>The monitor the window is on.</source>
         <translation>Skärmen som fönstret finns på.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="177"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="181"/>
         <source>The virtual desktop the window is on.</source>
         <translation>Det virtuella skrivbord som fönstret finns på.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="179"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="183"/>
         <source>The KDE Activity the window is on.</source>
         <translation>KDE-aktiviteten som fönstret finns på.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="183"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="187"/>
         <source>How many windows are tiled on this monitor and desktop. Lets a rule switch the tiling algorithm as windows open and close, for example a centered single-window layout that gives way once a second window opens.</source>
         <translation>Hur många fönster som är panelindelade på denna skärm och detta skrivbord. Låter en regel byta panelindelningsalgoritm när fönster öppnas och stängs, till exempel en centrerad layout med ett enda fönster som ger vika när ett andra fönster öppnas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="192"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="196"/>
         <source>The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change which layout is assigned (that would be circular).</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1839,9 +1849,9 @@
         <translation>Opacitet (%)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="171"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="175"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="340"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="172"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="176"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="341"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="282"/>
         <source>Zones</source>
         <translation>Zoner</translation>
@@ -1955,7 +1965,7 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="368"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="256"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="260"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="404"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="835"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchLeafEditor.qml.cpp" line="501"/>
@@ -1991,8 +2001,8 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="169"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="203"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="279"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="332"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="283"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="336"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="59"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="177"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="816"/>
@@ -2003,23 +2013,23 @@
         <translation>Fästning</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="237"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="238"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="239"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="240"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="241"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="242"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="243"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="244"/>
         <source>Autotile</source>
         <translation>Autopanelindelning</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="346"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="350"/>
         <source>Zone rectangles</source>
         <translation>Zonrektanglar</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="349"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="353"/>
         <source>Layout preview</source>
         <translation>Förhandsgranskning av layout</translation>
     </message>
@@ -2029,32 +2039,32 @@
         <translation>Ange motorläge</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="156"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="160"/>
         <source>Whether the window can be moved.</source>
         <translation>Om fönstret kan flyttas.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="158"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="162"/>
         <source>Whether the window can be maximized.</source>
         <translation>Om fönstret kan maximeras.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="166"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="170"/>
         <source>Whether the window has been floated out of tiling (snapping or tiling mode).</source>
         <translation>Om fönstret har gjorts flytande ut ur panelindelningen (fästnings- eller panelindelningsläge).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="171"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="175"/>
         <source>Whether the window is managed by the tiling engine.</source>
         <translation>Om fönstret hanteras av panelindelningsmotorn.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="181"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="185"/>
         <source>The engine mode the window is placed by (snapping, tiling or scrolling).</source>
         <translation>Motorläget som fönstret placeras av (fästning, panelindelning eller rullning).</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="188"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="192"/>
         <source>Whether the monitor is in portrait or landscape orientation. Lets a rule pick a different layout or algorithm on a rotated screen.</source>
         <translation>Om skärmen är i stående eller liggande orientering. Låter en regel välja en annan layout eller algoritm på en roterad skärm.</translation>
     </message>
@@ -2725,145 +2735,140 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="123"/>
-        <source>Whether the window is fullscreen. A scrolling window in windowed fullscreen counts as fullscreen here.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="204"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="208"/>
         <source>is</source>
         <translation>är</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="206"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="210"/>
         <source>contains</source>
         <translation>innehåller</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="208"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="212"/>
         <source>starts with</source>
         <translation>börjar med</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="210"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="214"/>
         <source>ends with</source>
         <translation>slutar med</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="212"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="216"/>
         <source>matches regex</source>
         <translation>matchar reguljärt uttryck</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="214"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="218"/>
         <source>matches app-id</source>
         <translation>matchar app-id</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="216"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="220"/>
         <source>greater than</source>
         <translation>större än</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="218"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="222"/>
         <source>less than</source>
         <translation>mindre än</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="246"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="250"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutsPage.qml.cpp" line="272"/>
         <source>Unknown</source>
         <translation>Okänt</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="247"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="251"/>
         <source>Normal window</source>
         <translation>Normalt fönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="248"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="252"/>
         <source>Dialog</source>
         <translation>Dialogruta</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="249"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="253"/>
         <source>Utility</source>
         <translation>Verktyg</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="250"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="254"/>
         <source>Toolbar</source>
         <translation>Verktygsrad</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="251"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="255"/>
         <source>Splash screen</source>
         <translation>Startskärm</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="252"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="256"/>
         <source>Menu</source>
         <translation>Meny</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="253"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="257"/>
         <source>Tooltip</source>
         <translation>Verktygstips</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="254"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="258"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="841"/>
         <source>Notification</source>
         <translation>Avisering</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="255"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="259"/>
         <source>Dock / panel</source>
         <translation>Docka / panel</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="257"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="261"/>
         <source>On-screen display</source>
         <translation>Skärmvisning</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="258"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="262"/>
         <source>Popup</source>
         <translation>Popup</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="285"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="289"/>
         <source>Landscape</source>
         <translation>Liggande</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="286"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="290"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="440"/>
         <source>Portrait</source>
         <translation>Stående</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="354"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="358"/>
         <source>End of stack</source>
         <translation>Sist i stacken</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="357"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="361"/>
         <source>After focused window</source>
         <translation>Efter fokuserat fönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="360"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="364"/>
         <source>As master</source>
         <translation>Som huvudfönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="365"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="369"/>
         <source>Float overflow windows</source>
         <translation>Gör överflödiga fönster flytande</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="368"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="372"/>
         <source>Unlimited (no cap)</source>
         <translation>Obegränsat (ingen gräns)</translation>
     </message>
@@ -3006,7 +3011,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="98"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="414"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="418"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="36"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="133"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3023,7 +3028,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="100"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="408"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="412"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="36"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="171"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="652"/>
@@ -3042,7 +3047,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="102"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="411"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="415"/>
         <location filename=".qml-stubs/src/settings/qml/components/TriggerLabels.qml.cpp" line="52"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="36"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="190"/>
@@ -3062,7 +3067,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="104"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="417"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="421"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/PositionPicker.qml.cpp" line="36"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="152"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="672"/>
@@ -3207,7 +3212,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="162"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="373"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="377"/>
         <source>Float on drag</source>
         <translation>Gör flytande vid dragning</translation>
     </message>
@@ -3228,19 +3233,19 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="179"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="381"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="385"/>
         <source>Never</source>
         <translation>Aldrig</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="180"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="384"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="388"/>
         <source>Always</source>
         <translation>Alltid</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="181"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="387"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="391"/>
         <source>On overflow</source>
         <translation>Vid överflöde</translation>
     </message>
@@ -3299,56 +3304,56 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="198"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="430"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="434"/>
         <source>Right of the focused column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="199"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="433"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="437"/>
         <source>Left of the focused column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="200"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="436"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="440"/>
         <source>Start of the strip</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="201"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="439"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="443"/>
         <source>End of the strip</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="202"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="442"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="446"/>
         <source>Into the focused column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="206"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="392"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="396"/>
         <source>Normal</source>
         <translation>Normal</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="207"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="395"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="399"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="25"/>
         <source>Tabbed</source>
         <translation>Med flikar</translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="211"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="400"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="404"/>
         <source>Titled chips</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="212"/>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="403"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="407"/>
         <source>Segment bar</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3379,32 +3384,32 @@
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="376"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="380"/>
         <source>Reorder in stack</source>
         <translation>Ändra ordning i stacken</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="422"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="426"/>
         <source>New column</source>
         <translation>Ny kolumn</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="425"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="429"/>
         <source>Consume into focused column</source>
         <translation>Ta in i den fokuserade kolumnen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="447"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="451"/>
         <source>Above other windows</source>
         <translation>Över andra fönster</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="450"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="454"/>
         <source>Normal stacking</source>
         <translation>Normal stapling</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="453"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="457"/>
         <source>Below other windows</source>
         <translation>Under andra fönster</translation>
     </message>
@@ -3429,12 +3434,12 @@
         <translation>Dölj zonnummer</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="648"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="652"/>
         <source>Regular expression, e.g. ^(firefox|chromium)$</source>
         <translation>Reguljärt uttryck, t.ex. ^(firefox|chromium)$</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="651"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="655"/>
         <source>Matches by reverse-DNS segments, so “firefox” also matches “org.mozilla.firefox”.</source>
         <translation>Matchar efter omvända DNS-segment, så ”firefox” matchar även ”org.mozilla.firefox”.</translation>
     </message>
@@ -4290,7 +4295,7 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="46"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="873"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="39"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="406"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="422"/>
         <source>Floating</source>
         <translation>Flytande</translation>
     </message>
@@ -4298,9 +4303,9 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="44"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="875"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="33"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="365"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="398"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="411"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="381"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="414"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="427"/>
         <source>Snapped</source>
         <translation>Fäst</translation>
     </message>
@@ -4308,7 +4313,7 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="42"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="877"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationWindowsPage.qml.cpp" line="27"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="395"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="411"/>
         <source>Tiled</source>
         <translation>Panelindelad</translation>
     </message>
@@ -5493,7 +5498,7 @@
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="186"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingFocusCard.qml.cpp" line="13"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingFocusCard.qml.cpp" line="13"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="378"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="394"/>
         <source>Focus</source>
         <translation>Fokus</translation>
     </message>
@@ -8301,10 +8306,10 @@
         <translation>Fäst storleksändring (förhandsgranskning av drag)</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="494"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="495"/>
         <location filename="../src/settings/controller/settingscontroller.cpp" line="838"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="348"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="387"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="364"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="403"/>
         <source>Zone %1</source>
         <translation>Zon %1</translation>
     </message>
@@ -8423,7 +8428,7 @@
         <translation>Kunde inte uppdatera bildförhållande: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring.cpp" line="324"/>
+        <location filename="../src/settings/rules/ruleauthoring.cpp" line="328"/>
         <source>Template: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8438,11 +8443,11 @@
         <translation>Översikt</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="126"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="127"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="128"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="129"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="136"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="130"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="137"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="334"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="428"/>
@@ -8456,26 +8461,26 @@
         <translation>Placering</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="179"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="180"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="181"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="182"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="189"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="191"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="193"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="195"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="197"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="183"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="190"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="192"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="194"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="196"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="198"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="199"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="200"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="202"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="201"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="203"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="204"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="205"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="212"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="214"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="221"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="223"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="206"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="213"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="215"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="222"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="224"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="357"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="439"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
@@ -8498,24 +8503,24 @@
         <translation>Om</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="225"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="227"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="229"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="231"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="233"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="235"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="226"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="228"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="230"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="232"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="234"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="236"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="179"/>
         <source>Virtual Screens</source>
         <translation>Virtuella skärmar</translation>
     </message>
     <message>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="143"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="146"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="149"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="154"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="160"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="164"/>
-        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="332"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="144"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="147"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="150"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="155"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="161"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="165"/>
+        <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="333"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="183"/>
         <source>Layouts</source>
         <translation>Layouter</translation>
@@ -18389,8 +18394,8 @@
         <translation>%1 (låst)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="292"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="595"/>
+        <location filename=".qml-stubs/src/ui/LayoutOsdContent.qml.cpp" line="297"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="633"/>
         <source>Dismiss notification</source>
         <translation>Stäng avisering</translation>
     </message>
@@ -18411,235 +18416,250 @@
         <translation>Layouten är låst. Lås upp den aktuella layouten innan du byter till en annan.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="84"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="85"/>
         <source>No window is focused</source>
         <translation>Inget fönster är fokuserat</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="85"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="86"/>
         <source>No zone layout on this screen</source>
         <translation>Ingen zonlayout på den här skärmen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="86"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="87"/>
         <source>Zone navigation is unavailable</source>
         <translation>Zonnavigering är inte tillgänglig</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="91"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="92"/>
         <source>This window is excluded from tiling</source>
         <translation>Det här fönstret är uteslutet från panelindelning</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="107"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="183"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="225"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="108"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="184"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="226"/>
         <source>Window is not in a zone</source>
         <translation>Fönstret är inte i en zon</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="112"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="228"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="113"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="229"/>
         <source>Window is floating</source>
         <translation>Fönstret är flytande</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="115"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="122"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="234"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="116"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="123"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="235"/>
         <source>No window in that direction</source>
         <translation>Inget fönster i den riktningen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="125"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="126"/>
         <source>Could not move the window</source>
         <translation>Det gick inte att flytta fönstret</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="133"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="237"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="134"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="238"/>
         <source>No zone in that direction</source>
         <translation>Ingen zon i den riktningen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="147"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="148"/>
         <source>No empty zone available</source>
         <translation>Ingen tom zon tillgänglig</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="156"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="157"/>
         <source>No zone with that number</source>
         <translation>Ingen zon med det numret</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="159"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="160"/>
         <source>Window is already in that position</source>
         <translation>Fönstret är redan i den positionen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="172"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="173"/>
         <source>No zone to return to</source>
         <translation>Ingen zon att återgå till</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="174"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="175"/>
         <source>Floating is unavailable</source>
         <translation>Flytande läge är inte tillgängligt</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="177"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="178"/>
         <source>No other window in this zone</source>
         <translation>Inget annat fönster i den här zonen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="180"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="181"/>
         <source>No other window</source>
         <translation>Inget annat fönster</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="196"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="197"/>
         <source>Nothing to restore</source>
         <translation>Inget att återställa</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="202"/>
         <source>No windows to rearrange</source>
         <translation>Inga fönster att ordna om</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="209"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="210"/>
         <source>Master ratio at limit (%1%)</source>
         <translation>Huvudfönsterförhållande vid gräns (%1 %)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="209"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="210"/>
         <source>Master count at limit (%1)</source>
         <translation>Antal huvudfönster vid gräns (%1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="219"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="220"/>
         <source>Nothing to rotate</source>
         <translation>Inget att rotera</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="231"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="232"/>
         <source>Could not swap windows</source>
         <translation>Det gick inte att byta fönster</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="242"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="328"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
         <source>Nothing to swap</source>
         <translation>Inget att byta</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="246"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="247"/>
         <source>That window is no longer available</source>
         <translation>Det fönstret är inte längre tillgängligt</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="128"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="129"/>
         <source>Spanning is not available in this mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="142"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="143"/>
         <source>Pushing to an empty zone is not available in this mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="164"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="165"/>
         <source>No window in that position</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="255"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="256"/>
         <source>All windows are already arranged</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="257"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="258"/>
         <source>Could not arrange the windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="260"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="278"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="261"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="279"/>
         <source>No virtual screen split on this monitor</source>
         <translation>Ingen virtuell skärmdelning på den här skärmen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="263"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="264"/>
         <source>Virtual screen no longer exists</source>
         <translation>Den virtuella skärmen finns inte längre</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="268"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="269"/>
         <source>Virtual screen swap failed</source>
         <translation>Byte av virtuell skärm misslyckades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="270"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="271"/>
         <source>No adjacent virtual screen</source>
         <translation>Ingen intilliggande virtuell skärm</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="282"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="283"/>
         <source>Virtual screen rotation failed</source>
         <translation>Rotation av virtuell skärm misslyckades</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="284"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="285"/>
         <source>No virtual screens to rotate</source>
         <translation>Inga virtuella skärmar att rotera</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="295"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="296"/>
         <source>No column templates available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="297"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="298"/>
         <source>Layouts are not available in this mode</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="303"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="304"/>
         <source>Column is already at that size</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="308"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="309"/>
         <source>Resizing is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="313"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="314"/>
         <source>Tabbing is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="318"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="322"/>
         <source>Windowed fullscreen is unavailable</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="320"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="327"/>
+        <source>No window to move between columns</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="332"/>
+        <source>The column is already centered</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="334"/>
+        <source>Could not refresh the layout</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="336"/>
         <source>No windows to focus</source>
         <translation>Inga fönster att fokusera</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="323"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="339"/>
         <source>Already in main position</source>
         <translation>Redan i huvudpositionen</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="330"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="346"/>
         <source>Failed</source>
         <translation>Misslyckades</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="342"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="358"/>
         <source>Rotated %n window</source>
         <translation>
             <numerusform>Roterade %n fönster</numerusform>
@@ -18647,154 +18667,169 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="344"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="360"/>
         <source>Rotated</source>
         <translation>Roterad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="350"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="366"/>
         <source>Moved</source>
         <translation>Flyttad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="357"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="373"/>
         <source>Extended into Zone %1</source>
         <translation>Utökad till zon %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="359"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="375"/>
         <source>Span extended</source>
         <translation>Spänning utökad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="363"/>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="409"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="379"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="425"/>
         <source>Snapped into Zone %1</source>
         <translation>Fäst i zon %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="367"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="383"/>
         <source>Span reduced</source>
         <translation>Spänning minskad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="372"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="388"/>
         <source>Focus on the master window</source>
         <translation>Fokusera huvudfönstret</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="376"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="392"/>
         <source>Focus on Zone %1</source>
         <translation>Fokusera zon %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="382"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="398"/>
         <source>Zone %1 ↔ Zone %2</source>
         <translation>Zon %1 ↔ zon %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="400"/>
         <source>Swapped</source>
         <translation>Bytt</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="389"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="405"/>
         <source>Window pushed</source>
         <translation>Fönster skjutet</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="407"/>
         <source>Restored</source>
         <translation>Återställd</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="404"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="420"/>
         <source>Extra windows moved out of the layout</source>
         <translation>Extra fönster flyttade ur layouten</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="413"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="429"/>
         <source>Next window</source>
         <translation>Nästa fönster</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="415"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="431"/>
         <source>Focus main window</source>
         <translation>Fokusera huvudfönster</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="417"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="433"/>
         <source>Swapped with main window</source>
         <translation>Bytt med huvudfönster</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="422"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="438"/>
         <source>Master ratio → %1%</source>
         <translation>Huvudfönsterförhållande → %1 %</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="422"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="438"/>
         <source>Master ratio changed</source>
         <translation>Huvudfönsterförhållande ändrat</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="426"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="442"/>
         <source>Master count → %1</source>
         <translation>Antal huvudfönster → %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="426"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="442"/>
         <source>Master count changed</source>
         <translation>Antal huvudfönster ändrat</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="428"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="444"/>
         <source>Layout refreshed</source>
         <translation>Layout uppdaterad</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="430"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="446"/>
         <source>Resized</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="432"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="448"/>
         <source>Tabbed display toggled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="439"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="455"/>
         <source>Windowed fullscreen off</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="441"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="457"/>
         <source>Windowed fullscreen on</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="444"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="459"/>
+        <source>Window moved between columns</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="461"/>
+        <source>Window expelled into its own column</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="463"/>
+        <source>Column centered</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="466"/>
         <source>Virtual screens swapped</source>
         <translation>Virtuella skärmar bytta</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="447"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="469"/>
         <source>Virtual screens rotated</source>
         <translation>Virtuella skärmar roterade</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="449"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="471"/>
         <source>Action completed</source>
         <translation>Åtgärd slutförd</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="501"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="523"/>
         <source>%1 %2</source>
         <comment>@info:status glyph, then the message it labels</comment>
         <translation>%1 %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="538"/>
+        <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="560"/>
         <source>Brief feedback for keyboard window and layout actions</source>
         <translation type="unfinished"></translation>
     </message>

@@ -13,6 +13,7 @@
 
 #include <QTest>
 #include <QCoreApplication>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QObject>
 
@@ -45,11 +46,12 @@ class TestTilingAdaptorPanelGate : public QObject
 private Q_SLOTS:
 
     // -------------------------------------------------------------------------
-    // Baseline: with no ScreenManager injected, windowOpened forwards straight
-    // to the engine without queueing. The adaptor must not force a dependency
-    // on ScreenManager — headless unit tests inject nullptr.
+    // Baseline: with no ScreenManager injected, windowOpened must not force a
+    // dependency on ScreenManager (headless unit tests inject nullptr) and
+    // must not QUEUE — the open is dropped outright here because no engine
+    // claims the screen, and "did not queue" is all this case pins.
     // -------------------------------------------------------------------------
-    void testNoScreenManager_passThrough()
+    void testNoScreenManager_noQueueing()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
@@ -346,6 +348,12 @@ private Q_SLOTS:
         TilingAdaptor adaptor(nullptr, &adaptorParent);
         QSignalSpy spy(&adaptor, &TilingAdaptor::windowsTileRequested);
 
+        // The two validator drops below (c|3 illegal edge, d|4 flag on
+        // floating) warn by design at this boundary — expected output, not
+        // noise, so keep the ctest log clean.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("dropping entry")));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("dropping entry")));
+
         const QString json = QStringLiteral(
             "["
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
@@ -370,9 +378,6 @@ private Q_SLOTS:
         // floating, or an early continue on the zero geometry, would stop
         // rejecting the pair with no failing test.
         QCOMPARE(requests.size(), 2);
-        for (const auto& req : requests) {
-            QVERIFY(req.windowId != QStringLiteral("d|4"));
-        }
         QCOMPARE(requests.at(0).windowId, QStringLiteral("a|1"));
         QCOMPARE(requests.at(0).scrollEdge, QStringLiteral("left"));
         QCOMPARE(requests.at(0).x, 0);

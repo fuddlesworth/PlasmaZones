@@ -65,8 +65,17 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
 }
 
 bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId,
-                                      int minWidth, int minHeight)
+                                      int minWidthIn, int minHeightIn)
 {
+    // Public-API belt at the one boundary the update path already guards:
+    // windowMinSizeUpdated clamps because "a negative floor flows into
+    // Tile::minWidth/minHeight, and the relayout slack math is not written
+    // for one" — the open path feeds the same five sinks (both insert
+    // shapes, the float-restore seed and the stash-restore inserts) and let
+    // raw values through. The in-tree daemon forwards KWin's minimum size
+    // and never sends a negative, so this is a belt for embedders.
+    const int minWidth = qMax(0, minWidthIn);
+    const int minHeight = qMax(0, minHeightIn);
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
 
     // Fixed-size / oversized windows cannot honour a column slot: float them
@@ -897,8 +906,34 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
     // holds it, so the emit-on-change gate would treat the corrective
     // relayout as "nothing moved" and never re-issue the rect. Drop the
     // memory and retile so the authoritative geometry is re-applied.
+    //
+    // EXCEPT when the displacement is the window's own minimum floor: a
+    // client pinned at a min the slot cannot honour (KWin clamps every
+    // commit to it) re-asserts the same oversized frame after every
+    // corrective re-apply, and the reconcile above keeps refusing because
+    // the Fixed intent already records that size — so the retile can never
+    // converge and the pair loops at the client's re-assert rate. The known
+    // floor is not a displacement to correct, so the SELF-DRIVING retile is
+    // skipped — but the gate memory is still dropped: the frame genuinely
+    // differs from the engine's rect, and keeping the memory would make the
+    // eventual healing relayout (a later min-size drop, a focus move, any
+    // scheduled retile) read as "nothing moved" and stay silent, stranding
+    // the window oversized forever. With the memory gone each such relayout
+    // re-emits once; the client re-asserts once; no retile is scheduled
+    // from here, so the pair advances only when something else drives a
+    // relayout instead of ping-ponging on its own.
     if (lastApplied != newFrame) {
+        const QSize knownMin = state->strip().windowMinimumSize(windowId);
+        const bool pinnedAtMinW =
+            knownMin.width() > 0 && newFrame.width() == knownMin.width() && newFrame.width() > lastApplied.width();
+        const bool pinnedAtMinH =
+            knownMin.height() > 0 && newFrame.height() == knownMin.height() && newFrame.height() > lastApplied.height();
+        const bool widthExplained = lastApplied.width() == newFrame.width() || pinnedAtMinW;
+        const bool heightExplained = lastApplied.height() == newFrame.height() || pinnedAtMinH;
         m_lastAppliedRect.remove(windowId);
+        if (widthExplained && heightExplained && lastApplied.topLeft() == newFrame.topLeft()) {
+            return;
+        }
         if (currentContext) {
             scheduleRetileForScreen(key.screenId);
         }
@@ -979,12 +1014,18 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // map pointing at only one. Migrate it out (same sweep as
     // windowOpened's context migration) before inserting.
     PhosphorEngine::PlacementStateKey staleKey;
+    bool migratedWindowedFs = false;
     if (ScrollState* staleState = stateForWindow(windowId, &staleKey); staleState && staleKey != key) {
         const ScrollLayoutParams staleParams = layoutParamsForScreen(staleKey.screenId);
         const bool staleWasFloating = staleState->isFloating(windowId);
+        // Capture before takeWindow destroys the tile, mirroring
+        // windowOpened's migration: the receive re-applies it after its own
+        // insert so the presentation survives this defence-in-depth hop too.
+        migratedWindowedFs = staleState->strip().isWindowedFullscreen(windowId);
         staleState->strip().takeWindow(windowId, staleParams);
         staleState->removeFloating(windowId);
         m_lastAppliedRect.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
@@ -1054,8 +1095,16 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
                                       params)) {
         // Seed the source engine's last-known min size so the first relayout
         // clamps correctly instead of waiting a refuse/re-discover round-trip.
-        if (ctx.minSize.width() > 0 || ctx.minSize.height() > 0) {
-            state->strip().setWindowMinimumSize(windowId, ctx.minSize.width(), ctx.minSize.height());
+        // Clamped per axis rather than OR-gated through: a mixed pair like
+        // (-1, 500) must not pass a negative floor into the slack math.
+        const int handoffMinW = qMax(0, ctx.minSize.width());
+        const int handoffMinH = qMax(0, ctx.minSize.height());
+        if (handoffMinW > 0 || handoffMinH > 0) {
+            state->strip().setWindowMinimumSize(windowId, handoffMinW, handoffMinH);
+        }
+        // Re-apply the migrated flag, mirroring windowOpened's migration.
+        if (migratedWindowedFs) {
+            state->strip().setWindowedFullscreen(windowId, true);
         }
         m_states.setKeyForWindow(windowId, key);
         const bool isCurrentContext = key == currentKeyForScreen(ctx.toScreenId);

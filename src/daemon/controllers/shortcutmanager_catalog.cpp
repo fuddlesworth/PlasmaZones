@@ -52,7 +52,8 @@ using namespace ShortcutIds;
 //    span quad and the empty-zone push
 //  - "autotile" for the master-stack ops, hard no-ops off autotile
 //  - "scrolling" for column/strip ops (consume/expel, column widths, tab
-//    display), hard no-ops off scrolling
+//    display, the windowed-fullscreen presentation toggle), hard no-ops off
+//    scrolling
 //  - "layouts" is a CAPABILITY tag, not a mode name: rows shown whenever
 //    the bound screen's engine consumes user-selectable layouts
 //    (IPlacementEngine::layoutSupport, pushed to the sheet as

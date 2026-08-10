@@ -33,10 +33,11 @@ Item {
     // "rotate", "move", "span", "focus", "swap", "push", "restore", "float",
     // "snap", "cycle", "focus_master", "swap_master", "master_ratio",
     // "master_count", "retile", "resnap", "resize", "tabbed", "fullscreen",
-    // "snap_assist", "snap_all", "swap_vs", "rotate_vs", "layout" ("layout"
-    // is failure-only by producer contract; see failureMessage).
+    // "consume", "expel", "center", "snap_assist", "snap_all", "swap_vs",
+    // "rotate_vs", "layout" ("layout" is failure-only by producer contract;
+    // see failureMessage).
     property string action: ""
-    property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/tiled/unfloated/overflow)
+    property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise) or travel ("left"/"right"), float state (floated/tiled/unfloated/overflow), or windowed-fullscreen state ("on"/"off")
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
     property string sourceZoneId: "" // Source zone for move/swap operations
@@ -315,7 +316,22 @@ Item {
             if (reason === "no_window" || reason === "no_windows" || reason === "no_focus" || reason === "no_target")
                 return noWindowText;
 
+            // Unreachable today (the producer emits only the reasons above);
+            // kept as the arm's fallthrough against a future producer reason,
+            // mirroring the "Tabbing is unavailable" arm's shape.
             return i18n("Windowed fullscreen is unavailable");
+        } else if (action === "consume" || action === "expel") {
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            return i18n("No window to move between columns");
+        } else if (action === "center") {
+            if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
+                return noWindowText;
+
+            return i18n("The column is already centered");
+        } else if (action === "retile") {
+            return i18n("Could not refresh the layout");
         } else if (action === "focus_master")
             return i18n("No windows to focus");
         else if (action === "swap_master") {
@@ -439,6 +455,12 @@ Item {
                 return i18n("Windowed fullscreen off");
 
             return i18n("Windowed fullscreen on");
+        } else if (action === "consume") {
+            return i18n("Window moved between columns");
+        } else if (action === "expel") {
+            return i18n("Window expelled into its own column");
+        } else if (action === "center") {
+            return i18n("Column centered");
         } else if (action === "swap_vs") {
             const vsSwapArrow = directionArrow(reason);
             return glyphed(vsSwapArrow, i18n("Virtual screens swapped"));
@@ -557,9 +579,16 @@ Item {
         id: container
 
         anchors.centerIn: parent
-        // Text-only: size based on message content
-        width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, Kirigami.Units.gridUnit * 10)
-        height: messageLabel.implicitHeight + Kirigami.Units.gridUnit * 2.5
+        // Text-only: size based on message content, clamped to the output so
+        // long copy at a large font scale (fontSizeScale reaches 3.0) wraps
+        // inside the screen instead of clipping at both centred ends. The
+        // label wraps against the same bound, and the height follows its
+        // wrapped implicitHeight, so the card grows downward as lines wrap.
+        width: Math.min(Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, Kirigami.Units.gridUnit * 10), root.width > 0 ? root.width - Kirigami.Units.gridUnit * 2 : Number.MAX_VALUE)
+        // contentHeight, not implicitHeight: it is the height of the text as
+        // laid out at its CURRENT width, so the card grows with wrapped lines
+        // regardless of how Text's implicit-size machinery treats a wrap.
+        height: messageLabel.contentHeight + Kirigami.Units.gridUnit * 3
         backgroundColor: root.backgroundColor
 
         // Message label - informative text-based feedback
@@ -574,6 +603,13 @@ Item {
             anchors.top: parent.top
             anchors.topMargin: Kirigami.Units.gridUnit * 1.5
             anchors.horizontalCenter: parent.horizontalCenter
+            // Wrap against the clamped card width, unconditionally: binding
+            // exactly implicitWidth in the unclamped case invites a
+            // sub-pixel spurious wrap of the last word, while this leaves a
+            // gridUnit of slack (the card is implicitWidth + 3 gridUnits
+            // when unclamped) and AlignHCenter centres short copy anyway.
+            width: container.width - Kirigami.Units.gridUnit * 2
+            wrapMode: Text.WordWrap
             text: root.messageText
             font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
             font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * root.messageFontScale * root.fontSizeScale)
@@ -583,11 +619,17 @@ Item {
         }
     }
 
-    // Click the card to dismiss. Anchored to the card (not the whole OSD
-    // slot) so a concurrent modal slot (snap assist, picker) keeps receiving
-    // its own clicks instead of hitting a screen-wide input shield.
-    // dismiss.fire() collapses timer-fire + click into a single
-    // dismissRequested per show cycle via the shared latch.
+    // Click the card to dismiss — BEST-EFFORT only: the OSD's host surface
+    // is input-transparent whenever no modal slot is up (see the
+    // anyInputGrabbing rationale in shellhost_bridge.cpp — a daemon that ate
+    // every click for the OSD's lifetime was judged worse), so in the common
+    // case this area receives nothing and the timer is the real dismiss.
+    // Clicks land here only while a modal slot (snap assist, picker) has the
+    // surface accepting input; the card anchoring keeps the modal's own
+    // clicks out of a screen-wide shield in that case. dismiss.fire()
+    // collapses timer-fire + click into a single dismissRequested per show
+    // cycle via the shared latch. Keep the MouseArea: the daemon rationale
+    // depends on it existing for the modal-visible case.
     MouseArea {
         anchors.fill: container
         onClicked: dismiss.fire()

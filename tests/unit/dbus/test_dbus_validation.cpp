@@ -323,6 +323,22 @@ private Q_SLOTS:
         QVERIFY(err.contains(QStringLiteral("scrollEdge")));
     }
 
+    void tileRequestEntry_scrollEdgeValues_tolerated()
+    {
+        // Empty (no strip motion) and the two screen edges are the only
+        // legal values.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("left");
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("right");
+        QVERIFY(e.validationError().isEmpty());
+    }
+
     void tileRequestEntry_windowedFullscreenOnFloating_rejected()
     {
         // The pair is contradictory (the flag means "keeps its column slot")
@@ -343,19 +359,24 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
-    void tileRequestEntry_scrollEdgeValues_tolerated()
+    void tileRequestEntry_windowedFullscreenOnMonocle_rejected()
     {
-        // Empty (no strip motion) and the two screen edges are the only
-        // legal values.
+        // Monocle and windowed fullscreen both claim the window's KWin
+        // presentation state, in opposite directions (maximize vs
+        // fullscreen), so a producer emitting both is garbled. Mirrors the
+        // floating pair above.
         PhosphorProtocol::TileRequestEntry e;
         e.windowId = QStringLiteral("win-1");
         e.screenId = QStringLiteral("DP-1");
         e.width = 1920;
         e.height = 1080;
-        QVERIFY(e.validationError().isEmpty());
-        e.scrollEdge = QStringLiteral("left");
-        QVERIFY(e.validationError().isEmpty());
-        e.scrollEdge = QStringLiteral("right");
+        e.monocle = true;
+        e.windowedFullscreen = true;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("windowedFullscreen")));
+        // Without the monocle claim the flag is legal.
+        e.monocle = false;
         QVERIFY(e.validationError().isEmpty());
     }
 

@@ -17,6 +17,8 @@
 #include <QJsonObject>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <utility>
 
 namespace PlasmaZones {
@@ -97,6 +99,7 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
 
     PhosphorProtocol::TileRequestList requests;
     QSet<QString> seenWindowIds;
+    bool sawValidatorDrop = false;
     const QJsonArray batchEntries = doc.array();
     for (const QJsonValue& val : batchEntries) {
         QJsonObject obj = val.toObject();
@@ -155,17 +158,32 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // that a garbled payload fails closed instead of mispainting.
         const QJsonValue visualXVal = obj.value(QLatin1String("visualX"));
         const QJsonValue visualYVal = obj.value(QLatin1String("visualY"));
+        bool visualPosValid = false;
         if (!entry.floating && visualXVal.isDouble() && visualYVal.isDouble()) {
-            entry.visualX = visualXVal.toInt(0);
-            entry.visualY = visualYVal.toInt(0);
-            entry.hasVisualPos = true;
-        } else if (!visualXVal.isUndefined() || !visualYVal.isUndefined()) {
+            // Integral check by value, not by type: QJsonValue has no
+            // integer predicate (isDouble() answers for every number) and
+            // toInt() returns its DEFAULT for a fractional double — so
+            // without the floor test a 4000.5 would decode to 0 while still
+            // latching the flag, exactly the mispaint the validation above
+            // promises to fail closed on.
+            const double vx = visualXVal.toDouble();
+            const double vy = visualYVal.toDouble();
+            if (vx == std::floor(vx) && vy == std::floor(vy) && std::abs(vx) <= double(std::numeric_limits<int>::max())
+                && std::abs(vy) <= double(std::numeric_limits<int>::max())) {
+                entry.visualX = static_cast<int>(vx);
+                entry.visualY = static_cast<int>(vy);
+                entry.hasVisualPos = true;
+                visualPosValid = true;
+            }
+        }
+        if (!visualPosValid && (!visualXVal.isUndefined() || !visualYVal.isUndefined())) {
             qCDebug(lcDbusTiling) << "relayTileRequestsJson: ignoring malformed visual position for" << entry.windowId;
         }
         // The protocol type ships its own validator (empty windowId /
         // screenId, degenerate rect) — run it rather than re-deriving a
         // subset of its checks here.
         if (const QString validationError = entry.validationError(); !validationError.isEmpty()) {
+            sawValidatorDrop = true;
             // Warning, not debug: every documented cause of a validator
             // failure at this boundary is producer garbling, and the drop
             // silently discards a whole placement — the event is by
@@ -184,10 +202,17 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
     // non-benign drop already warns individually at its entry, and a count
     // computed from the array size would fold the BENIGN drops (duplicates
     // and the invalid-geometry bail, both deliberately debug-level) into a
-    // warning that reads as suppressed errors.
+    // warning that reads as suppressed errors. The same reasoning gates the
+    // aggregate itself on a validator drop having occurred: a batch emptied
+    // entirely by benign drops is not suppressed errors either.
     if (requests.isEmpty() && !batchEntries.isEmpty()) {
-        qCWarning(lcDbusTiling) << "relayTileRequestsJson: every entry of a" << batchEntries.size()
-                                << "entry batch was dropped — nothing emitted";
+        if (sawValidatorDrop) {
+            qCWarning(lcDbusTiling) << "relayTileRequestsJson: every entry of a" << batchEntries.size()
+                                    << "entry batch was dropped — nothing emitted";
+        } else {
+            qCDebug(lcDbusTiling) << "relayTileRequestsJson: every entry of a" << batchEntries.size()
+                                  << "entry batch was benignly dropped — nothing emitted";
+        }
     }
     if (!requests.isEmpty()) {
         qCDebug(lcDbusTiling) << "Emitting windowsTileRequested:" << requests.size() << "windows";

@@ -3,6 +3,7 @@
 
 #include "daemon/daemon.h"
 #include "daemon/overlayservice.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>

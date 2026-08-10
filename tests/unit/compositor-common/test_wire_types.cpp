@@ -265,6 +265,10 @@ private Q_SLOTS:
         const QString path = QStringLiteral("/test/wiretypes/tilerequestecho");
         QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
 
+        // NOTE: QCOMPARE inside this lambda returns from the LAMBDA, not the
+        // test slot — a payload-A failure still runs payload B. Safe as
+        // written (every early return precedes the argument deref), but do
+        // not add code after a compare that assumes the test aborted.
         const auto roundTrip = [&bus, &path](const PhosphorProtocol::TileRequestEntry& sent) {
             QDBusMessage call =
                 QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
@@ -297,7 +301,11 @@ private Q_SLOTS:
         // two false. Payload A (wf=true) catches a floating-for-wf or
         // monocle-for-wf transposition in either operator; payload B
         // (monocle=true) catches the monocle-for-floating swap A cannot
-        // see. Between them all three pairwise transpositions fail loudly.
+        // see. Between them, a transposition introduced in EITHER operator
+        // alone fails loudly. (A matching swap in both operators is an
+        // identity round-trip no bus test can see — the realistic
+        // regression is the single-operator edit, and that is what these
+        // two payloads pin.)
         // (The signature probe above pins struct DECLARATION order via its
         // aggregate init; only these bus trips pin the two marshallers
         // agreeing.)

@@ -271,7 +271,17 @@ StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
         // a silent no-op is the wrong failure for the one that does not.
         sc.activeWindowId = col.tiles.at(qBound(0, col.activeTileIdx, col.tiles.size() - 1)).windowId;
         for (const Tile& tile : col.tiles) {
-            sc.tiles.append({tile.windowId, tile.height, tile.minimized, tile.windowedFullscreen});
+            // Named member assignment, not positional brace-init:
+            // StashedTile's next members are lease state that must stay
+            // defaulted here, and a future field inserted before
+            // windowedFullscreen would mis-bind two same-typed bools
+            // silently under a positional init.
+            StashedTile st;
+            st.windowId = tile.windowId;
+            st.height = tile.height;
+            st.minimized = tile.minimized;
+            st.windowedFullscreen = tile.windowedFullscreen;
+            sc.tiles.append(st);
         }
         out.columns.append(sc);
     }

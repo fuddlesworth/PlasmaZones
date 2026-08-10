@@ -537,6 +537,21 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         stillMinimized = true;
     }
     m_navigationHandler->setWindowFloating(liveWindowId, isFloating);
+    // Windowed fullscreen dies on float on THIS path too. This slot receives
+    // the WindowTracking interface's float signal, which carries floats from
+    // every producer (the scroll passive channel's
+    // windowFloatingStateSynced among them) and never reaches
+    // TilingHandler::slotWindowFloatingChanged, so it never runs
+    // applyFloatCleanup. Without this a migrated windowed-fullscreen window
+    // that arrives floating stays KWin-fullscreen-configured for the whole
+    // float. For the ACTIVE channel (the Tiling interface's signal) the
+    // tiling handler's slot performs the cleanup first and this remove() is
+    // a no-op belt. The release helper carries its own suppress counter and
+    // inGeometryApply bracket, so the synchronous X11 exit signal cannot
+    // re-enter the VS-crossing machinery from here.
+    if (isFloating && m_windowedFullscreenWindows.remove(liveWindowId)) {
+        m_tilingHandler->releaseWindowedFullscreenState(liveWindowId);
+    }
     // When a window is unfloated (tiled/snapped), clear the drag-float skip flag.
     // Without this, a subsequent float toggle's geometry restore would be skipped
     // because m_dragActivation.floatedWindowIds still has the entry from the original drag.

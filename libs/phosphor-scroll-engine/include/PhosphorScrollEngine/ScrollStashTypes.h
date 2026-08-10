@@ -34,9 +34,11 @@ struct StashedTile
     /// it directly; see the seam note on setWindowMinimized.
     bool minimized = false;
     /// Windowed fullscreen, carried through stash/serialize and RE-APPLIED
-    /// on claim (unlike minimized above): the flag is strip-owned state the
-    /// compositor mirrors, so a restart must hand it back or the client
-    /// stays fullscreen-configured with nothing on record saying so.
+    /// on exact-id claims only (unlike minimized above; the fuzzy appId
+    /// claim deliberately does not — see restoreFromStripStash): the flag
+    /// is strip-owned state the compositor mirrors, so a restart must hand
+    /// it back or the client stays fullscreen-configured with nothing on
+    /// record saying so.
     bool windowedFullscreen = false;
     /// True while THIS tile was staged from the persisted blob and has
     /// not been claimed. Per tile, not per entry: a key co-tenanted by a

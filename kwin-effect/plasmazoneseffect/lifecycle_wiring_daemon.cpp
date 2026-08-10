@@ -4,6 +4,8 @@
 #include "plasmazoneseffect.h"
 #include "input_filter.h"
 
+#include "compositor/stripviewanimator.h"
+
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -281,6 +283,13 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // arrive to clear the entry. Dropping it here is what lets the next
         // batch, or the next daemon, start from nothing.
         m_scrollVisualPos.clear();
+        // The commanded rects and the min-size cache are per-session scroll
+        // state like everything above: the counter-assert must not re-arm
+        // against a dead session's rects when a new daemon repopulates the
+        // scrolling set, and the min-size cache says "already sent" about a
+        // daemon that no longer holds anything.
+        m_scrollCommandedRects.clear();
+        m_lastReportedMinSize.clear();
         // Same reasoning for the per-screen active-layout map: it is a pure
         // ruleQuery input owned by the dead session, and the
         // invalidateAllRuleCaches below would otherwise re-resolve every

@@ -456,6 +456,9 @@ QKeySequence parseSequence(const QString& raw, const QString& contextId)
     }
     QKeySequence seq(raw);
     if (seq.isEmpty()) {
+        // Main-thread only: the warn-once latch's insert is not synchronized
+        // (zero-init of the static is thread-safe, the mutation is not), and
+        // every current caller runs on the daemon main thread.
         static QHash<QString, QString> warnedSpellings;
         if (warnedSpellings.value(contextId) != raw) {
             warnedSpellings.insert(contextId, raw);
@@ -725,7 +728,15 @@ void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequenc
     // as transient, and the matching unregisterAdhocShortcut() would purge
     // the persistent binding's saved kglobalshortcutsrc record — the exact
     // wipe unregisterShortcuts() exists to avoid (discussion #851).
-    if (staticShortcutIds().contains(id) || id.startsWith(QLatin1String(kQuickLayoutPrefix))
+    // Hoisted once: staticShortcutIds() rebuilds the whole static-id
+    // QStringList per call, and this guard runs per binding of every adhoc batch (six per
+    // layout-picker show). The table has internal linkage and never changes
+    // at runtime, so a function-local static set is sound.
+    static const QSet<QString> kStaticIdSet = [] {
+        const QStringList ids = staticShortcutIds();
+        return QSet<QString>(ids.cbegin(), ids.cend());
+    }();
+    if (kStaticIdSet.contains(id) || id.startsWith(QLatin1String(kQuickLayoutPrefix))
         || id.startsWith(QLatin1String(kSnapToZonePrefix))) {
         qCWarning(lcShortcuts) << "registerAdhocShortcut(" << id
                                << "): id collides with a settings-driven shortcut — rejected";

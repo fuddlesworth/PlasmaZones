@@ -223,11 +223,18 @@ int ScrollEngine::visibleTileNumberForWindow(const QString& screenId, const QStr
 
 QVector<ScrollEngine::VisibleTileWithRect> ScrollEngine::visibleTilesWithRects(const QString& screenId) const
 {
-    // Same state check, params resolve, basis resolve and walk as
-    // visibleTileRectsRelative — see the comments there for why the basis is
-    // the full screen rather than the work area. The only difference is that
-    // this carries the tile across instead of throwing it away, so a caller
-    // wanting both does not resolve the strip a second time to get it back.
+    // The single resolve behind BOTH relative-rect surfaces
+    // (visibleTileRectsRelative is a projection over this). State check
+    // first, like visibleTiles: an unmanaged or empty screen must not pay
+    // the ScreenManager query plus context-gap-provider call the params
+    // resolve costs. The basis is the FULL screen geometry, not the
+    // gap-inset work area the tiles are clipped to: every renderer of these
+    // fractions draws them into a box shaped like the whole screen (the
+    // settings app's strip thumbnail, and the daemon's own OSD card via its
+    // twin renorm in stripzones.h) — work-area fractions in a screen-shaped
+    // box stretch the strip by the panel's share of the output. Falls back
+    // to the work area when no screen rect is resolvable (headless without
+    // a provider), same as the parking-bounds resolution in applyLayout.
     const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
     if (!state || state->strip().isEmpty()) {
         return {};
@@ -257,40 +264,17 @@ QVector<ScrollEngine::VisibleTileWithRect> ScrollEngine::visibleTilesWithRects(c
 
 QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const
 {
-    // State check first, like visibleTiles: an unmanaged or empty screen must
-    // not pay the ScreenManager query plus context-gap-provider call that
-    // resolving the params costs.
-    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
-    if (!state || state->strip().isEmpty()) {
-        return {};
-    }
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
-    if (!params.workArea.isValid()) {
-        return {};
-    }
-    // Normalized against the FULL screen geometry, not the gap-inset work
-    // area the tiles are clipped to. Every renderer of these fractions draws
-    // them into a box shaped like the whole screen (the settings app's strip
-    // thumbnail, and the daemon's own OSD card via its twin renorm in
-    // stripzones.h) — work-area fractions in a screen-shaped box stretch the
-    // strip by the panel's share of the output. Falls back to the work area
-    // when no screen rect is resolvable (headless without a provider), same
-    // as the parking-bounds resolution in applyLayout.
-    QRect area = m_screenManager ? m_screenManager->screenGeometry(screenId)
-                                 : (m_screenGeometryProvider ? m_screenGeometryProvider(screenId) : QRect());
-    if (!area.isValid()) {
-        area = params.workArea;
-    }
-    // The params are already resolved, so the walk reuses them rather than
-    // sending visibleTiles back to layoutParamsForScreen for the same values.
-    const QVector<VisibleTile> tiles = visibleTiles(screenId, params);
+    // A projection over visibleTilesWithRects, not a second copy of its
+    // resolve: the state check, the params and basis resolution (full screen
+    // geometry, work-area fallback — see the paired walk for the rationale)
+    // and the normalization formula must all stay in lockstep, and two
+    // hand-maintained copies of that 30-line body already drifted apart once
+    // in comments alone.
+    const QVector<VisibleTileWithRect> paired = visibleTilesWithRects(screenId);
     QVector<QRectF> out;
-    out.reserve(tiles.size());
-    for (const VisibleTile& tile : tiles) {
-        const QRect& r = tile.rect;
-        out.append(QRectF(
-            static_cast<qreal>(r.x() - area.x()) / area.width(), static_cast<qreal>(r.y() - area.y()) / area.height(),
-            static_cast<qreal>(r.width()) / area.width(), static_cast<qreal>(r.height()) / area.height()));
+    out.reserve(paired.size());
+    for (const VisibleTileWithRect& entry : paired) {
+        out.append(entry.relativeRect);
     }
     return out;
 }
@@ -450,10 +434,51 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // work-area change is placing windows in a new geometry anyway, which is
     // the same situation as the first batch for a context.
     const bool sameBasis = state->hasLastAppliedViewX() && state->lastAppliedWorkArea() == params.workArea;
-    const int viewDelta = sameBasis ? resolved.viewX - state->lastAppliedViewX() : 0;
+    const int rawViewDelta = sameBasis ? resolved.viewX - state->lastAppliedViewX() : 0;
+    // Zero also when the viewX moved WITHOUT carrying anything — a width
+    // change to a column LEFT of the active one shifts strip coordinates and
+    // the view coordinate by the same amount to keep the anchor put, which
+    // the subtraction above reads as a slide nobody made. The test needs
+    // POSITIVE evidence in both directions, because the comparands differ:
+    // tile.rect here is the RAW resolved rect while m_lastAppliedRect holds
+    // the COMMITTED (possibly parked or edge-clamped) rect, so a batch whose
+    // every tile straddled last time matches neither pattern and must keep
+    // its delta (zeroing a mid-flight slide is worse than a redundant one —
+    // the effect never retargets a leg it is not told about). The
+    // compensation signature is a tile that STAYED PUT on screen while the
+    // view coordinate moved: it was committed unmodified last batch, and a
+    // genuine scroll would have carried it. Only when at least one tile
+    // shows that signature and none shows the carried signature is this a
+    // reflow rather than a scroll.
+    int viewDelta = rawViewDelta;
+    if (rawViewDelta != 0) {
+        bool anyCarried = false;
+        bool anyStayedPut = false;
+        for (const ResolvedColumn& column : resolved.columns) {
+            for (const ResolvedTile& tile : column.tiles) {
+                const auto lastIt = m_lastAppliedRect.constFind(tile.windowId);
+                if (lastIt == m_lastAppliedRect.constEnd()) {
+                    continue;
+                }
+                if (tile.rect == lastIt->translated(-rawViewDelta, 0)) {
+                    anyCarried = true;
+                    break;
+                }
+                if (tile.rect == *lastIt) {
+                    anyStayedPut = true;
+                }
+            }
+            if (anyCarried) {
+                break;
+            }
+        }
+        if (!anyCarried && anyStayedPut) {
+            viewDelta = 0;
+        }
+    }
 
     QJsonArray arr;
-    bool anyRectMoved = false;
+    bool anyEntryChanged = false;
     // Per columnIndex: did EVERY tile this loop emitted for that column end up
     // parked? A column with no emitted tiles at all gets no entry, so the
     // tab-strip loop's lookup default leaves it alone — and a column whose
@@ -710,8 +735,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // flagged windows below the normal layer and exempts them from
             // the fullscreen geometry bail, so the off-canvas rect commits
             // like any other parked tile's.
-            const bool presentWindowedFs = tile.windowedFullscreen;
-            if (presentWindowedFs) {
+            const bool windowedFs = tile.windowedFullscreen;
+            if (windowedFs) {
                 obj[QLatin1String("windowedFullscreen")] = true;
             }
             if (!scrollEdge.isEmpty()) {
@@ -777,17 +802,17 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             }
             const auto lastIt = m_lastAppliedRect.constFind(tile.windowId);
             if (lastIt == m_lastAppliedRect.constEnd() || *lastIt != rect) {
-                anyRectMoved = true;
+                anyEntryChanged = true;
             }
             m_lastAppliedRect.insert(tile.windowId, rect);
             // The windowed-fullscreen flag rides the same payload but never
             // moves a rect, so it needs its own leg of the emit-on-change
             // gate — a toggle on an otherwise motionless strip must still
             // reach the compositor.
-            if (m_lastAppliedWindowedFs.contains(tile.windowId) != presentWindowedFs) {
-                anyRectMoved = true;
+            if (m_lastAppliedWindowedFs.contains(tile.windowId) != windowedFs) {
+                anyEntryChanged = true;
             }
-            if (presentWindowedFs) {
+            if (windowedFs) {
                 m_lastAppliedWindowedFs.insert(tile.windowId);
             } else {
                 m_lastAppliedWindowedFs.remove(tile.windowId);
@@ -808,7 +833,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // Emit-on-change: a relayout that resolved every window to the exact
     // rect already applied (focus move under Never-centering, redundant
     // scheduled retile) must not re-feed the compositor's apply path.
-    if (anyRectMoved) {
+    if (anyEntryChanged) {
         // The view baseline advances with the EMIT, not with the relayout: a
         // batch suppressed just above leaves the compositor showing the
         // previous positions, and a baseline that moved anyway would make the
@@ -864,24 +889,13 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             && !columnHadSkippedTile.contains(column.columnIndex)) {
             continue;
         }
-        // A tabbed column whose SHOWN tab is in windowed fullscreen presents
-        // a client covering the whole output; drawing the indicator at the
-        // column's rect would float a tab bar over that fullscreen surface,
-        // anchored to a column that is not visually there. Skip the entry —
-        // the emit-on-change gate below re-announces the strip the moment
-        // the tab switches or the flag drops.
-        {
-            bool shownTabWindowedFs = false;
-            for (const ResolvedTile& tile : column.tiles) {
-                if (!tile.hidden && tile.windowedFullscreen) {
-                    shownTabWindowedFs = true;
-                    break;
-                }
-            }
-            if (shownTabWindowedFs) {
-                continue;
-            }
-        }
+        // A windowed-fullscreen shown tab gets its indicator like any other:
+        // the client is committed at the COLUMN rect, not the output (the
+        // compositor exempts flagged members from the fullscreen bail and
+        // re-applies the stored column rect), so the column is visually
+        // exactly where the indicator says. An earlier suppression here
+        // assumed a full-output presentation and silently deleted the
+        // column's tab bar for the toggle's duration.
         QJsonObject strip;
         // The rect is the INDICATOR's, not the column's: it is what the
         // overlay draws, and only this side knows how the position, gap and

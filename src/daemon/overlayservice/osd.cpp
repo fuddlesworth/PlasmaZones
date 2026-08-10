@@ -815,10 +815,14 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     // Float, algorithm, rotate, and autotile-only actions don't need layout/zones
+    // "fullscreen", "tabbed" and "resize" belong here too: their success
+    // arms render plain text and never consult zone data, so the
+    // missing-layout bail below could only ever swallow their feedback.
     static const QSet<QString> noLayoutActions{
         QStringLiteral("float"),       QStringLiteral("rotate"),       QStringLiteral("focus_master"),
         QStringLiteral("swap_master"), QStringLiteral("master_ratio"), QStringLiteral("master_count"),
-        QStringLiteral("retile"),      QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs")};
+        QStringLiteral("retile"),      QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs"),
+        QStringLiteral("fullscreen"),  QStringLiteral("tabbed"),       QStringLiteral("resize")};
     // Failure OSDs never need layout/zone data: every failure branch in
     // NavigationOsdContent.qml renders plain text (and reasons like
     // "no_zones" / "no_active_layout" fire precisely when no layout is

@@ -241,12 +241,23 @@ void PlasmaZonesEffect::applyOwnLayerFlags(PhosphorRules::WindowQuery& query, co
     // while the rule owns the layer. Applied to BOTH rule-input boundaries:
     // ruleQuery (effect-side evaluation) and pushWindowMetadata (the daemon's
     // KeepAbove/KeepBelow match inputs).
-    if (m_ruleWindowLayerSnapshots.isEmpty()) {
+    // The windowed-fullscreen layer demotion is a SECOND writer of the same
+    // KWin pair (keepAbove=false, keepBelow=true for the hold), so its
+    // snapshot substitutes too — otherwise every flagged tile reads
+    // keepBelow=true at the rule boundary and a `WHEN KeepBelow` rule fires
+    // off the feature's own output. Rule-snapshot-first: both maps can hold
+    // an entry for one window (the demotion snapshots whatever the rule had
+    // already written), and only the rule snapshot holds the pre-RULE value.
+    if (m_ruleWindowLayerSnapshots.isEmpty() && m_windowedFsLayerSnapshots.isEmpty()) {
         return;
     }
     if (const auto it = m_ruleWindowLayerSnapshots.constFind(windowId); it != m_ruleWindowLayerSnapshots.cend()) {
         query.keepAbove = it->keepAbove;
         query.keepBelow = it->keepBelow;
+    } else if (const auto fsIt = m_windowedFsLayerSnapshots.constFind(windowId);
+               fsIt != m_windowedFsLayerSnapshots.cend()) {
+        query.keepAbove = fsIt->keepAbove;
+        query.keepBelow = fsIt->keepBelow;
     }
 }
 
@@ -268,7 +279,11 @@ bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
     // Empty-map fast path: with no window rule-raised, the own flag IS the
     // live flag. Keeps the gates getWindowId-free for the common no-layer-rule
     // session (the "no-rules case pays nothing" invariant).
-    if (m_ruleWindowLayerSnapshots.isEmpty()) {
+    // The windowed-fullscreen demotion writes the same pair, so its snapshot
+    // substitutes here too (rule-snapshot-first, same reasoning as
+    // applyOwnLayerFlags) — a window the user genuinely keep-above'd must
+    // keep being rejected by the keep-above gates through the hold.
+    if (m_ruleWindowLayerSnapshots.isEmpty() && m_windowedFsLayerSnapshots.isEmpty()) {
         return w->keepAbove();
     }
     // Close-grabbed corpse: its flags are frozen and slotWindowClosed already
@@ -281,8 +296,14 @@ bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
     if (w->isDeleted()) {
         return w->keepAbove();
     }
-    const auto it = m_ruleWindowLayerSnapshots.constFind(getWindowId(w));
-    return it != m_ruleWindowLayerSnapshots.cend() ? it->keepAbove : w->keepAbove();
+    const QString windowId = getWindowId(w);
+    if (const auto it = m_ruleWindowLayerSnapshots.constFind(windowId); it != m_ruleWindowLayerSnapshots.cend()) {
+        return it->keepAbove;
+    }
+    if (const auto fsIt = m_windowedFsLayerSnapshots.constFind(windowId); fsIt != m_windowedFsLayerSnapshots.cend()) {
+        return fsIt->keepAbove;
+    }
+    return w->keepAbove();
 }
 
 PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::EffectWindow* w,
@@ -311,7 +332,8 @@ PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::Effec
     return evaluator.resolveCached(windowId, query);
 }
 
-bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason) const
+bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason,
+                                                             bool exemptFullscreen) const
 {
     // Single source of truth for the window-TYPE rejection set shared by
     // shouldHandleWindow() (snap/zone filter), notifyWindowActivated()
@@ -364,7 +386,7 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     // never calling getWindowId on a deleted window (shouldHandleWindow's
     // ordering note): a cache-missing lookup would re-insert the reverse-map
     // entry buildWindowMap deliberately skips for corpses.
-    const bool fullScreenUnmanageable = w->isFullScreen()
+    const bool fullScreenUnmanageable = !exemptFullscreen && w->isFullScreen()
         && (m_windowedFullscreenWindows.isEmpty() || w->isDeleted()
             || !m_windowedFullscreenWindows.contains(getWindowId(w)));
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || fullScreenUnmanageable || w->isSkipSwitcher()) {
@@ -380,9 +402,15 @@ bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow*
     // accurate KWin window type (isDialog/isPopupWindow stay false) but always
     // set the transient-parent relationship. Without this the popup passes the
     // filter and gets snapped to a zone (discussion #461 item 11).
+    // The bare transientFor() term shares the fullscreen exemption: Wine and
+    // Proton toplevels routinely carry transient_for on the real game
+    // window, and the exemption exists precisely so a fullscreen game on a
+    // scrolling screen keeps reporting its focus (the original live bug).
+    // Every EXPLICIT type term stays authoritative — a fullscreen dialog,
+    // splash or popup is still rejected.
     if (w->isDialog() || w->isUtility() || w->isSplash() || w->isNotification() || w->isCriticalNotification()
         || w->isOnScreenDisplay() || w->isModal() || w->isPopupWindow() || w->isPopupMenu() || w->isDropdownMenu()
-        || w->isMenu() || w->isTooltip() || w->transientFor()) {
+        || w->isMenu() || w->isTooltip() || (!exemptFullscreen && w->transientFor())) {
         if (rejectReason) {
             // Coarse reason — logWindowDiagnostics() dumps every flag in this
             // clause individually, so the caller can pinpoint which one fired.

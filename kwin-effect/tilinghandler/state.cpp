@@ -130,6 +130,12 @@ void TilingHandler::applyWindowedFullscreenLayerDemotion(const QString& windowId
     // Snapshot-once + restore mirrors the SetWindowLayer rule discipline;
     // reconcileRuleWindowLayer skips flagged windows so the two flag
     // owners never fight mid-hold.
+    // Null guard matching the restore's contract: both current callers hold
+    // a checked pointer, but an unguarded deref here is a compositor crash
+    // the day a third caller does not.
+    if (!kw) {
+        return;
+    }
     if (!m_effect->m_windowedFsLayerSnapshots.contains(windowId)) {
         m_effect->m_windowedFsLayerSnapshots.insert(windowId, {kw->keepAbove(), kw->keepBelow()});
     }
@@ -203,6 +209,11 @@ void TilingHandler::restoreAllWindowedFullscreen()
     // entry already gone.
     const QStringList ids = m_effect->m_windowedFullscreenWindows.keys();
     m_effect->m_windowedFullscreenWindows.clear();
+    // The clear-in-flight markers die with the holds: this is the shared
+    // drain for disable, teardown, daemon loss AND bring-up, and a marker
+    // surviving a daemon that died before echoing its clear would silently
+    // refuse the NEW daemon's adopt batches forever.
+    m_windowedFsClearInFlight.clear();
     for (const QString& wid : ids) {
         releaseWindowedFullscreenState(wid);
     }
@@ -963,17 +974,13 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // taking the window OUT of the strip, so no batch entry ever arrives to
     // un-flag it here) — drop the client's fullscreen state now or it stays
     // fullscreen-configured while free-floating.
+    // Route through the shared release helper: it carries the isDeleted
+    // check, the keep-flag restore, AND the inGeometryApply bracket that
+    // setFullScreen(false) needs — on X11 it synchronously emits
+    // windowFrameGeometryChanged, and no float call site holds the guard,
+    // so an unbracketed drop re-enters the VS-crossing detector mid-cleanup.
     if (m_effect->m_windowedFullscreenWindows.remove(windowId)) {
-        KWin::Window* kw = nullptr;
-        if (KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId)) {
-            kw = w->window();
-        }
-        if (kw && kw->isFullScreen()) {
-            ++m_suppressFullScreenChanged;
-            kw->setFullScreen(false);
-            --m_suppressFullScreenChanged;
-        }
-        restoreWindowedFullscreenLayerDemotion(windowId, kw);
+        releaseWindowedFullscreenState(windowId);
     }
     // A floating window is free to move itself — stop countering.
     m_effect->m_scrollCommandedRects.remove(windowId);

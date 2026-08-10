@@ -338,14 +338,21 @@ public:
     /// axis) — the shape zone previews consume. The tiles are clipped to the
     /// gap-inset work area, so the fractions show the panel gap; that is the
     /// same basis the daemon's own OSD card uses (its twin renorm of the
-    /// absolute rects in stripzones.h), so the settings thumbnail and the
-    /// OSD draw the same shape. Its one production consumer is the D-Bus
-    /// strip payload (scrollingadaptor.cpp), which pairs each rect with the
-    /// zone number from the matching visibleTiles entry: where a layout
-    /// switch shows the layout's zones, a scrolling screen shows what the
-    /// strip actually looks like right now. Falls back to the work area as
-    /// the basis only when no screen rect is resolvable. Same emptiness
-    /// contract.
+    /// absolute rects in stripzones.h) WHENEVER the screen rect resolves, so
+    /// the settings thumbnail and the OSD draw the same shape. Its one
+    /// production consumer is the D-Bus strip payload (scrollingadaptor.cpp),
+    /// which pairs each rect with the zone number from the matching
+    /// visibleTiles entry: where a layout switch shows the layout's zones, a
+    /// scrolling screen shows what the strip actually looks like right now.
+    /// Falls back to the work area as the basis only when no screen rect is
+    /// resolvable — a KNOWN divergence from the OSD twin in that window (it
+    /// falls back to QScreen::geometry() via the daemon's shared resolver,
+    /// which this LGPL library cannot link), so during early startup the two
+    /// surfaces can briefly disagree by the panel's share of the output.
+    /// Self-heals on the next poll once the screen resolves. Same emptiness
+    /// contract. Production reads the PAIRED form (visibleTilesWithRects,
+    /// via the D-Bus strip payload in scrollingadaptor.cpp); this projection
+    /// serves the test suites.
     ///
     /// The pairing is index-wise and both walks run in the same synchronous
     /// call, so a caller reading this beside visibleTiles gets rects and
@@ -838,8 +845,8 @@ private:
     /// insert was refused — today that means the strip already holds the
     /// window — in which case nothing about the placement changed and the
     /// caller must not announce one.
-    bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidth,
-                            int minHeight);
+    bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidthIn,
+                            int minHeightIn);
     /// Give a window that floats WITHOUT ever having been a strip tile
     /// (floated at open, or arriving already-floating over the handoff) the
     /// FloatRestore entry the clamp lives in while it floats. column stays
@@ -966,7 +973,7 @@ private:
     /// and swept by aliveness in pruneStaleWindows. Elsewhere a stale entry
     /// is self-correcting rather than co-dropped: any path that drops the
     /// rect memory forces an emit, and that batch carries the current
-    /// presentation-gated value.
+    /// model flag.
     QSet<QString> m_lastAppliedWindowedFs;
     /// Which screen edge each currently-parked window went out by ("left" /
     /// "right"), so that when it scrolls back INTO the viewport the batch can

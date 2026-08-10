@@ -179,10 +179,12 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     if (window->isFullScreen()) {
         KWin::Window* kwFs = window->window();
         const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
-        // isEmpty() fast path for sessions that never use the feature, same
-        // gate style as the structural predicate's exemption.
-        const bool windowedFsMember =
-            !m_windowedFullscreenWindows.isEmpty() && m_windowedFullscreenWindows.contains(getWindowId(window));
+        // isEmpty() fast path for sessions that never use the feature, and
+        // the isDeleted() term, both the structural predicate's gate style:
+        // getWindowId on a corpse would re-insert the reverse-map entry
+        // buildWindowMap deliberately skips.
+        const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty() && !window->isDeleted()
+            && m_windowedFullscreenWindows.contains(getWindowId(window));
         if (requestedFullScreen && !windowedFsMember) {
             qCDebug(lcEffect) << "applyGeometry: window is fullscreen, skipping";
             return;
@@ -203,9 +205,16 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             const QSizeF constrained = kw->constrainFrameSize(QSizeF(geo.size()));
             const int cw = qRound(constrained.width());
             const int ch = qRound(constrained.height());
-            if (cw < geo.width() || ch < geo.height()) {
-                // Clamp to non-negative: if min-size exceeds the zone in one
-                // dimension, don't shift the window beyond the zone's edge.
+            if (cw != geo.width() || ch != geo.height()) {
+                // BOTH directions, not shrink-only: a min size larger than
+                // the zone previously skipped this branch entirely, so KWin
+                // committed the constrained-larger frame unanchored while
+                // every downstream comparand held the requested rect. Apply
+                // the constrained size here so the pre-computed geo matches
+                // what KWin will commit. Clamp the centring shift to
+                // non-negative: when min-size exceeds the zone in a
+                // dimension the window stays anchored at the zone's origin
+                // rather than shifting past its edge.
                 const int dx = qMax(0, geo.width() - cw) / 2;
                 const int dy = qMax(0, geo.height() - ch) / 2;
                 geo = QRect(geo.x() + dx, geo.y() + dy, cw, ch);
@@ -288,8 +297,22 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                     [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen, originOverride,
                      visualTargetOverride](KWin::EffectWindow*) {
                         disconnect(*conn);
-                        if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
+                        if (!safeWindow || safeWindow->isDeleted()) {
                             return;
+                        }
+                        // Same predicate as the top-of-function fullscreen
+                        // bail, exemptions included: a deferred apply for a
+                        // windowed-fullscreen member must not be silently
+                        // dropped by a plain isFullScreen() test the entry
+                        // bail was deliberately opened for.
+                        if (safeWindow->isFullScreen()) {
+                            KWin::Window* kwFs = safeWindow->window();
+                            const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
+                            const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty()
+                                && m_windowedFullscreenWindows.contains(getWindowId(safeWindow.data()));
+                            if (requestedFullScreen && !windowedFsMember) {
+                                return;
+                            }
                         }
                         const QString nowScreen = getWindowScreenId(safeWindow.data());
                         if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
