@@ -35,8 +35,8 @@ Item {
     /// which is the shipped default for both.
     required property string indicatorColor
     required property string indicatorBorderColor
-    /// Fill opacity. The border draws opaque, matching the snapping zone
-    /// overlay, so a faint fill still gets a crisp edge.
+    /// Fill opacity. Applies to the fill only; the border's transparency
+    /// comes from its own colour's alpha channel.
     required property real indicatorOpacity
     required property int indicatorBorderWidth
     required property int indicatorBorderRadius
@@ -81,14 +81,12 @@ Item {
         // darker than the slider says, with no way to tell which of the two
         // was responsible.
         color: Qt.rgba(root.fillColor.r, root.fillColor.g, root.fillColor.b, root.indicatorOpacity)
-        // Forced opaque, for the same reason the fill's alpha is replaced.
-        // The colour picker writes 8-digit ARGB, so a border colour CAN carry
-        // an alpha, and passing it through contradicts what two shipped
-        // strings tell the user: the opacity row says "The border always
-        // stays fully opaque" and the ConfigDefaults accessor says the same.
-        // Honouring a picked alpha here would also give the edge a second,
-        // hidden opacity control that the settings page never mentions.
-        border.color: Qt.rgba(root.edgeColor.r, root.edgeColor.g, root.edgeColor.b, 1.0)
+        // The border carries the picked colour's alpha straight through,
+        // matching the snapping zone overlay's border. There is no border
+        // opacity slider, so the colour's own channel is the ONE control and
+        // no double-apply is possible; the theme fallback is opaque, so an
+        // unset border still draws solid.
+        border.color: root.edgeColor
         // Zero width is legal and means a fill with no edge, so this is NOT
         // floored at 1 the way a fixed hairline would be.
         border.width: root.indicatorBorderWidth

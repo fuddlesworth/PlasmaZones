@@ -98,7 +98,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Fill opacity")
             searchAnchor: "scrollingDropIndicatorOpacity"
-            description: i18n("How solid the fill is. The border always stays fully opaque.")
+            description: i18n("How solid the fill is. This replaces any transparency carried by the fill color.")
             enabled: root.indicatorOn
 
             SettingsSlider {

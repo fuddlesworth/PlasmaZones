@@ -495,9 +495,11 @@ public:
     {
         return QString();
     }
-    /// Fill opacity. The border always draws opaque, matching the snapping
-    /// zone overlay, so the fill can be faint enough to read the windows
-    /// underneath while the edge stays crisp.
+    /// Fill opacity. Replaces the fill colour's own alpha, matching the
+    /// snapping zone overlay's fill, so the fill can be faint enough to read
+    /// the windows underneath. The border instead honours its colour's alpha
+    /// channel directly; with an opaque theme fallback the edge stays crisp
+    /// unless the user picks a translucent border colour on purpose.
     ///
     /// One opacity, not the snapping overlay's active/inactive pair: there is
     /// exactly one drop target at a time, so there is no inactive state to
