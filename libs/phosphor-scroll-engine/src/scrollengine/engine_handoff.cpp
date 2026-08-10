@@ -133,8 +133,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         m_states.setKeyForWindow(windowId, key);
         // Honour the context payload this arm would otherwise discard: the
         // min-size clamp routes through the ordinary update entry (which
-        // handles tile and float shapes plus the background-context guard).
-        // A float-verdict mismatch is only logged — mutating placement in a
+        // handles tile and float shapes plus the background-context guard,
+        // and — like every min-size entry — re-runs the oversized verdict,
+        // so an oversized clamp floats the tile right here; that is this
+        // engine's own policy, not a ctx-driven mutation). The ctx float
+        // verdict itself stays log-only — honouring ctx.wasFloating in a
         // defence-in-depth arm with no constructed producer risks more than
         // it fixes, and the daemon's float record re-drives the verdict.
         if (!ctx.minSize.isEmpty()) {
