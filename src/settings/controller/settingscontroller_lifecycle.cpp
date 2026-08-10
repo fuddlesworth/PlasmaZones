@@ -448,8 +448,14 @@ void SettingsController::defaults()
         if (isPageDirty(page))
             m_dirtyPages.insert(page);
     }
+    // A factory reset is a clean transition unconditionally: any value-blind
+    // (per-screen) edit was just reset with everything else, so drop the
+    // reconcile latch even when the recomputed membership happens to match.
+    m_valueBlindDirty = false;
     if (m_dirtyPages != before) {
-        Q_EMIT dirtyPagesChanged();
+        // Through the wrapper (not a bare emit) so this path honours the
+        // DirtyEmitScope coalescing like every other membership change.
+        emitDirtyPagesChanged();
     }
 }
 

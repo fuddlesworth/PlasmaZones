@@ -78,26 +78,6 @@
         Q_EMIT settingsChanged();                                                                                      \
     }
 
-#define P_STORE_SET_COLOR(fn, group, key, signal)                                                                      \
-    void Settings::fn(const QColor& value)                                                                             \
-    {                                                                                                                  \
-        const QColor before = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                   \
-        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
-        const QColor after = m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key());                    \
-        if (after == before) {                                                                                         \
-            return;                                                                                                    \
-        }                                                                                                              \
-        /* applySystemColorScheme() derives under this flag in load() AND in                                           \
-           eventFilter()'s palette re-derive: both announce once themselves                                            \
-           (snapshot/diff + a single settingsChanged) — a setter-level                                               \
-           emission here would duplicate both. */                                                                      \
-        if (m_suppressDerivedColorEmissions) {                                                                         \
-            return;                                                                                                    \
-        }                                                                                                              \
-        Q_EMIT signal();                                                                                               \
-        Q_EMIT settingsChanged();                                                                                      \
-    }
-
 #define P_STORE_SET_STRING(fn, group, key, signal)                                                                     \
     void Settings::fn(const QString& value)                                                                            \
     {                                                                                                                  \
@@ -108,6 +88,23 @@
             return;                                                                                                    \
         }                                                                                                              \
         Q_EMIT signal();                                                                                               \
+        Q_EMIT settingsChanged();                                                                                      \
+    }
+
+// Like P_STORE_SET_STRING but announcing on TWO signals — for the raw
+// theme-fallback colour strings, whose resolved QColor twin reads through the
+// same stored value and must refresh alongside it.
+#define P_STORE_SET_STRING2(fn, group, key, signal, twinSignal)                                                        \
+    void Settings::fn(const QString& value)                                                                            \
+    {                                                                                                                  \
+        const QString before = m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key());                 \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const QString after = m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key());                  \
+        if (after == before) {                                                                                         \
+            return;                                                                                                    \
+        }                                                                                                              \
+        Q_EMIT signal();                                                                                               \
+        Q_EMIT twinSignal();                                                                                           \
         Q_EMIT settingsChanged();                                                                                      \
     }
 

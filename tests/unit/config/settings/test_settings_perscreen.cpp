@@ -674,8 +674,10 @@ private Q_SLOTS:
     // test_rule_store; the empty-rule-set case is exercised there.
 };
 
-// NOT guiless: Settings::load → applySystemColorScheme reads
-// QGuiApplication::palette(), which requires a QGuiApplication instance
-// (crashes under QCoreApplication).
+// NOT guiless: Settings' resolved zone-colour getters read
+// QGuiApplication::palette() lazily (Settings::resolvedSystemColor), and the
+// palette-tracking event filter installs on qGuiApp — keep a full
+// QGuiApplication so these tests exercise the GUI resolution path rather
+// than the headless ConfigDefaults fallback.
 QTEST_MAIN(TestSettingsPerScreen)
 #include "test_settings_perscreen.moc"

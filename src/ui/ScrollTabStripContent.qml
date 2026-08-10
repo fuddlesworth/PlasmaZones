@@ -46,6 +46,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 // NOTE: no `shaderAnchor` on this content root, unlike the PopupFrame
 // cards — a multi-indicator strip has no single card rect to anchor a surface
@@ -100,15 +101,14 @@ Item {
     // Theme fallbacks, niri's third resolution tier ("the colour matching the
     // window border or focus ring") spelled in Plasma's vocabulary. Urgent
     // falls back to the negative role rather than a hardcoded red so it tracks
-    // the user's colour scheme, including high-contrast ones.
-    readonly property color resolvedActiveColor: root.activeColor.length > 0 ? root.activeColor : Kirigami.Theme.highlightColor
-    readonly property color resolvedUrgentColor: root.urgentColor.length > 0 ? root.urgentColor : Kirigami.Theme.negativeTextColor
-    // The inactive fallback differs per style ON PURPOSE. A chip carries its
-    // title on top, so its resting state is no fill at all and the label does
-    // the work; a bar segment has nothing but its fill, so an unfilled one
-    // would be invisible and the indicator would under-report its tab count.
-    readonly property color resolvedInactiveChipColor: root.inactiveColor.length > 0 ? root.inactiveColor : "transparent"
-    readonly property color resolvedInactiveBarColor: root.inactiveColor.length > 0 ? root.inactiveColor : Qt.alpha(Kirigami.Theme.textColor, 0.35)
+    // the user's colour scheme, including high-contrast ones. The fallback
+    // COLOURS are single-sourced in ZoneColorDefaults so the settings page's
+    // swatch previews cannot drift from what this renderer draws (the
+    // per-style inactive split is explained there).
+    readonly property color resolvedActiveColor: root.activeColor.length > 0 ? root.activeColor : QFZCommon.ZoneColorDefaults.tabActiveColor
+    readonly property color resolvedUrgentColor: root.urgentColor.length > 0 ? root.urgentColor : QFZCommon.ZoneColorDefaults.tabUrgentColor
+    readonly property color resolvedInactiveChipColor: root.inactiveColor.length > 0 ? root.inactiveColor : QFZCommon.ZoneColorDefaults.tabInactiveChipColor
+    readonly property color resolvedInactiveBarColor: root.inactiveColor.length > 0 ? root.inactiveColor : QFZCommon.ZoneColorDefaults.tabInactiveBarColor
 
     /// Radius for a tab whose short extent is @p thickness, resolving the
     /// pill sentinel. Clamped so an oversized radius cannot exceed a half

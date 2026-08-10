@@ -35,19 +35,21 @@ Item {
     /// which is the shipped default for both.
     required property string indicatorColor
     required property string indicatorBorderColor
-    /// Fill opacity. The border draws opaque, matching the snapping zone
-    /// overlay, so a faint fill still gets a crisp edge.
+    /// Fill opacity. Applies to the fill only; the border's transparency
+    /// comes from its own colour's alpha channel.
     required property real indicatorOpacity
     required property int indicatorBorderWidth
     required property int indicatorBorderRadius
     /// Whether a rect change should be ANIMATED. True for a cursor-driven
     /// target change, which is what the transitions exist to make legible.
-    /// False only on the clear/hide paths (cross-screen hide, preview-end
-    /// teardown): a rectangle that must stop being painted has no target to
-    /// make legible, and x, width and height interpolate INDEPENDENTLY, so
-    /// animating a hide would stretch the rect as its edges arrive at
-    /// different times.
-    property bool animateMoves: true
+    /// False for the FIRST rect of a (re)show: x, width and height
+    /// interpolate INDEPENDENTLY, so tweening in from the stale rect of the
+    /// previous drag would stretch the rect as its edges arrive at
+    /// different times. (Hides fade the slot out via SurfaceAnimator and
+    /// never move the rect, so they need no gate.) Required like the six
+    /// paint properties above, so a host that forgets the forward fails at
+    /// instantiation instead of silently never gating.
+    required property bool animateMoves
 
     /// Resolved paint colours. The empty test is the only fallback: the D-Bus
     /// boundary rejects anything that is neither empty nor a colour QColor can
@@ -81,14 +83,12 @@ Item {
         // darker than the slider says, with no way to tell which of the two
         // was responsible.
         color: Qt.rgba(root.fillColor.r, root.fillColor.g, root.fillColor.b, root.indicatorOpacity)
-        // Forced opaque, for the same reason the fill's alpha is replaced.
-        // The colour picker writes 8-digit ARGB, so a border colour CAN carry
-        // an alpha, and passing it through contradicts what two shipped
-        // strings tell the user: the opacity row says "The border always
-        // stays fully opaque" and the ConfigDefaults accessor says the same.
-        // Honouring a picked alpha here would also give the edge a second,
-        // hidden opacity control that the settings page never mentions.
-        border.color: Qt.rgba(root.edgeColor.r, root.edgeColor.g, root.edgeColor.b, 1.0)
+        // The border carries the picked colour's alpha straight through,
+        // matching the snapping zone overlay's border. There is no border
+        // opacity slider, so the colour's own channel is the ONE control and
+        // no double-apply is possible; the theme fallback is opaque, so an
+        // unset border still draws solid.
+        border.color: root.edgeColor
         // Zero width is legal and means a fill with no edge, so this is NOT
         // floored at 1 the way a fixed hairline would be.
         border.width: root.indicatorBorderWidth

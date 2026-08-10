@@ -68,23 +68,32 @@ void SettingsAdaptor::initializeRegistryScrolling()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("double");
 
-// ISettings-flavoured theme-fallback colour: EMPTY (follow the theme) or a
-// colour QColor can parse; anything else is refused at the boundary so it
-// never reaches a QML `color` property, and the false return surfaces the
-// rejection to the D-Bus caller instead of silently dropping the write.
+// ISettings-flavoured theme-fallback colour: EMPTY (follow the theme), the
+// legacy "accent" token (aliased to empty so every themeColor-typed key
+// accepts one uniform vocabulary — the frozen PhosphorRules::
+// BorderColorToken::Accent spelling, mirrored from the core TU's
+// kAccentToken), or a colour QColor can parse; anything else is refused at
+// the boundary so it never reaches a QML `color` property, and the false
+// return surfaces the rejection to the D-Bus caller instead of silently
+// dropping the write. Schema token "themeColor" (shared with the *Raw
+// companion keys in the core TU) tells a schema-aware client the empty
+// value is the follow-the-scheme sentinel, not a missing string.
 #define REGISTER_THEME_FALLBACK_COLOR_SETTING(name, getter, setter)                                                    \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
     };                                                                                                                 \
     m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
-        const QString s = v.toString();                                                                                \
+        QString s = v.toString();                                                                                      \
+        if (s == QLatin1String("accent")) {                                                                            \
+            s = QString();                                                                                             \
+        }                                                                                                              \
         if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
             return false;                                                                                              \
         }                                                                                                              \
         m_settings->setter(s);                                                                                         \
         return true;                                                                                                   \
     };                                                                                                                 \
-    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
+    m_schemas[QStringLiteral(name)] = QStringLiteral("themeColor");
 
 #define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \

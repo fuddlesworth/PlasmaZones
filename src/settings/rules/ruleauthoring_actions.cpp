@@ -438,6 +438,20 @@ QString paramHint(const QString& type, const QString& key)
     return {};
 }
 
+/// Whether @p typeWire's colour param accepts the "accent" sentinel
+/// (PhosphorRules::BorderColorToken::Accent) — the trio whose validator is
+/// hasHexColorOrAccent and whose consumer resolves the token. The SINGLE
+/// source for this set: defaultPayloadFor seeds the sentinel from it, and
+/// paramsForActionTypeImpl publishes it to QML as `acceptsAccent` so the
+/// editor's Reset affordance and ActionRow's type-switch value migration
+/// read the same truth instead of each hardcoding the type ladder.
+bool actionAcceptsAccent(const QString& typeWire)
+{
+    return typeWire == QString(PhosphorRules::ActionType::SetBorderColorActive)
+        || typeWire == QString(PhosphorRules::ActionType::SetBorderColorInactive)
+        || typeWire == QString(PhosphorRules::ActionType::SetTintColor);
+}
+
 /// The parameter schema for @p type, derived from the LGPL ActionDescriptor's
 /// structural `params` and supplemented by GPL-side translated labels. The
 /// QML editor's per-param Loader dispatches on `kind`, so the wire shape
@@ -488,6 +502,9 @@ QVariantList paramsForActionTypeImpl(const QString& type)
         }
         if (schema.defaultDisplay.has_value()) {
             p[QStringLiteral("defaultDisplay")] = *schema.defaultDisplay;
+        }
+        if (schema.kind == QLatin1String("color")) {
+            p[QStringLiteral("acceptsAccent")] = actionAcceptsAccent(type);
         }
         if (!schema.enumWireValues.isEmpty()) {
             QVariantList options;
@@ -1007,11 +1024,8 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // resolves no token — validator is plain hex), so seed a concrete
             // hex (the Plasma default blue, matching the colour picker's own
             // empty-value fallback) that passes `hasHexColor`.
-            const bool isAccentColor = typeWire == QString(PhosphorRules::ActionType::SetBorderColorActive)
-                || typeWire == QString(PhosphorRules::ActionType::SetBorderColorInactive)
-                || typeWire == QString(PhosphorRules::ActionType::SetTintColor);
-            payload[key] =
-                isAccentColor ? QString(PhosphorRules::BorderColorToken::Accent) : QStringLiteral("#FF3DAEE9");
+            payload[key] = actionAcceptsAccent(typeWire) ? QString(PhosphorRules::BorderColorToken::Accent)
+                                                         : QStringLiteral("#FF3DAEE9");
         } else if (kind == QLatin1String("zoneOrdinals")) {
             // Seed a valid single-zone default ([1]) so a fresh SnapToZone rule
             // passes the validator (non-empty array of positive ordinals) before

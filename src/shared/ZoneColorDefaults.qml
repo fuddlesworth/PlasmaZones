@@ -77,9 +77,10 @@ QtObject {
     // resolve engine root context properties like `appSettings` by name
     // (tried; it silently fell back and settings previews mismatched the
     // popups). A preview must show what a zone will actually look like:
-    // with useSystemColors on, the pipeline follows the theme anyway; with
-    // custom colors it shows the user's picks. The theme-role expressions
-    // below are the fallback for engines with no injection and no push.
+    // the pipeline's resolved colors follow the palette while a color's
+    // stored theme-fallback value is empty, and show the user's picks
+    // otherwise. The theme-role expressions below are the fallback for
+    // engines with no injection and no push.
     // Lifetime: the injected object must outlive the engine; if it is
     // deleted externally QML nulls this property and the previews fall
     // back to the theme defaults (or go stale), without crashing.
@@ -91,4 +92,17 @@ QtObject {
     readonly property color previewActiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.highlightColor : root._viewScope.highlight)
     readonly property color previewInactiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.inactiveColor : root._viewScope.alternateBackground)
     readonly property color previewZoneBorderColor: root.settingsSource ? root.settingsSource.borderColor : root._viewScope.separator
+
+    // Scroll tab-indicator theme fallbacks — what an EMPTY tab colour key
+    // resolves to. Single-sourced here for the same drift reason as the zone
+    // trio above: the renderer (ScrollTabStripContent) and the settings
+    // page's swatch previews (ScrollingTabsPage) must show one truth. The
+    // inactive fallback differs per style ON PURPOSE: a chip carries its
+    // title, so its resting state is no fill at all; a bar segment has
+    // nothing but its fill, so an unfilled one would under-report the tab
+    // count.
+    readonly property color tabActiveColor: Kirigami.Theme.highlightColor
+    readonly property color tabInactiveChipColor: "transparent"
+    readonly property color tabInactiveBarColor: Qt.alpha(Kirigami.Theme.textColor, 0.35)
+    readonly property color tabUrgentColor: Kirigami.Theme.negativeTextColor
 }

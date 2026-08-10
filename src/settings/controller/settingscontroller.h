@@ -797,6 +797,10 @@ Q_SIGNALS:
 private Q_SLOTS:
     void onExternalSettingsChanged();
     void onSettingsPropertyChanged();
+    /// Dirty-marks like onSettingsPropertyChanged but for edits whose value
+    /// no page manifest can see (the per-screen overrides): latches the
+    /// value-based dirty reconcile off until the next clean transition.
+    void onValueBlindSettingsChanged();
     void loadLayoutsAsync();
     // Debounce slot: all layout-mutation D-Bus signals (layoutCreated,
     // layoutDeleted, layoutChanged, layoutPropertyChanged, layoutListChanged)
@@ -849,9 +853,10 @@ private:
     /// emit — the caller owns the batching.
     ///
     /// Whole-set operations are the exception and do not route through it:
-    /// setNeedsSave(false) clears the set outright, and load() replaces it with
-    /// the full page set. Neither is a per-page decision, and both compare the
-    /// whole set before emitting.
+    /// setNeedsSave(false) clears the set outright (load() and save() reach
+    /// it that way), and defaults() replaces the set with a full recompute.
+    /// Neither is a per-page decision, and both compare the whole set before
+    /// emitting.
     bool syncDirtyMembership(const QString& page, bool dirty);
     /// RAII batch window for the above: defers dirtyPagesChanged for the
     /// enclosing scope so a delegated Reset/Discard that walks several backing
@@ -1055,6 +1060,17 @@ private:
     /// fully clean; cleared without a reload by save(), whose whole-schema
     /// flush supersedes the external state the reload would have adopted.
     bool m_pendingExternalReload = false;
+    /// Coalesces onSettingsPropertyChanged()'s queued dirty-set reconcile
+    /// (one per event-loop turn) so a value edited back to its committed
+    /// state drops out of m_dirtyPages instead of stranding needsSave().
+    bool m_dirtyReconcileQueued = false;
+    /// True while an unsaved edit exists that value-based reconciliation
+    /// cannot see (per-screen overrides live outside every page manifest).
+    /// Suspends the queued reconcile so it cannot clear a page whose edit
+    /// is real but manifest-invisible; cleared with the dirty set on the
+    /// next clean transition (save / discard).
+    bool m_valueBlindDirty = false;
+    void scheduleDirtyReconcile();
     /// Reentrancy guard for setActivePage(). A slot connected to
     /// activePageChanged that calls back into setActivePage would
     /// otherwise corrupt the m_loading toggle window.

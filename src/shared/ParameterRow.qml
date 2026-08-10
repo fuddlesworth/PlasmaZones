@@ -376,7 +376,7 @@ Item {
             visible: paramDelegate.paramType === "color"
             // #AARRGGBB (alpha-first), not currentColor.toString() — the latter
             // emits #RRGGBB and hides the alpha channel this param carries.
-            // Mirrors ColorSwatchRow's display and the stored wire form.
+            // Mirrors ThemeFallbackColorControl's display and the stored wire form.
             text: {
                 function pad(v) {
                     return Math.round(v * 255).toString(16).padStart(2, '0');

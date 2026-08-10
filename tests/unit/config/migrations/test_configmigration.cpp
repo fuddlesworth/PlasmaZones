@@ -134,8 +134,12 @@ private Q_SLOTS:
     void testMigrateColors()
     {
         IsolatedConfigGuard guard;
+        // UseSystemColors=false pins the colours as USER picks: the v5→v6
+        // colour conversion keeps pinned colours but drops palette-following
+        // ones, and an absent UseSystemColors defaulted to following.
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
                      QStringLiteral("[Appearance]\n"
+                                    "UseSystemColors=false\n"
                                     "HighlightColor=82,148,226,255\n"
                                     "BorderColor=255,0,0,128\n"));
 
@@ -709,6 +713,11 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
                      QStringLiteral("[Appearance]\n"
+                                    // OFF so the v5→v6 step keeps the pinned colour and the
+                                    // heuristic's hex output stays observable in the final config
+                                    // (with the palette owning it, the value would end as the
+                                    // sentinel and the fixture line would reach no assertion).
+                                    "UseSystemColors=false\n"
                                     "HighlightColor=82,148,226,255\n"
                                     "\n"
                                     "[Ordering]\n"
@@ -726,6 +735,15 @@ private Q_SLOTS:
                  "Non-color int list must remain a string after migration — "
                  "color heuristic over-fired on comma-separated small ints.");
         QCOMPARE(order.toString(), QStringLiteral("1,2,3"));
+        // The positive half of the heuristic: the comma quartet converted to
+        // hex at the INI step and survived the chain as a pinned colour.
+        const QJsonObject colors = root.value(QStringLiteral("Snapping"))
+                                       .toObject()
+                                       .value(QStringLiteral("Zones"))
+                                       .toObject()
+                                       .value(QStringLiteral("Colors"))
+                                       .toObject();
+        QCOMPARE(colors.value(QStringLiteral("Highlight")).toString(), QStringLiteral("#ff5294e2"));
     }
 
     void testSchemaCoversEveryMigrationDestinationKey()
@@ -784,7 +802,11 @@ private Q_SLOTS:
                                     // group is removed wholesale — so the schema-coverage assertion
                                     // pins that it never surfaces as an undeclared v2 destination key.
                                     "EnableBlur=true\n"
-                                    "UseSystemColors=true\n"
+                                    // OFF, not on: with UseSystemColors=true the v5→v6 step converts
+                                    // the three colour keys to the sentinel, silently dropping them
+                                    // from the schema-coverage assertion's `produced` set — the
+                                    // sibling fixtures flipped to false for the same reason.
+                                    "UseSystemColors=false\n"
                                     "HighlightColor=1,2,3,255\n"
                                     "InactiveColor=4,5,6,255\n"
                                     "BorderColor=7,8,9,255\n"
@@ -977,10 +999,15 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     // UseSystemColors=false pins the highlight as a USER pick:
+                     // the v5→v6 colour conversion keeps pinned colours but
+                     // drops palette-following ones, and an absent
+                     // UseSystemColors defaulted to following.
                      QStringLiteral("[Activation]\n"
                                     "SnappingEnabled=true\n"
                                     "\n"
                                     "[Appearance]\n"
+                                    "UseSystemColors=false\n"
                                     "HighlightColor=82,148,226,255\n"
                                     "ActiveOpacity=0.3\n"));
 

@@ -107,7 +107,7 @@ public:
     // KWin effect now derives its m_animationExclusionRuleSet from the unified
     // rule store via PhosphorRules::ExclusionRules::excludeAnimationsRulesFrom.
 
-    // Autotile decoration settings (fetched by KWin effect via D-Bus)
+    // Autotile focus settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
     virtual void setAutotileFocusFollowsMouse(bool enabled) = 0;
     // Snapping focus behavior. focusNewWindows is read daemon-side by SnapAdaptor
@@ -205,6 +205,12 @@ public:
     virtual void setWindowBorderWidth(int width) = 0;
     virtual int windowBorderRadius() const = 0;
     virtual void setWindowBorderRadius(int radius) = 0;
+    // The two border colours are theme-fallback strings: an #AARRGGBB hex,
+    // or EMPTY meaning "follow the system" (active → the zone highlight,
+    // inactive → the zone inactive colour). An empty return is meaningful,
+    // not "unset". The daemon's D-Bus getter resolves the sentinel before
+    // the value crosses the wire, so the effect only ever sees concrete
+    // colours; the rules vocabulary keeps its separate "accent" token.
     virtual QString windowBorderColorActive() const = 0;
     virtual void setWindowBorderColorActive(const QString& color) = 0;
     virtual QString windowBorderColorInactive() const = 0;
@@ -221,8 +227,10 @@ public:
     // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*): the
     // opacity analogue of the plain border, rendered by the built-in
     // "opacity-tint" surface pack and suppressed by any user decoration pack.
-    // Opacity and tint strength are [0.0, 1.0]; the tint colour is an
-    // #AARRGGBB hex string or the "accent" sentinel like the border colours.
+    // Opacity and tint strength are [0.0, 1.0]; the tint colour carries the
+    // same theme-fallback contract as the border colours above (#AARRGGBB
+    // hex, or EMPTY meaning "follow the zone highlight", resolved by the
+    // daemon before D-Bus).
     virtual bool showWindowOpacityTint() const = 0;
     virtual void setShowWindowOpacityTint(bool show) = 0;
     virtual QString windowOpacityTintScope() const = 0;
@@ -318,10 +326,12 @@ public:
     // resolved column rect, so the scrolling engine reads them through
     // IScrollSettings and ships the finished rect in the tab-strip payload.
     // Each NUMERIC default below is pinned against its ConfigDefaults twin by a
-    // static_assert in settings/scrolling.cpp, the way the toggle above is. The
-    // three colour defaults cannot be: ConfigDefaults returns a non-constexpr
-    // QString for them. They are pinned at runtime instead, by the schema
-    // assertions in test_scrolling_settings.cpp.
+    // static_assert in settings/scrolling.cpp, the way the toggle above is
+    // (that covers the drop-indicator opacity/border-width literals further
+    // down too). The five colour defaults cannot be — ConfigDefaults returns
+    // a non-constexpr QString for them (the tab trio here plus the
+    // drop-indicator fill/border pair below). They are pinned at runtime
+    // instead, by the schema assertions in test_scrolling_settings.cpp.
 
     /// 0 = title chips, 1 = segment bar (ConfigDefaults' TabIndicatorStyle).
     /// The bar is the default: it is niri's own indicator, and the only one it
@@ -551,7 +561,11 @@ Q_SIGNALS:
     void showNavigationOsdChanged();
     void osdStyleChanged();
     void overlayDisplayModeChanged();
-    void useSystemColorsChanged();
+    // The four zone-colour NOTIFYs fire on a user edit AND on a system
+    // palette change while the colour follows the theme (the resolved value
+    // moved with no write). An ISettings-holding consumer cannot tell the
+    // two apart; the concrete Settings exposes isAnnouncingPaletteChange()
+    // for the one consumer that needs to.
     void highlightColorChanged();
     void inactiveColorChanged();
     void borderColorChanged();

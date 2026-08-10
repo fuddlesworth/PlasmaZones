@@ -72,15 +72,19 @@ tertiary accent, which is exactly why the misuses above render in
   theme API against the runtime before prescribing it in a ruleset.
 
 - **The zone-color pipeline overrides QML theming.** Zone fills and borders are
-  user-configurable Settings (`useSystemColors=true` by default →
-  `Settings::applySystemColorScheme()` maps QPalette into the settings
-  colors, which the daemon cascades into every overlay/popup slot —
-  `overlay_data.cpp`: zone-custom → rule override → global). QML-side
-  defaults (`ZoneColorDefaults`) only apply where the plumbing doesn't
-  push. `applySystemColorScheme()` originally mapped inactive fill AND
+  user-configurable Settings stored as theme-fallback strings: an EMPTY value
+  (the shipped default) means "follow the system palette", resolved on READ by
+  `Settings::resolvedSystemColor(SystemColorRole)`
+  (`src/config/settings/systemcolors.cpp`), and nothing is ever written back
+  into config on a palette change. The daemon cascades the resolved colors
+  into every overlay/popup slot (`overlay_data.cpp`: zone-custom → rule
+  override → global). QML-side defaults (`ZoneColorDefaults`) only apply
+  where the plumbing doesn't push. History: the retired
+  `applySystemColorScheme()` write-path originally mapped inactive fill AND
   border to `QPalette::Text` @ alpha, the same textColor fabrication
-  expressed in C++. It now uses `AlternateBase` / `Mid`. Any future
-  zone-color work must start at this function, not in QML.
+  expressed in C++; the resolver keeps its successors, `AlternateBase` /
+  `Mid`. Any future zone-color work must start at `resolvedSystemColor`, not
+  in QML.
 
 - **ZoneColorDefaults flavor rule:** panel-hosted zone cards (PopupFrame
   contents, settings previews) use the opaque `preview*` flavor; only
