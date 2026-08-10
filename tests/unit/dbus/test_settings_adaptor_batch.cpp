@@ -14,6 +14,7 @@
  */
 
 #include <QTest>
+#include <QColor>
 #include <QDBusVariant>
 #include <QHash>
 #include <QJsonDocument>
@@ -111,7 +112,7 @@ private Q_SLOTS:
         const QStringList keys{
             QStringLiteral("borderWidth"),
             QStringLiteral("borderRadius"),
-            QStringLiteral("useSystemColors"),
+            QStringLiteral("showZoneNumbers"),
             QStringLiteral("adjacentThreshold"),
             QStringLiteral("pollIntervalMs"),
             QStringLiteral("minimumZoneSizePx"),
@@ -131,7 +132,7 @@ private Q_SLOTS:
         // would be silently replaced by the default. Pin the type here.
         QCOMPARE(result.value(QStringLiteral("borderWidth")).metaType().id(), QMetaType::Int);
         QCOMPARE(result.value(QStringLiteral("adjacentThreshold")).metaType().id(), QMetaType::Int);
-        QCOMPARE(result.value(QStringLiteral("useSystemColors")).metaType().id(), QMetaType::Bool);
+        QCOMPARE(result.value(QStringLiteral("showZoneNumbers")).metaType().id(), QMetaType::Bool);
         QCOMPARE(result.value(QStringLiteral("overlayDisplayMode")).metaType().id(), QMetaType::Int);
     }
 
@@ -435,6 +436,80 @@ private Q_SLOTS:
     // getter must not be registered there at all — consumers fall back to
     // the global animation duration.
     // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Theme-fallback colour keys over D-Bus. The three window colour keys are
+    // the only registry entries whose getter does non-trivial work (resolve
+    // the empty sentinel through the zone colour getters before marshalling)
+    // and whose setter has its own validity gate — the effect drops an empty
+    // colour reply as version skew, so an empty value on the wire would make
+    // every window border vanish with a green suite.
+    // ─────────────────────────────────────────────────────────────────────
+    void testResolvedFallbackColors_wireCarriesConcreteDistinctColors()
+    {
+        // Flip the two resolvers apart so the three keys are pairwise
+        // distinguishable — all three collapsing onto one getter is the
+        // wiring mistake this guards against (cf. the dragToggleKeys test).
+        m_settings->setHighlightColor(QColor(QStringLiteral("#80112233")));
+        m_settings->setInactiveColor(QColor(QStringLiteral("#40aabbcc")));
+
+        const QVariantMap result = m_adaptor->getSettings(QStringList{QStringLiteral("windowBorderColorActive"),
+                                                                      QStringLiteral("windowBorderColorInactive"),
+                                                                      QStringLiteral("windowTintColor")});
+        const QString active = result.value(QStringLiteral("windowBorderColorActive")).toString();
+        const QString inactive = result.value(QStringLiteral("windowBorderColorInactive")).toString();
+        const QString tint = result.value(QStringLiteral("windowTintColor")).toString();
+        // Concrete and valid — never the empty sentinel.
+        QVERIFY(!active.isEmpty() && QColor(active).isValid());
+        QVERIFY(!inactive.isEmpty() && QColor(inactive).isValid());
+        QVERIFY(!tint.isEmpty() && QColor(tint).isValid());
+        // Active and tint resolve through the highlight, inactive through the
+        // zone inactive colour.
+        QCOMPARE(QColor(active), m_settings->highlightColor());
+        QCOMPARE(QColor(tint), m_settings->highlightColor());
+        QCOMPARE(QColor(inactive), m_settings->inactiveColor());
+    }
+
+    void testResolvedFallbackColors_setterContract()
+    {
+        // Garbage is refused and nothing is written.
+        QVERIFY(!m_adaptor->setSetting(QStringLiteral("windowBorderColorActive"),
+                                       QDBusVariant(QStringLiteral("not-a-color"))));
+        QCOMPARE(m_settings->windowBorderColorActive(), QString());
+
+        // A concrete pick pins; the raw companion key serves the stored
+        // value verbatim.
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorActive"),
+                                      QDBusVariant(QStringLiteral("#ff123456"))));
+        QCOMPARE(m_settings->windowBorderColorActive(), QStringLiteral("#ff123456"));
+        const QVariantMap raw = m_adaptor->getSettings(QStringList{QStringLiteral("windowBorderColorActiveRaw")});
+        QCOMPARE(raw.value(QStringLiteral("windowBorderColorActiveRaw")).toString(), QStringLiteral("#ff123456"));
+
+        // The empty sentinel (and its legacy "accent" alias) un-pins.
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorActive"), QDBusVariant(QString())));
+        QCOMPARE(m_settings->windowBorderColorActive(), QString());
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowTintColor"), QDBusVariant(QStringLiteral("#ff222222"))));
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowTintColor"), QDBusVariant(QStringLiteral("accent"))));
+        QCOMPARE(m_settings->windowTintColor(), QString());
+    }
+
+    void testResolvedFallbackColors_echoWriteKeepsFollowing()
+    {
+        // Writing back the currently-RESOLVED colour while following is the
+        // get→set echo: the equality guard keeps the key following (returns
+        // true, stores nothing) — the documented non-destructive round-trip.
+        // A caller that wants an exact pin uses the *Raw companion.
+        QCOMPARE(m_settings->windowBorderColorInactive(), QString());
+        const QString resolved = m_settings->inactiveColor().name(QColor::HexArgb);
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorInactive"), QDBusVariant(resolved)));
+        QCOMPARE(m_settings->windowBorderColorInactive(), QString());
+        // The raw companion pins the identical value when that is the intent.
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorInactiveRaw"), QDBusVariant(resolved)));
+        QCOMPARE(m_settings->windowBorderColorInactive(), resolved);
+        // Clean up for later slots (the fixture is rebuilt per test, but be
+        // explicit about the state this test leaves).
+        QVERIFY(m_adaptor->setSetting(QStringLiteral("windowBorderColorInactiveRaw"), QDBusVariant(QString())));
+    }
+
     void testMotionProfileTree_absentWhenNoRegistry()
     {
         QVERIFY(!m_adaptor->getSettingKeys().contains(QStringLiteral("motionProfileTree")));

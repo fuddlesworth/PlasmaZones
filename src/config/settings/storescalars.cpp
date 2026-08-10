@@ -61,18 +61,65 @@ void Settings::setAudioSpectrumBarCount(int count)
     Q_EMIT settingsChanged();
 }
 // ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
-// Colors group
-P_STORE_GET(bool, useSystemColors, snappingZonesColorsGroup, useSystemKey, bool)
-P_STORE_GET(QColor, highlightColor, snappingZonesColorsGroup, highlightKey, QColor)
-P_STORE_SET_COLOR(setHighlightColor, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
-P_STORE_GET(QColor, inactiveColor, snappingZonesColorsGroup, inactiveKey, QColor)
-P_STORE_SET_COLOR(setInactiveColor, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
-P_STORE_GET(QColor, borderColor, snappingZonesColorsGroup, borderKey, QColor)
-P_STORE_SET_COLOR(setBorderColor, snappingZonesColorsGroup, borderKey, borderColorChanged)
+// Colors group. Theme-fallback keys: the stored STRING is authoritative
+// (EMPTY = follow the system palette); the QColor getters resolve through
+// resolvedSystemColor and the QColor setters store the concrete #AARRGGBB
+// form, so every non-UI consumer keeps its concrete-colour contract.
+P_STORE_GET(QString, highlightColorRaw, snappingZonesColorsGroup, highlightKey, QString)
+P_STORE_SET_STRING2(setHighlightColorRaw, snappingZonesColorsGroup, highlightKey, highlightColorRawChanged,
+                    highlightColorChanged)
+P_STORE_GET(QString, inactiveColorRaw, snappingZonesColorsGroup, inactiveKey, QString)
+P_STORE_SET_STRING2(setInactiveColorRaw, snappingZonesColorsGroup, inactiveKey, inactiveColorRawChanged,
+                    inactiveColorChanged)
+P_STORE_GET(QString, borderColorRaw, snappingZonesColorsGroup, borderKey, QString)
+P_STORE_SET_STRING2(setBorderColorRaw, snappingZonesColorsGroup, borderKey, borderColorRawChanged, borderColorChanged)
+
+QColor Settings::highlightColor() const
+{
+    const QString raw = highlightColorRaw();
+    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Highlight) : QColor(raw);
+}
+// The QColor setters guard on isValid(): an invalid QColor's name() still
+// produces a non-empty "#ff000000", which would silently PIN opaque black
+// where the caller meant "no colour" — the sane meaning of which is the
+// theme-fallback sentinel.
+void Settings::setHighlightColor(const QColor& color)
+{
+    setHighlightColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
+QColor Settings::inactiveColor() const
+{
+    const QString raw = inactiveColorRaw();
+    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Inactive) : QColor(raw);
+}
+void Settings::setInactiveColor(const QColor& color)
+{
+    setInactiveColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
+QColor Settings::borderColor() const
+{
+    const QString raw = borderColorRaw();
+    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Border) : QColor(raw);
+}
+void Settings::setBorderColor(const QColor& color)
+{
+    setBorderColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
 
 // Labels group
-P_STORE_GET(QColor, labelFontColor, snappingZonesLabelsGroup, fontColorKey, QColor)
-P_STORE_SET_COLOR(setLabelFontColor, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
+P_STORE_GET(QString, labelFontColorRaw, snappingZonesLabelsGroup, fontColorKey, QString)
+P_STORE_SET_STRING2(setLabelFontColorRaw, snappingZonesLabelsGroup, fontColorKey, labelFontColorRawChanged,
+                    labelFontColorChanged)
+
+QColor Settings::labelFontColor() const
+{
+    const QString raw = labelFontColorRaw();
+    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::LabelFont) : QColor(raw);
+}
+void Settings::setLabelFontColor(const QColor& color)
+{
+    setLabelFontColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
 P_STORE_GET(QString, labelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, QString)
 P_STORE_SET_STRING(setLabelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
 P_STORE_GET(qreal, labelFontSizeScale, snappingZonesLabelsGroup, fontSizeScaleKey, double)

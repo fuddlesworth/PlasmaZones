@@ -566,7 +566,7 @@ SettingsController::SettingsController(QObject* parent)
     // truth, which is also why clicking a value already set no longer flips
     // the page to "unsaved changes".
     const auto wirePerScreenOverrideSignal = [this](void (Settings::*signal)()) {
-        connect(&m_settings, signal, this, &SettingsController::onSettingsPropertyChanged);
+        connect(&m_settings, signal, this, &SettingsController::onValueBlindSettingsChanged);
         connect(&m_settings, signal, this, &SettingsController::perScreenOverridesChanged);
     };
     wirePerScreenOverrideSignal(&Settings::perScreenAutotileSettingsChanged);

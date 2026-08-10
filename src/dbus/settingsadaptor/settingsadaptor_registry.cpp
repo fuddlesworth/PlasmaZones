@@ -37,6 +37,7 @@
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
+#include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <QColor>
@@ -48,6 +49,23 @@
 namespace PlasmaZones {
 
 namespace {
+// The rule vocabulary's follow-the-accent token (PhosphorRules::
+// BorderColorToken::Accent), accepted on the colour keys as an alias for the
+// empty theme-fallback sentinel so pre-v6 clients and rule-vocabulary
+// scripts keep working against the unified surface. Spelled locally to keep
+// this TU off the rules library; the migration freezes the same literal.
+constexpr QLatin1String kAccentToken{"accent"};
+
+// Exact-match predicate for the three window-appearance scope-token keys,
+// mirroring their validStringOr schema validator's closed set. File-scope so
+// the REGISTER_VALIDATED_STRING_SETTING lambdas can reach it without
+// widening the macro's capture list.
+bool isWindowScopeToken(const QString& requested)
+{
+    namespace WAS = ::PhosphorCompositor::WindowAppearanceScope;
+    return requested == WAS::Tiled || requested == WAS::Normal || requested == WAS::All;
+}
+
 // Shared wire-size cap for the JSON profile-tree blobs (animation shader tree
 // AND surface decoration tree) accepted over D-Bus.
 constexpr qsizetype kMaxProfileTreeBytes = 64 * 1024;
@@ -88,6 +106,32 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
+// For token-enum string keys whose store validator COERCES an unrecognized
+// token to the default: the plain string form would report success while the
+// store silently substituted, which is the accept-then-discard failure the
+// colour setter's comment names. Validate BEFORE writing — a
+// write-then-revert would emit the key's NOTIFY twice (once with the
+// coerced wrong value) and run its consumers on both, and would refuse
+// legal non-canonical spellings the store itself normalizes. @p acceptExpr
+// is a bool expression over `requested`; the case-normalizing keys accept
+// any spelling their option set contains after lower/trim (the store
+// canonicalizes on write), matching the gpuDevice custom setter's
+// tolerance, while the scope keys are exact-match like their validStringOr
+// schema validator.
+#define REGISTER_VALIDATED_STRING_SETTING(name, getter, setter, acceptExpr)                                            \
+    m_getters[QStringLiteral(name)] = [this]() {                                                                       \
+        return m_settings->getter();                                                                                   \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
+        const QString requested = v.toString();                                                                        \
+        if (!(acceptExpr)) {                                                                                           \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(requested);                                                                                 \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
+
 #define REGISTER_BOOL_SETTING(name, getter, setter)                                                                    \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
@@ -108,6 +152,12 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
 
+// Numeric keys accept out-of-range values and report success while the store
+// validator CLAMPS: deliberate — a clamp lands on the nearest legal value
+// (unlike the token-enum substitution the validated-string form refuses),
+// and rejecting would break sloppy-but-harmless callers for no gain. The
+// labelFontSizeScale custom setter shows the stricter pattern where a key
+// wants it.
 #define REGISTER_DOUBLE_SETTING(name, getter, setter)                                                                  \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
@@ -122,14 +172,26 @@ void SettingsAdaptor::initializeRegistry()
 // names no colour at all. Parsing it and storing the resulting invalid QColor
 // would leave the old value in place while setSetting reported success, which
 // is the one thing its documented post-condition must not do. Reject instead:
-// a malformed hex returns false and the caller sees the write fail.
+// a malformed hex returns false and the caller sees the write fail. Two
+// SENTINEL spellings are accepted and put the key back on the theme: the
+// empty string (the stored theme-fallback sentinel) and the legacy "accent"
+// token the pre-v6 wire accepted — both store the sentinel via the QColor
+// setter's invalid-colour branch. The getter marshals the RESOLVED colour;
+// the resolution chain (resolvedSystemColor / the stored #AARRGGBB) cannot
+// produce an invalid QColor, so no isValid() guard is needed before name().
+// The stored sentinel itself is visible through the *Raw companion keys.
 #define REGISTER_COLOR_SETTING(keyName, getter, setter)                                                                \
     m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
         QColor color = m_settings->getter();                                                                           \
         return color.name(QColor::HexArgb);                                                                            \
     };                                                                                                                 \
     m_setters[QStringLiteral(keyName)] = [this](const QVariant& v) {                                                   \
-        const QColor parsed(v.toString());                                                                             \
+        const QString s = v.toString();                                                                                \
+        if (s.isEmpty() || s == kAccentToken) {                                                                        \
+            m_settings->setter(QColor());                                                                              \
+            return true;                                                                                               \
+        }                                                                                                              \
+        const QColor parsed(s);                                                                                        \
         if (!parsed.isValid()) {                                                                                       \
             return false;                                                                                              \
         }                                                                                                              \
@@ -159,10 +221,11 @@ void SettingsAdaptor::initializeRegistry()
     auto* concrete = qobject_cast<Settings*>(m_settings);
 
 // Macro for concrete Settings entries (same pattern as REGISTER_* but captures
-// 'concrete'). Only the string form is left here: the bool / int / double /
-// theme-fallback-colour forms went with the keys that used them when the
-// registry split into per-mode TUs, and each mode TU carries its own copy of
-// whichever forms it needs.
+// 'concrete'). Only the string form is left here: the bool / int / double
+// forms went with the keys that used them when the registry split into
+// per-mode TUs, and each mode TU carries its own copy of whichever forms it
+// needs (the scrolling TU also carries the ISettings-flavoured
+// REGISTER_THEME_FALLBACK_COLOR_SETTING; no concrete colour form exists).
 #define REGISTER_CONCRETE_STRING(name, getter, setter)                                                                 \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
         return concrete->getter();                                                                                     \
@@ -257,8 +320,13 @@ void SettingsAdaptor::initializeRegistry()
                               disabledActivities, setDisabledActivities)
 #undef REGISTER_PER_MODE_DISABLE
 
-    // Appearance settings
-    REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)
+    // Appearance settings. The zone colours marshal RESOLVED (the getter
+    // serves a concrete palette-derived colour while the stored value is the
+    // empty theme-fallback sentinel), so the wire keeps its concrete-colour
+    // contract; setting one over D-Bus pins a concrete colour, and writing
+    // the empty sentinel (or the legacy "accent" token) puts it back on the
+    // theme. The stored follow/pin state itself is readable and writable
+    // through the *Raw companion keys registered further down.
     REGISTER_COLOR_SETTING("highlightColor", highlightColor, setHighlightColor)
     REGISTER_COLOR_SETTING("inactiveColor", inactiveColor, setInactiveColor)
     REGISTER_COLOR_SETTING("borderColor", borderColor, setBorderColor)
@@ -269,26 +337,113 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("borderRadius", borderRadius, setBorderRadius)
 
     // Window decoration appearance (config-backed default the KWin effect resolves
-    // against, with user rules overriding per slot). The two colour keys carry a
-    // hex string OR the "accent" sentinel, so they marshal as plain strings (not
-    // REGISTER_COLOR_SETTING, which would round-trip through QColor and drop the
-    // sentinel).
+    // against, with user rules overriding per slot).
+    //
+    // The three colour keys are theme-fallback strings whose EMPTY sentinel
+    // means "follow the zone highlight / inactive colour" — which itself
+    // follows the system palette only while unpinned, so a pinned zone
+    // colour flows through to an unpinned window colour by design. The
+    // sentinel is RESOLVED here, before the value crosses D-Bus: the
+    // effect's settings reader treats an empty colour reply as version skew
+    // and drops it, so the wire must only ever carry concrete colours. The
+    // resolution targets are the same system colours the effect resolves a
+    // rule-side "accent" token against (zone highlight for the active/tint
+    // slots, zone inactive for the inactive slot), so config-default and
+    // rule-side accent stay one colour. The setter accepts the sentinel
+    // (empty, or the legacy "accent" token these keys historically stored)
+    // or any colour QColor parses, rejecting garbage at the boundary the
+    // way REGISTER_THEME_FALLBACK_COLOR_SETTING (the scrolling TU's
+    // raw-string form) does — every themeColor-vocabulary key accepts the
+    // same sentinel spellings. The stored sentinel is visible through the
+    // *Raw companion keys registered below.
+#define REGISTER_RESOLVED_FALLBACK_COLOR(keyName, getter, setter, resolver)                                            \
+    m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
+        const QString raw = m_settings->getter();                                                                      \
+        return raw.isEmpty() ? m_settings->resolver().name(QColor::HexArgb) : raw;                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(keyName)] = [this](const QVariant& v) {                                                   \
+        QString s = v.toString();                                                                                      \
+        if (s == kAccentToken) {                                                                                       \
+            s = QString();                                                                                             \
+        }                                                                                                              \
+        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(s);                                                                                         \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(keyName)] = QStringLiteral("color");
+
     REGISTER_BOOL_SETTING("showWindowBorder", showWindowBorder, setShowWindowBorder)
-    REGISTER_STRING_SETTING("windowBorderScope", windowBorderScope, setWindowBorderScope)
+    REGISTER_VALIDATED_STRING_SETTING("windowBorderScope", windowBorderScope, setWindowBorderScope,
+                                      isWindowScopeToken(requested))
     REGISTER_INT_SETTING("windowBorderWidth", windowBorderWidth, setWindowBorderWidth)
     REGISTER_INT_SETTING("windowBorderRadius", windowBorderRadius, setWindowBorderRadius)
-    REGISTER_STRING_SETTING("windowBorderColorActive", windowBorderColorActive, setWindowBorderColorActive)
-    REGISTER_STRING_SETTING("windowBorderColorInactive", windowBorderColorInactive, setWindowBorderColorInactive)
+    REGISTER_RESOLVED_FALLBACK_COLOR("windowBorderColorActive", windowBorderColorActive, setWindowBorderColorActive,
+                                     highlightColor)
+    REGISTER_RESOLVED_FALLBACK_COLOR("windowBorderColorInactive", windowBorderColorInactive,
+                                     setWindowBorderColorInactive, inactiveColor)
     REGISTER_BOOL_SETTING("hideWindowTitleBars", hideWindowTitleBars, setHideWindowTitleBars)
-    REGISTER_STRING_SETTING("windowTitleBarScope", windowTitleBarScope, setWindowTitleBarScope)
+    REGISTER_VALIDATED_STRING_SETTING("windowTitleBarScope", windowTitleBarScope, setWindowTitleBarScope,
+                                      isWindowScopeToken(requested))
     // Plain opacity+tint layer (same config-backed-default model as the
-    // border block above). The tint colour carries a hex string OR the
-    // "accent" sentinel, so it marshals as a plain string too.
+    // border block above); the tint colour resolves like the active border.
     REGISTER_BOOL_SETTING("showWindowOpacityTint", showWindowOpacityTint, setShowWindowOpacityTint)
-    REGISTER_STRING_SETTING("windowOpacityTintScope", windowOpacityTintScope, setWindowOpacityTintScope)
+    REGISTER_VALIDATED_STRING_SETTING("windowOpacityTintScope", windowOpacityTintScope, setWindowOpacityTintScope,
+                                      isWindowScopeToken(requested))
     REGISTER_DOUBLE_SETTING("windowOpacity", windowOpacity, setWindowOpacity)
     REGISTER_DOUBLE_SETTING("windowTintStrength", windowTintStrength, setWindowTintStrength)
-    REGISTER_STRING_SETTING("windowTintColor", windowTintColor, setWindowTintColor)
+    REGISTER_RESOLVED_FALLBACK_COLOR("windowTintColor", windowTintColor, setWindowTintColor, highlightColor)
+#undef REGISTER_RESOLVED_FALLBACK_COLOR
+
+    // Companion RAW keys for every resolved theme-fallback colour above. The
+    // resolved keys can never carry the sentinel (their getters resolve it
+    // away), which made a getAllSettings → setSettings round-trip silently
+    // pin every following colour and left external clients no way to READ
+    // the follow/pin state. The raw keys serve the stored string verbatim
+    // (empty = following) and their setters store verbatim, so a client
+    // that wants an exact pin or an un-pin has an unambiguous surface — and
+    // the documented round-trip is lossless again by construction ON A
+    // CONCRETE Settings backend: QVariantMap iterates keys sorted, so
+    // "<key>Raw" is always applied after "<key>" and the sentinel state
+    // wins. (A bare-ISettings backend registers only the three window raws,
+    // so the four zone colours still pin on a round-trip there — every
+    // production composition root passes the concrete Settings.) Schema
+    // token "themeColor" distinguishes them from plain strings for
+    // schema-aware clients.
+// @p capture names the one object each flavour needs (`this` for the
+// m_settings forms, `concrete` for the zone raws) so neither flavour carries
+// an unused capture.
+#define REGISTER_RAW_THEME_COLOR(keyName, capture, obj, getter, setter)                                                \
+    m_getters[QStringLiteral(keyName)] = [capture]() {                                                                 \
+        return obj->getter();                                                                                          \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(keyName)] = [capture](const QVariant& v) {                                                \
+        QString s = v.toString();                                                                                      \
+        if (s == kAccentToken) {                                                                                       \
+            s = QString();                                                                                             \
+        }                                                                                                              \
+        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
+            return false;                                                                                              \
+        }                                                                                                              \
+        obj->setter(s);                                                                                                \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(keyName)] = QStringLiteral("themeColor");
+
+    REGISTER_RAW_THEME_COLOR("windowBorderColorActiveRaw", this, m_settings, windowBorderColorActive,
+                             setWindowBorderColorActive)
+    REGISTER_RAW_THEME_COLOR("windowBorderColorInactiveRaw", this, m_settings, windowBorderColorInactive,
+                             setWindowBorderColorInactive)
+    REGISTER_RAW_THEME_COLOR("windowTintColorRaw", this, m_settings, windowTintColor, setWindowTintColor)
+    // The zone quartet's raw accessors live on the concrete Settings only.
+    if (concrete) {
+        REGISTER_RAW_THEME_COLOR("highlightColorRaw", concrete, concrete, highlightColorRaw, setHighlightColorRaw)
+        REGISTER_RAW_THEME_COLOR("inactiveColorRaw", concrete, concrete, inactiveColorRaw, setInactiveColorRaw)
+        REGISTER_RAW_THEME_COLOR("borderColorRaw", concrete, concrete, borderColorRaw, setBorderColorRaw)
+        REGISTER_RAW_THEME_COLOR("labelFontColorRaw", concrete, concrete, labelFontColorRaw, setLabelFontColorRaw)
+    }
+#undef REGISTER_RAW_THEME_COLOR
     REGISTER_INT_SETTING("focusFadeDuration", focusFadeDuration, setFocusFadeDuration)
     REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
     // Custom setter with range validation instead of REGISTER_DOUBLE_SETTING.
@@ -314,13 +469,15 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("labelFontItalic", labelFontItalic, setLabelFontItalic)
     REGISTER_BOOL_SETTING("labelFontUnderline", labelFontUnderline, setLabelFontUnderline)
     REGISTER_BOOL_SETTING("labelFontStrikeout", labelFontStrikeout, setLabelFontStrikeout)
-    REGISTER_STRING_SETTING("renderingBackend", renderingBackend, setRenderingBackend)
+    REGISTER_VALIDATED_STRING_SETTING("renderingBackend", renderingBackend, setRenderingBackend,
+                                      ConfigDefaults::renderingBackendOptions().contains(requested.toLower().trimmed()))
     // gpuDevice: custom validating setter. The schema validator COERCES a
-    // malformed value to "auto", and the key deliberately declares no choices
-    // a D-Bus caller could consult — so a plain pass-through setter would
-    // report success for a write that was silently discarded. Reject at the
-    // boundary instead: only "auto" or a well-formed vendor:device pair (in
-    // any case/whitespace variation that normalizes to itself) is accepted.
+    // malformed value to "auto" (and the D-Bus schema surface exposes only
+    // {key, type} for EVERY key — no token choices cross the bus for any of
+    // them) — so a plain pass-through setter would report success for a
+    // write that was silently discarded. Reject at the boundary instead:
+    // only "auto" or a well-formed vendor:device pair (in any
+    // case/whitespace variation that normalizes to itself) is accepted.
     m_getters[QStringLiteral("gpuDevice")] = [this]() {
         return m_settings->gpuDevice();
     };
@@ -350,10 +507,12 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("audioHigherCutoffHz", audioHigherCutoffHz, setAudioHigherCutoffHz)
     REGISTER_BOOL_SETTING("audioMonstercat", audioMonstercat, setAudioMonstercat)
     REGISTER_BOOL_SETTING("audioWaves", audioWaves, setAudioWaves)
-    REGISTER_STRING_SETTING("audioChannelMode", audioChannelMode, setAudioChannelMode)
+    REGISTER_VALIDATED_STRING_SETTING("audioChannelMode", audioChannelMode, setAudioChannelMode,
+                                      ConfigDefaults::audioChannelModeOptions().contains(requested.toLower().trimmed()))
     REGISTER_BOOL_SETTING("audioReverse", audioReverse, setAudioReverse)
     REGISTER_INT_SETTING("audioExtraSmoothing", audioExtraSmoothing, setAudioExtraSmoothing)
-    REGISTER_STRING_SETTING("audioInputMethod", audioInputMethod, setAudioInputMethod)
+    REGISTER_VALIDATED_STRING_SETTING("audioInputMethod", audioInputMethod, setAudioInputMethod,
+                                      ConfigDefaults::audioInputMethodOptions().contains(requested.toLower().trimmed()))
     REGISTER_STRING_SETTING("audioInputSource", audioInputSource, setAudioInputSource)
 
     // Window filtering — the per-app / per-class exclusion lists
@@ -643,6 +802,7 @@ void SettingsAdaptor::initializeRegistry()
 
 // Clean up macros (local scope)
 #undef REGISTER_STRING_SETTING
+#undef REGISTER_VALIDATED_STRING_SETTING
 #undef REGISTER_BOOL_SETTING
 #undef REGISTER_INT_SETTING
 #undef REGISTER_DOUBLE_SETTING

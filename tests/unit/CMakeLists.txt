@@ -338,7 +338,13 @@ target_link_libraries(test_screen_mode_router PRIVATE PhosphorSnapEngine::Phosph
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - Settings Tests (core, validation, per-screen)
 # ═══════════════════════════════════════════════════════════════════════════════
-p_add_test(test_settings_core config/settings/test_settings_core.cpp)
+# Explicit Qt6::Gui: the pinned-colour round-trip and reload tests compare
+# palette-resolved zone colours (the resolved getters read
+# QGuiApplication::palette()); p_add_test links Core only and the transitive
+# pull through plasmazones_core is coincidental, not contractual.
+add_executable(test_settings_core config/settings/test_settings_core.cpp)
+target_link_libraries(test_settings_core PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_core COMMAND test_settings_core)
 
 # Companion test executable: animation Profile JSON-blob storage,
 # per-field signal discrimination, aggregate-setter merge semantics.
@@ -365,7 +371,11 @@ add_test(NAME test_settings_system_palette_tracking COMMAND test_settings_system
 # resetKeys (revert-to-default) with NOTIFY re-emission.
 p_add_test(test_settings_pagereset config/settings/test_settings_pagereset.cpp)
 
-p_add_test(test_settings_validation config/settings/test_settings_validation.cpp)
+# Explicit Qt6::Gui for the same reason as test_settings_core: the sentinel
+# tests assert the resolved colours are valid, which reads the palette.
+add_executable(test_settings_validation config/settings/test_settings_validation.cpp)
+target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_validation COMMAND test_settings_validation)
 
 p_add_test(test_settings_perscreen config/settings/test_settings_perscreen.cpp)
 
@@ -453,6 +463,12 @@ add_executable(test_migration_v4_to_v5 config/migrations/test_migration_v4_to_v5
 target_link_libraries(test_migration_v4_to_v5
     PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
 add_test(NAME test_migration_v4_to_v5 COMMAND test_migration_v4_to_v5)
+
+# v5→v6: snapping zone colours become theme-fallback strings; UseSystem dropped.
+add_executable(test_migration_v5_to_v6 config/migrations/test_migration_v5_to_v6.cpp)
+target_link_libraries(test_migration_v5_to_v6
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorRules::PhosphorRules)
+add_test(NAME test_migration_v5_to_v6 COMMAND test_migration_v5_to_v6)
 
 # Retired provider-default rule pruned from rules.json (finalizeV4Conversion cleanup).
 add_executable(test_provider_default_cleanup config/test_provider_default_cleanup.cpp)
