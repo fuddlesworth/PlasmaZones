@@ -132,7 +132,9 @@ void ScrollEngine::resetWindowHeights(const QString& screenId)
 
 void ScrollEngine::centerVisibleColumns(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().centerVisibleColumns(params), "center", false, QString());
+    // "span" distinguishes the whole-group centering from centerColumn's
+    // single-column copy in the OSD (both ride the "center" action).
+    P_SCROLL_VERB(screenId, state->strip().centerVisibleColumns(params), "center", false, QStringLiteral("span"));
 }
 
 void ScrollEngine::focusWindowTop(const QString& screenId)

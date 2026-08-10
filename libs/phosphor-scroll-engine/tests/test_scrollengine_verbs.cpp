@@ -69,7 +69,9 @@ private Q_SLOTS:
     void switchFocusRoundTripsBetweenLayers();
     void focusCrossesToTheScrollNeighboursEntryWindow();
     void focusEdgeWithNoNeighbourReportsNoTarget();
-    void verticalFocusNeverCrossesOutputs();
+    void verticalFocusCrossesToTheOutputBelow();
+    void verticalMoveCrossesToTheOutputBelow();
+    void emptyScreenFocusCrossesInsteadOfDeadEnding();
     void focusOntoAForeignModeNeighbourDefersToTheDaemon();
 
 private:
@@ -450,7 +452,7 @@ void TestScrollEngineVerbs::focusCrossesToTheScrollNeighboursEntryWindow()
     engine->setCrossSurfaceResolver(nullptr);
 }
 
-void TestScrollEngineVerbs::verticalFocusNeverCrossesOutputs()
+void TestScrollEngineVerbs::verticalFocusCrossesToTheOutputBelow()
 {
     DownNeighbourResolver resolver;
     QObject owner;
@@ -459,21 +461,89 @@ void TestScrollEngineVerbs::verticalFocusNeverCrossesOutputs()
     engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S2"), 0, 0);
 
-    // A vertical press that exhausts the column reports no_target and never
-    // consults the resolver, even though S2 sits below: the boundary
-    // crossing is DELIBERATELY horizontal-only across focus/move/swap (the
-    // strip has no vertical edge notion).
-    QSignalSpy crossFocus(engine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested);
+    // A vertical press that exhausts the column crosses onto the output
+    // below, riding the same boundary machinery as the horizontal walk:
+    // entryWindowForCrossing's vertical arm stands the target's own focused
+    // window in for the strip edge a vertical press does not have.
     QSignalSpy activate(engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
     QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
     PhosphorEngine::NavigationContext ctx;
     ctx.screenId = QStringLiteral("S1");
     engine->focusInDirection(QStringLiteral("down"), ctx);
-    QCOMPARE(crossFocus.count(), 0);
-    QCOMPARE(activate.count(), 0);
-    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(activate.count(), 1);
+    QCOMPARE(activate.last().at(0).toString(), QStringLiteral("app|b"));
+    QVERIFY(!feedback.isEmpty());
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:down"));
+    QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
+    QCOMPARE(stateFor(engine, QStringLiteral("S2"))->strip().activeWindowId(), QStringLiteral("app|b"));
+
+    // With no neighbour in the pressed direction (this resolver only offers
+    // "down"), the exhausted walk still answers no_target.
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->focusInDirection(QStringLiteral("up"), ctx);
+    QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), false);
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    engine->setCrossSurfaceResolver(nullptr);
+}
+
+void TestScrollEngineVerbs::verticalMoveCrossesToTheOutputBelow()
+{
+    DownNeighbourResolver resolver;
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")});
+    engine->setCrossSurfaceResolver(&resolver);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S2"), 0, 0);
+
+    // A vertical move that exhausts the column carries the window onto the
+    // output below, entering as an APPENDED column (a vertical crossing has
+    // no facing strip edge — the handoffReceive convention).
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    PhosphorEngine::NavigationContext ctx;
+    ctx.screenId = QStringLiteral("S1");
+    engine->moveFocusedInDirection(QStringLiteral("down"), ctx);
+    QVERIFY(!feedback.isEmpty());
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:down"));
+    QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
+    QVERIFY(!stateFor(engine, QStringLiteral("S1"))->strip().containsWindow(QStringLiteral("app|a")));
+    QCOMPARE(stateFor(engine, QStringLiteral("S2"))->strip().windowsInOrder(),
+             (QStringList{QStringLiteral("app|b"), QStringLiteral("app|a")}));
+    engine->setCrossSurfaceResolver(nullptr);
+}
+
+void TestScrollEngineVerbs::emptyScreenFocusCrossesInsteadOfDeadEnding()
+{
+    RightNeighbourResolver resolver;
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")});
+    engine->setCrossSurfaceResolver(&resolver);
+    // S1 stays EMPTY; only the neighbour holds a window.
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S2"), 0, 0);
+
+    // niri parity: a directional focus press on an empty monitor walks onto
+    // the neighbour instead of dead-ending with no_windows — the boundary
+    // is the whole verb when there is nothing local to prefer.
+    QSignalSpy activate(engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    PhosphorEngine::NavigationContext ctx;
+    ctx.screenId = QStringLiteral("S1");
+    engine->focusInDirection(QStringLiteral("right"), ctx);
+    QCOMPARE(activate.count(), 1);
+    QCOMPARE(activate.last().at(0).toString(), QStringLiteral("app|b"));
+    QVERIFY(!feedback.isEmpty());
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
+
+    // No neighbour that way and nothing local: the empty screen still
+    // answers no_windows (this resolver offers only "right").
+    engine->focusInDirection(QStringLiteral("left"), ctx);
+    QVERIFY(!feedback.isEmpty());
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_windows"));
     engine->setCrossSurfaceResolver(nullptr);
 }
 

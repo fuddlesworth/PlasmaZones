@@ -473,6 +473,11 @@ Item {
         } else if (action === "expel") {
             return i18n("Window expelled into its own column");
         } else if (action === "center") {
+            // "span" is centerVisibleColumns' whole-group variant; the bare
+            // reason is centerColumn.
+            if (reason === "span")
+                return i18n("Visible columns centered");
+
             return i18n("Column centered");
         } else if (action === "swap_vs") {
             const vsSwapArrow = directionArrow(reason);

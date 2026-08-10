@@ -84,6 +84,15 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
     P_SCROLL_RESOLVE(ctx.screenId);
     const QString action = QStringLiteral("focus");
     if (!state || state->strip().isEmpty()) {
+        // An EMPTY screen still crosses (niri parity): a directional focus
+        // press on a monitor with no strip walks onto the neighbour instead
+        // of dead-ending — there is no in-strip candidate to prefer, so the
+        // boundary IS the whole verb here. Only when no neighbour exists (or
+        // the crossing found nothing to focus) does the empty screen answer
+        // no_windows.
+        if (focusAcrossBoundary(screen, direction, QString())) {
+            return;
+        }
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), ctx.windowId, QString(), screen);
         return;
     }
@@ -110,15 +119,14 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
         Q_EMIT navigationFeedback(true, action, direction, focusedBefore, state->strip().activeWindowId(), screen);
         return;
     }
-    // Horizontal strip edge: cross onto the adjacent output, the parity twin
-    // of moveFocusedInDirection's boundary arm — and of autotile's plain
-    // focus, which already crosses outputs on the same generic chord.
-    // DELIBERATELY horizontal-only, like the move and swap twins below: the
-    // strip has no vertical edge notion (a column's tiles exhaust vertically
-    // inside one output), and all three directional verbs stay consistent.
-    // A vertically-adjacent output is reached by the horizontal walk on that
-    // output or by direct pointer/click focus.
-    if (h != 0 && focusAcrossBoundary(screen, direction, focusedBefore)) {
+    // Strip edge in ANY direction: cross onto the adjacent output, the
+    // parity twin of moveFocusedInDirection's boundary arm — and of
+    // autotile's plain focus, which already crosses outputs on the same
+    // generic chord. Vertical crossings ride the same machinery: the
+    // resolver answers "up"/"down" neighbours and entryWindowForCrossing's
+    // vertical arm stands the target's own focused window in for the strip
+    // edge a vertical press does not have.
+    if ((h != 0 || v != 0) && focusAcrossBoundary(screen, direction, focusedBefore)) {
         return;
     }
     Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
@@ -209,10 +217,12 @@ void ScrollEngine::moveFocusedInDirection(const QString& direction, const Phosph
         Q_EMIT navigationFeedback(true, action, direction, focused, QString(), screen);
         return;
     }
-    // Horizontal boundary: the strip has no further column in this
-    // direction — cross onto the adjacent output when one exists.
+    // Boundary in any direction: the strip has no further column (or the
+    // column no further tile) this way — cross onto the adjacent output
+    // when one exists. A vertical crossing enters the target as an appended
+    // column (no strip edge to enter from; the handoffReceive convention).
     QString landingScreen;
-    if (h != 0 && moveActiveWindowAcrossBoundary(state, screen, direction, false, &landingScreen)) {
+    if ((h != 0 || v != 0) && moveActiveWindowAcrossBoundary(state, screen, direction, false, &landingScreen)) {
         // Same "screen:<dir>" spelling as autotile's cross-output move, and
         // announced on the DESTINATION screen (the snap convention): the
         // source output no longer holds the window the OSD is about.
@@ -389,7 +399,10 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     // Entering from the facing edge: moving right arrives as the target's
     // first column, moving left as its last — unless it takes the swap
     // partner's slot, which for a STACKED partner is a slot inside that
-    // partner's column rather than a column position.
+    // partner's column rather than a column position. A VERTICAL crossing
+    // has no facing strip edge, so it appends like "left" does (the same
+    // convention the daemon's handoffReceive documents for its
+    // insertIndex -1 fallback).
     int columnIdx = (direction == QLatin1String("right")) ? 0 : targetState->strip().columnCount();
     QSize partnerMinSize;
     WindowHeight partnerHeight;
@@ -555,7 +568,7 @@ void ScrollEngine::swapFocusedInDirection(const QString& direction, const Phosph
         return;
     }
     QString landingScreen;
-    if (h != 0 && moveActiveWindowAcrossBoundary(state, screen, direction, true, &landingScreen)) {
+    if ((h != 0 || v != 0) && moveActiveWindowAcrossBoundary(state, screen, direction, true, &landingScreen)) {
         // Destination screen, like the move twin: the traded-in partner is
         // what the source output now shows.
         Q_EMIT navigationFeedback(true, action, QStringLiteral("screen:") + direction, focused, QString(),
