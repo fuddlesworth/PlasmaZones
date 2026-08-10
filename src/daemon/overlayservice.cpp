@@ -41,6 +41,8 @@
 #include "phosphor_qml_i18n.h"
 #include "rendering/vulkansupport.h"
 
+#include <PhosphorProtocol/ServiceConstants.h>
+
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/SurfaceAnimator.h>
@@ -185,7 +187,12 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
 
     QVulkanInstance* externalVulkanInstance = nullptr;
 #if QT_CONFIG(vulkan)
-    externalVulkanInstance = qApp->property(PlasmaZones::PVulkanInstanceProperty).value<QVulkanInstance*>();
+    // Guarded: the screen-signal wiring below explicitly tolerates a null
+    // application object, so this read must too — an unguarded qApp deref
+    // here contradicted that tolerance three hundred lines apart.
+    if (qApp) {
+        externalVulkanInstance = qApp->property(PlasmaZones::PVulkanInstanceProperty).value<QVulkanInstance*>();
+    }
 #endif
 
     // Construct the thumbnail provider eagerly so the borrowed @c m_thumbnailProvider
@@ -251,10 +258,26 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
                 engine.addImageProvider(QString::fromLatin1(DmabufTextureProvider::ProviderId),
                                         m_dmabufTextureProviderOwned.release());
 
-                QObject::connect(&engine, &QObject::destroyed, this, [this]() {
-                    m_thumbnailProvider.store(nullptr, std::memory_order_release);
-                    m_dmabufTextureProvider.store(nullptr, std::memory_order_release);
-                });
+                // Compare-exchange against the pointers minted for THIS
+                // engine: if the configurator ever runs again (re-created
+                // engine), the FIRST engine's late destroyed signal must not
+                // null out the SECOND engine's freshly-stored providers.
+                auto* thumbForThisEngine = m_thumbnailProvider.load(std::memory_order_acquire);
+                auto* dmabufForThisEngine = m_dmabufTextureProvider.load(std::memory_order_acquire);
+                // Retire the PREVIOUS engine's connection before overwriting
+                // the handle: the compare-exchange makes a live fire
+                // harmless, but a first-engine connection surviving into
+                // ~m_surfaceManager would CAS against already-destructed
+                // atomic storage.
+                QObject::disconnect(m_engineProviderDestroyConnection);
+                m_engineProviderDestroyConnection = QObject::connect(
+                    &engine, &QObject::destroyed, this, [this, thumbForThisEngine, dmabufForThisEngine]() {
+                        auto* expectedThumb = thumbForThisEngine;
+                        m_thumbnailProvider.compare_exchange_strong(expectedThumb, nullptr, std::memory_order_acq_rel);
+                        auto* expectedDmabuf = dmabufForThisEngine;
+                        m_dmabufTextureProvider.compare_exchange_strong(expectedDmabuf, nullptr,
+                                                                        std::memory_order_acq_rel);
+                    });
             },
         .pipelineCachePath = pipelineCachePath,
         .vulkanInstance = externalVulkanInstance,
@@ -265,7 +288,7 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
         // and the import fails. Only requested when the experimental gate is
         // on, so default builds keep Qt's stock device. Qt enables only the
         // physically-supported subset.
-        .vulkanDeviceExtensions = qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS")
+        .vulkanDeviceExtensions = PhosphorProtocol::Service::snapAssistDmabufThumbnailsEnabled()
             ? QByteArrayList{QByteArrayLiteral("VK_KHR_external_memory_fd"),
                              QByteArrayLiteral("VK_EXT_external_memory_dma_buf"),
                              QByteArrayLiteral("VK_EXT_image_drm_format_modifier"),
@@ -322,13 +345,21 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
         unwireScrollTabShellSlots(screenId);
     });
 
-    // Connect to screen changes (with safety check for early initialization)
-    if (qGuiApp) {
-        connect(qGuiApp, &QGuiApplication::screenAdded, this, &OverlayService::handleScreenAdded);
-        connect(qGuiApp, &QGuiApplication::screenRemoved, this, &OverlayService::handleScreenRemoved);
-    } else {
-        qCWarning(lcOverlay) << "Overlay: created before QGuiApplication, screen signals not connected";
+    // Connect to screen changes. Fail LOUD on a missing application object,
+    // matching the profileRegistry pair above: a log-only skip here was a
+    // guard that didn't guard — it permanently lost hot-plug tracking for
+    // the daemon's whole lifetime with a single warning line as the only
+    // trace. Constructing OverlayService before QGuiApplication is a
+    // composition-root wiring error, not a runtime condition.
+    Q_ASSERT_X(qGuiApp, "OverlayService::OverlayService",
+               "must be constructed after QGuiApplication: screen hot-plug tracking cannot be wired late");
+    if (Q_UNLIKELY(!qGuiApp)) {
+        qFatal(
+            "OverlayService: constructed before QGuiApplication (composition-root wiring error) — screen "
+            "hot-plug tracking would be permanently lost");
     }
+    connect(qGuiApp, &QGuiApplication::screenAdded, this, &OverlayService::handleScreenAdded);
+    connect(qGuiApp, &QGuiApplication::screenRemoved, this, &OverlayService::handleScreenRemoved);
 
     // Connect to virtual screen configuration changes
     if (auto* mgr = m_screenManager) {
@@ -425,9 +456,21 @@ OverlayService::~OverlayService()
     // shell's, no separate cleanup here.
     // Picker post-shell-migration is also a slot in the per-screen
     // passive shell - no separate surface cleanup.
+    // COMPLETE hand-rolled subset of destroyShaderPreviewWindow: disconnect
+    // the screen-tracking signals and null the raw window pointer BEFORE the
+    // drain below destroys the window (the old dtor left
+    // m_shaderPreviewWindow dangling across the drain and skipped the
+    // disconnect). Deliberately NOT a call to destroyShaderPreviewWindow():
+    // its tail schedules the CAVA idle-quiesce, which allocates a QTimer and
+    // wires connections inside a destructor — legal but pointless teardown
+    // work.
     if (m_shaderPreviewSurface) {
+        if (m_shaderPreviewScreen && m_shaderPreviewWindow) {
+            disconnect(m_shaderPreviewScreen, nullptr, m_shaderPreviewWindow, nullptr);
+        }
         m_shaderPreviewSurface->deleteLater();
         m_shaderPreviewSurface = nullptr;
+        m_shaderPreviewWindow = nullptr;
     }
 
     // Drain deferred-delete events NOW, while all OverlayService members are
@@ -435,6 +478,15 @@ OverlayService::~OverlayService()
     // etc. - if we let ~m_surfaceManager's drain run instead, those members could
     // already be destroyed (C++ member destruction order is reverse declaration).
     m_surfaceManager->drainDeferredDeletes();
+
+    // Retire the engine-destroyed provider null-out lambda and null the
+    // atomics here, in the destructor BODY: the engine dies inside
+    // ~m_surfaceManager during member destruction, which runs AFTER the two
+    // provider atomics' destructors (they are declared later in the class) —
+    // letting the lambda fire then would write through destructed storage.
+    QObject::disconnect(m_engineProviderDestroyConnection);
+    m_thumbnailProvider.store(nullptr, std::memory_order_release);
+    m_dmabufTextureProvider.store(nullptr, std::memory_order_release);
 
     // Explicitly disconnect + clear the prime-tracking maps so the
     // invariant ("every Connection retired before its sender's window
@@ -506,7 +558,11 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     if (!screenGeom.isValid() && physScreen) {
         screenGeom = physScreen->geometry();
     }
-    QSize initialSize = screenGeom.isValid() ? screenGeom.size() : QSize(240, 70);
+    // Content-sized fallback matching the pre-migration OSD toast card (see
+    // the swapchain-cost paragraph above for why the surface is normally
+    // screen-sized instead).
+    static constexpr QSize FallbackOsdToastSize(240, 70);
+    QSize initialSize = screenGeom.isValid() ? screenGeom.size() : FallbackOsdToastSize;
 
     // Virtual-screen-aware anchors / margins, same vocabulary popups use
     // (see the showOnScreen path in selector.cpp). Physical screen →
@@ -538,6 +594,15 @@ PhosphorLayer::Surface* OverlayService::createWarmedOsdSurface(const PhosphorLay
     // stays.) Effects-on path
     // keeps the warm cache; effects-off path lets the next
     // syncSurfaceState !anyVisible transition unmap the wl_surface.
+    //
+    // CREATION-TIME ONLY: the gate is evaluated once here and baked into the
+    // surface's config for its whole life. Toggling shaders or animations at
+    // runtime does not re-configure live shells — a shell created with
+    // effects on keeps its mapped fullscreen surface after both are turned
+    // off, and one created with effects off pays the unmap/teardown cost on
+    // transitions until it is next recreated (hot-plug, VS reconfig). No
+    // toggle handler re-creates shells today; a toggle takes effect on the
+    // next natural shell creation.
     const bool shadersOn = m_shaderRegistry && m_shaderRegistry->shadersEnabled();
     const bool animationsOn = m_settings && m_settings->animationsEnabled();
     const bool keepMapped = shadersOn || animationsOn;
@@ -628,6 +693,12 @@ bool OverlayService::isSnappingContextDisabled(const QString& screenId) const
     if (!m_contextResolver) {
         return true;
     }
+    // Deliberately the OPPOSITE default from the null-resolver branch: an
+    // empty screenId here is not a teardown window but a caller with no
+    // per-screen identity (global paths), and "disabled" for those would
+    // suppress every screen's overlay off one anonymous query. Per-screen
+    // callers always pass a real id, so the fail-open branch only ever
+    // answers the global case.
     if (screenId.isEmpty()) {
         return false;
     }
@@ -654,10 +725,10 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) cons
 
 bool OverlayService::isSnappingContextInactive(const QString& screenId) const
 {
-    const int virtualDesktop = currentVirtualDesktopForScreen(screenId);
     if (isSnappingContextDisabled(screenId)) {
         return true;
     }
+    const int virtualDesktop = currentVirtualDesktopForScreen(screenId);
     if (!m_layoutManager) {
         return false;
     }
@@ -757,13 +828,29 @@ void OverlayService::hideDisabledAndRefresh()
     // No m_settings gate here: neither context predicate reads settings (both
     // fail closed on their own null members), and skipping the destroy loop on
     // a null settings pointer would leave stale selector/overlay slots up.
+    // Evaluate both context predicates ONCE per screen up front: each
+    // isSnappingContextInactive call runs isSnappingContextDisabled again
+    // internally, and each evaluation does a context resolve plus registry
+    // lookups — the previous per-loop re-evaluation paid that up to four
+    // times per screen while nothing between the loops changes context.
+    struct ContextGates
+    {
+        bool disabled = false;
+        bool inactive = false;
+    };
+    QHash<QString, ContextGates> gates;
+    gates.reserve(m_screenStates.size());
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        gates.insert(it.key(), {isSnappingContextDisabled(it.key()), isSnappingContextInactive(it.key())});
+    }
+
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
-        const bool disabled = isSnappingContextDisabled(screenId);
-        if (disabled) {
+        const ContextGates g = gates.value(screenId);
+        if (g.disabled) {
             destroyZoneSelectorWindow(screenId);
         }
-        if (m_visible && isSnappingContextInactive(screenId)) {
+        if (m_visible && g.inactive) {
             dismissOverlayWindow(screenId);
         }
     }
@@ -771,11 +858,18 @@ void OverlayService::hideDisabledAndRefresh()
     // Update remaining zone selector (disabled-gated) and overlay (suppress-gated) windows.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         const QString& screenId = it.key();
-        const bool disabled = isSnappingContextDisabled(screenId);
-        if (!disabled && it.value().zoneSelectorSlot()) {
+        // Fall back to a LIVE evaluation for a screen the snapshot missed
+        // (an entry created re-entrantly by the destroy loop's callbacks):
+        // gates.value()'s default {false,false} would treat it as enabled
+        // AND active, where the pre-cache code evaluated it live.
+        const auto gateIt = gates.constFind(screenId);
+        const ContextGates g = (gateIt != gates.constEnd())
+            ? gateIt.value()
+            : ContextGates{isSnappingContextDisabled(screenId), isSnappingContextInactive(screenId)};
+        if (!g.disabled && it.value().zoneSelectorSlot()) {
             updateZoneSelectorWindow(screenId);
         }
-        if (!isSnappingContextInactive(screenId) && m_visible && it.value().overlayPhysScreen) {
+        if (!g.inactive && m_visible && it.value().overlayPhysScreen) {
             updateOverlayWindow(screenId, it.value().overlayPhysScreen);
         }
     }
@@ -830,7 +924,12 @@ OverlayService::LayoutIncludeFlags OverlayService::resolvePerScreenLayoutInclude
     if (resolvedIdOut) {
         // The id the include decision was made for — callers must build
         // their layout lists with THIS id, or a connector-name caller gets
-        // its flags decided for one id and its rows for another.
+        // its flags decided for one id and its rows for another. One
+        // exception to the strict agreement: when idForName cannot resolve
+        // a connector name, the empty-id bail below returns the SEED flags
+        // while this hands back the raw name — both sides then answer from
+        // global (non-per-screen) knowledge, which is the closest the two
+        // can agree for an unresolvable screen.
         *resolvedIdOut = resolvedId.isEmpty() ? screenId : resolvedId;
     }
     // Engine capability gate FIRST — ahead of the layout-manager guard,
@@ -929,7 +1028,19 @@ void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)
 
 void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
 {
+    if (m_excludedScreens == screenIds) {
+        return;
+    }
     m_excludedScreens = screenIds;
+    // A screen entering the excluded set while its overlay is up must drop
+    // that overlay now, not on the next incidental refresh — mirror the
+    // change-gate + refresh shape of setLayoutFilter. Note the refresh does
+    // NOT read m_excludedScreens itself: it works through the
+    // isAutotile/isScrolling assignment legs of isSnappingContextInactive,
+    // which reflect the same engine-ownership change that drove the
+    // exclusion (the caller updates the assignment state before pushing the
+    // set here).
+    hideDisabledAndRefresh();
 }
 
 int OverlayService::visibleLayoutCount(const QString& screenId) const
@@ -963,9 +1074,19 @@ void OverlayService::onPrepareForSleep(bool goingToSleep)
         return;
     }
 
-    // System waking up - restart shader timer to avoid large iTimeDelta
+    // System waking up - restart shader timer to avoid large iTimeDelta.
+    // Gate on m_visible OR the editor's shader preview — the preview drives
+    // the same timer with m_visible == false, and a resume with only the
+    // preview on screen used to skip the restart and deliver exactly the
+    // giant-delta frame this handler exists to prevent. Deliberately NOT
+    // isOverlayDisplaying(): that helper excludes the warm-idled overlay
+    // (m_overlayIdled), whose timer stays valid across idle and would
+    // deliver the whole suspend duration as the first delta after un-idle —
+    // refreshFromIdle's ensureShaderTimerStarted is a no-op on an
+    // already-valid timer, so nothing downstream repairs it.
     QMutexLocker locker(&m_shaderTimerMutex);
-    if (m_visible && m_shaderTimer.isValid()) {
+    const bool previewVisible = m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible();
+    if ((m_visible || previewVisible) && m_shaderTimer.isValid()) {
         m_shaderTimer.restart();
         m_lastFrameTime.store(0);
         qCInfo(lcOverlay) << "Shader timer restarted after system resume";

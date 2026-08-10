@@ -391,6 +391,18 @@ void Daemon::connectOverlaySignals()
                     : (isAutotileScreen(effectiveScreenId)
                        || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(effectiveScreenId)));
                 if (engineOwned) {
+                    // No move will be requested, so the usual dismissal wire
+                    // (windowZoneChanged → snap-assist dismiss) never fires —
+                    // without an explicit hide the modal stays up, eating a
+                    // click with no feedback until Escape. QUEUED, not
+                    // synchronous: this handler runs inside the QML click
+                    // dispatch (card MouseArea → shell signal → service
+                    // emit), and a synchronous hide can take ShellHost's
+                    // inline no-op completion, which unloads the Loader
+                    // whose MouseArea is still dispatching the click.
+                    QTimer::singleShot(0, m_overlayService.get(), [svc = m_overlayService.get()]() {
+                        svc->hideSnapAssist();
+                    });
                     return;
                 }
             }

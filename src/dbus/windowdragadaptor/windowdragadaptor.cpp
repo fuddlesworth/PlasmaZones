@@ -83,11 +83,11 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
     // binding — binding one per drag forced kwin to fsync kglobalshortcutsrc
     // at drag start/end and stuttered the compositor on slow disks (#167). The
     // kCancelOverlayId grab below is bound only for the grab-less snap-assist
-    // phase (start.cpp's snapAssistShown handler) and the layout picker
-    // (start.cpp), and released via onSnapAssistDismissed / the picker path.
+    // phase (shortcuts_wiring.cpp's snapAssistShown handler) and the layout picker
+    // (shortcuts_wiring.cpp), and released via onSnapAssistDismissed / the picker path.
 
     // When snap assist is dismissed (selection, timeout, etc.), unregister the Escape shortcut
-    // that start.cpp's snapAssistShown handler bound for the snap assist phase
+    // that shortcuts_wiring.cpp's snapAssistShown handler bound for the snap assist phase
     connect(overlay, &IOverlayService::snapAssistDismissed, this, &WindowDragAdaptor::onSnapAssistDismissed);
 }
 
@@ -566,8 +566,8 @@ void WindowDragAdaptor::unregisterCancelOverlayShortcut()
 void WindowDragAdaptor::releaseCancelOverlayShortcutIfIdle()
 {
     // kCancelOverlayId is the SHARED Escape grab. It is bound on behalf of the
-    // layout picker (start.cpp, layoutPickerRequested) and the snap-assist
-    // phase (start.cpp, snapAssistShown), each of which releases it on its own
+    // layout picker (shortcuts_wiring.cpp, layoutPickerRequested) and the snap-assist
+    // phase (shortcuts_wiring.cpp, snapAssistShown), each of which releases it on its own
     // dismiss. The drag itself never binds it (the kwin-effect's keyboard grab
     // handles Escape during a drag). So any teardown path that drops the grab
     // must first confirm no OTHER consumer is still showing — otherwise it

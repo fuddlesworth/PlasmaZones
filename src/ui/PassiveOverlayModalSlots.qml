@@ -40,8 +40,11 @@ Item {
         // show; SnapAssistContent picks them up via QML lexical scope.
         property var emptyZones: []
         property var candidates: []
-        property int screenWidth: 1920
-        property int screenHeight: 1080
+        // Per-show thumbnail overlay: compositorHandle → provider URL. C++
+        // pushes this as its OWN property so an arriving thumbnail updates
+        // only the Image bindings that read it — re-pushing the whole
+        // candidates list rebuilt every delegate and reset hover state.
+        property var thumbnails: ({})
         property color highlightColor: QFZCommon.ZoneColorDefaults.activeZoneColor
         property color inactiveColor: QFZCommon.ZoneColorDefaults.inactiveZoneColor
         property color borderColor: QFZCommon.ZoneColorDefaults.zoneBorderColor
@@ -109,8 +112,7 @@ Item {
             SnapAssistContent {
                 emptyZones: snapAssistSlot.emptyZones
                 candidates: snapAssistSlot.candidates
-                screenWidth: snapAssistSlot.screenWidth
-                screenHeight: snapAssistSlot.screenHeight
+                thumbnails: snapAssistSlot.thumbnails
                 highlightColor: snapAssistSlot.highlightColor
                 inactiveColor: snapAssistSlot.inactiveColor
                 borderColor: snapAssistSlot.borderColor

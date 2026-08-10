@@ -19,7 +19,12 @@ class ShellState;
 } // namespace PhosphorOverlay
 
 class QQuickItem;
+class QQuickWindow;
 class QScreen;
+
+namespace PhosphorLayer {
+class Surface;
+} // namespace PhosphorLayer
 
 namespace PlasmaZones {
 
@@ -178,6 +183,25 @@ struct LayerSurfaceParams
     /// the warm-up commit. Forwarded verbatim to
     /// SurfaceConfig::initialSize, including the empty-as-unset sentinel.
     QSize initialSize = {};
+};
+
+/**
+ * @brief Everything OverlayService::prepareLayoutOsdWindow resolves for an
+ *        OSD show: the shell window/surface/slot, the backing physical
+ *        screen, the (virtual-screen-aware) geometry, its clamped aspect
+ *        ratio and the effective screen id the per-screen context lookups
+ *        must use. Returned as std::optional (nullopt = preparation failed),
+ *        replacing the earlier seven-out-parameter signature — same
+ *        params-struct convention as LayerSurfaceParams above.
+ */
+struct PreparedLayoutOsdWindow
+{
+    QQuickWindow* window = nullptr;
+    PhosphorLayer::Surface* surface = nullptr;
+    QQuickItem* osdSlot = nullptr;
+    QRect screenGeom = {};
+    qreal aspectRatio = 0.0;
+    QString effectiveScreenId = {};
 };
 
 } // namespace PlasmaZones

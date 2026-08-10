@@ -377,6 +377,13 @@ void Daemon::connectDesktopActivity()
                 // sitting at their tile rects.
                 flushPendingSnapZoneRestores();
                 syncModeFromAssignments();
+                // Re-evaluate the context gates for the new (screen, desktop)
+                // pair: this per-output path never goes through
+                // setCurrentVirtualDesktop (whose global change gate is dead
+                // under per-output desktops), so without an explicit call a
+                // switch onto a context-disabled desktop left an
+                // already-visible overlay or zone selector up on that screen.
+                m_overlayService->hideDisabledAndRefresh();
                 if (m_overlayService->isVisible()) {
                     m_overlayService->updateGeometries();
                 }

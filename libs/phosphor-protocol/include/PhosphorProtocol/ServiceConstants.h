@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QLatin1String>
+#include <QtGlobal>
 
 namespace PhosphorProtocol::Service {
 
@@ -236,5 +237,24 @@ inline constexpr int SnapAssistThumbnailPostTimeoutMs = 2000;
 // is no longer a window where the effect believes the daemon holds entries
 // the daemon has already evicted. 24 × 256² ARGB32 ≈ 6 MB on the daemon.
 inline constexpr int SnapAssistThumbnailCacheCapacity = 24;
+
+// Shared per-axis ceiling for snap-assist thumbnails. The daemon rejects
+// anything larger at both the D-Bus boundary (OverlayAdaptor) and the service
+// boundary (OverlayService, for direct C++ callers); the kwin-effect clamps
+// its capture box against the same value so it can never produce a payload
+// the daemon is guaranteed to refuse — an oversize refusal never marks the
+// handle as recently-posted, which would otherwise re-capture on every show.
+inline constexpr int SnapAssistThumbnailMaxDimension = 1024;
+
+// Single accessor for the experimental zero-copy thumbnail gate. Read in
+// FOUR places with different lifetimes (the effect's capture ctor, the
+// daemon's D-Bus slot, the daemon's Vulkan device-extension wiring, and the
+// effect's daemon-ready re-arm); routing every read through one helper keeps
+// the spelling and the read discipline from drifting apart. The env var is
+// process-constant, so callers may cache the result freely.
+inline bool snapAssistDmabufThumbnailsEnabled()
+{
+    return qEnvironmentVariableIsSet("PLASMAZONES_DMABUF_THUMBNAILS");
+}
 
 } // namespace PhosphorProtocol::Service

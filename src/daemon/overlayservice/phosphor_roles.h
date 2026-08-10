@@ -104,8 +104,9 @@ inline const PhosphorLayer::Role PassiveShell = PhosphorShellPatterns::Hud()
 /// overloads resolve per-content motion + shader profiles via this
 /// role's prefix even though the shell's actual surface uses
 /// PassiveShell). Escape-to-dismiss is wired via the daemon's
-/// `cancel_overlay_during_drag` global accelerator (see start.cpp's
-/// snapAssistShown handler) since the shell is kbd-None.
+/// `cancel_overlay_during_drag` global accelerator (see
+/// shortcuts_wiring.cpp's snapAssistShown handler) since the shell is
+/// kbd-None.
 ///
 /// Singleton at the daemon level - m_snapAssistScreenId tracks which
 /// screen's slot is active and re-targets across screens.

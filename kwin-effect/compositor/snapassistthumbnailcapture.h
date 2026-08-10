@@ -21,6 +21,7 @@ class QImage;
 namespace KWin {
 class EffectWindow;
 class GLTexture;
+class RectF;
 }
 
 namespace PlasmaZones {
@@ -94,12 +95,27 @@ public:
     /**
      * @brief Drop the recently-posted bookkeeping.
      *
-     * Called when the daemon's cache is known to be empty (daemon restart,
-     * service registration after a disconnect). Without this the kwin-effect
-     * would keep skipping captures for handles the daemon no longer holds,
-     * stranding snap-assist on icons until the LRU window rolls past.
+     * Called when the daemon's cache is known to be empty: daemon restart /
+     * service registration after a disconnect, and the daemon's idle-grace
+     * cache trim (signalled via snapAssistThumbnailCacheTrimmed). Without
+     * this the kwin-effect would keep skipping captures for handles the
+     * daemon no longer holds, stranding snap-assist on icons until the LRU
+     * window rolls past — and because @ref bumpRecency re-promotes skipped
+     * handles, it would in practice never roll past.
      */
     void resetRecentlyPosted();
+
+    /**
+     * @brief Restore the env-gated dma-buf path after a daemon-ready transition.
+     *
+     * A daemon restart turns in-flight dma-buf posts into transport errors;
+     * historically those latched the session onto the raw-pixel path with no
+     * recovery edge. Called from the daemon-ready hook ONLY (not the cache
+     * trim, which fires repeatedly in healthy sessions): re-enables the path
+     * and zeroes the failure counter when the env gate is set. No-op when
+     * PLASMAZONES_DMABUF_THUMBNAILS is unset.
+     */
+    void rearmDmabufPath();
 
 private Q_SLOTS:
     void processNext();
@@ -110,8 +126,9 @@ private:
     /// lacks EGL_MESA_image_dma_buf_export. Per-export failures and daemon
     /// import rejections are counted; after @ref DmabufFailureThreshold
     /// consecutive failures the capture switches the whole session back to the
-    /// raw-pixel path (@ref onDmabufRejected) so an unsupported setup degrades
-    /// to working pixel thumbnails instead of stranding candidates on icons.
+    /// raw-pixel path (@ref countDmabufFailure) so an unsupported setup
+    /// degrades to working pixel thumbnails instead of stranding candidates
+    /// on icons.
     struct DmabufExport
     {
         bool ok = false;
@@ -139,22 +156,43 @@ private:
     /// path needs no OutputFrame). This is the raw-pixel path.
     QImage grabWindowImage(KWin::EffectWindow* w, QSize box) const;
 
-    /// Render @p w into a pooled, persistent GLFramebuffer texture and return
-    /// it (a borrowed pointer into @ref m_texturePool). Used by the dma-buf
-    /// path: the exported buffer aliases the texture, so it must outlive the
-    /// daemon's async import — the pool round-robins so a slot isn't reused
-    /// until @ref TexturePoolSize captures later, giving the daemon's copy a
-    /// margin (mirroring the producer-scene pool the OffscreenQuickScene path
-    /// used). Returns nullptr if the window can't be found/rendered.
+    /// Render @p w (blit-flipped to top-down orientation) into a pooled,
+    /// persistent GLFramebuffer texture and return it (a borrowed pointer
+    /// into @ref m_texturePool). Used by the dma-buf path: the exported
+    /// buffer aliases the texture. The pool provides a best-effort
+    /// CONTENT-STABILITY margin, not a guarantee — see the comment at the
+    /// pool use site for exactly what round-robin does and does not promise.
+    /// The slot index is advanced by the CALLER, and only after a successful
+    /// export, so failed exports and retries don't burn the margin.
+    /// Returns nullptr if the window can't be found/rendered.
     ///
     /// Unlike @ref grabWindowImage this does NOT manage GL context currency:
     /// the caller makes the compositor context current before calling and
     /// keeps it current through the subsequent @ref exportTextureToDmabuf
     /// (which reads it via @c eglGetCurrentContext).
-    KWin::GLTexture* renderWindowToPooledTexture(KWin::EffectWindow* w, QSize box);
+    ///
+    /// On a nullptr return, @p candidateNotRenderable distinguishes the two
+    /// failure domains the caller must treat differently: true = THIS
+    /// candidate has nothing to render (degenerate geometry, sliver fit) —
+    /// drop it without counting; false = a capability or resource failure
+    /// (no blit support, allocation failure, incomplete FBO) — count it
+    /// toward the session fallback so the pixel path can take over.
+    /// Collapsing both into a bare nullptr let a blit-less driver drop
+    /// every candidate forever with m_dmabufEnabled still true.
+    KWin::GLTexture* renderWindowToPooledTexture(KWin::EffectWindow* w, QSize box, bool* candidateNotRenderable);
 
     void postThumbnail(const QUuid& internalId, const QImage& image);
-    void postThumbnailDmabuf(const Pending& p, const DmabufExport& exported);
+    /// @p generation is the queue generation the capture ran under; the
+    /// rejection reply honours it the same way attemptCapture's timer lambda
+    /// does — a stale rejection still counts toward the capability fallback
+    /// but must not re-inject its candidate into a replaced queue.
+    void postThumbnailDmabuf(const Pending& p, const DmabufExport& exported, int generation);
+
+    /// Count one dma-buf capture failure toward the session fallback,
+    /// flipping to the raw-pixel path at @ref DmabufFailureThreshold.
+    /// Shared by onDmabufRejected (fresh failures, which also re-enqueue)
+    /// and the stale-generation rejection path (count only).
+    void countDmabufFailure();
 
     /// Record a dma-buf capture failure (export failure or daemon import
     /// rejection) for @p p. After @ref DmabufFailureThreshold consecutive
@@ -167,14 +205,24 @@ private:
     /// EGL_MESA_image_dma_buf_export. Must be called with KWin's GL/EGL
     /// context current (i.e. while @ref renderWindowToPooledTexture's context
     /// is still active). Returns {ok=false} on any failure; the caller drops
-    /// the candidate.
-    DmabufExport exportTextureToDmabuf(KWin::GLTexture* texture) const;
+    /// the candidate. Non-const: its whole purpose is external side effects
+    /// (EGLImage + sync creation/destruction, fd duplication).
+    DmabufExport exportTextureToDmabuf(KWin::GLTexture* texture);
 
-    /// Render and read back the thumbnail for @p p; on a null image, retry
-    /// once with a longer delay before giving up. A freshly mapped window
-    /// occasionally has no renderable frame on the first attempt; one retry is
-    /// enough in practice and falls back to the icon path otherwise.
-    void attemptCapture(Pending p, int delayMs, int retriesLeft);
+    /// Render and read back the thumbnail for @p p; on an empty image (null
+    /// OR fully transparent — a not-yet-renderable window draws nothing into
+    /// the cleared FBO, which reads back valid), retry once with a longer
+    /// delay before giving up. @p generation is compared against
+    /// @ref m_queueGeneration when the timer fires so a capture queued
+    /// before a captureCandidates replacement skips its stale render/post
+    /// while still advancing the queue.
+    void attemptCapture(const Pending& p, int delayMs, int retriesLeft, int generation);
+
+    /// Aspect-preserving fit of @p wg into @p box, never upscaling (scale
+    /// clamped to 1.0). Returns an empty size when either fitted axis lands
+    /// below the minimum useful thumbnail size — the caller treats that as a
+    /// capture failure (icon fallback) rather than shipping a sliver.
+    static QSize fittedThumbnailSize(const KWin::RectF& wg, QSize box, qreal* scaleOut);
 
     /// Mark @p handle as posted to the daemon, evicting the least-recently-
     /// used entry if the bookkeeping is at capacity. Called from the D-Bus
@@ -231,8 +279,9 @@ private:
     /// each capture renders into a pooled FBO texture, exports it as a dma-buf
     /// and posts via setWindowThumbnailDmabuf instead of the raw-ARGB32
     /// setSnapAssistThumbnail. Initialised from the env var at construction;
-    /// cleared by @ref onDmabufRejected if the path proves unavailable at
-    /// runtime, after which the session uses the pixel path.
+    /// cleared by @ref countDmabufFailure if the path proves unavailable at
+    /// runtime, after which the session uses the pixel path (until a
+    /// daemon-ready transition re-arms it via @ref rearmDmabufPath).
     bool m_dmabufEnabled = false;
     /// Consecutive dma-buf capture failures (export or daemon rejection).
     /// Reset on success; triggers the session fallback at
@@ -240,16 +289,27 @@ private:
     int m_dmabufConsecutiveFailures = 0;
 
     /// Small pool of persistent FBO textures driving the dma-buf path.
-    /// Consecutive captures round-robin across the pool so a texture isn't
-    /// reused until @ref TexturePoolSize captures later — long enough for the
-    /// daemon to have copied the exported buffer into its own per-candidate
-    /// texture. The raw-pixel path does not use the pool (@ref grabWindowImage
-    /// allocates a throwaway texture and copies immediately via toImage()).
+    /// Successful exports round-robin across the pool (the slot advances only
+    /// on export success), giving the daemon's lazy copy-on-first-frame a
+    /// best-effort content-stability window of @ref TexturePoolSize further
+    /// exports before a slot's pixels are overwritten. This is a heuristic
+    /// margin, NOT a guarantee — see renderWindowToPooledTexture. The
+    /// raw-pixel path does not use the pool (@ref grabWindowImage allocates a
+    /// throwaway texture and copies immediately via toImage()).
     static constexpr int TexturePoolSize = 3;
     std::array<std::unique_ptr<KWin::GLTexture>, TexturePoolSize> m_texturePool;
     int m_poolNext = 0;
+    /// Scratch render target for the dma-buf path's orientation flip: the
+    /// window renders here bottom-up (GL origin), then blits flipped into the
+    /// pooled slot so the exported buffer is top-down. Reallocated on size
+    /// change, freed with the pool in the destructor.
+    std::unique_ptr<KWin::GLTexture> m_flipScratch;
 
     QQueue<Pending> m_queue;
+    /// Bumped by every captureCandidates; in-flight capture timers carry the
+    /// generation they were queued under and no-op (queue-advance only) when
+    /// it no longer matches — see attemptCapture.
+    int m_queueGeneration = 0;
     /// Bookkeeping for @ref wasRecentlyPosted: O(1) membership via the set,
     /// O(1) oldest-first eviction via the queue. Kept strictly in sync.
     QSet<QUuid> m_recentlyPostedSet;

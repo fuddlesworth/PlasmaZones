@@ -63,43 +63,40 @@ void sizeOsdToScreen(QQuickWindow* window, const QRect& targetGeom)
 
 } // namespace
 
-bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer::Surface*& outSurface,
-                                            QQuickItem*& outOsdSlot, QScreen*& outPhysScreen, QRect& screenGeom,
-                                            qreal& aspectRatio, QString& outEffectiveScreenId, const QString& screenId)
+std::optional<PreparedLayoutOsdWindow> OverlayService::prepareLayoutOsdWindow(const QString& screenId)
 {
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for layout OSD";
-        return false;
+        return std::nullopt;
     }
 
-    outPhysScreen = physScreen;
+    PreparedLayoutOsdWindow prep;
 
     // Use virtual screen geometry if applicable, otherwise physical
-    screenGeom = resolveScreenGeometry(m_screenManager, screenId);
-    if (!screenGeom.isValid()) {
-        screenGeom = physScreen->geometry();
+    prep.screenGeom = resolveScreenGeometry(m_screenManager, screenId);
+    if (!prep.screenGeom.isValid()) {
+        prep.screenGeom = physScreen->geometry();
     }
 
-    QString effectiveId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
-    outEffectiveScreenId = effectiveId;
+    prep.effectiveScreenId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
-    auto* state = ensurePassiveShellFor(effectiveId, physScreen);
+    auto* state = ensurePassiveShellFor(prep.effectiveScreenId, physScreen);
     if (!state || !state->shell || !state->shell->shellWindow() || !state->shell->shellSurface() || !state->osdSlot()) {
-        qCWarning(lcOverlay) << "Failed to get passive shell for layout OSD on screen=" << effectiveId;
-        return false;
+        qCWarning(lcOverlay) << "Failed to get passive shell for layout OSD on screen=" << prep.effectiveScreenId;
+        return std::nullopt;
     }
 
     // Force-hide any zone selector on this screen so a fading-out
     // selector doesn't stack translucently behind the incoming OSD.
     // Slot-level animator hide; the shell surface stays Shown for the
     // OSD that follows.
-    hideZoneSelectorSlotOnScreen(effectiveId);
+    hideZoneSelectorSlotOnScreen(prep.effectiveScreenId);
 
-    window = state->shell->shellWindow();
-    outSurface = state->shell->shellSurface();
-    outOsdSlot = state->osdSlot();
+    prep.window = state->shell->shellWindow();
+    prep.surface = state->shell->shellSurface();
+    prep.osdSlot = state->osdSlot();
 
     // Mode is NOT written here - callers write data properties first, then
     // set mode. This ensures the Loader's freshly instantiated content
@@ -108,13 +105,14 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     // values from the previous show (or from QML property initialisers on
     // the first-ever show).
 
-    assertWindowOnScreen(window, physScreen, screenGeom);
+    assertWindowOnScreen(prep.window, physScreen, prep.screenGeom);
 
-    aspectRatio =
-        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+    prep.aspectRatio = (prep.screenGeom.height() > 0)
+        ? static_cast<qreal>(prep.screenGeom.width()) / prep.screenGeom.height()
+        : (16.0 / 9.0);
+    prep.aspectRatio = qBound(0.5, prep.aspectRatio, 4.0);
 
-    return true;
+    return prep;
 }
 
 void OverlayService::finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface* surface, QQuickItem* osdSlot,
@@ -165,17 +163,16 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
         qCDebug(lcOverlay) << "Skipping OSD for empty layout=" << layout->name();
         return;
     }
-    QQuickWindow* window = nullptr;
-    PhosphorLayer::Surface* surface = nullptr;
-    QQuickItem* osdSlot = nullptr;
-    QScreen* physScreen = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 0;
-    QString effectiveScreenId;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
-                                screenId)) {
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
         return;
     }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+    const QString effectiveScreenId = prep->effectiveScreenId;
 
     // Pass the actual screen geometry so fixed-mode zones normalize against
     // the screen we're about to render on, not Layout::lastRecalcGeometry()
@@ -241,17 +238,16 @@ void OverlayService::showScrollingTemplateOsd(const QString& id, const QString& 
         qCDebug(lcOverlay) << "Skipping OSD for empty template=" << name;
         return;
     }
-    QQuickWindow* window = nullptr;
-    PhosphorLayer::Surface* surface = nullptr;
-    QQuickItem* osdSlot = nullptr;
-    QScreen* physScreen = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 0;
-    QString effectiveScreenId;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
-                                screenId)) {
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
         return;
     }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+    const QString effectiveScreenId = prep->effectiveScreenId;
 
     LayoutOsdContentParams p;
     p.screenId = effectiveScreenId;
@@ -288,17 +284,16 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         return;
     }
 
-    QQuickWindow* window = nullptr;
-    PhosphorLayer::Surface* surface = nullptr;
-    QQuickItem* osdSlot = nullptr;
-    QScreen* physScreen = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 0;
-    QString effectiveScreenId;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
-                                screenId)) {
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
         return;
     }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+    const QString effectiveScreenId = prep->effectiveScreenId;
 
     // Resolve aspectRatioClass.
     //
@@ -604,17 +599,16 @@ void OverlayService::applyDecoration(QObject* slot, const QString& surfacePath)
 
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
 {
-    QQuickWindow* window = nullptr;
-    PhosphorLayer::Surface* surface = nullptr;
-    QQuickItem* osdSlot = nullptr;
-    QScreen* physScreen = nullptr;
-    QRect screenGeom;
-    qreal aspectRatio = 0;
-    QString effectiveScreenId;
-    if (!prepareLayoutOsdWindow(window, surface, osdSlot, physScreen, screenGeom, aspectRatio, effectiveScreenId,
-                                screenId)) {
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
         return;
     }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const surface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect screenGeom = prep->screenGeom;
+    const qreal aspectRatio = prep->aspectRatio;
+    const QString effectiveScreenId = prep->effectiveScreenId;
 
     // Reset overlay state then set disabled. locked stays false (mutually
     // exclusive with disabled; also enforced in QML). The disabled state
@@ -751,19 +745,17 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Runs BEFORE the dedup check because it is the source of effectiveId;
     // that is safe — on the duplicate path the first show already created
     // the shell and hid the zone selector, so the helper's side effects are
-    // no-ops there. The aspect-ratio out-param is unused: the nav card is
+    // no-ops there. The bundle's aspect ratio is unused: the nav card is
     // text-sized, not preview-sized.
-    QQuickWindow* window = nullptr;
-    PhosphorLayer::Surface* navSurface = nullptr;
-    QQuickItem* osdSlot = nullptr;
-    QScreen* physScreen = nullptr;
-    QRect navScreenGeom;
-    qreal unusedAspectRatio = 0;
-    QString effectiveId;
-    if (!prepareLayoutOsdWindow(window, navSurface, osdSlot, physScreen, navScreenGeom, unusedAspectRatio, effectiveId,
-                                screenId)) {
+    const auto prep = prepareLayoutOsdWindow(screenId);
+    if (!prep) {
         return;
     }
+    QQuickWindow* const window = prep->window;
+    PhosphorLayer::Surface* const navSurface = prep->surface;
+    QQuickItem* const osdSlot = prep->osdSlot;
+    const QRect navScreenGeom = prep->screenGeom;
+    const QString effectiveId = prep->effectiveScreenId;
 
     // Deduplicate: Skip if same action+reason+screen within 200ms (prevents duplicate from Qt signal + D-Bus signal).
     // Keyed on effectiveId (resolved from physScreen if the caller passed an

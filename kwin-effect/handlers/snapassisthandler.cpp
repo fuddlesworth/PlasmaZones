@@ -147,6 +147,14 @@ void SnapAssistHandler::resetRecentlyPostedThumbnails()
 {
     if (m_capture) {
         m_capture->resetRecentlyPosted();
+        m_capture->rearmDmabufPath();
+    }
+}
+
+void SnapAssistHandler::slotSnapAssistThumbnailCacheTrimmed()
+{
+    if (m_capture) {
+        m_capture->resetRecentlyPosted();
     }
 }
 
