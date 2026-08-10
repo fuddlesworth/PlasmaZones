@@ -1,6 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): this file is just past the 1150 hard
+// ceiling. The case for it: the shortcut-invariant guards (duplicate
+// defaults, Shift+symbol spellings, the schema/manager parity derivations)
+// and the scrolling schema guards read each other's fixtures and pin the
+// SAME defaults table, so a split would duplicate the advertised-chord
+// pins across two files and let them drift apart — the exact defect class
+// this suite exists to prevent. If a genuinely separate concern lands,
+// it takes a sibling rather than growing this.
+
 /**
  * @file test_scrolling_settings.cpp
  * @brief Schema-level guards for the Scrolling group and the

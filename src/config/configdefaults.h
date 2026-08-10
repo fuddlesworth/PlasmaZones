@@ -130,29 +130,34 @@ public:
     {
         return true;
     }
+    // Spelled as the enumerators, not literals, so each bound READS as the
+    // entry it means (a new enumerator still needs the Max retargeted by
+    // hand). The remaining consumers are the D-Bus registry guards and the
+    // runtime default asserts; the schema rows validate against explicit
+    // enumerator lists and no longer read these.
     static constexpr int osdStyleMin()
     {
-        return 0;
+        return static_cast<int>(OsdStyle::None);
     }
     static constexpr int osdStyleMax()
     {
-        return 2;
+        return static_cast<int>(OsdStyle::Preview);
     }
     static int osdStyle()
     {
-        return 2;
+        return static_cast<int>(OsdStyle::Preview);
     }
     static constexpr int overlayDisplayModeMin()
     {
-        return 0;
+        return static_cast<int>(OverlayDisplayMode::ZoneRectangles);
     }
     static constexpr int overlayDisplayModeMax()
     {
-        return 1;
+        return static_cast<int>(OverlayDisplayMode::LayoutPreview);
     }
     static int overlayDisplayMode()
     {
-        return 0;
+        return static_cast<int>(OverlayDisplayMode::ZoneRectangles);
     }
     // ═══════════════════════════════════════════════════════════════════════════
     // Window Behavior Settings
@@ -395,6 +400,28 @@ public:
         return QString();
     }
     static QString tilingAlgorithmOrder()
+    {
+        return QString();
+    }
+
+    /// Default snapping default-layout id: empty (no explicit default; the
+    /// daemon falls back to its bundled template pick). Same
+    /// every-default-through-ConfigDefaults rationale as the orders above.
+    static QString defaultLayoutId()
+    {
+        return QString();
+    }
+
+    /// Default per-algorithm settings map: empty (every algorithm runs on
+    /// its own schema defaults until the user tweaks one).
+    static QVariantMap autotilePerAlgorithmSettings()
+    {
+        return {};
+    }
+
+    /// Default tiling locked-screens list: empty comma-joined QString (no
+    /// screen locked), matching the key's stored type.
+    static QString autotileLockedScreens()
     {
         return QString();
     }
@@ -1082,5 +1109,16 @@ static_assert(ConfigDefaults::autotileSplitRatio() >= ConfigDefaults::autotileSp
 static_assert(ConfigDefaults::autotileSplitRatioStep() >= ConfigDefaults::autotileSplitRatioStepMin()
                   && ConfigDefaults::autotileSplitRatioStep() <= ConfigDefaults::autotileSplitRatioStepMax(),
               "ConfigDefaults::autotileSplitRatioStep() outside declared [min, max] range");
+// The zone-selector quick-size pair: both re-seed the RANGED PreviewWidth
+// key (the Small/Large buttons write them through the store), so an
+// out-of-range edit here would be silently snapped by the schema clamp on
+// the next press instead of failing the build — the same rationale as the
+// scrolling tab-indicator width re-seeds' asserts.
+static_assert(ConfigDefaults::previewWidthSmall() >= ConfigDefaults::previewWidthMin()
+                  && ConfigDefaults::previewWidthSmall() <= ConfigDefaults::previewWidthMax(),
+              "ConfigDefaults::previewWidthSmall() outside declared [min, max] range");
+static_assert(ConfigDefaults::previewWidthLarge() >= ConfigDefaults::previewWidthMin()
+                  && ConfigDefaults::previewWidthLarge() <= ConfigDefaults::previewWidthMax(),
+              "ConfigDefaults::previewWidthLarge() outside declared [min, max] range");
 
 } // namespace PlasmaZones

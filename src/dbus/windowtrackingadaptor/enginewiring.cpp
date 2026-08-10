@@ -43,7 +43,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                                        PhosphorEngine::PlacementEngineBase* autotileEngine,
                                        PhosphorEngine::PlacementEngineBase* scrollEngine)
 {
-    // Disconnect previous autotile engine nav feedback (its other five
+    // Disconnect previous autotile engine nav feedback (its other six
     // signals get their own targeted disconnect blocks below)
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);

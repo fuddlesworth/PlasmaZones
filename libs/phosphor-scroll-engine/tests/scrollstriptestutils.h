@@ -20,6 +20,7 @@
 // the same strip is laid out against two different gap values in one test
 // body.
 
+#include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollStrip.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
@@ -157,6 +158,22 @@ inline PhosphorScrollEngine::ScrollEngine* makeGappedProviderEngine(QObject* par
     });
     return engine;
 }
+
+/// S2 sits to the RIGHT of everything; every other direction has no
+/// neighbour. Shared by the smoke suite's parking tests and the verbs
+/// suite's horizontal crossings — one definition so the topology the pixel
+/// expectations assume cannot drift between files.
+struct RightNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
+{
+    QString neighborOutputInDirection(const QString&, const QString& direction) const override
+    {
+        return direction == QLatin1String("right") ? QStringLiteral("S2") : QString();
+    }
+    int neighborDesktopInDirection(int, const QString&) const override
+    {
+        return 0;
+    }
+};
 
 /// The resolved tile for @p windowId, or nullptr when it is ABSENT from the
 /// resolve. The three accessors below are thin readers over this one walk.

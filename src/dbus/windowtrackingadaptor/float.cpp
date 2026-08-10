@@ -359,6 +359,10 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
             ctx.windowId = windowId;
             ctx.toScreenId = effectiveScreenId;
             ctx.wasFloating = floating;
+            // Canonical-vs-canonical (windowActivated stores the shadow id):
+            // a floating arrival's receive seeds its focus memory from this,
+            // since a focus-keeping handoff produces no report.
+            ctx.heldFocus = m_lastActiveWindowId == shadowWindowId(windowId);
             QString recoverScreen;
             if (sourceTracked) {
                 ctx.fromEngineId = source->engineId();

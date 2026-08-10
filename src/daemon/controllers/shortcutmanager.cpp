@@ -672,24 +672,48 @@ void ShortcutManager::settleRegistration(quint64 generation)
     }
     m_registrationInProgress = false;
     qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
-    bool modelAlreadyEmitted = false;
+    // A settle with BOTH dirty settings and queued adhoc ops coalesces onto
+    // ONE backend flush (see applyShortcutUpdates' doc): the rebinds stay
+    // pending, the drain's trailing flush carries them, and only when
+    // nothing was drained does the deferred flush run here. The
+    // cheatsheetModelChanged for the rebinds is emitted AFTER whichever
+    // flush carried them — the model reads the backend's read-back
+    // (effectiveTriggers prefers it), so an emit ahead of the flush would
+    // publish the pre-flush sequences and nothing re-emits until the next
+    // settings save.
+    bool modelEmitted = false;
     if (m_settingsDirty) {
         m_settingsDirty = false;
-        modelAlreadyEmitted = updateShortcuts();
+        const bool rebound = applyShortcutUpdates(/*deferFlush=*/true);
+        // Replay any adhoc (un)registrations that arrived while the initial
+        // batch was in flight. Must run AFTER the in-progress flag is
+        // cleared so each drained op takes the immediate path instead of
+        // re-queuing itself.
+        const bool drainFlushed = drainPendingAdhocOps();
+        if (rebound && !drainFlushed) {
+            m_registry->flush();
+        }
+        if (rebound) {
+            Q_EMIT cheatsheetModelChanged();
+            modelEmitted = true;
+        }
+    } else {
+        drainPendingAdhocOps();
     }
-    // Replay any adhoc (un)registrations that arrived while the initial batch
-    // was in flight. Must run AFTER the in-progress flag is cleared so each
-    // drained op takes the immediate path instead of re-queuing itself.
-    drainPendingAdhocOps();
     // The catalog is first meaningful once the batch has settled (backend
-    // read-back can answer now). One emit per settle: a dirty-settings replay
-    // above may already have re-pushed it.
-    if (!modelAlreadyEmitted) {
+    // read-back can answer now). One emit per settle: the dirty-settings
+    // arm above may already have pushed it post-flush.
+    if (!modelEmitted) {
         Q_EMIT cheatsheetModelChanged();
     }
 }
 
 bool ShortcutManager::updateShortcuts()
+{
+    return applyShortcutUpdates(/*deferFlush=*/false);
+}
+
+bool ShortcutManager::applyShortcutUpdates(bool deferFlush)
 {
     if (m_registrationInProgress) {
         // Defer — the ready() callback above will call us again.
@@ -706,8 +730,12 @@ bool ShortcutManager::updateShortcuts()
     if (!rebindAll()) {
         return false;
     }
-    m_registry->flush();
-    Q_EMIT cheatsheetModelChanged();
+    if (!deferFlush) {
+        m_registry->flush();
+        Q_EMIT cheatsheetModelChanged();
+    }
+    // Deferred: the CALLER owns both the flush and the post-flush emit —
+    // emitting here would publish the pre-flush backend read-back.
     return true;
 }
 
@@ -927,10 +955,10 @@ void ShortcutManager::erasePendingAdhocOps(const QString& id)
                             m_pendingAdhocOps.end());
 }
 
-void ShortcutManager::drainPendingAdhocOps()
+bool ShortcutManager::drainPendingAdhocOps()
 {
     if (m_pendingAdhocOps.isEmpty()) {
-        return;
+        return false;
     }
     // Swap so the member queue is empty for the duration; the registration
     // flag is already cleared, so a re-entrant (un)registerAdhocShortcut
@@ -960,6 +988,7 @@ void ShortcutManager::drainPendingAdhocOps()
         }
     }
     m_registry->flush();
+    return true;
 }
 
 bool ShortcutManager::rebindAll()
@@ -988,9 +1017,10 @@ QStringList ShortcutManager::staticShortcutIds()
 void ShortcutManager::buildEntries()
 {
     m_entries.clear();
-    m_entries.reserve(std::size(kStaticEntries) + 2 * kIndexedSlotCount);
+    m_entries.reserve(static_cast<int>(std::size(kStaticEntries)) + 2 * kIndexedSlotCount);
 
     Settings* s = m_settings;
+    ShortcutManager* sm = this;
 
     // Static table — one entry per row.
     for (const auto& src : kStaticEntries) {
@@ -1003,7 +1033,6 @@ void ShortcutManager::buildEntries()
         e.currentSeq = [s, curGetter, idCopy] {
             return parseSequence((s->*curGetter)(), idCopy);
         };
-        ShortcutManager* sm = this;
         const auto fire = src.fire;
         e.fire = [sm, fire] {
             fire(sm);

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is over 1300 lines, past the
+// FILE-SIZE EXCEPTION (sanctioned): this file is around 1600 lines, past the
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
@@ -13,7 +13,7 @@
 // engine regression would then have to know which half to open.
 //
 // Reviewed at the same time as the file's other exception-worthy neighbours;
-// if a sixth concern emerges, it takes a sibling rather than growing this.
+// if a seventh concern emerges, it takes a sibling rather than growing this.
 
 // Headless ScrollEngine smoke test: tracking, ordering, float state, capture,
 // context teardown, and handoff semantics.
@@ -76,7 +76,7 @@ private Q_SLOTS:
     void viewDeltaCarriesOnScreenTilesOnly();
     void viewDeltaIsSuppressedAcrossAWorkAreaChange();
     void secondScrollMeasuresFromTheEmittedBaselineOnly();
-    void aWidthChangeInTheSameBatchStillCarriesTheViewDelta();
+    void aWidthChangeKeepsTheResizedColumnInTheBatch();
     void aDepartingColumnKeepsItsTabIndicator();
     void onlyAHorizontallyParkedTileCarriesAVisualPosition();
     void modeRoundTripRestoresStripStructure();
@@ -700,17 +700,7 @@ void TestScrollEngineSmoke::parkingAvoidsNeighbourOutputs()
     // and the park bound is the SCREEN rect (provider engines have no
     // ScreenManager, so the union degrades to the parked screen's own
     // rect).
-    struct RightNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
-    {
-        QString neighborOutputInDirection(const QString&, const QString& direction) const override
-        {
-            return direction == QLatin1String("right") ? QStringLiteral("S2") : QString();
-        }
-        int neighborDesktopInDirection(int, const QString&) const override
-        {
-            return 0;
-        }
-    } resolver;
+    ScrollTestUtils::RightNeighbourResolver resolver;
 
     const auto screenGeometry = [](const QString&) {
         return defaultScreenRect();
@@ -745,17 +735,7 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
     // could not both be satisfied on a horizontally-adjacent monitor pair.
     // Here the right neighbour forces the park LEFT while the edge stays
     // "right" — the pair that the old design could not express.
-    struct RightNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
-    {
-        QString neighborOutputInDirection(const QString&, const QString& direction) const override
-        {
-            return direction == QLatin1String("right") ? QStringLiteral("S2") : QString();
-        }
-        int neighborDesktopInDirection(int, const QString&) const override
-        {
-            return 0;
-        }
-    } resolver;
+    ScrollTestUtils::RightNeighbourResolver resolver;
 
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
@@ -979,16 +959,18 @@ void TestScrollEngineSmoke::viewDeltaIsSuppressedAcrossAWorkAreaChange()
 
     // And the NEXT batch, now sharing a basis with its baseline again, carries
     // one — so the suppression is scoped to the crossing rather than latching.
+    // Asserted UNCONDITIONALLY (the file's own style, see the arm above): a
+    // scroll back across a five-column strip genuinely moves rects, so a
+    // missing emit here would itself be the latch this test exists to catch.
     const int afterChange = tiled.count();
     engine->focusColumnLast(QStringLiteral("S1"));
-    if (tiled.count() > afterChange) {
-        const QJsonArray settled = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
-        bool anyDelta = false;
-        for (const QJsonValue& v : settled) {
-            anyDelta = anyDelta || v.toObject().contains(QLatin1String("viewDeltaX"));
-        }
-        QVERIFY2(anyDelta, "once the basis matches again the view delta must come back");
+    QVERIFY2(tiled.count() > afterChange, "the settling scroll must emit");
+    const QJsonArray settled = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    bool anyDelta = false;
+    for (const QJsonValue& v : settled) {
+        anyDelta = anyDelta || v.toObject().contains(QLatin1String("viewDeltaX"));
     }
+    QVERIFY2(anyDelta, "once the basis matches again the view delta must come back");
 }
 
 void TestScrollEngineSmoke::secondScrollMeasuresFromTheEmittedBaselineOnly()
@@ -1081,15 +1063,18 @@ void TestScrollEngineSmoke::secondScrollMeasuresFromTheEmittedBaselineOnly()
     QVERIFY2(checked > 0, "expected at least one column on screen across both emitted batches");
 }
 
-void TestScrollEngineSmoke::aWidthChangeInTheSameBatchStillCarriesTheViewDelta()
+void TestScrollEngineSmoke::aWidthChangeKeepsTheResizedColumnInTheBatch()
 {
     // The residual rule: a scrolled column's origin is placed one delta behind
     // its target so the per-window leg comes out degenerate and no second
     // spring runs. A column whose WIDTH also changed in the same batch keeps a
-    // real leg — its size has to interpolate — and it must still carry the
-    // view delta so the compositor can tell the two motions apart. The
-    // sibling smoke test deliberately asserts size EQUALITY across its batches,
-    // so this case had no coverage anywhere.
+    // real leg — its size has to interpolate. What this test PINS is the
+    // batch half of that: the resized column is present and reports its new
+    // width. Whether the same entry also carries viewDeltaX depends on
+    // whether the view genuinely moved, which the clamp-suppression rule can
+    // legitimately veto — so the delta is deliberately NOT asserted here.
+    // The sibling smoke test deliberately asserts size EQUALITY across its
+    // batches, so this case had no coverage anywhere.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
@@ -1109,7 +1094,9 @@ void TestScrollEngineSmoke::aWidthChangeInTheSameBatchStillCarriesTheViewDelta()
 
     const QJsonArray batch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
     QVERIFY(!batch.isEmpty());
-    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")).width() != widthBefore.width(), true);
+    QVERIFY2(engine->lastManagedRect(QStringLiteral("app|a")).width() != widthBefore.width(),
+             qPrintable(
+                 QStringLiteral("the width change must land in the managed rect (still %1)").arg(widthBefore.width())));
 
     // The resized column is in the batch and its geometry reflects the new
     // width — the delta field is orthogonal to that, and whether it appears
@@ -1158,8 +1145,9 @@ void TestScrollEngineSmoke::aDepartingColumnKeepsItsTabIndicator()
     };
     QVERIFY2(stripCount(strips, strips.count() - 1) > 0, "precondition: the tabbed column has a strip");
 
+    const int beforeScroll = strips.count();
     engine->focusColumnLast(QStringLiteral("S1"));
-    QVERIFY2(strips.count() > 0, "the scroll must re-announce");
+    QVERIFY2(strips.count() > beforeScroll, "the scroll must re-announce");
     // The departing column's indicator survives the batch that scrolls it out.
     // It resolves off screen and the per-screen surface clips it, which is why
     // carrying it costs nothing once at rest.
@@ -1220,6 +1208,27 @@ void TestScrollEngineSmoke::onlyAHorizontallyParkedTileCarriesAVisualPosition()
         // And both halves of the pair travel together.
         QCOMPARE(hasVisual, o.contains(QLatin1String("visualY")));
     }
+
+    // POSITIVE witness for the implication: nothing above carries the hint,
+    // so deleting the visualX emission entirely would leave every assertion
+    // green. Grow the strip and scroll back to the start so trailing columns
+    // genuinely depart by the right edge — the case the hint exists for.
+    for (const char* id : {"app|c", "app|d", "app|e"}) {
+        engine->windowOpened(QString::fromLatin1(id), QStringLiteral("S1"), 0, 0);
+    }
+    const int beforeWitnessScroll = tiled.count();
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    QVERIFY2(tiled.count() > beforeWitnessScroll, "the witness scroll must emit its own batch");
+    const QJsonArray scrolled = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    bool sawCarriedPark = false;
+    for (const QJsonValue& v : scrolled) {
+        const QJsonObject o = v.toObject();
+        if (o.contains(QLatin1String("visualX")) && o.contains(QLatin1String("scrollEdge"))) {
+            sawCarriedPark = true;
+            QVERIFY2(o.contains(QLatin1String("visualY")), "the paint hint must carry both axes");
+        }
+    }
+    QVERIFY2(sawCarriedPark, "a horizontally departed column must carry the visual-position paint hint");
 }
 
 void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()

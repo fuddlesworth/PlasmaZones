@@ -37,7 +37,7 @@ Item {
     // "rotate_vs", "layout" ("layout" is failure-only by producer contract;
     // see failureMessage).
     property string action: ""
-    property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise) or travel ("left"/"right"), float state (floated/tiled/unfloated/overflow), or windowed-fullscreen state ("on"/"off")
+    property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise) or travel ("left"/"right"/"up"/"down", optionally prefixed "screen:" or "desktop:" for a crossing), float state (floated/floating/tiled/unfloated/overflow), or windowed-fullscreen state ("on"/"off")
     property var zones: []
     property var highlightedZoneIds: [] // Zone IDs involved (target zones)
     property string sourceZoneId: "" // Source zone for move/swap operations
@@ -65,6 +65,12 @@ Item {
     /// Message type scale. Kirigami has no OSD-headline constant, so the
     /// factor is named here rather than buried in the Label binding.
     readonly property real messageFontScale: 1.3
+    // The master ratio/count producers report success=false at the clamp
+    // bound while carrying the clamped value ("increased:NN") — that copy is
+    // informational ("here is your value at its limit"), not an error, so
+    // the label must not paint it in the error colour beside genuine
+    // failures like "No window is focused".
+    readonly property bool atClampBound: !success && (action === "master_ratio" || action === "master_count") && reason.split(":").length >= 2
     // Get target zone number (first highlighted zone)
     readonly property int targetZoneNumber: {
         if (highlightedZoneIds && highlightedZoneIds.length > 0)
@@ -159,6 +165,11 @@ Item {
             if (reason === "already_at_position")
                 return i18n("Window is already in that position");
 
+            // Autotile: the focused window is a float, so a tiled-position
+            // digit has nothing to reorder (same phrasing as the swap arm).
+            if (reason === "not_tiled")
+                return i18n("Window is floating");
+
             // Scrolling: the digit named a strip position that does not
             // exist right now.
             if (reason === "no_target")
@@ -174,6 +185,17 @@ Item {
 
             if (reason === "no_pre_float_zone")
                 return i18n("No zone to return to");
+
+            // Scrolling's floating/tiling focus switch and explicit float
+            // verb: the layer asked for has no window to take focus (the
+            // focused window is already there, or the other layer is
+            // empty). Exact copy for the two switch legs; approximate for
+            // moveFocusedToFloating's already-floating refusal, where it is
+            // still closer than "Floating is unavailable" was (a per-site
+            // token would be the exact fix, at the cost of a producer
+            // vocabulary split).
+            if (reason === "no_target")
+                return i18n("No window to switch to");
 
             // Also absorbs three named producer tokens the copy reads
             // correctly for: not_managed (snap + scroll engines' untracked
@@ -303,11 +325,12 @@ Item {
 
             return i18n("Layouts are not available in this mode");
         } else if (action === "resize") {
-            // Scrolling width/height verbs. no_target for the preset cycle
-            // means the vocabulary offers no other value (a single-entry
-            // template list is refused by design, not broken).
+            // Scrolling width AND height verbs share this token, so the
+            // copy names neither a column nor a window. no_target for the
+            // preset cycle means the vocabulary offers no other value (a
+            // single-entry template list is refused by design, not broken).
             if (reason === "no_target")
-                return i18n("Column is already at that size");
+                return i18n("Already at that size");
 
             if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
                 return noWindowText;
@@ -337,17 +360,31 @@ Item {
             if (reason === "no_window" || reason === "no_windows" || reason === "no_focus")
                 return noWindowText;
 
-            return i18n("The column is already centered");
+            // Both centering verbs (single column and the visible group)
+            // collapse onto one no_target token at the producer, so the
+            // copy stays count-neutral.
+            return i18n("Already centered");
         } else if (action === "retile") {
             return i18n("Could not refresh the layout");
-        } else if (action === "focus_master")
+        } else if (action === "focus_master") {
+            // Unreachable today (the sole producer emits only no_windows);
+            // kept as the arm's routing for a future internal token,
+            // mirroring the sibling arms' isInternalReason handling.
+            if (isInternalReason)
+                return unavailableText;
+
             return i18n("No windows to focus");
-        else if (action === "swap_master") {
+        } else if (action === "swap_master") {
             if (reason === "already_master")
                 return i18n("Already in master position");
 
             if (reason === "no_focus")
                 return noWindowText;
+
+            // The focused window is a float; promoting it to master would
+            // reorder nothing on screen (same phrasing as the swap arm).
+            if (reason === "not_tiled")
+                return i18n("Window is floating");
 
             return i18n("Nothing to swap");
         } else
@@ -441,7 +478,7 @@ Item {
         } else if (action === "cycle") {
             return i18n("Next window");
         } else if (action === "focus_master") {
-            return i18n("Focus master window");
+            return i18n("Focused the master window");
         } else if (action === "swap_master") {
             return i18n("Swapped with master window");
         } else if (action === "master_ratio") {
@@ -655,7 +692,7 @@ Item {
             font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
             font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * root.messageFontScale * root.fontSizeScale)
             font.weight: Font.Medium
-            color: root.success ? root.textColor : root.errorColor
+            color: (root.success || root.atClampBound) ? root.textColor : root.errorColor
             horizontalAlignment: Text.AlignHCenter
         }
     }

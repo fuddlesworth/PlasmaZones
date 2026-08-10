@@ -333,7 +333,16 @@ private:
     /// Re-applies every entry's current sequence; returns true when any
     /// binding actually differed from the registry's stored sequence.
     bool rebindAll();
-    void drainPendingAdhocOps();
+    /// updateShortcuts' body. @p deferFlush leaves the rebinds pending AND
+    /// the cheatsheetModelChanged emit to the caller — settleRegistration
+    /// coalesces the flush with the drained adhoc ops into ONE backend round
+    /// trip (a second flush supersedes the first's in-flight portal Request,
+    /// and a superseded request whose RPC errors loses its grabs outright)
+    /// and emits only after that flush, since the model prefers the
+    /// backend's read-back.
+    bool applyShortcutUpdates(bool deferFlush);
+    /// Returns true when it drained ops and issued the trailing flush.
+    bool drainPendingAdhocOps();
     /// Drop every queued adhoc op for @p id. Both queueing paths supersede an
     /// earlier op for the same id (last write wins), so they share this.
     void erasePendingAdhocOps(const QString& id);

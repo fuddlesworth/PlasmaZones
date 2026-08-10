@@ -67,7 +67,8 @@ void ScrollEngine::moveColumnToLast(const QString& screenId)
 // A helper struct + lambda was considered and rejected: every verb would
 // still need the three names plus the bail-out, and the macro keeps almost
 // every verb body in this file a one-liner. The names are part of the macro's
-// documented contract, and both macros are #undef'd at the end of this file.
+// documented contract. P_SCROLL_VERB is #undef'd at the end of this file; the
+// tail note explains why P_SCROLL_RESOLVE deliberately is not.
 // Only the float-layer verbs at the tail are hand-expanded — their feedback
 // branches differ per arm, not just per outcome.
 void ScrollEngine::consumeWindowIntoColumn(const QString& screenId)
@@ -82,7 +83,29 @@ void ScrollEngine::expelWindowFromColumn(const QString& screenId)
 
 void ScrollEngine::consumeOrExpelWindow(int delta, const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().consumeOrExpel(delta, params), "consume", true, QString());
+    // Hand-expanded from P_SCROLL_VERB for the action token alone: the op
+    // EXPELS when the active column holds more than one tile and consumes
+    // otherwise (ScrollStrip::consumeOrExpel), and the OSD has distinct
+    // success copy for the two — "Window expelled into its own column" vs
+    // "Window moved between columns" — so the token is decided from the
+    // pre-op column, the only place the answer exists.
+    P_SCROLL_RESOLVE(screenId);
+    if (!state || state->strip().isEmpty()) {
+        Q_EMIT navigationFeedback(false, QStringLiteral("consume"), QStringLiteral("no_windows"), QString(), QString(),
+                                  screen);
+        return;
+    }
+    const int activeCol = state->strip().activeColumnIndex();
+    const bool willExpel = activeCol >= 0 && state->strip().columns().at(activeCol).tiles.size() > 1;
+    const QString action = willExpel ? QStringLiteral("expel") : QStringLiteral("consume");
+    const QString sourceWindow = state->strip().activeWindowId();
+    const bool changed = state->strip().consumeOrExpel(delta, params);
+    if (changed) {
+        applyLayout(screen, true);
+        Q_EMIT placementChanged(screen);
+    }
+    Q_EMIT navigationFeedback(changed, action, changed ? QString() : QStringLiteral("no_target"), sourceWindow,
+                              changed ? state->strip().activeWindowId() : QString(), screen);
 }
 
 void ScrollEngine::centerColumn(const QString& screenId)
@@ -150,7 +173,10 @@ void ScrollEngine::focusWindowBottom(const QString& screenId)
 void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
 {
     // Header contract: delta is -1 or +1. Reject anything else outright —
-    // a zero must not read as a press.
+    // a zero must not read as a press. Silent by design: the D-Bus adaptor
+    // refuses out-of-contract deltas the same way (its documented
+    // silent-no-op policy), so no shipped caller reaches this, and feedback
+    // here would give an out-of-contract call an OSD.
     if (delta != -1 && delta != 1) {
         return;
     }
@@ -160,8 +186,9 @@ void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
 
 void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
 {
-    // Same delta contract as focusColumnPlain — an invalid delta must not
-    // short-circuit into the wrap fallback and teleport focus to an end.
+    // Same delta contract (and the same deliberate silence) as
+    // focusColumnPlain — an invalid delta must not short-circuit into the
+    // wrap fallback and teleport focus to an end.
     if (delta != -1 && delta != 1) {
         return;
     }
@@ -223,7 +250,11 @@ void ScrollEngine::moveFocusedToFloating(const QString& screenId)
     // The RESOLVED screen, not the caller's raw hint: state and windowId came
     // from `screen`, and floatWindowInternal's announcement uses the id it is
     // handed — a foreign raw hint would label the change with a screen that
-    // does not own the window.
+    // does not own the window. A SUCCESSFUL press is deliberately silent (no
+    // navigationFeedback): the verb delegates to setWindowFloat and the
+    // window visibly moving IS the feedback, the rule snapAllWindows also
+    // follows — only refusals speak. Pinned by
+    // moveToFloatingAndBackAnswersEveryPress.
     setWindowFloat(windowId, true, screen);
 }
 
@@ -259,7 +290,8 @@ void ScrollEngine::moveFocusedToTiling(const QString& screenId)
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), windowId, QString(), screen);
         return;
     }
-    // Resolved screen for the same reason as moveFocusedToFloating.
+    // Resolved screen for the same reason as moveFocusedToFloating, and the
+    // same silent-success convention.
     setWindowFloat(windowId, false, screen);
 }
 
@@ -290,10 +322,7 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
             return;
         }
         state->setFloatingHasFocus(false);
-        m_pendingSelfActivations.append(target);
-        while (m_pendingSelfActivations.size() > kMaxPendingSelfActivations) {
-            m_pendingSelfActivations.removeFirst();
-        }
+        queueSelfActivation(target);
         Q_EMIT activateWindowRequested(target);
         Q_EMIT navigationFeedback(true, action, QStringLiteral("tiled"), state->lastFloatingFocus(), target, screen);
         return;

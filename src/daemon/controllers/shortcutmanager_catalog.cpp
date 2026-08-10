@@ -368,16 +368,30 @@ CatalogMeta catalogMetaForId(const QString& id)
     // tests together instead of compiling clean and quietly dumping the whole
     // family into the "Other" bucket below.
     if (id.startsWith(QLatin1String(kQuickLayoutPrefix))) {
-        // Same capability tag as the enumerated Layouts rows above.
-        return {QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts"};
+        // Same capability tag as the enumerated Layouts rows above — and the
+        // same per-capability tooltip split those rows carry, since the
+        // digit family's meaning shifts with the capability too.
+        return {QT_TRANSLATE_NOOP("plasmazones", "Layouts"),
+                1,
+                "layouts",
+                nullptr,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones", "Applies the numbered layout to this screen."),
+                QT_TRANSLATE_NOOP("plasmazones", "Applies the numbered column template to this screen.")};
     }
     if (id.startsWith(QLatin1String(kSnapToZonePrefix))) {
         // Every engine implements moveFocusedToPosition: zone N in
         // snapping, layout slot N in tiling, visible tile slot N in
         // scrolling. Only 1 to 9 have shortcuts, so a scrolling strip with
         // more visible tiles than that numbers them all but leaves the ones
-        // past 9 with no digit that reaches them.
-        return {QT_TRANSLATE_NOOP("plasmazones", "Zones"), 3, "all"};
+        // past 9 with no digit that reaches them. The tooltip stays
+        // mode-neutral for exactly that per-mode divergence.
+        return {QT_TRANSLATE_NOOP("plasmazones", "Zones"),
+                3,
+                "all",
+                nullptr,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones", "Sends the focused window to the numbered slot on this screen.")};
     }
     // A shortcut added to the table without catalog metadata still shows up
     // (miscategorised beats invisible), and the log points at the fix.
@@ -591,29 +605,20 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // expectation of "" can never match a live trigger, so a spelled-out
     // pair for a default-less member would sit in the table looking active
     // while being structurally dead. Several defaults now SHIP unbound (the
-    // edge-stop/wrap focus variants and the one-way float verbs); for those,
-    // and for a member a user cleared, the live single trigger stands in for
-    // the missing default once the user binds one, and the pair collapses
-    // normally. No specs are listed for the unbound-by-default focus pairs —
-    // until a user binds both members such a spec is dead weight, and once
-    // they do, the individual rows still render each binding on its own.
-    const auto liveSequenceFor = [this](const char* id) -> QString {
-        if (!m_registry) {
-            return QString();
-        }
-        const QStringList triggers = m_registry->effectiveTriggers(QString::fromLatin1(id));
-        // Only a single unambiguous binding can serve as the expectation; a
-        // member with an alternate binding cannot compress anyway.
-        return triggers.size() == 1 ? triggers.first() : QString();
-    };
+    // edge-stop/wrap focus variants and the one-way float verbs) and no
+    // specs are listed for those pairs — until a user binds both members
+    // such a spec is dead weight, and once they do, the individual rows
+    // still render each binding on its own. (A member a user cleared keeps
+    // the shipped default as its expectation; a cleared member has no
+    // trigger, so its row fails the single-trigger compression test either
+    // way and renders individually.)
+    //
     // Both members' key tokens joined for the merged chip. The digit family
     // reads as a range and the directional one as a class name; a bare
     // space-joined pair instead read as one chord, so the alternatives are
     // separated the way the row labels separate them.
-    const auto addScrollPair = [&](const char* firstId, const QString& firstDefault, const char* secondId,
-                                   const QString& secondDefault, const QString& label, const QString& description) {
-        const QString firstSeq = firstDefault.isEmpty() ? liveSequenceFor(firstId) : firstDefault;
-        const QString secondSeq = secondDefault.isEmpty() ? liveSequenceFor(secondId) : secondDefault;
+    const auto addScrollPair = [&](const char* firstId, const QString& firstSeq, const char* secondId,
+                                   const QString& secondSeq, const QString& label, const QString& description) {
         if (firstSeq.isEmpty() || secondSeq.isEmpty()) {
             return;
         }

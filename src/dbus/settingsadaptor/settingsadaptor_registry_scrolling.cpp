@@ -9,7 +9,8 @@
 // land in the same maps.
 //
 // BOUNDARY RULE for the four registry TUs: a key belongs to a mode TU when
-// its name carries that mode's prefix or the zone family prefix — scrolling*
+// its name carries that mode's prefix, names that mode's family (e.g.
+// defaultScrollingTemplate), or carries the zone family prefix — scrolling*
 // here, snap* / snapping* / zone* in settingsadaptor_registry_snapping.cpp,
 // autotile* in settingsadaptor_registry_autotile.cpp. Mode-neutral keys
 // (drag activation, navigation / swap / span / quickLayout / cycle / rotate /
@@ -46,6 +47,44 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("bool");
+
+#define REGISTER_INT_SETTING(name, getter, setter)                                                                     \
+    m_getters[QStringLiteral(name)] = [this]() {                                                                       \
+        return m_settings->getter();                                                                                   \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
+        m_settings->setter(v.toInt());                                                                                 \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("int");
+
+#define REGISTER_DOUBLE_SETTING(name, getter, setter)                                                                  \
+    m_getters[QStringLiteral(name)] = [this]() {                                                                       \
+        return m_settings->getter();                                                                                   \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
+        m_settings->setter(v.toDouble());                                                                              \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("double");
+
+// ISettings-flavoured theme-fallback colour: EMPTY (follow the theme) or a
+// colour QColor can parse; anything else is refused at the boundary so it
+// never reaches a QML `color` property, and the false return surfaces the
+// rejection to the D-Bus caller instead of silently dropping the write.
+#define REGISTER_THEME_FALLBACK_COLOR_SETTING(name, getter, setter)                                                    \
+    m_getters[QStringLiteral(name)] = [this]() {                                                                       \
+        return m_settings->getter();                                                                                   \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
+        const QString s = v.toString();                                                                                \
+        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(s);                                                                                         \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
 #define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
@@ -84,27 +123,6 @@ void SettingsAdaptor::initializeRegistryScrolling()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("string");
 
-// A theme-fallback colour: EMPTY (follow the theme) or a colour QColor can
-// parse. Rejects anything else at the boundary rather than letting it reach
-// the QML `color` property, where an unparseable string renders as an invalid
-// colour rather than falling back. Returning false surfaces the rejection to
-// the D-Bus caller instead of silently dropping the write.
-#define REGISTER_THEME_FALLBACK_COLOR(name, getter, setter)                                                            \
-    m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
-        return concrete->getter();                                                                                     \
-    };                                                                                                                 \
-    m_setters[QStringLiteral(name)] = [concrete](const QVariant& v) {                                                  \
-        const QString s = v.toString();                                                                                \
-        /* Same validity predicate as REGISTER_COLOR_SETTING; only the                                                 \
-           empty-string exemption ("follow the theme") is extra here. */                                               \
-        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
-            return false;                                                                                              \
-        }                                                                                                              \
-        concrete->setter(s);                                                                                           \
-        return true;                                                                                                   \
-    };                                                                                                                 \
-    m_schemas[QStringLiteral(name)] = QStringLiteral("string");
-
     auto* concrete = qobject_cast<Settings*>(m_settings);
 
     // ── ISettings-level scrolling keys ──
@@ -131,6 +149,52 @@ void SettingsAdaptor::initializeRegistryScrolling()
     REGISTER_BOOL_SETTING("scrollingTabIndicatorEnabled", scrollingTabIndicatorEnabled, setScrollingTabIndicatorEnabled)
     REGISTER_BOOL_SETTING("scrollingDropIndicatorEnabled", scrollingDropIndicatorEnabled,
                           setScrollingDropIndicatorEnabled)
+
+    // The PAINT keys of both indicator families register through the
+    // interface too — isettings.h declares getter+no-op-setter virtual pairs
+    // for exactly these eleven so a non-Settings backend keeps them (its
+    // stated rationale); only the tab indicator's GEOMETRY keys are
+    // deliberately concrete-only (isettings.h documents that exclusion).
+    // The Style enum keeps its validated hand registration, via the
+    // interface.
+    m_getters[QStringLiteral("scrollingTabIndicatorStyle")] = [this]() {
+        return m_settings->scrollingTabIndicatorStyle();
+    };
+    m_setters[QStringLiteral("scrollingTabIndicatorStyle")] = [this](const QVariant& v) {
+        const int style = v.toInt();
+        if (!ConfigDefaults::isValidScrollingTabIndicatorStyle(style)) {
+            return false;
+        }
+        m_settings->setScrollingTabIndicatorStyle(style);
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollingTabIndicatorStyle")] = QStringLiteral("int");
+    REGISTER_INT_SETTING("scrollingTabIndicatorGapsBetweenTabs", scrollingTabIndicatorGapsBetweenTabs,
+                         setScrollingTabIndicatorGapsBetweenTabs)
+    REGISTER_INT_SETTING("scrollingTabIndicatorCornerRadius", scrollingTabIndicatorCornerRadius,
+                         setScrollingTabIndicatorCornerRadius)
+    // Colours are strings, not REGISTER_COLOR_SETTING: EMPTY is the
+    // meaningful "follow the theme" value and a QColor round-trip cannot
+    // carry it. They are still validated at this boundary rather than
+    // passed through — the string lands on a QML `color` property, where an
+    // unparseable value renders as an invalid colour instead of falling
+    // back to the theme, so an arbitrary D-Bus write must not reach it.
+    REGISTER_THEME_FALLBACK_COLOR_SETTING("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
+                                          setScrollingTabIndicatorActiveColor)
+    REGISTER_THEME_FALLBACK_COLOR_SETTING("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
+                                          setScrollingTabIndicatorInactiveColor)
+    REGISTER_THEME_FALLBACK_COLOR_SETTING("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
+                                          setScrollingTabIndicatorUrgentColor)
+    REGISTER_THEME_FALLBACK_COLOR_SETTING("scrollingDropIndicatorColor", scrollingDropIndicatorColor,
+                                          setScrollingDropIndicatorColor)
+    REGISTER_THEME_FALLBACK_COLOR_SETTING("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
+                                          setScrollingDropIndicatorBorderColor)
+    REGISTER_DOUBLE_SETTING("scrollingDropIndicatorOpacity", scrollingDropIndicatorOpacity,
+                            setScrollingDropIndicatorOpacity)
+    REGISTER_INT_SETTING("scrollingDropIndicatorBorderWidth", scrollingDropIndicatorBorderWidth,
+                         setScrollingDropIndicatorBorderWidth)
+    REGISTER_INT_SETTING("scrollingDropIndicatorBorderRadius", scrollingDropIndicatorBorderRadius,
+                         setScrollingDropIndicatorBorderRadius)
 
     // Scrolling settings (concrete Settings only)
     if (concrete) {
@@ -241,18 +305,6 @@ void SettingsAdaptor::initializeRegistryScrolling()
         // closed sets, same shape as scrollingDefaultColumnDisplay above) rather
         // than a bare int, so a garbage wire value is refused instead of being
         // cast into a nonexistent style or edge.
-        m_getters[QStringLiteral("scrollingTabIndicatorStyle")] = [concrete]() {
-            return concrete->scrollingTabIndicatorStyle();
-        };
-        m_setters[QStringLiteral("scrollingTabIndicatorStyle")] = [concrete](const QVariant& v) {
-            const int style = v.toInt();
-            if (!ConfigDefaults::isValidScrollingTabIndicatorStyle(style)) {
-                return false;
-            }
-            concrete->setScrollingTabIndicatorStyle(style);
-            return true;
-        };
-        m_schemas[QStringLiteral("scrollingTabIndicatorStyle")] = QStringLiteral("int");
         m_getters[QStringLiteral("scrollingTabIndicatorPosition")] = [concrete]() {
             return concrete->scrollingTabIndicatorPosition();
         };
@@ -273,40 +325,13 @@ void SettingsAdaptor::initializeRegistryScrolling()
         REGISTER_CONCRETE_INT("scrollingTabIndicatorWidth", scrollingTabIndicatorWidth, setScrollingTabIndicatorWidth)
         REGISTER_CONCRETE_DOUBLE("scrollingTabIndicatorLengthProportion", scrollingTabIndicatorLengthProportion,
                                  setScrollingTabIndicatorLengthProportion)
-        REGISTER_CONCRETE_INT("scrollingTabIndicatorGapsBetweenTabs", scrollingTabIndicatorGapsBetweenTabs,
-                              setScrollingTabIndicatorGapsBetweenTabs)
-        REGISTER_CONCRETE_INT("scrollingTabIndicatorCornerRadius", scrollingTabIndicatorCornerRadius,
-                              setScrollingTabIndicatorCornerRadius)
-        // Colours are strings, not REGISTER_COLOR_SETTING: EMPTY is the
-        // meaningful "follow the theme" value and a QColor round-trip cannot
-        // carry it. They are still validated at this boundary rather than
-        // passed through — the string lands on a QML `color` property, where an
-        // unparseable value renders as an invalid colour instead of falling
-        // back to the theme, so an arbitrary D-Bus write must not reach it.
-        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorActiveColor", scrollingTabIndicatorActiveColor,
-                                      setScrollingTabIndicatorActiveColor)
-        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorInactiveColor", scrollingTabIndicatorInactiveColor,
-                                      setScrollingTabIndicatorInactiveColor)
-        REGISTER_THEME_FALLBACK_COLOR("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
-                                      setScrollingTabIndicatorUrgentColor)
-
-        // ── Scrolling.DropIndicator ──
-        // scrollingDropIndicatorEnabled is registered in the ISettings section
-        // above; the other FIVE live here (two colours, opacity,
-        // border width and radius) so the whole group is reachable. Same
-        // every-key-must-be-present rule as the tab indicator block above:
-        // this generic surface is the settings app's ONLY channel to the
-        // daemon, so an unregistered key looks wired and does nothing.
-        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorColor", scrollingDropIndicatorColor,
-                                      setScrollingDropIndicatorColor)
-        REGISTER_THEME_FALLBACK_COLOR("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
-                                      setScrollingDropIndicatorBorderColor)
-        REGISTER_CONCRETE_DOUBLE("scrollingDropIndicatorOpacity", scrollingDropIndicatorOpacity,
-                                 setScrollingDropIndicatorOpacity)
-        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderWidth", scrollingDropIndicatorBorderWidth,
-                              setScrollingDropIndicatorBorderWidth)
-        REGISTER_CONCRETE_INT("scrollingDropIndicatorBorderRadius", scrollingDropIndicatorBorderRadius,
-                              setScrollingDropIndicatorBorderRadius)
+        // The tab-indicator and drop-indicator PAINT keys (style, spacing,
+        // radius, colours, opacity, border) are registered through the
+        // ISettings section above — only the GEOMETRY keys stay in this
+        // concrete block, per isettings.h's stated split. Same
+        // every-key-must-be-present rule throughout: this generic surface is
+        // the settings app's ONLY channel to the daemon, so an unregistered
+        // key looks wired and does nothing.
 
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusEnabled", scrollingWheelFocusEnabled, setScrollingWheelFocusEnabled)
         REGISTER_CONCRETE_BOOL("scrollingWheelFocusInverted", scrollingWheelFocusInverted,
@@ -420,11 +445,13 @@ void SettingsAdaptor::initializeRegistryScrolling()
 
 // Clean up macros (local scope; unity-batch hygiene)
 #undef REGISTER_BOOL_SETTING
+#undef REGISTER_INT_SETTING
+#undef REGISTER_DOUBLE_SETTING
+#undef REGISTER_THEME_FALLBACK_COLOR_SETTING
 #undef REGISTER_CONCRETE_BOOL
 #undef REGISTER_CONCRETE_INT
 #undef REGISTER_CONCRETE_DOUBLE
 #undef REGISTER_CONCRETE_STRING
-#undef REGISTER_THEME_FALLBACK_COLOR
 }
 
 } // namespace PlasmaZones

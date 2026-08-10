@@ -63,7 +63,10 @@ void Daemon::connectScrollingShortcuts()
         return;
     }
     // Tracked handles, mirroring initializeAutotile: a re-entry must not
-    // stack duplicate lambda connections.
+    // stack duplicate lambda connections. The re-entry is PROSPECTIVE — this
+    // has exactly one call site today (Daemon::start's wiring pass) — but
+    // the mirrored shape keeps a future re-wire from silently double-firing
+    // every verb.
     for (const QMetaObject::Connection& c : std::as_const(m_scrollingShortcutConnections)) {
         disconnect(c);
     }

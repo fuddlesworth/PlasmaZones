@@ -727,6 +727,13 @@ public:
                        ///< the source BEFORE handoffRelease drops its tracking.
         QStringList sourceZoneIds; ///< zones the window held at source (empty if not snapped)
         bool wasFloating = false; ///< window was floating in source engine
+        bool heldFocus = false; ///< the window held compositor focus at
+                                ///< handoff time, per the daemon's
+                                ///< windowActivated tracking. Receivers seed
+                                ///< their focus-side memory from it: a
+                                ///< focused window KEEPS focus across the
+                                ///< handoff, so no focusChanged report ever
+                                ///< arrives to record the side change.
         int insertIndex = -1; ///< PER-TARGET unit. Autotile target: raw
                               ///< window-order index (position in windowOrder(),
                               ///< counting floats — NOT the tiled-only index).

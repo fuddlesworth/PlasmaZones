@@ -63,9 +63,15 @@ public:
 
     /// Focus-side memory for switch-focus-between-floating-and-tiling: the
     /// float most recently reported focused by the compositor, and whether
-    /// the float layer holds focus RIGHT NOW. Both are fed exclusively by
-    /// genuine focus reports (windowFocused) and the engine's own activation
-    /// arm; neither is serialized — focus history dies with the session.
+    /// the float layer holds focus RIGHT NOW. Writers fall into three
+    /// classes: genuine focus reports (windowFocused), the engine's own
+    /// activation arms (applyLayout's focus arm and the floating/tiling
+    /// switch), and the float/unfloat/adoption/handoff transitions that move
+    /// focus with NO compositor round trip (floatWindowInternal's
+    /// active-tile arm, unfloat's insert-refused restore, the
+    /// boundary-move refusal adoption, handoffReceive's heldFocus seed, and
+    /// clearSourceFloatFocusAfterCrossing on the clearing side). Neither
+    /// field is serialized — focus history dies with the session.
     ///
     /// PER-STATE, while focus is global: only the state owning the newly
     /// focused window is updated by a focus report, so a sibling screen's

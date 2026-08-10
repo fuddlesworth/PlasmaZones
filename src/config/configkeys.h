@@ -660,11 +660,9 @@ public:
     P_CONFIG_KEY(rotateVirtualScreensClockwiseKey, "RotateVirtualScreensClockwise")
     P_CONFIG_KEY(rotateVirtualScreensCounterclockwiseKey, "RotateVirtualScreensCounterclockwise")
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Shortcuts.Scrolling: split by concern into
-    // configkeys_scrolling.h (ConfigKeysScrolling, the next link in the
-    // inheritance chain) when this file hit its size ceiling.
-    // ═══════════════════════════════════════════════════════════════════════════
+    // Shortcuts.Scrolling keys live in configkeys_scrolling.h
+    // (ConfigKeysScrolling, the next link in the inheritance chain) — split
+    // by concern when this file hit its size ceiling.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Tiling

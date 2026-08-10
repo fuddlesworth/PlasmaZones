@@ -24,11 +24,13 @@ namespace PlasmaZones {
  * Provides D-Bus interface: org.plasmazones.Scrolling
  *
  * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin
- * effect uses as its Mode-stamp discriminator, the strip-preview snapshot,
- * the wheel-driven focusColumn verb, the clearWindowedFullscreen
- * reconciliation call (inbound, effect to daemon, when a client leaves
- * fullscreen on its own), and the reapplyWindowGeometry repair call
- * (inbound too, for a fullscreen exit whose strip rects never moved).
+ * effect uses as its Mode-stamp discriminator, the strip-preview snapshot
+ * (with the preset vocabulary beside it), the wheel-driven focusColumn
+ * verb, the four absolute width/height setters for external scripting, the
+ * clearWindowedFullscreen reconciliation call (inbound, effect to daemon,
+ * when a client leaves fullscreen on its own), and the
+ * reapplyWindowGeometry repair call (inbound too, for a fullscreen exit
+ * whose strip rects never moved).
  * Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
@@ -74,6 +76,12 @@ public Q_SLOTS:
      * cursor's screen. Gated on the engine actually owning @p screenId —
      * the engine's own screen fallback would otherwise redirect a wheel
      * event from a non-scrolling monitor onto the active scrolling one.
+     *
+     * A press at the strip's edge CROSSES onto the adjacent output when
+     * one exists (a different-mode neighbour defers to the daemon, which
+     * activates that engine's entry-edge window), and a press on an EMPTY
+     * scrolling screen crosses the same way instead of dead-ending — so a
+     * wheel notch can legitimately move focus to another monitor.
      *
      * Every rejection is a SILENT no-op, not an error reply: an empty
      * @p screenId, a screen the engine does not own, and any @p delta

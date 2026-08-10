@@ -447,7 +447,11 @@ private Q_SLOTS:
 
         // Pixel form: out-of-range (including just-outside) refused with the
         // full intent untouched; the bounds accepted; in-range writes Fixed.
+        // The foreign-screen arm is exercised on EVERY setter, not just the
+        // proportion one: the ownership gate is per-method code, and deleting
+        // it from one leaves the suite green if only a sibling pins it.
         const ColumnWidth beforePx = activeColumn().width;
+        m_adaptor->setColumnWidthPixels(QStringLiteral("HDMI-2"), 640);
         m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 50);
         m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 99);
         m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 10001);
@@ -469,17 +473,32 @@ private Q_SLOTS:
             const PhosphorScrollEngine::Column& col = activeColumn();
             return col.tiles.at(col.activeTileIdx).height;
         };
+        // Foreign-screen refusal + the same bound pins as the width twin: a
+        // `<` flipped to `<=` at either height bound was invisible before.
+        m_adaptor->setWindowHeightPixels(QStringLiteral("HDMI-2"), 300);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 50);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 99);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 10001);
         m_adaptor->setWindowHeightPixels(QString(), 300);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Auto);
+        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 100);
+        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
+        QCOMPARE(activeHeight().fixedPx, 100);
+        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 10000);
+        QCOMPARE(activeHeight().fixedPx, 10000);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
         QCOMPARE(activeHeight().fixedPx, 300);
+        // Height-proportion refusals, full-value compare like the width arm
+        // (kind-only would miss a clamp that rewrote fixedPx), with the
+        // foreign screen, both out-of-range sides and NaN covered.
+        const WindowHeight beforeHeightRefusals = activeHeight();
+        m_adaptor->setWindowHeightProportion(QStringLiteral("HDMI-2"), 0.5);
         m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.01);
+        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 1.5);
         m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), std::numeric_limits<double>::quiet_NaN());
         m_adaptor->setWindowHeightProportion(QString(), 0.5);
+        QCOMPARE(activeHeight(), beforeHeightRefusals);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
         // An OFF-VOCABULARY fraction is accepted and stored VERBATIM as the
         // anchor — the setter is not exact and does not snap at store time;
@@ -717,6 +736,11 @@ private Q_SLOTS:
         QTest::qWait(200);
 
         QCOMPARE(m_propertiesChangedCount, 0);
+        // Pair the match rule with the unregister: the test QObject lives
+        // for the whole binary, so an undisconnected rule would outlive the
+        // probe (hygiene only — nothing later reads the counter).
+        bus.disconnect(bus.baseService(), path, QStringLiteral("org.freedesktop.DBus.Properties"),
+                       QStringLiteral("PropertiesChanged"), this, SLOT(onPropertiesChanged(QDBusMessage)));
         bus.unregisterObject(path);
     }
 

@@ -298,12 +298,13 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::gapKey()), number(px));
         t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::widthKey()), number(px));
         t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::gapsBetweenTabsKey()), number(px));
-        // The corner radius reads as plain pixels even though 0 is the PILL
-        // sentinel ("fully rounded"), not zero rounding. The profile diff
-        // therefore shows "0 px" for a pill, which understates it. Left as
-        // is: a unit table maps a key to a unit, and a sentinel needs a
-        // value RENDERER, which is a different mechanism from the one this
-        // table implements.
+        // The corner radius reads as plain pixels even though -1 is the PILL
+        // sentinel ("fully rounded" — configdefaults_scrolling.h pins the
+        // floor to it; 0 is an honest square, the shipped default). The
+        // profile diff therefore shows "-1 px" for a pill, which reads as
+        // nonsense. Left as is: a unit table maps a key to a unit, and a
+        // sentinel needs a value RENDERER, which is a different mechanism
+        // from the one this table implements.
         t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::cornerRadiusKey()), number(px));
         t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::lengthProportionKey()), number(pct, 100.0));
         // Drop indicator: same treatment as the zone border it mirrors, with

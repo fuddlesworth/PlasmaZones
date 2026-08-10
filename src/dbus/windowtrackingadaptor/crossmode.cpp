@@ -79,6 +79,13 @@ void WindowTrackingAdaptor::crossModeMoveImpl(PhosphorEngine::PlacementEngineBas
     if (!targetEngine || targetEngine == sourceEngine) {
         return; // target engine unavailable, or not actually cross-mode
     }
+    // Deliberately NO isActiveOnScreen pre-gate here (or in the swap twin),
+    // unlike handleCrossModeFocus: a focus toward a disabled-context screen
+    // would walk state the engine never adopted, but the MOVE and SWAP paths
+    // hand the window over through refusal-recovering receives
+    // (guardedHandoff below, receiveVerified in the swap) that re-home it
+    // into the source on a refusal — a logged bounce, not a stranding — and
+    // the gate would turn that recoverable bounce into a silent no-op.
 
     // Where the window currently lives — for the source reflow.
     const QString sourceScreen = sourceEngine->screenForTrackedWindow(windowId);
@@ -481,7 +488,10 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     // a future receiver that DOES displace, and the recovery below depends
     // on knowing, not assuming.
     const bool focusedStillOnTarget = targetEngine->isWindowTracked(windowId);
-    if (!targetScreenId.isEmpty() && targetEngine == m_autotileEngine.data() && !focusedStillOnTarget) {
+    // No !targetScreenId.isEmpty() term: handleCrossModeSwap already
+    // returned on an empty target id, so the engine identity plus the
+    // re-read flag are the whole condition.
+    if (targetEngine == m_autotileEngine.data() && !focusedStillOnTarget) {
         targetEngine->retile(targetScreenId);
     }
     // Adopted, then EVICTED by the partner's re-home landing in the same slot
@@ -502,7 +512,8 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
     // rather than guessing.
     if (focusedAdopted && !focusedStillOnTarget && partnerAdopted) {
         qCWarning(lcDbusWindow) << "cross-mode swap:" << windowId << "left" << targetEngine->engineId()
-                                << "but the partner was adopted, so its source slot is taken - not re-homing";
+                                << "but the partner was adopted, so its source slot is taken - not re-homing,"
+                                << "window is now tracked by no engine";
     }
     if (focusedAdopted && !focusedStillOnTarget && !partnerAdopted) {
         qCWarning(lcDbusWindow) << "cross-mode swap:" << windowId << "was adopted by" << targetEngine->engineId()
@@ -551,6 +562,12 @@ void WindowTrackingAdaptor::handleCrossModeSwap(const QString& windowId, const Q
         if (focusedStillOnTarget) {
             Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, sourceScreen);
         }
+        // The isWindowTracked term is the partner-side twin of the one
+        // deliberate focusedStillOnTarget re-read above, with the same
+        // justification: arming the one-shot for a window the source no
+        // longer holds would swallow its next genuine outputChanged. With
+        // today's non-evicting receivers it always agrees with
+        // partnerAdopted; it stands for the same future-receiver reason.
         if (partnerAdopted && sourceEngine->isWindowTracked(partner)) {
             Q_EMIT windowOutputMoveExpected(partner, sourceScreen, targetScreenId);
         }

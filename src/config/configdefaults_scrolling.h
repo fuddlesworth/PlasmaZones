@@ -505,7 +505,7 @@ public:
     /// One opacity, not the snapping overlay's active/inactive pair: there is
     /// exactly one drop target at a time, so there is no inactive state to
     /// give a second value to.
-    static constexpr double scrollingDropIndicatorOpacity()
+    static constexpr qreal scrollingDropIndicatorOpacity()
     {
         return 0.25;
     }
@@ -600,16 +600,18 @@ public:
     {
         return 10000.0;
     }
-    /// Height-PROPORTION bounds (the D-Bus setWindowHeightProportion gate and
-    /// the height preset-list canonicalizer). Delegate to the width
-    /// proportion range today — both are work-area fractions sharing the 0-1
-    /// spelling — but exist as their own accessors so the height wire
-    /// contract and preset vocabulary cannot be silently retargeted by a
-    /// future retune of the WIDTH range.
+    /// Height-PROPORTION floor: the D-Bus setWindowHeightProportion gate's
+    /// alone (canonicalProportionList hardcodes its own <= 0.0 floor and
+    /// never consults a Min). Delegates to the width proportion range today —
+    /// both are work-area fractions sharing the 0-1 spelling — but exists as
+    /// its own accessor so the height wire contract cannot be silently
+    /// retargeted by a future retune of the WIDTH range.
     static constexpr qreal scrollingWindowHeightProportionMin()
     {
         return scrollingDefaultColumnWidthProportionMin();
     }
+    /// Height-PROPORTION ceiling: the D-Bus gate AND the height preset-list
+    /// canonicalizer read this one. Same delegation rationale as Min.
     static constexpr qreal scrollingWindowHeightProportionMax()
     {
         return scrollingDefaultColumnWidthProportionMax();

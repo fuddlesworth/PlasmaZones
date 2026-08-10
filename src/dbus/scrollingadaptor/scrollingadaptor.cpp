@@ -21,6 +21,21 @@
 
 namespace PlasmaZones {
 
+namespace {
+/// The presetVocabularyJson payload keys, in one place so the two writes
+/// cannot drift apart (the sibling payloads use ZoneJsonKeys:: /
+/// ScrollOpenKeys:: the same way). The XML DocString spells them by hand,
+/// per the same kept-in-sync-BY-HAND rule the bounds literals follow.
+inline QLatin1String presetColumnWidthsKey()
+{
+    return QLatin1String("columnWidths");
+}
+inline QLatin1String presetWindowHeightsKey()
+{
+    return QLatin1String("windowHeights");
+}
+} // namespace
+
 ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
@@ -268,8 +283,8 @@ QString ScrollingAdaptor::presetVocabularyJson(const QString& screenId) const
         return arr;
     };
     QJsonObject obj;
-    obj[QLatin1String("columnWidths")] = toArray(m_engine->effectivePresetColumnWidths(screenId));
-    obj[QLatin1String("windowHeights")] = toArray(m_engine->effectivePresetWindowHeights(screenId));
+    obj[presetColumnWidthsKey()] = toArray(m_engine->effectivePresetColumnWidths(screenId));
+    obj[presetWindowHeightsKey()] = toArray(m_engine->effectivePresetWindowHeights(screenId));
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 

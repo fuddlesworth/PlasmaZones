@@ -52,7 +52,10 @@ const QString kScreen = QStringLiteral("eDP-1");
 void installBinarySplitLayout(AutotileEngine* engine)
 {
     PhosphorTiles::TilingState* state = engine->tilingStateForScreen(kScreen);
-    Q_ASSERT(state);
+    // QVERIFY, not Q_ASSERT: the fixture-precondition convention the rest of
+    // the partition uses, and it fails loudly in a release-built test binary
+    // instead of segfaulting on the setCalculatedZones below.
+    QVERIFY(state);
     // setCalculatedZones must run AFTER the post-open retile (which fails under
     // the null ScreenManager and would otherwise clear these) — callers invoke
     // this once the engine is fully constructed.
@@ -101,12 +104,14 @@ private Q_SLOTS:
     void focus_fromTopRight_resolvesEachDirectionGeometrically();
     void swap_exchangesWithSpatialNeighbour();
 
-    void entryWindowForCrossing_picksEdgeTileFacingSource();
-    void crossOutput_swapTowardNonAutotileOutput_emitsCrossModeSwap();
+    // Declaration order matches definition order (the suite's convention;
+    // Qt Test runs slots in declaration order, so this is readability only).
     void crossOutput_focusTowardNonAutotileOutput_defersCrossModeFocus();
     void crossOutput_focusTowardNonAutotileOutput_unhandledFallsThrough();
     void crossOutput_focusRight_entersLeftEdgeOfNeighbourOutput();
     void crossOutput_moveRight_emitsExpectedMoveOnceBeforeReflowsAndActivate();
+    void entryWindowForCrossing_picksEdgeTileFacingSource();
+    void crossOutput_swapTowardNonAutotileOutput_emitsCrossModeSwap();
     void crossOutput_moveTowardNonAutotileOutput_doesNotStrandWindow();
     void crossOutput_moveTowardFullAutotileOutput_doesNotStrandWindow();
     void crossOutput_moveFloatRuledTiledWindow_towardFullOutput_refuses();
@@ -668,7 +673,13 @@ void TestNavigationCrossSurface::crossOutput_focusMigrationToFullOutput_doesNotS
 
     // The user-visible half: isWindowTiled() reads a window's OWNING state, so a
     // stranded window (in no state) reports a phantom tile that never clears.
-    if (!fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->isFloating(QStringLiteral("a2"))) {
+    // Discriminated on BOTH branches rather than skipped for the floated one
+    // (the shape the two sibling slots below use): whichever way the
+    // destination's overflow pass resolves the arrival, the verdict is
+    // asserted, not silently unexercised.
+    if (fx.engine->tilingStateForScreen(QStringLiteral("DP-2"))->isFloating(QStringLiteral("a2"))) {
+        QVERIFY2(!fx.engine->isWindowTiled(QStringLiteral("a2")), "a floated arrival must not report a phantom tile");
+    } else {
         QVERIFY(fx.engine->isWindowTiled(QStringLiteral("a2")));
     }
 }

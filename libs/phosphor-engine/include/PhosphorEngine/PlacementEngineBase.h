@@ -60,6 +60,9 @@ public:
     // IAutotileSettings, ISnapSettings). Engines qobject_cast at point of
     // use to their interface type. No caching, no bridge, no signal wiring
     // inside the engine — the daemon handles change signals externally.
+    // A nullptr is REFUSED with a warning (there is deliberately no unset
+    // path); lifetime is handled by the QPointer member, so a destroyed
+    // settings object reads back null without a teardown-symmetry clear.
     // ═══════════════════════════════════════════════════════════════════════════
 
     void setEngineSettings(QObject* settings);

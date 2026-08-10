@@ -10,22 +10,21 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/ScreenContextTracker.h>
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorScrollEngine/ScrollStashTypes.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
-
-#include <PhosphorScrollEngine/ScrollStashTypes.h>
 
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
 #include <QRect>
+#include <QSet>
+#include <QString>
+#include <QStringList>
 #include <QVariantMap>
 
 #include <functional>
 #include <optional>
-#include <QSet>
-#include <QString>
-#include <QStringList>
 
 namespace PhosphorEngine {
 class WindowRegistry;
@@ -303,7 +302,8 @@ public:
         /// unique across the walk — a stacked column contributes one entry
         /// per visible tile, all carrying the same index. Read by callers
         /// that need to tell stack-mates apart from separate columns; the
-        /// engine's own tests are the only such caller today.
+        /// engine's own tests and the D-Bus adaptor test are the only such
+        /// callers today.
         int columnIndex = -1;
         /// The tile's 1-based zone number, stamped by the walk. THE number
         /// space: every consumer (preview labels, the OSD, the Snap-to-Zone
@@ -839,19 +839,16 @@ private:
     /// caller alike. It has to be every caller — the geometry producers
     /// (applyLayout, the visibleTiles walks) and the pure-math verbs
     /// (navigation, anchor math, the maximize compare) resolve against the
-    /// same work area, and a defaulted parameter that only a handful of the
-    /// twenty-eight call sites passed left the verbs computing against a
-    /// gapped rect the apply path then un-gapped: a lone column off-centre by
-    /// (outerL+outerR)/2, leftover width nobody claimed, and a maximize
-    /// compare that never matched. Inner gaps need no arm — with one column no
+    /// same work area; a defaulted parameter only a handful of call sites
+    /// passed left the verbs computing against a gapped rect the apply path
+    /// then un-gapped. Inner gaps need no arm — with one column no
     /// inter-column gap exists.
     /// @param columnCountOverride When >= 0, the smart-gaps arm judges the
     /// single-column case against THIS count instead of the live strip's.
-    /// Only the drop indicator passes it: while a preview holds the dragged
-    /// window detached, a strip that will have two columns after the drop
-    /// still counts as one, so the live answer zeroes the outer gaps that the
-    /// post-drop layout will restore — and the indicator would be drawn
-    /// against a work area the window never occupies.
+    /// Two callers pass it: the drop indicator (a preview holds the dragged
+    /// window detached, so the post-drop column count differs from the live
+    /// one) and windowOpened's height-rule arm, which re-resolves the work
+    /// area against the POST-insert column count.
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId, int columnCountOverride = -1) const;
     /// visibleTiles' real body, taking params the caller already resolved.
     /// The public overload is the thin wrapper; callers that hold params
@@ -904,6 +901,10 @@ private:
     /// on the source paints the OSD on the output the window just left).
     bool moveActiveWindowAcrossBoundary(ScrollState* state, const QString& screenId, const QString& direction,
                                         bool swap, QString* landingScreen = nullptr);
+    /// The insert-refusal float adoption both of moveActiveWindowAcrossBoundary's
+    /// legs share; the body documents the repair set (engine_navigation.cpp).
+    void adoptAsFloatAfterRefusal(ScrollState* owner, const QString& windowId, const QSize& minSize,
+                                  const QString& announceScreen);
 
     /// The FOCUS twin of the boundary move: cross focus onto the adjacent
     /// output. A scroll-mode neighbour is handled in-engine (entry-edge
@@ -934,25 +935,14 @@ private:
     QString m_activeScreen;
     /// FIFO of window ids this engine asked the compositor to activate
     /// (applyLayout's focusWindowAfter arm) whose windowFocused report has
-    /// not come back yet. The effect reports EVERY activation back through
-    /// notifyWindowFocused, including ones this engine initiated, and the
-    /// round trip is asynchronous: on a rapid focus scroll the strip has
-    /// already advanced past the echoed window by the time the report lands,
-    /// and treating that stale echo as user focus rewinds the active column —
-    /// the next scroll step then advances from the rewound column and skips
-    /// one. windowFocused consumes a matching entry and drops the report; a
-    /// NON-matching report clears the whole queue, which is sound because the
-    /// effect's calls share one ordered D-Bus connection — any echo sent
-    /// earlier has already arrived, so a leftover entry means the effect
-    /// dropped that activation (show desktop, window gone). The tab-click
-    /// path is unaffected: its activation goes out via the adaptor's
-    /// focusWindowRequested, never through this engine's emit, so its echo
-    /// is never queued and still drives the strip (signals.cpp documents
-    /// that contract).
+    /// not come back yet — the self-activation echo filter. The full
+    /// consume/clear contract is documented on windowFocused's drain
+    /// (engine_lifecycle.cpp).
     QStringList m_pendingSelfActivations;
-    /// Cap for m_pendingSelfActivations, shared by every producer
-    /// (applyLayout's focus arm and switchFocusBetweenFloatingAndTiling) so
-    /// one queue cannot grow under two different limits.
+    /// Append to m_pendingSelfActivations and trim to the cap — the single
+    /// producer path (applyLayout's focus arm and the verb TU's switch).
+    void queueSelfActivation(const QString& windowId);
+    /// Cap for m_pendingSelfActivations (enforced in queueSelfActivation).
     static constexpr int kMaxPendingSelfActivations = 16;
     /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
     /// While positive, windowOpened defers its per-arrival applyLayout into
@@ -1018,26 +1008,11 @@ private:
     QSet<QString> m_lastAppliedWindowedFs;
     /// Which screen edge each currently-parked window went out by ("left" /
     /// "right"), so that when it scrolls back INTO the viewport the batch can
-    /// tell the effect which side to animate it in from.
-    ///
-    /// It has to be remembered rather than derived: the park position is
-    /// direction-agnostic (below the union of all outputs), so the parked
-    /// rect cannot answer the question. The entry is written when the window
-    /// parks with a departure direction and consumed when it comes back on
-    /// screen; windows that are never parked never appear here. A park with no
-    /// direction (a hidden tab of an on-screen tabbed column, or a vertical
-    /// stack-overflow park) does not write one, and the tab case clears any
-    /// stale entry so the next activation appears in place. A path that drops
-    /// the window's m_lastAppliedRect while it stays alive drops this too, with
-    /// two deliberate exceptions, both for the same reason (the window stays a
-    /// live tile of this strip and may genuinely be parked right now):
-    /// re-adoption TAKES the edge and puts it back when the insert is refused,
-    /// and onWindowResized's refused-ack arm drops only the rect and keeps the
-    /// edge. The aliveness sweep
-    /// reclaims died-parked entries. One seam-only gap: an
-    /// embedder driving strip-level minimize directly (production models
-    /// minimize as a float toggle, which clears) can strand an entry until
-    /// the sweep.
+    /// tell the effect which side to animate it in from. Remembered rather
+    /// than derived: the park position is direction-agnostic, so the parked
+    /// rect cannot answer. The write/consume/eviction contract (including
+    /// the two deliberate rect-drop exceptions) is documented at the park
+    /// sites in engine_apply.cpp.
     QHash<QString, QString> m_parkedScrollEdge;
     /// What a floated/minimized window's column held, so unfloat restores
     /// the slot AND the user's width/display intent (a Proportion/Preset
@@ -1098,11 +1073,8 @@ private:
     /// reaches a stash whose context is still live, i.e. a window that closed
     /// while its screen sat in another mode. Entries staged from persistence
     /// are exempt from the aliveness sweep until their first claim; see
-    /// StashedTile::stagedFromPersistence.
-    // StashedTile / StashedColumn / StashedStrip live in ScrollStashTypes.h
-    // (namespace-level; hoisted for the file-size ceiling). Their lifetime
-    // and consumption contracts stay documented on m_stripStash and on the
-    // fields themselves.
+    /// StashedTile::stagedFromPersistence. The stash value types live in
+    /// ScrollStashTypes.h (hoisted for the file-size ceiling).
     QHash<PhosphorEngine::PlacementStateKey, StashedStrip> m_stripStash;
     QHash<PhosphorEngine::PlacementStateKey, QSet<QString>> m_stripStashConsumed;
     /// Ever-increasing stamp source for StashedStrip::sequence.

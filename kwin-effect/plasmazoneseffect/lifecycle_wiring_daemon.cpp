@@ -5,8 +5,6 @@
 #include "compositor/stripviewanimator.h"
 #include "input_filter.h"
 
-#include "compositor/stripviewanimator.h"
-
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -144,9 +142,16 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     // Connect to daemon's daemonReady signal — emitted at the end of Daemon::start()
     // after all initialization is complete and the daemon can process D-Bus messages.
     // This is the safe point to set m_daemonGate.serviceRegistered and create QDBusInterfaces.
-    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                          PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                          QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
+    // Logged on failure like the sibling subscriptions above: this is the
+    // one subscription gating ALL daemon state sync, so a silent miss would
+    // be the most consequential of the set.
+    const bool readyConnected =
+        QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                              PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                              QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
+    if (!readyConnected) {
+        qCWarning(lcEffect) << "Failed to connect to daemon daemonReady D-Bus signal - state sync will not start";
+    }
 
     // Watch for daemon D-Bus service registration and unregistration.
     // After a daemon restart, m_lastCursorOutput is still valid in the effect
@@ -379,9 +384,13 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         QDBusConnection::sessionBus().disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                                  PhosphorProtocol::Service::Interface::LayoutRegistry,
                                                  QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
-        QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                              PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                              QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
+        const bool readyReconnected = QDBusConnection::sessionBus().connect(
+            PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+            PhosphorProtocol::Service::Interface::LayoutRegistry, QStringLiteral("daemonReady"), this,
+            SLOT(slotDaemonReady()));
+        if (!readyReconnected) {
+            qCWarning(lcEffect) << "Failed to re-connect daemonReady D-Bus signal after daemon restart";
+        }
     });
 
     // NOTE: daemon state sync (floating windows, cached settings) is NOT done

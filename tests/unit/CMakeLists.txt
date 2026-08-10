@@ -758,7 +758,11 @@ add_executable(test_navigation_cross_surface
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_navigation_cross_surface
                PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
-target_link_libraries(test_navigation_cross_surface PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+# QTEST_MAIN expands to a QGuiApplication main whenever QT_GUI_LIB is
+# defined, which here would otherwise arrive only through plasmazones_core's
+# transitive Qt6::Gui — coincidental, not contractual (the same reason
+# test_scrolling_settings links Gui explicitly above).
+target_link_libraries(test_navigation_cross_surface PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_navigation_cross_surface COMMAND test_navigation_cross_surface)
 
 # Real-retile cross-output test: drives the actual tile pipeline, so it needs

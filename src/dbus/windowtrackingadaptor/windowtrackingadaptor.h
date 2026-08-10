@@ -812,9 +812,10 @@ public:
     bool shouldFloatByRule(const QString& windowId, const QString& screenId);
 
     /// Per-window scrolling open-behaviour rule slots (openColumnWidth /
-    /// openTabbed / openColumnPlacement), returned as a loose map so the
-    /// header stays free of scroll-engine types. Keys (present only when the
-    /// slot matched): "widthFraction" (double), "tabbed" (bool), "consume"
+    /// openWindowHeight / openTabbed / openColumnPlacement), returned as a
+    /// loose map so the header stays free of scroll-engine types. Keys
+    /// (present only when the slot matched): "widthFraction" (double),
+    /// "heightFraction" (double), "tabbed" (bool), "consume"
     /// (bool). Resolves UNCACHED, like shouldFloatByRule and unlike the
     /// Restore predicates: the query carries ScreenId and Mode stamps, and the
     /// evaluator cache is keyed on windowId and rule revision alone, so a hit
@@ -1502,15 +1503,6 @@ private:
     // Null until setScreenModeRouter is called (Daemon wires during init).
     ScreenModeRouter* m_screenModeRouter = nullptr;
 
-    // Pure-compute helper that owns snap-mode navigation target
-    // computation. Constructed eagerly in the adaptor constructor with
-    // m_service + m_layoutManager and a feedback callback that forwards
-    // into the adaptor's navigationFeedback signal. The zone detector is
-    // wired late via setZoneDetectionAdaptor which also pushes it into
-    // the resolver. Engine pure: never emits Qt signals directly.
-    // Note: SnapNavigationTargetResolver ownership moved to SnapEngine in
-    // Phase 5E — see SnapEngine::ensureTargetResolver.
-
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service
     //
@@ -1537,13 +1529,12 @@ private:
 
     // Unified window-rule store (daemon-owned, not owned here) + a lazily-built
     // evaluator over its full rule set. One evaluator serves every per-window
-    // resolver: the cacheable ones (shouldRestoreFloatedPosition,
-    // shouldRestoreToZoneOnLogin, placementZonesByRule) share its resolveCached
-    // memo, while the rest stamp per-call context or need a per-query filter
-    // and go through resolve()/resolveFiltered() on the same instance, which
-    // neither reads nor seeds that memo — see rules.cpp for which resolver
-    // takes which path (the enumeration lives with the code, not here, so it
-    // cannot go stale). The evaluator self-invalidates
+    // resolver: the cacheable ones share its resolveCached memo, while the
+    // rest stamp per-call context or need a per-query filter and go through
+    // resolve()/resolveFiltered() on the same instance, which neither reads
+    // nor seeds that memo — see rules.cpp for which resolver takes which
+    // path (the enumeration lives with the code, not here, so it cannot go
+    // stale). The evaluator self-invalidates
     // on in-place rule edits via the set revision, so it is built once on first
     // use. Reset in setRuleStore only when the store pointer actually
     // changes (a same-store rebind keeps the evaluator).

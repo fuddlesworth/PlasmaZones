@@ -6,7 +6,9 @@
 #include "configkeys.h"
 
 // Local copy of configkeys.h's accessor macro (that header #undefs it at end
-// of file); same expansion, undef'd again below.
+// of file); same expansion, undef'd again below. A tweak to the original
+// (e.g. attribute annotation) must be applied HERE by hand too — both
+// expansions compile either way, so nothing catches the drift.
 #define P_CONFIG_KEY(name, str)                                                                                        \
     static QString name()                                                                                              \
     {                                                                                                                  \

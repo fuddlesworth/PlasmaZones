@@ -531,8 +531,8 @@ void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()
     // failure OSD per press): shrink by 10% of the 800px work height.
     QVERIFY(strip.adjustActiveWindowHeight(-10.0, params));
     QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("solo")).height(), 720);
-    // Preset cycle enters from the preset nearest the current 720px
-    // (2/3 of the gap-aware 810 span = 530).
+    // Preset cycle enters from the preset nearest the current 720px:
+    // 2/3 of the gap-aware 810 span is 540, minus the 10px gap = 530.
     QVERIFY(strip.cycleActiveWindowPresetHeight(+1, params));
     QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("solo")).height(), 530);
 }

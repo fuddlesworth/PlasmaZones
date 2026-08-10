@@ -353,12 +353,20 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // focus change reclaims it; the engine's applyLayout does NOT
     // (updateViewForFocus leaves a fully-visible column's anchor alone
     // precisely to preserve this).
-    const int stripX = columnStripX(m_activeColumnIdx, params);
-    int anchor = removedLeftOfActive ? m_viewAnchor : stripX - oldViewX;
-    if (stripX - anchor < 0) {
-        anchor = stripX;
+    // Degenerate-area guard, same rationale as clampedAnchor's
+    // (scrollstrip_relayout.cpp): every width resolves to 0 here, so the
+    // left-edge rule below collapses any positive anchor to 0 — and the
+    // anchor is PERSISTED. The removal itself stands; only the anchor
+    // bookkeeping is skipped, and the first relayout against a real area
+    // re-clamps whatever survived.
+    if (params.workArea.width() > 0) {
+        const int stripX = columnStripX(m_activeColumnIdx, params);
+        int anchor = removedLeftOfActive ? m_viewAnchor : stripX - oldViewX;
+        if (stripX - anchor < 0) {
+            anchor = stripX;
+        }
+        m_viewAnchor = anchor;
     }
-    m_viewAnchor = anchor;
 
     if (refocus) {
         const int workW = params.workArea.width();
@@ -474,6 +482,11 @@ QSize ScrollStrip::windowMinimumSize(const QString& windowId) const
     if (colIdx < 0) {
         return QSize(0, 0);
     }
+    // The unguarded .at(indexOfWindow(...)) here (and in the minimized /
+    // set-min-size siblings) is safe BY CONSTRUCTION: columnOfWindow returns
+    // colIdx only when this exact column's indexOfWindow answered >= 0, both
+    // are pure const scans over the same unmutated container, so the
+    // re-derived index cannot be -1. A runtime guard would be dead code.
     const Column& col = m_columns.at(colIdx);
     const Tile& tile = col.tiles.at(col.indexOfWindow(windowId));
     return QSize(tile.minWidth, tile.minHeight);

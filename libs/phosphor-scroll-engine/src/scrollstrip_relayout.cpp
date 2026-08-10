@@ -135,12 +135,22 @@ int ScrollStrip::centeredAnchorFor(int columnIndex, const ScrollLayoutParams& pa
     if (columnIndex < 0 || columnIndex >= m_columns.size()) {
         return 0;
     }
+    // Degenerate-area guard, same as clampedAnchor's (the rationale lives
+    // there): a centered anchor computed against a 0-width area is 0.
+    if (params.workArea.width() <= 0) {
+        return m_viewAnchor;
+    }
     const int colW = columnWidthPx(m_columns.at(columnIndex), params);
     return (params.workArea.width() - colW) / 2;
 }
 
 int ScrollStrip::keepOrRecenterAnchor(int oldViewX, const ScrollLayoutParams& params) const
 {
+    // Degenerate-area guard, same as clampedAnchor's (the rationale lives
+    // there). Checked here too so the centering arms cannot bypass it.
+    if (params.workArea.width() <= 0) {
+        return m_viewAnchor;
+    }
     // Structural changes (minimize collapse, consume) keep the view where it
     // was UNLESS the centering policy pins the focused column to the middle:
     // Always / lone-column centering must survive a strip-width change, or
@@ -157,6 +167,21 @@ int ScrollStrip::clampedAnchor(int anchor, const ScrollLayoutParams& params) con
     if (m_activeColumnIdx < 0) {
         return 0;
     }
+    // Degenerate work area (unknown/removed screen, or outer gaps wider than
+    // the output — resolveColumnWidthPx documents the same state): every
+    // column width resolves to 0/1 here, so the clamp math below collapses
+    // ANY anchor to 0 — and m_viewAnchor is PERSISTED state
+    // (serializeStripState), so a verb or float round trip running against a
+    // dying screen would permanently reset the strip's restored scroll
+    // position. Preserve the current anchor instead; the first relayout
+    // against a real area re-clamps it. This is the chokepoint most anchor
+    // walks share; keepOrRecenterAnchor, reanchorAfterFocusChange,
+    // centeredAnchorFor, centerVisibleColumns and removeWindowInternal
+    // (scrollstrip_structure.cpp) carry their own copies of the guard for
+    // the arms that do not pass through here.
+    if (params.workArea.width() <= 0) {
+        return m_viewAnchor;
+    }
     const int workW = params.workArea.width();
     const int stripW = stripWidthPx(params);
     const int stripX = columnStripX(m_activeColumnIdx, params);
@@ -170,6 +195,11 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewX, const Scro
 {
     if (m_activeColumnIdx < 0) {
         m_viewAnchor = 0;
+        return;
+    }
+    // Degenerate-area guard, same as clampedAnchor's (the rationale lives
+    // there): every arm below would write 0 over the persisted anchor.
+    if (params.workArea.width() <= 0) {
         return;
     }
     const int workW = params.workArea.width();
@@ -253,6 +283,12 @@ bool ScrollStrip::centerActiveColumn(const ScrollLayoutParams& params)
 bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
 {
     if (m_activeColumnIdx < 0) {
+        return false;
+    }
+    // Degenerate-area guard, same rationale as clampedAnchor's: the span
+    // math below would write a garbage anchor over persisted state. Refuse
+    // (the verb reports no_target) rather than centering against nothing.
+    if (params.workArea.width() <= 0) {
         return false;
     }
     const int workW = params.workArea.width();

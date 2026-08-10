@@ -18,7 +18,6 @@
 #include <PhosphorContext/ContextResolver.h>
 #include "config/settings.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
-#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/IPlacementEngine.h>
@@ -918,7 +917,13 @@ void Daemon::processPendingGeometryUpdates()
     }
     // Timer-driven entry (the geometry debounce fires from the event loop),
     // so unlike the signal-wired paths nothing upstream vouches for these
-    // members during a stop() teardown window.
+    // members during a stop() teardown window — and the same shutdown guard
+    // the async tails below carry applies to the synchronous body too: a
+    // debounce firing after stop() must not retile torn-down engines or
+    // restart the reapply timer stop() just stopped.
+    if (m_shuttingDown) {
+        return;
+    }
     if (!m_screenManager || !m_layoutManager || !m_layoutComputeService || !m_overlayService) {
         return;
     }
@@ -1043,6 +1048,14 @@ void Daemon::processPendingGeometryUpdates()
     *conn = connect(
         m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration, this,
         [this, pending, conn](const QString& screenId, const QUuid&, PhosphorZones::Layout*, uint64_t generation) {
+            // Shutdown guard, the async-completion idiom lifecycle.cpp's
+            // D-Bus replies use: stop() has already hidden the overlays and
+            // stopped the reapply timer, and restarting it here would push a
+            // geometry reapply at the effect against torn-down engine state
+            // up to 3s after shutdown began.
+            if (m_shuttingDown) {
+                return;
+            }
             auto expected = pending->find(screenId);
             if (expected == pending->end() || generation < expected.value()) {
                 return;
@@ -1066,6 +1079,12 @@ void Daemon::processPendingGeometryUpdates()
     // empty pending set and an already-disconnected conn — the timeout then
     // no-ops.
     QTimer::singleShot(COMPUTE_BARRIER_TIMEOUT_MS, this, [this, pending, conn]() {
+        // Same shutdown guard as the completion lambda above; the barrier
+        // connection still gets torn down with the daemon.
+        if (m_shuttingDown) {
+            QObject::disconnect(*conn);
+            return;
+        }
         if (pending->isEmpty()) {
             return;
         }
