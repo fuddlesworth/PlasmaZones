@@ -219,6 +219,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->applyWindowGeometry(floatWin, savedGeo.toRect(), /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
                                                   PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                    // Re-seed the tracked screen: the comment above names
+                    // the exact precondition (the restored rect may lie in
+                    // a different virtual screen than the tiled rect), the
+                    // bracket suppressed the detectors' tracker write, and
+                    // applyWindowGeometry does not self-seed — without this
+                    // the next genuine geometry change reads the stale
+                    // pre-apply screen and fires a spurious VS transfer.
+                    m_effect->m_trackedScreenPerWindow[floatWin] = m_effect->getWindowScreenId(floatWin);
                     qCInfo(lcEffect) << "Restored pre-autotile geometry for overflow" << floatWindowId
                                      << savedGeo.toRect();
                 }
@@ -1008,10 +1016,27 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // strip position, which the paint path then drew it at for as long
             // as it stayed parked. The commit being unchanged says nothing
             // about where the column now sits on the strip.
-            if (snap.hasVisualPos) {
-                m_effect->m_scrollVisualPos.insert(snap.windowId, snap.visualPos);
-            } else {
-                m_effect->m_scrollVisualPos.remove(snap.windowId);
+            // Change-gated, and a REAL change pairs with damage: the entry
+            // moves where the paint path draws the window (the sibling
+            // removers document the same rule), and the apply that follows
+            // frequently commits nothing for a parked column (its committed
+            // rect is the park, stable between batches, so the no-op skip
+            // fires) — with no view leg live, nothing else damages, and the
+            // last presented frame keeps drawing the column at the old
+            // strip position. The gate keeps the steady state (same visual
+            // pos every batch) at zero repaint cost.
+            {
+                bool visualPosChanged = false;
+                if (snap.hasVisualPos) {
+                    const auto vit = m_effect->m_scrollVisualPos.constFind(snap.windowId);
+                    visualPosChanged = (vit == m_effect->m_scrollVisualPos.constEnd() || vit.value() != snap.visualPos);
+                    m_effect->m_scrollVisualPos.insert(snap.windowId, snap.visualPos);
+                } else {
+                    visualPosChanged = m_effect->m_scrollVisualPos.remove(snap.windowId) > 0;
+                }
+                if (visualPosChanged) {
+                    KWin::effects->addRepaintFull();
+                }
             }
             // Re-report the declared minimum size when it changed since the
             // last report. KWin exposes minSize with no change signal, and
@@ -1108,17 +1133,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     restoreWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                     qCInfo(lcEffect) << "Windowed-fullscreen deferred reconcile for" << snap.windowId;
                     if (m_effect->m_daemonGate.serviceRegistered) {
-                        // Arm the in-flight marker: a batch the daemon emitted
-                        // BEFORE processing this clear can still carry
-                        // flag=true (cross-direction D-Bus has no ordering
-                        // guarantee), and its adopt arm would re-fullscreen
-                        // the window the user just exited. The flag-off echo
-                        // above consumes it.
-                        m_windowedFsClearInFlight.insert(snap.windowId);
-                        PhosphorProtocol::ClientHelpers::fireAndForget(
-                            m_effect, PhosphorProtocol::Service::Interface::Scrolling,
-                            QStringLiteral("clearWindowedFullscreen"), {snap.windowId},
-                            QStringLiteral("clearWindowedFullscreen"));
+                        // Marker armed + reply-gated inside the helper: the
+                        // flag-off echo above consumes it on success, and a
+                        // failed clear drops it so it cannot latch.
+                        dispatchWindowedFullscreenClear(snap.windowId);
                     }
                 } else if (snap.isWindowedFullscreen && inSet) {
                     // Keep the stored rect current — the strip may have
@@ -1130,7 +1148,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // the same ownership KWin rules claim while they match.
                     applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                 } else if (!snap.isWindowedFullscreen && inSet) {
-                    if (kwFs->isFullScreen()) {
+                    // isRequestedFullScreen: an un-flag landing inside our own
+                    // enter round-trip (flag on, then off, before the client
+                    // acks) must still un-set — the sibling self-heal arm
+                    // above uses the same term for the same committed lag.
+                    // Skipping it drops membership with the request standing,
+                    // and the pending ack then commits fullscreen ownerless.
+                    if (kwFs->isFullScreen() || kwFs->isRequestedFullScreen()) {
                         ++m_suppressFullScreenChanged;
                         kwFs->setFullScreen(false);
                         --m_suppressFullScreenChanged;
@@ -1403,7 +1427,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)
 {
     Q_UNUSED(oldGeometry)
-    if (!w) {
+    // isDeleted: every other entry point bails on a corpse BEFORE the id
+    // lookup, explicitly to avoid re-polluting the scrubbed id caches; this
+    // slot sees strictly more geometry changes since the counter-assert
+    // widened its fast bail.
+    if (!w || w->isDeleted()) {
         return;
     }
 
@@ -1423,14 +1451,29 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
     // out of the strip's park and straddle placements — sitting over its
     // neighbour's column until the next user scroll, because the engine's
     // emit-on-change gate had nothing to say. Re-apply the commanded rect,
-    // without animation (this is enforcement, not motion). The burst
-    // budget (3 per second, reset by every fresh batch command) keeps a
-    // client that re-asserts on every configure from driving an infinite
-    // tug-of-war; when the budget runs out the client wins until the next
-    // batch, which is the pre-existing behavior.
-    if (!w->isWaylandClient() && !m_effect->m_daemonGate.inGeometryApply) {
+    // without animation (this is enforcement, not motion). The counter is
+    // RATE-LIMITED to 3 per rolling second (the window resets once a second
+    // elapses since the burst started, and every fresh batch command
+    // re-arms it) — a client that re-asserts on every configure gets
+    // countered at most 3x/s indefinitely, it does not win outright.
+    //
+    // User-move/resize terms: DragTracker never tracks an interactive
+    // RESIZE at all (its start handler bails on isUserResize), and a mouse
+    // drag stays live past forceEnd until all buttons release — in both
+    // gaps isDragging() is false while the user is actively manipulating
+    // the frame, and the counter would fight the user's own gesture.
+    // The commandedRect entry survives a resize that STARTS after the
+    // batch (the per-batch disarm only covers one already in flight).
+    //
+    // Screen gate through scrollTrackedScreenFor, not the raw notified map:
+    // the apply loop marks tiled unconditionally but records the screen
+    // only for notified windows, so a demoted/rolled-back window is a
+    // tiled member with no recorded screen — the helper resolves that
+    // (fail-closed either way; the helper just fails closed for the right
+    // set).
+    if (!w->isWaylandClient() && !m_effect->m_daemonGate.inGeometryApply && !w->isUserMove() && !w->isUserResize()) {
         const auto cit = m_effect->m_scrollCommandedRects.find(windowId);
-        if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(m_notifiedWindowScreens.value(windowId))
+        if (cit != m_effect->m_scrollCommandedRects.end() && isScrollingScreen(scrollTrackedScreenFor(windowId))
             && !(m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId())) {
             const QRect actual = w->frameGeometry().toRect();
             if (actual != cit->rect) {

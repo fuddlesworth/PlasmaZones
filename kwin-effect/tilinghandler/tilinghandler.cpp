@@ -918,6 +918,24 @@ void TilingHandler::onDaemonReady()
     m_scrollClipLossReported.clear();
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreTileForDesktopMove.clear();
+    // The three per-session scroll maps the serviceUnregistered teardown
+    // clears, for the same handover reason as everything here: a straight
+    // old→new daemon handover produces no unregistered edge, so bring-up
+    // arrives with the dead session's state intact. A stale commanded rect
+    // re-arms the counter-assert against the dead session's position the
+    // moment the new daemon's batches re-open the gates (and before they
+    // overwrite the entry); a stale visual pos paints a parked column at
+    // the dead session's strip position; the min-size cache says "already
+    // sent" about a daemon that never heard it (mildest — the re-announce
+    // re-seeds it, cleared for symmetry with the teardown). The visual-pos
+    // clear pairs with damage like its teardown twin: the removal changes
+    // where the paint path draws those windows.
+    if (!m_effect->m_scrollVisualPos.isEmpty()) {
+        m_effect->m_scrollVisualPos.clear();
+        KWin::effects->addRepaintFull();
+    }
+    m_effect->m_scrollCommandedRects.clear();
+    m_effect->m_lastReportedMinSize.clear();
     // Tiled membership belongs to the dead session as well. The
     // serviceUnregistered teardown normally clears it (paired there with the
     // decoration restore), but a straight old→new owner handover produces no

@@ -168,22 +168,30 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // skipped by the stale marker.
     const bool wasDragFloated = zoneId.isEmpty() && m_dragActivation.floatedWindowIds.remove(liveWindowId);
 
-    // Skip float-restore geometry on minimized windows: when a snapped window is minimized
+    // Skip float-restore GEOMETRY on minimized windows: when a snapped window is minimized
     // we float it (to free the zone slot), but applying the pre-tile geometry while minimized
     // would poison what KWin restores to on unminimize, causing a visible flash of the
     // pre-snap geometry before the unfloat re-snaps to the zone.
+    // A flag rather than a return, mirroring the batch twin's
+    // skipMinimizedRestore: the snap-tracking discriminator below still runs
+    // — the entry genuinely un-snaps the window regardless of visibility,
+    // and a return here left the border set and the ZoneCache holding a
+    // window that was no longer snapped (stale snapped-scoped chrome and
+    // rule verdicts until an unrelated authoritative edge).
+    bool skipGeometry = false;
     if (w->isMinimized() && zoneId.isEmpty()) {
         qCDebug(lcEffect) << "slotApplyGeometryRequested: skipping float-restore geometry on minimized window:"
                           << windowId;
-        return;
+        skipGeometry = true;
     }
     // Skip float-restore geometry for drag-to-float: when the user drags a window
     // off the autotile layout, the daemon restores pre-autotile geometry. But the
     // user expects the window to stay where they dropped it, not snap back.
+    // Same flag, same reason: the un-snap bookkeeping below must still run.
     if (wasDragFloated) {
         qCInfo(lcEffect) << "slotApplyGeometryRequested: skipping float-restore for drag-floated window:"
                          << liveWindowId;
-        return;
+        skipGeometry = true;
     }
     qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "(live:" << liveWindowId << ") geo:" << geometry
                      << "zoneId:" << zoneId << "screen:" << screenId << "floating:" << isWindowFloating(liveWindowId)
@@ -202,7 +210,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // spot). The idempotent daemon-side check normally protects this, but on a
     // daemon restart the reapply can race ahead of the disk-persisted pre-tile
     // load; the move-check makes it robust regardless of ordering.
-    if (!zoneId.isEmpty() && w->frameGeometry().toRect() != geometry) {
+    if (!skipGeometry && !zoneId.isEmpty() && w->frameGeometry().toRect() != geometry) {
         // Capture frame geometry synchronously BEFORE applyWindowGeometry moves the window.
         // ensurePreSnapGeometryStored is async (D-Bus hasPreTileGeometry check) — without
         // pre-capturing, the callback would read the post-move geometry instead of the
@@ -213,9 +221,11 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
     // Empty zoneId = float-restore (daemon placing the window back at its pre-snap geometry, e.g.
     // autotile drag-to-float, drag-out unsnap). Non-empty zoneId = snap into a target zone. The
     // shader-tree path differs accordingly so users can give snap-in and snap-out distinct effects.
-    applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                        zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
-                                         : PhosphorAnimation::ProfilePaths::WindowSnapIn);
+    if (!skipGeometry) {
+        applyWindowGeometry(w, geometry, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                            zoneId.isEmpty() ? PhosphorAnimation::ProfilePaths::WindowSnapOut
+                                             : PhosphorAnimation::ProfilePaths::WindowSnapIn);
+    }
     // Track snapping's own border set (mirrors how autotile records at its
     // tile-apply) using a discriminator analogous to the batch path
     // (slotApplyGeometriesBatch). The batch path discriminates on screenId (empty =
@@ -537,20 +547,22 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
         stillMinimized = true;
     }
     m_navigationHandler->setWindowFloating(liveWindowId, isFloating);
-    // Windowed fullscreen dies on float on THIS path too. This slot receives
-    // the WindowTracking interface's float signal, which carries floats from
-    // every producer (the scroll passive channel's
+    // This slot receives the WindowTracking interface's float signal, which
+    // carries floats from every producer (the scroll passive channel's
     // windowFloatingStateSynced among them) and never reaches
     // TilingHandler::slotWindowFloatingChanged, so it never runs
-    // applyFloatCleanup. Without this a migrated windowed-fullscreen window
-    // that arrives floating stays KWin-fullscreen-configured for the whole
-    // float. For the ACTIVE channel (the Tiling interface's signal) the
-    // tiling handler's slot performs the cleanup first and this remove() is
-    // a no-op belt. The release helper carries its own suppress counter and
+    // applyFloatCleanup. The shed helper mirrors applyFloatCleanup's full
+    // shed half — windowed-fullscreen release, clear-in-flight marker,
+    // counter-assert rect, centering targets, parked paint hint (with
+    // damage), decoration re-drive — not just the fullscreen drop; each of
+    // those was otherwise silently bypassed on this channel. For the ACTIVE
+    // channel (the Tiling interface's signal) the tiling handler's slot
+    // performed the cleanup first and every remove in the shed is a no-op
+    // belt. The release helper carries its own suppress counter and
     // inGeometryApply bracket, so the synchronous X11 exit signal cannot
     // re-enter the VS-crossing machinery from here.
-    if (isFloating && m_windowedFullscreenWindows.remove(liveWindowId)) {
-        m_tilingHandler->releaseWindowedFullscreenState(liveWindowId);
+    if (isFloating) {
+        m_tilingHandler->applyPassiveFloatShed(liveWindowId);
     }
     // When a window is unfloated (tiled/snapped), clear the drag-float skip flag.
     // Without this, a subsequent float toggle's geometry restore would be skipped

@@ -114,7 +114,14 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             const QString trueSource = sourceScreenId.isEmpty() ? oldScreenId : sourceScreenId;
             if (m_managedScreens.contains(positional)) {
                 m_notifiedWindowScreens[windowId] = positional;
-            } else if (m_managedScreens.contains(trueSource)) {
+                // On a scroll→scroll handoff the SOURCE screen's commanded
+                // rect survives this bookkeeping-only arm (the funnel that
+                // drops it, cleanupAutotileTracking, is bypassed here), and
+                // once the record above names the destination the
+                // counter-assert could fight one legitimate X11 position
+                // with the old screen's rect before the destination's first
+                // batch overwrites it. Same hazard the funnel documents.
+                m_effect->m_scrollCommandedRects.remove(windowId);
                 // Cross-MODE move: window left autotile. Drop effect-side
                 // autotile tracking (daemon already relinquished via
                 // handoffRelease) — else it lingers phantom.

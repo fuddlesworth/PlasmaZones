@@ -264,7 +264,13 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // have damaged them is gone).
         m_stripTransition.reset();
         m_stripViewAnimator->reset();
-        KWin::effects->addRepaintFull();
+        // Guarded like repaintSnapRegions: this lambda runs on an arbitrary
+        // later D-Bus dispatch (serviceUnregistered), which can land during
+        // compositor teardown when KWin::effects has been torn down —
+        // unlike the construction-time statements around the connect.
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
         // The tab-indicator surface ids name objects that died with the daemon,
         // and a retraction only ever arrives from a daemon healthy enough to
         // send one — a crash sends nothing. Wayland reuses object ids, so a

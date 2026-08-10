@@ -223,6 +223,11 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 const bool wasWindowedFs = m_effect->m_windowedFullscreenWindows.contains(windowId);
                 if (wasWindowedFs) {
                     forgetWindowedFullscreen(windowId);
+                    // The clear-in-flight marker dies with the hold it
+                    // guarded (the untrack funnel and the snap↔snap belt
+                    // drop it the same way) — a marker outliving the strip
+                    // membership can only refuse a future adopt.
+                    m_windowedFsClearInFlight.remove(windowId);
                     windowedFsToRelease.append(windowId);
                 } else if (w->isFullScreen()) {
                     // Genuinely fullscreen (user F11): KWin owns its
@@ -301,6 +306,16 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     m_effect->applyWindowGeometry(w, savedGeo.toRect(), /*allowDuringDrag=*/false,
                                                   /*skipAnimation=*/false,
                                                   PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                    // Re-seed the tracked screen: the bracket above
+                    // suppressed the VS-crossing detectors whose early
+                    // return sits BEFORE their tracker write, and
+                    // applyWindowGeometry does not self-seed — the pre-tile
+                    // restore can legitimately land in a different virtual
+                    // screen than the tiled rect, and a stale entry makes
+                    // the next genuine geometry change read as a spurious
+                    // VS crossing (the daemon-fallback arm of this same
+                    // if/else chain re-seeds for exactly this reason).
+                    m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
                 } else if (wasTracked) {
                     // No local bucket entry but the window WAS tile-managed
                     // here: it was snap-managed when it entered autotile, so
@@ -352,6 +367,9 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 // per-context philosophy borders already follow.
                 if (m_effect->m_windowedFullscreenWindows.contains(wid)) {
                     forgetWindowedFullscreen(wid);
+                    // Marker dies with the hold — same rationale as the
+                    // demote arm above and the untrack funnel.
+                    m_windowedFsClearInFlight.remove(wid);
                     windowedFsToRelease.append(wid);
                 }
             }
@@ -360,8 +378,20 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // border OVERLAYS clear immediately — windows leaving autotile
             // should not keep autotile borders through the transition.
             // Title-bar restores flow through the rule path.
+            // The per-session scroll companions go with the untrack, like
+            // every other exit funnel (cleanupAutotileTracking, float
+            // cleanup, the snap↔snap belt): the counter-assert must not
+            // re-arm against a rect from the mode that just ended, and the
+            // membership clear below this loop ends the paint relocation,
+            // so the visual-pos removal pairs with damage.
+            bool anyVisualPosDropped = false;
             for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
                 clearWindowTiledAllScreens(wid);
+                m_effect->m_scrollCommandedRects.remove(wid);
+                anyVisualPosDropped = (m_effect->m_scrollVisualPos.remove(wid) > 0) || anyVisualPosDropped;
+            }
+            if (anyVisualPosDropped) {
+                KWin::effects->addRepaintFull();
             }
 
             // Save autotile stacking order before restoring snap-mode order.
@@ -501,6 +531,11 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
         }
         m_effect->applyWindowGeometry(w, it.value().toRect(), /*allowDuringDrag=*/false,
                                       /*skipAnimation=*/false, PhosphorAnimation::ProfilePaths::WindowSnapOut);
+        // Re-seed the tracked screen — same pairing rule as the inline
+        // restore arm and requestDaemonPreTileRestore: the bracket
+        // suppressed the detectors' own tracker write, and the restore can
+        // land in a different virtual screen than the tiled rect.
+        m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
     }
     if (scrollingScreenIntersection() != scrollingBefore) {
         m_effect->invalidateAllRuleCaches();
@@ -774,25 +809,35 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                                 continue;
                             }
                             {
-                                const QString scr = m_effect->getWindowScreenId(matchedWindow);
-                                auto& screenGeometries = m_preTileGeometries[scr];
                                 const QString wId = m_effect->getWindowId(matchedWindow);
-                                // Only pre-populate if no entry yet (saveAndRecordPreTileGeometry
-                                // already ran for windows on these screens). If the entry matches the
-                                // window's current frame (i.e., it was zone-snapped), prefer the daemon's
-                                // stored value which is the original pre-autotile position.
-                                auto existingIt = screenGeometries.find(wId);
-                                if (existingIt == screenGeometries.end()) {
-                                    screenGeometries[wId] = geom;
+                                // ALL-bucket lookup, matching the rule
+                                // saveAndRecordPreTileGeometry documents: a
+                                // per-screen check here let a transferred
+                                // window (the cross-output path re-files its
+                                // rect under the CAPTURE screen's bucket)
+                                // gain a SECOND entry under its current
+                                // screen, and findPreTileGeometry then
+                                // returned whichever bucket hash order
+                                // reached first — possibly a rect measured
+                                // in the other monitor's coordinate space.
+                                // Update the existing entry in place under
+                                // its own bucket; insert under the current
+                                // screen only on a genuine all-bucket miss.
+                                QString bucketScreenId;
+                                const QRectF existing = findPreTileGeometry(wId, &bucketScreenId);
+                                if (!existing.isValid()) {
+                                    const QString scr = m_effect->getWindowScreenId(matchedWindow);
+                                    m_preTileGeometries[scr][wId] = geom;
                                     qCDebug(lcEffect) << "Pre-populated pre-autotile geometry from daemon for"
                                                       << stableId << "on" << scr << ":" << geom;
-                                } else if (existingIt.value().toRect() != geom.toRect()) {
+                                } else if (existing.toRect() != geom.toRect()) {
                                     // Daemon stored a different geometry (likely from before the window
                                     // was resnapped to a zone). Prefer the daemon's version as it's the
                                     // true pre-autotile position.
-                                    qCDebug(lcEffect) << "Updated pre-autotile geometry from daemon for" << stableId
-                                                      << "on" << scr << ":" << existingIt.value() << "->" << geom;
-                                    existingIt.value() = geom;
+                                    qCDebug(lcEffect)
+                                        << "Updated pre-autotile geometry from daemon for" << stableId << "in bucket"
+                                        << bucketScreenId << ":" << existing << "->" << geom;
+                                    m_preTileGeometries[bucketScreenId][wId] = geom;
                                 }
                             }
                         }
@@ -814,27 +859,35 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
     qCInfo(lcEffect) << "Autotile floating changed:" << windowId << "isFloating:" << isFloating
                      << "screen:" << screenId;
 
+    // Re-key to the live id BEFORE either branch, the same re-key the batch
+    // apply performs (tiling.cpp documents why): the daemon can still name a
+    // pre-restore uuid. On the float side applyFloatCleanup's id-keyed drops
+    // — the windowed-fullscreen release among them — silently miss on the
+    // stale spelling; on the UNFLOAT side the FloatingCache entry (written
+    // under the live id by the float side) would be cleared under the stale
+    // spelling instead, leaving the live entry answering "floating" to every
+    // reader (FFM pause, pre-tile capture guard, the desktop-switch and
+    // fullscreen-exit skips) for the rest of the session — and this slot is
+    // the ONLY writer for an autotile unfloat (the WindowTracking relay
+    // deliberately excludes AutotileEngine::windowFloatingChanged). The
+    // pending-focus stamp uses the live id too: its consumer resolves via
+    // findWindowByIdExact, which refuses the fuzzy fallback.
+    QString liveId = windowId;
+    if (KWin::EffectWindow* resolved = m_effect->findWindowById(windowId)) {
+        liveId = m_effect->getWindowId(resolved);
+    }
+
     if (!isFloating) {
-        m_effect->m_navigationHandler->setWindowFloating(windowId, false);
+        m_effect->m_navigationHandler->setWindowFloating(liveId, false);
         KWin::EffectWindow* unfloatWin = m_effect->findWindowById(windowId);
         // Showing-desktop guard: this refocus is automatic (daemon float-state
         // signal), and activateWindow() would synchronously cancel a peek.
         if (unfloatWin && unfloatWin == KWin::effects->activeWindow() && !PlasmaZonesEffect::isShowingDesktop()) {
-            m_pendingAutotileFocusWindowId = windowId;
+            m_pendingAutotileFocusWindowId = liveId;
             KWin::effects->activateWindow(unfloatWin);
         }
     } else {
-        // Re-key to the live id BEFORE the cleanup, the same re-key the
-        // batch apply performs (tiling.cpp documents why): the daemon can
-        // still name a pre-restore uuid, and applyFloatCleanup's id-keyed
-        // drops — the windowed-fullscreen release among them — silently
-        // miss on the stale spelling, leaving a floated window
-        // fullscreen-configured with a live hash entry.
-        QString cleanupId = windowId;
-        if (KWin::EffectWindow* resolved = m_effect->findWindowById(windowId)) {
-            cleanupId = m_effect->getWindowId(resolved);
-        }
-        applyFloatCleanup(cleanupId);
+        applyFloatCleanup(liveId);
 
         // Raise the floated window if it's the active window (user-initiated float)
         KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
@@ -845,7 +898,7 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
             // == activeWindow() predicate usually covers this (peek focuses
             // the desktop window), but with no desktop window to take focus
             // the floated window can still be "active" while hidden.
-            m_pendingAutotileFocusWindowId = windowId;
+            m_pendingAutotileFocusWindowId = liveId;
             auto* ws = KWin::Workspace::self();
             if (ws) {
                 KWin::Window* kw = floatWin->window();
@@ -931,13 +984,21 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // window without touching the animator. Bracketed: moveResize emits
         // frameGeometryChanged synchronously on X11 and this slot's caller
         // holds no apply guard.
-        if (!m_effect->m_windowAnimator->hasAnimation(w)) {
-            m_effect->applyWindowGeometry(w, m_effect->m_windowedFullscreenWindows.value(windowId),
-                                          /*allowDuringDrag=*/false, /*skipAnimation=*/true);
-        } else if (KWin::Window* kw = w->window()) {
+        // The bracket covers BOTH arms: the applyWindowGeometry arm issues
+        // the same synchronous X11 moveResize the direct arm does, and
+        // applyWindowGeometry does not set inGeometryApply itself on the
+        // non-deferred path — an unbracketed re-entry would reach the
+        // VS-crossing detector (and the counter-assert gate) for a move the
+        // effect itself made.
+        {
             const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
             m_effect->m_daemonGate.inGeometryApply = true;
-            kw->moveResize(QRectF(m_effect->m_windowedFullscreenWindows.value(windowId)));
+            if (!m_effect->m_windowAnimator->hasAnimation(w)) {
+                m_effect->applyWindowGeometry(w, m_effect->m_windowedFullscreenWindows.value(windowId),
+                                              /*allowDuringDrag=*/false, /*skipAnimation=*/true);
+            } else if (KWin::Window* kw = w->window()) {
+                kw->moveResize(QRectF(m_effect->m_windowedFullscreenWindows.value(windowId)));
+            }
             m_effect->m_daemonGate.inGeometryApply = prevInApply;
         }
         // Shed the decoration now: shouldDecorateWindow rejects on the
@@ -968,13 +1029,12 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             m_effect->m_windowedFullscreenWindows.remove(windowId);
             restoreWindowedFullscreenLayerDemotion(windowId, w->window());
             qCInfo(lcEffect) << "Windowed-fullscreen window left fullscreen on its own:" << windowId;
-            // In-flight marker: an already-emitted batch still carrying
-            // flag=true must not re-adopt against this exit (the batch arm's
-            // flag-off echo consumes the marker).
-            m_windowedFsClearInFlight.insert(windowId);
-            PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Scrolling,
-                                                           QStringLiteral("clearWindowedFullscreen"), {windowId},
-                                                           QStringLiteral("clearWindowedFullscreen"));
+            // In-flight marker + reply-gated dispatch: an already-emitted
+            // batch still carrying flag=true must not re-adopt against this
+            // exit (the batch arm's flag-off echo consumes the marker), and
+            // the helper drops the marker on a failed clear so it cannot
+            // latch for the session.
+            dispatchWindowedFullscreenClear(windowId);
             m_effect->updateAllDecorations();
         } else {
             qCInfo(lcEffect) << "Windowed-fullscreen window left fullscreen with the daemon gone:" << windowId

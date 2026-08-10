@@ -733,7 +733,16 @@ void ScrollEngine::refreshConfigFromSettings()
     m_alwaysCenterSingleColumn = settings->scrollingAlwaysCenterSingleColumn();
     m_cropStraddlers = settings->scrollingCropStraddlers();
 
-    const auto widthKind = static_cast<DefaultWidthKind>(settings->scrollingDefaultColumnWidthKind());
+    // Guarded cast, matching every sibling enum in this function (center,
+    // insertPos, sticky, indicator position): the shared value key can hold
+    // a figure from the OTHER kind in a hand-edited config, and an
+    // out-of-range kind falling through to the Proportion arm would clamp
+    // a Fixed pixel figure to 1.0 — every new column full-width.
+    const int widthKindRaw = settings->scrollingDefaultColumnWidthKind();
+    const auto widthKind = (widthKindRaw >= static_cast<int>(DefaultWidthKind::Proportion)
+                            && widthKindRaw <= static_cast<int>(DefaultWidthKind::Preset))
+        ? static_cast<DefaultWidthKind>(widthKindRaw)
+        : DefaultWidthKind::Proportion;
     const qreal widthValue = settings->scrollingDefaultColumnWidthValue();
     m_defaultWidthClientDecides = (widthKind == DefaultWidthKind::ClientDecides);
     if (widthKind == DefaultWidthKind::Fixed) {
@@ -828,6 +837,14 @@ void ScrollEngine::retile(const QString& screenId)
         for (const QString& sid : std::as_const(m_scrollingScreens)) {
             applyLayout(sid);
         }
+        return;
+    }
+    // Membership guard, matching scheduleRetileForScreen and the queued
+    // callback: a caller naming a screen this engine does not manage would
+    // otherwise pay a full layoutParamsForScreen resolve and, if that
+    // screen still carries a tab-strip latch, emit a tabStripsChanged for a
+    // screen the engine does not own.
+    if (!m_scrollingScreens.contains(screenId)) {
         return;
     }
     applyLayout(screenId);

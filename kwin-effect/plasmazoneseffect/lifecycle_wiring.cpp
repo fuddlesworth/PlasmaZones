@@ -467,7 +467,12 @@ void PlasmaZonesEffect::connectDragTracker()
                         m_dragBypassedForEngine = false;
                         m_dragBypassScreenId.clear();
                         m_dragActivation.detected = false;
-                        if (!m_keyboardGrabbed) {
+                        // KWin::effects guarded: this lambda runs from a
+                        // QDBusPendingCallWatcher reply, which can dispatch
+                        // during compositor teardown when the global is
+                        // already gone (repaintSnapRegions documents the
+                        // same rule for the same reason).
+                        if (!m_keyboardGrabbed && KWin::effects) {
                             KWin::effects->grabKeyboard(this);
                             m_keyboardGrabbed = true;
                         }

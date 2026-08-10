@@ -842,7 +842,11 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // branch above happened to overwrite it.
         m_dragBypassScreenId.clear();
         m_dragActivation.detected = false;
-        if (!m_keyboardGrabbed) {
+        // KWin::effects guarded: this slot runs from a D-Bus signal
+        // dispatch (slotDragPolicyChanged), which can land during compositor
+        // teardown when the global is already gone — same rule and reason
+        // repaintSnapRegions documents above.
+        if (!m_keyboardGrabbed && KWin::effects) {
             KWin::effects->grabKeyboard(this);
             m_keyboardGrabbed = true;
         }

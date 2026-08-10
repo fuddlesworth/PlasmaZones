@@ -429,7 +429,7 @@ bool PlasmaZonesEffect::isShowingDesktop()
     return ws && ws->showingDesktop();
 }
 
-bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason) const
+bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason, bool exemptFullscreen) const
 {
     if (rejectReason) {
         rejectReason->clear();
@@ -462,7 +462,14 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     // the stacking walks) hit this filter for every tooltip/popup/menu. The
     // predicate is shared verbatim with the other structural filters so they
     // can never drift — see isStructurallyUnmanageableWindowType().
-    if (isStructurallyUnmanageableWindowType(w, rejectReason)) {
+    // exemptFullscreen threads through untouched: the caller that sets it
+    // (isEligibleForTilingNotify, for a fullscreen window on a scrolling
+    // screen) needs the structural fullscreen reject waived here, because at
+    // effect bring-up the membership hash is empty and this reject would
+    // otherwise fire 30 lines before the eligibility function's own
+    // scrolling-screen exemption could — making the documented re-adoption
+    // of a windowed-fullscreen column unreachable.
+    if (isStructurallyUnmanageableWindowType(w, rejectReason, exemptFullscreen)) {
         return false;
     }
 

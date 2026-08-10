@@ -793,7 +793,16 @@ void SnapHandler::retryVisibleMinimizeFloats()
         const QString screenId = m_effect->getWindowScreenId(window);
         TilingHandler* autotile = m_effect->tilingHandler();
         if (autotile && autotile->isManagedScreen(screenId)) {
-            autotile->slotWindowMinimizedChanged(window);
+            // offerMinimizeEdge, not the void slot: the slot silently
+            // returns on its entry gates (unhandleable, non-tileable), and
+            // with the budget already refunded above a refused transfer
+            // would leave the window floating with no armed timer —
+            // recoverable only by another screen-set change. Both sibling
+            // transfer sites use this exact refusal shape.
+            if (!autotile->offerMinimizeEdge(window)) {
+                qCInfo(lcEffect) << "Snap: autotile refused visible-float transfer, re-arming retry:" << windowId;
+                scheduleUnminimizeUnfloatRetry(windowId);
+            }
             continue;
         }
         commitUnminimizeUnfloat(window, windowId, screenId);
@@ -1016,11 +1025,21 @@ void SnapHandler::slotSnapAllWindowsRequested(const QString& screenId)
 
             PhosphorProtocol::SnapAllResultList snapResults = calcReply.value();
 
-            // Build WindowGeometryList for the batch geometry path
+            // Build WindowGeometryList for the batch geometry path. Stamp the
+            // screen the batch was computed for onto every entry:
+            // toGeometryEntry() has no screen to give (SnapAllResultEntry
+            // carries none), and an EMPTY screenId makes the batch consumer's
+            // discriminator take the float/restore arm — clearWindowSnapped
+            // instead of markWindowSnapped — so no snap-all window would ever
+            // enter the border set. The collection loop above already skipped
+            // any window whose screen differs, so this id IS each window's
+            // real screen.
             PhosphorProtocol::WindowGeometryList snapGeometries;
             snapGeometries.reserve(snapResults.size());
             for (const auto& r : snapResults) {
-                snapGeometries.append(r.toGeometryEntry());
+                PhosphorProtocol::WindowGeometryEntry entry = r.toGeometryEntry();
+                entry.screenId = screenId;
+                snapGeometries.append(entry);
             }
             m_effect->slotApplyGeometriesBatch(snapGeometries, QStringLiteral("snap_all"));
 

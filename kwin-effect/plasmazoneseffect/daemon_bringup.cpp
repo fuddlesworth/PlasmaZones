@@ -270,10 +270,17 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     }
 
     // Re-notify active window (gives daemon lastActiveScreenName).
-    // Use notifyWindowActivated which bypasses user exclusion lists — the daemon
-    // must always know which window is active for correct shortcut handling.
-    KWin::EffectWindow* activeWindow = getActiveWindow();
-    if (activeWindow) {
+    // Hand KWin's RAW active window to notifyWindowActivated and let ITS
+    // filter decide — that filter carries the fullscreen-on-a-scrolling-
+    // screen exemption. Pre-filtering through getActiveWindow() (plain
+    // shouldHandleWindow) rejected a genuinely fullscreen active window and
+    // fell through to the topmost OTHER window in the stacking walk, so the
+    // re-seed reported the NEIGHBOUR as active — the exact wrong-target
+    // failure the exemption exists for (the toggle pressed over a
+    // fullscreen Proton game landing on the terminal beside it), and no
+    // further windowActivated fires while the game keeps focus.
+    KWin::EffectWindow* activeWindow = KWin::effects ? KWin::effects->activeWindow() : nullptr;
+    if (activeWindow && !activeWindow->isDeleted()) {
         notifyWindowActivated(activeWindow);
     }
 

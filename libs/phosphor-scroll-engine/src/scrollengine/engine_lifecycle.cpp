@@ -831,7 +831,13 @@ void ScrollEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth
     // min-size report for a window on another desktop would relayout a strip
     // this change did not touch. The model write still lands; the switch back
     // retiles the mutated strip.
-    if (state->strip().setWindowMinimumSize(windowId, minWidth, minHeight)
+    // qMax(0, ...): same negative-floor contract as the FloatRestore write
+    // above and insertOpenedWindow's boundary clamp — a negative floor flows
+    // from here into Tile::minWidth/minHeight, and the relayout slack math
+    // is not written for one. (No live crash today; every consumer happens
+    // to guard, but this is exported LGPL API and the sibling paths all
+    // clamp at the boundary.)
+    if (state->strip().setWindowMinimumSize(windowId, qMax(0, minWidth), qMax(0, minHeight))
         && key == currentKeyForScreen(key.screenId)) {
         scheduleRetileForScreen(key.screenId);
     }

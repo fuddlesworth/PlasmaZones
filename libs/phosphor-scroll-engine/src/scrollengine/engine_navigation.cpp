@@ -428,7 +428,11 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     }
 
     applyLayout(screenId, false);
-    applyLayout(target, true);
+    // Focus flag gated on moverInserted, same rationale as m_activeScreen
+    // above: on the refusal path the crossing failed and is reported as
+    // failure, so the target's applyLayout must not yank compositor focus
+    // onto the other output's active window.
+    applyLayout(target, moverInserted);
     Q_EMIT placementChanged(screenId);
     Q_EMIT placementChanged(target);
     // The partner's refusal (if any) is warned about above but does not gate
@@ -669,6 +673,14 @@ void ScrollEngine::snapAllWindows(const PhosphorEngine::NavigationContext& ctx)
                                   ctx.windowId, QString(), screen);
         return;
     }
+    // Capture the strip's active window BEFORE the pull:
+    // unfloatWindowInternal unconditionally focuses each window it inserts,
+    // and floatingWindows() is SORTED, so without a restore the focus (and
+    // the view anchor with it) lands on the lexicographically-greatest
+    // candidate — deterministic but arbitrary, and user-visible in the
+    // resulting scroll position. If the user's window is still in the strip
+    // after the pull, put the focus back.
+    const QString activeBefore = state->strip().activeWindowId();
     bool any = false;
     for (const QString& windowId : candidates) {
         // Batched: one relayout + one placementChanged for the whole pull,
@@ -676,6 +688,9 @@ void ScrollEngine::snapAllWindows(const PhosphorEngine::NavigationContext& ctx)
         any = unfloatWindowInternal(state, windowId, screen, /*applyAfter=*/false) || any;
     }
     if (any) {
+        if (!activeBefore.isEmpty() && state->strip().containsWindow(activeBefore)) {
+            state->strip().focusWindow(activeBefore, layoutParamsForScreen(screen));
+        }
         applyLayout(screen, false);
         Q_EMIT placementChanged(screen);
     } else {

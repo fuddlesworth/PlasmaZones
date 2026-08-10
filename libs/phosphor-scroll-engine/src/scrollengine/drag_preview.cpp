@@ -407,6 +407,12 @@ void ScrollEngine::cancelDragInsertPreview()
                 const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
                 if (dragPreviewRestoreSlot(targetState, p.windowId, p.defensiveSlot, params, p.targetScreenId)) {
                     m_states.setKeyForWindow(p.windowId, p.targetKey);
+                    // Same emit-on-change escape as every other restore arm
+                    // in this function: the restored slot is typically the
+                    // pre-drag rect, so without dropping the memories the
+                    // re-tile emit is suppressed.
+                    m_lastAppliedRect.remove(p.windowId);
+                    m_parkedScrollEdge.remove(p.windowId);
                     applyLayout(p.targetScreenId, false);
                 }
             }
@@ -464,6 +470,19 @@ void ScrollEngine::cancelDragInsertPreview()
             const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
             targetState->strip().insertWindow(p.windowId, p.carried.width, p.carried.display, params,
                                               p.carried.minWidth, p.carried.minHeight, ScrollInsertPosition::Last);
+            // Post-insert stamps, gated exactly like commit's and
+            // dragPreviewRestoreSlot's: for a cross-key TILED drag the
+            // carried slot holds the user's height intent and the
+            // windowed-fullscreen flag, and the bare insert above seeded
+            // the context default height with the flag off. NOT routed
+            // through dragPreviewRestoreSlot — its column index names the
+            // PRIOR screen's slot and would misplace the window here.
+            if (p.carried.column >= 0 || p.carried.tileIndex >= 0) {
+                targetState->strip().setWindowHeightIntent(p.windowId, p.carried.height);
+                if (p.carried.windowedFullscreen) {
+                    targetState->strip().setWindowedFullscreen(p.windowId, true);
+                }
+            }
             m_states.setKeyForWindow(p.windowId, p.targetKey);
             m_lastAppliedRect.remove(p.windowId);
             m_parkedScrollEdge.remove(p.windowId);

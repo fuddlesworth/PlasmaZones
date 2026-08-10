@@ -778,7 +778,17 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
         Column& dest = m_columns[visible.at(i)];
         dest.tiles = tiles.at(from);
         dest.activeTileIdx = activeTileIdx.at(from);
-        rotated += dest.tiles.size();
+        // Count non-minimized tiles only: the total feeds the user-facing
+        // "Rotated %n windows" OSD copy, and a partly-minimized column's
+        // hidden tiles did not visibly move. (visibleColumnIndices already
+        // excludes FULLY minimized columns, so every counted column
+        // contributes at least one — the caller's rotated < 2 no-op test
+        // still holds.)
+        for (const Tile& t : dest.tiles) {
+            if (!t.minimized) {
+                ++rotated;
+            }
+        }
     }
     // Width/display intents stayed with the slot, but a column's RESOLVED
     // width also carries its tiles' min-width clamp — so a rotate that lands

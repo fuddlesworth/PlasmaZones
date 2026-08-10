@@ -180,7 +180,14 @@ void TilingHandler::releaseWindowedFullscreenState(const QString& windowId)
     // Keep-flag restore runs even when fullscreen is already gone (the
     // client may have exited on its own before this release landed).
     restoreWindowedFullscreenLayerDemotion(windowId, kw);
-    if (!kw->isFullScreen()) {
+    // Requested-state term: during our OWN enter round-trip the committed
+    // state lags behind while requested is already true (the same lag
+    // drag_snap's apply bail and the self-heal arm handle explicitly). A
+    // release landing inside that gap must still un-set, or the client
+    // commits fullscreen with membership already gone — the apply bail then
+    // rejects every geometry and the ack arm can't fire, stranding the
+    // window fullscreen at full-output size with no owner.
+    if (!kw->isFullScreen() && !kw->isRequestedFullScreen()) {
         return;
     }
     // Own inGeometryApply bracket: setFullScreen(false) synchronously emits
@@ -196,8 +203,45 @@ void TilingHandler::releaseWindowedFullscreenState(const QString& windowId)
     m_effect->m_daemonGate.inGeometryApply = prevInApply;
 }
 
+void TilingHandler::dispatchWindowedFullscreenClear(const QString& windowId)
+{
+    // Arm the in-flight marker: a batch the daemon emitted BEFORE
+    // processing this clear can still carry flag=true (cross-direction
+    // D-Bus has no ordering guarantee), and its adopt arm would
+    // re-fullscreen the window the user just exited. The batch arm's
+    // flag-off echo consumes the marker on success.
+    //
+    // Reply-gated, NOT fireAndForget: on a LOST clear the daemon keeps its
+    // flag true, so every subsequent batch entry carries flag=true and the
+    // flag-off echo never arrives — the marker would latch and refuse
+    // re-adoption for the rest of the session. The error arm drops it so
+    // the next batch can adopt again (the daemon's flag surviving an error
+    // is exactly the state re-adoption reconciles).
+    m_windowedFsClearInFlight.insert(windowId);
+    QDBusPendingCall call = PhosphorProtocol::ClientHelpers::asyncCall(
+        PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("clearWindowedFullscreen"), {windowId});
+    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcEffect) << "clearWindowedFullscreen failed for" << windowId
+                                << "- dropping in-flight marker:" << reply.error().message();
+            m_windowedFsClearInFlight.remove(windowId);
+        }
+    });
+}
+
 void TilingHandler::restoreAllWindowedFullscreen()
 {
+    // The clear-in-flight markers die unconditionally, BEFORE the empty-hash
+    // early return: this is the shared drain for disable, teardown, daemon
+    // loss AND bring-up, and a marker surviving a daemon that died before
+    // echoing its clear would silently refuse the NEW daemon's adopt batches
+    // forever. Both marker-arm sites remove membership before inserting the
+    // marker, so the last-member case arrives here with the hash EMPTY and
+    // the marker set — a drain gated behind the early return would miss it.
+    m_windowedFsClearInFlight.clear();
     if (m_effect->m_windowedFullscreenWindows.isEmpty()) {
         return;
     }
@@ -209,11 +253,6 @@ void TilingHandler::restoreAllWindowedFullscreen()
     // entry already gone.
     const QStringList ids = m_effect->m_windowedFullscreenWindows.keys();
     m_effect->m_windowedFullscreenWindows.clear();
-    // The clear-in-flight markers die with the holds: this is the shared
-    // drain for disable, teardown, daemon loss AND bring-up, and a marker
-    // surviving a daemon that died before echoing its clear would silently
-    // refuse the NEW daemon's adopt batches forever.
-    m_windowedFsClearInFlight.clear();
     for (const QString& wid : ids) {
         releaseWindowedFullscreenState(wid);
     }
@@ -894,7 +933,15 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (internal window)" << m_effect->getWindowId(w);
         return false;
     }
-    if (!m_effect->shouldHandleWindow(w)) {
+    // Compute the scrolling windowed-fullscreen exemption BEFORE the
+    // handleable check and thread it through: shouldHandleWindow's structural
+    // fullscreen reject would otherwise fire here, 30 lines before this
+    // function's own fullscreen clause below, and at effect bring-up (empty
+    // membership hash) that made the documented re-adoption of a flagged
+    // column unreachable — the window was never announced, so no batch could
+    // ever restore membership. Mirrors notifyWindowActivated's exemption.
+    const bool fullscreenOnScrollingScreen = w->isFullScreen() && isScrollingScreen(m_effect->getWindowScreenId(w));
+    if (!m_effect->shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not handleable)" << m_effect->getWindowId(w);
         return false;
     }
@@ -982,6 +1029,11 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     if (m_effect->m_windowedFullscreenWindows.remove(windowId)) {
         releaseWindowedFullscreenState(windowId);
     }
+    // The clear-in-flight marker dies with the hold, like the untrack
+    // funnel and the snap↔snap belt drop it — a marker outliving the strip
+    // membership can only refuse a future adopt (usually consumed by the
+    // next flag-off entry, but a float means no batch entry ever arrives).
+    m_windowedFsClearInFlight.remove(windowId);
     // A floating window is free to move itself — stop countering.
     m_effect->m_scrollCommandedRects.remove(windowId);
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
@@ -1020,6 +1072,59 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // the funnel resolves the floating-state chain.
     m_effect->reconcileDecorationOnPlacementFlip(windowId);
     unmaximizeMonocleWindow(windowId);
+}
+
+void TilingHandler::applyPassiveFloatShed(const QString& windowId)
+{
+    // The shed half of applyFloatCleanup, for the WindowTracking interface's
+    // float channel (PlasmaZonesEffect::slotWindowFloatingChanged). That slot
+    // receives floats from producers that never reach
+    // TilingHandler::slotWindowFloatingChanged (the scroll passive channel's
+    // windowFloatingStateSynced among them), so applyFloatCleanup never runs
+    // for them and every one of these sheds was silently bypassed.
+    // Deliberately EXCLUDES applyFloatCleanup's setWindowFloating /
+    // clearWindowTiledAllScreens / unmaximizeMonocleWindow — the passive
+    // slot's surrounding code already covers those or they would double-fire.
+    //
+    // Membership-OR-snapshot guard: the membership remove() is consumed by
+    // the first call, but the first release can silently no-op when
+    // findWindowByIdExact misses (it discards the keep-flag snapshot and
+    // returns before setFullScreen(false)). A surviving snapshot therefore
+    // means the release is still owed; releaseWindowedFullscreenState is
+    // idempotent and deliberately does not consult the membership hash, so
+    // re-driving it off the snapshot is safe.
+    const bool hadMembership = m_effect->m_windowedFullscreenWindows.remove(windowId);
+    if (hadMembership || m_effect->m_windowedFsLayerSnapshots.contains(windowId)) {
+        releaseWindowedFullscreenState(windowId);
+    }
+    // A stale clear-in-flight marker must not outlive the hold it guarded —
+    // same rationale as the untrack funnel (cleanupAutotileTracking) and the
+    // snap↔snap transfer belt.
+    m_windowedFsClearInFlight.remove(windowId);
+    // A floating window is free to move itself — stop countering.
+    m_effect->m_scrollCommandedRects.remove(windowId);
+    // Same rationale as applyFloatCleanup for all three: a stale target
+    // re-triggers centering on the next frameGeometryChanged, and a stale
+    // visual-pos entry makes a later snap on another screen paint the window
+    // at the dead strip position (or not at all).
+    m_tileTargetZones.remove(windowId);
+    m_centeredWaylandZones.remove(windowId);
+    // The removal changes where the paint path draws the window (relocated
+    // position → nothing), and unlike the active channel this path has no
+    // follow-up geometry apply guaranteed to damage — so pair it.
+    if (m_effect->m_scrollVisualPos.remove(windowId) > 0) {
+        KWin::effects->addRepaintFull();
+    }
+    // Decoration re-drive: the sibling exit paths (the self-exit arms, the
+    // active channel's applyFloatCleanup) all re-resolve chrome on this
+    // transition, and shouldDecorateWindow's fullscreen reject lifts the
+    // moment the release above lands — without this the window comes back
+    // with no PlasmaZones chrome until an unrelated sweep. The rule-cache
+    // invalidation the passive slot performs later early-returns in a
+    // default-config session, so it cannot substitute.
+    if (hadMembership) {
+        m_effect->reconcileDecorationOnPlacementFlip(windowId);
+    }
 }
 
 void TilingHandler::markWindowTiled(const QString& screenId, const QString& windowId)

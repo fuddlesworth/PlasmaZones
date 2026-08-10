@@ -53,6 +53,15 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
             m_floatRestore.insert(windowId, FloatRestore{});
         }
         m_scrollFloatedWindows.insert(windowId);
+        // Drop the same three per-window memories the main float path below
+        // drops, for the same reasons: a retained rect that happens to equal
+        // the one the strip later resolves defeats applyLayout's
+        // emit-on-change gate (reachable — the drag-preview heal that
+        // manufactures this residue clears neither memory), and a stale park
+        // edge would anchor the arrival animation to the wrong side.
+        m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
         Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
         Q_EMIT placementChanged(key.screenId);
         return true;
@@ -292,7 +301,18 @@ void ScrollEngine::toggleWindowFloat(const QString& rawWindowId, const QString& 
     // pipeline, not a second translation.
     const QString windowId = canonicalizeForLookup(rawWindowId);
     ScrollState* state = stateForWindow(windowId);
-    const bool floating = state && state->isFloating(windowId);
+    if (!state) {
+        // Report instead of absorbing the press silently: a toggle aimed at
+        // an untracked window would resolve floating=false below and
+        // setWindowFloat's no-state arm silently rejects the float. Every
+        // other navigation shortcut produces feedback, and a silent
+        // shortcut reads as broken — mirrors SnapEngine::toggleWindowFloat
+        // and the autotile facade's not_managed report.
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("not_managed"), windowId, QString(),
+                                  screenId);
+        return;
+    }
+    const bool floating = state->isFloating(windowId);
     setWindowFloat(windowId, !floating, screenId);
 }
 

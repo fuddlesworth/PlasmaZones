@@ -48,14 +48,46 @@ int ScrollStrip::resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayo
 
 int ScrollStrip::columnWidthPx(const Column& c, const ScrollLayoutParams& params) const
 {
-    if (c.isFullyMinimized()) {
+    // isEmpty first: isFullyMinimized answers FALSE for an empty column, so
+    // without this the width/offset walks (columnStripX, stripWidthPx,
+    // visibleColumnIndices) would count a phantom column's width+gap while
+    // relayout's own accumulator skips it — every column right of the
+    // phantom would render shifted from the position the anchor math
+    // computed. No mutation site produces an empty column today (each
+    // either closes the emptied column or is guarded on tiles.size() >= 2);
+    // this is the single chokepoint all four walks share, kept here so the
+    // invariant does not depend on every future mutation site remembering
+    // it.
+    if (c.isEmpty() || c.isFullyMinimized()) {
         return 0;
     }
     int px = resolveColumnWidthPx(c.width, params);
     if (params.respectMinimumSize) {
+        // A tabbed column with a LEFT/RIGHT within-column indicator hands
+        // its tiles contentRectFor(rect) = rect minus reservedThickness, so
+        // when the min-width clamp is what sets the column width the
+        // committed TILE width would land below the client's declared
+        // minimum — the exact commit-a-width-the-client-refuses hazard the
+        // peek floor documents (KWin then regrows the frame from x). Raise
+        // the floor by the reservation so the tile, not the column, honours
+        // the minimum. Applied HERE, in the one function every consumer
+        // (columnStripX / stripWidthPx / relayout / the anchor math) goes
+        // through, so the strip widens consistently for such columns. The
+        // Top/Bottom axis needs nothing: the tabbed branch applies no
+        // minHeight floor, so there is no contradicted clamp on heights.
+        int reservationFloor = 0;
+        if (c.display == ColumnDisplay::Tabbed && isVerticalTabIndicator(params.tabIndicator.position)) {
+            int visibleTiles = 0;
+            for (const Tile& tile : c.tiles) {
+                if (!tile.minimized) {
+                    ++visibleTiles;
+                }
+            }
+            reservationFloor = params.tabIndicator.reservedThickness(visibleTiles);
+        }
         for (const Tile& tile : c.tiles) {
-            if (!tile.minimized && tile.minWidth > px) {
-                px = tile.minWidth;
+            if (!tile.minimized && tile.minWidth + reservationFloor > px) {
+                px = tile.minWidth + reservationFloor;
             }
         }
     }

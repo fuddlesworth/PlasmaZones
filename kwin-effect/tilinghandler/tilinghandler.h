@@ -256,6 +256,18 @@ public:
     /// holds too) — snapshot-and-clear then release each, the
     /// restoreAllMonocleMaximized shape.
     void restoreAllWindowedFullscreen();
+    /// Arm the clear-in-flight marker and dispatch Scrolling.
+    /// clearWindowedFullscreen reply-gated: the error arm drops the marker
+    /// so a lost clear (whose flag-off echo will never arrive) cannot latch
+    /// the adopt guard for the session.
+    void dispatchWindowedFullscreenClear(const QString& windowId);
+    /// Shed half of applyFloatCleanup for the WindowTracking float channel
+    /// (PlasmaZonesEffect::slotWindowFloatingChanged), whose floats never
+    /// reach this handler's slot and so never run applyFloatCleanup. Drops
+    /// the windowed-fullscreen hold, the clear-in-flight marker, the
+    /// counter-assert rect, the centering targets and the parked paint hint
+    /// (with damage), and re-drives decorations.
+    void applyPassiveFloatShed(const QString& windowId);
 
     /// Cleanup: drop all autotile tiled-tracking bookkeeping. Physical
     /// title-bar restores are the DecorationManager's job — teardown callers

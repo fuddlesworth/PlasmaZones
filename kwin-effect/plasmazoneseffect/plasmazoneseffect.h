@@ -368,7 +368,14 @@ private:
      *                     so the rejection reason has a single source of truth
      *                     (this function) and cannot drift from the filter.
      */
-    bool shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+    /// exemptFullscreen waives ONLY the structural fullscreen/transientFor
+    /// terms (threaded into isStructurallyUnmanageableWindowType) — every
+    /// other rejection stays authoritative. Opt-in for callers that carry the
+    /// scrolling windowed-fullscreen exemption (isEligibleForTilingNotify);
+    /// the default keeps all other consumers treating a genuinely fullscreen
+    /// window as unmanageable.
+    bool shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr,
+                            bool exemptFullscreen = false) const;
 
     /**
      * @brief Autotile-tree eligibility filter. @see shouldHandleWindow for the
@@ -2041,8 +2048,13 @@ private:
     /// Tiling.windowMinSizeUpdated when it moved — clients that set their
     /// size hints after mapping (Wine games pin theirs to the configured
     /// resolution once up) otherwise leave the engine modelling a column
-    /// the clamped real frame can never match. Seeded at announce, dropped
-    /// beside the other per-window maps on close and the deleted backstop.
+    /// the clamped real frame can never match. Seeded at announce (rolled
+    /// back on a failed BATCH announce; the single-window error arm relies
+    /// on the re-announce re-seeding instead). Dropped on close and the
+    /// deleted backstop, evicted per-window by the min-size discovery leg
+    /// (so the next batch re-asserts the true pair), and cleared wholesale
+    /// on daemon loss AND at onDaemonReady (handover). NOT dropped by
+    /// cleanupAutotileTracking — the re-announce re-seeds it inline.
     QHash<QString, QSize> m_lastReportedMinSize;
     /// Per scroll-managed X11 window: the rect the last batch commanded, so
     /// an EXTERNAL move can be detected and countered. X11 clients can
@@ -2052,10 +2064,16 @@ private:
     /// over its neighbour's column, and the engine's emit-on-change gate
     /// stayed silent because its own rects never moved). Written by the
     /// batch apply, consumed by TilingHandler::slotWindowFrameGeometryChanged
-    /// (counter-assert with a per-batch burst budget so a client that
-    /// refuses to stay put cannot drive an infinite tug-of-war). Wayland
-    /// windows are covered by m_tileTargetZones instead and never appear
-    /// here. Dropped on close, the deleted backstop, and float cleanup.
+    /// (counter-assert RATE-LIMITED to 3 per rolling second, re-armed by
+    /// every fresh batch command — a client that refuses to stay put is
+    /// countered at that ceiling indefinitely, it does not win outright).
+    /// Wayland windows are covered by m_tileTargetZones instead and never
+    /// appear here. Dropped on close, the deleted backstop, float cleanup
+    /// (both channels), the untrack funnel (cleanupAutotileTracking), the
+    /// per-batch disarm when the commit deferred or the fullscreen bail
+    /// fired (load-bearing: it disarms the counter rather than recording a
+    /// drag-time frame), and cleared wholesale on daemon loss and at
+    /// onDaemonReady.
     QHash<QString, ScrollCommandedRect> m_scrollCommandedRects;
     /// wl_surface object ids of the daemon's scrolling tab-indicator surfaces,
     /// announced over D-Bus. The paint path slides these with the strip so the
