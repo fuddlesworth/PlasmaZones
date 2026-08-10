@@ -1091,12 +1091,13 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // slot's surrounding code already covers those or they would double-fire.
     //
     // Membership-OR-snapshot guard: the membership remove() is consumed by
-    // the first call, but the first release can silently no-op when
-    // findWindowByIdExact misses (it discards the keep-flag snapshot and
-    // returns before setFullScreen(false)). A surviving snapshot therefore
-    // means the release is still owed; releaseWindowedFullscreenState is
-    // idempotent and deliberately does not consult the membership hash, so
-    // re-driving it off the snapshot is safe.
+    // the first call, and every arm of releaseWindowedFullscreenState (the
+    // no-window miss included) erases the snapshot — so a SURVIVING snapshot
+    // means membership was dropped by a path that never called the release
+    // at all (e.g. cleanupAutotileTracking's bare forget) and the release is
+    // still owed. releaseWindowedFullscreenState is idempotent and
+    // deliberately does not consult the membership hash, so re-driving it
+    // off the snapshot is safe.
     const bool hadMembership = m_effect->m_windowedFullscreenWindows.remove(windowId);
     const bool released = hadMembership || m_effect->m_windowedFsLayerSnapshots.contains(windowId);
     if (released) {
