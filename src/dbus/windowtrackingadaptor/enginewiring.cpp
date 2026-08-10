@@ -92,18 +92,17 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_snapEngine) {
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
-        // Focus is emitted only by the scroll engine today, so nothing here
-        // has a live connection to drop — but the sweep stays symmetric with
-        // the scroll block above so the day another engine gains the emit
-        // (and the connect beside these two), the rewire cannot double-fire
-        // handleCrossModeFocus.
+        // Focus is emitted by the scroll and autotile engines (snap has no
+        // directional window-focus vocabulary), so nothing here has a live
+        // connection to drop — but the sweep stays symmetric with the scroll
+        // block above so the day snap gains the emit (and the connect beside
+        // these two), the rewire cannot double-fire handleCrossModeFocus.
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this, nullptr);
     }
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
-        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
-                   nullptr); // same defensive symmetry as the snap block
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this, nullptr);
     }
     // Drop the snap-specific state signals (snap-mode-only types, connected below
     // on the typed engine) from the outgoing snap engine — same rule. Uses the
@@ -384,6 +383,16 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
     }
 
+    // Cross-MODE directional focus from an autotile boundary: autotile's plain
+    // focus probes its own same-mode neighbour first and defers here only when
+    // the neighbour context runs a different mode. DirectConnection so the
+    // handler's out-param verdict is readable on return (see the scroll twin
+    // below).
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
+                &WindowTrackingAdaptor::handleCrossModeFocus, Qt::DirectConnection);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Common float-restore geometry channel
     //
@@ -432,10 +441,11 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                 &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
-        // Cross-MODE directional FOCUS: scroll-only emitter today (autotile's
-        // plain focus keeps its own same-mode cross-output probe; snap has no
-        // directional window-focus vocabulary). DirectConnection so the
-        // activation lands within the navigation call, like the move/swap.
+        // Cross-MODE directional FOCUS: emitted by scroll (here) and autotile
+        // (above); each probes its own same-mode neighbour first and defers
+        // only for a different-mode one. Snap has no directional window-focus
+        // vocabulary. DirectConnection so the activation lands within the
+        // navigation call, like the move/swap.
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeFocus, Qt::DirectConnection);
         connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);

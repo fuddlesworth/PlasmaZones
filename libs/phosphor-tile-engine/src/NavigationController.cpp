@@ -675,6 +675,26 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
                                                 QString(), screenId);
             return;
         }
+        // Different-MODE neighbour output: the probe above only knows autotile
+        // state, so a scrolling or snapping neighbour answered empty. Defer to
+        // the daemon the way the move/swap verbs already do — it asks the
+        // target engine for its entry-edge window and activates it. The
+        // connection is DirectConnection (enginewiring.cpp), so the out-param
+        // carries the handler's verdict on return: an empty neighbour surface
+        // is an everyday state for a focus, and the cross-desktop / no_neighbor
+        // fallthrough below must still run when nothing was activated.
+        if (m_engine->m_crossSurfaceResolver) {
+            const QString neighbor = m_engine->m_crossSurfaceResolver->neighborOutputInDirection(screenId, direction);
+            if (!neighbor.isEmpty() && neighbor != screenId && !m_engine->isAutotileScreen(neighbor)) {
+                bool handled = false;
+                Q_EMIT m_engine->crossModeFocusRequested(neighbor, direction, &handled);
+                if (handled) {
+                    Q_EMIT m_engine->navigationFeedback(true, action, QStringLiteral("screen:") + direction, focused,
+                                                        QString(), neighbor);
+                    return;
+                }
+            }
+        }
         const QString crossDesktopTarget = crossDesktopFocusTarget(screenId, direction);
         if (!crossDesktopTarget.isEmpty()) {
             // Activating a window on another desktop switches KWin to it.
