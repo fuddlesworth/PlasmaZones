@@ -52,29 +52,21 @@ SettingsCard {
     headerText: i18n("Drop indicator")
     searchAnchor: "scrollingDropIndicator"
     collapsible: true
+    // The master switch lives in the card HEADER (like the Borders and
+    // Opacity-and-tint cards), not as a body row: search deep-links to the
+    // colour rows below land on the invisible-target fallback while the
+    // indicator is off, and that fallback scrolls to and pulses the card
+    // header on the assumption its toggle is what un-hides the target.
+    showToggle: true
+    toggleChecked: appSettings.scrollingDropIndicatorEnabled
+    onToggleClicked: checked => appSettings.scrollingDropIndicatorEnabled = checked
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
 
-        SettingsRow {
-            title: i18n("Show drop indicator")
-            searchAnchor: "scrollingDropIndicatorEnabled"
-            description: i18n("Highlight the space a dragged window will land in while re-inserting it into the scroll strip.")
-
-            SettingsSwitch {
-                checked: appSettings.scrollingDropIndicatorEnabled
-                accessibleName: i18n("Show the drop indicator during a drag re-insert")
-                onToggled: function (newValue) {
-                    appSettings.scrollingDropIndicatorEnabled = newValue;
-                }
-            }
-        }
-
-        SettingsSeparator {
-            enabled: root.indicatorOn
-        }
-
         ThemeFallbackColorRow {
+            id: dropFillColorRow
+
             title: i18n("Fill color")
             // Overridden because the title already says "color"; the default
             // would announce "Fill color color".
@@ -87,7 +79,14 @@ SettingsCard {
             themeColor: Kirigami.Theme.highlightColor
             picker: root.picker
             onColorChosen: function (hex) {
-                appSettings.scrollingDropIndicatorColor = hex;
+                // The FILL alpha is owned by the opacity slider below (the
+                // paint path replaces the colour's own alpha with it), so
+                // store the pick opaque like the snapping fill rows do —
+                // otherwise the swatch previews a transparency the
+                // indicator never draws. The border row keeps its alpha:
+                // it has no slider, so the colour's alpha is its single
+                // control.
+                appSettings.scrollingDropIndicatorColor = hex === dropFillColorRow.sentinel ? hex : "#FF" + hex.slice(3);
             }
         }
 

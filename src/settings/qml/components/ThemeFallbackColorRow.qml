@@ -20,7 +20,11 @@ import org.kde.kirigami as Kirigami
  * "accent") sets `sentinel` and `fallbackLabel` to match; the row itself
  * never interprets the value beyond comparing against the sentinel. Hosts
  * with different chrome use ThemeFallbackColorControl, the inner control
- * this row wraps, directly.
+ * this row wraps, directly. One surface deliberately stays OFF this
+ * pattern: the layout editor's per-zone colour rows (src/editor
+ * ColorPickerRow), whose "unset" convention is alpha == 0 behind a separate
+ * useCustomColors gate — per-zone JSON overrides in another process, not
+ * theme-fallback settings.
  *
  * The picker itself is PAGE-LEVEL and passed in rather than owned here: a page
  * rebuild while the dialog is open would destroy a row-scoped dialog and tear
@@ -41,9 +45,14 @@ SettingsRow {
     /// What the label shows while the sentinel is stored, naming the system
     /// colour being followed.
     property string fallbackLabel: i18n("Color scheme")
-    /// What the Reset button announces and its tooltip says.
-    property string resetAccessibleName: i18n("Reset to the color scheme")
+    /// What the Reset button announces and its tooltip says. The default
+    /// composes the row title in, so a card hosting several colour rows does
+    /// not announce the same name for every Reset button.
+    property string resetAccessibleName: i18nc("@action:button", "Reset %1 to the color scheme", root.title)
     property string resetToolTip: i18n("Follow the color scheme")
+    /// Whether the Reset button exists at all — forwarded to the inner
+    /// control so the two surfaces expose one API.
+    property bool showReset: true
     /// What the indicator actually draws while storedColor is the sentinel.
     /// Shown as the swatch so the row previews the real result rather than a
     /// blank.
@@ -70,6 +79,7 @@ SettingsRow {
         fallbackLabel: root.fallbackLabel
         resetAccessibleName: root.resetAccessibleName
         resetToolTip: root.resetToolTip
+        showReset: root.showReset
         themeColor: root.themeColor
         picker: root.picker
         swatchAccessibleName: root.swatchAccessibleName

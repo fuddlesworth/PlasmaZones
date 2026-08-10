@@ -62,26 +62,39 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     // The four zone-colour CONFIG keys are theme-fallback strings whose
-    // schema default is the empty sentinel ("follow the system palette").
-    // These QColor constants are NOT those defaults: they are the resolution
+    // schema default is the empty sentinel ("follow the system palette",
+    // see themeFallbackColorDefault below). These QColor constants are NOT
+    // those defaults — the *Fallback* names say so: they are the resolution
     // fallbacks Settings::resolvedSystemColor serves when no GUI application
     // (and therefore no palette) exists, and the shipped constants tests and
-    // headless consumers compare against.
-    static QColor highlightColor()
+    // headless consumers compare against. Retuning one moves only that
+    // no-palette fallback, never the shipped default.
+    static QColor highlightFallbackColor()
     {
         return ::PhosphorZones::ZoneDefaults::HighlightColor;
     }
-    static QColor inactiveColor()
+    static QColor inactiveFallbackColor()
     {
         return ::PhosphorZones::ZoneDefaults::InactiveColor;
     }
-    static QColor borderColor()
+    static QColor borderFallbackColor()
     {
         return ::PhosphorZones::ZoneDefaults::BorderColor;
     }
-    static QColor labelFontColor()
+    static QColor labelFontFallbackColor()
     {
         return ::PhosphorZones::ZoneDefaults::LabelFontColor;
+    }
+    // The stored default for the FOUR zone colour keys: the empty
+    // follow-the-system sentinel. Routed through an accessor (not an inline
+    // QString() at each schema site) per the ConfigDefaults-for-all-defaults
+    // rule. The other theme-fallback keys (the Windows border/tint trio
+    // below and the scrolling five) reach the same empty sentinel through
+    // their own domain accessors, which double as their ISettings and stub
+    // defaults — one value, two accessor families.
+    static QString themeFallbackColorDefault()
+    {
+        return QString();
     }
     static double activeOpacity()
     {
@@ -178,9 +191,10 @@ public:
     // Tiled/snapped window border + title bar defaults. Distinct from the
     // zone-overlay border constants above: these come from the shared
     // PhosphorCompositor::DecorationDefaults so the daemon and the compositor
-    // plugin never drift. Border colours default to the "accent" sentinel
-    // (resolved to the system accent colour at render time); the border/title-bar
-    // scope defaults to "tiled" (apply only to tiled/snapped windows).
+    // plugin never drift. Border colours default to the EMPTY theme-fallback
+    // sentinel (resolved by the daemon's D-Bus getter against the zone
+    // highlight / inactive colours); the border/title-bar scope defaults to
+    // "tiled" (apply only to tiled/snapped windows).
     // ═══════════════════════════════════════════════════════════════════════════
 
     static bool showWindowBorder()
@@ -236,8 +250,10 @@ public:
     // empty-reply skew guard keeps meaning skew and only ever sees concrete
     // colours from config. The rules vocabulary is separate: rule actions
     // still carry PhosphorRules::BorderColorToken::Accent, because a rule
-    // param's empty slot already means "unset". The inactive default mirrors
-    // the active one.
+    // param's empty slot already means "unset". The inactive accessor
+    // forwards to the active one, but only the STORED sentinel mirrors: the
+    // two resolve against different targets (active → zone highlight,
+    // inactive → zone inactive), same as the pre-v6 accent token did.
     static QString windowBorderColorActive()
     {
         return QString();
@@ -264,7 +280,8 @@ public:
     // packs), suppressed wholesale by any user pack. Defaults mirror the
     // pack's own parameter defaults (full opacity, no tint) so enabling the
     // toggle changes nothing until the user moves a slider; the tint colour
-    // defaults to the accent sentinel like the border colours.
+    // defaults to the empty follow-the-system sentinel like the border
+    // colours (resolved against the zone highlight).
     static bool showWindowOpacityTint()
     {
         return false;

@@ -396,7 +396,9 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
     // Shared accent fallback for the plain layers below: the live system
     // accent when the daemon has delivered one, else the Breeze default.
-    const QColor accentOr = m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9"));
+    const QColor accentOr = m_borderAccentColor.isValid()
+        ? m_borderAccentColor
+        : QColor(QString(PhosphorCompositor::DecorationDefaults::FallbackAccentHex));
     if (showBorder) {
         // Easy mode: the resolved border appearance rides the built-in
         // "border" pack's OWN declared parameters (borderWidth / cornerRadius /
@@ -419,7 +421,14 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
                             appearance->borderWidth.value_or(PhosphorCompositor::DecorationDefaults::BorderWidth));
         borderParams.insert(QStringLiteral("cornerRadius"),
                             appearance->borderRadius.value_or(PhosphorCompositor::DecorationDefaults::BorderRadius));
+        // Pin BOTH host-consumed theme flags, not just useSystemAccent: the
+        // resolver checks useThemeNeutral FIRST and falls back to the PACK'S
+        // declared default when the caller supplies no override. The shipped
+        // metadata declares it false, but pack metadata is an installable
+        // boundary — a third-party "border" pack shipping useThemeNeutral=true
+        // would otherwise silently discard the accent-resolved colours here.
         borderParams.insert(QStringLiteral("useSystemAccent"), false);
+        borderParams.insert(QStringLiteral("useThemeNeutral"), false);
         const QColor active = appearance->activeColor.value_or(accentOr);
         borderParams.insert(QStringLiteral("activeColor"), active);
         borderParams.insert(QStringLiteral("inactiveColor"), appearance->inactiveColor.value_or(active));
@@ -465,10 +474,17 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // from the daemon-plumbed border colours (same source the plain-border layer
     // uses); background / foreground come from the compositor's palette, which
     // tracks the active colour scheme. Built once for the whole chain.
+    // Known refresh gap, accepted: the effect installs no palette listener of
+    // its own, so with all four zone colours PINNED (no daemon
+    // settingsChanged on a scheme switch) the two palette-derived entries
+    // refresh only on the next unrelated decoration update. Closing it needs
+    // an effect-side ApplicationPaletteChange filter → scheduleBorderSweep.
     const QPalette pal = QGuiApplication::palette();
     const PhosphorSurfaceShaders::SurfaceThemeColors themeColors{
-        m_borderAccentColor.isValid() ? m_borderAccentColor : QColor(QStringLiteral("#ff3daee9")),
-        m_borderInactiveColor.isValid() ? m_borderInactiveColor : QColor(QStringLiteral("#ff5c6370")),
+        m_borderAccentColor.isValid() ? m_borderAccentColor
+                                      : QColor(QString(PhosphorCompositor::DecorationDefaults::FallbackAccentHex)),
+        m_borderInactiveColor.isValid() ? m_borderInactiveColor
+                                        : QColor(QString(PhosphorCompositor::DecorationDefaults::FallbackInactiveHex)),
         pal.color(QPalette::Active, QPalette::Window), pal.color(QPalette::Active, QPalette::WindowText)};
     for (const QString& packId : std::as_const(chain)) {
         const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(packId);

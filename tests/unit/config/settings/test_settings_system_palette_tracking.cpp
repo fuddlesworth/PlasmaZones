@@ -138,8 +138,11 @@ private Q_SLOTS:
         QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#80aa00aa"));
 
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
-        // The OTHER colours still follow, so the aggregate fires for them; the
-        // pinned highlight itself must stay silent and keep its value.
+        QSignalSpy aggregateSpy(&settings, &Settings::settingsChanged);
+        // Only the Highlight ROLE moves: the pinned highlight must stay
+        // silent, and since no FOLLOWING colour's resolved value moved
+        // either, the aggregate stays silent too (the fan-out is
+        // change-gated, not merely follows-gated).
         QPalette pal = qGuiApp->palette();
         pal.setColor(QPalette::Active, QPalette::Highlight, QColor(0x55, 0x66, 0x77));
         qGuiApp->setPalette(pal);
@@ -147,7 +150,65 @@ private Q_SLOTS:
         // Deliver any pending events, then confirm the pin held.
         QTest::qWait(50);
         QCOMPARE(highlightSpy.count(), 0);
+        QCOMPARE(aggregateSpy.count(), 0);
         QCOMPARE(settings.highlightColor(), QColor(0xAA, 0x00, 0xAA, 0x80));
+    }
+
+    void unrelatedPaletteRoleChangeStaysSilent()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+
+        QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
+        QSignalSpy inactiveSpy(&settings, &Settings::inactiveColorChanged);
+        QSignalSpy borderSpy(&settings, &Settings::borderColorChanged);
+        QSignalSpy labelFontSpy(&settings, &Settings::labelFontColorChanged);
+        QSignalSpy aggregateSpy(&settings, &Settings::settingsChanged);
+
+        // An ApplicationPaletteChange that moves NO role the four colours
+        // resolve from (a style change, a plasma-integration re-push) must
+        // emit nothing: the aggregate re-runs the daemon config refresh and
+        // the KWin effect reload, so an unconditional fan-out would pay that
+        // full cost per palette event for no observable change.
+        QPalette pal = qGuiApp->palette();
+        pal.setColor(QPalette::Active, QPalette::Button, QColor(0x31, 0x41, 0x59));
+        qGuiApp->setPalette(pal);
+
+        QTest::qWait(50);
+        QCOMPARE(highlightSpy.count(), 0);
+        QCOMPARE(inactiveSpy.count(), 0);
+        QCOMPARE(borderSpy.count(), 0);
+        QCOMPARE(labelFontSpy.count(), 0);
+        QCOMPARE(aggregateSpy.count(), 0);
+    }
+
+    void allFourRawSettersWriteTheirOwnKey()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        Settings settings;
+
+        // Distinct hex per key, then per-key read-back with the other three
+        // asserted untouched at each step: a copy-paste key swap inside one
+        // of the P_STORE macro invocations would otherwise pass the whole
+        // suite (the palette tests only ever assert these raws are EMPTY).
+        settings.setHighlightColorRaw(QStringLiteral("#ff111111"));
+        QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff111111"));
+        QCOMPARE(settings.inactiveColorRaw(), QString());
+        QCOMPARE(settings.borderColorRaw(), QString());
+        QCOMPARE(settings.labelFontColorRaw(), QString());
+
+        settings.setInactiveColorRaw(QStringLiteral("#ff222222"));
+        QCOMPARE(settings.inactiveColorRaw(), QStringLiteral("#ff222222"));
+        QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff111111"));
+
+        settings.setBorderColorRaw(QStringLiteral("#ff333333"));
+        QCOMPARE(settings.borderColorRaw(), QStringLiteral("#ff333333"));
+        QCOMPARE(settings.inactiveColorRaw(), QStringLiteral("#ff222222"));
+
+        settings.setLabelFontColorRaw(QStringLiteral("#ff444444"));
+        QCOMPARE(settings.labelFontColorRaw(), QStringLiteral("#ff444444"));
+        QCOMPARE(settings.borderColorRaw(), QStringLiteral("#ff333333"));
+        QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff111111"));
     }
 
     void resetRawToSentinelResumesFollowing()

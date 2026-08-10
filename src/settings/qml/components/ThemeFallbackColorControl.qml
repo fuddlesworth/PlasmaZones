@@ -56,7 +56,8 @@ RowLayout {
 
     // Qt's color.toString() drops the alpha channel when fully opaque and
     // keeps it otherwise, so the hex label's width would jump between 6 and 8
-    // digits. Always emit the full 8-digit form, matching ColorSwatchRow.
+    // digits. Always emit the full 8-digit form — the canonical #AARRGGBB
+    // spelling every colour setting stores.
     //
     // Takes a COLOR, not a string. Handing it `storedColor` reads `.a`/`.r`
     // off a QML string, which are undefined, and `Math.round(undefined * 255)`
@@ -69,12 +70,27 @@ RowLayout {
         return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
     }
 
-    /// The stored value as the label shows it. Already a hex string — the
-    /// picker writes it through _toHexArgb — so this only normalises case. A
-    /// hand-edited short form (`#RGB`) is shown VERBATIM rather than silently
-    /// rewritten into a longer one the user never typed.
+    /// The stored value as the label shows it. Picker and reset writes are
+    /// hex via _toHexArgb, so this usually only normalises case — but the
+    /// read-side validator accepts ANY valid colour NAME, so a hand-edited
+    /// config can carry a named colour ("red") or a short form ("#RGB");
+    /// both are shown VERBATIM (uppercased) rather than silently rewritten
+    /// into a spelling the user never typed. The swatch still paints the
+    /// real colour either way.
     function _displayHex(s) {
         return s.toUpperCase();
+    }
+
+    // The transient picker handlers below outlive this control if it is
+    // destroyed while the dialog is open (a rules-list rebuild destroying a
+    // delegate is an EXPECTED path — it is why the picker is page-level).
+    // Track the live pair so destruction can disconnect them instead of
+    // leaving stale closures on the shared dialog's signals.
+    property var _disconnectPending: null
+
+    Component.onDestruction: {
+        if (root._disconnectPending)
+            root._disconnectPending();
     }
 
     spacing: Kirigami.Units.smallSpacing
@@ -84,6 +100,7 @@ RowLayout {
 
         color: root._followsTheme ? root.themeColor : root.storedColor
         Accessible.name: root.swatchAccessibleName
+        accessibleDescription: root._followsTheme ? i18n("Following the color scheme") : i18n("Current color: %1", swatch.color.toString())
         onClicked: {
             if (!root.picker)
                 return;
@@ -98,18 +115,29 @@ RowLayout {
             var picker = root.picker;
 
             function acceptedHandler() {
+                root._disconnectPending = null;
                 picker.accepted.disconnect(acceptedHandler);
                 picker.rejected.disconnect(rejectedHandler);
                 root.colorChosen(root._toHexArgb(picker.selectedColor));
             }
 
             function rejectedHandler() {
+                root._disconnectPending = null;
                 picker.accepted.disconnect(acceptedHandler);
                 picker.rejected.disconnect(rejectedHandler);
             }
 
             picker.accepted.connect(acceptedHandler);
             picker.rejected.connect(rejectedHandler);
+            root._disconnectPending = function () {
+                // The page-level dialog can be destroyed before this control
+                // during a page teardown; a null picker has nothing left to
+                // disconnect.
+                if (!picker)
+                    return;
+                picker.accepted.disconnect(acceptedHandler);
+                picker.rejected.disconnect(rejectedHandler);
+            };
             // Seed imperatively: ColorDialog writes selectedColor itself
             // as the user drags, and that JS-side write would sever a
             // declarative binding after the first edit.
@@ -122,8 +150,19 @@ RowLayout {
         text: root._followsTheme ? root.fallbackLabel : root._displayHex(root.storedColor)
         color: root._followsTheme ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
         font.family: root._followsTheme ? Kirigami.Theme.defaultFont.family : Kirigami.Theme.fixedWidthFont.family
-        Layout.preferredWidth: Kirigami.Units.gridUnit * 6
+        // Content-sized up to a cap, not a fixed width: the SettingsRow slot
+        // hosts this in a Row POSITIONER that never resizes its child, so
+        // every pixel of fixed width the label doesn't need pushes the Reset
+        // button toward the clip edge on a narrow window.
+        Layout.preferredWidth: Math.min(implicitWidth, Kirigami.Units.gridUnit * 6)
         elide: Text.ElideRight
+        // A hex value is an LTR machine token, not prose: pin the alignment
+        // (Text mirrors an explicitly-set horizontalAlignment under
+        // LayoutMirroring, so disabling mirroring here is what makes the
+        // AlignLeft stick) so RTL locales neither flip the visual edge the
+        // value hangs from nor elide the wrong end.
+        horizontalAlignment: Text.AlignLeft
+        LayoutMirroring.enabled: false
     }
 
     QQC2.Button {
@@ -134,7 +173,13 @@ RowLayout {
         text: i18n("Reset")
         display: QQC2.AbstractButton.IconOnly
         Accessible.name: root.resetAccessibleName
-        onClicked: root.colorChosen(root.sentinel)
+        onClicked: {
+            root.colorChosen(root.sentinel);
+            // The button disables itself the moment the sentinel lands
+            // (enabled tracks _followsTheme), which would drop keyboard
+            // focus on the floor — re-home it on the swatch.
+            swatch.forceActiveFocus();
+        }
 
         QQC2.ToolTip.visible: hovered
         QQC2.ToolTip.text: root.resetToolTip

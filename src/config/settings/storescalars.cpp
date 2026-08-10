@@ -66,20 +66,26 @@ void Settings::setAudioSpectrumBarCount(int count)
 // resolvedSystemColor and the QColor setters store the concrete #AARRGGBB
 // form, so every non-UI consumer keeps its concrete-colour contract.
 P_STORE_GET(QString, highlightColorRaw, snappingZonesColorsGroup, highlightKey, QString)
-P_STORE_SET_STRING(setHighlightColorRaw, snappingZonesColorsGroup, highlightKey, highlightColorChanged)
+P_STORE_SET_STRING2(setHighlightColorRaw, snappingZonesColorsGroup, highlightKey, highlightColorRawChanged,
+                    highlightColorChanged)
 P_STORE_GET(QString, inactiveColorRaw, snappingZonesColorsGroup, inactiveKey, QString)
-P_STORE_SET_STRING(setInactiveColorRaw, snappingZonesColorsGroup, inactiveKey, inactiveColorChanged)
+P_STORE_SET_STRING2(setInactiveColorRaw, snappingZonesColorsGroup, inactiveKey, inactiveColorRawChanged,
+                    inactiveColorChanged)
 P_STORE_GET(QString, borderColorRaw, snappingZonesColorsGroup, borderKey, QString)
-P_STORE_SET_STRING(setBorderColorRaw, snappingZonesColorsGroup, borderKey, borderColorChanged)
+P_STORE_SET_STRING2(setBorderColorRaw, snappingZonesColorsGroup, borderKey, borderColorRawChanged, borderColorChanged)
 
 QColor Settings::highlightColor() const
 {
     const QString raw = highlightColorRaw();
     return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Highlight) : QColor(raw);
 }
+// The QColor setters guard on isValid(): an invalid QColor's name() still
+// produces a non-empty "#ff000000", which would silently PIN opaque black
+// where the caller meant "no colour" — the sane meaning of which is the
+// theme-fallback sentinel.
 void Settings::setHighlightColor(const QColor& color)
 {
-    setHighlightColorRaw(color.name(QColor::HexArgb));
+    setHighlightColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
 }
 QColor Settings::inactiveColor() const
 {
@@ -88,7 +94,7 @@ QColor Settings::inactiveColor() const
 }
 void Settings::setInactiveColor(const QColor& color)
 {
-    setInactiveColorRaw(color.name(QColor::HexArgb));
+    setInactiveColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
 }
 QColor Settings::borderColor() const
 {
@@ -97,12 +103,13 @@ QColor Settings::borderColor() const
 }
 void Settings::setBorderColor(const QColor& color)
 {
-    setBorderColorRaw(color.name(QColor::HexArgb));
+    setBorderColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
 }
 
 // Labels group
 P_STORE_GET(QString, labelFontColorRaw, snappingZonesLabelsGroup, fontColorKey, QString)
-P_STORE_SET_STRING(setLabelFontColorRaw, snappingZonesLabelsGroup, fontColorKey, labelFontColorChanged)
+P_STORE_SET_STRING2(setLabelFontColorRaw, snappingZonesLabelsGroup, fontColorKey, labelFontColorRawChanged,
+                    labelFontColorChanged)
 
 QColor Settings::labelFontColor() const
 {
@@ -111,7 +118,7 @@ QColor Settings::labelFontColor() const
 }
 void Settings::setLabelFontColor(const QColor& color)
 {
-    setLabelFontColorRaw(color.name(QColor::HexArgb));
+    setLabelFontColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
 }
 P_STORE_GET(QString, labelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, QString)
 P_STORE_SET_STRING(setLabelFontFamily, snappingZonesLabelsGroup, fontFamilyKey, labelFontFamilyChanged)

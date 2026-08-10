@@ -45,8 +45,10 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int windowBorderWidth READ windowBorderWidth WRITE setWindowBorderWidth NOTIFY windowBorderWidthChanged)
     Q_PROPERTY(
         int windowBorderRadius READ windowBorderRadius WRITE setWindowBorderRadius NOTIFY windowBorderRadiusChanged)
-    // Border colours: a concrete "#AARRGGBB" hex, or the sentinel "accent" that
-    // the effect resolves to the live system accent at paint time.
+    // Border colours: a concrete "#AARRGGBB" hex, or EMPTY meaning "follow
+    // the system" (active → zone highlight, inactive → zone inactive). The
+    // daemon's D-Bus adaptor resolves the sentinel before the value crosses
+    // the wire, so the effect only ever sees concrete colours.
     Q_PROPERTY(QString windowBorderColorActive READ windowBorderColorActive WRITE setWindowBorderColorActive NOTIFY
                    windowBorderColorActiveChanged)
     Q_PROPERTY(QString windowBorderColorInactive READ windowBorderColorInactive WRITE setWindowBorderColorInactive
@@ -59,7 +61,8 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int focusFadeDuration READ focusFadeDuration WRITE setFocusFadeDuration NOTIFY focusFadeDurationChanged)
     // ── Plain opacity+tint layer (Windows.*) ──────────────────────────────────
     // Opacity/strength are [0.0, 1.0]; the tint colour shares the border
-    // colours' "#AARRGGBB" or "accent" sentinel shape.
+    // colours' theme-fallback shape ("#AARRGGBB" hex, or EMPTY meaning
+    // "follow the zone highlight").
     Q_PROPERTY(bool showWindowOpacityTint READ showWindowOpacityTint WRITE setShowWindowOpacityTint NOTIFY
                    showWindowOpacityTintChanged)
     Q_PROPERTY(QString opacityTintScope READ windowOpacityTintScope WRITE setWindowOpacityTintScope NOTIFY

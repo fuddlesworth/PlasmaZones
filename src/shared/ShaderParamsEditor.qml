@@ -138,7 +138,7 @@ ColumnLayout {
         // Encode as `#AARRGGBB` (alpha-first) rather than selectedColor.toString():
         // Qt's color.toString() emits `#RRGGBB` and DROPS the alpha channel, so a
         // translucent pick would silently become opaque. Mirrors ActionRow /
-        // ColorSwatchRow and the QColor::HexArgb form the C++ consumer parses.
+        // ThemeFallbackColorControl and the QColor::HexArgb form the C++ consumer parses.
         function _toHexArgb(c) {
             function pad(v) {
                 return Math.round(v * 255).toString(16).padStart(2, '0');

@@ -338,7 +338,13 @@ target_link_libraries(test_screen_mode_router PRIVATE PhosphorSnapEngine::Phosph
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ - Settings Tests (core, validation, per-screen)
 # ═══════════════════════════════════════════════════════════════════════════════
-p_add_test(test_settings_core config/settings/test_settings_core.cpp)
+# Explicit Qt6::Gui: the pinned-colour round-trip and reload tests compare
+# palette-resolved zone colours (the resolved getters read
+# QGuiApplication::palette()); p_add_test links Core only and the transitive
+# pull through plasmazones_core is coincidental, not contractual.
+add_executable(test_settings_core config/settings/test_settings_core.cpp)
+target_link_libraries(test_settings_core PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_core COMMAND test_settings_core)
 
 # Companion test executable: animation Profile JSON-blob storage,
 # per-field signal discrimination, aggregate-setter merge semantics.
@@ -365,7 +371,11 @@ add_test(NAME test_settings_system_palette_tracking COMMAND test_settings_system
 # resetKeys (revert-to-default) with NOTIFY re-emission.
 p_add_test(test_settings_pagereset config/settings/test_settings_pagereset.cpp)
 
-p_add_test(test_settings_validation config/settings/test_settings_validation.cpp)
+# Explicit Qt6::Gui for the same reason as test_settings_core: the sentinel
+# tests assert the resolved colours are valid, which reads the palette.
+add_executable(test_settings_validation config/settings/test_settings_validation.cpp)
+target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_validation COMMAND test_settings_validation)
 
 p_add_test(test_settings_perscreen config/settings/test_settings_perscreen.cpp)
 

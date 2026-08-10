@@ -42,12 +42,14 @@ Item {
     required property int indicatorBorderRadius
     /// Whether a rect change should be ANIMATED. True for a cursor-driven
     /// target change, which is what the transitions exist to make legible.
-    /// False only on the clear/hide paths (cross-screen hide, preview-end
-    /// teardown): a rectangle that must stop being painted has no target to
-    /// make legible, and x, width and height interpolate INDEPENDENTLY, so
-    /// animating a hide would stretch the rect as its edges arrive at
-    /// different times.
-    property bool animateMoves: true
+    /// False for the FIRST rect of a (re)show: x, width and height
+    /// interpolate INDEPENDENTLY, so tweening in from the stale rect of the
+    /// previous drag would stretch the rect as its edges arrive at
+    /// different times. (Hides fade the slot out via SurfaceAnimator and
+    /// never move the rect, so they need no gate.) Required like the six
+    /// paint properties above, so a host that forgets the forward fails at
+    /// instantiation instead of silently never gating.
+    required property bool animateMoves
 
     /// Resolved paint colours. The empty test is the only fallback: the D-Bus
     /// boundary rejects anything that is neither empty nor a colour QColor can

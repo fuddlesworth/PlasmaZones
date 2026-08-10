@@ -326,7 +326,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/tiling/TilingFocusCard.qml
         # Scrolling: the condensed simple page, the three advanced leaves
         # (Columns / Tabs / Window), the quick-shortcuts page binding
-        # templates to the quick digits, the cards both surfaces share, and
+        # templates to the quick digits, and the cards both surfaces share.
         qml/pages/scrolling/ScrollingSimplePage.qml
         qml/pages/scrolling/ScrollingColumnsPage.qml
         qml/pages/scrolling/ScrollingTabsPage.qml
@@ -503,7 +503,6 @@ qt_add_qml_module(plasmazones-settings
         qml/js/SearchAnchorHelpers.js
         qml/js/PresetList.js
         qml/components/SettingsButtonGroup.qml
-        qml/components/ColorSwatchRow.qml
         # The sentinel-fallback colour surface: the inner control (swatch,
         # hex, reset) plus the SettingsRow wrapper the settings pages host.
         qml/components/ThemeFallbackColorControl.qml

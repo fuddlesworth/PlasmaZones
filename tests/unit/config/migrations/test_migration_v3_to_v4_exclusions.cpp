@@ -95,6 +95,10 @@ private:
 
         QJsonObject colors;
         colors.insert(QStringLiteral("UseSystem"), false);
+        // A pinned colour riding the rename: its survival at the new path is
+        // what actually witnesses the relocation carried values (the
+        // UseSystem strip alone would also hold if the rename moved nothing).
+        colors.insert(QStringLiteral("Highlight"), QStringLiteral("#ff112233"));
         QJsonObject opacity;
         opacity.insert(QStringLiteral("Active"), 0.5);
         QJsonObject border;
@@ -292,8 +296,9 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        // The migration chain now runs v3 → v4 → v5, so config.json lands at
-        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        // The migration chain runs every remaining step (v3→v4→v5→v6), so
+        // config.json lands at the current schema version (the v3→v4 step
+        // still stamps 4 mid-chain).
         QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
         const QJsonObject snapping = cfg.value(QStringLiteral("Snapping")).toObject();
@@ -303,6 +308,8 @@ private Q_SLOTS:
         // v5→v6 colour conversion on top, which strips the UseSystem bool
         // outright (the colours became per-key theme-fallback strings).
         const QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
+        QCOMPARE(zones.value(QStringLiteral("Colors")).toObject().value(QStringLiteral("Highlight")).toString(),
+                 QStringLiteral("#ff112233"));
         QVERIFY2(!zones.value(QStringLiteral("Colors")).toObject().contains(QStringLiteral("UseSystem")),
                  "the v5->v6 step must strip the UseSystem key the v3->v4 rename relocated");
         QVERIFY(qFuzzyCompare(

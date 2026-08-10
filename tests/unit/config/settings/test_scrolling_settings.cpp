@@ -40,7 +40,9 @@
  * mirror.
  */
 
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeySequence>
@@ -364,20 +366,35 @@ private Q_SLOTS:
             {ConfigDefaults::inactiveColorKey(), ConfigDefaults::scrollingTabIndicatorInactiveColor()},
             {ConfigDefaults::urgentColorKey(), ConfigDefaults::scrollingTabIndicatorUrgentColor()},
         };
+        // Accumulate failures rather than QVERIFY-ing in the loop: an
+        // in-loop abort would silently skip every later colour key (the
+        // known data-loop trap the transition-table test documents).
+        QStringList colourFailures;
         for (const auto& [colorKey, defaultColour] : colourPins) {
             const auto* color = findKey(schema, tabGroup, colorKey);
-            QVERIFY2(color, qPrintable(colorKey));
+            if (!color) {
+                colourFailures << QStringLiteral("%1: key missing from schema").arg(colorKey);
+                continue;
+            }
             // Pin the schema default to the ConfigDefaults accessor (today
             // the schema reads the accessor directly, so this only guards
             // against the entry being replaced with a literal), and
             // separately pin that it is EMPTY (the "follow the theme" value).
-            QCOMPARE(color->defaultValue.toString(), defaultColour);
-            QVERIFY(color->defaultValue.toString().isEmpty());
-            QVERIFY(color->validator);
-            QVERIFY(color->validator(QStringLiteral("not-a-colour")).toString().isEmpty());
-            QVERIFY(color->validator(QString()).toString().isEmpty());
-            QCOMPARE(color->validator(QStringLiteral("#FF3366CC")).toString(), QStringLiteral("#FF3366CC"));
+            if (color->defaultValue.toString() != defaultColour || !color->defaultValue.toString().isEmpty()) {
+                colourFailures << QStringLiteral("%1: default is '%2', expected the empty sentinel")
+                                      .arg(colorKey, color->defaultValue.toString());
+            }
+            if (!color->validator) {
+                colourFailures << QStringLiteral("%1: no validator attached").arg(colorKey);
+                continue;
+            }
+            if (color->validator(QStringLiteral("not-a-colour")).toString() != QString()
+                || color->validator(QString()).toString() != QString()
+                || color->validator(QStringLiteral("#FF3366CC")).toString() != QStringLiteral("#FF3366CC")) {
+                colourFailures << QStringLiteral("%1: validator misbehaves").arg(colorKey);
+            }
         }
+        QVERIFY2(colourFailures.isEmpty(), qPrintable(colourFailures.join(QStringLiteral("; "))));
 
         // The old flat Scrolling/TabStripEnabled key is GONE, not aliased: the
         // family moved wholesale into its own group and the no-ad-hoc-compat
@@ -436,21 +453,36 @@ private Q_SLOTS:
         // Both colours default EMPTY, which is the "follow the colour scheme"
         // sentinel — the one value a QColor round-trip could not carry, and
         // the reason these two are stored as free-form strings.
+        // Accumulated like the tab loop above, for the same in-loop-abort
+        // reason; QCOMPARE-style messages come from the failure strings.
+        QStringList dropFailures;
         for (const auto& colourKey : {ConfigDefaults::colorKey(), ConfigDefaults::borderColorKey()}) {
             const auto* dropColour = findKey(schema, dropGroup, colourKey);
-            QVERIFY(dropColour);
-            QVERIFY(dropColour->defaultValue.toString().isEmpty());
+            if (!dropColour) {
+                dropFailures << QStringLiteral("%1: key missing from schema").arg(colourKey);
+                continue;
+            }
+            if (!dropColour->defaultValue.toString().isEmpty()) {
+                dropFailures << QStringLiteral("%1: default is '%2', expected the empty sentinel")
+                                    .arg(colourKey, dropColour->defaultValue.toString());
+            }
             // The DISK path's only guard. The D-Bus setter refuses an
             // unparseable colour, but a hand-edited config never goes through
             // it and reaches QML as an invalid QColor, which Qt paints BLACK
             // rather than falling back to the scheme. Junk must come back as
             // the empty sentinel, and both the sentinel and a real colour
             // must survive untouched.
-            QVERIFY(dropColour->validator);
-            QVERIFY(dropColour->validator(QStringLiteral("not-a-colour")).toString().isEmpty());
-            QVERIFY(dropColour->validator(QString()).toString().isEmpty());
-            QCOMPARE(dropColour->validator(QStringLiteral("#FF3366CC")).toString(), QStringLiteral("#FF3366CC"));
+            if (!dropColour->validator) {
+                dropFailures << QStringLiteral("%1: no validator attached").arg(colourKey);
+                continue;
+            }
+            if (dropColour->validator(QStringLiteral("not-a-colour")).toString() != QString()
+                || dropColour->validator(QString()).toString() != QString()
+                || dropColour->validator(QStringLiteral("#FF3366CC")).toString() != QStringLiteral("#FF3366CC")) {
+                dropFailures << QStringLiteral("%1: validator misbehaves").arg(colourKey);
+            }
         }
+        QVERIFY2(dropFailures.isEmpty(), qPrintable(dropFailures.join(QStringLiteral("; "))));
     }
 
     /// The Scrolling group's numeric-range keys, which DO clamp (clampInt /
@@ -1124,6 +1156,10 @@ private Q_SLOTS:
         group[ConfigDefaults::defaultColumnWidthKindKey()] = kind;
         group[ConfigDefaults::defaultColumnWidthValueKey()] = stored;
         root[ConfigDefaults::scrollingGroup()] = group;
+        // A fully-default save() may have created neither the file nor its
+        // directory (sparse persistence), and a WriteOnly open cannot create
+        // missing parents — make the path unconditionally.
+        QDir().mkpath(QFileInfo(configFile).absolutePath());
         QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
         file.write(QJsonDocument(root).toJson());
         file.close();
@@ -1175,7 +1211,9 @@ private Q_SLOTS:
     }
 };
 
-// QTEST_MAIN (not GUILESS): the transition-table test constructs Settings,
-// whose load path reads QGuiApplication::palette().
+// QTEST_MAIN (not GUILESS): several tests construct Settings, whose resolved
+// zone-colour GETTERS read QGuiApplication::palette() (resolution is lazy;
+// the load path itself no longer touches the palette), and the schema
+// assertions compare against palette-derived resolutions.
 QTEST_MAIN(TestScrollingSettings)
 #include "test_scrolling_settings.moc"

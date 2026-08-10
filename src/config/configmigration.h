@@ -73,6 +73,12 @@ namespace PlasmaZones {
 /// bump — the gated resolver already ignored the priority-0 catch-all at
 /// runtime, so the stale rule is pruned from rules.json by finalizeV4Conversion's
 /// idempotent cleanup (see pruneRetiredProviderDefaultRule), not a version step.
+/// v5: the per-mode Snapping/Tiling appearance and gap settings fold into the
+///     unified Windows / Gaps groups (see migrateV4ToV5).
+/// v6: the snapping zone colours and the Windows border/tint colours become
+///     theme-fallback strings (EMPTY means "follow the system palette"); the
+///     Snapping.Zones.Colors/UseSystem bool and the "accent" token default
+///     are retired (see migrateV5ToV6).
 inline constexpr int ConfigSchemaVersion = 6;
 
 class PLASMAZONES_EXPORT ConfigMigration
@@ -121,7 +127,12 @@ public:
     /// ConfigSchemaVersion, writes atomically.
     static bool runMigrationChain(const QString& jsonPath);
 
-    /// Run the migration chain in-memory (for INI→JSON + upgrade in one pass).
+    /// Run the migration chain in-memory. Two callers: ensureJsonConfig's
+    /// INI→JSON + upgrade single pass (a full nested config root), and
+    /// ProfileStore::readProfileFile, which feeds it a profile's SPARSE
+    /// config delta translated into the nested shape — so a step must be
+    /// correct for a sparse input too (write retired values' replacements
+    /// explicitly; removal there means "inherit", not "default").
     static void runMigrationChainInMemory(QJsonObject& root);
 
     // Schema migration functions (one per version bump).

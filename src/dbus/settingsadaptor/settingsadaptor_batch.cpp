@@ -96,7 +96,11 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
                 // serializes those, so a getAllSettings -> setSettings round-trip
                 // legitimately carries them back; skip them silently rather than
                 // failing the whole batch. Only a key unknown to BOTH maps is a
-                // genuine error.
+                // genuine error. The theme-fallback colour keys survive that
+                // round-trip losslessly because their *Raw companions ride
+                // along: QVariantMap iterates keys sorted, so "<key>Raw" is
+                // applied after the resolved "<key>" and the stored
+                // follow/pin state wins.
                 if (!m_getters.contains(key)) {
                     qCDebug(lcDbusSettings) << "setSettings: unknown key" << key;
                     allOk = false;
@@ -149,6 +153,17 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
                  QByteArrayLiteral("shaderProfileTreeJson")},
                 {QString(PhosphorProtocol::Service::SettingProperty::DecorationProfileTree),
                  QByteArrayLiteral("decorationProfileTreeJson")},
+                // The three window *Raw companion keys have no Q_PROPERTY of
+                // their own (the raw surface IS the windowBorderColor* /
+                // windowTintColor ISettings property); alias each to its
+                // twin's NOTIFY so a batch that changes only the stored
+                // follow/pin state (e.g. pinning a colour to the value it
+                // already resolved to) still announces per-key. The four
+                // zone raws need no row here — they have real Q_PROPERTYs
+                // with their own *RawChanged NOTIFYs.
+                {QStringLiteral("windowBorderColorActiveRaw"), QByteArrayLiteral("windowBorderColorActive")},
+                {QStringLiteral("windowBorderColorInactiveRaw"), QByteArrayLiteral("windowBorderColorInactive")},
+                {QStringLiteral("windowTintColorRaw"), QByteArrayLiteral("windowTintColor")},
             };
             const auto aliasIt = jsonFacadeAliases.constFind(it.key());
             if (aliasIt == jsonFacadeAliases.constEnd()) {
@@ -165,7 +180,7 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
         }
     }
     // Per-mode disable lists are the other registry-only surface with dedicated
-    // NOTIFYs: their six keys have no Q_PROPERTY (the signals carry a Mode
+    // NOTIFYs: their nine keys have no Q_PROPERTY (the signals carry a Mode
     // argument, so the parameterless metaobject replay above can never reach
     // them). No daemon component connects to these signals today — the one
     // in-tree consumer is the settings app's ScreenHelper path, which documents
@@ -193,6 +208,12 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
          PhosphorZones::AssignmentEntry::Snapping},
         {QStringLiteral("autotileDisabledActivities"), &ISettings::disabledActivitiesChanged,
          PhosphorZones::AssignmentEntry::Autotile},
+        {QStringLiteral("scrollingDisabledMonitors"), &ISettings::disabledMonitorsChanged,
+         PhosphorZones::AssignmentEntry::Scrolling},
+        {QStringLiteral("scrollingDisabledDesktops"), &ISettings::disabledDesktopsChanged,
+         PhosphorZones::AssignmentEntry::Scrolling},
+        {QStringLiteral("scrollingDisabledActivities"), &ISettings::disabledActivitiesChanged,
+         PhosphorZones::AssignmentEntry::Scrolling},
     };
     for (const auto& replay : disableReplays) {
         const auto getter = m_getters.constFind(replay.key);

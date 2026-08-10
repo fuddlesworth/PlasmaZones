@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settings.h"
-#include "colorimporter.h"
 #include "configdefaults.h"
 #include "configbackends.h"
 #include "configmigration.h"
@@ -22,12 +21,8 @@
 #include <PhosphorRules/Rule.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
 
-#include <QEvent>
-#include <QGuiApplication>
-#include <QScopedValueRollback>
 #include <QMetaMethod>
 #include <QMetaProperty>
-#include <QPalette>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>

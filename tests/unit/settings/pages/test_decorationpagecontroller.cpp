@@ -549,8 +549,10 @@ private Q_SLOTS:
     /// A providesBorder pack newly added to a chain gets its shared contract
     /// params seeded from the plain Windows border setting: width copied,
     /// radius clamped to the pack's declared max, a concrete active colour
-    /// copied, the empty follow-the-accent sentinel skipped, a non-border
-    /// pack untouched, and an already-present pack never re-seeded.
+    /// copied, the empty follow-the-theme sentinel seeded from the RESOLVED
+    /// zone colour it follows (so the pack shows what the user was actually
+    /// looking at), a non-border pack untouched, and an already-present pack
+    /// never re-seeded.
     void setChain_seedsBorderPackParamsFromPlainBorderSetting()
     {
         QTemporaryDir tmp;
@@ -577,7 +579,11 @@ private Q_SLOTS:
         QCOMPARE(fancy.value(QStringLiteral("borderWidth")).toInt(), 4);
         QCOMPARE(fancy.value(QStringLiteral("cornerRadius")).toInt(), 8);
         QCOMPARE(QColor(fancy.value(QStringLiteral("activeColor")).toString()), QColor(QStringLiteral("#80ff0000")));
-        QVERIFY2(!fancy.contains(QStringLiteral("inactiveColor")), "the follow sentinel must not seed a colour");
+        // The sentinel seeds the RESOLVED zone-inactive colour (the stub's
+        // ISettings::inactiveColor(), i.e. the ConfigDefaults fallback), not
+        // nothing: leaving the slot empty would swap the user's followed
+        // colour for the pack's own default at the moment of the trade.
+        QCOMPARE(QColor(fancy.value(QStringLiteral("inactiveColor")).toString()), settings.inactiveColor());
         QVERIFY2(!params.contains(QStringLiteral("glowish")), "non-border pack must not be seeded");
 
         // Re-writing the chain with the pack already present must not re-seed:
@@ -621,6 +627,34 @@ private Q_SLOTS:
         QCOMPARE(params.value(QStringLiteral("opacity")).toDouble(), 0.8);
         QCOMPARE(params.value(QStringLiteral("tintStrength")).toDouble(), 0.25);
         QCOMPARE(QColor(params.value(QStringLiteral("tintColor")).toString()), QColor(QStringLiteral("#80ff0000")));
+    }
+
+    /// The tint sentinel leg of the seeding contract: an EMPTY stored tint
+    /// colour seeds the RESOLVED zone highlight it follows, mirroring the
+    /// border rows (the border test above covers the inactive slot).
+    void setChain_tintSentinelSeedsResolvedHighlight()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        QVERIFY(writePack(tmp.path(), QStringLiteral("fade-tint"), fadeTintMetadata()));
+        PhosphorSurfaceShaders::SurfaceShaderRegistry registry;
+        registry.addSearchPaths(QStringList{tmp.path()}, PhosphorFsLoader::LiveReload::Off);
+
+        TreeStubSettings settings;
+        settings.setShowWindowOpacityTint(true);
+        settings.setWindowTintColor(QString()); // sentinel: follow the highlight
+
+        DecorationPageController c(&registry, &settings);
+        const QString path = QStringLiteral("window.tiled");
+        c.setChain(path, QStringList{QStringLiteral("fade-tint")});
+
+        const QVariantMap params =
+            c.rawProfile(path).value(QStringLiteral("parameters")).toMap().value(QStringLiteral("fade-tint")).toMap();
+        // Alpha-stripped: the tint contract stores opaque (strength is the
+        // sole alpha), so the sentinel seed opaques the resolved highlight.
+        QColor expected = settings.highlightColor();
+        expected.setAlpha(255);
+        QCOMPARE(QColor(params.value(QStringLiteral("tintColor")).toString()), expected);
     }
 
     /// With the plain border toggled off there is no look to carry over, so

@@ -254,14 +254,17 @@ SettingsFlickable {
                     visible: root.borderVisible
                     title: i18n("Active border color")
                     // Overridden because the title already says "color".
-                    swatchAccessibleName: i18n("Active border color")
+                    swatchAccessibleName: i18nc("@action:button", "Active border color")
                     searchAnchor: "activeBorderColor"
                     description: i18n("Border color for the focused window. Follows the color scheme unless you pick one.")
 
                     storedColor: root.ctl.windowBorderColorActive
                     // The colour the focused border actually draws while it
-                    // follows the scheme: the live system highlight, alpha
-                    // included.
+                    // follows the scheme: the live zone highlight, alpha
+                    // included — which is the scheme accent unless the user
+                    // pinned the zone colour. The "Color scheme" fallback
+                    // label stays deliberately loose; the swatch preview is
+                    // the truthful part.
                     themeColor: appSettings.highlightColor
                     picker: borderColorDialog
                     onColorChosen: function (hex) {
@@ -277,7 +280,7 @@ SettingsFlickable {
                     visible: root.borderVisible
                     title: i18n("Inactive border color")
                     // See the active row above.
-                    swatchAccessibleName: i18n("Inactive border color")
+                    swatchAccessibleName: i18nc("@action:button", "Inactive border color")
                     searchAnchor: "inactiveBorderColor"
                     description: i18n("Border color for unfocused windows. Follows the color scheme unless you pick one.")
 
@@ -385,22 +388,29 @@ SettingsFlickable {
                 }
 
                 ThemeFallbackColorRow {
+                    id: tintColorRow
+
                     visible: root.opacityTintVisible
                     title: i18n("Tint color")
                     // Overridden because the title already says "color".
-                    swatchAccessibleName: i18n("Tint color")
+                    swatchAccessibleName: i18nc("@action:button", "Tint color")
                     searchAnchor: "tintColor"
                     description: i18n("Color the window is washed with when the tint strength is above zero. Follows the color scheme unless you pick one.")
 
                     storedColor: root.ctl.windowTintColor
-                    // Preview the live highlight the tint follows.
-                    themeColor: appSettings.highlightColor
+                    // Preview the live highlight the tint follows — with its
+                    // alpha stripped, because the tint contract on this page
+                    // is "stored opaque, strength is the sole alpha" and the
+                    // shader ignores the colour's own alpha. Showing the
+                    // highlight's zone alpha would make the swatch jump from
+                    // half-transparent to solid the moment a colour is picked.
+                    themeColor: Qt.rgba(appSettings.highlightColor.r, appSettings.highlightColor.g, appSettings.highlightColor.b, 1)
                     picker: tintColorDialog
                     onColorChosen: function (hex) {
-                        // Stored opaque unless it is the empty sentinel; the
-                        // tint strength slider is the sole alpha (see
+                        // Stored opaque unless it is the row's own sentinel;
+                        // the tint strength slider is the sole alpha (see
                         // hexToOpaqueHex).
-                        root.ctl.windowTintColor = hex === "" ? hex : root.hexToOpaqueHex(hex);
+                        root.ctl.windowTintColor = hex === tintColorRow.sentinel ? hex : root.hexToOpaqueHex(hex);
                     }
                 }
             }
@@ -656,5 +666,22 @@ SettingsFlickable {
         // No alpha channel here. Tint strength already controls how strongly
         // the wash lands, and the shader ignores the colour's own alpha.
         title: i18n("Choose Tint Color")
+    }
+
+    // Publish the open state so Ctrl+PgUp/PgDown page-stepping cannot swap
+    // the page out from under an open page-level dialog — the exact teardown
+    // hosting the dialogs at page level exists to prevent. Same pattern
+    // (including the standalone-host guard) as RulesPage.
+    readonly property bool anyModalOpen: borderColorDialog.visible || tintColorDialog.visible
+    onAnyModalOpenChanged: {
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = anyModalOpen;
+    }
+    // Clear a latched true on page swap (RulesPage's own teardown pattern):
+    // _pageOwnedModalOpen is a single global flag, and a page destroyed with
+    // its dialog up would otherwise leave nav shortcuts dead for the session.
+    Component.onDestruction: {
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = false;
     }
 }

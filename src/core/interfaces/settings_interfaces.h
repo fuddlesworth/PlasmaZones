@@ -206,8 +206,11 @@ public:
 
     // Appearance settings. The four zone colours are theme-fallback keys:
     // the getters return RESOLVED colours (palette-derived while the stored
-    // string is empty), the setters pin a concrete colour. The stored-string
+    // string is empty), the setters pin a concrete colour (an INVALID QColor
+    // stores the sentinel, i.e. resumes following). The stored-string
     // surface lives on the concrete Settings class for the settings UI.
+    // Their NOTIFYs also fire on a palette change while following — see the
+    // note above ISettings' signal block.
     virtual QColor highlightColor() const = 0;
     virtual void setHighlightColor(const QColor& color) = 0;
     virtual QColor inactiveColor() const = 0;

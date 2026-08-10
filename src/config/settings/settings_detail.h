@@ -91,6 +91,23 @@
         Q_EMIT settingsChanged();                                                                                      \
     }
 
+// Like P_STORE_SET_STRING but announcing on TWO signals — for the raw
+// theme-fallback colour strings, whose resolved QColor twin reads through the
+// same stored value and must refresh alongside it.
+#define P_STORE_SET_STRING2(fn, group, key, signal, twinSignal)                                                        \
+    void Settings::fn(const QString& value)                                                                            \
+    {                                                                                                                  \
+        const QString before = m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key());                 \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const QString after = m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key());                  \
+        if (after == before) {                                                                                         \
+            return;                                                                                                    \
+        }                                                                                                              \
+        Q_EMIT signal();                                                                                               \
+        Q_EMIT twinSignal();                                                                                           \
+        Q_EMIT settingsChanged();                                                                                      \
+    }
+
 namespace PlasmaZones {
 namespace settings_detail {
 

@@ -191,14 +191,16 @@ QtObject {
             id: colorEditorRoot
 
             readonly property var _param: parent.modelData
-            // Final fallback (colour param with no stored value AND no metadata
-            // default) derives from the theme's accent rather than a hardcoded
-            // hex (CLAUDE.md: never hardcode colors).
-            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : (_param.default !== undefined ? String(_param.default) : String(Kirigami.Theme.highlightColor))
-            // The actions whose consumer resolves the "accent" sentinel
-            // ("follow the system accent") — the same trio
-            // RuleAuthoring::defaultPayloadFor seeds it for.
-            readonly property bool _accentCapable: row.action.type === "setBorderColorActive" || row.action.type === "setBorderColorInactive" || row.action.type === "setTintColor"
+            // Final fallback (colour param with no stored value) derives from
+            // the theme's accent rather than a hardcoded hex (CLAUDE.md:
+            // never hardcode colors). Unreachable in practice —
+            // defaultPayloadFor always seeds a colour param.
+            readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : String(Kirigami.Theme.highlightColor)
+            // Whether this action's consumer resolves the "accent" sentinel:
+            // published on the param descriptor (acceptsAccent) so this
+            // editor, defaultPayloadFor's seeding, and ActionRow's
+            // type-switch migration all read one C++ source of truth.
+            readonly property bool _accentCapable: colorEditorRoot._param.acceptsAccent === true
             // The accent sentinel follows the system colour scheme per focus state,
             // the same split updateWindowDecoration applies: the focused (active) slot
             // adopts the highlight colour, the unfocused (inactive) slot the inactive

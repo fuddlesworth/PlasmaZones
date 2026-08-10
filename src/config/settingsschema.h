@@ -43,8 +43,9 @@ QVariant canonicalTriggerList(const QVariant& v);
 /// scheme" sentinel) and any string QColor can parse, and drop anything else
 /// back to empty. The D-Bus boundary already refuses an unparseable colour,
 /// but the DISK path does not go through it — a hand-edited config reached
-/// QML unchecked and Qt paints an invalid QColor as black. Shared by the tab
-/// indicator's three colours and the drop indicator's two.
+/// QML unchecked and Qt paints an invalid QColor as black. Shared by every
+/// theme-fallback colour key: the zone colours, the Windows border/tint
+/// colours, the tab indicator's three, and the drop indicator's two.
 QVariant canonicalThemeFallbackColor(const QVariant& v);
 
 void appendShadersSchema(PhosphorConfig::Schema& schema);

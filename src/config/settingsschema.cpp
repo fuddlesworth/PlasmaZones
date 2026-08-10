@@ -5,7 +5,7 @@
 // ceiling and stays whole deliberately: it is a flat sequence of one
 // appendXxxSchema function per config domain plus the file-local validator
 // helpers several of them share (canonicalCommaList,
-// sanitizePerAlgorithmSettings, the colour canonicalizers). The two domains
+// sanitizePerAlgorithmSettings, the colour canonicalizer). The two domains
 // big enough to carry their own weight are already split
 // (settingsschema_scrolling.cpp); each remaining function is well under a
 // hundred lines, and moving one out drags its shared helpers into a header
@@ -116,8 +116,9 @@ constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction
 /// Canonicalize a theme-fallback colour: the EMPTY sentinel ("follow the
 /// theme") and any valid colour name pass through unchanged; anything else
 /// maps back to empty rather than reaching QML as an invalid QColor. See the
-/// header. Namespace scope so settingsschema_scrolling.cpp can reach it for
-/// the five colour keys that carry the empty sentinel.
+/// header. The single validator behind EVERY theme-fallback colour key in
+/// both schema TUs — the seven in this file (four zone, three Windows) and,
+/// via namespace scope, the five in settingsschema_scrolling.cpp.
 QVariant canonicalThemeFallbackColor(const QVariant& v)
 {
     const QString s = v.toString();
@@ -245,10 +246,10 @@ void appendShadersSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Appearance ─────────────────────────────────────────────────────────────
-// Declares four zone-overlay sub-groups under Snapping.Zones.*: Colors (system
-// toggle + 3 zone colors), Labels (font family/color/scale/weight + italic/
-// underline/strikeout toggles), Opacity (active + inactive), Border (width +
-// radius). The per-mode snapped-window
+// Declares four zone-overlay sub-groups under Snapping.Zones.*: Colors (3
+// theme-fallback zone colors), Labels (font family/color/scale/weight +
+// italic/underline/strikeout toggles), Opacity (active + inactive), Border
+// (width + radius). The per-mode snapped-window
 // decoration groups that used to live here are gone — window border and title-bar
 // appearance moved to the top-level mode-neutral Windows config group (see
 // appendWindowsSchema).
@@ -257,17 +258,18 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
 
-    // Theme-fallback colour keys: stored as strings where EMPTY means
-    // "follow the system palette" (the same sentinel the scrolling colour
-    // keys use); Settings resolves in the getters.
+    // Theme-fallback colour keys — the three zone colours here AND the
+    // Labels FontColor below: stored as strings where EMPTY means "follow
+    // the system palette" (the same sentinel the scrolling colour keys
+    // use); Settings resolves in the getters.
     schema.groups[CD::snappingZonesColorsGroup()] = {
-        {CD::highlightKey(), QString(), QMetaType::QString, {}, canonicalThemeFallbackColor},
-        {CD::inactiveKey(), QString(), QMetaType::QString, {}, canonicalThemeFallbackColor},
-        {CD::borderKey(), QString(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::highlightKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::inactiveKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::borderKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
     };
 
     schema.groups[CD::snappingZonesLabelsGroup()] = {
-        {CD::fontColorKey(), QString(), QMetaType::QString, {}, canonicalThemeFallbackColor},
+        {CD::fontColorKey(), CD::themeFallbackColorDefault(), QMetaType::QString, {}, canonicalThemeFallbackColor},
         {CD::fontFamilyKey(), CD::labelFontFamily(), QMetaType::QString},
         {CD::fontSizeScaleKey(),
          CD::labelFontSizeScale(),
@@ -1009,10 +1011,9 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
 // Mode-neutral window border + title bar. Border colours are theme-fallback
 // strings (EMPTY = "follow the system accent", or a hex/named colour),
 // validated by canonicalThemeFallbackColor like every other follow-the-system
-// colour key. The
-// border/title-bar scope is a closed-set token ("tiled" / "normal" / "all")
-// the Appearance page and the effect agree on, snapped to the default on an
-// unknown on-disk value.
+// colour key. The border/title-bar scope is a closed-set token
+// ("tiled" / "normal" / "all") the Appearance page and the effect agree on,
+// snapped to the default on an unknown on-disk value.
 // Width/radius are clamped ints reusing the generic Width/Radius keys (the Windows
 // group disambiguates them from the Snapping.Zones.Border keys of the same spelling).
 // FocusFadeDuration is a clamped int: the decoration focus cross-fade in ms

@@ -201,10 +201,10 @@ private Q_SLOTS:
     {
         ZoneShaderItem item;
 
-        // Verify default color 1 matches ConfigDefaults::highlightColor()
+        // Verify default color 1 matches ConfigDefaults::highlightFallbackColor()
         constexpr float kEpsilon = 0.002f;
         QColor defaultColor = item.customColor1();
-        QColor expectedColor = PlasmaZones::ConfigDefaults::highlightColor();
+        QColor expectedColor = PlasmaZones::ConfigDefaults::highlightFallbackColor();
         QVERIFY(qAbs(static_cast<float>(defaultColor.redF()) - static_cast<float>(expectedColor.redF())) < kEpsilon);
         QVERIFY(qAbs(static_cast<float>(defaultColor.greenF()) - static_cast<float>(expectedColor.greenF()))
                 < kEpsilon);

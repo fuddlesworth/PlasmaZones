@@ -2474,10 +2474,10 @@ private:
     PhosphorAnimationShaders::ShaderProfileTree m_shaderProfileTree;
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationProfileTree =
         static_cast<PhosphorSurfaceShaders::DecorationProfileTree>(ConfigDefaults::decorationProfileTree());
-    QColor m_borderColor = ConfigDefaults::borderColor();
-    QColor m_highlightColor = ConfigDefaults::highlightColor();
-    QColor m_inactiveColor = ConfigDefaults::inactiveColor();
-    QColor m_labelFontColor = ConfigDefaults::labelFontColor();
+    QColor m_borderColor = ConfigDefaults::borderFallbackColor();
+    QColor m_highlightColor = ConfigDefaults::highlightFallbackColor();
+    QColor m_inactiveColor = ConfigDefaults::inactiveFallbackColor();
+    QColor m_labelFontColor = ConfigDefaults::labelFontFallbackColor();
     QString m_animationEasingCurve = ConfigDefaults::animationEasingCurve();
     QString m_audioChannelMode = ConfigDefaults::audioChannelMode();
     QString m_audioInputMethod = ConfigDefaults::audioInputMethod();

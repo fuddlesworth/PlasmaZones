@@ -5,6 +5,7 @@
 
 #include "config/configkeys.h"
 #include "config/configmigration.h"
+#include "config/configmigration_util.h"
 #include "config/settingsvaluelabels.h"
 #include "core/platform/logging.h"
 #include "phosphor_i18n.h"
@@ -27,10 +28,15 @@ namespace PlasmaZones {
 
 namespace {
 
-constexpr QLatin1String kProfVersionKey{"_version"};
 // Profiles first shipped in the same release as config schema v5, so no
 // older stamp can name a profile-shaped file this store knows how to read.
 constexpr int kProfOldestReadableVersion = 5;
+// Frozen v5 spellings of the zone-colour groups, used only by the pre-v6
+// child-delta refusal below (the same migration-freeze exemption the
+// configmigration_v*.cpp constants carry).
+constexpr QLatin1String kProfV5ColorsGroup{"Snapping.Zones.Colors"};
+constexpr QLatin1String kProfV5LabelsGroup{"Snapping.Zones.Labels"};
+constexpr QLatin1String kProfV5KeyFontColor{"FontColor"};
 constexpr QLatin1String kProfIdKey{"id"};
 constexpr QLatin1String kProfNameKey{"name"};
 constexpr QLatin1String kProfDescriptionKey{"description"};
@@ -128,35 +134,119 @@ bool ProfileStore::readProfileFile(const QString& path, Record* out) const
     // Refuse a file stamped with an UNKNOWN schema version rather than
     // mis-applying config-delta keys whose shape moved between versions. A
     // file stamped with an older version we know (profiles first shipped at
-    // schema v5, so v5 is the floor) is migrated forward in memory instead:
-    // the profile's config delta is group/key-shaped exactly like config.json,
-    // so the same migration chain advances it, and the migrated record is
-    // simply served — the file itself is rewritten on the profile's next
-    // save. The profileFormatTracksConfigSchemaVersion test pins the version
-    // so every future ConfigSchemaVersion bump fails loudly there, forcing
-    // the author to confirm the new step is a pure config→config transform
-    // this path may run (or to extend it when one is not).
-    const QJsonValue versionVal = root.value(kProfVersionKey);
+    // schema v5, so v5 is the floor) is migrated forward in memory instead,
+    // and the migrated record is simply served — the file itself is
+    // rewritten on the profile's next save. Two contracts a future step must
+    // honour on this path, on top of being a pure config→config transform:
+    // the delta is stored FLAT (dot-path group names as top-level keys, the
+    // Store export shape) while the migration helpers walk NESTED objects
+    // (the config.json shape), so it is translated around the chain below;
+    // and the delta is SPARSE, where a removed key means "inherit from the
+    // parent" rather than "take the default", so a step that retires a value
+    // must write the new default explicitly, never by removal. The
+    // profileFormatTracksConfigSchemaVersion test pins the version so every
+    // future ConfigSchemaVersion bump fails loudly there, forcing the author
+    // to confirm both properties (or to extend this path when one fails).
+    const QJsonValue versionVal = root.value(ConfigKeys::versionKey());
     const int fileVersion = versionVal.isDouble() ? versionVal.toInt() : -1;
     if (fileVersion < kProfOldestReadableVersion || fileVersion > m_config.formatVersion) {
         qCWarning(lcConfig) << "ProfileStore: profile file" << path << "has version" << versionVal
-                            << "but this build expects" << m_config.formatVersion << "— refusing";
+                            << "but this build reads versions" << kProfOldestReadableVersion << "through"
+                            << m_config.formatVersion << "— refusing";
         return false;
     }
     if (fileVersion < m_config.formatVersion) {
-        QJsonObject delta = root.value(kProfConfigKey).toObject();
-        delta[ConfigKeys::versionKey()] = fileVersion;
-        ConfigMigration::runMigrationChainInMemory(delta);
+        // The schema-group filter below is what turns the migrated nested
+        // blob back into a delta; without the defaults blob it would emit an
+        // EMPTY delta and silently erase the profile's config. Refuse the
+        // migration path outright when the wiring is absent (test harnesses;
+        // every production composition root supplies it).
+        if (!m_config.defaultConfig) {
+            qCWarning(lcConfig) << "ProfileStore: cannot migrate profile file" << path
+                                << "without a defaultConfig source — refusing";
+            return false;
+        }
+
+        QJsonObject flat = root.value(kProfConfigKey).toObject();
+
+        // A pre-v6 CHILD delta touching the v5 zone-colour surface cannot be
+        // migrated faithfully in isolation: whether its colour values were
+        // palette snapshots or deliberate picks depends on the UseSystem
+        // state resolved through its parents, which this per-file path does
+        // not see. Drop ONLY the ambiguous colour entries and keep the
+        // profile — the child then inherits its parent's colours, the
+        // closest defensible reading — rather than refusing the whole file,
+        // which would silently re-root its own children onto the wrong
+        // resolution baseline. Root profiles diff against the defaults
+        // blob, so their own delta carries the whole story and migrates
+        // confidently.
+        if (fileVersion < 6 && !QUuid(root.value(kProfParentKey).toString()).isNull()) {
+            const bool touchesZoneColors = !flat.value(kProfV5ColorsGroup).toObject().isEmpty()
+                || flat.value(kProfV5LabelsGroup).toObject().contains(kProfV5KeyFontColor);
+            if (touchesZoneColors) {
+                qCWarning(lcConfig) << "ProfileStore: profile file" << path
+                                    << "is a version-5 child profile overriding zone colours; their"
+                                    << "snapshot-vs-pick intent needs its parents, so the colour entries are"
+                                    << "dropped and the profile inherits its parent's colours";
+                flat.remove(kProfV5ColorsGroup);
+                QJsonObject labels = flat.value(kProfV5LabelsGroup).toObject();
+                labels.remove(kProfV5KeyFontColor);
+                if (labels.isEmpty()) {
+                    flat.remove(kProfV5LabelsGroup);
+                } else {
+                    flat[kProfV5LabelsGroup] = labels;
+                }
+            }
+        }
+
+        // Translate the flat delta into the nested config.json shape the
+        // migration steps walk, run the chain, then flatten back through the
+        // schema's group list. Keeping only schema-declared keys on the way
+        // back doubles as a stale-key sweep (import would drop them anyway)
+        // and keeps sub-group objects from masquerading as key values.
+        QJsonObject nested;
+        for (auto it = flat.constBegin(); it != flat.constEnd(); ++it) {
+            if (!it.value().isObject()) {
+                continue;
+            }
+            // A hand-edited empty or dot-only group key splits to NO
+            // segments; the segment walkers assume at least one and would
+            // read past the front of their chain in release builds.
+            const QStringList segments = it.key().split(QLatin1Char('.'), Qt::SkipEmptyParts);
+            if (segments.isEmpty()) {
+                continue;
+            }
+            setGroupAtSegments(nested, segments, it.value().toObject());
+        }
+        nested[ConfigKeys::versionKey()] = fileVersion;
+        ConfigMigration::runMigrationChainInMemory(nested);
         // The chain advances to ConfigSchemaVersion; a store configured for a
         // DIFFERENT target (tests inject formatVersion) cannot use the result.
-        if (delta.value(ConfigKeys::versionKey()).toInt() != m_config.formatVersion) {
+        if (nested.value(ConfigKeys::versionKey()).toInt() != m_config.formatVersion) {
             qCWarning(lcConfig) << "ProfileStore: profile file" << path << "migrated to version"
-                                << delta.value(ConfigKeys::versionKey()).toInt() << "but this store expects"
+                                << nested.value(ConfigKeys::versionKey()).toInt() << "but this store expects"
                                 << m_config.formatVersion << "— refusing";
             return false;
         }
-        delta.remove(ConfigKeys::versionKey());
-        root[kProfConfigKey] = delta;
+        QJsonObject migrated;
+        const QJsonObject schemaGroups = m_config.defaultConfig();
+        for (auto it = schemaGroups.constBegin(); it != schemaGroups.constEnd(); ++it) {
+            if (!it.value().isObject()) {
+                continue; // the defaults blob's own top-level _version stamp
+            }
+            const QJsonObject defGroup = it.value().toObject();
+            const QJsonObject migratedGroup = groupObjectAtPath(nested, it.key());
+            QJsonObject keptGroup;
+            for (auto kit = migratedGroup.constBegin(); kit != migratedGroup.constEnd(); ++kit) {
+                if (defGroup.contains(kit.key())) {
+                    keptGroup.insert(kit.key(), kit.value());
+                }
+            }
+            if (!keptGroup.isEmpty()) {
+                migrated.insert(it.key(), keptGroup);
+            }
+        }
+        root[kProfConfigKey] = migrated;
     }
 
     const QUuid id(root.value(kProfIdKey).toString());
@@ -187,7 +277,9 @@ bool ProfileStore::readProfileFile(const QString& path, Record* out) const
 QJsonObject ProfileStore::recordToJson(const Record& rec, int formatVersion)
 {
     QJsonObject root;
-    root.insert(kProfVersionKey, formatVersion);
+    // The envelope deliberately reuses the config schema's version-key
+    // spelling so one accessor names both stamps.
+    root.insert(ConfigKeys::versionKey(), formatVersion);
     root.insert(kProfIdKey, rec.id.toString());
     root.insert(kProfNameKey, rec.name);
     root.insert(kProfDescriptionKey, rec.description);
@@ -303,6 +395,12 @@ void stripMachineScopedKeys(QJsonObject& config)
 void ProfileStore::overlayConfig(QJsonObject& base, const QJsonObject& delta)
 {
     for (auto git = delta.constBegin(); git != delta.constEnd(); ++git) {
+        // Skip non-object members the way diffConfig's capture side does: a
+        // hand-edited scalar at a group slot would otherwise read as {} and
+        // wipe the whole base group out of the resolved blob.
+        if (!git.value().isObject()) {
+            continue;
+        }
         const QJsonObject deltaGroup = git.value().toObject();
         QJsonObject baseGroup = base.value(git.key()).toObject();
         for (auto kit = deltaGroup.constBegin(); kit != deltaGroup.constEnd(); ++kit) {
@@ -526,7 +624,28 @@ QJsonObject ProfileStore::readIndex() const
     if (!f.open(QIODevice::ReadOnly)) {
         return QJsonObject();
     }
-    const auto doc = QJsonDocument::fromJson(f.readAll());
+    const QByteArray bytes = f.readAll();
+    f.close();
+    QJsonParseError parseErr{};
+    const auto doc = QJsonDocument::fromJson(bytes, &parseErr);
+    if (!bytes.trimmed().isEmpty() && (parseErr.error != QJsonParseError::NoError || !doc.isObject())) {
+        // A corrupt index must not be treated as an empty one: the next
+        // appendToOrder/writeActiveId would commit that emptiness over the
+        // surviving order and active pointer. Quarantine the bytes (the
+        // sibling readProfileFile refuses instead, but the index is
+        // degradable state, so starting fresh is the better failure mode):
+        // profiles stay visible through depthFirstOrder's name-sorted
+        // leftovers, the sibling order degrades to alphabetical until the
+        // next writeIndex commit re-records it, and the committed active
+        // pointer is lost (the staged one is unaffected).
+        const QString quarantine = path + QStringLiteral(".corrupt.bak");
+        QFile::remove(quarantine);
+        QFile::rename(path, quarantine);
+        qCWarning(lcConfig) << "ProfileStore: index.json is not valid JSON (" << parseErr.errorString()
+                            << ") — moved to" << quarantine << "and starting with a fresh index";
+        m_indexCache = QJsonObject();
+        return QJsonObject();
+    }
     QJsonObject index = doc.isObject() ? doc.object() : QJsonObject();
     m_indexCache = index;
     return index;
@@ -1017,6 +1136,10 @@ bool ProfileStore::removeProfile(const QString& id)
     if (!path.isEmpty() && QFile::exists(path) && !QFile::remove(path)) {
         qCWarning(lcConfig) << "ProfileStore::removeProfile: could not delete" << path;
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not delete the profile."));
+        // Children rewritten above ARE reparented on disk; announce the
+        // partial state (same contract as the loop-failure branch) so the
+        // record cache does not keep serving the pre-reparent tree.
+        notifyProfilesChanged();
         return false;
     }
     removeFromOrder(uid);
@@ -1029,10 +1152,10 @@ bool ProfileStore::removeProfile(const QString& id)
     // through a one-call transient where only one pointer is cleared and the
     // page reads dirty; the second clear lands synchronously right after, so
     // no UI frame ever observes it.
-    if (m_config.stagedActiveId && m_config.setStagedActiveId && m_config.stagedActiveId() == id) {
+    if (m_config.stagedActiveId && m_config.setStagedActiveId && QUuid(m_config.stagedActiveId()) == uid) {
         m_config.setStagedActiveId(QString());
     }
-    if (committedActiveId() == id) {
+    if (QUuid(committedActiveId()) == uid) {
         writeActiveId(QString());
     }
     notifyProfilesChanged();
@@ -1050,7 +1173,7 @@ bool ProfileStore::activateProfile(const QString& id)
     // renormalize rule priorities and dirty the Rules page. When the user has
     // edited away from it, activation is the "re-apply, discarding my edits"
     // action and must run.
-    if (id == activeProfileId() && !isActiveModified(all)) {
+    if (uid == QUuid(activeProfileId()) && !isActiveModified(all)) {
         return true;
     }
     // Resolve the full config and stage it into the settings store (uncommitted,
@@ -1088,17 +1211,19 @@ bool ProfileStore::exportProfile(const QString& id, const QString& destLocalPath
     if (sourcePath.isEmpty()) {
         return false;
     }
-    const QFileInfo sourceInfo(sourcePath);
-    if (!sourceInfo.isFile() || sourceInfo.size() > kMaxProfileFileBytes) {
+    // Export the RECORD, not the raw file bytes: a pre-current profile is
+    // migrated forward in memory by loadAll, and exporting the stale bytes
+    // would hand out a file that stops being importable the moment a future
+    // build raises the version floor. The record's delta was captured with
+    // the machine-scoped-key skip applied, so re-serialising keeps exports
+    // free of machine-scoped keys exactly like the verbatim copy did.
+    const QHash<QUuid, Record> all = loadAll();
+    if (!all.contains(uid)) {
         Q_EMIT toastRequested(PhosphorI18n::tr("Could not read that profile."));
         return false;
     }
-    QFile source(sourcePath);
-    if (!source.open(QIODevice::ReadOnly)) {
-        Q_EMIT toastRequested(PhosphorI18n::tr("Could not read that profile."));
-        return false;
-    }
-    const QByteArray payload = source.readAll();
+    const QByteArray payload =
+        QJsonDocument(recordToJson(all.value(uid), m_config.formatVersion)).toJson(QJsonDocument::Indented);
     QSaveFile dest(destLocalPath);
     if (!(dest.open(QIODevice::WriteOnly | QIODevice::Truncate) && dest.write(payload) == payload.size()
           && dest.commit())) {

@@ -92,4 +92,17 @@ QtObject {
     readonly property color previewActiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.highlightColor : root._viewScope.highlight)
     readonly property color previewInactiveZoneColor: root._opaque(root.settingsSource ? root.settingsSource.inactiveColor : root._viewScope.alternateBackground)
     readonly property color previewZoneBorderColor: root.settingsSource ? root.settingsSource.borderColor : root._viewScope.separator
+
+    // Scroll tab-indicator theme fallbacks — what an EMPTY tab colour key
+    // resolves to. Single-sourced here for the same drift reason as the zone
+    // trio above: the renderer (ScrollTabStripContent) and the settings
+    // page's swatch previews (ScrollingTabsPage) must show one truth. The
+    // inactive fallback differs per style ON PURPOSE: a chip carries its
+    // title, so its resting state is no fill at all; a bar segment has
+    // nothing but its fill, so an unfilled one would under-report the tab
+    // count.
+    readonly property color tabActiveColor: Kirigami.Theme.highlightColor
+    readonly property color tabInactiveChipColor: "transparent"
+    readonly property color tabInactiveBarColor: Qt.alpha(Kirigami.Theme.textColor, 0.35)
+    readonly property color tabUrgentColor: Kirigami.Theme.negativeTextColor
 }

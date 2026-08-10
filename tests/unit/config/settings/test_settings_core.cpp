@@ -335,6 +335,67 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
         QCOMPARE(highlightSpy.count(), 0);
         QCOMPARE(fontColorSpy.count(), 0);
+
+        // The pinned leg gives the guard teeth beyond the trivially-default
+        // case: a CONCRETE stored colour reloaded from unchanged disk state
+        // must be equally silent, which is what actually exercises the
+        // same-value early-return against a non-default value.
+        settings.setHighlightColorRaw(QStringLiteral("#ff123456"));
+        settings.save();
+        highlightSpy.clear();
+        spy.clear();
+        settings.load();
+        QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff123456"));
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(highlightSpy.count(), 0);
+    }
+
+    /**
+     * A pinned zone colour must survive save() → fresh Settings → read-back:
+     * the four keys moved from QMetaType::QColor to QMetaType::QString with
+     * a new validator underneath them, so the stored JSON type and the
+     * read-side coercion both changed and nothing else round-trips them.
+     */
+    void testSave_load_pinnedZoneColorsRoundTrip()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            Settings settings;
+            settings.setHighlightColorRaw(QStringLiteral("#80112233"));
+            settings.setInactiveColorRaw(QStringLiteral("#40223344"));
+            settings.setBorderColorRaw(QStringLiteral("#c8334455"));
+            settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+            settings.save();
+        }
+
+        Settings fresh;
+        QCOMPARE(fresh.highlightColorRaw(), QStringLiteral("#80112233"));
+        QCOMPARE(fresh.inactiveColorRaw(), QStringLiteral("#40223344"));
+        QCOMPARE(fresh.borderColorRaw(), QStringLiteral("#c8334455"));
+        QCOMPARE(fresh.labelFontColorRaw(), QStringLiteral("#ffddeeff"));
+        // The resolved getters serve the pins, not palette-derived values.
+        QCOMPARE(fresh.highlightColor(), QColor(QStringLiteral("#80112233")));
+        QCOMPARE(fresh.labelFontColor(), QColor(QStringLiteral("#ffddeeff")));
+    }
+
+    /**
+     * reset() must return the four colour keys to the empty theme-fallback
+     * sentinel (the schema default), after which the resolved getters follow
+     * the palette again.
+     */
+    void testReset_returnsZoneColorsToSentinel()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setHighlightColorRaw(QStringLiteral("#80112233"));
+        settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+        settings.reset();
+        QCOMPARE(settings.highlightColorRaw(), QString());
+        QCOMPARE(settings.labelFontColorRaw(), QString());
+        QVERIFY(settings.highlightColor().isValid());
+        QVERIFY(settings.labelFontColor().isValid());
     }
 
     /**

@@ -42,6 +42,15 @@ namespace PlasmaZones {
 
 void SettingsController::emitDirtyPagesChanged()
 {
+    // A fully-clean dirty set means no unsaved edit is TRACKED any more —
+    // including a value-blind (per-screen) one, which stops being tracked at
+    // the same moment its page leaves the set (a kebab Discard on that page
+    // reaches here without ever passing through setNeedsSave(false)). Drop
+    // the reconcile latch with it, or a stranded latch would disable the
+    // value-based reconcile for the rest of the session.
+    if (m_dirtyPages.isEmpty()) {
+        m_valueBlindDirty = false;
+    }
     if (m_dirtyEmitDepth > 0) {
         m_dirtyEmitPending = true;
         return;
@@ -253,7 +262,57 @@ void SettingsController::onSettingsPropertyChanged()
     // unsaved-changes footer on every theme switch.
     if (!m_saving && !m_loading && !m_settings.isAnnouncingPaletteChange()) {
         setNeedsSave(true);
+        // A value edited BACK to its committed state would otherwise strand
+        // its page in m_dirtyPages forever — nothing else reconciles on a
+        // plain change — leaving needsSave() true with every badge clean and
+        // maybeDrainPendingExternalReload() permanently bailing on a deferred
+        // external reload. Reconcile the dirty set against value truth,
+        // coalesced through a queued single-shot so a slider drag's NOTIFY
+        // burst pays one reconcile per event-loop turn, not one per tick.
+        // Pages with no value/staging-based branch fall through isPageDirty
+        // to their m_dirtyPages membership, so the reconcile keeps them; the
+        // one blind spot is a MANIFEST page dirtied by an edit its manifest
+        // cannot see (the per-screen overrides), which the m_valueBlindDirty
+        // latch below suspends the reconcile for entirely — clearing such a
+        // page would silently drop the unsaved edit and un-park a deferred
+        // external reload over it.
+        scheduleDirtyReconcile();
     }
+}
+
+void SettingsController::onValueBlindSettingsChanged()
+{
+    // A per-screen override edit: dirties like any other change, but its
+    // value lives outside every page manifest, so value-based reconciliation
+    // cannot see it. Latch the reconcile off until the next clean transition
+    // (save / discard / an emptied dirty set clears the latch) rather than
+    // let it clear a page whose edit is real but manifest-invisible. Latched
+    // AFTER the mark and only when something is actually tracked, so
+    // setNeedsSave's virtual-node early return cannot strand the latch with
+    // an empty dirty set.
+    if (!m_saving && !m_loading && !m_settings.isAnnouncingPaletteChange()) {
+        setNeedsSave(true);
+        if (!m_dirtyPages.isEmpty()) {
+            m_valueBlindDirty = true;
+        }
+    }
+}
+
+void SettingsController::scheduleDirtyReconcile()
+{
+    if (m_valueBlindDirty || m_dirtyReconcileQueued) {
+        return;
+    }
+    m_dirtyReconcileQueued = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_dirtyReconcileQueued = false;
+        if (m_saving || m_loading || m_valueBlindDirty) {
+            return;
+        }
+        // Copy: reconcilePagesDirty mutates m_dirtyPages while iterating
+        // its argument.
+        reconcilePagesDirty(QSet<QString>(m_dirtyPages));
+    });
 }
 
 void SettingsController::onExternalSettingsChanged()
@@ -318,7 +377,10 @@ void SettingsController::setNeedsSave(bool needs)
         }
     } else if (!m_dirtyPages.isEmpty()) {
         m_dirtyPages.clear();
+        m_valueBlindDirty = false;
         emitDirtyPagesChanged();
+    } else {
+        m_valueBlindDirty = false;
     }
 }
 

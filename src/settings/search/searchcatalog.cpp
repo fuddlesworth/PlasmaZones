@@ -399,7 +399,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Corner radius"), {PhosphorI18n::tr("rounding"), PhosphorI18n::tr("border")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("labelColor"),
                PhosphorI18n::tr("Label color"),
-               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("text"), PhosphorI18n::tr("font")});
+               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("text"), PhosphorI18n::tr("font"),
+                PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("font"), PhosphorI18n::tr("Font"),
                {PhosphorI18n::tr("typeface"), PhosphorI18n::tr("family"), PhosphorI18n::tr("style")});
     addSetting(search, QStringLiteral("snapping-overlay-appearance"), QStringLiteral("labelScale"),
@@ -674,16 +675,22 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
 
     addSection(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorColors"),
                PhosphorI18n::tr("Colors"));
+    // The three tab colours are theme-fallback rows like the zone colours, so
+    // they carry the same theme/scheme vocabulary (plus the British spelling
+    // every other colour row has).
     addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorActiveColor"),
                PhosphorI18n::tr("Active tab"),
-               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("active")});
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("colour"),
+                PhosphorI18n::tr("active"), PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme")});
     addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorInactiveColor"),
                PhosphorI18n::tr("Inactive tabs"),
-               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("inactive")});
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("colour"),
+                PhosphorI18n::tr("inactive"), PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme")});
     addSetting(search, QStringLiteral("scrolling-tabs"), QStringLiteral("tabIndicatorUrgentColor"),
                PhosphorI18n::tr("Urgent tab"),
-               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("urgent"),
-                PhosphorI18n::tr("attention")});
+               {PhosphorI18n::tr("tab"), PhosphorI18n::tr("color"), PhosphorI18n::tr("colour"),
+                PhosphorI18n::tr("urgent"), PhosphorI18n::tr("attention"), PhosphorI18n::tr("theme"),
+                PhosphorI18n::tr("scheme")});
 
     // Triggers card first, matching visual order on the page, then the drop
     // indicator. The ANCHOR string is what must match the QML searchAnchor
@@ -705,25 +712,26 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("strip preview")});
 
-    // Drop indicator card, directly after Triggers on the page.
+    // Drop indicator card, directly after Triggers on the page. The master
+    // switch lives in the card HEADER (no body row of its own), so this is
+    // the section-only shape the Borders and Opacity-and-tint cards use —
+    // the section title is what a "drop indicator" search matches.
     addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicator"),
                PhosphorI18n::tr("Drop indicator"));
-    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorEnabled"),
-               PhosphorI18n::tr("Show drop indicator"),
-               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("indicator"),
-                PhosphorI18n::tr("highlight"), PhosphorI18n::tr("target")});
-    addSetting(
-        search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorColor"),
-        PhosphorI18n::tr("Fill color"),
-        {PhosphorI18n::tr("drop"), PhosphorI18n::tr("color"), PhosphorI18n::tr("indicator"), PhosphorI18n::tr("fill")});
+    addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorColor"),
+               PhosphorI18n::tr("Fill color"),
+               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("color"), PhosphorI18n::tr("colour"),
+                PhosphorI18n::tr("indicator"), PhosphorI18n::tr("fill"), PhosphorI18n::tr("theme"),
+                PhosphorI18n::tr("scheme")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorOpacity"),
                PhosphorI18n::tr("Fill opacity"),
                {PhosphorI18n::tr("drop"), PhosphorI18n::tr("opacity"), PhosphorI18n::tr("transparency"),
                 PhosphorI18n::tr("indicator")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorBorderColor"),
                PhosphorI18n::tr("Border color"),
-               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("color"), PhosphorI18n::tr("border"),
-                PhosphorI18n::tr("indicator")});
+               {PhosphorI18n::tr("drop"), PhosphorI18n::tr("color"), PhosphorI18n::tr("colour"),
+                PhosphorI18n::tr("border"), PhosphorI18n::tr("indicator"), PhosphorI18n::tr("theme"),
+                PhosphorI18n::tr("scheme")});
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDropIndicatorBorderWidth"),
                PhosphorI18n::tr("Border width"),
                {PhosphorI18n::tr("drop"), PhosphorI18n::tr("border"), PhosphorI18n::tr("width"),

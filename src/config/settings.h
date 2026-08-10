@@ -32,6 +32,8 @@
 
 #include <QFont>
 #include <QHash>
+
+#include <array>
 #include <QJsonValue>
 #include <QList>
 #include <QPair>
@@ -149,17 +151,20 @@ public:
     // palette". The QColor properties read RESOLVED — palette-derived while
     // the stored value is empty — so every consumer keeps seeing a concrete
     // colour. The *Raw string twins expose the stored value for the settings
-    // UI's theme-fallback rows; they share the resolved property's NOTIFY
-    // because the two views change together (a palette change re-emits the
-    // NOTIFY too, which merely re-reads an unchanged raw value).
+    // UI's theme-fallback rows and carry their own NOTIFY: a store write
+    // fires both (the resolved view reads through the same stored value),
+    // while a palette change fires only the resolved signal, since the raw
+    // value did not move.
     Q_PROPERTY(QColor highlightColor READ highlightColor WRITE setHighlightColor NOTIFY highlightColorChanged)
     Q_PROPERTY(QColor inactiveColor READ inactiveColor WRITE setInactiveColor NOTIFY inactiveColorChanged)
     Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor NOTIFY borderColorChanged)
     Q_PROPERTY(QColor labelFontColor READ labelFontColor WRITE setLabelFontColor NOTIFY labelFontColorChanged)
-    Q_PROPERTY(QString highlightColorRaw READ highlightColorRaw WRITE setHighlightColorRaw NOTIFY highlightColorChanged)
-    Q_PROPERTY(QString inactiveColorRaw READ inactiveColorRaw WRITE setInactiveColorRaw NOTIFY inactiveColorChanged)
-    Q_PROPERTY(QString borderColorRaw READ borderColorRaw WRITE setBorderColorRaw NOTIFY borderColorChanged)
-    Q_PROPERTY(QString labelFontColorRaw READ labelFontColorRaw WRITE setLabelFontColorRaw NOTIFY labelFontColorChanged)
+    Q_PROPERTY(
+        QString highlightColorRaw READ highlightColorRaw WRITE setHighlightColorRaw NOTIFY highlightColorRawChanged)
+    Q_PROPERTY(QString inactiveColorRaw READ inactiveColorRaw WRITE setInactiveColorRaw NOTIFY inactiveColorRawChanged)
+    Q_PROPERTY(QString borderColorRaw READ borderColorRaw WRITE setBorderColorRaw NOTIFY borderColorRawChanged)
+    Q_PROPERTY(
+        QString labelFontColorRaw READ labelFontColorRaw WRITE setLabelFontColorRaw NOTIFY labelFontColorRawChanged)
     Q_PROPERTY(qreal activeOpacity READ activeOpacity WRITE setActiveOpacity NOTIFY activeOpacityChanged)
     Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
     Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
@@ -850,7 +855,9 @@ public:
     // Getters read through the store on demand with validator-driven
     // clamping; setters go through the store so persistence is immediate.
     // The four zone colours resolve their empty theme-fallback sentinel to
-    // palette-derived colours (see resolvedSystemColor); the QColor setters
+    // palette-derived colours (see resolvedSystemColor) — on that branch the
+    // QColor getter returns a palette value the store validator never sees;
+    // only the Raw string surface is validator-covered. The QColor setters
     // store the concrete colour as an #AARRGGBB string, and the Raw accessors
     // read/write the stored string itself, including the empty sentinel.
     QColor highlightColor() const override;
@@ -1881,6 +1888,15 @@ public:
     }
 
 Q_SIGNALS:
+    /// NOTIFYs for the four raw theme-fallback colour strings. Distinct from
+    /// the resolved QColor twins' ISettings signals so a palette change
+    /// (which moves only the resolved view) does not announce a raw change;
+    /// the raw setters emit both.
+    void highlightColorRawChanged();
+    void inactiveColorRawChanged();
+    void borderColorRawChanged();
+    void labelFontColorRawChanged();
+
     /// Emitted when the whole animation Profile blob is replaced via
     /// `setAnimationProfile`. Fires alongside every per-field *Changed
     /// signal. Consumers that want to observe the Profile atomically
@@ -1959,7 +1975,11 @@ private:
     // bindings never refresh. snapshotNotifyProperties() captures every own
     // NOTIFY-able Q_PROPERTY value (index-aligned to the metaobject) BEFORE the
     // mutation; emitChangedNotifyProperties() fires the NOTIFY of each property
-    // whose value changed and returns whether any fired.
+    // whose value changed and returns whether any fired. One added
+    // precondition since the theme-fallback colours: the four resolved
+    // QColor properties are palette-derived, so the snapshot/compare span
+    // must stay synchronous — an event-loop spin between the two calls could
+    // let a palette change masquerade as (or mask) a store mutation.
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
 
@@ -2070,6 +2090,13 @@ private:
     // palette-change NOTIFY fan-out; surfaced through
     // isAnnouncingPaletteChange(). Never true outside that synchronous window.
     bool m_announcingPaletteChange = false;
+
+    // The last-announced resolved values of the four theme-fallback zone
+    // colours (Highlight, Inactive, Border, LabelFont — in that order),
+    // seeded by trackSystemPaletteChanges(). eventFilter() compares against
+    // these so an ApplicationPaletteChange that moved no relevant role stays
+    // silent instead of re-running the aggregate consumers.
+    std::array<QColor, 4> m_paletteBaseline{};
 
     static QString normalizeUuidString(const QString& uuidStr);
 
