@@ -147,6 +147,10 @@ QVariantList ruleTemplates()
                      PhosphorI18n::tr("Keep one application's windows floating instead of tiled. The windows stay "
                                       "managed, so they can still be dragged into a zone."),
                      QLatin1String("window-restore")));
+    out.append(entry(QLatin1String("noZoneRestoreApp"), PhosphorI18n::tr("Don't restore an app to its zone"),
+                     PhosphorI18n::tr("Let one application's windows reopen wherever they like instead of returning "
+                                      "to their previous zone. Every other window keeps restoring."),
+                     QLatin1String("window-restore")));
     out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from placement"),
                      PhosphorI18n::tr("Keep one application's windows out of tiling, snapping, and scrolling. "
                                       "Borders, decoration packs, and animations still apply."),
@@ -261,6 +265,19 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         // actually want (media players, calculators, launcher popups).
         RuleAction action;
         action.type = QString::fromLatin1(ActionType::Float);
+        rule.actions.append(action);
+    } else if (templateId == QLatin1String("noZoneRestoreApp")) {
+        rule.name = PhosphorI18n::tr("Don't restore an app to its zone");
+        rule.priority = kApplicationBandBase;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
+        // The per-window veto of the "Restore windows to their previous zone"
+        // setting (discussion #889's ask: restore everything except a browser
+        // whose zone habit is wrong more often than right). Seeded FALSE — the
+        // template exists to opt an app OUT, and the action's own default
+        // seed is the generic opt-out too.
+        RuleAction action;
+        action.type = QString::fromLatin1(ActionType::SetRestoreToZoneOnLogin);
+        action.params.insert(ActionParam::Value, false);
         rule.actions.append(action);
     } else if (templateId == QLatin1String("excludeApp")) {
         // The id predates the ExcludePlacement retarget and is not persisted

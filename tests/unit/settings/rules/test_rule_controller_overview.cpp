@@ -778,6 +778,23 @@ void TestRuleControllerOverview::templatesProduceSeededRules()
     QCOMPARE(undecorateActions.at(0).toMap().value(QStringLiteral("type")).toString(),
              QStringLiteral("excludeDecorations"));
 
+    // `noZoneRestoreApp` is the per-app veto of the zone-restore setting
+    // (discussion #889): Application subject + a single SetRestoreToZoneOnLogin
+    // action seeded FALSE. The seeded value is the contract — the template
+    // exists to opt an app OUT, so a dropped or inverted seed would author a
+    // rule that silently changes nothing.
+    const QVariantMap noRestoreRule = controller.newRuleFromTemplate(QStringLiteral("noZoneRestoreApp"));
+    QCOMPARE(noRestoreRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("appId"));
+    const QVariantList noRestoreActions = noRestoreRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(noRestoreActions.size(), 1);
+    QCOMPARE(noRestoreActions.at(0).toMap().value(QStringLiteral("type")).toString(),
+             QStringLiteral("setRestoreToZoneOnLogin"));
+    // The key must be PRESENT with an explicit false — QVariant().toBool()
+    // also reads false, so pin presence first.
+    QVERIFY(noRestoreActions.at(0).toMap().contains(QStringLiteral("value")));
+    QCOMPARE(noRestoreActions.at(0).toMap().value(QStringLiteral("value")).toBool(), false);
+
     // `excludeSmallFromAnimations` showcases the new Width numeric match field:
     // a `Width LessThan 300` leaf + a single terminal ExcludeAnimations action.
     // Regression here means the quick-start that demonstrates the new fields is

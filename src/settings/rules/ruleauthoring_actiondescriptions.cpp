@@ -94,8 +94,9 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SetRestoreToZoneOnLogin) {
         return PhosphorI18n::tr(
-            "Controls whether a matching window returns to its remembered zone on login, "
-            "overriding the global setting.");
+            "Controls whether a matching window returns to its previous zone when it reopens, during the session or "
+            "after a logout. Overrides the Restore windows to their previous zone setting, so an app like a browser "
+            "can be left out while every other window still restores.");
     }
     if (type == ActionType::SetRestoreSizeOnUnsnap) {
         return PhosphorI18n::tr(

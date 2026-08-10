@@ -2051,6 +2051,11 @@
         <translation>Hoekradius (px)</translation>
     </message>
     <message>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="303"/>
+        <source>Return the window to its previous zone when it reopens (off = don&apos;t restore)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="340"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="403"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="382"/>
@@ -2364,11 +2369,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="303"/>
-        <source>Restore to zone on login (off = don&apos;t restore)</source>
-        <translation>Herstellen naar zone bij aanmelden (uit = niet herstellen)</translation>
-    </message>
-    <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="306"/>
         <source>Restore size on unsnap (off = keep zone size)</source>
         <translation>Grootte herstellen bij losklikken (uit = zonegrootte behouden)</translation>
@@ -2523,7 +2523,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="585"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="893"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="900"/>
         <source>Open in a tabbed column</source>
         <translation>Openen in een tabbladkolom</translation>
     </message>
@@ -2534,7 +2534,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="591"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="898"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="905"/>
         <source>Open maximized</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2545,13 +2545,13 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="597"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="909"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="916"/>
         <source>Open in fullscreen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="603"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="915"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="922"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="636"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="864"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="239"/>
@@ -2573,7 +2573,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="612"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="918"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="925"/>
         <source>Hide the tab indicator for a single tab</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2639,7 +2639,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="653"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="927"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="934"/>
         <source>Show the drop indicator</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2685,7 +2685,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="684"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="868"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="875"/>
         <source>Lock layout</source>
         <translation>Indeling vergrendelen</translation>
     </message>
@@ -2707,61 +2707,72 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="717"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="861"/>
-        <source>Fall back to a zone on unfloat</source>
+        <source>Restore to previous zone</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="723"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="868"/>
+        <source>Fall back to a zone on unfloat</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="729"/>
         <source>Set scroll speed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="726"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="732"/>
         <source>Show on-screen displays</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="782"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="788"/>
         <source>Exclude from decorations</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="862"/>
+        <source>Don&apos;t restore to previous zone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="869"/>
         <source>Stay floating when no zone is remembered</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="888"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="895"/>
         <source>Show on-screen displays here</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="888"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="895"/>
         <source>Hide on-screen displays here</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="898"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="905"/>
         <source>Open at the default width</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="903"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="910"/>
         <source>Focus the window when it opens</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="904"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="911"/>
         <source>Keep focus where it was when it opens</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="909"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="916"/>
         <source>Block fullscreen at open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="927"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="934"/>
         <source>Hide the drop indicator</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2777,106 +2788,100 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="708"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="852"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="858"/>
         <source>Restore position on login</source>
         <translation>Positie herstellen bij aanmelden</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="711"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="855"/>
-        <source>Restore to zone on login</source>
-        <translation>Herstellen naar zone bij aanmelden</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="720"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="726"/>
         <source>Set window layer</source>
         <translation>Vensterlaag instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="729"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="735"/>
         <source>Override animation shader</source>
         <translation>Animatieshader overschrijven</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="732"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="738"/>
         <source>Override decoration packs</source>
         <translation>Decoratiepakketten overschrijven</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="735"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="741"/>
         <source>Override animation duration</source>
         <translation>Animatieduur overschrijven</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="738"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="744"/>
         <source>Override animation curve</source>
         <translation>Animatiecurve overschrijven</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="741"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="747"/>
         <source>Set opacity</source>
         <translation>Dekking instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="744"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="750"/>
         <source>Set overlay shader</source>
         <translation>Overlay-shader instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="747"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="753"/>
         <source>Set overlay style</source>
         <translation>Overlay-stijl instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="750"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="756"/>
         <source>Set overlay highlight color</source>
         <translation>Overlay-markeringskleur instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="753"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="759"/>
         <source>Set overlay inactive color</source>
         <translation>Inactieve overlay-kleur instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="756"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="762"/>
         <source>Set overlay border color</source>
         <translation>Overlay-randkleur instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="759"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="765"/>
         <source>Set overlay active opacity</source>
         <translation>Actieve overlay-dekking instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="762"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="768"/>
         <source>Set overlay inactive opacity</source>
         <translation>Inactieve overlay-dekking instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="765"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="771"/>
         <source>Set overlay border width</source>
         <translation>Overlay-randbreedte instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="768"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="774"/>
         <source>Set overlay corner radius</source>
         <translation>Overlay-hoekradius instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="771"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="883"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="777"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="890"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="439"/>
         <source>Show zone numbers</source>
         <translation>Zonenummers tonen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="774"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="780"/>
         <source>Exclude from animations</source>
         <translation>Uitsluiten van animaties</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="790"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="865"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="796"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="872"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="448"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="499"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="505"/>
@@ -2884,116 +2889,116 @@
         <translation>Titelbalken verbergen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="793"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="874"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="799"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="881"/>
         <source>Show border</source>
         <translation>Rand tonen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="796"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="802"/>
         <source>Set border width</source>
         <translation>Randbreedte instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="799"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="805"/>
         <source>Set corner radius</source>
         <translation>Hoekradius instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="802"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="808"/>
         <source>Set focused border color</source>
         <translation>Randkleur bij focus instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="805"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="811"/>
         <source>Set unfocused border color</source>
         <translation>Randkleur zonder focus instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="808"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="877"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="814"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="884"/>
         <source>Show opacity and tint</source>
         <translation>Dekking en tint tonen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="811"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="817"/>
         <source>Set tint strength</source>
         <translation>Tintsterkte instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="814"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="820"/>
         <source>Set tint color</source>
         <translation>Tintkleur instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="817"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="823"/>
         <source>Set inner gap</source>
         <translation>Binnenste tussenruimte instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="820"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="826"/>
         <source>Set outer gap</source>
         <translation>Buitenste tussenruimte instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="823"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="829"/>
         <source>Use per-side outer gaps</source>
         <translation>Buitenste tussenruimten per zijde gebruiken</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="826"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="832"/>
         <source>Set top gap</source>
         <translation>Bovenste tussenruimte instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="829"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="835"/>
         <source>Set bottom gap</source>
         <translation>Onderste tussenruimte instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="832"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="838"/>
         <source>Set left gap</source>
         <translation>Linkertussenruimte instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="835"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="841"/>
         <source>Set right gap</source>
         <translation>Rechtertussenruimte instellen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="838"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="844"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="383"/>
         <source>Open on monitor</source>
         <translation>Openen op scherm</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="841"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="847"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="388"/>
         <source>Open on desktop</source>
         <translation>Openen op bureaublad</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="893"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="900"/>
         <source>Open in a normal column</source>
         <translation>Openen in een normale kolom</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="915"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="922"/>
         <source>Hide the tab indicator</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="919"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="926"/>
         <source>Show the tab indicator for a single tab</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="922"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="929"/>
         <source>Tab indicator inside the column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="923"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="930"/>
         <source>Tab indicator beside the column</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3687,22 +3692,17 @@
         <translation>Onder andere vensters</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="855"/>
-        <source>Don&apos;t restore to zone on login</source>
-        <translation>Niet herstellen naar zone bij aanmelden</translation>
-    </message>
-    <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="858"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="865"/>
         <source>Keep zone size on unsnap</source>
         <translation>Zonegrootte behouden bij losklikken</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="877"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="884"/>
         <source>Hide opacity and tint</source>
         <translation>Dekking en tint verbergen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="883"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="890"/>
         <source>Hide zone numbers</source>
         <translation>Zonenummers verbergen</translation>
     </message>
@@ -3894,32 +3894,32 @@
         <translation>Overlay-shader: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="852"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="858"/>
         <source>Don&apos;t restore position on login</source>
         <translation>Positie niet herstellen bij aanmelden</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="865"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="872"/>
         <source>Show title bars</source>
         <translation>Titelbalken tonen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="868"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="875"/>
         <source>Don&apos;t lock layout</source>
         <translation>Indeling niet vergrendelen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="871"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="878"/>
         <source>Assign default layout</source>
         <translation>Standaardindeling toewijzen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="871"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="878"/>
         <source>Don&apos;t assign default layout</source>
         <translation>Standaardindeling niet toewijzen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="874"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="881"/>
         <source>Hide border</source>
         <translation>Rand verbergen</translation>
     </message>
@@ -3962,14 +3962,14 @@
         <translation>Buitenste tussenruimte: %1 px</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="880"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="887"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="511"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/GapsSettingsCard.qml.cpp" line="108"/>
         <source>Per-side outer gaps</source>
         <translation>Aparte buitenste tussenruimte per zijde</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="880"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="887"/>
         <source>Uniform outer gap</source>
         <translation>Uniforme buitenste tussenruimte</translation>
     </message>
@@ -4761,7 +4761,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="140"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="237"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="241"/>
         <source>Open an app in a zone</source>
         <translation>Een app in een zone openen</translation>
     </message>
@@ -4772,7 +4772,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="143"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="248"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="252"/>
         <source>Open an app on a monitor</source>
         <translation>Een app op een scherm openen</translation>
     </message>
@@ -4783,7 +4783,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="146"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="256"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="260"/>
         <source>Float an app</source>
         <translation>Een app laten zweven</translation>
     </message>
@@ -4793,65 +4793,76 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="150"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="270"/>
+        <source>Don&apos;t restore an app to its zone</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/settings/rules/ruletemplates.cpp" line="151"/>
+        <source>Let one application&apos;s windows reopen wherever they like instead of returning to their previous zone. Every other window keeps restoring.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="155"/>
         <source>Keep one application&apos;s windows out of tiling, snapping, and scrolling. Borders, decoration packs, and animations still apply.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="150"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="269"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="154"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="286"/>
         <source>Exclude an app from placement</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="158"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="291"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="162"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="308"/>
         <source>Don&apos;t animate small windows</source>
         <translation>Kleine vensters niet animeren</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="155"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="159"/>
         <source>Turn off borders and decoration packs for one application&apos;s windows. Tiling, snapping, scrolling, and animations still apply.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="154"/>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="281"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="158"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="298"/>
         <source>Remove decorations from an app</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="159"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="163"/>
         <source>Skip open and close animations for windows narrower than a chosen width. Handy for tiny popups and tool windows.</source>
         <translation>Sla open- en sluitanimaties over voor vensters die smaller zijn dan een gekozen breedte. Handig voor kleine pop-ups en hulpvensters.</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="172"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="176"/>
         <source>Snapping layout on monitor</source>
         <translation>Vastklikindeling op scherm</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="179"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="183"/>
         <source>Tiling algorithm on monitor</source>
         <translation>Tegelalgoritme op scherm</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="194"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="198"/>
         <source>Scrolling mode on monitor</source>
         <translation>Scrollmodus op scherm</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="208"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="212"/>
         <source>Lock layout on monitor</source>
         <translation>Indeling op scherm vergrendelen</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="219"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="223"/>
         <source>Snapping layout on virtual desktop</source>
         <translation>Vastklikindeling op virtueel bureaublad</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruletemplates.cpp" line="229"/>
+        <location filename="../src/settings/rules/ruletemplates.cpp" line="233"/>
         <source>Layout for portrait monitors</source>
         <translation>Indeling voor staande schermen</translation>
     </message>
@@ -7647,8 +7658,8 @@
         <translation>Bureaublad gewisseld</translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="714"/>
-        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="858"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="720"/>
+        <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="865"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="555"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="956"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowHandlingCard.qml.cpp" line="71"/>
@@ -19575,477 +19586,477 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="31"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="32"/>
         <source>Assigns a snapping layout to the matched screen, desktop or activity.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="34"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="35"/>
         <source>Assigns a tiling algorithm to the matched screen, desktop or activity.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="37"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="38"/>
         <source>Assigns a scrolling column template to the matched screen, desktop or activity.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="40"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="41"/>
         <source>Turns the named engine off for the matched screen, desktop or activity.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="43"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="44"/>
         <source>Locks the active layout for the matched context so it cannot be switched.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="46"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="47"/>
         <source>Allows or suppresses the automatic default layout for the matched context. Off means no engine activates there until you assign one yourself.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="50"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="52"/>
         <source>Shows or hides on-screen displays for the matched screen, desktop or activity. Off silences the layout and navigation popups there. On shows them even when the global toggles are off, though the None display style still hides everything.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="56"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="59"/>
         <source>Keeps matching windows out of PlasmaZones entirely. No placement, no decorations.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="59"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="62"/>
         <source>Keeps matching windows out of snapping, tiling and scrolling while their decorations and animations still apply.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="63"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="67"/>
         <source>Turns off every PlasmaZones animation for matching windows.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="66"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
         <source>Turns off PlasmaZones borders and decoration packs for matching windows. Placement and animations are untouched.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="70"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="75"/>
         <source>Opens matching windows floating instead of placing them. A floated window can still be snapped or tiled by hand later.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="74"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="80"/>
         <source>Snaps matching windows into the given zone numbers when they open. Several numbers span their combined area.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="78"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="85"/>
         <source>Moves matching windows to a chosen monitor when they open.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="81"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="88"/>
         <source>Moves matching windows to a chosen virtual desktop when they open.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="84"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="91"/>
         <source>Controls whether a matching floated window returns to its remembered position and monitor on login, overriding the global setting.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="88"/>
-        <source>Controls whether a matching window returns to its remembered zone on login, overriding the global setting.</source>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="96"/>
+        <source>Controls whether a matching window returns to its previous zone when it reopens, during the session or after a logout. Overrides the Restore windows to their previous zone setting, so an app like a browser can be left out while every other window still restores.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="92"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="102"/>
         <source>Controls whether a matching window gets its original size back when unsnapped, overriding the global setting.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="96"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="107"/>
         <source>When a matching floating window is unfloated without a remembered zone, places it into a zone anyway. Overrides the global fallback setting for this window.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="100"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="112"/>
         <source>Keeps matching windows above or below other windows, for example floating windows above tiled ones when paired with the Floating condition.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="105"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="118"/>
         <source>Sets the width a matching window&apos;s column opens at on a scrolling screen.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="108"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="121"/>
         <source>Sets the height a matching window takes inside its column when it opens.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="111"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="124"/>
         <source>Opens a matching window&apos;s column tabbed, or forces it normal where the default is tabbed.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="115"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="129"/>
         <source>Chooses whether a matching window opens its own column or joins the focused one.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="118"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="132"/>
         <source>Opens matching windows maximized so their column fills the whole screen when they first appear.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="122"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="137"/>
         <source>Gives matching windows keyboard focus as soon as they open, or keeps focus where it was when set to off.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="126"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="142"/>
         <source>Opens matching windows in fullscreen mode. Off stops apps from starting in fullscreen on their own.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="130"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="147"/>
         <source>Multiplies mouse wheel and touchpad scrolling speed inside matching windows. Below 1 slows it down and above 1 speeds it up. Works in Wayland sessions.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="135"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="153"/>
         <source>Uses a different animation shader for one event on matching windows. An empty choice turns that event&apos;s shader off for them.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="139"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="158"/>
         <source>Uses a different animation duration for one event on matching windows.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="142"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="161"/>
         <source>Uses a different easing curve for one event on matching windows.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="145"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="164"/>
         <source>Replaces the decoration packs drawn on matching windows. An empty list removes their decorations.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="149"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="169"/>
         <source>Dims matching windows to the given opacity. Takes effect only while the opacity and tint layer is on for the window, from the global setting or a Show opacity tint rule, and custom decoration chains dim through their own pack parameters instead.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="154"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="175"/>
         <source>Turns the opacity and tint layer on or off for matching windows. The Set opacity and tint rules need this layer on to have any effect.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="158"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="180"/>
         <source>Sets how strongly the tint colors matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="162"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="185"/>
         <source>Sets the tint color for matching windows. Takes effect only while the opacity and tint layer is on for the window.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="167"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="191"/>
         <source>Hides the title bar on matching windows, or forces it visible where a mode would hide it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="171"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="196"/>
         <source>Shows or hides the PlasmaZones border on matching windows.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="174"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="199"/>
         <source>Sets the border thickness on matching windows.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="177"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="202"/>
         <source>Sets the border corner radius on matching windows.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="180"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="205"/>
         <source>Sets the border color for matching windows while they are focused.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="183"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="208"/>
         <source>Sets the border color for matching windows while they are not focused.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="187"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="212"/>
         <source>Uses a different zone overlay shader for the matched screen, desktop or activity.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="190"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="215"/>
         <source>Switches the zone overlay between zone rectangles and the layout preview for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="194"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="220"/>
         <source>Sets the highlighted zone color of the overlay for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="197"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="223"/>
         <source>Sets the inactive zone color of the overlay for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="200"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="226"/>
         <source>Sets the zone border color of the overlay for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="203"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="229"/>
         <source>Sets the highlighted zone opacity of the overlay for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="206"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="232"/>
         <source>Sets the inactive zone opacity of the overlay for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="209"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="235"/>
         <source>Sets the zone border thickness of the overlay for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="212"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="238"/>
         <source>Sets the zone corner radius of the overlay for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="215"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="241"/>
         <source>Shows or hides the zone numbers on the overlay for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="219"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="245"/>
         <source>Sets the gap between zones for the matched screen, desktop or activity.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="222"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="248"/>
         <source>Sets the uniform gap around the screen edge for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="225"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="251"/>
         <source>Switches the matched context between one uniform outer gap and per-side outer gaps.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="228"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="254"/>
         <source>Sets the top outer gap for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="231"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="257"/>
         <source>Sets the bottom outer gap for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="234"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="260"/>
         <source>Sets the left outer gap for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="237"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="263"/>
         <source>Sets the right outer gap for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="241"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="267"/>
         <source>Caps how many windows the tiling algorithm arranges on the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="244"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="270"/>
         <source>Sets the master area split ratio for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="247"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="273"/>
         <source>Sets how many windows the master area holds for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="250"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="276"/>
         <source>Chooses where newly opened windows enter the tiling stack for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="253"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="279"/>
         <source>Chooses what happens to windows past the cap for the matched context. Float them, or ignore the cap.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="257"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="284"/>
         <source>Chooses whether dragging a tiled window floats it out or swaps it within the stack for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="261"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="289"/>
         <source>Overrides a tiling algorithm&apos;s own parameters for the matched context. Applies only while that algorithm is active there.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="266"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="295"/>
         <source>Sets the width newly opened columns take on the matched scrolling context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="269"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="298"/>
         <source>Chooses when the scrolling view re-centers on the focused column for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="273"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="303"/>
         <source>Chooses whether new columns open side by side or tabbed on the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="276"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="306"/>
         <source>Chooses where a new window&apos;s column enters the strip for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="279"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="309"/>
         <source>Sets the height newly opened windows take inside their column for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="284"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="315"/>
         <source>Shows or hides the tab indicator on tabbed columns for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="287"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="318"/>
         <source>Switches the tab indicator between a segment bar and titled chips for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="291"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="323"/>
         <source>Chooses which column edge the tab indicator runs along for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="294"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="326"/>
         <source>Hides the tab indicator when a tabbed column holds only one window, for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="298"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="331"/>
         <source>Reserves the tab indicator&apos;s space inside the column instead of drawing beside it, for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="302"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="336"/>
         <source>Sets the gap between the tab indicator and the window for the matched context. A negative gap draws it over the window.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="306"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="341"/>
         <source>Sets the tab indicator&apos;s thickness for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="309"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="344"/>
         <source>Sets how much of the column edge the tab indicator spans for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="312"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="347"/>
         <source>Sets the gap between individual tabs for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="315"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="350"/>
         <source>Sets the corner radius of each tab for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="318"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="353"/>
         <source>Sets the active tab color for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="321"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="356"/>
         <source>Sets the inactive tab color for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="324"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="359"/>
         <source>Sets the color of a tab whose window asks for attention, for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="327"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="362"/>
         <source>Recolors a matching window&apos;s own tab while it is the active one.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="330"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="365"/>
         <source>Recolors a matching window&apos;s own tab while another tab is active.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="333"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="368"/>
         <source>Recolors a matching window&apos;s own tab while it asks for attention.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="337"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="372"/>
         <source>Shows or hides the drop indicator during drag re-inserts for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="340"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="375"/>
         <source>Sets the drop indicator&apos;s fill color for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="343"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="378"/>
         <source>Sets the drop indicator&apos;s border color for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="346"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="381"/>
         <source>Sets the drop indicator&apos;s fill opacity for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="349"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="384"/>
         <source>Sets the drop indicator&apos;s border thickness for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="352"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="387"/>
         <source>Sets the drop indicator&apos;s corner radius for the matched context.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="355"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="390"/>
         <source>Recolors the drop indicator&apos;s fill while a matching window is being dragged.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="358"/>
+        <location filename="../src/settings/rules/ruleauthoring_actiondescriptions.cpp" line="393"/>
         <source>Recolors the drop indicator&apos;s border while a matching window is being dragged.</source>
         <translation type="unfinished"></translation>
     </message>

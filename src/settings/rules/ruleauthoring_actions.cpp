@@ -300,7 +300,7 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Restore position on login (off = don't restore)");
     }
     if (type == ActionType::SetRestoreToZoneOnLogin && key == ActionParam::Value) {
-        return PhosphorI18n::tr("Restore to zone on login (off = don't restore)");
+        return PhosphorI18n::tr("Return the window to its previous zone when it reopens (off = don't restore)");
     }
     if (type == ActionType::SetRestoreSizeOnUnsnap && key == ActionParam::Value) {
         return PhosphorI18n::tr("Restore size on unsnap (off = keep zone size)");
@@ -708,7 +708,13 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Restore position on login");
     }
     if (type == ActionType::SetRestoreToZoneOnLogin) {
-        return PhosphorI18n::tr("Restore to zone on login");
+        // Named after the setting it overrides ("Restore windows to their
+        // previous zone"), not the wire id: the gate fires on every reopen,
+        // during the session and after a logout, so "on login" undersold it
+        // and hid the rule from anyone searching by the setting's name
+        // (discussion #889 asked for exactly this control, not knowing it
+        // shipped under the old label).
+        return PhosphorI18n::tr("Restore to previous zone");
     }
     if (type == ActionType::SetRestoreSizeOnUnsnap) {
         return PhosphorI18n::tr("Restore size on unsnap");
@@ -852,7 +858,7 @@ QString boolActionStateLabel(const QString& type, bool on)
         return on ? PhosphorI18n::tr("Restore position on login") : PhosphorI18n::tr("Don't restore position on login");
     }
     if (type == ActionType::SetRestoreToZoneOnLogin) {
-        return on ? PhosphorI18n::tr("Restore to zone on login") : PhosphorI18n::tr("Don't restore to zone on login");
+        return on ? PhosphorI18n::tr("Restore to previous zone") : PhosphorI18n::tr("Don't restore to previous zone");
     }
     if (type == ActionType::SetRestoreSizeOnUnsnap) {
         return on ? PhosphorI18n::tr("Restore size on unsnap") : PhosphorI18n::tr("Keep zone size on unsnap");
