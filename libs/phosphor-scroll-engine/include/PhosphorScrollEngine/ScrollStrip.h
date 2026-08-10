@@ -255,6 +255,18 @@ public:
     /// Toggle the active column between Normal and Tabbed presentation.
     bool toggleActiveColumnTabbed();
 
+    /// Toggle windowed fullscreen on the active tile of the active column.
+    /// Layout-neutral: the tile keeps its column slot; the flag only rides
+    /// the apply payload so the compositor flips the client's fullscreen
+    /// state. Returns false when there is no active tile.
+    bool toggleActiveWindowedFullscreen();
+    /// Direct flag write for @p windowId (any tile, not just the active
+    /// one) — compositor-driven reconciliation clears through this, and the
+    /// mode-round-trip restore path re-applies stashed flags through it.
+    /// Returns false for an unknown window or an unchanged flag.
+    bool setWindowedFullscreen(const QString& windowId, bool on);
+    bool isWindowedFullscreen(const QString& windowId) const;
+
     /// Direct height-intent write for @p windowId (any tile, not just the
     /// active one) — the mode-round-trip restore path re-applies stashed
     /// heights through this. Returns false for an unknown window or an

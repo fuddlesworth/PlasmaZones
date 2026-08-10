@@ -1573,6 +1573,16 @@ private:
     void performToggleFloat(PhosphorTiles::TilingState* state, const QString& windowId, const QString& screenId);
 
     /**
+     * @brief toggleWindowFloat body with a caller-supplied failure action.
+     *
+     * The failure token is per-verb (the scroll engine keeps the same
+     * convention): a "Restore" press on an untracked window must report
+     * action "restore", not "float". The public toggleWindowFloat override
+     * delegates with "float"; restoreFocusedWindow with "restore".
+     */
+    void toggleWindowFloatAs(const QString& rawWindowId, const QString& screenId, const QString& failureAction);
+
+    /**
      * @brief Get PhosphorTiles::TilingState for a window by looking up its screen
      *
      * Consolidates the common pattern of m_states lookup + state resolution.

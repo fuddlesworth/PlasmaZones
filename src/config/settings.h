@@ -537,6 +537,8 @@ public:
                    setScrollingCenterColumnShortcut NOTIFY scrollingCenterColumnShortcutChanged)
     Q_PROPERTY(QString scrollingToggleColumnTabbedShortcut READ scrollingToggleColumnTabbedShortcut WRITE
                    setScrollingToggleColumnTabbedShortcut NOTIFY scrollingToggleColumnTabbedShortcutChanged)
+    Q_PROPERTY(QString scrollingToggleWindowedFullscreenShortcut READ scrollingToggleWindowedFullscreenShortcut WRITE
+                   setScrollingToggleWindowedFullscreenShortcut NOTIFY scrollingToggleWindowedFullscreenShortcutChanged)
     Q_PROPERTY(QString scrollingCycleColumnWidthShortcut READ scrollingCycleColumnWidthShortcut WRITE
                    setScrollingCycleColumnWidthShortcut NOTIFY scrollingCycleColumnWidthShortcutChanged)
     Q_PROPERTY(QString scrollingCycleColumnWidthBackShortcut READ scrollingCycleColumnWidthBackShortcut WRITE
@@ -1340,6 +1342,8 @@ public:
     void setScrollingCenterColumnShortcut(const QString& shortcut);
     QString scrollingToggleColumnTabbedShortcut() const;
     void setScrollingToggleColumnTabbedShortcut(const QString& shortcut);
+    QString scrollingToggleWindowedFullscreenShortcut() const;
+    void setScrollingToggleWindowedFullscreenShortcut(const QString& shortcut);
     QString scrollingCycleColumnWidthShortcut() const;
     void setScrollingCycleColumnWidthShortcut(const QString& shortcut);
     QString scrollingCycleColumnWidthBackShortcut() const;

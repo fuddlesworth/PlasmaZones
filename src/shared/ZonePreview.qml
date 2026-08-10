@@ -167,7 +167,13 @@ Item {
                 anchors.centerIn: parent
                 // Use actual zoneNumber from data if available, otherwise fall back to index + 1
                 text: modelData.zoneNumber !== undefined ? modelData.zoneNumber : (index + 1)
-                font.pixelSize: Math.min(parent.width, parent.height) * 0.4 * root.fontSizeScale
+                // Clamped against the zone box: labelFontSizeScale reaches
+                // 3.0, and unclamped the glyph box would be 1.2x the zone's
+                // shorter side — the numbers spill over neighbouring zones,
+                // worst in fixed-size hosts (the OSD's preview does not grow
+                // with the font scale). 0.6 keeps the digit inside the box
+                // with breathing room at every scale.
+                font.pixelSize: Math.min(Math.min(parent.width, parent.height) * 0.4 * root.fontSizeScale, Math.min(parent.width, parent.height) * 0.6)
                 font.weight: root.fontWeight
                 font.italic: root.fontItalic
                 font.underline: root.fontUnderline

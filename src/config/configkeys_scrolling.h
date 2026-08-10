@@ -41,6 +41,7 @@ public:
     P_CONFIG_KEY(centerColumnKey, "CenterColumn")
     P_CONFIG_KEY(centerVisibleColumnsKey, "CenterVisibleColumns")
     P_CONFIG_KEY(toggleColumnTabbedKey, "ToggleColumnTabbed")
+    P_CONFIG_KEY(toggleWindowedFullscreenKey, "ToggleWindowedFullscreen")
     P_CONFIG_KEY(cycleColumnWidthKey, "CycleColumnWidth")
     P_CONFIG_KEY(cycleColumnWidthBackKey, "CycleColumnWidthBack")
     P_CONFIG_KEY(increaseColumnWidthKey, "IncreaseColumnWidth")

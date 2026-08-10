@@ -33,15 +33,26 @@
  *  9. scrollingScreensChanged is gated on an actual change: the engine
  *     re-announces an identical set on every desktop switch, and a wire
  *     consumer comparing successive payloads must not see a phantom one.
- * 10. clearEngine leaves every slot answering safely AND stops relaying.
- * 11. The four absolute setters share focusColumn's ownership gate, refuse
+ * 10. clearEngine leaves every slot answering safely AND stops relaying,
+ *     and it drops the recorded tab-indicator surfaces.
+ * 11. setScrollTabSurface publishes, retracts and replays per screen, and
+ *     rejects an empty screen id.
+ * 12. The scrollingScreens property never emits PropertiesChanged (change
+ *     traffic rides the dedicated signal only).
+ * 13. clearWindowedFullscreen refuses an empty id, an unknown window and an
+ *     unflagged tile as silent no-ops, and clears a genuinely flagged tile
+ *     exactly once (placementChanged discriminates: every refusal returns
+ *     before emitting). The null-engine arm rides item 10's clearEngine
+ *     sweep like every other slot.
+ * 14. reapplyWindowGeometry refuses an empty and an unknown id silently,
+ *     and its evict makes a rect-stable relayout re-emit — with a control
+ *     first proving that same relayout is silent WITHOUT the evict. Its
+ *     null-engine arm rides the item 10 sweep too.
+ * 15. The four absolute setters share focusColumn's ownership gate, refuse
  *     out-of-range and non-finite values silently (inclusive at both bounds),
  *     and write the intent kind each form documents — width proportion
  *     exact, width/height px Fixed, height proportion a Preset anchor that
  *     relayout snaps to the height vocabulary.
- * 12. The tab-surface registry publishes, replaces, retracts and replays
- *     per screen, and the scrollingScreens property never reaches
- *     PropertiesChanged (the real-bus probe at the tail).
  */
 
 #include <QTest>
@@ -254,11 +265,12 @@ private Q_SLOTS:
         }
         QVERIFY2(stackedFailures.isEmpty(), qPrintable(stackedFailures.join(QStringLiteral("; "))));
 
-        // Against the ENGINE's numbers, not against the payload's own index.
-        // The adaptor relays VisibleTile::zoneNumber, so comparing each entry
-        // with the tile at the same position is what pins that it relays the
-        // engine's numbering rather than re-deriving one; the ordinals-are-1-
-        // and-2 claim below is the engine's contract, asserted separately.
+        // Cross-check against the ENGINE's numbers. Under this fixture it is
+        // redundant with collectRectMismatches' own tail (the engine stamps
+        // 1..N contiguously by construction, so a re-deriving adaptor would
+        // pass both) — kept as a cheap alignment pin, not as proof the
+        // adaptor relays rather than re-derives; no legal fixture can
+        // distinguish those while visibleTiles numbers contiguously.
         for (int i = 0; i < stackedArr.size(); ++i) {
             QCOMPARE(stackedArr.at(i).toObject().value(QLatin1String("zoneNumber")).toInt(-1),
                      stackedTiles.at(i).zoneNumber);
@@ -597,6 +609,8 @@ private Q_SLOTS:
         m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 640);
         m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.5);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a")); // must not crash
+        m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a")); // must not crash
     }
 
     // clearEngine also DISCONNECTS: the engine outlives the adaptor's
@@ -704,6 +718,71 @@ private Q_SLOTS:
 
         QCOMPARE(m_propertiesChangedCount, 0);
         bus.unregisterObject(path);
+    }
+
+    // clearWindowedFullscreen's wire-boundary policy: every refusal (empty
+    // id, unknown window, unflagged tile) is a silent no-op, and a genuine
+    // clear reaches the strip. placementChanged discriminates — the engine
+    // returns before emitting on every refusal path, and emits on success.
+    void testClearWindowedFullscreen_gatesAndClears()
+    {
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("DP-1"));
+        m_engine->toggleWindowedFullscreen(QStringLiteral("DP-1"));
+
+        QSignalSpy placement(m_engine, &PhosphorEngine::PlacementEngineBase::placementChanged);
+
+        m_adaptor->clearWindowedFullscreen(QString()); // empty id
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("nobody|9")); // unknown window
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("app|b")); // tracked but unflagged
+        QCOMPARE(placement.count(), 0);
+
+        // Positive control: the flagged tile clears, once — a second call
+        // finds the flag already down and refuses silently again.
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a"));
+        QCOMPARE(placement.count(), 1);
+        m_adaptor->clearWindowedFullscreen(QStringLiteral("app|a"));
+        QCOMPARE(placement.count(), 1);
+    }
+
+    // reapplyWindowGeometry shares clearWindowedFullscreen's wire-boundary
+    // policy, and its whole point is defeating the emit-on-change gate: a
+    // relayout whose rects never moved is normally silent, and the evict
+    // must make that same relayout re-emit the batch (the compositor moved
+    // the window behind the engine's back, so the gate's memory is stale).
+    void testReapplyWindowGeometry_gatesAndReemits()
+    {
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+
+        QSignalSpy tiled(m_engine, &ScrollEngine::windowsTiled);
+
+        m_adaptor->reapplyWindowGeometry(QString()); // empty id
+        m_adaptor->reapplyWindowGeometry(QStringLiteral("nobody|9")); // unknown window
+        QCOMPARE(tiled.count(), 0);
+
+        // Silent control FIRST: a plain relayout with unchanged rects emits
+        // nothing, so the re-emission below is attributable to the evicted
+        // gate memory and not to the relayout itself.
+        m_engine->retile(QStringLiteral("DP-1"));
+        QCOMPARE(tiled.count(), 0);
+
+        // Positive case: nothing in the strip moved, so only the evicted
+        // gate memory explains the re-emission — and the batch must actually
+        // CONTAIN the re-applied window (a count alone would pass a
+        // regression that evicted the memory but emitted an unrelated
+        // batch).
+        m_adaptor->reapplyWindowGeometry(QStringLiteral("app|a"));
+        QCOMPARE(tiled.count(), 1);
+        bool sawA = false;
+        const QJsonArray reBatch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : reBatch) {
+            if (v.toObject().value(QLatin1String("windowId")).toString() == QLatin1String("app|a")) {
+                sawA = true;
+            }
+        }
+        QVERIFY2(sawA, "the re-emitted batch must carry the re-applied window");
     }
 
 public Q_SLOTS:

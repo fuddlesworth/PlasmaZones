@@ -1294,9 +1294,11 @@ private:
     bool m_scrollTabEnrichmentPending = false;
 
     /// One screen's last-applied assignment state: the resolved assignment
-    /// id. (The KCM apply's template-only OSD gate does NOT read this — it
-    /// keys on m_lastAnnouncedTemplateByScreen below; a resolved-template
-    /// field once rode along here for that purpose but was never read.)
+    /// id. (A resolved templateId used to ride along "for the KCM apply's
+    /// template-only OSD gate", but that gate keys on
+    /// m_lastAnnouncedTemplateByScreen and re-resolves the template itself —
+    /// the snapshot field was write-only dead state costing a
+    /// scrollingTemplateForContext resolve per screen per diff.)
     struct ActiveAssignmentSnapshot
     {
         QString assignmentId;

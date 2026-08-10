@@ -88,7 +88,7 @@ private Q_SLOTS:
     void minHeightClampStaysInBudget();
     void centeringPolicySurvivesCollapseAndConsume();
     void takeWindowLeavesFocusPolicyAlone();
-    void onOverflowIgnoresShiftedPrevIdxOnRemoval();
+    void leftOfActiveRemovalHoldsTheActiveColumnStill();
     void onOverflowAnchorsLeftOfActiveInsertAgainstTheShiftedPrevIdx();
     void firstInsertAnchorsAtTheStripHead();
     void centerVisibleColumnsCentersTheSpanAndFallsBack();
@@ -1095,38 +1095,73 @@ void TestScrollStripOps::takeWindowLeavesFocusPolicyAlone()
     QVERIFY(activeRect.x() != (centerParams.workArea.width() - activeRect.width()) / 2);
 }
 
-void TestScrollStripOps::onOverflowIgnoresShiftedPrevIdxOnRemoval()
+void TestScrollStripOps::leftOfActiveRemovalHoldsTheActiveColumnStill()
 {
-    // removeWindowInternal's prevIdx fixup pin, on a path where the
-    // refocus reanchor genuinely RUNS: closing a wide column left of the
-    // active one shifts the strip so far that the keep-stationary anchor
-    // goes negative and reanchorAfterFocusChange is consulted. The fixup
-    // makes prevIdx track the active column itself (so the OnOverflow
-    // entering-edge test is skipped and Never-policy pins the column to
-    // the left edge); an UNADJUSTED prevIdx names the RIGHT neighbour d,
-    // and with c+gap+d overflowing the work area the stale index would
-    // wrongly center c instead.
+    // niri parity ("A column to the left was removed; preserve the current
+    // position"): closing a column LEFT of the active one holds the active
+    // column pixel-stationary — the anchor is kept, so the left-side
+    // survivors slide right to close the gap while the column the user is
+    // looking at never moves. The pre-parity behaviour re-derived the
+    // anchor from the old viewX, sliding the WHOLE visible strip left; in
+    // this scenario that landed c at the left edge (x == 0), so the two
+    // contracts are cleanly told apart.
     auto params = defaultParams();
     params.centerFocusedColumn = CenterFocusedColumn::OnOverflow;
-    ScrollStrip strip;
-    QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.9), ColumnDisplay::Normal, params));
-    QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeProportion(0.3), ColumnDisplay::Normal, params));
-    QVERIFY(strip.insertWindow(QStringLiteral("c"), ColumnWidth::makeProportion(0.3), ColumnDisplay::Normal, params));
-    QVERIFY(strip.insertWindow(QStringLiteral("d"), ColumnWidth::makeProportion(0.8), ColumnDisplay::Normal, params));
-    // Arrive at c from b (b+gap+c fits, so the focus itself cannot center
-    // — a centered starting anchor would blur the two outcomes).
-    QVERIFY(strip.focusColumn(1, params));
-    QVERIFY(strip.focusColumn(2, params));
+    {
+        // Wide surviving left neighbour: the kept anchor needs no clamp, so
+        // the active column is EXACTLY stationary. The pre-parity slide
+        // landed c at x == 0 here, so the contracts cannot be confused.
+        ScrollStrip strip;
+        QVERIFY(
+            strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.9), ColumnDisplay::Normal, params));
+        QVERIFY(
+            strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeProportion(0.7), ColumnDisplay::Normal, params));
+        QVERIFY(
+            strip.insertWindow(QStringLiteral("c"), ColumnWidth::makeProportion(0.3), ColumnDisplay::Normal, params));
+        QVERIFY(
+            strip.insertWindow(QStringLiteral("d"), ColumnWidth::makeProportion(0.8), ColumnDisplay::Normal, params));
+        QVERIFY(strip.focusColumn(1, params));
+        QVERIFY(strip.focusColumn(2, params));
 
-    QVERIFY(strip.removeWindow(QStringLiteral("a"), params));
-    const ResolvedStrip after = strip.relayout(params);
-    const QRect cAfter = rectOf(after, QStringLiteral("c"));
-    QVERIFY(resolveContains(after, QStringLiteral("c")));
-    // Never-policy left-edge pin; the stale-prevIdx failure mode is the
-    // OnOverflow centering at (workW - cWidth) / 2.
-    // (x == 0 already excludes the OnOverflow centering, which would land
-    // at (workW - width) / 2.)
-    QCOMPARE(cAfter.x(), 0);
+        const ResolvedStrip before = strip.relayout(params);
+        const QRect cBefore = rectOf(before, QStringLiteral("c"));
+        const QRect bBefore = rectOf(before, QStringLiteral("b"));
+        QVERIFY(cBefore.x() != 0); // the discriminator needs a non-edge start
+
+        QVERIFY(strip.removeWindow(QStringLiteral("a"), params));
+        const ResolvedStrip after = strip.relayout(params);
+        QVERIFY(resolveContains(after, QStringLiteral("c")));
+        // The active column holds its exact screen position, and its left
+        // neighbour keeps its relative offset.
+        QCOMPARE(rectOf(after, QStringLiteral("c")), cBefore);
+        QCOMPARE(rectOf(after, QStringLiteral("b")).x(), bBefore.x());
+    }
+    {
+        // Narrow surviving left neighbour: the surviving strip left of c is
+        // narrower than c's old screen offset, so the left-edge rule (never
+        // expose space left of the first column) clamps the kept anchor —
+        // the active column moves only as far left as that rule requires,
+        // landing at the surviving left strip's width, never at the edge.
+        ScrollStrip strip;
+        QVERIFY(
+            strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.9), ColumnDisplay::Normal, params));
+        QVERIFY(
+            strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeProportion(0.3), ColumnDisplay::Normal, params));
+        QVERIFY(
+            strip.insertWindow(QStringLiteral("c"), ColumnWidth::makeProportion(0.3), ColumnDisplay::Normal, params));
+        QVERIFY(strip.focusColumn(1, params));
+        QVERIFY(strip.focusColumn(2, params));
+
+        const ResolvedStrip before = strip.relayout(params);
+        const QRect bBefore = rectOf(before, QStringLiteral("b"));
+        QVERIFY(rectOf(before, QStringLiteral("c")).x() > bBefore.width() + params.gap);
+
+        QVERIFY(strip.removeWindow(QStringLiteral("a"), params));
+        const ResolvedStrip after = strip.relayout(params);
+        QVERIFY(resolveContains(after, QStringLiteral("c")));
+        QCOMPARE(rectOf(after, QStringLiteral("b")).x(), 0);
+        QCOMPARE(rectOf(after, QStringLiteral("c")).x(), bBefore.width() + params.gap);
+    }
 }
 
 void TestScrollStripOps::onOverflowAnchorsLeftOfActiveInsertAgainstTheShiftedPrevIdx()

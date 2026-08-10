@@ -372,6 +372,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingCenterColumnShortcut)
         REGISTER_CONCRETE_STRING("scrollingToggleColumnTabbedShortcut", scrollingToggleColumnTabbedShortcut,
                                  setScrollingToggleColumnTabbedShortcut)
+        REGISTER_CONCRETE_STRING("scrollingToggleWindowedFullscreenShortcut", scrollingToggleWindowedFullscreenShortcut,
+                                 setScrollingToggleWindowedFullscreenShortcut)
         REGISTER_CONCRETE_STRING("scrollingCycleColumnWidthShortcut", scrollingCycleColumnWidthShortcut,
                                  setScrollingCycleColumnWidthShortcut)
         REGISTER_CONCRETE_STRING("scrollingCycleColumnWidthBackShortcut", scrollingCycleColumnWidthBackShortcut,

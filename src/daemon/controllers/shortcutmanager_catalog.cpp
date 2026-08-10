@@ -52,7 +52,8 @@ using namespace ShortcutIds;
 //    span quad and the empty-zone push
 //  - "autotile" for the master-stack ops, hard no-ops off autotile
 //  - "scrolling" for column/strip ops (consume/expel, column widths, tab
-//    display), hard no-ops off scrolling
+//    display, the windowed-fullscreen presentation toggle), hard no-ops off
+//    scrolling
 //  - "layouts" is a CAPABILITY tag, not a mode name: rows shown whenever
 //    the bound screen's engine consumes user-selectable layouts
 //    (IPlacementEngine::layoutSupport, pushed to the sheet as
@@ -272,6 +273,11 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the focused column sits centered on the screen."));
         add(kIdScrollToggleColumnTabbed, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Switches the focused column between stacked windows and tabs."));
+        add(kIdScrollToggleWindowedFullscreen, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Puts the focused window into its fullscreen presentation while it keeps its "
+                              "place in the column, so it does not cover the screen. Press again to leave "
+                              "it."));
         add(kIdScrollCycleColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"),
             QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the screen's width presets."));

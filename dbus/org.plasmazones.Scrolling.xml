@@ -6,7 +6,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
 -->
 <node>
     <interface name="org.plasmazones.Scrolling">
-        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen). This interface carries the scrolling screen set, the strip snapshot the settings app renders as its preview surface, and future columnar operations."/>
+        <annotation name="org.gtk.GDBus.DocString" value="Scroll-engine-specific surface. Window lifecycle and tile-request traffic for scrolling screens rides org.plasmazones.Tiling (the shared tiling-family pipeline, which routes per screen). This interface carries the scrolling screen set, the strip snapshot the settings app renders as its preview surface, the wheel-driven focusColumn verb, the clearWindowedFullscreen reconciliation call the KWin effect sends when a client leaves fullscreen on its own, and the reapplyWindowGeometry repair call it sends on a fullscreen exit whose strip rects never moved."/>
 
         <property name="scrollingScreens" type="as" access="read">
             <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine, sorted, matching the ordering of the scrollingScreensChanged payload so a consumer can compare the two for the same set. The KWin effect uses it as the discriminator that stamps Mode 'scrolling' rather than 'tiling' in window rule queries, but it does not answer from this raw set: it intersects it at read time with the engine-managed union published on org.plasmazones.Tiling, because the two sets arrive as independent signals with no ordering guarantee and this one can transiently name a screen the union has already dropped. Changes are announced on the scrollingScreensChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
@@ -59,6 +59,20 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="px" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Height in pixels, 100 to 10000."/>
+            </arg>
+        </method>
+
+        <method name="clearWindowedFullscreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Drops a window's windowed-fullscreen flag. Called by the KWin effect when a windowed-fullscreen client leaves fullscreen on its own, so the strip's flag follows reality. Silent no-op for an unknown window or one whose flag is not set."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window whose flag to clear. An empty string is ignored."/>
+            </arg>
+        </method>
+
+        <method name="reapplyWindowGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Re-emits a window's true strip rect. Called by the KWin effect when the compositor moved the window behind the engine's back (KWin restores a fullscreen-exiting window to its pre-fullscreen rect one client round-trip after the strip already placed it, and the engine's emit-on-change gate would otherwise stay silent forever). The engine evicts the window's emit-gate memory and relayouts its screen so the next batch re-carries the rect. Silent no-op for an unknown window."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to re-emit. An empty string is ignored."/>
             </arg>
         </method>
 

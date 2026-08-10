@@ -69,14 +69,22 @@ QStringList ScrollingAdaptor::scrollingScreens() const
 
 void ScrollingAdaptor::setScrollTabSurface(const QString& screenId, quint32 surfaceId)
 {
-    // No engine gate, and a deliberate opt-out from the emit-on-change rule
-    // for the non-zero path: the producer (the overlay service) already only
-    // calls this on a real change, and re-broadcasting a value the compositor
-    // may have missed is the safe direction for a registration the compositor
-    // cannot re-derive. The zero path IS gated on membership below — a
-    // retraction for a registration that never existed is not a re-broadcast
-    // of anything, just a spurious event on the wire.
-    if (screenId.isEmpty()) {
+    // No engine POINTER gate, and a deliberate opt-out from the
+    // emit-on-change rule for the non-zero path: the producer (the overlay
+    // service) already only calls this on a real change, and re-broadcasting
+    // a value the compositor may have missed is the safe direction for a
+    // registration the compositor cannot re-derive. The zero path IS gated
+    // on membership below — a retraction for a registration that never
+    // existed is not a re-broadcast of anything, just a spurious event on
+    // the wire.
+    //
+    // Cleared latch: the overlay connection outlives clearEngine (its
+    // context object is this adaptor), and a push landing after the
+    // terminal clear must not repopulate the registry — the ordinary
+    // late arrival is a surfaceId-0 retraction from the overlay's
+    // destructor-time PreDestroy hooks, but a monitor-hotplug rekey in the
+    // same window could carry a non-zero id.
+    if (m_engineCleared || screenId.isEmpty()) {
         return;
     }
     if (surfaceId == 0) {
@@ -177,6 +185,27 @@ void ScrollingAdaptor::setWindowHeightPixels(const QString& screenId, int px)
     m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makeFixed(px), screenId);
 }
 
+void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
+{
+    // Same wire-boundary policy as focusColumn: malformed input is a silent
+    // no-op, and the engine's own lookup rejects an untracked window.
+    if (!m_engine || windowId.isEmpty()) {
+        return;
+    }
+    m_engine->clearWindowedFullscreen(windowId);
+}
+
+void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
+{
+    // Same wire-boundary policy as clearWindowedFullscreen: malformed input
+    // is a silent no-op, and the engine's own lookup rejects an untracked
+    // window.
+    if (!m_engine || windowId.isEmpty()) {
+        return;
+    }
+    m_engine->reapplyWindowGeometry(windowId);
+}
+
 QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
 {
     // isEmpty kept for the same wire-boundary reason as in focusColumn.
@@ -257,12 +286,19 @@ void ScrollingAdaptor::clearEngine()
     // would just mean a detached adaptor whose "last broadcast" memory
     // contradicts every other slot it answers.
     m_lastBroadcastScreens.clear();
-    // The tab-surface registry goes for the same reason, and it is the more
-    // visible half: scrollTabSurfaces() stays a live D-Bus method for the
-    // window between clearEngine and the adaptor's delete, so a peer asking
-    // then would be handed surfaces from a session that no longer exists while
-    // scrollingScreens() answers empty beside it.
+    // The tab-surface registry goes for the same object-state reason — NOT
+    // because a peer could still read it: the bus object was unregistered
+    // (lifecycle.cpp) before clearEngine runs, so scrollTabSurfaces() is
+    // unreachable in the window between here and the adaptor's delete. No
+    // retraction signals are emitted for the cleared entries either (they
+    // would not reach the bus); the overlay service's own PreDestroy hooks
+    // are what announce surface teardown while the session is alive.
     m_scrollTabSurfaces.clear();
+    // Terminal latch: the overlay-service connection that feeds
+    // setScrollTabSurface has the ADAPTOR as its context object, so it
+    // survives this call until the adaptor is deleted — a late push landing
+    // in that gap must not repopulate the registry just cleared.
+    m_engineCleared = true;
 }
 
 } // namespace PlasmaZones

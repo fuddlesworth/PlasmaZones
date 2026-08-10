@@ -339,6 +339,50 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
+    void tileRequestEntry_windowedFullscreenOnFloating_rejected()
+    {
+        // The pair is contradictory (the flag means "keeps its column slot")
+        // and the effect would flip KWin fullscreen state on a free window.
+        // The engine never emits it, so its presence is garbling.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.floating = true;
+        e.windowedFullscreen = true;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("windowedFullscreen")));
+        // On a tiled entry the flag is legal.
+        e.floating = false;
+        e.width = 1920;
+        e.height = 1080;
+        QVERIFY(e.validationError().isEmpty());
+    }
+
+    void tileRequestEntry_windowedFullscreenOnMonocle_rejected()
+    {
+        // Monocle and windowed fullscreen both claim the window's KWin
+        // presentation state, in opposite directions (maximize vs
+        // fullscreen), so a producer emitting both is garbled. Mirrors the
+        // floating pair above.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        e.monocle = true;
+        e.windowedFullscreen = true;
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("windowedFullscreen")));
+        // Discriminating substring: "windowedFullscreen" is shared with the
+        // floating rejection, so also pin which message fired.
+        QVERIFY(err.contains(QStringLiteral("monocle")));
+        // Without the monocle claim the flag is legal.
+        e.monocle = false;
+        QVERIFY(e.validationError().isEmpty());
+    }
+
     // ═════════════════════════════════════════════════════════════════════
     // PhosphorProtocol::BridgeRegistrationResult
     // ═════════════════════════════════════════════════════════════════════

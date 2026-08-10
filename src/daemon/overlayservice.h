@@ -1368,6 +1368,15 @@ private:
                                 QScreen*& outPhysScreen, QRect& screenGeom, qreal& aspectRatio,
                                 QString& outEffectiveScreenId, const QString& screenId = QString());
 
+    /**
+     * @brief Shared show tail for every OSD path (layout, template, disabled,
+     * navigation): size to the screen, map the surface, animate the slot in
+     * and kick the auto-dismiss timer. Callers write their content
+     * properties and the mode string first.
+     */
+    void finishOsdShow(QQuickWindow* window, PhosphorLayer::Surface* surface, QQuickItem* osdSlot,
+                       const QRect& screenGeom);
+
     /// Parameters for @ref createLayerSurface. Defined in
     /// overlayservice_types.h; aliased here so existing nested-name
     /// references keep working.

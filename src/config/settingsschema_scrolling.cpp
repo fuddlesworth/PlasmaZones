@@ -248,7 +248,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     // value and no closed set can express that alongside arbitrary hex.
     schema.groups[CD::scrollingTabIndicatorGroup()] = {
         {CD::enabledKey(), CD::scrollingTabIndicatorEnabled(), QMetaType::Bool},
-        {CD::tabIndicatorStyleKey(),
+        {CD::styleKey(),
          CD::scrollingTabIndicatorStyle(),
          QMetaType::Int,
          {},
@@ -396,13 +396,20 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
 // Called from appendShortcutsSchema so the whole Shortcuts.* family is still
 // declared by one entry point.
 //
-// These 31 chords are bindable via the system Shortcuts KCM, because
-// ShortcutManager registers them like every other action. The settings app has
-// no page for editing the chords themselves. Scrolling does have a Quick
-// Shortcuts page (ScrollingQuickShortcutsPage), but like its Snapping and
-// Tiling siblings that page assigns templates to the numbered quick slots
-// (wire mode 2, staged through the scrolling quick-slot map) rather than
-// editing any of the chords declared below.
+// Every BOUND chord in this group is bindable via the system Shortcuts KCM,
+// because ShortcutManager registers it like every other action. The
+// deliberately UNBOUND defaults (the edge-stop/wrap focus variants and the
+// one-way float verbs) never register — the registry skips empty sequences —
+// so they do not appear in the KCM; binding one means writing its
+// Shortcuts.Scrolling key (config.json or the settings D-Bus surface). No
+// count here on purpose: this family's hand-counts have drifted before, and
+// the parity test that guards the group cannot see a number in a comment.
+//
+// The settings app has no page for editing the chords themselves. Scrolling
+// does have a Quick Shortcuts page (ScrollingQuickShortcutsPage), but like
+// its Snapping and Tiling siblings that page assigns templates to the
+// numbered quick slots (wire mode 2, staged through the scrolling
+// quick-slot map) rather than editing any of the chords declared below.
 
 void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
 {
@@ -418,6 +425,7 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::consumeOrExpelRightKey(), CD::scrollingConsumeOrExpelRightShortcut(), QMetaType::QString},
         {CD::centerColumnKey(), CD::scrollingCenterColumnShortcut(), QMetaType::QString},
         {CD::toggleColumnTabbedKey(), CD::scrollingToggleColumnTabbedShortcut(), QMetaType::QString},
+        {CD::toggleWindowedFullscreenKey(), CD::scrollingToggleWindowedFullscreenShortcut(), QMetaType::QString},
         {CD::cycleColumnWidthKey(), CD::scrollingCycleColumnWidthShortcut(), QMetaType::QString},
         {CD::cycleColumnWidthBackKey(), CD::scrollingCycleColumnWidthBackShortcut(), QMetaType::QString},
         {CD::increaseColumnWidthKey(), CD::scrollingIncreaseColumnWidthShortcut(), QMetaType::QString},

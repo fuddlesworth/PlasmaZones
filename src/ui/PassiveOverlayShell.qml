@@ -211,12 +211,13 @@ Window {
         property bool isTemplate: false
         property bool disabled: false
         property string disabledReason: ""
-        // Overlay glyph for the disabled-style card; the daemon overwrites
-        // it per show (neutral icon for the Scrolling mode announcement).
-        // Fourth copy of this literal: LayoutOsdContent.qml's failureIcon is
-        // the one the card compares against to decide the failure tint, and
-        // src/daemon/overlayservice/osd.cpp writes the same string as its
-        // empty-icon fallback. Change one and change all four (the fourth is daemon/osd.cpp's text-OSD fallback for this same message).
+        // Overlay glyph for the disabled-style card. The card is
+        // refusal-only (overlayservice.h documents the design), so the
+        // daemon restates this same literal per show; the QML default only
+        // covers the never-shown pre-first-write state. One of four copies
+        // of the literal: LayoutOsdContent.qml's default, the write in
+        // src/daemon/overlayservice/osd.cpp, and daemon/osd.cpp's text-OSD
+        // fallback for the same message — change one and change all four.
         property string disabledIcon: "dialog-cancel"
         property bool success: true
         property string action: ""

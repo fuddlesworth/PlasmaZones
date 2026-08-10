@@ -11,7 +11,10 @@
 #include <QDBusArgument>
 #include <QDBusMetaType>
 
-/// D-Bus marshalling for the autotile value types (see AutotileTypes.h).
+/// D-Bus marshalling for the shared tiling-family value types (see
+/// AutotileTypes.h; the file names predate the autotile-to-tiling
+/// generalization and are load-bearing across the build, so only the docs
+/// moved with the split).
 
 namespace PhosphorProtocol {
 

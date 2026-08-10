@@ -5,6 +5,8 @@
 #include "compositor/stripviewanimator.h"
 #include "input_filter.h"
 
+#include "compositor/stripviewanimator.h"
+
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -263,7 +265,13 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // have damaged them is gone).
         m_stripTransition.reset();
         m_stripViewAnimator->reset();
-        KWin::effects->addRepaintFull();
+        // Guarded like repaintSnapRegions: this lambda runs on an arbitrary
+        // later D-Bus dispatch (serviceUnregistered), which can land during
+        // compositor teardown when KWin::effects has been torn down —
+        // unlike the construction-time statements around the connect.
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
         // The tab-indicator surface ids name objects that died with the daemon,
         // and a retraction only ever arrives from a daemon healthy enough to
         // send one — a crash sends nothing. Wayland reuses object ids, so a
@@ -282,6 +290,13 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // arrive to clear the entry. Dropping it here is what lets the next
         // batch, or the next daemon, start from nothing.
         m_scrollVisualPos.clear();
+        // The commanded rects and the min-size cache are per-session scroll
+        // state like everything above: the counter-assert must not re-arm
+        // against a dead session's rects when a new daemon repopulates the
+        // scrolling set, and the min-size cache says "already sent" about a
+        // daemon that no longer holds anything.
+        m_scrollCommandedRects.clear();
+        m_lastReportedMinSize.clear();
         // Same reasoning for the per-screen active-layout map: it is a pure
         // ruleQuery input owned by the dead session, and the
         // invalidateAllRuleCaches below would otherwise re-resolve every
@@ -328,6 +343,11 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         invalidateAllRuleCaches();
         m_decorationManager->restoreAll();
         m_tilingHandler->restoreAllMonocleMaximized();
+        // The daemon that owned the windowed-fullscreen flags is gone; its
+        // restart restores them from the strip blob and re-flags via the
+        // adopt-on-batch arm, so releasing here is safe AND mandatory — a
+        // crashed daemon must not strand clients fullscreen at column rects.
+        m_tilingHandler->restoreAllWindowedFullscreen();
         clearAllDecorations();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
         // `m_decorationExclusionRuleSet`, `m_animationExclusionRuleSet`, or

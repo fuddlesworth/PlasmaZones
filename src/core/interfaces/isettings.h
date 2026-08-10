@@ -870,6 +870,7 @@ Q_SIGNALS:
     void scrollingConsumeOrExpelRightShortcutChanged();
     void scrollingCenterColumnShortcutChanged();
     void scrollingToggleColumnTabbedShortcutChanged();
+    void scrollingToggleWindowedFullscreenShortcutChanged();
     void scrollingCycleColumnWidthShortcutChanged();
     void scrollingCycleColumnWidthBackShortcutChanged();
     void scrollingIncreaseColumnWidthShortcutChanged();

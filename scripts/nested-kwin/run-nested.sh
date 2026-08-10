@@ -15,6 +15,10 @@
 # are global). Genuinely MIXED per-output scale needs a seeded
 # kwinoutputconfig.json in the nested config home instead.
 #
+# Set PZ_NESTED_XWAYLAND to any value to start Xwayland in the nested
+# session (X11 test clients; see the flag site below for how to point a
+# client at the nested display).
+#
 # State (isolated XDG home and env.sh) lives in $PZ_NESTED_DIR (default
 # $XDG_RUNTIME_DIR/pz-nested, private to the user). The daemon's log is
 # the only log file (daemon.sh writes it); the compositor's output stays
@@ -140,6 +144,18 @@ EXTRA_FLAGS=""
 [ -n "$WIDTH" ] && EXTRA_FLAGS="$EXTRA_FLAGS --width $WIDTH"
 [ -n "$HEIGHT" ] && EXTRA_FLAGS="$EXTRA_FLAGS --height $HEIGHT"
 [ -n "$SCALE" ] && EXTRA_FLAGS="$EXTRA_FLAGS --scale $SCALE"
+# Opt-in Xwayland: X11 clients (Proton games are the ones that matter) take
+# different KWin paths for fullscreen geometry, so X11-specific bugs cannot
+# reproduce in a Wayland-only nested session. env.sh cannot carry the X11
+# DISPLAY — it is written before kwin_wayland execs, and the nested
+# Xwayland picks its display number at startup (kwin_wayland usually
+# prints it on this terminal; if not, `ls /tmp/.X11-unix` and pick the
+# socket that appeared). To run an X11 test client: source env.sh, find
+# the display number, then
+#   DISPLAY=:<n> QT_QPA_PLATFORM=xcb <client>
+# (QT_QPA_PLATFORM=xcb alone would connect to the HOST X server and
+# silently test the wrong compositor).
+[ -n "${PZ_NESTED_XWAYLAND:-}" ] && EXTRA_FLAGS="$EXTRA_FLAGS --xwayland"
 
 exec dbus-run-session -- sh -c "
   {

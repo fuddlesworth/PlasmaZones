@@ -19,15 +19,17 @@
  * existing test_dbus_validation pinned the validator's behaviour but
  * never exercised a real producer, so the bug slipped through.
  *
- * This test mirrors the TilingAdaptor::onWindowsTiled parse logic
- * exactly (same field names, same optional flags) so a drift in either
- * producer or consumer that broke round-tripping would fail here too.
+ * This test mirrors TilingAdaptor::relayTileRequestsJson's parse logic
+ * (same field names, same optional flags, same drop gates) so a drift in
+ * either producer or consumer that broke round-tripping would fail here
+ * too.
  */
 
 #include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSet>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -44,12 +46,23 @@ using namespace PhosphorProtocol;
 
 namespace {
 
-/// Mirrors TilingAdaptor::onWindowsTiled's JSON → PhosphorProtocol::TileRequestList parse.
-/// Kept in sync with src/dbus/tilingadaptor/tilingadaptor.cpp so the producer test
-/// exercises the exact same deserialization the D-Bus pipe performs.
+/// Mirrors TilingAdaptor::relayTileRequestsJson's JSON →
+/// PhosphorProtocol::TileRequestList parse. Kept in sync with
+/// src/dbus/tilingadaptor/tilingadaptor.cpp — same field set (including the
+/// v6-v10 additions), same duplicate-windowId and invalid-geometry drop
+/// gates — so the producer test exercises the same deserialization the
+/// D-Bus pipe performs and the validator assertions below actually see the
+/// fields the real relay would carry. Deliberately NOT mirrored: the
+/// validator drop and the visual-position floor check — the cases below
+/// assert validationError() per entry instead (a failing entry fails
+/// loudly), and this producer never emits visual positions. The duplicate
+/// gate here also records the id before validation, unlike the relay's
+/// first-VALID-entry-wins rule; no case emits duplicates, so the
+/// difference is unreachable.
 PhosphorProtocol::TileRequestList parseWindowsTiledJson(const QString& json)
 {
     PhosphorProtocol::TileRequestList requests;
+    QSet<QString> seenWindowIds;
     QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
     if (!doc.isArray()) {
         return requests;
@@ -58,16 +71,34 @@ PhosphorProtocol::TileRequestList parseWindowsTiledJson(const QString& json)
         QJsonObject obj = val.toObject();
         PhosphorProtocol::TileRequestEntry entry;
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
+        if (seenWindowIds.contains(entry.windowId)) {
+            continue;
+        }
         entry.floating = obj.value(QLatin1String("floating")).toBool(false);
         if (!entry.floating) {
             entry.x = obj.value(QLatin1String("x")).toInt();
             entry.y = obj.value(QLatin1String("y")).toInt();
             entry.width = obj.value(QLatin1String("width")).toInt();
             entry.height = obj.value(QLatin1String("height")).toInt();
+            if (entry.width <= 0 || entry.height <= 0) {
+                continue;
+            }
         }
         entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
+        entry.windowedFullscreen = obj.value(QLatin1String("windowedFullscreen")).toBool(false);
+        entry.stacking = obj.value(QLatin1String("stacking")).toString();
+        entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
+        entry.viewDeltaX = obj.value(QLatin1String("viewDeltaX")).toInt(0);
+        const QJsonValue visualXVal = obj.value(QLatin1String("visualX"));
+        const QJsonValue visualYVal = obj.value(QLatin1String("visualY"));
+        if (!entry.floating && visualXVal.isDouble() && visualYVal.isDouble()) {
+            entry.visualX = visualXVal.toInt(0);
+            entry.visualY = visualYVal.toInt(0);
+            entry.hasVisualPos = true;
+        }
+        seenWindowIds.insert(entry.windowId);
         requests.append(entry);
     }
     return requests;

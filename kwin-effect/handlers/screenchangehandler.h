@@ -5,9 +5,7 @@
 
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <QObject>
-#include <QPointer>
 #include <QRect>
-#include <QString>
 #include <QTimer>
 
 namespace KWin {
@@ -94,6 +92,13 @@ public Q_SLOTS:
 
 private:
     void applyScreenGeometryChange();
+    /// Snap-mode only: resolves the daemon's zone-assigned windows (the
+    /// keep-windows-in-zones repair after a resolution change).
+    /// Scroll-managed windows are skipped at APPLY time by the
+    /// isManagedScreen guard (m_managedScreens is the autotile+scrolling
+    /// union), not filtered at the reply boundary; the scrolling
+    /// fullscreen-exit repair goes through Scrolling.reapplyWindowGeometry
+    /// instead (sent from the tiling handler's fullscreen-exit slot).
     void fetchAndApplyWindowGeometries();
     void applyWindowGeometries(const PhosphorProtocol::WindowGeometryList& geometries);
 

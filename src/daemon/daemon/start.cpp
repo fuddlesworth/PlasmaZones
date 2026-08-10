@@ -667,7 +667,7 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     if (m_overlayService && m_overlayService->visibleLayoutCount(screenId) == 0) {
         if (support == LayoutSupport::Templates) {
             qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
-            if (m_settings && m_settings->showNavigationOsd()) {
+            if (m_settings && m_settings->showNavigationOsd() && !shouldSuppressOsd()) {
                 m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
                                                     QString(), QString(), screenId);
             }

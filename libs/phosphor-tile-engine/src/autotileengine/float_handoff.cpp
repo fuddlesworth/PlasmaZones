@@ -91,6 +91,12 @@ void AutotileEngine::toggleFocusedWindowFloat()
 
 void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString& screenId)
 {
+    toggleWindowFloatAs(rawWindowId, screenId, QStringLiteral("float"));
+}
+
+void AutotileEngine::toggleWindowFloatAs(const QString& rawWindowId, const QString& screenId,
+                                         const QString& failureAction)
+{
     if (!warnIfEmptyWindowId(rawWindowId, "toggleWindowFloat")) {
         return;
     }
@@ -101,8 +107,7 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
 
     if (screenId.isEmpty()) {
         qCWarning(PhosphorTileEngine::lcTileEngine) << "toggleWindowFloat: empty screenId for window" << windowId;
-        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_screen"), QString(), QString(),
-                                  QString());
+        Q_EMIT navigationFeedback(false, failureAction, QStringLiteral("no_screen"), QString(), QString(), QString());
         return;
     }
 
@@ -151,8 +156,8 @@ void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString
         // — this path is purely "no-op when the window isn't ours".
         qCWarning(PhosphorTileEngine::lcTileEngine)
             << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
-        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"), QString(),
-                                  QString(), screenId);
+        Q_EMIT navigationFeedback(false, failureAction, QStringLiteral("window_not_tracked"), QString(), QString(),
+                                  screenId);
         return;
     }
 

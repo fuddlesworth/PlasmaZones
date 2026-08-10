@@ -467,7 +467,12 @@ void PlasmaZonesEffect::connectDragTracker()
                         m_dragBypassedForEngine = false;
                         m_dragBypassScreenId.clear();
                         m_dragActivation.detected = false;
-                        if (!m_keyboardGrabbed) {
+                        // KWin::effects guarded: this lambda runs from a
+                        // QDBusPendingCallWatcher reply, which can dispatch
+                        // during compositor teardown when the global is
+                        // already gone (repaintSnapRegions documents the
+                        // same rule for the same reason).
+                        if (!m_keyboardGrabbed && KWin::effects) {
                             KWin::effects->grabKeyboard(this);
                             m_keyboardGrabbed = true;
                         }
@@ -648,6 +653,11 @@ void PlasmaZonesEffect::connectDragTracker()
 
 void PlasmaZonesEffect::connectWindowAndScreenSignals()
 {
+    // KWin::effects derefs here are deliberately unguarded: an Effect is
+    // only ever constructed by a live EffectsHandler, so at ctor-wiring
+    // time the pointer cannot be null. initRenderingAndRegistries' guard is
+    // the historical outlier, kept because its screen loop doubles as a
+    // no-compositor unit-test path.
     // Connect to window lifecycle signals
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &PlasmaZonesEffect::slotWindowAdded);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &PlasmaZonesEffect::slotWindowClosed);
@@ -904,6 +914,14 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             // stranded entry is never READ back (the paint-side probes key
             // on a LIVE window's id), so this is purely bounding the map.
             m_scrollVisualPos.remove(cachedId);
+            // Windowed-fullscreen membership keeps the same backstop pairing
+            // (slotWindowClosed removes it first in every ordering KWin
+            // provides; this bounds the map if that ever changes). The
+            // keep-flag snapshot rides along.
+            m_windowedFullscreenWindows.remove(cachedId);
+            m_windowedFsLayerSnapshots.remove(cachedId);
+            m_lastReportedMinSize.remove(cachedId);
+            m_scrollCommandedRects.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);

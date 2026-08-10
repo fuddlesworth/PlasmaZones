@@ -120,7 +120,12 @@ QString fieldDescription(Field f)
     case Field::IsSticky:
         return PhosphorI18n::tr("Whether the window is shown on all virtual desktops.");
     case Field::IsFullscreen:
-        return PhosphorI18n::tr("Whether the window is fullscreen.");
+        // Two tr() units, not one edited string: the first sentence predates
+        // the clarification and is translated in every shipped locale —
+        // Linguist keys on source text, so folding the addition into it
+        // would orphan all six translations for the whole tooltip.
+        return PhosphorI18n::tr("Whether the window is fullscreen.") + QLatin1Char(' ')
+            + PhosphorI18n::tr("A scrolling window in windowed fullscreen counts as fullscreen here.");
     case Field::IsMinimized:
         return PhosphorI18n::tr("Whether the window is minimized.");
     case Field::IsMaximized:
