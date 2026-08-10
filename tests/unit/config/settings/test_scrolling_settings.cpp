@@ -41,6 +41,8 @@
 #include <QTest>
 #include <QtNumeric>
 
+#include <utility>
+
 #include <PhosphorConfig/Schema.h>
 // For the drop indicator's radius default, which is deliberately the zone
 // overlay's constant rather than a literal.
@@ -239,7 +241,7 @@ private Q_SLOTS:
         // floor is the "fully rounded" sentinel.
         const QString tabGroup = ConfigDefaults::scrollingTabIndicatorGroup();
 
-        const auto* style = findKey(schema, tabGroup, ConfigDefaults::tabIndicatorStyleKey());
+        const auto* style = findKey(schema, tabGroup, ConfigDefaults::styleKey());
         QVERIFY(style && style->validator);
         QCOMPARE(style->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
         QCOMPARE(style->validator(ConfigDefaults::scrollingTabIndicatorStyleBar()).toInt(),
@@ -316,13 +318,30 @@ private Q_SLOTS:
         QCOMPARE(length->validator(0.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMin());
         QCOMPARE(length->validator(5.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMax());
 
-        // The colours carry no validator: EMPTY is the meaningful "follow the
-        // theme" value, and no closed set can express that alongside hex.
-        for (const QString& colorKey :
-             {ConfigDefaults::activeColorKey(), ConfigDefaults::inactiveColorKey(), ConfigDefaults::urgentColorKey()}) {
+        // The colours carry canonicalThemeFallbackColor (not a closed set —
+        // EMPTY is the meaningful "follow the theme" value). Pin the
+        // validator like the drop-indicator loop below does: it is the DISK
+        // path's only guard, and without these compares deleting it from the
+        // schema would leave the suite green while junk reached QML as an
+        // invalid QColor and painted black.
+        const std::pair<QString, QString> colourPins[] = {
+            {ConfigDefaults::activeColorKey(), ConfigDefaults::scrollingTabIndicatorActiveColor()},
+            {ConfigDefaults::inactiveColorKey(), ConfigDefaults::scrollingTabIndicatorInactiveColor()},
+            {ConfigDefaults::urgentColorKey(), ConfigDefaults::scrollingTabIndicatorUrgentColor()},
+        };
+        for (const auto& [colorKey, defaultColour] : colourPins) {
             const auto* color = findKey(schema, tabGroup, colorKey);
             QVERIFY2(color, qPrintable(colorKey));
+            // Pin the schema default to the ConfigDefaults accessor (today
+            // the schema reads the accessor directly, so this only guards
+            // against the entry being replaced with a literal), and
+            // separately pin that it is EMPTY (the "follow the theme" value).
+            QCOMPARE(color->defaultValue.toString(), defaultColour);
             QVERIFY(color->defaultValue.toString().isEmpty());
+            QVERIFY(color->validator);
+            QVERIFY(color->validator(QStringLiteral("not-a-colour")).toString().isEmpty());
+            QVERIFY(color->validator(QString()).toString().isEmpty());
+            QCOMPARE(color->validator(QStringLiteral("#FF3366CC")).toString(), QStringLiteral("#FF3366CC"));
         }
 
         // The old flat Scrolling/TabStripEnabled key is GONE, not aliased: the

@@ -24,8 +24,12 @@ namespace PlasmaZones {
  * Provides D-Bus interface: org.plasmazones.Scrolling
  *
  * The scroll-SPECIFIC wire surface: the scrolling screen set the KWin
- * effect uses as its Mode-stamp discriminator, and the home for future
- * columnar methods. Window lifecycle and tile-request traffic for
+ * effect uses as its Mode-stamp discriminator, the strip-preview snapshot,
+ * the wheel-driven focusColumn verb, the clearWindowedFullscreen
+ * reconciliation call (inbound, effect to daemon, when a client leaves
+ * fullscreen on its own), and the reapplyWindowGeometry repair call
+ * (inbound too, for a fullscreen exit whose strip rects never moved).
+ * Window lifecycle and tile-request traffic for
  * scrolling screens deliberately stays on org.plasmazones.Tiling — the
  * effect keeps ONE engine-managed screen set and one geometry pipeline
  * for both tiling-family engines, and TilingAdaptor routes per screen.
@@ -82,6 +86,33 @@ public Q_SLOTS:
      *              other value is ignored
      */
     void focusColumn(const QString& screenId, int delta);
+
+    /**
+     * @brief Drop a window's windowed-fullscreen flag (compositor reconciliation)
+     *
+     * The KWin effect calls this when a windowed-fullscreen client leaves
+     * fullscreen on its own (the app's in-app toggle), so the strip's flag
+     * follows reality. Silent no-op for an unknown window or one whose
+     * flag is not set, same wire-boundary policy as focusColumn.
+     *
+     * @param windowId Window whose flag to clear; an empty string is ignored
+     */
+    void clearWindowedFullscreen(const QString& windowId);
+
+    /**
+     * @brief Re-emit a window's true strip rect (compositor repair)
+     *
+     * The KWin effect calls this when the compositor moved a window behind
+     * the engine's back (KWin restores a fullscreen-exiting window to its
+     * pre-fullscreen rect one round-trip after the batch). The engine
+     * evicts the window's emit-gate memory and relayouts its screen, so
+     * the next batch re-carries the rect the gate would otherwise keep
+     * silent. Silent no-op for an unknown window, same wire-boundary
+     * policy as focusColumn.
+     *
+     * @param windowId Window to re-emit; an empty string is ignored
+     */
+    void reapplyWindowGeometry(const QString& windowId);
 
     /**
      * @brief The strip as it currently looks on a screen, for previews
@@ -177,6 +208,10 @@ private:
     /// than read back from the overlay service so the replay getter answers
     /// from the same values the signal published.
     QHash<QString, quint32> m_scrollTabSurfaces;
+    /// Terminal latch set by clearEngine(): the overlay-service connection
+    /// feeding setScrollTabSurface survives the clear (its context object is
+    /// this adaptor), and a late push must not repopulate the registry.
+    bool m_engineCleared = false;
 };
 
 } // namespace PlasmaZones

@@ -61,15 +61,11 @@ FloatRestore ScrollEngine::captureDragSlot(const ScrollStrip& strip, const QStri
     const int tileIdx = column.indexOfWindow(windowId);
     if (tileIdx >= 0) {
         slot.height = column.tiles.at(tileIdx).height;
+        slot.windowedFullscreen = column.tiles.at(tileIdx).windowedFullscreen;
     }
     if (column.tiles.size() > 1) {
         slot.tileIndex = tileIdx;
-        for (int i = slot.tileIndex - 1; i >= 0 && slot.stackAnchor.isEmpty(); --i) {
-            slot.stackAnchor = column.tiles.at(i).windowId;
-        }
-        for (int i = slot.tileIndex + 1; i < static_cast<int>(column.tiles.size()) && slot.stackAnchor.isEmpty(); ++i) {
-            slot.stackAnchor = column.tiles.at(i).windowId;
-        }
+        slot.stackAnchor = column.anchorSiblingFor(slot.tileIndex);
     }
     return slot;
 }
@@ -102,6 +98,11 @@ bool ScrollEngine::dragPreviewRestoreSlot(ScrollState* state, const QString& win
         }
         if (slot.column >= 0 || slot.tileIndex >= 0) {
             strip.setWindowHeightIntent(windowId, slot.height);
+            // Same tile-captured gate: an Escape must hand back windowed
+            // fullscreen exactly as it hands back the height intent.
+            if (slot.windowedFullscreen) {
+                strip.setWindowedFullscreen(windowId, true);
+            }
         }
     }
     return inserted;
@@ -306,6 +307,11 @@ void ScrollEngine::commitDragInsertPreview()
             carried.tileIndex = -1;
             carried.stackAnchor.clear();
         }
+        // The float capture's exclusivity invariant (ScrollStashTypes.h):
+        // every m_floatRestore entry carries this false, and a drag-captured
+        // true must not leak in through the degrade arm — a future unfloat
+        // that honoured the field would resurrect fullscreen on a float.
+        carried.windowedFullscreen = false;
         m_floatRestore.insert(p.windowId, carried);
         // Mode marker: this is a scroll-decided float, same as every other
         // float-producing exit (begin removed the marker on the way in).
@@ -317,6 +323,11 @@ void ScrollEngine::commitDragInsertPreview()
         // dies with it — floatWindowInternal drops it for the same reason.
         m_lastAppliedRect.remove(p.windowId);
         m_parkedScrollEdge.remove(p.windowId);
+        // Windowed fullscreen dies with the tile — floatWindowInternal drops
+        // this third memory for the same reason, and this arm was the
+        // exception (a stale true only forces one redundant emit, but the
+        // symmetry is the documented contract).
+        m_lastAppliedWindowedFs.remove(p.windowId);
         m_states.setKeyForWindow(p.windowId, p.targetKey);
         Q_EMIT windowFloatingStateSynced(p.windowId, true, p.targetScreenId);
         Q_EMIT placementChanged(p.targetScreenId);
@@ -331,6 +342,12 @@ void ScrollEngine::commitDragInsertPreview()
         // context default the insert just seeded (same gate as
         // dragPreviewRestoreSlot and unfloatWindowInternal).
         strip.setWindowHeightIntent(p.windowId, p.carried.height);
+        // The drop re-seats the tile, so windowed fullscreen survives the
+        // reorder the same way the height intent does. The float-drop arm
+        // above never reaches here, which is the exclusivity holding.
+        if (p.carried.windowedFullscreen) {
+            strip.setWindowedFullscreen(p.windowId, true);
+        }
     }
     // The dropped window is the one the user is looking at.
     strip.focusWindow(p.windowId, params);
@@ -385,6 +402,12 @@ void ScrollEngine::cancelDragInsertPreview()
                 const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
                 if (dragPreviewRestoreSlot(targetState, p.windowId, p.defensiveSlot, params, p.targetScreenId)) {
                     m_states.setKeyForWindow(p.windowId, p.targetKey);
+                    // Same emit-on-change escape as every other restore arm
+                    // in this function: the restored slot is typically the
+                    // pre-drag rect, so without dropping the memories the
+                    // re-tile emit is suppressed.
+                    m_lastAppliedRect.remove(p.windowId);
+                    m_parkedScrollEdge.remove(p.windowId);
                     applyLayout(p.targetScreenId, false);
                 }
             }
@@ -442,6 +465,19 @@ void ScrollEngine::cancelDragInsertPreview()
             const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
             targetState->strip().insertWindow(p.windowId, p.carried.width, p.carried.display, params,
                                               p.carried.minWidth, p.carried.minHeight, ScrollInsertPosition::Last);
+            // Post-insert stamps, gated exactly like commit's and
+            // dragPreviewRestoreSlot's: for a cross-key TILED drag the
+            // carried slot holds the user's height intent and the
+            // windowed-fullscreen flag, and the bare insert above seeded
+            // the context default height with the flag off. NOT routed
+            // through dragPreviewRestoreSlot — its column index names the
+            // PRIOR screen's slot and would misplace the window here.
+            if (p.carried.column >= 0 || p.carried.tileIndex >= 0) {
+                targetState->strip().setWindowHeightIntent(p.windowId, p.carried.height);
+                if (p.carried.windowedFullscreen) {
+                    targetState->strip().setWindowedFullscreen(p.windowId, true);
+                }
+            }
             m_states.setKeyForWindow(p.windowId, p.targetKey);
             m_lastAppliedRect.remove(p.windowId);
             m_parkedScrollEdge.remove(p.windowId);
@@ -690,9 +726,12 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     if (!inserted) {
         return {};
     }
-    // The same two post-insert stamps commit applies, under the same gates —
-    // both change the resolved geometry, so omitting either would reintroduce
-    // a modelling error by the back door.
+    // The layout-affecting post-insert stamps commit applies, under the same
+    // gates — both change the resolved geometry, so omitting either would
+    // reintroduce a modelling error by the back door. Commit's THIRD stamp
+    // (the windowed-fullscreen re-seat) is deliberately absent: the flag is
+    // layout-neutral and never moves a resolved rect, so the probe has
+    // nothing to mirror for it.
     if (p.carried.minWidth > 0 || p.carried.minHeight > 0) {
         probe.setWindowMinimumSize(p.windowId, p.carried.minWidth, p.carried.minHeight);
     }

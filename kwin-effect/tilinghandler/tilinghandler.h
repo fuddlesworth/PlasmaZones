@@ -28,6 +28,7 @@ class QTimer;
 
 namespace KWin {
 class EffectWindow;
+class Window;
 }
 
 namespace PlasmaZones {
@@ -236,6 +237,37 @@ public:
 
     // Cleanup: unmaximize all monocle-maximized windows (called on daemon loss / effect teardown)
     void restoreAllMonocleMaximized();
+    /// Membership half of the windowed-fullscreen release (hash removal
+    /// only, no compositor call). Split from the state half because the
+    /// demote path needs them on opposite sides of the managed-set write.
+    void forgetWindowedFullscreen(const QString& windowId);
+    /// Compositor half: drop KWin fullscreen state under the suppression
+    /// counter and an own inGeometryApply bracket. Membership-independent.
+    void releaseWindowedFullscreenState(const QString& windowId);
+    /// Hold keep-below on a flagged window (snapshot-once) so KWin's
+    /// active-fullscreen layer promotion cannot stack it above its strip.
+    void applyWindowedFullscreenLayerDemotion(const QString& windowId, KWin::Window* kw);
+    /// Drain the keep-flag snapshot; @p kw may be null for a gone window
+    /// (the snapshot is dropped either way).
+    void restoreWindowedFullscreenLayerDemotion(const QString& windowId, KWin::Window* kw);
+    /// Bulk restore (daemon loss, effect unload, engine disable, and daemon
+    /// BRING-UP — a straight old-to-new daemon handover emits no
+    /// serviceUnregistered edge, so onDaemonReady drains the dead session's
+    /// holds too) — snapshot-and-clear then release each, the
+    /// restoreAllMonocleMaximized shape.
+    void restoreAllWindowedFullscreen();
+    /// Arm the clear-in-flight marker and dispatch Scrolling.
+    /// clearWindowedFullscreen reply-gated: the error arm drops the marker
+    /// so a lost clear (whose flag-off echo will never arrive) cannot latch
+    /// the adopt guard for the session.
+    void dispatchWindowedFullscreenClear(const QString& windowId);
+    /// Shed half of applyFloatCleanup for the WindowTracking float channel
+    /// (PlasmaZonesEffect::slotWindowFloatingChanged), whose floats never
+    /// reach this handler's slot and so never run applyFloatCleanup. Drops
+    /// the windowed-fullscreen hold, the clear-in-flight marker, the
+    /// counter-assert rect, the centering targets and the parked paint hint
+    /// (with damage), and re-drives decorations.
+    void applyPassiveFloatShed(const QString& windowId);
 
     /// Cleanup: drop all autotile tiled-tracking bookkeeping. Physical
     /// title-bar restores are the DecorationManager's job — teardown callers
@@ -274,7 +306,11 @@ public:
     QString scrollTrackedScreenFor(const QString& windowId) const;
 
     /// Cheap gate for callers that want to skip scroll-specific work in a
-    /// session with no scrolling screens at all.
+    /// session with no scrolling screens at all. RAW set, deliberately NOT
+    /// the isScrollingScreen intersection — the clip / input-filter /
+    /// screen-override consumers want the conservative answer, and their
+    /// inner predicates re-derive per-window truth anyway (see the rationale
+    /// on scrollTrackedScreenFor in tilinghandler.cpp).
     bool hasScrollingScreens() const
     {
         return !m_scrollingScreens.isEmpty();
@@ -887,6 +923,13 @@ private:
     /// The generation rejects completions from a countermanded older request.
     /// A re-minimize countermand moves the window back to the active set.
     QHash<QString, quint64> m_unfloatInFlight;
+    /// Windows whose clearWindowedFullscreen is dispatched and unechoed —
+    /// the m_unfloatInFlight idiom for the fullscreen-exit reconcile. A batch
+    /// emitted before the daemon processed the clear can still carry
+    /// flag=true; the adopt arm skips members so it cannot re-fullscreen the
+    /// window against the user's exit, and the first flag-off batch entry
+    /// consumes the marker (a lost clear therefore cannot latch it).
+    QSet<QString> m_windowedFsClearInFlight;
     quint64 m_unfloatRequestGeneration = 0;
     QHash<QString, int> m_unfloatRetryAttempts;
     /// Subset of m_minimizeFloatedWindows claimed at batch-announce time
@@ -936,6 +979,14 @@ private:
     QPointer<KWin::EffectWindow> m_pendingReactivateWindow; ///< re-activate after raise loop (daemon restart)
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
+    /// Suppresses slotWindowFullScreenChanged for the effect's OWN
+    /// setFullScreen calls (windowed fullscreen), mirroring
+    /// m_suppressMaximizeChanged. Load-bearing on the X11/XWayland path,
+    /// where the signal fires synchronously inside setFullScreen. On the
+    /// Wayland path the committed signal arrives a client round-trip later
+    /// with this counter back at 0 — there the hash-membership branches in
+    /// the slot are what protect the tiling state, not this counter.
+    int m_suppressFullScreenChanged = 0;
     // ── Focus follows mouse ──
     // Per-mode pair: m_focusFollowsMouse is the autotile flag
     // (autotileFocusFollowsMouse), m_scrollingFocusFollowsMouse the

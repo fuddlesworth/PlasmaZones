@@ -196,8 +196,14 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       oversized window tiled for the session. Same signature-matched
 //       failure mode as v6-v8: an old effect's four-arg call no longer
 //       matches the widened slot.
-inline constexpr int ApiVersion = 9;
-inline constexpr int MinPeerApiVersion = 9;
+//   v10: TileRequestEntry gained windowedFullscreen (after floating), widening
+//       windowsTileRequested from a(siiiissbbssiiib) to a(siiiissbbbssiiib).
+//       Scrolling windowed fullscreen: the effect flips KWin fullscreen state
+//       on the client while committing the column rect. Mid-struct insertion,
+//       so BOTH the signature and the field order change — same
+//       signature-matched failure mode as v6 through v9.
+inline constexpr int ApiVersion = 10;
+inline constexpr int MinPeerApiVersion = 10;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

@@ -397,7 +397,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         {QStringLiteral("scrolling-tabs"),
          {
              {CD::scrollingTabIndicatorGroup(), CD::enabledKey()},
-             {CD::scrollingTabIndicatorGroup(), CD::tabIndicatorStyleKey()},
+             {CD::scrollingTabIndicatorGroup(), CD::styleKey()},
              {CD::scrollingTabIndicatorGroup(), CD::positionKey()},
              {CD::scrollingTabIndicatorGroup(), CD::hideWhenSingleTabKey()},
              {CD::scrollingTabIndicatorGroup(), CD::placeWithinColumnKey()},

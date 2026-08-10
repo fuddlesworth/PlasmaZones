@@ -130,7 +130,7 @@ Full first-run tour: **[Getting started →](https://phosphor-works.github.io/pl
 
 Full reference — around 85 bindings across core actions, zone movement, snap, layouts, autotile, scrolling, virtual screens, and the editor: **[Keyboard shortcuts →](https://phosphor-works.github.io/plasmazones/shortcuts/)**.
 
-All bindings are rebindable in **System Settings → Shortcuts → PlasmaZones** (KDE) or the PlasmaZones settings app.
+All bindings are rebindable in **System Settings → Shortcuts → PlasmaZones** (KDE). The PlasmaZones settings app rebinds only the layout editor's own shortcuts.
 
 ---
 

@@ -490,9 +490,11 @@ void AutotileEngine::restoreFocusedWindow(const NavigationContext& ctx)
     // tiling layout — toggling its float state achieves exactly that.
     // Same daemon-authoritative routing as toggleFocusedFloat: prefer
     // ctx.windowId over the engine's per-state focusedWindow() tracker.
+    // Routed through the per-verb body so a failure reports action
+    // "restore", matching the scroll engine's convention.
     if (!ctx.windowId.isEmpty()) {
         const QString screenId = ctx.screenId.isEmpty() ? m_activeScreen : ctx.screenId;
-        toggleWindowFloat(ctx.windowId, screenId);
+        toggleWindowFloatAs(ctx.windowId, screenId, QStringLiteral("restore"));
         return;
     }
     toggleFocusedWindowFloat();

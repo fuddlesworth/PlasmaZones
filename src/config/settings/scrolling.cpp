@@ -52,8 +52,12 @@ static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
 // The two COLOUR defaults have no assert here and cannot get one: they return
 // a default-constructed QString, which is not a constant expression, and their
 // agreement rests on the doc comment in isettings.h. That is the whole
-// unasserted set now — the opacity joined the checked ones when it became
-// constexpr.
+// unasserted set in THIS indicator's family — the opacity joined the checked
+// ones when it became constexpr. The three tab-indicator colours are equally
+// unasserted for the same non-constexpr reason; test_scrolling_settings.cpp
+// pins their SCHEMA defaults (via ConfigDefaults) at runtime, while their
+// ISettings-body agreement, like the drop indicator's, rests on the doc
+// comment in isettings.h.
 static_assert(ConfigDefaults::scrollingDropIndicatorEnabled(),
               "ISettings::scrollingDropIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingDropIndicatorOpacity() == 0.25,
@@ -272,13 +276,16 @@ P_STORE_SET_BOOL(setScrollingWheelFocusInverted, scrollingGroup, wheelFocusInver
 // page reset manifest and the rule slots address one subtree. The schema
 // validators own the enum closed sets (validIntOr) and the numeric clamps; the
 // colours are free-form strings whose EMPTY value means "follow the theme", so
-// they deliberately carry no validator.
+// they carry canonicalThemeFallbackColor (empty or QColor-parseable) rather
+// than a closed set — the schema validator is the ONLY guard on the
+// hand-edited-config path, where an unsanitized string would reach QML as an
+// invalid QColor and paint black.
 
 P_STORE_GET(bool, scrollingTabIndicatorEnabled, scrollingTabIndicatorGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingTabIndicatorEnabled, scrollingTabIndicatorGroup, enabledKey,
                  scrollingTabIndicatorEnabledChanged)
 
-P_STORE_GET(int, scrollingTabIndicatorStyle, scrollingTabIndicatorGroup, tabIndicatorStyleKey, int)
+P_STORE_GET(int, scrollingTabIndicatorStyle, scrollingTabIndicatorGroup, styleKey, int)
 
 // Hand-written style setter, the setScrollingDefaultColumnWidthKind shape: one
 // stored Width key serves both styles, and the thickness that suits one is
@@ -294,11 +301,9 @@ P_STORE_GET(int, scrollingTabIndicatorStyle, scrollingTabIndicatorGroup, tabIndi
 // user who set 40 for chips still has 40 after a bar round trip.
 void Settings::setScrollingTabIndicatorStyle(int style)
 {
-    const int before =
-        m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::tabIndicatorStyleKey());
-    m_store->write(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::tabIndicatorStyleKey(), style);
-    const int after =
-        m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::tabIndicatorStyleKey());
+    const int before = m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::styleKey());
+    m_store->write(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::styleKey(), style);
+    const int after = m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::styleKey());
     if (after == before) {
         return;
     }
@@ -368,8 +373,9 @@ P_STORE_SET_STRING(setScrollingTabIndicatorUrgentColor, scrollingTabIndicatorGro
 // The drop-target highlight painted during a drag re-insert. Paint-only: the
 // engine never reads these, it resolves the indicator's rect from the same
 // layout math the drop uses. Like the tab colours above, the colour is a
-// free-form string whose EMPTY value means "follow the theme", so it
-// deliberately carries no validator.
+// free-form string whose EMPTY value means "follow the theme", so it carries
+// canonicalThemeFallbackColor rather than a closed set (the disk path's only
+// guard against a black-painting unparseable string).
 
 P_STORE_GET(bool, scrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey,
@@ -490,6 +496,10 @@ P_STORE_SET_STRING(setScrollingCenterColumnShortcut, shortcutsScrollingGroup, ce
 P_STORE_GET(QString, scrollingToggleColumnTabbedShortcut, shortcutsScrollingGroup, toggleColumnTabbedKey, QString)
 P_STORE_SET_STRING(setScrollingToggleColumnTabbedShortcut, shortcutsScrollingGroup, toggleColumnTabbedKey,
                    scrollingToggleColumnTabbedShortcutChanged)
+P_STORE_GET(QString, scrollingToggleWindowedFullscreenShortcut, shortcutsScrollingGroup, toggleWindowedFullscreenKey,
+            QString)
+P_STORE_SET_STRING(setScrollingToggleWindowedFullscreenShortcut, shortcutsScrollingGroup, toggleWindowedFullscreenKey,
+                   scrollingToggleWindowedFullscreenShortcutChanged)
 P_STORE_GET(QString, scrollingCycleColumnWidthShortcut, shortcutsScrollingGroup, cycleColumnWidthKey, QString)
 P_STORE_SET_STRING(setScrollingCycleColumnWidthShortcut, shortcutsScrollingGroup, cycleColumnWidthKey,
                    scrollingCycleColumnWidthShortcutChanged)

@@ -188,6 +188,13 @@ public Q_SLOTS:
      * startup/restart and mode toggle-on to avoid per-window D-Bus
      * round-trips.
      *
+     * Trusted-peer boundary: batch size is deliberately unbounded on the
+     * panel-ready path (the deferral queue's kMaxPendingOpens is a depth
+     * valve that processes on overflow, never a drop cap), and the numeric
+     * in-args are sign-clamped only. The KWin effect is the sole producer;
+     * a foreign caller can spend daemon CPU proportional to the batch it
+     * sends, nothing more.
+     *
      * @param entries Array of (windowId, screenId, minWidth, minHeight) structs
      */
     void windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList& entries);
@@ -287,9 +294,9 @@ Q_SIGNALS:
      * many windows are retiled (e.g. rotate).
      *
      * @param tileRequests Typed list of TileRequestEntry structs, wire shape
-     *        a(siiiissbbssiiib): (windowId, x, y, width, height, zoneId,
-     *        screenId, monocle, floating, stacking, scrollEdge, viewDeltaX,
-     *        visualX, visualY, hasVisualPos)
+     *        a(siiiissbbbssiiib): (windowId, x, y, width, height, zoneId,
+     *        screenId, monocle, floating, windowedFullscreen, stacking,
+     *        scrollEdge, viewDeltaX, visualX, visualY, hasVisualPos)
      */
     void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
 
@@ -442,6 +449,11 @@ private:
     void dispatchOpenToClaimingEngine(const PhosphorProtocol::WindowOpenedEntry& entry, bool allowPark,
                                       bool allowCrossScreenClaim = true);
     void removeUnclaimedOpen(const QString& windowId);
+    /// The panel-geometry deferral queue's twin of removeUnclaimedOpen —
+    /// every close path calls both, so a window that opens and closes inside
+    /// the startup panel-query window is never dispatched post-mortem at
+    /// panelGeometryReady.
+    void removePendingOpen(const QString& windowId);
 
 public:
     /**

@@ -368,7 +368,14 @@ private:
      *                     so the rejection reason has a single source of truth
      *                     (this function) and cannot drift from the filter.
      */
-    bool shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+    /// exemptFullscreen waives ONLY the structural fullscreen/transientFor
+    /// terms (threaded into isStructurallyUnmanageableWindowType) — every
+    /// other rejection stays authoritative. Opt-in for callers that carry the
+    /// scrolling windowed-fullscreen exemption (isEligibleForTilingNotify);
+    /// the default keeps all other consumers treating a genuinely fullscreen
+    /// window as unmanageable.
+    bool shouldHandleWindow(KWin::EffectWindow* w, QString* rejectReason = nullptr,
+                            bool exemptFullscreen = false) const;
 
     /**
      * @brief Autotile-tree eligibility filter. @see shouldHandleWindow for the
@@ -386,11 +393,24 @@ private:
      * focus-tracking filter and classifyWindowKind(), so they can never drift
      * (discussion #461 item 11).
      *
-     * @param w            window to classify; must be non-null.
-     * @param rejectReason when non-null, set to a human-readable reason on a
-     *                     true return. @see shouldHandleWindow.
+     * The fullscreen term carves out windowed-fullscreen strip members (the
+     * strip keeps tiling them through real KWin fullscreen), and callers can
+     * additionally exempt it wholesale via @p exemptFullscreen — the
+     * activation-reporting path does, for any fullscreen window on a
+     * scrolling screen — WITHOUT bypassing the other terms: a fullscreen
+     * transient/splash/popup stays rejected either way.
+     *
+     * @param w                window to classify; must be non-null.
+     * @param rejectReason     when non-null, set to a human-readable reason on
+     *                         a true return. @see shouldHandleWindow.
+     * @param exemptFullscreen when true, the fullscreen term never fires and
+     *                         the bare transientFor() term is waived too
+     *                         (Wine/Proton toplevels carry transient_for on
+     *                         the real game window); every explicit type
+     *                         term stays authoritative.
      */
-    bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr) const;
+    bool isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason = nullptr,
+                                              bool exemptFullscreen = false) const;
     // Cached placement-exclusion verdict (Exclude ∪ ExcludePlacement slice)
     // consumed by shouldHandleWindow's drag gate. Fast-paths on an empty
     // exclusion slice; otherwise resolves through the exclusion evaluator's
@@ -622,10 +642,14 @@ private:
      * rect is empty. Every candidate — restore rects AND the fallback — passes the
      * off-screen poison guard, so the function can also return an INVALID rect (a frame
      * parked outside every screen by the scrolling engine is never a legitimate free
-     * geometry); callers MUST check isValid() before storing. Shared by the snap and
-     * autotile capture paths, which write the SAME daemon free-geometry store.
+     * geometry). A windowed-fullscreen strip member returns INVALID unconditionally —
+     * its live frame AND its fullscreen restore rect are both tile rects, so it has no
+     * free geometry to offer (which is why this is a const member now, not a static:
+     * the membership check needs the instance). Callers MUST check isValid() before
+     * storing. Shared by the snap and autotile capture paths, which write the SAME
+     * daemon free-geometry store.
      */
-    static QRectF freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback);
+    QRectF freeGeometryForCapture(KWin::EffectWindow* w, const QRectF& fallback) const;
 
     /**
      * @brief Check if a window is floating (full windowId with appId fallback)
@@ -677,7 +701,12 @@ private:
     /// would fall back to position, and a parked scroll column's frame can
     /// sit on a NEIGHBOUR output.
     void notifyWindowClosed(KWin::EffectWindow* w, const QString& preTeardownScreenId);
-    void notifyWindowActivated(KWin::EffectWindow* w);
+    /// Returns false when the window is not a reportable activation target
+    /// (null, own overlay, portal, plasmashell, structurally unmanageable) —
+    /// the daemon-ready gate does NOT count as rejection. The bring-up
+    /// re-seed uses this to fall back to the stacking walk when the raw
+    /// active window is internally rejected; ordinary callers may ignore it.
+    bool notifyWindowActivated(KWin::EffectWindow* w);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
 
     /// The O(1) reverse-cache half of findWindowById, WITHOUT the fuzzy appId fallback.
@@ -1850,23 +1879,30 @@ private:
     /// keepBelowChanged: an instant re-assert would fight the user's own
     /// toggle (the Krohnkite failure mode this feature exists to avoid), so
     /// a manual toggle under an active rule stands until the next natural
-    /// reconcile.
+    /// reconcile. Also NOT applied to windowed-fullscreen strip members: the
+    /// layer demotion owns their keep flags for the hold (see the early
+    /// return in decoration_rules.cpp), so the two flag owners never trade
+    /// writes mid-hold.
     void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
 
     /// The window's OWN keep-above flag — the app/user-set state, with
-    /// rule-written values substituted from the pre-rule snapshot while a
-    /// SetWindowLayer rule owns the window's layer. Consulted by the
+    /// written values substituted from the pre-write snapshot while either
+    /// flag owner (a SetWindowLayer rule, or the windowed-fullscreen layer
+    /// demotion) holds the window's layer; the rule snapshot wins when both
+    /// exist, since only it predates the rule's write. Consulted by the
     /// keep-above overlay-tool gates (shouldHandleWindow / shouldDecorateWindow
     /// / isTileableWindow) and the engine-facing KWinCompositorBridge::windowInfo
     /// export; applyOwnLayerFlags is the query-side counterpart.
     bool windowOwnKeepAbove(KWin::EffectWindow* w) const;
 
-    /// Substitute the pre-rule snapshot's keepAbove/keepBelow pair into
-    /// @p query while a SetWindowLayer rule owns @p windowId's layer, so rule
-    /// output never feeds back into rule input. Shared by ruleQuery (the
-    /// effect's live evaluation path) and pushWindowMetadata (the daemon's
+    /// Substitute the pre-write snapshot's keepAbove/keepBelow pair into
+    /// @p query while either flag owner (a SetWindowLayer rule, or the
+    /// windowed-fullscreen layer demotion) holds @p windowId's layer, so
+    /// neither owner's output feeds back into rule input (rule snapshot
+    /// first when both exist). Shared by ruleQuery (the effect's live
+    /// evaluation path) and pushWindowMetadata (the daemon's
     /// KeepAbove/KeepBelow match inputs) — the one invariant lives in one
-    /// place. No-op with no snapshots (the no-rules case pays one isEmpty).
+    /// place. No-op with no snapshots (the no-rules case pays two isEmpty).
     void applyOwnLayerFlags(PhosphorRules::WindowQuery& query, const QString& windowId) const;
 
     /// Restore every rule-applied window layer to its snapshotted pre-rule
@@ -1981,7 +2017,82 @@ private:
     /// travelling with the rest of the strip instead of vanishing the moment
     /// it leaves the viewport. Absent for every window whose committed rect
     /// already IS its paint position, which is almost all of them.
+    /// DAMAGE CONTRACT: adding, changing or removing an entry moves where
+    /// the paint path draws the window, so every mutation site must either
+    /// pair with addRepaint(Full) or sit on a path whose follow-up geometry
+    /// apply (or membership clear that already stopped the relocation)
+    /// provably damages — the batch writer change-gates and damages, and
+    /// the removers each document which half covers them.
     QHash<QString, QPoint> m_scrollVisualPos;
+    /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
+    /// fullscreen state (set by the effect from the batch flag) while the
+    /// committed rect stays the column slot, stored here as the value. The
+    /// single source for every fullscreen exemption this feature needs — the
+    /// applyWindowGeometry bail, tiling eligibility, and the screen-leave
+    /// demote all consult membership, so it means "this window's fullscreen
+    /// is OURS, keep managing it". The rect exists because KWin re-asserts
+    /// the FullScreenArea when the client's fullscreen ack COMMITS, one
+    /// round-trip after the batch already applied the column rect — the
+    /// committed windowFullScreenChanged signal is where the column rect is
+    /// re-asserted, and by then the batch is long gone. Maintained by
+    /// TilingHandler's batch consumer and windowFullScreenChanged
+    /// reconciliation. Membership is removed by the FORGET helper
+    /// (forgetWindowedFullscreen) and by the direct removals on: close and
+    /// the windowDeleted backstop, both float cleanups (active and passive
+    /// channels), the batch un-flag and deferred-reconcile arms, the
+    /// cross-output transfer, the mode-swap / screen-removal demotes, the
+    /// untile pass, and the bulk drain (restoreAllWindowedFullscreen).
+    /// releaseWindowedFullscreenState removes NOTHING here — it is the
+    /// compositor-state drop only and deliberately never consults this
+    /// hash; every membership removal pairs with a release or a
+    /// layer-demotion restore.
+    QHash<QString, QRect> m_windowedFullscreenWindows;
+    /// Pre-demotion keep-above/keep-below flags for windowed-fullscreen
+    /// windows. The feature holds keep-below on every flagged window because
+    /// KWin's belongsToLayer() promotes an active fullscreen window to the
+    /// ActiveLayer — and KEEPS it there while the active window sits on a
+    /// different output — stacking the tile above its strip neighbours and
+    /// the daemon's overlay surfaces; keep-below is the one input that layer
+    /// resolve consults before the fullscreen promotion. Written by
+    /// TilingHandler::applyWindowedFullscreenLayerDemotion (snapshot-once) and
+    /// drained by its restore counterpart on every un-flag path; entries for
+    /// closing windows are dropped beside the membership removals. Separate
+    /// from m_ruleWindowLayerSnapshots: reconcileRuleWindowLayer skips flagged
+    /// windows entirely, so the two owners never trade flags mid-hold.
+    QHash<QString, WindowLayerSnapshot> m_windowedFsLayerSnapshots;
+    /// Last minimum size reported to the daemon per managed window. KWin
+    /// exposes Window::minSize with no change signal, so the batch consumer
+    /// polls it per applied entry and re-reports through
+    /// Tiling.windowMinSizeUpdated when it moved — clients that set their
+    /// size hints after mapping (Wine games pin theirs to the configured
+    /// resolution once up) otherwise leave the engine modelling a column
+    /// the clamped real frame can never match. Seeded at announce (rolled
+    /// back on a failed BATCH announce; the single-window error arm relies
+    /// on the re-announce re-seeding instead). Dropped on close and the
+    /// deleted backstop, evicted per-window by the min-size discovery leg
+    /// (so the next batch re-asserts the true pair), and cleared wholesale
+    /// on daemon loss AND at onDaemonReady (handover). NOT dropped by
+    /// cleanupAutotileTracking — the re-announce re-seeds it inline.
+    QHash<QString, QSize> m_lastReportedMinSize;
+    /// Per scroll-managed X11 window: the rect the last batch commanded, so
+    /// an EXTERNAL move can be detected and countered. X11 clients can
+    /// reposition themselves through ConfigureRequests KWin honors — a Wine
+    /// game re-asserting its saved window position was seen live undoing
+    /// the strip's parks and straddles (the window crawled back on-screen
+    /// over its neighbour's column, and the engine's emit-on-change gate
+    /// stayed silent because its own rects never moved). Written by the
+    /// batch apply, consumed by TilingHandler::slotWindowFrameGeometryChanged
+    /// (counter-assert RATE-LIMITED to 3 per rolling second, re-armed by
+    /// every fresh batch command — a client that refuses to stay put is
+    /// countered at that ceiling indefinitely, it does not win outright).
+    /// Wayland windows are covered by m_tileTargetZones instead and never
+    /// appear here. Dropped on close, the deleted backstop, float cleanup
+    /// (both channels), the untrack funnel (cleanupAutotileTracking), the
+    /// per-batch disarm when the commit deferred or the fullscreen bail
+    /// fired (load-bearing: it disarms the counter rather than recording a
+    /// drag-time frame), and cleared wholesale on daemon loss and at
+    /// onDaemonReady.
+    QHash<QString, ScrollCommandedRect> m_scrollCommandedRects;
     /// wl_surface object ids of the daemon's scrolling tab-indicator surfaces,
     /// announced over D-Bus. The paint path slides these with the strip so the
     /// indicators travel with the columns they label.

@@ -10,6 +10,7 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 #include <QJsonArray>
@@ -63,6 +64,10 @@ inline QLatin1String kWindowId()
 inline QLatin1String kMinimized()
 {
     return QLatin1String("minimized");
+}
+inline QLatin1String kWindowedFullscreen()
+{
+    return QLatin1String("windowedFullscreen");
 }
 inline QLatin1String kKind()
 {
@@ -184,7 +189,12 @@ QString keyToString(const PhosphorEngine::PlacementStateKey& key)
 
 // Right-anchored parse: activity is the last '|' segment, desktop the one
 // before it, the rest is the screen id (screen ids never contain '|', but
-// anchoring from the right keeps this true even if one ever did).
+// anchoring from the right keeps this true even if one ever did). The
+// ACTIVITY segment shares the assumption from the other side: an activity id
+// containing '|' would shift the desktop segment and fail the numeric
+// parse, dropping that key's stash. KDE activity ids are UUIDs, so none
+// carries one in practice; if that ever changes the parse must left-anchor
+// (screen, then desktop, then activity = remainder) instead.
 bool keyFromString(const QString& s, PhosphorEngine::PlacementStateKey* out)
 {
     const int actSep = s.lastIndexOf(QLatin1Char('|'));
@@ -225,6 +235,7 @@ QJsonObject ScrollEngine::serializeStripState() const
                 t.insert(kWindowId(), tile.windowId);
                 t.insert(kHeight(), heightToJson(tile.height));
                 t.insert(kMinimized(), tile.minimized);
+                t.insert(kWindowedFullscreen(), tile.windowedFullscreen);
                 // PER-TILE lease. A tile still flagged staged-from-persistence
                 // has not been claimed this session, so it ages by one; a
                 // claimed tile (flag cleared, count zeroed) and a fresh
@@ -282,6 +293,16 @@ QJsonObject ScrollEngine::serializeStripState() const
         for (const QString& windowId : floating) {
             liveWindowIds.insert(windowId);
         }
+    }
+    // Reverse-map residue too: a window tracked in neither the strip nor
+    // the floating set (the state the drag/float heal arms exist to repair)
+    // is still LIVE, and a save landing while one exists would let a stale
+    // stash tile naming it survive the prune and be handed to a
+    // cross-session claim — the same hazard the two structural walks above
+    // guard against.
+    const auto& trackedKeys = m_states.windowKeys();
+    for (auto it = trackedKeys.cbegin(); it != trackedKeys.cend(); ++it) {
+        liveWindowIds.insert(it.key());
     }
     // A drag-insert preview's dragged window is DETACHED — in no strip and
     // in no stash — but it is emphatically live, and without this a save
@@ -375,6 +396,15 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
     // it into a second strip.
     QSet<QString> claimedWindowIds;
     for (auto it = state.constBegin(); it != state.constEnd(); ++it) {
+        // Count cap (see enginelimits.h): the numerics below are all
+        // bounded at this boundary; the counts must be too, or a corrupt
+        // blob stages unbounded structure the per-open stash walk then
+        // pays for until the entries age out.
+        if (restored >= kMaxRestoredKeys) {
+            qCWarning(lcScrollEngine) << "restoreStripState: key cap reached (" << kMaxRestoredKeys
+                                      << ") — dropping remaining persisted keys";
+            break;
+        }
         PhosphorEngine::PlacementStateKey key;
         if (!keyFromString(it.key(), &key) || !it.value().isObject()) {
             continue;
@@ -416,6 +446,11 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         stash.viewAnchor = qBound(-1000000, obj.value(kViewAnchor()).toInt(0), 1000000);
         const QJsonArray columns = obj.value(kColumns()).toArray();
         for (const QJsonValue& colVal : columns) {
+            if (stash.columns.size() >= kMaxRestoredColumnsPerKey) {
+                qCWarning(lcScrollEngine) << "restoreStripState: column cap reached for" << it.key() << "("
+                                          << kMaxRestoredColumnsPerKey << ") — dropping the rest";
+                break;
+            }
             if (!colVal.isObject()) {
                 continue;
             }
@@ -427,6 +462,11 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 : ColumnDisplay::Normal;
             const QJsonArray tiles = colObj.value(kTiles()).toArray();
             for (const QJsonValue& tileVal : tiles) {
+                if (col.tiles.size() >= kMaxRestoredTilesPerColumn) {
+                    qCWarning(lcScrollEngine) << "restoreStripState: tile cap reached in a column of" << it.key() << "("
+                                              << kMaxRestoredTilesPerColumn << ") — dropping the rest";
+                    break;
+                }
                 if (!tileVal.isObject()) {
                     continue;
                 }
@@ -435,6 +475,9 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
                 tile.windowId = tileObj.value(kWindowId()).toString();
                 tile.height = heightFromJson(tileObj.value(kHeight()).toObject(), heightVocab);
                 tile.minimized = tileObj.value(kMinimized()).toBool(false);
+                // Additive key: an older blob reads false (version-free
+                // policy above).
+                tile.windowedFullscreen = tileObj.value(kWindowedFullscreen()).toBool(false);
                 // PER-TILE lease, bounded at the system boundary like every
                 // other numeric in this file (persisted config is
                 // user-writable). Absent key reads 0, so an older blob gets a

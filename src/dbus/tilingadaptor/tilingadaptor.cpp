@@ -17,6 +17,8 @@
 #include <QJsonObject>
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <utility>
 
 namespace PlasmaZones {
@@ -97,7 +99,9 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
 
     PhosphorProtocol::TileRequestList requests;
     QSet<QString> seenWindowIds;
-    for (const QJsonValue& val : doc.array()) {
+    bool sawValidatorDrop = false;
+    const QJsonArray batchEntries = doc.array();
+    for (const QJsonValue& val : batchEntries) {
         QJsonObject obj = val.toObject();
         PhosphorProtocol::TileRequestEntry entry;
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
@@ -105,11 +109,13 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // order, so a duplicate would apply twice (last wins) and, with
         // scrollEdge now driving the animation anchor, two entries naming
         // different edges would animate the window in from one side and
-        // re-anchor it to the other. No producer emits duplicates today;
-        // this is boundary hardening. First VALID entry wins: the id is
-        // recorded after the validation bail below, so a malformed first
-        // entry does not consume the window's slot and shut out a good
-        // second one.
+        // re-anchor it to the other — and with windowedFullscreen in the
+        // struct, WHICH duplicate wins now decides KWin fullscreen state on
+        // the client, not just an animation anchor. No producer emits
+        // duplicates today; this is boundary hardening. First VALID entry
+        // wins: the id is recorded after the validation bail below, so a
+        // malformed first entry does not consume the window's slot and shut
+        // out a good second one.
         if (seenWindowIds.contains(entry.windowId)) {
             qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping duplicate entry for" << entry.windowId;
             continue;
@@ -120,14 +126,20 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
             entry.y = obj.value(QLatin1String("y")).toInt();
             entry.width = obj.value(QLatin1String("width")).toInt();
             entry.height = obj.value(QLatin1String("height")).toInt();
-            if (entry.width <= 0 || entry.height <= 0) {
-                qCDebug(lcDbusTiling) << "relayTileRequestsJson: invalid geometry for" << entry.windowId;
-                continue;
-            }
         }
+        // No geometry pre-check here: validationError() below owns the
+        // degenerate-rect rejection for non-floating entries (its coverage
+        // is a strict superset of the old `width <= 0 || height <= 0`
+        // check), and routing the drop through it logs at qCWarning — a
+        // producer emitting a zero rect is producer garbling and a bug
+        // report by this boundary's own policy, not debug noise.
         entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
         entry.screenId = obj.value(QLatin1String("screenId")).toString();
         entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
+        // Scrolling windowed fullscreen. Only meaningful on a tiled entry;
+        // the floating pair is rejected by validationError() below like any
+        // other garbling.
+        entry.windowedFullscreen = obj.value(QLatin1String("windowedFullscreen")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
         // Absent for every non-scrolling producer, and absent within scrolling
@@ -148,24 +160,64 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // that a garbled payload fails closed instead of mispainting.
         const QJsonValue visualXVal = obj.value(QLatin1String("visualX"));
         const QJsonValue visualYVal = obj.value(QLatin1String("visualY"));
+        bool visualPosValid = false;
         if (!entry.floating && visualXVal.isDouble() && visualYVal.isDouble()) {
-            entry.visualX = visualXVal.toInt(0);
-            entry.visualY = visualYVal.toInt(0);
-            entry.hasVisualPos = true;
-        } else if (!visualXVal.isUndefined() || !visualYVal.isUndefined()) {
+            // Integral check by value, not by type: QJsonValue has no
+            // integer predicate (isDouble() answers for every number) and
+            // toInt() returns its DEFAULT for a fractional double — so
+            // without the floor test a 4000.5 would decode to 0 while still
+            // latching the flag, exactly the mispaint the validation above
+            // promises to fail closed on.
+            const double vx = visualXVal.toDouble();
+            const double vy = visualYVal.toDouble();
+            if (vx == std::floor(vx) && vy == std::floor(vy) && std::abs(vx) <= double(std::numeric_limits<int>::max())
+                && std::abs(vy) <= double(std::numeric_limits<int>::max())) {
+                entry.visualX = static_cast<int>(vx);
+                entry.visualY = static_cast<int>(vy);
+                entry.hasVisualPos = true;
+                visualPosValid = true;
+            }
+        }
+        if (!visualPosValid && (!visualXVal.isUndefined() || !visualYVal.isUndefined())) {
             qCDebug(lcDbusTiling) << "relayTileRequestsJson: ignoring malformed visual position for" << entry.windowId;
         }
         // The protocol type ships its own validator (empty windowId /
         // screenId, degenerate rect) — run it rather than re-deriving a
         // subset of its checks here.
         if (const QString validationError = entry.validationError(); !validationError.isEmpty()) {
-            qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping entry:" << validationError;
+            sawValidatorDrop = true;
+            // Warning, not debug: every documented cause of a validator
+            // failure at this boundary is producer garbling, and the drop
+            // silently discards a whole placement — the event is by
+            // construction a bug report, not noise. (The duplicate and
+            // malformed-visual-position drops above stay at debug; both
+            // have documented benign shapes.)
+            qCWarning(lcDbusTiling) << "relayTileRequestsJson: dropping entry:" << validationError;
             continue;
         }
         seenWindowIds.insert(entry.windowId);
         requests.append(entry);
     }
 
+    // A fully-rejected batch must not be indistinguishable from a batch that
+    // was never produced. No partial-count aggregate on purpose: every
+    // non-benign drop already warns individually at its entry, and a count
+    // computed from the array size would fold the BENIGN drops (duplicates
+    // and the malformed-visual-position bail, both deliberately debug-level;
+    // degenerate rects route through validationError and warn like any
+    // other validator drop) into a warning that reads as suppressed errors.
+    // The same reasoning gates the aggregate itself on a validator drop
+    // having occurred: a batch emptied entirely by benign drops is not
+    // suppressed errors either.
+    if (requests.isEmpty() && !batchEntries.isEmpty()) {
+        if (sawValidatorDrop) {
+            qCWarning(lcDbusTiling) << "relayTileRequestsJson: every entry of a" << batchEntries.size()
+                                    << "entry batch was dropped — nothing emitted";
+        } else {
+            qCDebug(lcDbusTiling) << "relayTileRequestsJson: every entry of a" << batchEntries.size()
+                                  << "entry batch was benignly dropped — nothing emitted";
+        }
+    }
     if (!requests.isEmpty()) {
         qCDebug(lcDbusTiling) << "Emitting windowsTileRequested:" << requests.size() << "windows";
         Q_EMIT windowsTileRequested(requests);
@@ -174,6 +226,13 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
 
 void TilingAdaptor::relayWindowsReleased(const QStringList& windowIds)
 {
+    // The one relay with no change gate — every in-tree producer already
+    // gates on a non-empty list, so this belt only keeps a future producer
+    // from putting pure noise on the bus (the XML documents that no
+    // effect-side subscriber exists today).
+    if (windowIds.isEmpty()) {
+        return;
+    }
     Q_EMIT windowsReleasedFromTiling(windowIds);
 }
 
@@ -466,6 +525,20 @@ void TilingAdaptor::removeUnclaimedOpen(const QString& windowId)
     }
 }
 
+void TilingAdaptor::removePendingOpen(const QString& windowId)
+{
+    // The panel-geometry deferral queue's twin of removeUnclaimedOpen: a
+    // window that opens and closes inside the startup panel-query window
+    // (splash screens, quickly-dismissed session-restore dialogs) would
+    // otherwise still be dispatched to an engine at panelGeometryReady — a
+    // queued open for a window already reported closed can never be wanted.
+    for (int i = m_pendingOpens.size() - 1; i >= 0; --i) {
+        if (m_pendingOpens.at(i).windowId == windowId) {
+            m_pendingOpens.removeAt(i);
+        }
+    }
+}
+
 bool TilingAdaptor::deferUntilPanelReady(qsizetype incomingCount)
 {
     // Fast path: panel geometry already known, or no PhosphorScreens::ScreenManager at all (tests
@@ -591,7 +664,18 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         engine->beginArrivalBurst();
     }
+    // Intra-batch duplicate guard, matching the tile-request JSON sibling's:
+    // a peer bug sending one window twice would open it into two contexts,
+    // and the second dispatch is never a legitimate re-announce (those come
+    // as separate calls). Empty ids fall through to dispatchWindowOpened's
+    // own validation.
+    QSet<QString> seenWindowIds;
     for (const auto& entry : entries) {
+        if (!entry.windowId.isEmpty() && seenWindowIds.contains(entry.windowId)) {
+            qCDebug(lcDbusTiling) << "windowsOpenedBatch: dropping duplicate entry for" << entry.windowId;
+            continue;
+        }
+        seenWindowIds.insert(entry.windowId);
         dispatchWindowOpened(entry);
     }
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
@@ -633,6 +717,7 @@ void TilingAdaptor::windowClosed(const QString& windowId)
         m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
     }
     removeUnclaimedOpen(windowId);
+    removePendingOpen(windowId);
     if (!ensurePipeline("windowClosed")) {
         return;
     }
@@ -668,6 +753,7 @@ void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
     // pruneStaleFloatBroadcasts.
     m_lastFloatBroadcast.remove(windowId);
     removeUnclaimedOpen(windowId);
+    removePendingOpen(windowId);
 }
 
 void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
@@ -701,6 +787,7 @@ void TilingAdaptor::releaseWindowTracking(const QString& windowId)
         m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
     }
     removeUnclaimedOpen(windowId);
+    removePendingOpen(windowId);
     if (!ensurePipeline("releaseWindowTracking")) {
         return;
     }

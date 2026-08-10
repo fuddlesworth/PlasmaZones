@@ -1293,17 +1293,15 @@ private:
     /// Set between a scheduleScrollTabEnrichmentRefresh() and its queued run.
     bool m_scrollTabEnrichmentPending = false;
 
-    /// One screen's last-applied assignment state: the resolved assignment id
-    /// plus, for Scrolling contexts, the resolved template layout id (empty
-    /// elsewhere — the template resolver is mode-gated). The template rides
-    /// the snapshot so the KCM apply path can tell a template-only change
-    /// (same sentinel id, different template) from a genuine mode/layout
-    /// switch and skip the mode-switch OSD for it; the diff's CHANGED set
-    /// stays keyed on assignmentId alone (only an id change moves windows).
+    /// One screen's last-applied assignment state: the resolved assignment
+    /// id. (A resolved templateId used to ride along "for the KCM apply's
+    /// template-only OSD gate", but that gate keys on
+    /// m_lastAnnouncedTemplateByScreen and re-resolves the template itself —
+    /// the snapshot field was write-only dead state costing a
+    /// scrollingTemplateForContext resolve per screen per diff.)
     struct ActiveAssignmentSnapshot
     {
         QString assignmentId;
-        QString templateId;
         bool operator==(const ActiveAssignmentSnapshot&) const = default;
     };
     // Last-applied active assignment per effective screen (resolved for that

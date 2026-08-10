@@ -55,6 +55,21 @@ public Q_SLOTS:
 /// Echoes an a{sv} map. Callers that read such a reply with QVariant::toMap()
 /// silently get an empty map, so this object exists to pin the demarshalling
 /// idiom the settings app relies on (getAllQuickLayoutSlots and its peers).
+/// Echoes a SwapTargetResult — the highest-transposition-risk wire struct
+/// (18 fields with two interleaved int quadruples and five trailing
+/// strings): a swap introduced in operator>> alone keeps the signature
+/// valid and passes every signature-only probe.
+class SwapTargetResultEcho : public QObject
+{
+    Q_OBJECT
+
+public Q_SLOTS:
+    PhosphorProtocol::SwapTargetResult echoEntry(const PhosphorProtocol::SwapTargetResult& entry) const
+    {
+        return entry;
+    }
+};
+
 class VariantMapEcho : public QObject
 {
     Q_OBJECT
@@ -188,6 +203,7 @@ private Q_SLOTS:
                                                  QStringLiteral("screen-0"),
                                                  true,
                                                  false,
+                                                 true,
                                                  QStringLiteral("lastOnTop"),
                                                  QStringLiteral("right"),
                                                  -240,
@@ -195,11 +211,20 @@ private Q_SLOTS:
                                                  120,
                                                  true};
 
-        // Verify D-Bus signature: (siiiissbbssiiib) = string + 4 ints + 2
-        // strings + 2 bools + stacking + scrollEdge + viewDeltaX + the visual
-        // position pair and its validity flag
+        // FIELD-ORDER PROBE, not a legal payload: monocle and
+        // windowedFullscreen both true is rejected by validationError()
+        // (disjoint producers). What this fixture pins is the STRUCT's
+        // declaration order via aggregate initialization — the per-field
+        // compares below never cross a marshaller, so wire transposition
+        // coverage lives in the bus round-trip's two payloads instead. Do
+        // not copy this fixture into a validator test.
+        //
+        // Verify D-Bus signature: (siiiissbbbssiiib) = string + 4 ints + 2
+        // strings + 3 bools (monocle, floating, windowedFullscreen) +
+        // stacking + scrollEdge + viewDeltaX + the visual position pair and
+        // its validity flag
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbssiiib)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiib)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
@@ -215,6 +240,7 @@ private Q_SLOTS:
         QCOMPARE(entry.screenId, QStringLiteral("screen-0"));
         QCOMPARE(entry.monocle, true);
         QCOMPARE(entry.floating, false);
+        QCOMPARE(entry.windowedFullscreen, true);
         QCOMPARE(entry.stacking, QStringLiteral("lastOnTop"));
         QCOMPARE(entry.scrollEdge, QStringLiteral("right"));
         QCOMPARE(entry.viewDeltaX, -240);
@@ -227,6 +253,7 @@ private Q_SLOTS:
         QVERIFY(defaultEntry.windowId.isEmpty());
         QCOMPARE(defaultEntry.monocle, false);
         QCOMPARE(defaultEntry.floating, false);
+        QCOMPARE(defaultEntry.windowedFullscreen, false);
         QVERIFY(defaultEntry.stacking.isEmpty());
         QVERIFY(defaultEntry.scrollEdge.isEmpty());
         QCOMPARE(defaultEntry.viewDeltaX, 0);
@@ -253,46 +280,135 @@ private Q_SLOTS:
         const QString path = QStringLiteral("/test/wiretypes/tilerequestecho");
         QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
 
-        const PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"),
-                                                      50,
-                                                      100,
-                                                      640,
-                                                      480,
-                                                      QStringLiteral("{zone-uuid}"),
-                                                      QStringLiteral("screen-0"),
-                                                      true,
-                                                      false,
-                                                      QStringLiteral("lastOnTop"),
-                                                      QStringLiteral("left"),
-                                                      512,
-                                                      -900,
-                                                      64,
-                                                      true};
+        // NOTE: QCOMPARE inside this lambda returns from the LAMBDA, not the
+        // test slot — a payload-A failure still runs payload B. Safe as
+        // written (every early return precedes the argument deref), but do
+        // not add code after a compare that assumes the test aborted.
+        const auto roundTrip = [&bus, &path](const PhosphorProtocol::TileRequestEntry& sent) {
+            QDBusMessage call =
+                QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
+            call << QVariant::fromValue(sent);
+            const QDBusMessage reply = bus.call(call);
+            QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
+            QCOMPARE(reply.arguments().size(), 1);
+            const auto got = qdbus_cast<PhosphorProtocol::TileRequestEntry>(reply.arguments().at(0));
+            QCOMPARE(got.windowId, sent.windowId);
+            QCOMPARE(got.x, sent.x);
+            QCOMPARE(got.y, sent.y);
+            QCOMPARE(got.width, sent.width);
+            QCOMPARE(got.height, sent.height);
+            QCOMPARE(got.zoneId, sent.zoneId);
+            QCOMPARE(got.screenId, sent.screenId);
+            QCOMPARE(got.monocle, sent.monocle);
+            QCOMPARE(got.floating, sent.floating);
+            QCOMPARE(got.windowedFullscreen, sent.windowedFullscreen);
+            QCOMPARE(got.stacking, sent.stacking);
+            QCOMPARE(got.scrollEdge, sent.scrollEdge);
+            QCOMPARE(got.viewDeltaX, sent.viewDeltaX);
+            QCOMPARE(got.visualX, sent.visualX);
+            QCOMPARE(got.visualY, sent.visualY);
+            QCOMPARE(got.hasVisualPos, sent.hasVisualPos);
+        };
+
+        // TWO legal payloads, because no single legal payload can cover the
+        // three bool slots: validationError rejects windowedFullscreen
+        // beside either monocle or floating, so wf=true forces the other
+        // two false. Payload A (wf=true) catches a floating-for-wf or
+        // monocle-for-wf transposition in either operator; payload B
+        // (monocle=true) catches the monocle-for-floating swap A cannot
+        // see. Between them, a transposition introduced in EITHER operator
+        // alone fails loudly. (A matching swap in both operators is an
+        // identity round-trip no bus test can see — the realistic
+        // regression is the single-operator edit, and that is what these
+        // two payloads pin.)
+        // (The signature probe above pins struct DECLARATION order via its
+        // aggregate init; only these bus trips pin the two marshallers
+        // agreeing.)
+        PhosphorProtocol::TileRequestEntry sent{QStringLiteral("konsole|7"),
+                                                50,
+                                                100,
+                                                640,
+                                                480,
+                                                QStringLiteral("{zone-uuid}"),
+                                                QStringLiteral("screen-0"),
+                                                false,
+                                                false,
+                                                true,
+                                                QStringLiteral("lastOnTop"),
+                                                QStringLiteral("left"),
+                                                512,
+                                                -900,
+                                                64,
+                                                true};
+        roundTrip(sent);
+        sent.monocle = true;
+        sent.windowedFullscreen = false;
+        roundTrip(sent);
+
+        bus.unregisterObject(path);
+    }
+
+    void testSwapTargetResultBusRoundtrip()
+    {
+        PhosphorProtocol::registerWireTypes();
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        if (!bus.isConnected()) {
+            QSKIP("No session bus available for a wire round-trip");
+        }
+        SwapTargetResultEcho echo;
+        const QString path = QStringLiteral("/test/wiretypes/swaptargetecho");
+        QVERIFY(bus.registerObject(path, &echo, QDBusConnection::ExportAllSlots));
+
+        // Every field distinct — the two int quadruples especially, so a
+        // window1/window2 transposition or an x/y/w/h shuffle inside either
+        // quadruple fails on a specific compare.
+        PhosphorProtocol::SwapTargetResult sent;
+        sent.success = true;
+        sent.reason = QStringLiteral("reason-r");
+        sent.windowId1 = QStringLiteral("app|one");
+        sent.x1 = 11;
+        sent.y1 = 12;
+        sent.w1 = 13;
+        sent.h1 = 14;
+        sent.zoneId1 = QStringLiteral("{zone-1}");
+        sent.windowId2 = QStringLiteral("app|two");
+        sent.x2 = 21;
+        sent.y2 = 22;
+        sent.w2 = 23;
+        sent.h2 = 24;
+        sent.zoneId2 = QStringLiteral("{zone-2}");
+        sent.screenName = QStringLiteral("DP-1");
+        sent.sourceZoneId = QStringLiteral("{zone-src}");
+        sent.targetZoneId = QStringLiteral("{zone-dst}");
+        sent.screenName2 = QStringLiteral("DP-2");
 
         QDBusMessage call =
             QDBusMessage::createMethodCall(bus.baseService(), path, QString(), QStringLiteral("echoEntry"));
         call << QVariant::fromValue(sent);
         const QDBusMessage reply = bus.call(call);
-        bus.unregisterObject(path);
-
         QCOMPARE(reply.type(), QDBusMessage::ReplyMessage);
         QCOMPARE(reply.arguments().size(), 1);
-        const auto got = qdbus_cast<PhosphorProtocol::TileRequestEntry>(reply.arguments().at(0));
-        QCOMPARE(got.windowId, sent.windowId);
-        QCOMPARE(got.x, sent.x);
-        QCOMPARE(got.y, sent.y);
-        QCOMPARE(got.width, sent.width);
-        QCOMPARE(got.height, sent.height);
-        QCOMPARE(got.zoneId, sent.zoneId);
-        QCOMPARE(got.screenId, sent.screenId);
-        QCOMPARE(got.monocle, sent.monocle);
-        QCOMPARE(got.floating, sent.floating);
-        QCOMPARE(got.stacking, sent.stacking);
-        QCOMPARE(got.scrollEdge, sent.scrollEdge);
-        QCOMPARE(got.viewDeltaX, sent.viewDeltaX);
-        QCOMPARE(got.visualX, sent.visualX);
-        QCOMPARE(got.visualY, sent.visualY);
-        QCOMPARE(got.hasVisualPos, sent.hasVisualPos);
+        const auto got = qdbus_cast<PhosphorProtocol::SwapTargetResult>(reply.arguments().at(0));
+        QCOMPARE(got.success, sent.success);
+        QCOMPARE(got.reason, sent.reason);
+        QCOMPARE(got.windowId1, sent.windowId1);
+        QCOMPARE(got.x1, sent.x1);
+        QCOMPARE(got.y1, sent.y1);
+        QCOMPARE(got.w1, sent.w1);
+        QCOMPARE(got.h1, sent.h1);
+        QCOMPARE(got.zoneId1, sent.zoneId1);
+        QCOMPARE(got.windowId2, sent.windowId2);
+        QCOMPARE(got.x2, sent.x2);
+        QCOMPARE(got.y2, sent.y2);
+        QCOMPARE(got.w2, sent.w2);
+        QCOMPARE(got.h2, sent.h2);
+        QCOMPARE(got.zoneId2, sent.zoneId2);
+        QCOMPARE(got.screenName, sent.screenName);
+        QCOMPARE(got.sourceZoneId, sent.sourceZoneId);
+        QCOMPARE(got.targetZoneId, sent.targetZoneId);
+        QCOMPARE(got.screenName2, sent.screenName2);
+
+        bus.unregisterObject(path);
     }
 
     // =================================================================
@@ -360,8 +476,8 @@ private Q_SLOTS:
     void testTileRequestToRect()
     {
         PhosphorProtocol::TileRequestEntry entry{
-            QStringLiteral("app|5"), 15,    25,    640,       480,      QStringLiteral("{z}"),
-            QStringLiteral("s0"),    false, false, QString(), QString()};
+            QStringLiteral("app|5"), 15,    25,    640,   480,       QStringLiteral("{z}"),
+            QStringLiteral("s0"),    false, false, false, QString(), QString()};
         QCOMPARE(entry.toRect(), QRect(15, 25, 640, 480));
     }
 

@@ -213,6 +213,16 @@ public:
     void consumeOrExpelWindow(int delta, const QString& screenId);
     void centerColumn(const QString& screenId);
     void toggleColumnTabbed(const QString& screenId);
+    /// Windowed fullscreen (niri toggle-windowed-fullscreen) on the active
+    /// window: layout-neutral per-tile flag, see Tile::windowedFullscreen.
+    void toggleWindowedFullscreen(const QString& screenId);
+    /// Compositor-driven reconciliation: the client left fullscreen on its
+    /// own, so drop the flag and re-apply that window's screen.
+    void clearWindowedFullscreen(const QString& windowId);
+    /// Compositor-driven repair: the compositor moved this window behind
+    /// the engine's back (KWin's fullscreen-exit restore), so evict its
+    /// emit-gate memory and relayout its screen to re-emit the true rect.
+    void reapplyWindowGeometry(const QString& windowId);
     /// delta -1/+1 through the preset width list.
     void cycleColumnPresetWidth(int delta, const QString& screenId);
     /// deltaPercent of the work-area width (e.g. +10 / -10).
@@ -328,14 +338,21 @@ public:
     /// axis) — the shape zone previews consume. The tiles are clipped to the
     /// gap-inset work area, so the fractions show the panel gap; that is the
     /// same basis the daemon's own OSD card uses (its twin renorm of the
-    /// absolute rects in stripzones.h), so the settings thumbnail and the
-    /// OSD draw the same shape. Its one production consumer is the D-Bus
-    /// strip payload (scrollingadaptor.cpp), which pairs each rect with the
-    /// zone number from the matching visibleTiles entry: where a layout
-    /// switch shows the layout's zones, a scrolling screen shows what the
-    /// strip actually looks like right now. Falls back to the work area as
-    /// the basis only when no screen rect is resolvable. Same emptiness
-    /// contract.
+    /// absolute rects in stripzones.h) WHENEVER the screen rect resolves, so
+    /// the settings thumbnail and the OSD draw the same shape. Its one
+    /// production consumer is the D-Bus strip payload (scrollingadaptor.cpp),
+    /// which pairs each rect with the zone number from the matching
+    /// visibleTiles entry: where a layout switch shows the layout's zones, a
+    /// scrolling screen shows what the strip actually looks like right now.
+    /// Falls back to the work area as the basis only when no screen rect is
+    /// resolvable — a KNOWN divergence from the OSD twin in that window (it
+    /// falls back to QScreen::geometry() via the daemon's shared resolver,
+    /// which this LGPL library cannot link), so during early startup the two
+    /// surfaces can briefly disagree by the panel's share of the output.
+    /// Self-heals on the next poll once the screen resolves. Same emptiness
+    /// contract. Production reads the PAIRED form (visibleTilesWithRects,
+    /// via the D-Bus strip payload in scrollingadaptor.cpp); this projection
+    /// serves the test suites.
     ///
     /// The pairing is index-wise and both walks run in the same synchronous
     /// call, so a caller reading this beside visibleTiles gets rects and
@@ -828,8 +845,8 @@ private:
     /// insert was refused — today that means the strip already holds the
     /// window — in which case nothing about the placement changed and the
     /// caller must not announce one.
-    bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidth,
-                            int minHeight);
+    bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidthIn,
+                            int minHeightIn);
     /// Give a window that floats WITHOUT ever having been a strip tile
     /// (floated at open, or arriving already-floating over the handoff) the
     /// FloatRestore entry the clamp lives in while it floats. column stays
@@ -946,6 +963,18 @@ private:
     /// The exact rect last APPLIED per window while strip-managed (float-back
     /// poison guard; see PlacementEngineBase::lastManagedRect).
     QHash<QString, QRect> m_lastAppliedRect;
+    /// Windows whose last EMITTED batch entry carried windowedFullscreen —
+    /// the flag's own leg of applyLayout's emit-on-change gate (a toggle
+    /// never moves a rect). The emitted value IS the model flag: parks and
+    /// hidden tabs no longer suppress it (suppressing cycled the client's
+    /// fullscreen presentation on every scroll past a flagged column).
+    /// A QSet because only "told true" is representable.
+    /// Dropped alongside m_lastAppliedRect on the context-teardown paths
+    /// and swept by aliveness in pruneStaleWindows. Elsewhere a stale entry
+    /// is self-correcting rather than co-dropped: any path that drops the
+    /// rect memory forces an emit, and that batch carries the current
+    /// model flag.
+    QSet<QString> m_lastAppliedWindowedFs;
     /// Which screen edge each currently-parked window went out by ("left" /
     /// "right"), so that when it scrolls back INTO the viewport the batch can
     /// tell the effect which side to animate it in from.
@@ -1014,6 +1043,9 @@ private:
     /// Kept beside, not inside, the list so consuming an id cannot shift the
     /// recorded positions of the ids still pending.
     QHash<QString, QSet<QString>> m_consumedInitialOrder;
+    /// Snapshot @p state's strip as a stash entry (columns + focus + view
+    /// anchor). Empty columns list when the state is null or empty.
+    StashedStrip buildStashFromState(const ScrollState* state) const;
     /// Mode-round-trip structure stash (see stashStripStructure). The
     /// stashed lists stay INTACT while they live (positions are counted
     /// against windows already present); consumption is tracked in
@@ -1026,11 +1058,8 @@ private:
     /// StashedTile::stagedFromPersistence.
     // StashedTile / StashedColumn / StashedStrip live in ScrollStashTypes.h
     // (namespace-level; hoisted for the file-size ceiling). Their lifetime
-    // and consumption contracts stay documented on m_stripStash above and on
-    // the fields themselves.
-    /// Snapshot @p state's strip as a stash entry (columns + focus + view
-    /// anchor). Empty columns list when the state is null or empty.
-    StashedStrip buildStashFromState(const ScrollState* state) const;
+    // and consumption contracts stay documented on m_stripStash and on the
+    // fields themselves.
     QHash<PhosphorEngine::PlacementStateKey, StashedStrip> m_stripStash;
     QHash<PhosphorEngine::PlacementStateKey, QSet<QString>> m_stripStashConsumed;
     /// Ever-increasing stamp source for StashedStrip::sequence.

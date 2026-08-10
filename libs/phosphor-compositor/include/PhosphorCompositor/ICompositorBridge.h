@@ -49,6 +49,12 @@ struct WindowInfo
     QRectF frameGeometry;
     QSizeF minSize;
     bool isMinimized = false;
+    /// Currently written but read by no consumer. CONTRACT: this field is
+    /// the raw compositor state, so a scrolling window in WINDOWED
+    /// fullscreen reports true (its client holds KWin fullscreen while the
+    /// strip owns its geometry). A consumer that needs to distinguish the
+    /// strip-managed hold from genuine fullscreen must not overload this
+    /// flag — add a distinct isWindowedFullscreen instead.
     bool isFullScreen = false;
     bool isOnCurrentDesktop = true;
     bool isOnCurrentActivity = true;
@@ -181,7 +187,7 @@ public:
 
     /// Move a window to a target geometry, running the configured placement
     /// transition (snap / tile / move) unless @p skipAnimation is set.
-    virtual void applyWindowGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation = false) = 0;
+    virtual void applyWindowGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation) = 0;
 
     // ═══════════════════════════════════════════════════════════════════
     // D-Bus Integration (convenience wrappers using compositor as parent)

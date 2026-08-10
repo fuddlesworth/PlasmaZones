@@ -30,6 +30,16 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
             ++it;
         }
     }
+    // The emit-gate memory for the windowed-fullscreen flag ages out the same
+    // way; a stale true for a re-used id would only force one redundant emit,
+    // but there is no reason to keep dead ids around.
+    for (auto it = m_lastAppliedWindowedFs.begin(); it != m_lastAppliedWindowedFs.end();) {
+        if (!aliveWindowIds.contains(*it)) {
+            it = m_lastAppliedWindowedFs.erase(it);
+        } else {
+            ++it;
+        }
+    }
     // The remembered park edge is written only while a window sits parked and
     // consumed when it scrolls back on screen, so a window that DIES parked
     // never consumes its entry; this aliveness sweep reclaims those. Every
@@ -126,11 +136,15 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // cross-session appId claim, able to hand an unrelated same-app window the
     // dead tile's slot, width and display.
     //
-    // The empty-alive-set bail below is this BOUNDARY's own fail-closed, not
-    // a house rule the sweeps above share: the seed and rect sweeps run
-    // unconditionally, because re-deriving a seed or a rect costs nothing,
-    // while a wiped stash cannot be rebuilt. A premature one-shot report at
-    // login must not take the structure with it.
+    // The empty-alive-set bail below protects the STASH specifically — the
+    // one collection that cannot be rebuilt once wiped. It is a second,
+    // narrower belt: the boundary that actually refuses an empty alive set
+    // is the adaptor (WindowTrackingAdaptor::pruneStaleWindows returns
+    // before reaching this function), so in production the destructive dead
+    // loop above never runs against an empty set. An embedder calling this
+    // exported API directly with an empty set WOULD tear down every strip
+    // while the stash survived; hoisting the bail to cover the dead loop is
+    // a public-API behaviour change deliberately not taken here.
     //
     // A tile staged straight from the persisted blob is EXEMPT until it is
     // claimed. Its id belongs to last session, so no alive set can contain it
@@ -167,7 +181,13 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
                 bool focusSurvives = false;
                 for (const StashedColumn& col : std::as_const(stashIt->columns)) {
                     for (const StashedTile& tile : col.tiles) {
-                        focusSurvives = focusSurvives || tile.windowId == stashIt->focusedWindowId;
+                        if (tile.windowId == stashIt->focusedWindowId) {
+                            focusSurvives = true;
+                            break;
+                        }
+                    }
+                    if (focusSurvives) {
+                        break;
                     }
                 }
                 if (!focusSurvives) {
@@ -332,6 +352,14 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                             m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
                         }
                     }
+                    // The mid-burst deferred-apply marker is context-keyed too:
+                    // left at the old key it can never drain (endArrivalBurst
+                    // resolves live keys), silently dropping the deferred apply
+                    // and its focusWindowAfter. Same move-only-if-vacant rule
+                    // as the stash.
+                    if (m_burstPendingApplies.contains(oldKey) && !m_burstPendingApplies.contains(newKey)) {
+                        m_burstPendingApplies.insert(newKey, m_burstPendingApplies.take(oldKey));
+                    }
                     qCInfo(lcScrollEngine) << "Migrated screen" << screenId << "strip from desktop" << pinnedDesktop
                                            << "to" << newKey.desktop;
                 }
@@ -358,6 +386,7 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
         // ordering contract as pruneStatesForRemovedScreen).
         for (const QString& windowId : std::as_const(displacedWindows)) {
             m_lastAppliedRect.remove(windowId);
+            m_lastAppliedWindowedFs.remove(windowId);
             m_parkedScrollEdge.remove(windowId);
             m_scrollFloatedWindows.remove(windowId);
         }
@@ -407,6 +436,7 @@ void ScrollEngine::dropWindowBookkeeping(const ScrollState* state)
     const QStringList windows = state->managedWindows();
     for (const QString& windowId : windows) {
         m_lastAppliedRect.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
@@ -614,6 +644,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     // no second collection to keep in step with it.
     for (const QString& windowId : std::as_const(releasedWindows)) {
         m_lastAppliedRect.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
         m_floatRestore.remove(windowId);
         m_scrollFloatedWindows.remove(windowId);
