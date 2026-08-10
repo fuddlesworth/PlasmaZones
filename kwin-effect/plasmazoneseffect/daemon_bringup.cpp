@@ -288,12 +288,18 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // seeds lastActiveScreenName (the walk's pre-filter only loses the
     // fullscreen exemption, which cannot matter when the raw active window
     // was rejected for reasons other than being fullscreen).
+    // notifyWindowActivated's bool return covers its INTERNAL rejections too
+    // (plasmashell surface, unmanageable popup): a raw candidate that passes
+    // the eligibility terms here but is rejected inside still falls back to
+    // the stacking walk, so bring-up seeds lastActiveScreenName whenever any
+    // reportable window exists.
     KWin::EffectWindow* activeWindow = KWin::effects ? KWin::effects->activeWindow() : nullptr;
-    if (activeWindow && !activeWindow->isDeleted() && !activeWindow->isMinimized() && activeWindow->isOnCurrentDesktop()
-        && activeWindow->isOnCurrentActivity()) {
-        notifyWindowActivated(activeWindow);
-    } else if (KWin::EffectWindow* fallback = getActiveWindow()) {
-        notifyWindowActivated(fallback);
+    const bool rawEligible = activeWindow && !activeWindow->isDeleted() && !activeWindow->isMinimized()
+        && activeWindow->isOnCurrentDesktop() && activeWindow->isOnCurrentActivity();
+    if (!rawEligible || !notifyWindowActivated(activeWindow)) {
+        if (KWin::EffectWindow* fallback = getActiveWindow(); fallback && fallback != activeWindow) {
+            notifyWindowActivated(fallback);
+        }
     }
 
     // Fetch virtual screen definitions from daemon — needed before any screen ID

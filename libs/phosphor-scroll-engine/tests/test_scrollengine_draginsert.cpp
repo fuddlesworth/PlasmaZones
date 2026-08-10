@@ -63,6 +63,7 @@ private Q_SLOTS:
     void reentrantBeginRestoresPriorWindow();
     void neighbourCloseInvalidatesStaleTarget();
     void windowedFullscreenSurvivesCancelAndCommit();
+    void windowedFullscreenSurvivesCrossScreenCommit();
 
 private:
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
@@ -1083,12 +1084,14 @@ void TestScrollEngineDragInsert::windowedFullscreenSurvivesCancelAndCommit()
     QVERIFY(state->strip().isWindowedFullscreen(QStringLiteral("b")));
 
     // Cancel path: begin detaches (flag leaves with the tile), cancel
-    // restores tile AND flag.
+    // restores tile AND flag. The neighbour is the negative control on both
+    // exits: the flag must ride the dragged tile, never leak to a sibling.
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
     QVERIFY(!state->strip().containsWindow(QStringLiteral("b")));
     engine->cancelDragInsertPreview();
     QVERIFY(state->strip().containsWindow(QStringLiteral("b")));
     QVERIFY(state->strip().isWindowedFullscreen(QStringLiteral("b")));
+    QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("a")));
 
     // Commit path: the re-inserted tile carries the flag too.
     QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S1")));
@@ -1099,6 +1102,37 @@ void TestScrollEngineDragInsert::windowedFullscreenSurvivesCancelAndCommit()
     engine->commitDragInsertPreview();
     QVERIFY(state->strip().containsWindow(QStringLiteral("b")));
     QVERIFY(state->strip().isWindowedFullscreen(QStringLiteral("b")));
+    QVERIFY(!state->strip().isWindowedFullscreen(QStringLiteral("a")));
+}
+
+void TestScrollEngineDragInsert::windowedFullscreenSurvivesCrossScreenCommit()
+{
+    // The cross-screen twin of the test above: a windowed-fullscreen tile
+    // dragged to ANOTHER scrolling screen keeps its flag on the receiving
+    // strip, and the receiving strip's own tiles stay unflagged.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1"), QStringLiteral("S2")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b")});
+    openWindows(engine, QStringLiteral("S2"), {QStringLiteral("c")});
+    ScrollState* s1 = stateFor(engine, QStringLiteral("S1"));
+    ScrollState* s2 = stateFor(engine, QStringLiteral("S2"));
+    QVERIFY(s1);
+    QVERIFY(s2);
+
+    engine->windowFocused(QStringLiteral("b"), QStringLiteral("S1"));
+    engine->toggleWindowedFullscreen(QStringLiteral("S1"));
+    QVERIFY(s1->strip().isWindowedFullscreen(QStringLiteral("b")));
+
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b"), QStringLiteral("S2")));
+    DragTarget target;
+    target.primary = 0;
+    target.newSlot = true;
+    engine->updateDragInsertPreview(target);
+    engine->commitDragInsertPreview();
+    QVERIFY(!s1->strip().containsWindow(QStringLiteral("b")));
+    QVERIFY(s2->strip().containsWindow(QStringLiteral("b")));
+    QVERIFY(s2->strip().isWindowedFullscreen(QStringLiteral("b")));
+    QVERIFY(!s2->strip().isWindowedFullscreen(QStringLiteral("c")));
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDragInsert)

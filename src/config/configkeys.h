@@ -435,7 +435,7 @@ public:
     // disambiguated by group)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_KEY(tabIndicatorStyleKey, "Style")
+    P_CONFIG_KEY(styleKey, "Style")
     P_CONFIG_KEY(hideWhenSingleTabKey, "HideWhenSingleTab")
     P_CONFIG_KEY(placeWithinColumnKey, "PlaceWithinColumn")
     P_CONFIG_KEY(gapKey, "Gap")
@@ -446,10 +446,13 @@ public:
     P_CONFIG_KEY(inactiveColorKey, "InactiveColor")
     P_CONFIG_KEY(urgentColorKey, "UrgentColor")
 
-    // Scrolling.DropIndicator. Reuses the shared enabledKey / opacityKey /
-    // widthKey / radiusKey leaves above, the same way Snapping.Zones.Border
-    // spells its border as Width + Radius. Only the fill and border colours
-    // need names of their own.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.DropIndicator
+    // Reuses the shared enabledKey / opacityKey / widthKey / radiusKey
+    // leaves above, the same way Snapping.Zones.Border spells its border as
+    // Width + Radius. Only the fill and border colours need names of their
+    // own.
+    // ═══════════════════════════════════════════════════════════════════════════
     P_CONFIG_KEY(colorKey, "Color")
     P_CONFIG_KEY(borderColorKey, "BorderColor")
 
@@ -755,7 +758,9 @@ public:
     P_CONFIG_GROUP(scrollingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.
+    // Legacy v1/v2/v3/v4 accessors — for migration code, plus the two
+    // documented non-migration readers (configdefaults.cpp's
+    // v1RenderingBackendKey read and settings.cpp's v4 stash-key list).
     //
     // Wrapped in a nested `Legacy` struct so a stray
     // ConfigKeys::v1ActivationGroup() call outside configmigration.cpp

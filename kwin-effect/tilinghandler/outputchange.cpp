@@ -239,6 +239,17 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // a window that left autotile via the desktop-switch float skip
         // stays tracked, and a stale screen here would make every later
         // frameGeometryChanged re-detect a phantom VS crossing.
+        //
+        // An armed m_expectedOutputMove marker deliberately SURVIVES this
+        // arm (the only exit that neither consumes nor drains one): a
+        // marked move still in flight can see intermediate positional
+        // echoes that classify snap↔snap here, and the marker is the only
+        // reliable signal left for the real echo — dropping it would break
+        // the genuine handoff. The residual is benign: a marker that never
+        // gets its echo is drained by the same-screen belt above on the
+        // next settle, and one that later matches its target runs the
+        // bookkeeping-only arm, which is what a genuine arrival at that
+        // screen wants anyway.
         if (m_notifiedWindowScreens.contains(windowId)) {
             m_notifiedWindowScreens[windowId] = newScreenId;
         }
@@ -283,6 +294,12 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // it and the re-establish below would skip exactly the case the comment
     // claims to cover, leaving the daemon's floating echo without an owner.
     const bool wasUnfloatInFlight = hasUnfloatInFlight(windowId);
+    // And the THIRD ownership state: the post-unminimize animation grace. A
+    // grace window is unminimized (so the isMinimized term below is false)
+    // and not yet in flight, and the cleanup below cancels its timer — the
+    // unminimize edge will never repeat, so without carrying this state the
+    // window strands floating on the new screen.
+    const bool wasInUnminimizeGrace = hasPendingUnminimizeUnfloat(windowId);
     // Snapshot the retry budget too: cleanupAutotileTracking erases it, and
     // the header documents that the budget must survive the ownership hop
     // (a persistently-refused unfloat must not reset to a fresh budget on
@@ -295,7 +312,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // final state.
     releaseWindowTracking(windowId, oldScreenId);
 
-    if (ownedMinimizeFloat && (w->isMinimized() || wasUnfloatInFlight)) {
+    if (ownedMinimizeFloat && (w->isMinimized() || wasUnfloatInFlight || wasInUnminimizeGrace)) {
         if (newIsAutotile) {
             m_minimizeFloatedWindows.insert(windowId);
             if (wasUntiledMinimizeFloat) {
@@ -310,6 +327,12 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // lands back in m_unfloatInFlight rather than being demoted to
                 // a plain marker its completion path can no longer find.
                 dispatchUnminimizeUnfloat(windowId, newScreenId);
+            } else if (wasInUnminimizeGrace) {
+                // The grace timer died with the old screen's cleanup and the
+                // unminimize edge will not repeat. The retry path re-validates
+                // against the window's CURRENT screen and dispatches — the
+                // budget seeded above keeps a bouncing window bounded.
+                scheduleUnminimizeUnfloatRetry(windowId);
             }
             qCInfo(lcEffect) << "Autotile: minimize-float ownership carried across screens:" << windowId << "->"
                              << newScreenId;
@@ -328,6 +351,15 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             // snap re-drives the unfloat from its own unminimize edge.
             snap->adoptMinimizeFloated(windowId);
             snap->seedUnfloatRetryBudget(windowId, savedUnfloatBudget);
+            if (wasInUnminimizeGrace) {
+                // A grace window's unminimize edge already happened and will
+                // never reach snap's minimize machinery — offer it directly,
+                // mirroring the deferred-commit transfer in minimizefloat.cpp
+                // (refusal is impossible here: the offer only refuses
+                // autotile-managed screens, and this arm is the non-autotile
+                // destination).
+                snap->offerMinimizeEdge(w, windowId, newScreenId);
+            }
             qCInfo(lcEffect) << "Autotile: minimize-float ownership handed to snap on screen change:" << windowId
                              << "->" << newScreenId;
         }

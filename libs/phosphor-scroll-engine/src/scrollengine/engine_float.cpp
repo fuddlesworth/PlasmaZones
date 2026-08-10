@@ -87,12 +87,7 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
         restore.tileIndex = tileIdx;
         // Anchor on a surviving sibling so the stack can be re-located even
         // after column indices shift (prefer the neighbour above, else below).
-        for (int i = restore.tileIndex - 1; i >= 0 && restore.stackAnchor.isEmpty(); --i) {
-            restore.stackAnchor = sourceColumn.tiles.at(i).windowId;
-        }
-        for (int i = restore.tileIndex + 1; i < sourceColumn.tiles.size() && restore.stackAnchor.isEmpty(); ++i) {
-            restore.stackAnchor = sourceColumn.tiles.at(i).windowId;
-        }
+        restore.stackAnchor = sourceColumn.anchorSiblingFor(restore.tileIndex);
     }
     state->strip().takeWindow(windowId, params);
     state->addFloating(windowId);

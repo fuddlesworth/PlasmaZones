@@ -653,6 +653,11 @@ void PlasmaZonesEffect::connectDragTracker()
 
 void PlasmaZonesEffect::connectWindowAndScreenSignals()
 {
+    // KWin::effects derefs here are deliberately unguarded: an Effect is
+    // only ever constructed by a live EffectsHandler, so at ctor-wiring
+    // time the pointer cannot be null. initRenderingAndRegistries' guard is
+    // the historical outlier, kept because its screen loop doubles as a
+    // no-compositor unit-test path.
     // Connect to window lifecycle signals
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &PlasmaZonesEffect::slotWindowAdded);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &PlasmaZonesEffect::slotWindowClosed);

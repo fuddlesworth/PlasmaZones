@@ -831,6 +831,12 @@ bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w, QString* rejectR
 
 void PlasmaZonesEffect::logWindowDiagnostics(KWin::EffectWindow* w, const char* context) const
 {
+    // Silent-unless-enabled, as documented: the verdict computation below
+    // walks both filter chains, which is real work to do just to hand
+    // qCDebug strings it will discard.
+    if (!lcEffectDiag().isDebugEnabled()) {
+        return;
+    }
     if (!w) {
         qCDebug(lcEffectDiag) << "[window-diag]" << context << "— null window";
         return;

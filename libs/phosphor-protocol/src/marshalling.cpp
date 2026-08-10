@@ -368,8 +368,8 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, DragOutcome& o)
     int action = 0;
     arg >> action >> o.windowId >> o.targetScreenId >> o.x >> o.y >> o.width >> o.height >> o.zoneId >> o.skipAnimation
         >> o.requestSnapAssist >> o.emptyZones;
-    o.action = static_cast<DragOutcome::Action>(action);
     arg.endStructure();
+    o.action = static_cast<DragOutcome::Action>(action);
     return arg;
 }
 

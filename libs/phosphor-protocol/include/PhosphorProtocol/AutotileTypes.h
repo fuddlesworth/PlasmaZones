@@ -107,7 +107,7 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 using TileRequestList = QList<TileRequestEntry>;
 
 /// D-Bus struct for algorithm metadata: (sssbbbbdibsbbb)
-struct AlgorithmInfoEntry
+struct PHOSPHORPROTOCOLTYPES_EXPORT AlgorithmInfoEntry
 {
     QString id;
     QString name;
@@ -129,7 +129,7 @@ using AlgorithmInfoList = QList<AlgorithmInfoEntry>;
 
 /// D-Bus struct for pre-tile geometry entries: (siiiis)
 /// Replaces the JSON blob previously returned by getPreTileGeometriesJson.
-struct PreTileGeometryEntry
+struct PHOSPHORPROTOCOLTYPES_EXPORT PreTileGeometryEntry
 {
     QString appId;
     int x = 0;

@@ -307,7 +307,7 @@ void Daemon::connectShortcutSignals()
             // this refusal is gated on.
             if (layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
                 qCDebug(lcDaemon) << "Layout picker: no templates in the store for screen" << screenId;
-                if (m_settings && m_settings->showNavigationOsd()) {
+                if (m_settings && m_settings->showNavigationOsd() && !shouldSuppressOsd()) {
                     m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
                                                         QString(), QString(), screenId);
                 }

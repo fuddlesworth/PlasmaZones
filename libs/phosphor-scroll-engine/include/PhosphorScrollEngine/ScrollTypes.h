@@ -494,21 +494,21 @@ struct WindowHeight
     int fixedPx = 0; ///< Kind::Fixed
     qreal presetFraction = 0.5; ///< Kind::Preset
 
-    static WindowHeight makeAuto(qreal w = 1.0)
+    static constexpr WindowHeight makeAuto(qreal w = 1.0)
     {
         WindowHeight h;
         h.kind = Auto;
         h.weight = w;
         return h;
     }
-    static WindowHeight makeFixed(int px)
+    static constexpr WindowHeight makeFixed(int px)
     {
         WindowHeight h;
         h.kind = Fixed;
         h.fixedPx = px;
         return h;
     }
-    static WindowHeight makePreset(qreal fraction)
+    static constexpr WindowHeight makePreset(qreal fraction)
     {
         WindowHeight h;
         h.kind = Preset;
@@ -613,6 +613,21 @@ struct Column
             }
         }
         return -1;
+    }
+    /// Surviving sibling to anchor a stack re-insert on: the nearest tile
+    /// above @p tileIdx with a non-empty id, else the nearest below, else
+    /// empty. Shared by the float capture, the minimize round trip and the
+    /// drag-preview slot capture, which must agree on the anchor choice.
+    QString anchorSiblingFor(int tileIdx) const
+    {
+        QString anchor;
+        for (int i = tileIdx - 1; i >= 0 && anchor.isEmpty(); --i) {
+            anchor = tiles.at(i).windowId;
+        }
+        for (int i = tileIdx + 1; i < tiles.size() && anchor.isEmpty(); ++i) {
+            anchor = tiles.at(i).windowId;
+        }
+        return anchor;
     }
 };
 

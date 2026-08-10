@@ -206,7 +206,7 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                      {QStringLiteral("normal"), PhosphorI18n::tr("Normal")},
                      {QStringLiteral("tabbed"), PhosphorI18n::tr("Tabbed")},
                  });
-        t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::tabIndicatorStyleKey()),
+        t.insert(pairKey(CD::scrollingTabIndicatorGroup(), CD::styleKey()),
                  {
                      {QStringLiteral("chips"), PhosphorI18n::tr("Titled chips")},
                      {QStringLiteral("bar"), PhosphorI18n::tr("Segment bar")},

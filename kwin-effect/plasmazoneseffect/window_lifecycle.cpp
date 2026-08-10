@@ -606,10 +606,10 @@ void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& 
          newGeometry.y(), newGeometry.width(), newGeometry.height()});
 }
 
-void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
+bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 {
     if (!w) {
-        return;
+        return false;
     }
 
     // Skip non-manageable window types but NOT user-excluded apps — the daemon
@@ -618,14 +618,14 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // m_lastActiveWindowId.
     const QString windowClass = w->windowClass();
     if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass)) {
-        return;
+        return false;
     }
     // Plasma shell surfaces — independent filter chain from shouldHandleWindow()
     // because notifyWindowActivated() intentionally skips user-exclusion lists
     // (the daemon still needs focus updates for excluded apps). The plasmashell
     // rejection must apply in both chains; see isPlasmaShellSurface().
     if (isPlasmaShellSurface(windowClass)) {
-        return;
+        return false;
     }
     // Reject structurally unmanageable window types via the predicate shared
     // verbatim with shouldHandleWindow() — see isStructurallyUnmanageableWindowType().
@@ -656,7 +656,7 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     const bool fullscreenOnScrollingScreen =
         w->isFullScreen() && m_tilingHandler->isScrollingScreen(getWindowScreenId(w));
     if (isStructurallyUnmanageableWindowType(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)) {
-        return;
+        return false;
     }
 
     // window.focus shader transition. Fires after the rejection-filter cascade
@@ -677,7 +677,10 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     }
 
     if (!isDaemonReady("notify windowActivated")) {
-        return;
+        // True on purpose: the window IS an acceptable activation target;
+        // only the transient daemon gate stopped the report (see the header
+        // doc — a bring-up fallback to another window would be wrong here).
+        return true;
     }
 
     QString windowId = getWindowId(w);
@@ -729,6 +732,7 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
                                                        QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                        QStringLiteral("notifyWindowFocused"));
     }
+    return true;
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowByIdExact(const QString& windowId) const

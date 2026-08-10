@@ -701,7 +701,12 @@ private:
     /// would fall back to position, and a parked scroll column's frame can
     /// sit on a NEIGHBOUR output.
     void notifyWindowClosed(KWin::EffectWindow* w, const QString& preTeardownScreenId);
-    void notifyWindowActivated(KWin::EffectWindow* w);
+    /// Returns false when the window is not a reportable activation target
+    /// (null, own overlay, portal, plasmashell, structurally unmanageable) —
+    /// the daemon-ready gate does NOT count as rejection. The bring-up
+    /// re-seed uses this to fall back to the stacking walk when the raw
+    /// active window is internally rejected; ordinary callers may ignore it.
+    bool notifyWindowActivated(KWin::EffectWindow* w);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
 
     /// The O(1) reverse-cache half of findWindowById, WITHOUT the fuzzy appId fallback.

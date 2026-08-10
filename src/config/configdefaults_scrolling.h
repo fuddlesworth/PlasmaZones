@@ -153,6 +153,13 @@ public:
     {
         return 1.0;
     }
+    /// Height twin of the ceiling above. Same value today, but the height
+    /// preset-list canonicalizer bounds against THIS accessor so the two
+    /// axes' ceilings stay independently editable.
+    static constexpr qreal scrollingDefaultWindowHeightProportionMax()
+    {
+        return scrollingDefaultColumnWidthProportionMax();
+    }
     /// Fixed-kind pixel floor. Enforced in two places, because the shared
     /// value key means the schema's clampDouble has to span both kinds and
     /// cannot enforce either: the hand-written setter (which the D-Bus
@@ -215,10 +222,10 @@ public:
         return v == scrollingColumnDisplayNormal() || v == scrollingColumnDisplayTabbed();
     }
     /// Preset proportion lists, comma-joined decimals (the niri defaults).
-    /// KEEP IN SYNC with the engine's hard-coded fallback in
-    /// ScrollEngine (engine_core.cpp refreshConfigFromSettings) — same
-    /// {1/3, 1/2, 2/3} intent spelled twice because the LGPL engine cannot
-    /// include this GPL header.
+    /// KEEP IN SYNC with the other THREE copies of the {1/3, 1/2, 2/3}
+    /// intent — ScrollLayoutParams' member seeds document the full four-copy
+    /// map (ScrollTypes.h, presetColumnWidths). Spelled separately because
+    /// the LGPL engine cannot include this GPL header.
     static QString scrollingPresetColumnWidths()
     {
         return QStringLiteral("0.333,0.5,0.667");

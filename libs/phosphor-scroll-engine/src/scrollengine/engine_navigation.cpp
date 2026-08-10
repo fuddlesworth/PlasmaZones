@@ -72,12 +72,7 @@ StackSlot stackSlotOf(const ScrollStrip& strip, const QString& windowId)
         return slot;
     }
     slot.tileIndex = column.indexOfWindow(windowId);
-    for (int i = slot.tileIndex - 1; i >= 0 && slot.anchor.isEmpty(); --i) {
-        slot.anchor = column.tiles.at(i).windowId;
-    }
-    for (int i = slot.tileIndex + 1; i < column.tiles.size() && slot.anchor.isEmpty(); ++i) {
-        slot.anchor = column.tiles.at(i).windowId;
-    }
+    slot.anchor = column.anchorSiblingFor(slot.tileIndex);
     return slot;
 }
 
@@ -781,11 +776,11 @@ void ScrollEngine::toggleFocusedFloatAs(const PhosphorEngine::NavigationContext&
         Q_EMIT navigationFeedback(false, failureAction, QStringLiteral("no_window"), QString(), QString(), screen);
         return;
     }
-    // Untracked check HERE, not only in the delegate: this engine reports the
-    // failure token per-verb (a scroll-engine convention — autotile's restore
-    // path still reports "float"), and toggleWindowFloat's own not_managed
-    // emit can only say "float" — a "Restore" press on an untracked window
-    // must report action "restore". Emit the CANONICAL id, matching what the
+    // Untracked check HERE, not only in the delegate: the failure token is
+    // per-verb (autotile's restore path keeps the same convention via its
+    // toggleWindowFloatAs), and toggleWindowFloat's own not_managed emit can
+    // only say "float" — a "Restore" press on an untracked window must
+    // report action "restore". Emit the CANONICAL id, matching what the
     // delegate would have emitted.
     const QString canonical = canonicalizeForLookup(windowId);
     if (!stateForWindow(canonical)) {

@@ -1043,6 +1043,9 @@ private:
     /// Kept beside, not inside, the list so consuming an id cannot shift the
     /// recorded positions of the ids still pending.
     QHash<QString, QSet<QString>> m_consumedInitialOrder;
+    /// Snapshot @p state's strip as a stash entry (columns + focus + view
+    /// anchor). Empty columns list when the state is null or empty.
+    StashedStrip buildStashFromState(const ScrollState* state) const;
     /// Mode-round-trip structure stash (see stashStripStructure). The
     /// stashed lists stay INTACT while they live (positions are counted
     /// against windows already present); consumption is tracked in
@@ -1055,11 +1058,8 @@ private:
     /// StashedTile::stagedFromPersistence.
     // StashedTile / StashedColumn / StashedStrip live in ScrollStashTypes.h
     // (namespace-level; hoisted for the file-size ceiling). Their lifetime
-    // and consumption contracts stay documented on m_stripStash above and on
-    // the fields themselves.
-    /// Snapshot @p state's strip as a stash entry (columns + focus + view
-    /// anchor). Empty columns list when the state is null or empty.
-    StashedStrip buildStashFromState(const ScrollState* state) const;
+    // and consumption contracts stay documented on m_stripStash and on the
+    // fields themselves.
     QHash<PhosphorEngine::PlacementStateKey, StashedStrip> m_stripStash;
     QHash<PhosphorEngine::PlacementStateKey, QSet<QString>> m_stripStashConsumed;
     /// Ever-increasing stamp source for StashedStrip::sequence.

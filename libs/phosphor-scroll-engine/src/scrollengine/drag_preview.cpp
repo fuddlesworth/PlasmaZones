@@ -65,12 +65,7 @@ FloatRestore ScrollEngine::captureDragSlot(const ScrollStrip& strip, const QStri
     }
     if (column.tiles.size() > 1) {
         slot.tileIndex = tileIdx;
-        for (int i = slot.tileIndex - 1; i >= 0 && slot.stackAnchor.isEmpty(); --i) {
-            slot.stackAnchor = column.tiles.at(i).windowId;
-        }
-        for (int i = slot.tileIndex + 1; i < static_cast<int>(column.tiles.size()) && slot.stackAnchor.isEmpty(); ++i) {
-            slot.stackAnchor = column.tiles.at(i).windowId;
-        }
+        slot.stackAnchor = column.anchorSiblingFor(slot.tileIndex);
     }
     return slot;
 }

@@ -664,7 +664,18 @@ void TilingAdaptor::windowsOpenedBatch(const PhosphorProtocol::WindowOpenedList&
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {
         engine->beginArrivalBurst();
     }
+    // Intra-batch duplicate guard, matching the tile-request JSON sibling's:
+    // a peer bug sending one window twice would open it into two contexts,
+    // and the second dispatch is never a legitimate re-announce (those come
+    // as separate calls). Empty ids fall through to dispatchWindowOpened's
+    // own validation.
+    QSet<QString> seenWindowIds;
     for (const auto& entry : entries) {
+        if (!entry.windowId.isEmpty() && seenWindowIds.contains(entry.windowId)) {
+            qCDebug(lcDbusTiling) << "windowsOpenedBatch: dropping duplicate entry for" << entry.windowId;
+            continue;
+        }
+        seenWindowIds.insert(entry.windowId);
         dispatchWindowOpened(entry);
     }
     for (PhosphorEngine::IPlacementEngine* engine : m_lifecycleEngines) {

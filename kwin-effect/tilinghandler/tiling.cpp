@@ -1158,10 +1158,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // off-screen (seen live with ghostty). The in-stack
                         // moveResize is never presented: setFullScreen's own
                         // FullScreenArea moveResize and the geometry apply
-                        // below both land in the same stack. Bracketed like
-                        // releaseWindowedFullscreenState: moveResize emits
+                        // below both land in the same stack. The save/restore
+                        // bracket is belt-and-braces: the surrounding batch
+                        // apply may already hold inGeometryApply, and this
+                        // keeps the guarantee local instead of leaning on the
+                        // caller's bracket (moveResize emits
                         // frameGeometryChanged synchronously on X11 and the
-                        // VS-crossing detector must not re-enter.
+                        // VS-crossing detector must not re-enter).
                         const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
                         m_effect->m_daemonGate.inGeometryApply = true;
                         kwFs->moveResize(QRectF(snap.geometry));
@@ -1543,6 +1546,14 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
                     // Bracketed like every sibling moveResize site: the
                     // synchronous re-entry must not fall through to the
                     // VS-crossing detector for a move the effect itself made.
+                    // Routed through applyWindowGeometry ON PURPOSE, unlike
+                    // the fullscreen-ack re-commit (signals.cpp): its
+                    // already-at-target skip cannot fire here (this slot runs
+                    // because the frame DIFFERS from the commanded rect), and
+                    // its user-move defer is wanted — countering a live mouse
+                    // drag would fight the user, and the drag machinery owns
+                    // the re-insert; a superseding batch mooting the deferred
+                    // replay is the correct outcome, not a drop.
                     const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
                     m_effect->m_daemonGate.inGeometryApply = true;
                     m_effect->applyWindowGeometry(w, commanded, /*allowDuringDrag=*/false, /*skipAnimation=*/true);
@@ -1795,6 +1806,13 @@ void TilingHandler::reportDiscoveredMinSize(const QString& windowId, int minWidt
     // the half-pair as sent: the next batch's change poll then re-asserts
     // the true declared pair instead of being silenced by its own cache.
     m_effect->m_lastReportedMinSize.remove(windowId);
+
+    // Gate like every other fireAndForget in this handler: with no daemon
+    // registered the call only queues a D-Bus error, and the eviction above
+    // already ensures the discovery is re-reported after bring-up.
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        return;
+    }
 
     PhosphorProtocol::ClientHelpers::fireAndForget(
         m_effect, PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowMinSizeUpdated"),

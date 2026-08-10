@@ -207,7 +207,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          {},
          [](const QVariant& v) {
              return canonicalProportionList(v, CD::scrollingPresetWindowHeights(),
-                                            CD::scrollingDefaultColumnWidthProportionMax());
+                                            CD::scrollingDefaultWindowHeightProportionMax());
          }},
         // Default window height trio: kind + fixed pixel value + preset
         // index. Unlike the width pair, the value key serves ONE kind
@@ -245,7 +245,7 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
     // value and no closed set can express that alongside arbitrary hex.
     schema.groups[CD::scrollingTabIndicatorGroup()] = {
         {CD::enabledKey(), CD::scrollingTabIndicatorEnabled(), QMetaType::Bool},
-        {CD::tabIndicatorStyleKey(),
+        {CD::styleKey(),
          CD::scrollingTabIndicatorStyle(),
          QMetaType::Int,
          {},
@@ -394,15 +394,15 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
 // declared by one entry point.
 //
 // Every chord in this group is bindable via the system Shortcuts KCM,
-// because ShortcutManager registers them like every other action. (No
-// count here on purpose: this family's hand-counts have drifted before,
-// and the parity test that guards the group cannot see a number in a
-// comment.) The settings app has
-// no page for editing the chords themselves. Scrolling does have a Quick
-// Shortcuts page (ScrollingQuickShortcutsPage), but like its Snapping and
-// Tiling siblings that page assigns templates to the numbered quick slots
-// (wire mode 2, staged through the scrolling quick-slot map) rather than
-// editing any of the chords declared below.
+// because ShortcutManager registers them like every other action. No count
+// here on purpose: this family's hand-counts have drifted before, and the
+// parity test that guards the group cannot see a number in a comment.
+//
+// The settings app has no page for editing the chords themselves. Scrolling
+// does have a Quick Shortcuts page (ScrollingQuickShortcutsPage), but like
+// its Snapping and Tiling siblings that page assigns templates to the
+// numbered quick slots (wire mode 2, staged through the scrolling
+// quick-slot map) rather than editing any of the chords declared below.
 
 void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
 {

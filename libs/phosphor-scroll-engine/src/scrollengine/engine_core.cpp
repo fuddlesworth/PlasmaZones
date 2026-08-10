@@ -319,7 +319,8 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // A consumed id must not re-enter (same reasoning as the order seed's
     // consumed guard: a later unrelated open reusing the id would be
     // re-positioned by the stale entry).
-    if (m_stripStashConsumed.value(key).contains(windowId)) {
+    if (const auto consumedIt = m_stripStashConsumed.constFind(key);
+        consumedIt != m_stripStashConsumed.cend() && consumedIt->contains(windowId)) {
         return false;
     }
     StashedStrip& stashStrip = it.value();

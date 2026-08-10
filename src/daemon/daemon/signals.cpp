@@ -440,7 +440,7 @@ void Daemon::connectOverlaySignals()
                 m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
                 return;
             }
-            if (m_settings && m_settings->showNavigationOsd()) {
+            if (m_settings && m_settings->showNavigationOsd() && !shouldSuppressOsd()) {
                 if (m_overlayService) {
                     m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
                 }
@@ -673,7 +673,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
     }
 
     // Use "Floating" and "Tiled" labels for autotile (not "Snapped" for unfloat)
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !shouldSuppressOsd()) {
         QString reason = floating ? QStringLiteral("floated") : QStringLiteral("tiled");
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), reason, QString(), QString(), screenId);
     }
@@ -807,7 +807,8 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
             wts->clearPreFloatZone(windowId);
         }
     }
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !windowIds.isEmpty()) {
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !windowIds.isEmpty()
+        && !shouldSuppressOsd()) {
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), QStringLiteral("overflow"), QString(),
                                             QString(), screenId);
     }

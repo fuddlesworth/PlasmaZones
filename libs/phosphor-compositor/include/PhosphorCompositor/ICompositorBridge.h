@@ -187,7 +187,7 @@ public:
 
     /// Move a window to a target geometry, running the configured placement
     /// transition (snap / tile / move) unless @p skipAnimation is set.
-    virtual void applyWindowGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation = false) = 0;
+    virtual void applyWindowGeometry(WindowHandle w, const QRectF& geometry, bool skipAnimation) = 0;
 
     // ═══════════════════════════════════════════════════════════════════
     // D-Bus Integration (convenience wrappers using compositor as parent)

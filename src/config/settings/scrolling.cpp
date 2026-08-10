@@ -285,7 +285,7 @@ P_STORE_GET(bool, scrollingTabIndicatorEnabled, scrollingTabIndicatorGroup, enab
 P_STORE_SET_BOOL(setScrollingTabIndicatorEnabled, scrollingTabIndicatorGroup, enabledKey,
                  scrollingTabIndicatorEnabledChanged)
 
-P_STORE_GET(int, scrollingTabIndicatorStyle, scrollingTabIndicatorGroup, tabIndicatorStyleKey, int)
+P_STORE_GET(int, scrollingTabIndicatorStyle, scrollingTabIndicatorGroup, styleKey, int)
 
 // Hand-written style setter, the setScrollingDefaultColumnWidthKind shape: one
 // stored Width key serves both styles, and the thickness that suits one is
@@ -301,11 +301,9 @@ P_STORE_GET(int, scrollingTabIndicatorStyle, scrollingTabIndicatorGroup, tabIndi
 // user who set 40 for chips still has 40 after a bar round trip.
 void Settings::setScrollingTabIndicatorStyle(int style)
 {
-    const int before =
-        m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::tabIndicatorStyleKey());
-    m_store->write(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::tabIndicatorStyleKey(), style);
-    const int after =
-        m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::tabIndicatorStyleKey());
+    const int before = m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::styleKey());
+    m_store->write(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::styleKey(), style);
+    const int after = m_store->read<int>(ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::styleKey());
     if (after == before) {
         return;
     }

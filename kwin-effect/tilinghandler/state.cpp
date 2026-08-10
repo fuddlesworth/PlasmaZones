@@ -1068,6 +1068,11 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     if (m_effect->m_scrollVisualPos.remove(windowId) > 0 && KWin::effects) {
         KWin::effects->addRepaintFull();
     }
+    // Geometry first, then the decoration funnel — the order every sibling
+    // exit path uses: the monocle unmaximize is a geometry change, and
+    // resolving the chain after it means the resolve sees the window's
+    // final shape.
+    unmaximizeMonocleWindow(windowId);
     // Shared placement-flip funnel (update-or-remove in the same turn) —
     // the bare removal here left the float paths WITHOUT a bulk
     // updateAllDecorations follow-up (daemon auto-float past maxWindows)
@@ -1075,7 +1080,6 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // the snap engine had. The tiled/floating facts were flipped above, so
     // the funnel resolves the floating-state chain.
     m_effect->reconcileDecorationOnPlacementFlip(windowId);
-    unmaximizeMonocleWindow(windowId);
 }
 
 void TilingHandler::applyPassiveFloatShed(const QString& windowId)

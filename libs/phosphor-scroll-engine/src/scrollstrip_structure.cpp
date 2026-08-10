@@ -134,6 +134,9 @@ bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width
             break;
         }
     }
+    // Cheap hardening only: the -1 active-index sentinel exists solely under
+    // isEmpty(), so a non-empty strip implies insertAt is already in range.
+    insertAt = qBound(0, insertAt, int(m_columns.size()));
     m_columns.insert(insertAt, col);
     if (m_preMaximizeColumnIdx >= insertAt) {
         ++m_preMaximizeColumnIdx;
@@ -183,9 +186,11 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     }
     // No re-anchor and no re-clamp, unlike every sibling insert verb: the
     // arrival joins the column that is ALREADY active, so no column index
-    // shifts, the active column does not change, and the strip's total width
-    // is unchanged (a stack adds no width). The anchor is active-relative,
-    // so it still means exactly what it did before the append.
+    // shifts and the active column does not change. The strip's total width
+    // is USUALLY unchanged — under respectMinimumSize a new tile's declared
+    // minimum can widen the host column, and updateViewForFocus backstops
+    // the view for that case. The anchor is active-relative, so it still
+    // means exactly what it did before the append.
     Q_UNUSED(width)
     return true;
 }
@@ -680,6 +685,9 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
         }
         Column newCol;
         newCol.width = col->width;
+        // Explicit, matching the consume twin: a single expelled tile is a
+        // Normal column regardless of the host's (possibly Tabbed) display.
+        newCol.display = ColumnDisplay::Normal;
         newCol.tiles.append(expelled);
         const int insertAt = delta > 0 ? m_activeColumnIdx + 1 : m_activeColumnIdx;
         m_columns.insert(insertAt, newCol);

@@ -461,6 +461,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     ScrollState* oldState = stateForWindow(windowId, &oldKey);
     const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
     if (oldState && oldKey == key) {
+        // Raw reverse-map key gate, deliberately NOT the containsWindow
+        // membership test the restore paths use: the one same-key producer
+        // whose strip does not contain the window is a drag-preview detach
+        // (tracked against the target key while the tile is held out), and
+        // early-returning there is exactly right — the commit/cancel owns
+        // the re-insert.
         // Re-announce of a window we already track here. Still an arrival as
         // far as the mode-transition seed is concerned: the header's
         // "consumed on EVERY outcome" invariant has no exception for this
@@ -549,8 +555,12 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         m_floatRestore.remove(windowId);
         // The mode-float marker goes with the old context too: the window
         // re-enters (usually tiled) on the new screen, and a stale marker
-        // would re-float it at the next mode transition.
+        // would re-float it at the next mode transition. The
+        // windowed-fullscreen apply memory follows for the same eviction
+        // symmetry the handoff paths keep (a stale true only costs one
+        // redundant emit, but the exit sets should stay identical).
         m_scrollFloatedWindows.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
         if (wasFloating) {
             // Announce the dropped float bit: signal-driven subscribers
             // (the effect's FloatingCache) would otherwise keep believing
@@ -612,6 +622,10 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         }
         if (!priorParkedEdge.isEmpty()) {
             m_parkedScrollEdge.insert(windowId, priorParkedEdge);
+        }
+        if (migratedWindowedFs) {
+            qCWarning(lcScrollEngine) << "windowOpened: insert refused for" << windowId
+                                      << "— migrated windowed-fullscreen state dropped";
         }
         return;
     }

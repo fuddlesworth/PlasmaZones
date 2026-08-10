@@ -979,24 +979,23 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // very tick — reaping it (the skipAnimation tail calls
         // removeAnimation) would snap one column out of the strip's slide.
         // But the clobber still has to be countered: the leg's own moveResize
-        // already ran BEFORE the ack (the animator never re-commits), so with
-        // an animation live, re-commit the column rect directly on the KWin
-        // window without touching the animator. Bracketed: moveResize emits
-        // frameGeometryChanged synchronously on X11 and this slot's caller
-        // holds no apply guard.
-        // The bracket covers BOTH arms: the applyWindowGeometry arm issues
-        // the same synchronous X11 moveResize the direct arm does, and
-        // applyWindowGeometry does not set inGeometryApply itself on the
-        // non-deferred path — an unbracketed re-entry would reach the
-        // VS-crossing detector (and the counter-assert gate) for a move the
-        // effect itself made.
+        // already ran BEFORE the ack (the animator never re-commits), so
+        // re-commit the column rect directly on the KWin window without
+        // touching the animator — in BOTH arms. The former no-animation arm
+        // routed through applyWindowGeometry, whose already-at-target no-op
+        // skip could swallow the re-commit when this slot runs before KWin's
+        // FullScreenArea clobber lands (the frame still reads as the column
+        // rect, the skip drops the apply, the later clobber stands). The
+        // direct moveResize is skip-proof, and none of applyWindowGeometry's
+        // extra services apply here (the window is live, visible and not
+        // mid-drag). Bracketed: moveResize emits frameGeometryChanged
+        // synchronously on X11 and this slot's caller holds no apply guard —
+        // an unbracketed re-entry would reach the VS-crossing detector (and
+        // the counter-assert gate) for a move the effect itself made.
         {
             const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
             m_effect->m_daemonGate.inGeometryApply = true;
-            if (!m_effect->m_windowAnimator->hasAnimation(w)) {
-                m_effect->applyWindowGeometry(w, m_effect->m_windowedFullscreenWindows.value(windowId),
-                                              /*allowDuringDrag=*/false, /*skipAnimation=*/true);
-            } else if (KWin::Window* kw = w->window()) {
+            if (KWin::Window* kw = w->window()) {
                 kw->moveResize(QRectF(m_effect->m_windowedFullscreenWindows.value(windowId)));
             }
             m_effect->m_daemonGate.inGeometryApply = prevInApply;

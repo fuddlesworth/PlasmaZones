@@ -276,8 +276,11 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
     // its TILE rect, never a free-floating position. Capturing it here would
     // poison the shared float-back with the tile rect (the reverse of the
     // per-mode leak that guard closes).
+    // Unguarded deref, this file's convention: m_tilingHandler is declared
+    // before m_snapHandler on the effect, so it outlives every SnapHandler
+    // call (documented at the adoptMinimizeFloated site).
     if (TilingHandler* autotile = m_effect->tilingHandler();
-        autotile && (autotile->isTiledWindow(windowId) || autotile->isMinimizeFloated(windowId))) {
+        autotile->isTiledWindow(windowId) || autotile->isMinimizeFloated(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-snap geometry for autotile-owned window (frame is tile rect)" << windowId;
         return;
     }
@@ -507,9 +510,11 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             // current mode or the unminimize leaves the window floating
             // until the next mode toggle. removeMinimizeFloated also cancels
             // that handler's pending deferred commit for the window.
+            // Unguarded deref per this file's convention (declaration order
+            // on the effect guarantees the handler outlives us).
             TilingHandler* autotile = m_effect->tilingHandler();
-            const int autotileBudgetUsed = autotile ? autotile->unfloatRetryBudgetUsed(windowId) : 0;
-            if (autotile && autotile->removeMinimizeFloated(windowId)) {
+            const int autotileBudgetUsed = autotile->unfloatRetryBudgetUsed(windowId);
+            if (autotile->removeMinimizeFloated(windowId)) {
                 m_minimizeFloatedWindows.insert(windowId);
                 // Budget survives the hop (see seedUnfloatRetryBudget).
                 seedUnfloatRetryBudget(windowId, autotileBudgetUsed);
@@ -806,7 +811,7 @@ void SnapHandler::retryVisibleMinimizeFloats()
         }
         const QString screenId = m_effect->getWindowScreenId(window);
         TilingHandler* autotile = m_effect->tilingHandler();
-        if (autotile && autotile->isManagedScreen(screenId)) {
+        if (autotile->isManagedScreen(screenId)) {
             // offerMinimizeEdge, not the void slot: the slot silently
             // returns on its entry gates (unhandleable, non-tileable), and a
             // refused transfer would otherwise leave the window floating

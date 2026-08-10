@@ -35,6 +35,13 @@ constexpr int kParkMargin = 16;
 /// ScrollEngine.h.
 constexpr int kMaxPendingSelfActivations = 16;
 
+/// Minimum visible sliver a straddling tile keeps on screen, on BOTH axes:
+/// the horizontal edge clamps and the vertical stack-overflow clamp share
+/// this floor (each raises it to the client's declared minimum under
+/// respectMinimumSize). Hoisted here beside kParkMargin because it governs
+/// two clamp sites, not one loop body.
+constexpr int kMinVisiblePeekPx = 48;
+
 } // namespace
 
 ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, int columnCountOverride) const
@@ -88,12 +95,14 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
             right = outer->right;
         }
     }
-    // Smart gaps: a single-column strip drops the outer gaps wholesale —
+    // Smart gaps: a single-COLUMN strip drops the outer gaps wholesale —
     // settings values AND context-rule overrides, matching autotile's bypass
-    // of its whole gap resolve. The inner gap stays as-is: with one column
-    // nothing consumes it between columns, and stacked tiles keeping their
-    // separation matches autotile's windowCount == 1 condition (a lone
-    // column with a stack is not a lone window).
+    // of its whole gap resolve. Deliberately column-count keyed, NOT the
+    // window-count gate autotile uses: a lone column with a stacked pair
+    // still fills the strip edge-to-edge, which is the look smart gaps are
+    // for, while a window-count gate would keep outer gaps around it. The
+    // inner gap stays as-is: with one column nothing consumes it between
+    // columns, and stacked tiles keep their separation.
     //
     // Resolved HERE rather than passed in, so every consumer of these params
     // agrees: the geometry producers and the pure-math verbs (navigation,
@@ -614,7 +623,6 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // mode covers only what the setting names: the side-edge
             // straddle. Vertical stack overflow is enforced unconditionally
             // further down.
-            constexpr int kMinVisiblePeekPx = 48;
             // Set when the clamp MOVES the tile's left edge, which pins its x
             // at the screen edge instead of leaving it where the strip put it.
             // The right-edge clamp keeps x and only changes width, so it does

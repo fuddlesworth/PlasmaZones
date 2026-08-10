@@ -241,7 +241,7 @@ private Q_SLOTS:
         // floor is the "fully rounded" sentinel.
         const QString tabGroup = ConfigDefaults::scrollingTabIndicatorGroup();
 
-        const auto* style = findKey(schema, tabGroup, ConfigDefaults::tabIndicatorStyleKey());
+        const auto* style = findKey(schema, tabGroup, ConfigDefaults::styleKey());
         QVERIFY(style && style->validator);
         QCOMPARE(style->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
         QCOMPARE(style->validator(ConfigDefaults::scrollingTabIndicatorStyleBar()).toInt(),

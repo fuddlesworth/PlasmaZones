@@ -252,15 +252,20 @@ void Daemon::updateEngineScreens()
     // screens are retiled with the correct per-screen algorithm (not the global
     // fallback).  applyPerScreenConfig lazily creates TilingStates via
     // tilingStateForScreen(), which setActiveScreens reuses for added screens.
-    if (m_settings) {
+    {
+        // The loop is NOT gated on m_settings: the algorithm injection and
+        // the rule-parameter layering derive from the layout assignment and
+        // the rule resolver, so a null settings service (defensive-only in
+        // practice) must not silently drop them. Only the config-derived
+        // reads below guard on m_settings individually.
         for (const QString& screenId : effectiveIds) {
             if (!autotileScreens.contains(screenId))
                 continue;
             // Virtual->physical fallback: a per-screen autotile override stored on
             // a physical monitor must still apply when this screenId is one of its
             // virtual sub-screens.
-            QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
-            if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            QVariantMap overrides = m_settings ? m_settings->getPerScreenAutotileSettings(screenId) : QVariantMap();
+            if (overrides.isEmpty() && m_settings && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
                 overrides = m_settings->getPerScreenAutotileSettings(
                     PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
             }
@@ -281,12 +286,14 @@ void Daemon::updateEngineScreens()
             // global config. Clamp before the enum compare exactly as the resolver
             // does (qBound), so a corrupt out-of-range stored value can't make the two
             // determinations drift (which would reintroduce the injected-cap defeat).
-            const int effectiveOverflow = qBound(
-                PhosphorTiles::AutotileDefaults::MinOverflowBehavior,
-                tilingParams.overflowBehavior.value_or(overrides.contains(PerScreenKeys::OverflowBehavior)
-                                                           ? overrides.value(PerScreenKeys::OverflowBehavior).toInt()
-                                                           : m_settings->autotileOverflowBehaviorInt()),
-                PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
+            const int effectiveOverflow =
+                qBound(PhosphorTiles::AutotileDefaults::MinOverflowBehavior,
+                       tilingParams.overflowBehavior.value_or(
+                           overrides.contains(PerScreenKeys::OverflowBehavior)
+                               ? overrides.value(PerScreenKeys::OverflowBehavior).toInt()
+                               : (m_settings ? m_settings->autotileOverflowBehaviorInt()
+                                             : PhosphorTiles::AutotileDefaults::MinOverflowBehavior)),
+                       PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
             const bool contextUnlimited =
                 effectiveOverflow == static_cast<int>(PhosphorTiles::AutotileOverflowBehavior::Unlimited);
             // Inject algorithm from layout assignment (authoritative source)
@@ -733,7 +740,14 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
     // rely on the same invariant.
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
-        if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
+        // Independent scopes: the activity compare must not hide behind the
+        // desktop sentinel, or a desktop-unscoped caller (the master-switch
+        // toggle) emits float restores for orders captured on OTHER
+        // activities.
+        if (desktop >= 0 && it.key().desktop != desktop) {
+            continue;
+        }
+        if (!activity.isEmpty() && it.key().activity != activity) {
             continue;
         }
         // Scope to the toggled screen when the caller says so. The per-screen

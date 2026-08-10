@@ -181,7 +181,13 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
                 bool focusSurvives = false;
                 for (const StashedColumn& col : std::as_const(stashIt->columns)) {
                     for (const StashedTile& tile : col.tiles) {
-                        focusSurvives = focusSurvives || tile.windowId == stashIt->focusedWindowId;
+                        if (tile.windowId == stashIt->focusedWindowId) {
+                            focusSurvives = true;
+                            break;
+                        }
+                    }
+                    if (focusSurvives) {
+                        break;
                     }
                 }
                 if (!focusSurvives) {
@@ -345,6 +351,14 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                         if (m_stripStashConsumed.contains(oldKey)) {
                             m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
                         }
+                    }
+                    // The mid-burst deferred-apply marker is context-keyed too:
+                    // left at the old key it can never drain (endArrivalBurst
+                    // resolves live keys), silently dropping the deferred apply
+                    // and its focusWindowAfter. Same move-only-if-vacant rule
+                    // as the stash.
+                    if (m_burstPendingApplies.contains(oldKey) && !m_burstPendingApplies.contains(newKey)) {
+                        m_burstPendingApplies.insert(newKey, m_burstPendingApplies.take(oldKey));
                     }
                     qCInfo(lcScrollEngine) << "Migrated screen" << screenId << "strip from desktop" << pinnedDesktop
                                            << "to" << newKey.desktop;

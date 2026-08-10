@@ -60,8 +60,12 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     m_scrollFloatedWindows.remove(windowId);
     // Same orphan rule as the float path: the window leaves this engine
     // alive, so the park-edge memory has to go here or it survives to
-    // mis-anchor the first arrival after a later re-adoption.
+    // mis-anchor the first arrival after a later re-adoption. The
+    // windowed-fullscreen apply memory goes with it — a stale true is
+    // benign (one redundant emit on re-adoption) but the symmetry keeps
+    // the eviction set identical across the exit paths.
     m_parkedScrollEdge.remove(windowId);
+    m_lastAppliedWindowedFs.remove(windowId);
     // Background-context guard, as windowClosed and the float paths carry: a
     // release out of another desktop's state must not retile the strip that
     // is on screen right now. The switch back retiles the mutated one.
@@ -127,6 +131,20 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         // name the stale context the migration above just emptied, which
         // would leave the window tracked at a key that no longer holds it.
         m_states.setKeyForWindow(windowId, key);
+        // Honour the context payload this arm would otherwise discard: the
+        // min-size clamp routes through the ordinary update entry (which
+        // handles tile and float shapes plus the background-context guard).
+        // A float-verdict mismatch is only logged — mutating placement in a
+        // defence-in-depth arm with no constructed producer risks more than
+        // it fixes, and the daemon's float record re-drives the verdict.
+        if (!ctx.minSize.isEmpty()) {
+            windowMinSizeUpdated(windowId, ctx.minSize.width(), ctx.minSize.height());
+        }
+        if (ctx.wasFloating != state->isFloating(windowId)) {
+            qCWarning(lcScrollEngine) << "handoffReceive: already-tracked window" << windowId
+                                      << "float verdict disagrees with context (ctx.wasFloating=" << ctx.wasFloating
+                                      << ")";
+        }
         return;
     }
     // Re-adoption starts from a blank rect memory: handoffRelease/windowClosed
