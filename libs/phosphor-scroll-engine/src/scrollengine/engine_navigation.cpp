@@ -781,12 +781,15 @@ void ScrollEngine::toggleFocusedFloatAs(const PhosphorEngine::NavigationContext&
         Q_EMIT navigationFeedback(false, failureAction, QStringLiteral("no_window"), QString(), QString(), screen);
         return;
     }
-    // Untracked check HERE, not only in the delegate: the failure token is
-    // per-verb (the restoreFocusedWindow comment above documents why), and
-    // toggleWindowFloat's own not_managed emit can only say "float" — a
-    // "Restore" press on an untracked window must report action "restore".
-    if (!stateForWindow(canonicalizeForLookup(windowId))) {
-        Q_EMIT navigationFeedback(false, failureAction, QStringLiteral("not_managed"), windowId, QString(), screen);
+    // Untracked check HERE, not only in the delegate: this engine reports the
+    // failure token per-verb (a scroll-engine convention — autotile's restore
+    // path still reports "float"), and toggleWindowFloat's own not_managed
+    // emit can only say "float" — a "Restore" press on an untracked window
+    // must report action "restore". Emit the CANONICAL id, matching what the
+    // delegate would have emitted.
+    const QString canonical = canonicalizeForLookup(windowId);
+    if (!stateForWindow(canonical)) {
+        Q_EMIT navigationFeedback(false, failureAction, QStringLiteral("not_managed"), canonical, QString(), screen);
         return;
     }
     toggleWindowFloat(windowId, ctx.screenId);

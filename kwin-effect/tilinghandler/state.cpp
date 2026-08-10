@@ -1098,7 +1098,8 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // idempotent and deliberately does not consult the membership hash, so
     // re-driving it off the snapshot is safe.
     const bool hadMembership = m_effect->m_windowedFullscreenWindows.remove(windowId);
-    if (hadMembership || m_effect->m_windowedFsLayerSnapshots.contains(windowId)) {
+    const bool released = hadMembership || m_effect->m_windowedFsLayerSnapshots.contains(windowId);
+    if (released) {
         releaseWindowedFullscreenState(windowId);
     }
     // A stale clear-in-flight marker must not outlive the hold it guarded —
@@ -1125,8 +1126,13 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // moment the release above lands — without this the window comes back
     // with no PlasmaZones chrome until an unrelated sweep. The rule-cache
     // invalidation the passive slot performs later early-returns in a
-    // default-config session, so it cannot substitute.
-    if (hadMembership) {
+    // default-config session, so it cannot substitute. Gated on the RELEASE
+    // having run, not on membership: the caller's clearWindowSnapped
+    // reconciled before this shed (fact-flip contract), i.e. while the
+    // window was still fullscreen, so a snapshot-only release with no
+    // follow-up reconcile here would leave the window undecorated until an
+    // unrelated sweep.
+    if (released) {
         m_effect->reconcileDecorationOnPlacementFlip(windowId);
     }
 }

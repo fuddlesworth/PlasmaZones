@@ -332,9 +332,10 @@ private Q_SLOTS:
         for (const auto& [colorKey, defaultColour] : colourPins) {
             const auto* color = findKey(schema, tabGroup, colorKey);
             QVERIFY2(color, qPrintable(colorKey));
-            // Pin the schema default to the ConfigDefaults accessor the
-            // consumers read, and separately pin that it is EMPTY (the
-            // "follow the theme" value) so neither side can drift alone.
+            // Pin the schema default to the ConfigDefaults accessor (today
+            // the schema reads the accessor directly, so this only guards
+            // against the entry being replaced with a literal), and
+            // separately pin that it is EMPTY (the "follow the theme" value).
             QCOMPARE(color->defaultValue.toString(), defaultColour);
             QVERIFY(color->defaultValue.toString().isEmpty());
             QVERIFY(color->validator);

@@ -206,9 +206,9 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
     // and the malformed-visual-position bail, both deliberately debug-level;
     // degenerate rects route through validationError and warn like any
     // other validator drop) into a warning that reads as suppressed errors.
-    // The same reasoning gates the
-    // aggregate itself on a validator drop having occurred: a batch emptied
-    // entirely by benign drops is not suppressed errors either.
+    // The same reasoning gates the aggregate itself on a validator drop
+    // having occurred: a batch emptied entirely by benign drops is not
+    // suppressed errors either.
     if (requests.isEmpty() && !batchEntries.isEmpty()) {
         if (sawValidatorDrop) {
             qCWarning(lcDbusTiling) << "relayTileRequestsJson: every entry of a" << batchEntries.size()

@@ -10,6 +10,7 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 #include <QJsonArray>
