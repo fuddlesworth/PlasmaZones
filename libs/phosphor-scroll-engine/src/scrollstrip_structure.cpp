@@ -283,6 +283,9 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     }
     const int oldViewX = viewXFor(params);
     int prevIdx = m_activeColumnIdx;
+    // Captured in PRE-removal indexing, where colIdx and the active index
+    // are still comparable — the side decides the anchor policy below.
+    const bool removedLeftOfActive = colIdx < m_activeColumnIdx;
 
     Column& col = m_columns[colIdx];
     const int tileIdx = col.indexOfWindow(windowId);
@@ -324,19 +327,34 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     }
     clampActiveIndices();
 
-    // Keep survivors visually stationary: the anchor is relative to the
-    // active column, so re-derive it from the pre-removal viewX. Without
-    // refocus (take/transfer path) the same math applies — the caller wants
-    // zero visual churn while it re-homes the window. The one hard rule is
-    // the strip's left edge: never expose space left of the first column.
-    // DELIBERATE asymmetry with keepOrRecenterAnchor (minimize-collapse /
-    // consume), which also clamps the RIGHT edge: on a removal the user
-    // just lost a window, and keeping the survivors pixel-stationary beats
-    // reclaiming right-edge dead space. The next focus change reclaims it;
-    // the engine's applyLayout does NOT (updateViewForFocus leaves a
-    // fully-visible column's anchor alone precisely to preserve this).
+    // Anchor policy splits on which SIDE of the active column the removal
+    // happened, matching niri's remove_column_by_idx ("A column to the left
+    // was removed; preserve the current position"):
+    //
+    // LEFT of active — keep the anchor. The anchor is the active column's
+    // on-screen offset, so keeping it holds the column the user is looking
+    // at pixel-stationary while the left-side survivors slide right to
+    // close the gap. Re-deriving from the old viewX here (the previous
+    // behaviour) slid the WHOLE visible strip left instead, active column
+    // included.
+    //
+    // AT or RIGHT of active — re-derive from the pre-removal viewX. The
+    // active-and-left strip coordinates are unchanged there, so this keeps
+    // every surviving on-screen column stationary and the gap closes from
+    // the right. Without refocus (take/transfer path) the same math
+    // applies — the caller wants zero visual churn while it re-homes the
+    // window.
+    //
+    // The one hard rule for BOTH sides is the strip's left edge: never
+    // expose space left of the first column. DELIBERATE asymmetry with
+    // keepOrRecenterAnchor (minimize-collapse / consume), which also clamps
+    // the RIGHT edge: on a removal the user just lost a window, and keeping
+    // the view stationary beats reclaiming right-edge dead space. The next
+    // focus change reclaims it; the engine's applyLayout does NOT
+    // (updateViewForFocus leaves a fully-visible column's anchor alone
+    // precisely to preserve this).
     const int stripX = columnStripX(m_activeColumnIdx, params);
-    int anchor = stripX - oldViewX;
+    int anchor = removedLeftOfActive ? m_viewAnchor : stripX - oldViewX;
     if (stripX - anchor < 0) {
         anchor = stripX;
     }
