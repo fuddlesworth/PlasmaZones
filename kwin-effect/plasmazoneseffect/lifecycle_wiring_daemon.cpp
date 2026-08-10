@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/stripviewanimator.h"
 #include "input_filter.h"
 
 #include <PhosphorProtocol/ClientHelpers.h>
