@@ -174,23 +174,31 @@ QtObject {
     }
 
     // Colour swatch + picker for `kind == "color"` params — the single `value`
-    // colour on SetBorderColorActive / SetBorderColorInactive. Stores a
-    // `#AARRGGBB` wire string (alpha-first, matching QColor::HexArgb and the
-    // global zone/border colours) so transparency set in the picker survives.
-    // The validator accepts the `#AARRGGBB` shape and the effect-side consumer
-    // parses it via `QColor(QString)` (which reads 9-digit hex alpha-first).
+    // colour on SetBorderColorActive / SetBorderColorInactive / SetTintColor
+    // plus the overlay-colour actions. Stores a `#AARRGGBB` wire string
+    // (alpha-first, matching QColor::HexArgb and the global zone/border
+    // colours) so transparency set in the picker survives. The validator
+    // accepts the `#AARRGGBB` shape and the effect-side consumer parses it via
+    // `QColor(QString)` (which reads 9-digit hex alpha-first).
+    //
+    // Presented through ThemeFallbackColorControl — the same swatch, hex
+    // label, and reset every settings-page colour row uses — with "accent" as
+    // the sentinel. Only the three border/tint actions carry the accent
+    // concept (their consumer resolves the token; the overlay-colour actions'
+    // validator is plain hex), so Reset exists only on those.
     property Component _colorParamEditor: Component {
         RowLayout {
+            id: colorEditorRoot
+
             readonly property var _param: parent.modelData
             // Final fallback (colour param with no stored value AND no metadata
             // default) derives from the theme's accent rather than a hardcoded
             // hex (CLAUDE.md: never hardcode colors).
             readonly property string _hex: (row.action[_param.key] !== undefined && row.action[_param.key] !== "") ? String(row.action[_param.key]) : (_param.default !== undefined ? String(_param.default) : String(Kirigami.Theme.highlightColor))
-            // A border-colour action's single `value` param may carry the "accent"
-            // sentinel ("follow the system accent") instead of a hex string. It is
-            // not a QColor, so render the live system colour for the swatch and a
-            // word for the label rather than letting QColor("accent") fall to black.
-            readonly property bool _isAccent: _hex === "accent"
+            // The actions whose consumer resolves the "accent" sentinel
+            // ("follow the system accent") — the same trio
+            // RuleAuthoring::defaultPayloadFor seeds it for.
+            readonly property bool _accentCapable: row.action.type === "setBorderColorActive" || row.action.type === "setBorderColorInactive" || row.action.type === "setTintColor"
             // The accent sentinel follows the system colour scheme per focus state,
             // the same split updateWindowDecoration applies: the focused (active) slot
             // adopts the highlight colour, the unfocused (inactive) slot the inactive
@@ -201,42 +209,26 @@ QtObject {
 
             spacing: Kirigami.Units.smallSpacing
 
-            ColorButton {
-                id: swatch
-
-                color: parent._isAccent ? parent._accentColor : parent._hex
-                Accessible.name: _param.label
-                onClicked: {
-                    // Open the PAGE-LEVEL colour picker (via the appSettings
-                    // bridge) rather than a delegate-scoped ColorDialog: a
-                    // rule-list rebuild while the dialog is open would destroy
-                    // this delegate and tear the popup down under the user. The
-                    // target param key is captured in the transient accepted
-                    // handler, which self-disconnects on close.
-                    var picker = row.appSettings ? row.appSettings.colorPicker : null;
-                    if (!picker)
-                        return;
-                    var key = _param.key;
-                    function acceptedHandler() {
-                        picker.accepted.disconnect(acceptedHandler);
-                        picker.rejected.disconnect(rejectedHandler);
-                        row.actionEdited(row._withParam(key, row._toHexArgb(picker.selectedColor)));
-                    }
-                    function rejectedHandler() {
-                        picker.accepted.disconnect(acceptedHandler);
-                        picker.rejected.disconnect(rejectedHandler);
-                    }
-                    picker.accepted.connect(acceptedHandler);
-                    picker.rejected.connect(rejectedHandler);
-                    picker.openFor(swatch.color);
+            ThemeFallbackColorControl {
+                storedColor: colorEditorRoot._hex
+                sentinel: "accent"
+                fallbackLabel: i18n("Accent")
+                themeColor: colorEditorRoot._accentColor
+                // Reset only where the sentinel means something: writing
+                // "accent" into an overlay-colour action would fail its
+                // plain-hex validator.
+                showReset: colorEditorRoot._accentCapable
+                resetAccessibleName: i18n("Reset to the system accent color")
+                resetToolTip: i18n("Follow the system accent color")
+                // The PAGE-LEVEL colour picker (via the appSettings bridge)
+                // rather than a delegate-scoped ColorDialog: a rule-list
+                // rebuild while the dialog is open would destroy this delegate
+                // and tear the popup down under the user.
+                picker: row.appSettings ? row.appSettings.colorPicker : null
+                swatchAccessibleName: colorEditorRoot._param.label
+                onColorChosen: function (hex) {
+                    row.actionEdited(row._withParam(colorEditorRoot._param.key, hex));
                 }
-            }
-
-            Label {
-                // Show the stored #AARRGGBB wire value (alpha-first), or "Accent"
-                // for the system-accent sentinel.
-                text: parent._isAccent ? i18n("Accent") : parent._hex.toUpperCase()
-                font: Kirigami.Theme.fixedWidthFont
             }
 
             Item {

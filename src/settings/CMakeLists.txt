@@ -504,8 +504,9 @@ qt_add_qml_module(plasmazones-settings
         qml/js/PresetList.js
         qml/components/SettingsButtonGroup.qml
         qml/components/ColorSwatchRow.qml
-        # The sentinel-fallback colour row: scrolling's tab and drop-indicator
-        # colours today, every follow-the-system colour setting eventually.
+        # The sentinel-fallback colour surface: the inner control (swatch,
+        # hex, reset) plus the SettingsRow wrapper the settings pages host.
+        qml/components/ThemeFallbackColorControl.qml
         qml/components/ThemeFallbackColorRow.qml
         qml/pages/layouts/NewLayoutDialog.qml
         qml/pages/layouts/ScrollingTemplateEditorDialog.qml

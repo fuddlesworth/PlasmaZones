@@ -219,17 +219,6 @@ ColumnLayout {
         row: row
     }
 
-    /// Encode a QML color to a `#AARRGGBB` wire string (alpha-first) — the form
-    /// the border-colour validator accepts and the consumer parses back via
-    /// QColor::HexArgb. Mirrors how general-settings border colours are stored.
-    function _toHexArgb(c) {
-        function h(v) {
-            var s = Math.round(v * 255).toString(16);
-            return s.length < 2 ? "0" + s : s;
-        }
-        return "#" + h(c.a) + h(c.r) + h(c.g) + h(c.b);
-    }
-
     // `actionEdited`, not `actionChanged`, because `property var action`
     // auto-generates `actionChanged()` and QML rejects the duplicate signal.
     signal actionEdited(var updatedAction)
