@@ -81,24 +81,6 @@ auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
     };
 }
 
-/// Window-border colour validator. The value is a string that is EITHER the
-/// "accent" sentinel (which the effect resolves to the live system colour) OR any
-/// string QColor accepts (a #hex or a named colour, matching what the effect
-/// parses); snap anything else to @p fallback. Kept as a string round-trip so a
-/// hand-edited garbage colour in the on-disk file can't flow to the effect. The
-/// bare "accent" literal mirrors ConfigDefaults::windowBorderColorActive (the
-/// config layer deliberately avoids pulling PhosphorRules::BorderColorToken in).
-auto validBorderColorOr(QString fallback)
-{
-    return [fallback = std::move(fallback)](const QVariant& v) -> QVariant {
-        const QString raw = v.toString();
-        if (raw == QLatin1String("accent") || QColor(raw).isValid()) {
-            return raw;
-        }
-        return fallback;
-    };
-}
-
 /// Normalize a comma-joined list: split, trim each entry, drop empties,
 /// drop duplicates, rejoin. Shared by every setting whose wire format is a
 /// comma-separated list (layout order, algorithm order, exclusion lists).
@@ -989,9 +971,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Windows (window decoration appearance) ─────────────────────────────────
-// Mode-neutral window border + title bar. Border colours are strings (the
-// "accent" sentinel, or a hex/named colour) validated by the string-form
-// validBorderColorOr rather than the QColor-coercing validColorOr. The
+// Mode-neutral window border + title bar. Border colours are theme-fallback
+// strings (EMPTY = "follow the system accent", or a hex/named colour),
+// validated by canonicalThemeFallbackColor like every other follow-the-system
+// colour key. The
 // border/title-bar scope is a closed-set token ("tiled" / "normal" / "all")
 // the Appearance page and the effect agree on, snapped to the default on an
 // unknown on-disk value.
@@ -1032,12 +1015,12 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          CD::windowBorderColorActive(),
          QMetaType::QString,
          {},
-         validBorderColorOr(CD::windowBorderColorActive())},
+         canonicalThemeFallbackColor},
         {CD::borderColorInactiveKey(),
          CD::windowBorderColorInactive(),
          QMetaType::QString,
          {},
-         validBorderColorOr(CD::windowBorderColorInactive())},
+         canonicalThemeFallbackColor},
         {CD::hideTitleBarsKey(), CD::hideWindowTitleBars(), QMetaType::Bool},
         {CD::titleBarScopeKey(),
          CD::windowTitleBarScope(),
@@ -1052,7 +1035,8 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          clampInt(CD::focusFadeDurationMin(), CD::focusFadeDurationMax())},
         // Plain opacity+tint layer: opacity/strength are [0.0, 1.0] doubles,
         // the tint colour shares the border-colour shape (#AARRGGBB or the
-        // accent sentinel) and the scope shares the closed token set.
+        // empty follow-the-accent sentinel) and the scope shares the closed
+        // token set.
         {CD::showOpacityTintKey(), CD::showWindowOpacityTint(), QMetaType::Bool},
         {CD::opacityTintScopeKey(),
          CD::windowOpacityTintScope(),
@@ -1070,7 +1054,7 @@ void appendWindowsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Double,
          {},
          clampDouble(CD::windowTintStrengthMin(), CD::windowTintStrengthMax())},
-        {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString, {}, validBorderColorOr(CD::windowTintColor())},
+        {CD::tintColorKey(), CD::windowTintColor(), QMetaType::QString, {}, canonicalThemeFallbackColor},
     };
 }
 

@@ -238,8 +238,12 @@ public:
     /// bool is gone. This step removes the four colour keys when UseSystem
     /// was on (or absent — its v5 default was true), since their stored
     /// values were palette snapshots rather than user picks; keeps the hex
-    /// strings verbatim when it was off; strips the UseSystem key either
-    /// way; and stamps `_version = 6`.
+    /// strings verbatim when it was off; and strips the UseSystem key either
+    /// way. The window-appearance colours
+    /// (`Windows/{BorderColorActive,BorderColorInactive,TintColor}`) adopt
+    /// the same empty sentinel: a stored `"accent"` token (their v5 sentinel)
+    /// is removed so the key falls back to following the system accent.
+    /// Stamps `_version = 6`.
     static void migrateV5ToV6(QJsonObject& root);
 
     /// Prune the retired provider-default catch-all assignment rule from

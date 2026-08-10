@@ -271,26 +271,51 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("borderRadius", borderRadius, setBorderRadius)
 
     // Window decoration appearance (config-backed default the KWin effect resolves
-    // against, with user rules overriding per slot). The two colour keys carry a
-    // hex string OR the "accent" sentinel, so they marshal as plain strings (not
-    // REGISTER_COLOR_SETTING, which would round-trip through QColor and drop the
-    // sentinel).
+    // against, with user rules overriding per slot).
+    //
+    // The three colour keys are theme-fallback strings whose EMPTY sentinel
+    // means "follow the system accent". The sentinel is RESOLVED here, before
+    // the value crosses D-Bus: the effect's settings reader treats an empty
+    // colour reply as version skew and drops it, so the wire must only ever
+    // carry concrete colours. The resolution targets are the same system
+    // colours the effect resolves a rule-side "accent" token against
+    // (zone highlight for the active/tint slots, zone inactive for the
+    // inactive slot), so config-default and rule-side accent stay one colour.
+    // The setter accepts the sentinel or any colour QColor parses, rejecting
+    // garbage at the boundary like REGISTER_THEME_FALLBACK_COLOR does.
+#define REGISTER_RESOLVED_FALLBACK_COLOR(keyName, getter, setter, resolver)                                            \
+    m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
+        const QString raw = m_settings->getter();                                                                      \
+        return raw.isEmpty() ? m_settings->resolver().name(QColor::HexArgb) : raw;                                     \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(keyName)] = [this](const QVariant& v) {                                                   \
+        const QString s = v.toString();                                                                                \
+        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(s);                                                                                         \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(keyName)] = QStringLiteral("string");
+
     REGISTER_BOOL_SETTING("showWindowBorder", showWindowBorder, setShowWindowBorder)
     REGISTER_STRING_SETTING("windowBorderScope", windowBorderScope, setWindowBorderScope)
     REGISTER_INT_SETTING("windowBorderWidth", windowBorderWidth, setWindowBorderWidth)
     REGISTER_INT_SETTING("windowBorderRadius", windowBorderRadius, setWindowBorderRadius)
-    REGISTER_STRING_SETTING("windowBorderColorActive", windowBorderColorActive, setWindowBorderColorActive)
-    REGISTER_STRING_SETTING("windowBorderColorInactive", windowBorderColorInactive, setWindowBorderColorInactive)
+    REGISTER_RESOLVED_FALLBACK_COLOR("windowBorderColorActive", windowBorderColorActive, setWindowBorderColorActive,
+                                     highlightColor)
+    REGISTER_RESOLVED_FALLBACK_COLOR("windowBorderColorInactive", windowBorderColorInactive,
+                                     setWindowBorderColorInactive, inactiveColor)
     REGISTER_BOOL_SETTING("hideWindowTitleBars", hideWindowTitleBars, setHideWindowTitleBars)
     REGISTER_STRING_SETTING("windowTitleBarScope", windowTitleBarScope, setWindowTitleBarScope)
     // Plain opacity+tint layer (same config-backed-default model as the
-    // border block above). The tint colour carries a hex string OR the
-    // "accent" sentinel, so it marshals as a plain string too.
+    // border block above); the tint colour resolves like the active border.
     REGISTER_BOOL_SETTING("showWindowOpacityTint", showWindowOpacityTint, setShowWindowOpacityTint)
     REGISTER_STRING_SETTING("windowOpacityTintScope", windowOpacityTintScope, setWindowOpacityTintScope)
     REGISTER_DOUBLE_SETTING("windowOpacity", windowOpacity, setWindowOpacity)
     REGISTER_DOUBLE_SETTING("windowTintStrength", windowTintStrength, setWindowTintStrength)
-    REGISTER_STRING_SETTING("windowTintColor", windowTintColor, setWindowTintColor)
+    REGISTER_RESOLVED_FALLBACK_COLOR("windowTintColor", windowTintColor, setWindowTintColor, highlightColor)
+#undef REGISTER_RESOLVED_FALLBACK_COLOR
     REGISTER_INT_SETTING("focusFadeDuration", focusFadeDuration, setFocusFadeDuration)
     REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
     // Custom setter with range validation instead of REGISTER_DOUBLE_SETTING.

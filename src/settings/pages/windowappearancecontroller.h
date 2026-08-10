@@ -79,12 +79,6 @@ class WindowAppearanceController : public PhosphorControl::PageController
     Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
     Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
 
-    // ── Border colour sentinel (single source: ConfigDefaults) ──
-    // The "follow the system accent" sentinel the theme-fallback colour rows
-    // compare and reset against. Exposed here so QML never hardcodes the
-    // literal.
-    Q_PROPERTY(QString accentColorToken READ accentColorToken CONSTANT)
-
     // ── CONSTANT slider bounds ────────────────────────────────────────────────
     Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
     Q_PROPERTY(int borderWidthMax READ borderWidthMax CONSTANT)
@@ -179,11 +173,6 @@ public:
     // tracking rides; these invokables are the per-monitor-aware path.
     Q_INVOKABLE QVariant gapValue(const QString& screenName, const QString& key) const;
     Q_INVOKABLE void writeGap(const QString& screenName, const QString& key, const QVariant& value);
-
-    QString accentColorToken() const
-    {
-        return ConfigDefaults::windowBorderColorActive();
-    }
 
     // CONSTANT slider bounds.
     int borderWidthMin() const

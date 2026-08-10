@@ -40,6 +40,14 @@ constexpr QLatin1String kV5KeyBorder{"Border"};
 constexpr QLatin1String kV5KeyFontColor{"FontColor"};
 // The v5 compile default for UseSystem: an absent key means "on".
 constexpr bool kV5DefUseSystemColors = true;
+// The window-appearance colour keys, whose v5 sentinel was the literal
+// "accent" (the rule vocabulary's token); v6 spells "follow the system
+// accent" as the same empty sentinel every theme-fallback key uses.
+constexpr QLatin1String kV5WindowsGroup{"Windows"};
+constexpr QLatin1String kV5KeyBorderColorActive{"BorderColorActive"};
+constexpr QLatin1String kV5KeyBorderColorInactive{"BorderColorInactive"};
+constexpr QLatin1String kV5KeyTintColor{"TintColor"};
+constexpr QLatin1String kV5AccentToken{"accent"};
 
 // Parse a v5 colour value the way the v5 reader (JsonGroup::readColor) did:
 // a #hex / named string via QColor, plus the legacy KConfig "r,g,b[,a]"
@@ -134,6 +142,20 @@ void ConfigMigration::migrateV5ToV6(QJsonObject& root)
     QJsonObject labels = groupObjectAtPath(root, kV5LabelsGroup);
     convertColorKey(labels, kV5KeyFontColor, systemOn);
     putGroupBack(root, kV5LabelsGroup, labels);
+
+    // Window-appearance colours: the v5 "accent" sentinel becomes the empty
+    // sentinel, which with sparse persistence means REMOVING the key (it is
+    // now the schema default). Sparse pruning makes an on-disk "accent"
+    // unlikely, but a hand-edited config can carry it. Concrete hex picks
+    // stay verbatim; the read-side canonicalThemeFallbackColor validator
+    // snaps any garbage to the sentinel like the other colour keys.
+    QJsonObject windows = groupObjectAtPath(root, kV5WindowsGroup);
+    for (const QLatin1String key : {kV5KeyBorderColorActive, kV5KeyBorderColorInactive, kV5KeyTintColor}) {
+        if (windows.value(key).toString() == kV5AccentToken) {
+            windows.remove(key);
+        }
+    }
+    putGroupBack(root, kV5WindowsGroup, windows);
 
     // Stamp the literal, not ConfigSchemaVersion — the historical step's
     // output must stay frozen when the chain grows again.

@@ -549,8 +549,8 @@ private Q_SLOTS:
     /// A providesBorder pack newly added to a chain gets its shared contract
     /// params seeded from the plain Windows border setting: width copied,
     /// radius clamped to the pack's declared max, a concrete active colour
-    /// copied, the "accent" sentinel skipped, a non-border pack untouched, and
-    /// an already-present pack never re-seeded.
+    /// copied, the empty follow-the-accent sentinel skipped, a non-border
+    /// pack untouched, and an already-present pack never re-seeded.
     void setChain_seedsBorderPackParamsFromPlainBorderSetting()
     {
         QTemporaryDir tmp;
@@ -566,7 +566,7 @@ private Q_SLOTS:
         settings.setWindowBorderWidth(4);
         settings.setWindowBorderRadius(12); // above the pack's max of 8
         settings.setWindowBorderColorActive(QStringLiteral("#80ff0000"));
-        settings.setWindowBorderColorInactive(QStringLiteral("accent")); // sentinel, not a colour
+        settings.setWindowBorderColorInactive(QString()); // sentinel, not a colour
 
         DecorationPageController c(&registry, &settings);
         const QString path = QStringLiteral("window.tiled");
@@ -577,7 +577,7 @@ private Q_SLOTS:
         QCOMPARE(fancy.value(QStringLiteral("borderWidth")).toInt(), 4);
         QCOMPARE(fancy.value(QStringLiteral("cornerRadius")).toInt(), 8);
         QCOMPARE(QColor(fancy.value(QStringLiteral("activeColor")).toString()), QColor(QStringLiteral("#80ff0000")));
-        QVERIFY2(!fancy.contains(QStringLiteral("inactiveColor")), "accent sentinel must not seed a colour");
+        QVERIFY2(!fancy.contains(QStringLiteral("inactiveColor")), "the follow sentinel must not seed a colour");
         QVERIFY2(!params.contains(QStringLiteral("glowish")), "non-border pack must not be seeded");
 
         // Re-writing the chain with the pack already present must not re-seed:

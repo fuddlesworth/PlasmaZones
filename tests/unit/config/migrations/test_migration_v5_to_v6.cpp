@@ -166,6 +166,32 @@ private Q_SLOTS:
         QCOMPARE(labelsAfter(after).value(QStringLiteral("FontColor")).toString(), QStringLiteral("#ffddeeff"));
     }
 
+    void testWindowsAccentToken_becomesEmptySentinel()
+    {
+        IsolatedConfigGuard guard;
+        QJsonObject windows;
+        windows.insert(QStringLiteral("BorderColorActive"), QStringLiteral("accent"));
+        windows.insert(QStringLiteral("BorderColorInactive"), QStringLiteral("#FF112233"));
+        windows.insert(QStringLiteral("TintColor"), QStringLiteral("accent"));
+        // An unrelated sibling key that must survive untouched.
+        windows.insert(QStringLiteral("Width"), 4);
+        QJsonObject root = makeV5Config({}, {});
+        root.insert(QStringLiteral("Windows"), windows);
+        writeJson(ConfigDefaults::configFilePath(), root);
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject after = readJson(ConfigDefaults::configFilePath());
+        const QJsonObject windowsOut = after.value(QStringLiteral("Windows")).toObject();
+        // The "accent" sentinel spells "follow the system accent" as the
+        // empty sentinel now, which with sparse persistence means the key is
+        // simply gone; a concrete pick stays verbatim.
+        QVERIFY(!windowsOut.contains(QStringLiteral("BorderColorActive")));
+        QVERIFY(!windowsOut.contains(QStringLiteral("TintColor")));
+        QCOMPARE(windowsOut.value(QStringLiteral("BorderColorInactive")).toString(), QStringLiteral("#FF112233"));
+        QCOMPARE(windowsOut.value(QStringLiteral("Width")).toInt(), 4);
+    }
+
     void testAlreadyV6_versionGateIsNoOp()
     {
         IsolatedConfigGuard guard;

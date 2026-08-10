@@ -33,6 +33,10 @@ namespace {
 // its `accent` sentinel maps to. Mirrors resolveWindowAppearance's rule colour
 // path: the sentinel yields @p systemColor (nullopt when that colour is not yet
 // known), an empty string contributes nothing, anything else parses as hex.
+// A CURRENT daemon resolves its empty follow-the-accent sentinel before the
+// value crosses D-Bus, so this normally sees only concrete hex; the accent
+// branch stays for the rule path's shared vocabulary and for an older daemon
+// that still marshals the token.
 std::optional<QColor> resolveDefaultBorderColor(const QString& value, const QColor& systemColor)
 {
     if (value.isEmpty()) {

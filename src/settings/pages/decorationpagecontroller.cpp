@@ -241,9 +241,9 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
     // for a pack. Seeds only while the matching plain layer is on (otherwise
     // there is no look to carry), only ids the pack declares (border-rgb has
     // no colour slots, border-double no borderWidth), clamped to the pack's
-    // declared bounds, and never over an existing value. The "accent" colour
-    // sentinel is not a valid QColor and is skipped, leaving the pack's own
-    // default colours.
+    // declared bounds, and never over an existing value. The empty
+    // follow-the-accent sentinel is not a valid QColor and is skipped,
+    // leaving the pack's own default colours.
     if (m_registry && (m_settings->showWindowBorder() || m_settings->showWindowOpacityTint())) {
         // Base the working map on the DIRECT override when one is engaged, else
         // on the RESOLVED effective parameters. Seeding engages the optional

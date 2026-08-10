@@ -19,13 +19,6 @@ SettingsFlickable {
     // the CONSTANT slider bounds.
     readonly property var ctl: settingsController.windowAppearancePage
 
-    // "Follow the system accent" sentinel. The effect resolves it to the live
-    // system accent colour at paint time, so a border colour stored as this token
-    // tracks Plasma accent changes without an edit. Sourced from the controller so
-    // it stays in lockstep with the config layer, the schema validator, and the
-    // effect.
-    readonly property string accentToken: root.ctl.accentColorToken
-
     // The border detail controls (width, radius, colours) are hidden while the
     // border is off so the user cannot edit values that would not apply.
     readonly property bool borderVisible: root.ctl.showWindowBorder
@@ -252,12 +245,11 @@ SettingsFlickable {
                 }
 
                 // ── Border colours — a border concern, so they live in this
-                // card. The stored sentinel is "accent" rather than the empty
-                // string the scrolling keys use: the effect's settings reader
-                // treats an empty D-Bus reply as version skew and drops it,
-                // and the rules vocabulary shares the token, so the sentinel
-                // stays "accent" while the row presents the same
-                // follow-the-scheme affordance as everywhere else.
+                // card. Theme-fallback keys with the standard EMPTY sentinel;
+                // the DAEMON resolves the sentinel before the value crosses
+                // D-Bus, so the effect only ever sees concrete colours. (The
+                // rules vocabulary still spells its sentinel "accent", because
+                // a rule param's empty slot already means "unset".)
                 ThemeFallbackColorRow {
                     visible: root.borderVisible
                     title: i18n("Active border color")
@@ -267,11 +259,9 @@ SettingsFlickable {
                     description: i18n("Border color for the focused window. Follows the color scheme unless you pick one.")
 
                     storedColor: root.ctl.windowBorderColorActive
-                    sentinel: root.accentToken
                     // The colour the focused border actually draws while it
                     // follows the scheme: the live system highlight, alpha
-                    // included. A stored "accent" value would otherwise coerce
-                    // to black.
+                    // included.
                     themeColor: appSettings.highlightColor
                     picker: borderColorDialog
                     onColorChosen: function (hex) {
@@ -292,7 +282,6 @@ SettingsFlickable {
                     description: i18n("Border color for unfocused windows. Follows the color scheme unless you pick one.")
 
                     storedColor: root.ctl.windowBorderColorInactive
-                    sentinel: root.accentToken
                     // The unfocused border follows the system INACTIVE colour
                     // (alpha included), not the accent, matching what the
                     // border actually draws.
@@ -404,16 +393,14 @@ SettingsFlickable {
                     description: i18n("Color the window is washed with when the tint strength is above zero. Follows the color scheme unless you pick one.")
 
                     storedColor: root.ctl.windowTintColor
-                    // Same "accent" sentinel as the border rows above.
-                    sentinel: root.accentToken
-                    // Preview the live highlight instead of coercing the token
-                    // to black.
+                    // Preview the live highlight the tint follows.
                     themeColor: appSettings.highlightColor
                     picker: tintColorDialog
                     onColorChosen: function (hex) {
-                        // Stored opaque unless it is the sentinel; the tint
-                        // strength slider is the sole alpha (see hexToOpaqueHex).
-                        root.ctl.windowTintColor = hex === root.accentToken ? hex : root.hexToOpaqueHex(hex);
+                        // Stored opaque unless it is the empty sentinel; the
+                        // tint strength slider is the sole alpha (see
+                        // hexToOpaqueHex).
+                        root.ctl.windowTintColor = hex === "" ? hex : root.hexToOpaqueHex(hex);
                     }
                 }
             }

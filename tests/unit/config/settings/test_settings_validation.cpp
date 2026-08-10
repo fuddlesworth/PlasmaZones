@@ -443,20 +443,15 @@ private Q_SLOTS:
     }
 
     /**
-     * The "accent" sentinel is a valid border-colour value (the effect resolves it
-     * to the live system colour) and must pass validation.
-     *
-     * COVERAGE LIMIT, stated so nobody trusts this beyond what it proves: every
-     * string-colour key defaults to "accent", so a validator that DROPPED the
-     * sentinel and fell back to the schema default would also return "accent"
-     * and still pass. The sentinel branch is therefore covered only indirectly —
-     * the hex legs above are what prove the validator preserves a non-default
-     * valid value rather than blanket-snapping. There is no in-tree way to make
-     * this assertion falsifiable (the validator is TU-local and sparse
-     * persistence deletes a default-equal write), so the test stands as a
-     * smoke check that "accent" does not trip the invalid-colour path.
+     * "accent" is no longer a stored value for the window colour keys — their
+     * v6 sentinel is the empty string, resolved by the daemon before the
+     * value crosses D-Bus (rules keep the token, the config does not). A
+     * hand-edited leftover "accent" is neither the sentinel nor a QColor, so
+     * canonicalThemeFallbackColor snaps it to the sentinel and the key falls
+     * back to following the system accent rather than painting a black
+     * border.
      */
-    void testReadValidatedBorderColor_accentPreserved()
+    void testReadValidatedBorderColor_accentTokenSnapsToSentinel()
     {
         IsolatedConfigGuard guard;
 
@@ -469,7 +464,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.windowBorderColorActive(), QStringLiteral("accent"));
+        QCOMPARE(settings.windowBorderColorActive(), QString());
     }
 
     /**
@@ -510,13 +505,11 @@ private Q_SLOTS:
     }
 
     /**
-     * The "accent" sentinel is a valid tint-colour value (the effect resolves it to the
-     * live system colour) and must pass validation. Same coverage limit as the
-     * border-colour sibling above: the sentinel equals the default, so this is a
-     * smoke check that "accent" avoids the invalid-colour path, not proof the
-     * validator preserves it — the hex leg carries that proof.
+     * The tint colour shares the border keys' v6 contract: "accent" is not a
+     * stored value any more, so a hand-edited leftover snaps to the empty
+     * sentinel (see the border sibling above).
      */
-    void testReadValidatedTintColor_accentPreserved()
+    void testReadValidatedTintColor_accentTokenSnapsToSentinel()
     {
         IsolatedConfigGuard guard;
 
@@ -529,7 +522,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.windowTintColor(), QStringLiteral("accent"));
+        QCOMPARE(settings.windowTintColor(), QString());
     }
 
     // =========================================================================

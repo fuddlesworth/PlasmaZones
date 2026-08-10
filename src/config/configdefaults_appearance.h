@@ -220,13 +220,17 @@ public:
     {
         return ::PhosphorCompositor::DecorationDefaults::HideTitleBars;
     }
-    // The "accent" sentinel (PhosphorRules::BorderColorToken::Accent) — the effect
-    // resolves it to the live system accent / inactive colour at paint time. Kept
-    // as a bare literal here rather than pulling PhosphorRules into this
-    // widely-included header; the inactive default mirrors the active one.
+    // Theme-fallback keys, like every other follow-the-system colour: EMPTY
+    // means "follow the system accent" (the zone highlight / inactive colour),
+    // resolved by the DAEMON before the value crosses D-Bus, so the effect's
+    // empty-reply skew guard keeps meaning skew and only ever sees concrete
+    // colours from config. The rules vocabulary is separate: rule actions
+    // still carry PhosphorRules::BorderColorToken::Accent, because a rule
+    // param's empty slot already means "unset". The inactive default mirrors
+    // the active one.
     static QString windowBorderColorActive()
     {
-        return QStringLiteral("accent");
+        return QString();
     }
     static QString windowBorderColorInactive()
     {
