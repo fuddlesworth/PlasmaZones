@@ -25,9 +25,6 @@ SettingsFlickable {
     // it stays in lockstep with the config layer, the schema validator, and the
     // effect.
     readonly property string accentToken: root.ctl.accentColorToken
-    // Concrete fallback colour written when the user turns the accent toggle off
-    // (KDE accent blue, opaque). Also controller-sourced for the same reason.
-    readonly property string defaultBorderHex: root.ctl.defaultBorderColorHex
 
     // The border detail controls (width, radius, colours) are hidden while the
     // border is off so the user cannot edit values that would not apply.
@@ -64,23 +61,14 @@ SettingsFlickable {
         return -1;
     }
 
-    // Always emit the full 8-digit #AARRGGBB form so the stored value matches
-    // what the effect resolves (it parses #AARRGGBB / #RRGGBB / #RGB).
-    function colorToHex(c) {
-        function pad(v) {
-            return Math.round(v * 255).toString(16).padStart(2, '0');
-        }
-        return ("#" + pad(c.a) + pad(c.r) + pad(c.g) + pad(c.b)).toUpperCase();
-    }
-
     // The tint colour is always stored opaque. The opacity-tint shader ignores
     // the colour's own alpha and uses the tint strength slider as the sole
     // control, so storing a translucent colour would silently discard
     // information the user thought they set. Scaling the wash by both was the
     // double-apply the shader was changed to avoid, so do not reintroduce it
-    // here by storing alpha.
-    function colorToOpaqueHex(c) {
-        return "#FF" + root.colorToHex(c).slice(3);
+    // here by storing alpha. Takes the row's 8-digit #AARRGGBB string.
+    function hexToOpaqueHex(hex) {
+        return "#FF" + hex.slice(3);
     }
 
     // Scope-aware gap values for the Gaps card. gapValue() reads C++ state (the
@@ -264,80 +252,54 @@ SettingsFlickable {
                 }
 
                 // ── Border colours — a border concern, so they live in this
-                // card: system accent toggle (writes the "accent" sentinel)
-                // with explicit active/inactive pickers when it is off.
-                SettingsRow {
+                // card. The stored sentinel is "accent" rather than the empty
+                // string the scrolling keys use: the effect's settings reader
+                // treats an empty D-Bus reply as version skew and drops it,
+                // and the rules vocabulary shares the token, so the sentinel
+                // stays "accent" while the row presents the same
+                // follow-the-scheme affordance as everywhere else.
+                ThemeFallbackColorRow {
                     visible: root.borderVisible
-                    title: i18n("Use system accent color")
-                    searchAnchor: "useSystemAccentColor"
-                    description: i18n("Follow the system color scheme for the border color")
-
-                    SettingsSwitch {
-                        id: useAccentSwitch
-
-                        // True when the focused colour carries the accent sentinel.
-                        checked: root.ctl.windowBorderColorActive === root.accentToken
-                        accessibleName: i18n("Use system accent color")
-                        onToggled: function (newValue) {
-                            const colorValue = newValue ? root.accentToken : root.defaultBorderHex;
-                            root.ctl.windowBorderColorActive = colorValue;
-                            root.ctl.windowBorderColorInactive = colorValue;
-                        }
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: root.borderVisible && !useAccentSwitch.checked
-                }
-
-                SettingsRow {
-                    visible: root.borderVisible && !useAccentSwitch.checked
                     title: i18n("Active border color")
+                    // Overridden because the title already says "color".
+                    swatchAccessibleName: i18n("Active border color")
                     searchAnchor: "activeBorderColor"
-                    description: i18n("Border color for the focused window")
+                    description: i18n("Border color for the focused window. Follows the color scheme unless you pick one.")
 
-                    ColorSwatchRow {
-                        accessibleName: i18n("Active border color")
-                        color: {
-                            // Map the accent sentinel to the live system highlight
-                            // colour (alpha included) — the colour the focused border
-                            // actually draws. A stored "accent" value would otherwise
-                            // coerce to black.
-                            const raw = root.ctl.windowBorderColorActive;
-                            return raw === root.accentToken ? appSettings.highlightColor : raw;
-                        }
-                        onClicked: {
-                            const raw = root.ctl.windowBorderColorActive;
-                            activeBorderColorDialog.selectedColor = raw === root.accentToken ? appSettings.highlightColor : raw;
-                            activeBorderColorDialog.open();
-                        }
+                    storedColor: root.ctl.windowBorderColorActive
+                    sentinel: root.accentToken
+                    // The colour the focused border actually draws while it
+                    // follows the scheme: the live system highlight, alpha
+                    // included. A stored "accent" value would otherwise coerce
+                    // to black.
+                    themeColor: appSettings.highlightColor
+                    picker: borderColorDialog
+                    onColorChosen: function (hex) {
+                        root.ctl.windowBorderColorActive = hex;
                     }
                 }
 
                 SettingsSeparator {
-                    visible: root.borderVisible && !useAccentSwitch.checked
+                    visible: root.borderVisible
                 }
 
-                SettingsRow {
-                    visible: root.borderVisible && !useAccentSwitch.checked
+                ThemeFallbackColorRow {
+                    visible: root.borderVisible
                     title: i18n("Inactive border color")
+                    // See the active row above.
+                    swatchAccessibleName: i18n("Inactive border color")
                     searchAnchor: "inactiveBorderColor"
-                    description: i18n("Border color for unfocused windows")
+                    description: i18n("Border color for unfocused windows. Follows the color scheme unless you pick one.")
 
-                    ColorSwatchRow {
-                        accessibleName: i18n("Inactive border color")
-                        color: {
-                            // The unfocused border follows the system INACTIVE colour
-                            // (alpha included), not the accent, matching what the
-                            // border actually draws.
-                            const raw = root.ctl.windowBorderColorInactive;
-                            return raw === root.accentToken ? appSettings.inactiveColor : raw;
-                        }
-                        onClicked: {
-                            const raw = root.ctl.windowBorderColorInactive;
-                            inactiveBorderColorDialog.selectedColor = raw === root.accentToken ? appSettings.inactiveColor : raw;
-                            inactiveBorderColorDialog.open();
-                        }
+                    storedColor: root.ctl.windowBorderColorInactive
+                    sentinel: root.accentToken
+                    // The unfocused border follows the system INACTIVE colour
+                    // (alpha included), not the accent, matching what the
+                    // border actually draws.
+                    themeColor: appSettings.inactiveColor
+                    picker: borderColorDialog
+                    onColorChosen: function (hex) {
+                        root.ctl.windowBorderColorInactive = hex;
                     }
                 }
             }
@@ -433,51 +395,25 @@ SettingsFlickable {
                     visible: root.opacityTintVisible
                 }
 
-                SettingsRow {
+                ThemeFallbackColorRow {
                     visible: root.opacityTintVisible
-                    title: i18n("Use system accent color")
-                    searchAnchor: "useSystemAccentTint"
-                    description: i18n("Follow the system color scheme for the tint color")
-
-                    SettingsSwitch {
-                        id: useAccentTintSwitch
-
-                        checked: root.ctl.windowTintColor === root.accentToken
-                        accessibleName: i18n("Use system accent color for the tint")
-                        onToggled: function (newValue) {
-                            // The tint colour's config default IS the border
-                            // default (ConfigDefaults::windowTintColor returns
-                            // windowBorderColorActive), so toggling accent off
-                            // restores the same fallback the border swatches use.
-                            root.ctl.windowTintColor = newValue ? root.accentToken : root.defaultBorderHex;
-                        }
-                    }
-                }
-
-                SettingsSeparator {
-                    visible: root.opacityTintVisible && !useAccentTintSwitch.checked
-                }
-
-                SettingsRow {
-                    visible: root.opacityTintVisible && !useAccentTintSwitch.checked
                     title: i18n("Tint color")
+                    // Overridden because the title already says "color".
+                    swatchAccessibleName: i18n("Tint color")
                     searchAnchor: "tintColor"
-                    description: i18n("Color the window is washed with when the tint strength is above zero")
+                    description: i18n("Color the window is washed with when the tint strength is above zero. Follows the color scheme unless you pick one.")
 
-                    ColorSwatchRow {
-                        accessibleName: i18n("Tint color")
-                        color: {
-                            // Same accent-sentinel mapping as the border swatches:
-                            // preview the live highlight instead of coercing the
-                            // token to black.
-                            const raw = root.ctl.windowTintColor;
-                            return raw === root.accentToken ? appSettings.highlightColor : raw;
-                        }
-                        onClicked: {
-                            const raw = root.ctl.windowTintColor;
-                            tintColorDialog.selectedColor = raw === root.accentToken ? appSettings.highlightColor : raw;
-                            tintColorDialog.open();
-                        }
+                    storedColor: root.ctl.windowTintColor
+                    // Same "accent" sentinel as the border rows above.
+                    sentinel: root.accentToken
+                    // Preview the live highlight instead of coercing the token
+                    // to black.
+                    themeColor: appSettings.highlightColor
+                    picker: tintColorDialog
+                    onColorChosen: function (hex) {
+                        // Stored opaque unless it is the sentinel; the tint
+                        // strength slider is the sole alpha (see hexToOpaqueHex).
+                        root.ctl.windowTintColor = hex === root.accentToken ? hex : root.hexToOpaqueHex(hex);
                     }
                 }
             }
@@ -715,22 +651,16 @@ SettingsFlickable {
     }
 
     // =====================================================================
-    // Color Dialogs
+    // Color Dialogs — page-level and shared, like the scrolling pages: a page
+    // rebuild while a row-scoped dialog is open would tear the popup down
+    // under the user. The rows connect transiently and write on accept, so no
+    // onAccepted lives here.
     // =====================================================================
     ColorDialog {
-        id: activeBorderColorDialog
+        id: borderColorDialog
 
         options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Active Border Color")
-        onAccepted: root.ctl.windowBorderColorActive = root.colorToHex(selectedColor)
-    }
-
-    ColorDialog {
-        id: inactiveBorderColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Inactive Border Color")
-        onAccepted: root.ctl.windowBorderColorInactive = root.colorToHex(selectedColor)
+        title: i18n("Choose Border Color")
     }
 
     ColorDialog {
@@ -739,6 +669,5 @@ SettingsFlickable {
         // No alpha channel here. Tint strength already controls how strongly
         // the wash lands, and the shader ignores the colour's own alpha.
         title: i18n("Choose Tint Color")
-        onAccepted: root.ctl.windowTintColor = root.colorToOpaqueHex(selectedColor)
     }
 }

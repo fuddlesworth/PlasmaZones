@@ -418,15 +418,18 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Apply borders to"),
                {PhosphorI18n::tr("scope"), PhosphorI18n::tr("which windows"), PhosphorI18n::tr("border")},
                /*advancedOnly=*/true);
-    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("useSystemAccentColor"),
-               PhosphorI18n::tr("Use system accent color"),
-               {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
+    // The accent/scheme keywords ride the colour rows themselves now that the
+    // separate "Use system accent color" switches are gone: each row's Reset
+    // is the follow-the-scheme affordance, so a search for accent or theme
+    // should land on the row.
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("activeBorderColor"),
                PhosphorI18n::tr("Active border color"),
-               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("focused"), PhosphorI18n::tr("outline")});
+               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("focused"), PhosphorI18n::tr("outline"),
+                PhosphorI18n::tr("accent"), PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("inactiveBorderColor"),
                PhosphorI18n::tr("Inactive border color"),
-               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("outline")});
+               {PhosphorI18n::tr("colour"), PhosphorI18n::tr("unfocused"), PhosphorI18n::tr("outline"),
+                PhosphorI18n::tr("accent"), PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme")});
     addSection(search, QStringLiteral("window-appearance"), QStringLiteral("opacityTint"),
                PhosphorI18n::tr("Opacity and tint"));
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("opacityTintScope"),
@@ -439,11 +442,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("tintStrength"),
                PhosphorI18n::tr("Tint strength"),
                {PhosphorI18n::tr("wash"), PhosphorI18n::tr("blend"), PhosphorI18n::tr("colour")});
-    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("useSystemAccentTint"),
-               PhosphorI18n::tr("Use system accent color for the tint"),
-               {PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme"), PhosphorI18n::tr("colour")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("tintColor"), PhosphorI18n::tr("Tint color"),
-               {PhosphorI18n::tr("wash"), PhosphorI18n::tr("colour"), PhosphorI18n::tr("accent")});
+               {PhosphorI18n::tr("wash"), PhosphorI18n::tr("colour"), PhosphorI18n::tr("accent"),
+                PhosphorI18n::tr("theme"), PhosphorI18n::tr("scheme")});
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("hideTitleBars"),
                PhosphorI18n::tr("Hide title bars"),
                {PhosphorI18n::tr("titlebar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("header")});
