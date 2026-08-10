@@ -569,20 +569,30 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             return qRound(s.window->frameGeometry().x());
         };
         // Net travel across the batch decides which end leads, measured on
-        // STAYING columns only: an arriving column's current frame is the
-        // park, whose x carries no direction (the park is direction-agnostic
-        // by design), so its term could swamp every staying column's true
-        // delta with an arbitrary sign. Leaving columns contribute zero by
-        // construction (visibleX keys them on their own current frame).
+        // STAYING columns only — target on-screen AND current frame
+        // on-screen. An arriving column's current frame is the park, whose x
+        // carries no direction (the park is direction-agnostic by design),
+        // and a leaving column's target is the park, so both are excluded:
+        // each would swamp the staying columns' true delta with an
+        // arbitrary sign. (The earlier form filtered on !isArriving alone,
+        // which kept only LEAVING columns — whose visibleX is their own
+        // frame, making every term identically zero and the branch below
+        // dead; the scrollEdge fallback decided every batch.)
         qint64 netDx = 0;
         for (const TileSnap& s : toApply) {
-            if (s.window && !isArriving(s)) {
-                netDx += visibleX(s) - qRound(s.window->frameGeometry().x());
+            if (!s.window || !isArriving(s)) {
+                continue;
+            }
+            const QRect& rect = screenRectFor(s);
+            const QRect currentFrame = s.window->frameGeometry().toRect();
+            if (rect.isValid() && rect.intersects(currentFrame)) {
+                netDx += qint64(s.geometry.x()) - currentFrame.x();
             }
         }
         bool movingRight = netDx > 0;
         if (netDx == 0) {
-            // No staying column moved (all-leaving or all-arriving batch).
+            // No staying column moved (all-leaving or all-arriving batch,
+            // or the stays' deltas cancelled exactly).
             // The scrollEdge is authoritative there: a column LEAVES by the
             // edge the content moves toward, and ARRIVES from the edge it
             // once left by (content moving away from it).
