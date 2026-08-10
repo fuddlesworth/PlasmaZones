@@ -135,7 +135,9 @@ public:
     /// MEMBERSHIP (not the raw reverse-map key); decides via the store's
     /// live-instance-excluding peekForReclaim over the registry-aware appId;
     /// requires the recorded home in the LIVE scrolling set AND the record's
-    /// (desktop, activity) to equal the home screen's current key; and
+    /// (desktop, activity) to match the home screen's current key (sticky and
+    /// unknown-context sentinel records stay eligible — see
+    /// recordContextMatchesLive); and
     /// returns the REAL adoption outcome verified by membership after the
     /// windowOpened re-entry. Peek-not-take: consumption stays with the open
     /// path's own restore machinery (strip stash claim, takeForReopen).
@@ -893,6 +895,10 @@ private:
     /// initiated (feedback already emitted, on the destination).
     bool focusAcrossBoundary(const QString& screenId, const QString& direction, const QString& focusedBefore);
 
+    /// After a SUCCESSFUL focus crossing (either arm), the source state's
+    /// floatingHasFocus must drop — focus demonstrably left that output.
+    void clearSourceFloatFocusAfterCrossing(const QString& sourceScreenId);
+
     PhosphorEngine::IWindowTrackingService* m_windowTracker = nullptr;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;
     /// Embedder/test seam: geometry providers consulted when NO
@@ -927,6 +933,10 @@ private:
     /// is never queued and still drives the strip (signals.cpp documents
     /// that contract).
     QStringList m_pendingSelfActivations;
+    /// Cap for m_pendingSelfActivations, shared by every producer
+    /// (applyLayout's focus arm and switchFocusBetweenFloatingAndTiling) so
+    /// one queue cannot grow under two different limits.
+    static constexpr int kMaxPendingSelfActivations = 16;
     /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
     /// While positive, windowOpened defers its per-arrival applyLayout into
     /// m_burstPendingApplies (context key → whether any deferred arrival took
@@ -990,9 +1000,11 @@ private:
     /// stack-overflow park) does not write one, and the tab case clears any
     /// stale entry so the next activation appears in place. A path that drops
     /// the window's m_lastAppliedRect while it stays alive drops this too, with
-    /// one deliberate exception: re-adoption TAKES the edge and puts it back
-    /// when the insert is refused, because a refusal leaves this strip alive
-    /// and the window may genuinely be parked right now. The aliveness sweep
+    /// two deliberate exceptions, both for the same reason (the window stays a
+    /// live tile of this strip and may genuinely be parked right now):
+    /// re-adoption TAKES the edge and puts it back when the insert is refused,
+    /// and onWindowResized's refused-ack arm drops only the rect and keeps the
+    /// edge. The aliveness sweep
     /// reclaims died-parked entries. One seam-only gap: an
     /// embedder driving strip-level minimize directly (production models
     /// minimize as a float toggle, which clears) can strand an entry until

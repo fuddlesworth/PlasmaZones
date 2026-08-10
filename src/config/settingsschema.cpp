@@ -132,13 +132,11 @@ constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction
 
 } // namespace
 
-/// Canonicalize a trigger list: cap size, coerce each entry to a
-/// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
-/// every write so the flush loop enforces the cap even when the setter
-/// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
-///
-/// See the header. Namespace scope so settingsschema_scrolling.cpp can reach
-/// it for the five colour keys that carry the empty sentinel.
+/// Canonicalize a theme-fallback colour: the EMPTY sentinel ("follow the
+/// theme") and any valid colour name pass through unchanged; anything else
+/// maps back to empty rather than reaching QML as an invalid QColor. See the
+/// header. Namespace scope so settingsschema_scrolling.cpp can reach it for
+/// the five colour keys that carry the empty sentinel.
 QVariant canonicalThemeFallbackColor(const QVariant& v)
 {
     const QString s = v.toString();
@@ -148,6 +146,10 @@ QVariant canonicalThemeFallbackColor(const QVariant& v)
     return QString();
 }
 
+/// Canonicalize a trigger list: cap size, coerce each entry to a
+/// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
+/// every write so the flush loop enforces the cap even when the setter
+/// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
 /// Namespace scope (declared in settingsschema.h): shared with
 /// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
 /// scrolling drag-insert trigger list.
@@ -334,8 +336,8 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::orderingGroup()] = {
-        {CD::snappingLayoutOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::tilingAlgorithmOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::snappingLayoutOrderKey(), CD::snappingLayoutOrder(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::tilingAlgorithmOrderKey(), CD::tilingAlgorithmOrder(), QMetaType::QString, {}, canonicalCommaList},
     };
 }
 

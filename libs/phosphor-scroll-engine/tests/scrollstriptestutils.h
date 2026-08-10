@@ -4,19 +4,21 @@
 #pragma once
 
 // Shared fixture helpers for the whole PhosphorScrollEngine test suite — the
-// two strip-model files and the six engine files. One definition of the
+// two strip-model files and the seven engine files. One definition of the
 // 1200x800 geometry, because a work area that drifts between files quietly
 // changes what every hardcoded pixel expectation means, and one definition
 // of the headless engine fixture, because its two geometry providers are
 // the seam the parking tests need to tell apart.
 //
-// TWO params helpers, deliberately: defaultParams() (10px gap) is for the
+// THREE params helpers, deliberately: defaultParams() (10px gap) is for the
 // PURE-STRIP fixtures; engineParams() (0 gap) mirrors what makeProviderEngine
 // actually computes — its engine has no IScrollSettings and no gap provider,
-// so layoutParamsForScreen leaves every gap at 0. An engine test that mixes
-// direct strip calls with engine-driven relayouts must use engineParams(),
-// or the same strip is laid out against two different gap values in one
-// test body.
+// so layoutParamsForScreen leaves every gap at 0 — and gappedEngineParams()
+// (kEngineInnerGap) pairs with makeGappedProviderEngine for gap-dependent
+// geometry (its own doc below). An engine test that mixes direct strip calls
+// with engine-driven relayouts must use the helper matching its factory, or
+// the same strip is laid out against two different gap values in one test
+// body.
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollStrip.h>
@@ -53,11 +55,15 @@ inline PhosphorScrollEngine::ScrollLayoutParams defaultParams()
 /// helper produces visibly wrong numbers rather than a near-miss.
 inline constexpr int kEngineInnerGap = 6;
 
-/// Params matching a makeGappedProviderEngine engine. Use these — and that
-/// factory — for anything whose geometry depends on the gap. The plain
-/// engineParams()/makeProviderEngine pair runs at gap 0, which means it
-/// CANNOT observe a gap-dependent defect: a layout that omits the gap term
-/// entirely still matches. That blind spot hid a real drop-indicator bug.
+/// Params matching a makeGappedProviderEngine engine, for a test that
+/// hand-computes gap-dependent pixel expectations at the strip level. The
+/// current gapped-engine tests assert on payloads read back from the engine
+/// instead, so nothing uses this yet — it exists so the first test that DOES
+/// derive expectations by hand has one definition of the gap to derive them
+/// from. The plain engineParams()/makeProviderEngine pair runs at gap 0,
+/// which CANNOT observe a gap-dependent defect: a layout that omits the gap
+/// term entirely still matches. That blind spot hid a real drop-indicator
+/// bug.
 inline PhosphorScrollEngine::ScrollLayoutParams gappedEngineParams()
 {
     PhosphorScrollEngine::ScrollLayoutParams p;
@@ -109,8 +115,17 @@ inline PhosphorScrollEngine::ScrollEngine* makeProviderEngine(QObject* parent, c
     // pending-self-activation queue, so a fixture that never echoes leaves
     // the queue populated and the NEXT simulated user focus of that window
     // is consumed as the missing echo. Direct connection is safe: the echo
-    // handler consumes the queue entry and returns before touching strip
-    // state, so the re-entry into the engine mid-applyLayout mutates nothing.
+    // handler consumes the queue entry and returns before touching STRIP
+    // state — it does set m_activeScreen to the activated window's screen
+    // first, which is the value the real relay carries anyway, so the
+    // re-entry into the engine mid-applyLayout changes no layout outcome.
+    //
+    // FIDELITY NOTE: this echo is synchronous and UNCONDITIONAL, unlike the
+    // daemon's relay — an emit the engine deliberately does not queue (the
+    // switch-focus tiling→float arm) is echoed here too, and it is delivered
+    // inside the emit rather than on a later event-loop turn. Tests that
+    // depend on observing the window between the press and the echo use the
+    // bare no-echo fixture instead.
     QObject::connect(engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, engine,
                      [engine](const QString& windowId) {
                          engine->windowFocused(windowId, engine->screenForTrackedWindow(windowId));
@@ -120,7 +135,8 @@ inline PhosphorScrollEngine::ScrollEngine* makeProviderEngine(QObject* parent, c
 }
 
 /// makeProviderEngine plus a context gap provider, so the engine resolves a
-/// NON-ZERO inner gap. Pair with gappedEngineParams().
+/// NON-ZERO inner gap (kEngineInnerGap; gappedEngineParams() is its
+/// strip-level twin for hand-computed expectations).
 ///
 /// This exists because the plain factory is structurally unable to observe a
 /// gap-dependent defect — at gap 0 a layout that drops the gap term entirely

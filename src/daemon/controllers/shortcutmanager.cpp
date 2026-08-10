@@ -742,10 +742,11 @@ void ShortcutManager::unregisterShortcuts()
     // everything by closing the session.
     //
     // Deliberately NO cheatsheetModelChanged emit, unlike every other
-    // catalog-changing path. This runs on the daemon stop() path, where the
-    // only consumer (refreshCheatsheetIfVisible) is being torn down alongside
-    // the overlay service; announcing an empty catalog into a half-destroyed
-    // overlay buys nothing, since a live sheet goes away with it.
+    // catalog-changing path. The two callers are the daemon stop() path —
+    // where the only consumer (refreshCheatsheetIfVisible) is being torn
+    // down alongside the overlay service — and setBackendForTesting's
+    // misuse branch, which is a programming-error recovery that no live
+    // overlay should ever observe; neither needs an empty-catalog announce.
     m_entries.clear();
 
     // Tear down the backend so any Portal session is closed and grabs are
@@ -774,7 +775,14 @@ void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequenc
     // as transient, and the matching unregisterAdhocShortcut() would purge
     // the persistent binding's saved kglobalshortcutsrc record — the exact
     // wipe unregisterShortcuts() exists to avoid (discussion #851).
-    if (staticShortcutIds().contains(id) || id.startsWith(QLatin1String(kQuickLayoutPrefix))
+    // Set built once: staticShortcutIds() materialises a ~70-entry
+    // QStringList per call, and the layout-picker batch registers six adhoc
+    // shortcuts per show.
+    static const QSet<QString> staticIds = [] {
+        const QStringList ids = staticShortcutIds();
+        return QSet<QString>(ids.cbegin(), ids.cend());
+    }();
+    if (staticIds.contains(id) || id.startsWith(QLatin1String(kQuickLayoutPrefix))
         || id.startsWith(QLatin1String(kSnapToZonePrefix))) {
         qCWarning(lcShortcuts) << "registerAdhocShortcut(" << id
                                << "): id collides with a settings-driven shortcut — rejected";

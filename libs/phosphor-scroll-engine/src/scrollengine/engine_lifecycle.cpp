@@ -321,14 +321,25 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 insertPos == ScrollInsertPosition::IntoActiveColumn ? ScrollInsertPosition::RightOfActive : insertPos);
         }
     }
-    if (inserted && openParams.heightFraction && params.workArea.height() > 0) {
+    if (inserted && openParams.heightFraction) {
         // Per-window open rule wins over every default and remembered
         // height, matching the width/tabbed precedence above. Committed as
         // Fixed pixels against the live work area, the same resolution the
         // adjust verbs use.
-        const qreal fraction = qBound<qreal>(MinWindowHeightFraction, *openParams.heightFraction, 1.0);
-        state->strip().setWindowHeightIntent(
-            windowId, WindowHeight::makeFixed(qMax(1, qRound(fraction * params.workArea.height()))));
+        //
+        // Re-resolved AFTER the insert rather than reusing the params from
+        // the top of this function: with smart gaps the work area depends on
+        // the strip's column count, and an insert that took the strip from
+        // one column to two makes the pre-insert area stale — the committed
+        // pixels are PERSISTED intent, so the error would not self-heal on
+        // the next relayout the way a transient anchor does. The override
+        // pins the resolve to the post-insert count.
+        const ScrollLayoutParams postParams = layoutParamsForScreen(screenId, state->strip().columnCount());
+        if (postParams.workArea.height() > 0) {
+            const qreal fraction = qBound<qreal>(MinWindowHeightFraction, *openParams.heightFraction, 1.0);
+            state->strip().setWindowHeightIntent(
+                windowId, WindowHeight::makeFixed(qMax(1, qRound(fraction * postParams.workArea.height()))));
+        }
     }
     if (!inserted) {
         qCWarning(lcScrollEngine) << "insertOpenedWindow: duplicate window" << windowId;
@@ -1012,6 +1023,17 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         // name the stale context the migration above just emptied, which
         // would leave the window tracked at a key that no longer holds it.
         m_states.setKeyForWindow(windowId, key);
+        // containsWindow covers BOTH sets, so this arm is reachable with the
+        // window on the OTHER side of the float split than the receive asked
+        // for (ctx.wasFloating true but the window is a strip tile here, or
+        // the mirror). Announce the engine's REAL verdict rather than letting
+        // the daemon keep believing its request took — the same
+        // announce-don't-transition shape unfloatWindowInternal uses. The
+        // single-owner sweep above already decided this key holds the window,
+        // so no transition is performed.
+        if (state->isFloating(windowId) != ctx.wasFloating) {
+            Q_EMIT windowFloatingStateSynced(windowId, state->isFloating(windowId), key.screenId);
+        }
         return;
     }
     // Re-adoption starts from a blank rect memory: handoffRelease/windowClosed

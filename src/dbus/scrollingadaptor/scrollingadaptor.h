@@ -100,6 +100,10 @@ public Q_SLOTS:
      * anchor that snaps to the nearest effective height preset at relayout
      * (WindowHeight::Preset's value-anchored contract), so an exact height
      * needs the pixel form.
+     *
+     * NOTE: nothing in this tree calls these four — they exist FOR external
+     * scripting, like presetVocabularyJson below. Do not re-justify them by
+     * naming an in-tree caller; there is none beyond the contract tests.
      */
     void setColumnWidthProportion(const QString& screenId, double proportion);
     void setColumnWidthPixels(const QString& screenId, int px);

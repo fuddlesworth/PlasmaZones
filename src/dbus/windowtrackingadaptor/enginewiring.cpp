@@ -49,7 +49,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this, nullptr);
     }
     // The scroll engine gets the same generic base-signal wiring as the
-    // other two below; drop the SAME six signals, targeted — a blanket
+    // other two below; drop the SAME seven signals, targeted — a blanket
     // disconnect(engine, nullptr, this, nullptr) would also sever
     // connections OTHER classes made with this adaptor as receiver context
     // (concretely the composition root's placementChanged→markDirty
@@ -92,10 +92,18 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     if (m_snapEngine) {
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
         disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+        // Focus is emitted only by the scroll engine today, so nothing here
+        // has a live connection to drop — but the sweep stays symmetric with
+        // the scroll block above so the day another engine gains the emit
+        // (and the connect beside these two), the rewire cannot double-fire
+        // handleCrossModeFocus.
+        disconnect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this, nullptr);
     }
     if (m_autotileEngine) {
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this, nullptr);
         disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this, nullptr);
+        disconnect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
+                   nullptr); // same defensive symmetry as the snap block
     }
     // Drop the snap-specific state signals (snap-mode-only types, connected below
     // on the typed engine) from the outgoing snap engine — same rule. Uses the
@@ -478,7 +486,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         } else {
             // A non-ScrollEngine in the scroll slot leaves m_cachedScrollEngine
             // null, so the float predicate and the open-params resolver are
-            // silently skipped while all six generic signals stay wired —
+            // silently skipped while all seven generic signals stay wired —
             // every scrolling Float rule and every open-behaviour rule becomes
             // inert with nothing in the log to say why. The snap slot qFatals
             // on the same mistake; this is at least loud.

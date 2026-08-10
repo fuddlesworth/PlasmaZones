@@ -385,10 +385,26 @@ public:
         return {baselineBorderRuleId(), baselineTitleBarRuleId(), baselineGapRuleId()};
     }
 
-    // Returns the absolute path to quicklayouts.json (the numbered quick-layout
-    // shortcut slots 1..9). Quick-layout slots are NOT rules, so they
-    // sit in a sibling sidecar next to rules.json rather than in the
-    // rule store. LayoutRegistry reads/writes this file directly.
+    /// Default user-defined sort orders for the layout picker and the tiling
+    /// algorithm menu: empty (no custom order; consumers fall back to their
+    /// natural sort). Comma-joined QString on disk, matching the keys' stored
+    /// type — the schema rows source their defaults here per the
+    /// every-default-through-ConfigDefaults rule.
+    static QString snappingLayoutOrder()
+    {
+        return QString();
+    }
+    static QString tilingAlgorithmOrder()
+    {
+        return QString();
+    }
+
+    // Returns the absolute path to quicklayouts.json (the numbered
+    // quick-layout shortcut slots 1..QuickLayoutSlotCount — the key builders
+    // in configkeys.h read the count from PhosphorProtocol::Service, so this
+    // prose names the constant rather than a literal). Quick-layout slots are
+    // NOT rules, so they sit in a sibling sidecar next to rules.json rather
+    // than in the rule store. LayoutRegistry reads/writes this file directly.
     PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
 
     // Returns the absolute path to layout-settings.json — the per-layout
@@ -948,7 +964,16 @@ public:
         // NOT Meta+Shift+] — Shift+symbol chords never fire on Wayland
         // (KWin consumes Shift in the keysym translation; see
         // toggleCheatsheetShortcut). Meta+Ctrl+[ ] belong to the rotate
-        // pair; = and - are the free count-adjust idiom.
+        // pair; = and - are the KDE-wide count/zoom-adjust idiom.
+        //
+        // ACCEPTED EXCEPTION to the letters-only rule the scrolling family
+        // follows (configdefaults_scrolling.h): on layouts where "=" itself
+        // is a shifted key (German among them) this chord is dead until the
+        // user rebinds. The unshifted-symbol idiom is kept anyway because
+        // +/- is what every KDE count control ships, and the scrolling rule
+        // targets the harder failure (Shift+SYMBOL spellings, dead on every
+        // layout under Wayland). The scrolling banner's blanket wording
+        // points here.
         return QStringLiteral("Meta+Ctrl+=");
     }
     static QString autotileDecMasterCountShortcut()

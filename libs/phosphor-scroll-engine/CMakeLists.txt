@@ -44,6 +44,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/engine_verbs.cpp
     src/scrollengine/engine_serialize.cpp
     src/scrollengine/scrollenginelogging.h
+    src/scrollengine/scrollverbresolve_p.h
     src/scrollengine/scrollenginelogging.cpp
 )
 add_library(PhosphorScrollEngine::PhosphorScrollEngine ALIAS PhosphorScrollEngine)

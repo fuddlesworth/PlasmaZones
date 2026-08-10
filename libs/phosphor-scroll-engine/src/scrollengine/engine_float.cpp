@@ -53,6 +53,12 @@ bool ScrollEngine::floatWindowInternal(ScrollState* state, const PhosphorEngine:
             m_floatRestore.insert(windowId, FloatRestore{});
         }
         m_scrollFloatedWindows.insert(windowId);
+        // Same residue drops the normal path below performs: a retained rect
+        // from before the residue state would defeat applyLayout's
+        // emit-on-change gate on the eventual re-adoption, and a stale park
+        // edge would mis-anchor the arrival slide.
+        m_lastAppliedRect.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
         Q_EMIT windowFloatingChanged(windowId, true, screenId.isEmpty() ? key.screenId : screenId);
         Q_EMIT placementChanged(key.screenId);
         return true;
@@ -128,7 +134,9 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
     // Mirror of floatWindowInternal's focus-side capture: re-tiling the float
     // that holds focus moves focus back to the strip with no compositor
     // report (the window keeps focus, only its layer changes). Read before
-    // removeFloating, which clears the lastFloatingFocus slot.
+    // removeFloating, which clears BOTH focus-memory fields when this window
+    // held them — the capture is what lets the insert-refused restore arm
+    // put the pair back.
     const bool wasFloatFocus = state->floatingHasFocus() && state->lastFloatingFocus() == windowId;
 
     if (!state->removeFloating(windowId)) {
@@ -197,6 +205,12 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         if (hadSlot) {
             m_floatRestore.insert(windowId, restore);
         }
+        // removeFloating above cleared the focus-memory pair when this window
+        // held it; the window is a float again, so put both halves back.
+        if (wasFloatFocus) {
+            state->setLastFloatingFocus(windowId);
+            state->setFloatingHasFocus(true);
+        }
         return false;
     }
     {
@@ -218,9 +232,9 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
             state->strip().setWindowHeightIntent(windowId, restore.height);
         }
         state->strip().focusWindow(windowId, params);
-        if (wasFloatFocus) {
-            state->setFloatingHasFocus(false);
-        }
+        // No setFloatingHasFocus(false) here: removeFloating already cleared
+        // the pair when this window held it (the wasFloatFocus capture above
+        // exists for the refusal arm's restore, not for a second clear).
     }
     m_scrollFloatedWindows.remove(windowId);
     // contextScreen, not the caller's raw screenId — the same fallback form
@@ -259,9 +273,19 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         if (targetScreen.isEmpty()) {
             return;
         }
-        ScrollState* target = stateForKey(currentKeyForScreen(targetScreen), true);
-        if (!target || target->containsWindow(windowId)) {
+        // Look up WITHOUT creating first: the two bail-outs below must not
+        // leave a freshly created empty state behind — an empty state at a
+        // key makes desktopsWithActiveState report the desktop and keeps the
+        // stateless-bookkeeping sweep from reclaiming the screen.
+        ScrollState* target = stateForKey(currentKeyForScreen(targetScreen), false);
+        if (target && target->containsWindow(windowId)) {
             return;
+        }
+        if (!target) {
+            target = stateForKey(currentKeyForScreen(targetScreen), true);
+            if (!target) {
+                return;
+            }
         }
         const ScrollLayoutParams params = layoutParamsForScreen(targetScreen);
         // Same as handoffReceive: the retained close/release rect only has to

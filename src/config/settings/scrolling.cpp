@@ -49,11 +49,12 @@ static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
               "ISettings::scrollingTabIndicatorCornerRadius defaults to 0 (square) — update it with this default");
 // The drop indicator's paint keys, same story: the overlay service reads them
 // through ISettings, so a stub answering from the interface body must agree.
-// The two COLOUR defaults have no assert here and cannot get one: they return
-// a default-constructed QString, which is not a constant expression, and their
-// agreement rests on the doc comment in isettings.h. That is the whole
-// unasserted set now — the opacity joined the checked ones when it became
-// constexpr.
+// The COLOUR defaults have no assert here and cannot get one: they return a
+// default-constructed QString, which is not a constant expression. The
+// unasserted set is FIVE — the three tab-indicator colours above plus the two
+// drop-indicator colours — and all five are pinned at runtime by the schema
+// assertions in test_scrolling_settings.cpp instead. The opacity joined the
+// checked ones when it became constexpr.
 static_assert(ConfigDefaults::scrollingDropIndicatorEnabled(),
               "ISettings::scrollingDropIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingDropIndicatorOpacity() == 0.25,
@@ -271,8 +272,9 @@ P_STORE_SET_BOOL(setScrollingWheelFocusInverted, scrollingGroup, wheelFocusInver
 // Its own group rather than more Tab*-prefixed leaves on Scrolling, so the
 // page reset manifest and the rule slots address one subtree. The schema
 // validators own the enum closed sets (validIntOr) and the numeric clamps; the
-// colours are free-form strings whose EMPTY value means "follow the theme", so
-// they deliberately carry no validator.
+// colours carry canonicalThemeFallbackColor, which passes the EMPTY
+// follow-the-theme sentinel and any valid colour name through and maps junk
+// back to empty (settingsschema_scrolling.cpp).
 
 P_STORE_GET(bool, scrollingTabIndicatorEnabled, scrollingTabIndicatorGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingTabIndicatorEnabled, scrollingTabIndicatorGroup, enabledKey,
@@ -367,9 +369,10 @@ P_STORE_SET_STRING(setScrollingTabIndicatorUrgentColor, scrollingTabIndicatorGro
 // ── Scrolling drop indicator (Scrolling.DropIndicator) ──────────────────────
 // The drop-target highlight painted during a drag re-insert. Paint-only: the
 // engine never reads these, it resolves the indicator's rect from the same
-// layout math the drop uses. Like the tab colours above, the colour is a
-// free-form string whose EMPTY value means "follow the theme", so it
-// deliberately carries no validator.
+// layout math the drop uses. Like the tab colours above, both colour keys
+// carry canonicalThemeFallbackColor (empty sentinel means "follow the
+// theme"; junk maps back to empty — the validator test_scrolling_settings
+// pins as the disk path's only guard).
 
 P_STORE_GET(bool, scrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey,

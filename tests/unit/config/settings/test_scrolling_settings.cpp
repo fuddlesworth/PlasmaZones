@@ -185,6 +185,31 @@ private Q_SLOTS:
         QVERIFY2(offenders.isEmpty(), qPrintable(offenders.join(QLatin1String("; "))));
     }
 
+    /// The specific chords the CHANGELOG and README advertise, plus the
+    /// ships-unbound set, pinned by VALUE. The structural guards above
+    /// cannot see a retune that moves an advertised default (or binds a
+    /// deliberately-unbound verb) while staying unique and parseable — this
+    /// is what fails when a shipped doc claim and a default disagree.
+    void advertisedChordValues()
+    {
+        QCOMPARE(ConfigDefaults::scrollingCenterVisibleColumnsShortcut(), QStringLiteral("Meta+Alt+Shift+C"));
+        QCOMPARE(ConfigDefaults::scrollingFocusWindowTopShortcut(), QStringLiteral("Meta+Alt+V"));
+        QCOMPARE(ConfigDefaults::scrollingFocusWindowBottomShortcut(), QStringLiteral("Meta+Alt+Shift+V"));
+        QCOMPARE(ConfigDefaults::scrollingSwitchFocusFloatTilingShortcut(), QStringLiteral("Meta+Alt+X"));
+        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthShortcut(), QStringLiteral("Meta+Alt+D"));
+        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthBackShortcut(), QStringLiteral("Meta+Alt+Shift+D"));
+        QCOMPARE(ConfigDefaults::autotileRetileShortcut(), QStringLiteral("Meta+Ctrl+T"));
+
+        // Ships unbound, per the same docs: the edge-stop/wrap focus
+        // variants and the one-way float verbs.
+        QVERIFY(ConfigDefaults::scrollingFocusColumnLeftShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingFocusColumnRightShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingFocusColumnLeftOrLastShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingFocusColumnRightOrFirstShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingMoveToFloatingShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingMoveToTilingShortcut().isEmpty());
+    }
+
     /// The scrolling enums fall back to their DEFAULT on out-of-range input
     /// (validIntOr), never to the nearest enumerator, matching the engine's
     /// own snap-to-default guard.
@@ -316,13 +341,20 @@ private Q_SLOTS:
         QCOMPARE(length->validator(0.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMin());
         QCOMPARE(length->validator(5.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMax());
 
-        // The colours carry no validator: EMPTY is the meaningful "follow the
-        // theme" value, and no closed set can express that alongside hex.
+        // The colours carry canonicalThemeFallbackColor: EMPTY is the
+        // meaningful "follow the theme" value, any valid colour name passes
+        // through, and junk maps back to empty rather than reaching QML as
+        // an invalid QColor (painted BLACK, not scheme-fallback). Pinned the
+        // same three ways as the drop indicator's identical validator below.
         for (const QString& colorKey :
              {ConfigDefaults::activeColorKey(), ConfigDefaults::inactiveColorKey(), ConfigDefaults::urgentColorKey()}) {
             const auto* color = findKey(schema, tabGroup, colorKey);
             QVERIFY2(color, qPrintable(colorKey));
             QVERIFY(color->defaultValue.toString().isEmpty());
+            QVERIFY(color->validator);
+            QVERIFY(color->validator(QStringLiteral("not-a-colour")).toString().isEmpty());
+            QVERIFY(color->validator(QString()).toString().isEmpty());
+            QCOMPARE(color->validator(QStringLiteral("#FF3366CC")).toString(), QStringLiteral("#FF3366CC"));
         }
 
         // The old flat Scrolling/TabStripEnabled key is GONE, not aliased: the

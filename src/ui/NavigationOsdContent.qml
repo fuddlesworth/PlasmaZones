@@ -165,7 +165,10 @@ Item {
 
             return unavailableText;
         } else if (action === "float") {
-            if (reason === "no_active_window" || reason === "no_focused_window" || reason === "no_window" || reason === "window_not_tracked" || reason === "invalid_window")
+            // no_windows rides this arm since the floating/tiled focus
+            // switch moved onto the float token: an empty screen must say
+            // so, not claim floating is unavailable.
+            if (reason === "no_active_window" || reason === "no_focused_window" || reason === "no_window" || reason === "no_windows" || reason === "window_not_tracked" || reason === "invalid_window")
                 return noWindowText;
 
             if (reason === "no_pre_float_zone")

@@ -369,7 +369,13 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     // driven by title changes, so a revision-only key would pin a
     // `Title contains …` rule to its first verdict for the window's lifetime.
     const quint64 revision = m_ruleStore->ruleSet().revision();
-    const auto memoIt = m_tabColorMemo.constFind(windowId);
+    // Shadow-keyed so the writer and the windowClosed remover share one key
+    // space BY CONSTRUCTION — the close path removes by shadowWindowId, and
+    // a raw-keyed entry would survive until the pruneStaleWindows sweep.
+    // (The sole caller today passes canonical ids, so this is pinning the
+    // pairing structurally rather than fixing a live leak.)
+    const QString memoKey = shadowWindowId(windowId);
+    const auto memoIt = m_tabColorMemo.constFind(memoKey);
     if (memoIt != m_tabColorMemo.constEnd() && memoIt->revision == revision && memoIt->title == query->title
         && memoIt->captionNormal == query->captionNormal && memoIt->virtualDesktop == query->virtualDesktop
         && memoIt->activity == query->activity) {
@@ -386,7 +392,7 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
             return admitScreenStamped(rule) && !rule.match.referencesAnyField({PhosphorRules::Field::ScreenId});
         });
     const QVariantMap colors = tabColorsFromResolved(resolved);
-    m_tabColorMemo.insert(windowId,
+    m_tabColorMemo.insert(memoKey,
                           TabColorMemoEntry{revision, query->title, query->captionNormal, query->virtualDesktop,
                                             query->activity, colors});
     return colors;

@@ -1,6 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): this file exceeds the 1150-line ceiling
+// because it owns the whole PURE STRIP-MODEL operation surface in one
+// narrative — consume/expel, column and tile moves, the width and height
+// intent families, tabbed columns, reconcile, viewport queries and the
+// anchoring/centering policies. Each slot is a short self-contained scenario
+// over the same threeColumns fixture; splitting by operation family would
+// duplicate the fixture and the declaration-order table of contents below is
+// what keeps the length navigable. The ENGINE-level behaviour is already
+// split across seven sibling files.
+
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
 #include "scrollstriptestutils.h"
@@ -141,10 +151,15 @@ void TestScrollStripOps::consumeOrExpelLeftRight()
     QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
     QCOMPARE(strip.windowsInOrder(), (QStringList{QStringLiteral("a"), QStringLiteral("c"), QStringLiteral("b")}));
 
-    // Rightward: alone again, consume into b's column on the right.
+    // Rightward: alone again, consume into b's column on the right. The
+    // ORDER inside the merged column is pinned like the leftward arm pins
+    // its column order: a consumed window APPENDS below the destination's
+    // tiles (consumeOrExpel's dest.tiles.append), so c sits under b and the
+    // strip order reads a, b, c.
     QVERIFY(strip.consumeOrExpel(+1, params));
     QCOMPARE(strip.columnCount(), 2);
     QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
+    QCOMPARE(strip.windowsInOrder(), (QStringList{QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
 
     // Leftmost lone column with no left neighbour: no-op.
     QVERIFY(strip.focusFirstColumn(params));
@@ -217,9 +232,15 @@ void TestScrollStripOps::widthPresetCycling()
     QVERIFY(strip.activeColumn());
     QCOMPARE(strip.activeColumn()->width.presetFraction, presets.at(2));
 
-    // From a non-preset width the cycle enters at the nearest preset.
-    QVERIFY(strip.setActiveColumnWidth(
-        ColumnWidth::makeFixed(ScrollStrip::resolveColumnWidthPx(ColumnWidth::makeProportion(0.34), params))));
+    // From a non-preset width the cycle enters at the nearest preset. The
+    // fixture width is a LITERAL, not a resolveColumnWidthPx call — this
+    // file's own rule (see the reconcile tests) forbids deriving fixture
+    // values through the code under test. The exact pixel does not matter
+    // for the verdict; 408 (≈ 0.34 of the viewport) sits comfortably nearer
+    // presets[0] (one third, ≈ 400px) than presets[1] (one half, ≈ 600px)
+    // under any of the resolver's gap conventions, so the entry preset is
+    // unambiguous.
+    QVERIFY(strip.setActiveColumnWidth(ColumnWidth::makeFixed(408)));
     QVERIFY(strip.cycleActiveColumnPresetWidth(+1, params));
     QVERIFY(strip.activeColumn());
     QCOMPARE(strip.activeColumn()->width.kind, ColumnWidth::Preset);
@@ -1209,6 +1230,24 @@ void TestScrollStripOps::centerVisibleColumnsCentersTheSpanAndFallsBack()
     QVERIFY(resolveContains(pre, QStringLiteral("a")));
     const int cStripX = 2 * (rectOf(pre, QStringLiteral("a")).width() + params.gap);
     straddle.restoreViewAnchor(cStripX - 60, params); // viewX = 60
+    // The fallback's precondition, asserted rather than hand-derived: at
+    // this view NOTHING is fully visible (a clipped left, b overflowing
+    // right, c past the edge), which is the only state that reaches the
+    // centerActiveColumn fallback — without this check the expected value
+    // below would also be produced by the span path centering just {c}.
+    {
+        const ResolvedStrip parked = straddle.relayout(params);
+        const int viewLeft = 0;
+        const int viewRight = workW;
+        bool anyFullyVisible = false;
+        for (const QString& id : {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}) {
+            const QRect rect = rectOf(parked, id);
+            if (!rect.isNull() && rect.left() >= viewLeft && rect.right() < viewRight) {
+                anyFullyVisible = true;
+            }
+        }
+        QVERIFY2(!anyFullyVisible, "precondition: no column fully visible, or the fallback arm is not exercised");
+    }
     QVERIFY(straddle.centerVisibleColumns(params));
     const ResolvedStrip sr = straddle.relayout(params);
     QVERIFY(resolveContains(sr, QStringLiteral("c")));
@@ -1240,6 +1279,25 @@ void TestScrollStripOps::focusTileAtEndSeeksEndsAndSkipsMinimized()
     QVERIFY(strip.setWindowMinimized(QStringLiteral("c"), true, params));
     QVERIFY(!strip.focusTileAtEnd(true)); // b is the last non-minimized tile
     QCOMPARE(strip.activeWindowId(), QStringLiteral("b"));
+
+    // Every tile minimized: the walk runs off the end and refuses both ways
+    // (no crash, no phantom focus of a hidden tile).
+    QVERIFY(strip.setWindowMinimized(QStringLiteral("b"), true, params));
+    QVERIFY(!strip.focusTileAtEnd(false));
+    QVERIFY(!strip.focusTileAtEnd(true));
+
+    // A single-tile column: both ends ARE the focused tile, so both seeks
+    // give the honest no-op verdict.
+    ScrollStrip lone;
+    QVERIFY(lone.insertWindow(QStringLiteral("only"), kHalf, ColumnDisplay::Normal, params));
+    QVERIFY(!lone.focusTileAtEnd(false));
+    QVERIFY(!lone.focusTileAtEnd(true));
+    QCOMPARE(lone.activeWindowId(), QStringLiteral("only"));
+
+    // An empty strip refuses without touching anything.
+    ScrollStrip empty;
+    QVERIFY(!empty.focusTileAtEnd(false));
+    QVERIFY(!empty.focusTileAtEnd(true));
 }
 
 QTEST_APPLESS_MAIN(TestScrollStripOps)

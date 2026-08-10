@@ -206,8 +206,11 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          QMetaType::QString,
          {},
          [](const QVariant& v) {
+             // The HEIGHT proportion accessor (a delegating twin of the width
+             // one), so a retune of the width ceiling cannot silently
+             // retarget the height vocabulary.
              return canonicalProportionList(v, CD::scrollingPresetWindowHeights(),
-                                            CD::scrollingDefaultColumnWidthProportionMax());
+                                            CD::scrollingWindowHeightProportionMax());
          }},
         // Default window height trio: kind + fixed pixel value + preset
         // index. Unlike the width pair, the value key serves ONE kind

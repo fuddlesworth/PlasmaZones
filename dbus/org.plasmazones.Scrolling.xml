@@ -23,7 +23,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="setColumnWidthProportion">
-            <annotation name="org.gtk.GDBus.DocString" value="Set the focused column's width to a fraction of the work area (niri set-column-width with an absolute value; the shortcut surface carries no value argument, so the absolute setters live here). Same silent ownership gate as focusColumn, and the value is refused silently outside the proportion range the settings UI enforces (0.05 to 1.0). A value equal to the current intent is a no-op."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set the focused column's width to a fraction of the work area (niri set-column-width with an absolute value; the shortcut surface carries no value argument, so the absolute setters live here). Same silent ownership gate as focusColumn, and the value is refused silently outside the proportion range the settings UI enforces (0.05 to 1.0). A value equal to the current intent answers with a no-target OSD rather than acting, like the step verbs, and a successful call also raises the navigation OSD — every one of the four setters reports through it when that setting is on, so a scripted caller should expect on-screen feedback per call."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose focused column to resize. An empty string is ignored."/>
             </arg>
@@ -33,7 +33,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="setColumnWidthPixels">
-            <annotation name="org.gtk.GDBus.DocString" value="Set the focused column's width to a fixed pixel value. Same gates as setColumnWidthProportion; the value is refused silently outside the fixed range the settings UI enforces (100 to 10000). The relayout still caps a rendered column at the work-area width."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set the focused column's width to a fixed pixel value. Same gates, equal-value no-target answer and OSD feedback as setColumnWidthProportion; the value is refused silently outside the fixed range the settings UI enforces (100 to 10000). The relayout still caps a rendered column at the work-area width."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose focused column to resize. An empty string is ignored."/>
             </arg>
@@ -43,7 +43,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="setWindowHeightProportion">
-            <annotation name="org.gtk.GDBus.DocString" value="Set the focused window's height intent to a fraction of the work area (niri set-window-height with an absolute value). Same gates and proportion range as setColumnWidthProportion. Heights have no exact-proportion kind in the strip model: the value is stored as a fraction anchor that snaps to the NEAREST entry of the screen's effective height preset list at relayout, the same value-anchored contract the cycle-height shortcut walks. For an exact height use setWindowHeightPixels. The relayout renormalizes heights into the column budget, so an oversized value degrades rather than overflowing."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set the focused window's height intent to a fraction of the work area (niri set-window-height with an absolute value). Same gates, proportion range, equal-value no-target answer and OSD feedback as setColumnWidthProportion. Heights have no exact-proportion kind in the strip model: the value is stored as a fraction anchor that snaps to the NEAREST entry of the screen's effective height preset list at relayout, the same value-anchored contract the cycle-height shortcut walks. For an exact height use setWindowHeightPixels. The relayout renormalizes heights into the column budget, so an oversized value degrades rather than overflowing."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose focused window to resize. An empty string is ignored."/>
             </arg>
@@ -53,7 +53,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="setWindowHeightPixels">
-            <annotation name="org.gtk.GDBus.DocString" value="Set the focused window's height to a fixed pixel value. Same gates as setWindowHeightProportion; the value is refused silently outside the fixed range the settings UI enforces (100 to 10000)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set the focused window's height to a fixed pixel value. Same gates, equal-value no-target answer and OSD feedback as setWindowHeightProportion; the value is refused silently outside the fixed range the settings UI enforces (100 to 10000)."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose focused window to resize. An empty string is ignored."/>
             </arg>

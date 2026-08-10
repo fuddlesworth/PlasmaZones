@@ -511,17 +511,6 @@ QSet<QString> Daemon::diffActiveAssignments()
         // resolves to the same snapping id and is correctly ignored.
         ActiveAssignmentSnapshot snapshot;
         snapshot.assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        // The resolved template rides the snapshot for the KCM apply's
-        // template-only OSD gate. Mode-gated resolver: empty on every
-        // non-Scrolling context. Deliberately NOT part of the `changed` key —
-        // a template swap moves no windows, so it must not trigger the
-        // resnap/OSD apply below (the engine re-derives its vocabulary via
-        // the unconditional updateEngineScreens either way).
-        const PhosphorZones::ScrollingTemplate templ =
-            m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity);
-        if (templ.isValid()) {
-            snapshot.templateId = templ.id.toString();
-        }
         next.insert(screenId, snapshot);
         if (m_activeAssignmentByScreen.value(screenId).assignmentId != snapshot.assignmentId) {
             changed.insert(screenId);
@@ -965,11 +954,40 @@ void Daemon::processPendingGeometryUpdates()
     // engine's current one, and that branch retiles every screen
     // unconditionally (engine_core.cpp, `screens == m_scrollingScreens`) —
     // the same guarantee scrolling.cpp's LOAD-BEARING gate leans on. The
-    // retile loop at the tail of this function is an extra pass that only
-    // runs when the compute barrier below is non-empty (an empty barrier
-    // returns early), so it cannot be the mechanism relied on here.
+    // retile loop below now runs on every pass too (it was hoisted above
+    // the compute-barrier early return), but this push stays the documented
+    // mechanism: it is what re-resolves the override map, not just the
+    // geometry.
     if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
         updateScrollingScreens(m_scrollEngine->activeScreens());
+    }
+
+    // The panel-settle requery and the tiling-family retiles run BEFORE the
+    // empty-barrier early return below: a geometry pass in which no screen
+    // produced a compute request (all screens in a tiling mode, say) still
+    // changed the work areas, so the settled-panel follow-up pass must still
+    // arm and both engines must still pick up the new geometry. They are
+    // independent of the compute barrier — the barrier watches the layout
+    // compute service, the retiles drive the engines directly.
+    //
+    // Re-query panel geometry once after a delay to pick up settled state
+    // (e.g. panel editor close). That completion emits
+    // availableGeometryChanged → debounce → processPendingGeometryUpdates →
+    // reapply.
+    m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
+
+    // Retile BOTH tiling-family engines to adapt to new screen geometry
+    // (panels added/removed, resolution changes, etc.). The scroll engine
+    // reads the available geometry only at relayout time and subscribes to
+    // no ScreenManager signal of its own, so without this its columns keep
+    // stale widths/offsets until an unrelated event happens to retile.
+    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+        m_autotileEngine->retile();
+    }
+    if (m_scrollEngine && m_scrollEngine->isEnabled()) {
+        for (const QString& screenId : m_scrollEngine->activeScreens()) {
+            m_scrollEngine->scheduleRetileForScreen(screenId);
+        }
     }
 
     if (pending->isEmpty()) {
@@ -1034,24 +1052,6 @@ void Daemon::processPendingGeometryUpdates()
         m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
         m_reapplyGeometriesTimer.start();
     });
-
-    // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
-    // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.
-    m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
-
-    // Retile BOTH tiling-family engines to adapt to new screen geometry
-    // (panels added/removed, resolution changes, etc.). The scroll engine
-    // reads the available geometry only at relayout time and subscribes to
-    // no ScreenManager signal of its own, so without this its columns keep
-    // stale widths/offsets until an unrelated event happens to retile.
-    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
-        m_autotileEngine->retile();
-    }
-    if (m_scrollEngine && m_scrollEngine->isEnabled()) {
-        for (const QString& screenId : m_scrollEngine->activeScreens()) {
-            m_scrollEngine->scheduleRetileForScreen(screenId);
-        }
-    }
 }
 
 } // namespace PlasmaZones

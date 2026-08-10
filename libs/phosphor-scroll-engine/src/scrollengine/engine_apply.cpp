@@ -29,12 +29,6 @@ namespace {
 /// scrollEdge field on the tile request does.
 constexpr int kParkMargin = 16;
 
-/// Cap on the self-activation echo queue. The bound exists only to keep a
-/// pathological run of effect-side drops from growing the FIFO without
-/// limit; the full reasoning lives with m_pendingSelfActivations' doc in
-/// ScrollEngine.h.
-constexpr int kMaxPendingSelfActivations = 16;
-
 } // namespace
 
 ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, int columnCountOverride) const
@@ -223,40 +217,6 @@ int ScrollEngine::visibleTileNumberForWindow(const QString& screenId, const QStr
 
 QVector<ScrollEngine::VisibleTileWithRect> ScrollEngine::visibleTilesWithRects(const QString& screenId) const
 {
-    // Same state check, params resolve, basis resolve and walk as
-    // visibleTileRectsRelative — see the comments there for why the basis is
-    // the full screen rather than the work area. The only difference is that
-    // this carries the tile across instead of throwing it away, so a caller
-    // wanting both does not resolve the strip a second time to get it back.
-    const ScrollState* state = m_states.stateForKey(m_context.currentKeyForScreen(screenId));
-    if (!state || state->strip().isEmpty()) {
-        return {};
-    }
-    const ScrollLayoutParams params = layoutParamsForScreen(screenId);
-    if (!params.workArea.isValid()) {
-        return {};
-    }
-    QRect area = m_screenManager ? m_screenManager->screenGeometry(screenId)
-                                 : (m_screenGeometryProvider ? m_screenGeometryProvider(screenId) : QRect());
-    if (!area.isValid()) {
-        area = params.workArea;
-    }
-    const QVector<VisibleTile> tiles = visibleTiles(screenId, params);
-    QVector<VisibleTileWithRect> out;
-    out.reserve(tiles.size());
-    for (const VisibleTile& tile : tiles) {
-        const QRect& r = tile.rect;
-        out.append(
-            {tile,
-             QRectF(static_cast<qreal>(r.x() - area.x()) / area.width(),
-                    static_cast<qreal>(r.y() - area.y()) / area.height(), static_cast<qreal>(r.width()) / area.width(),
-                    static_cast<qreal>(r.height()) / area.height())});
-    }
-    return out;
-}
-
-QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const
-{
     // State check first, like visibleTiles: an unmanaged or empty screen must
     // not pay the ScreenManager query plus context-gap-provider call that
     // resolving the params costs.
@@ -284,13 +244,29 @@ QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) 
     // The params are already resolved, so the walk reuses them rather than
     // sending visibleTiles back to layoutParamsForScreen for the same values.
     const QVector<VisibleTile> tiles = visibleTiles(screenId, params);
-    QVector<QRectF> out;
+    QVector<VisibleTileWithRect> out;
     out.reserve(tiles.size());
     for (const VisibleTile& tile : tiles) {
         const QRect& r = tile.rect;
-        out.append(QRectF(
-            static_cast<qreal>(r.x() - area.x()) / area.width(), static_cast<qreal>(r.y() - area.y()) / area.height(),
-            static_cast<qreal>(r.width()) / area.width(), static_cast<qreal>(r.height()) / area.height()));
+        out.append(
+            {tile,
+             QRectF(static_cast<qreal>(r.x() - area.x()) / area.width(),
+                    static_cast<qreal>(r.y() - area.y()) / area.height(), static_cast<qreal>(r.width()) / area.width(),
+                    static_cast<qreal>(r.height()) / area.height())});
+    }
+    return out;
+}
+
+QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) const
+{
+    // A pure projection of visibleTilesWithRects — one definition of the
+    // state gate, basis resolution and normalization; this overload only
+    // drops the tile.
+    const QVector<VisibleTileWithRect> tiles = visibleTilesWithRects(screenId);
+    QVector<QRectF> out;
+    out.reserve(tiles.size());
+    for (const VisibleTileWithRect& entry : tiles) {
+        out.append(entry.relativeRect);
     }
     return out;
 }
@@ -352,6 +328,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // empty screen forever — and an anchor the re-anchor above already
         // moved is persisted state that has to be marked dirty on this exit
         // too, or the move is never saved.
+        //
+        // The view-delta baseline is INVALIDATED, not left standing: this
+        // state object survives the empty period, and a baseline captured
+        // before it would make the repopulating batch compute a delta
+        // against a coordinate nothing on screen occupies — flying the next
+        // window in from wherever the old view sat. (The arr-empty
+        // interactive-drag bail further down deliberately does NOT clear:
+        // its strip still has resolved columns the compositor is showing.)
+        //
+        // Deliberately no focusWindowAfter activation on this exit either —
+        // there is no tile to activate on an empty resolve, and the caller's
+        // request dies with the batch it was for.
+        state->clearLastAppliedViewX();
         clearTabStripsForScreen(screenId);
         if (anchorMoved) {
             Q_EMIT placementChanged(screenId);
@@ -629,7 +618,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                     // scanned-out frame can still show the overhang. That is
                     // the same bypass the clamp exists to avoid, re-accepted
                     // for this one degenerate case.
-                    const QSize tileMin = params.respectMinimumSize ? windowMinimumSize(tile.windowId) : QSize();
+                    // Strip-level lookup: the tile is by construction a strip
+                    // tile of the state in hand, so the engine-level resolve
+                    // (canonicalize + reverse map + float-restore fallback)
+                    // would re-derive what one walk answers.
+                    const QSize tileMin =
+                        params.respectMinimumSize ? state->strip().windowMinimumSize(tile.windowId) : QSize();
                     const int peekFloorX = qMin(screenRect.width(), qMax(kMinVisiblePeekPx, tileMin.width()));
                     if (straddleRight) {
                         const int visible = screenRect.right() + 1 - rect.left();
@@ -676,7 +670,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 park(rect);
                 parkedNow = true;
             } else if (!parkedNow && rect.bottom() > screenRect.bottom()) {
-                const QSize tileMinV = params.respectMinimumSize ? windowMinimumSize(tile.windowId) : QSize();
+                const QSize tileMinV =
+                    params.respectMinimumSize ? state->strip().windowMinimumSize(tile.windowId) : QSize();
                 const int peekFloorY = qMin(screenRect.height(), qMax(kMinVisiblePeekPx, tileMinV.height()));
                 const int visible = screenRect.bottom() + 1 - rect.top();
                 if (visible >= peekFloorY) {

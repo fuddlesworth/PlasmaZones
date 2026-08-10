@@ -4,10 +4,12 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // Daemon — scrolling-mode shortcut wiring
 //
-// Connects the ShortcutManager's scroll-specific column signals to the
-// concrete ScrollEngine. Directional focus/move/swap and float shortcuts are
-// NOT here — they route through the generic navigation handlers
-// (navigation.cpp), which reach the scroll engine via ScreenModeRouter.
+// Connects the ShortcutManager's scroll-specific signals to the concrete
+// ScrollEngine — the column vocabulary, the edge-stop/wrap focus variants,
+// the top/bottom window focus, and the one-way float verbs. The GENERIC
+// directional move/focus/swap chords are not here: they route through the
+// generic navigation handlers (navigation.cpp), which reach the scroll
+// engine via ScreenModeRouter.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "daemon/daemon.h"
@@ -164,6 +166,11 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollCenterVisibleColumnsRequested, plainVerb([](Scroll* s, const QString& id) {
         s->centerVisibleColumns(id);
     }));
+    // POLARITY CONTRACT: the emitter passes bottom=false for
+    // kIdScrollFocusWindowTop and true for the Bottom id (shortcutmanager.cpp
+    // table rows); focusTileAtEnd(false) seeks the TOP tile. Swapping this
+    // ternary compiles clean and no test drives the wire, so keep the
+    // polarity next to the branch.
     wire(&ShortcutManager::scrollFocusWindowEndRequested, boolVerb([](Scroll* s, const QString& id, bool bottom) {
         bottom ? s->focusWindowBottom(id) : s->focusWindowTop(id);
     }));
@@ -176,6 +183,9 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollSwitchFocusFloatTilingRequested, plainVerb([](Scroll* s, const QString& id) {
         s->switchFocusBetweenFloatingAndTiling(id);
     }));
+    // POLARITY CONTRACT: the emitter passes floating=true for
+    // kIdScrollMoveToFloating and false for the MoveToTiling id — same
+    // swap-silently hazard as the focus-end wire above.
     wire(&ShortcutManager::scrollMoveToFloatRequested, boolVerb([](Scroll* s, const QString& id, bool floating) {
         floating ? s->moveFocusedToFloating(id) : s->moveFocusedToTiling(id);
     }));

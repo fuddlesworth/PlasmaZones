@@ -156,16 +156,16 @@ void Daemon::connectLayoutSignals()
     // template. The recompute is cheap and store mutations are user-paced,
     // so no per-screen template-id matching is needed here.
     //
-    // The per-screen active-assignment snapshot is re-diffed for the same
-    // reason: store CRUD can retarget or clear a context's template without
-    // touching its assignment id, and the KCM apply's template-only OSD gate
-    // reads the snapshot's templateId. Its changed-set return is ignored, as
-    // at the other refresh-only call sites.
+    // The per-screen active-assignment snapshot is re-diffed so the NEXT
+    // rulesChanged diff starts from the post-CRUD assignment ids (the
+    // template-only OSD gate itself keys on m_lastAnnouncedTemplateByScreen,
+    // not this snapshot). Its changed-set return is ignored, as at the other
+    // refresh-only call sites.
     if (m_scrollingTemplateStore) {
         m_restartScopedConnections << connect(m_scrollingTemplateStore.get(),
                                               &PhosphorZones::ScrollingTemplateStore::templatesChanged, this, [this]() {
                                                   updateEngineScreens();
-                                                  // Refresh the snapshot's templateId — see above.
+                                                  // Refresh the assignment snapshot — see above.
                                                   diffActiveAssignments();
                                                   // Relay to the D-Bus surface so the settings app
                                                   // refreshes its template views on store CRUD.

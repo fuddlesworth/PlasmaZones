@@ -69,15 +69,20 @@ QStringList ScrollingAdaptor::scrollingScreens() const
 
 void ScrollingAdaptor::setScrollTabSurface(const QString& screenId, quint32 surfaceId)
 {
-    // No engine gate, and no change gate either: the producer (the overlay
-    // service) already only calls this on a real change, and re-broadcasting a
-    // value the compositor may have missed is the safe direction for a
-    // registration the compositor cannot re-derive.
+    // No engine gate, and a deliberate opt-out from the emit-on-change rule
+    // for the non-zero path: the producer (the overlay service) already only
+    // calls this on a real change, and re-broadcasting a value the compositor
+    // may have missed is the safe direction for a registration the compositor
+    // cannot re-derive. The zero path IS gated on membership below — a
+    // retraction for a registration that never existed is not a re-broadcast
+    // of anything, just a spurious event on the wire.
     if (screenId.isEmpty()) {
         return;
     }
     if (surfaceId == 0) {
-        m_scrollTabSurfaces.remove(screenId);
+        if (m_scrollTabSurfaces.remove(screenId) == 0) {
+            return;
+        }
     } else {
         m_scrollTabSurfaces.insert(screenId, surfaceId);
     }
@@ -121,8 +126,12 @@ void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double 
     if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
         return;
     }
-    if (proportion < ConfigDefaults::scrollingDefaultColumnWidthProportionMin()
-        || proportion > ConfigDefaults::scrollingDefaultColumnWidthProportionMax()) {
+    // Negated inclusive form rather than "< min || > max": both of those
+    // comparisons are false for NaN, which D-Bus type 'd' can carry, so the
+    // exclusion form would wave a NaN through into the stored intent. The
+    // conjunction is false for NaN by construction.
+    if (!(proportion >= ConfigDefaults::scrollingDefaultColumnWidthProportionMin()
+          && proportion <= ConfigDefaults::scrollingDefaultColumnWidthProportionMax())) {
         return;
     }
     m_engine->setColumnWidth(PhosphorScrollEngine::ColumnWidth::makeProportion(proportion), screenId);
@@ -142,15 +151,15 @@ void ScrollingAdaptor::setColumnWidthPixels(const QString& screenId, int px)
 
 void ScrollingAdaptor::setWindowHeightProportion(const QString& screenId, double proportion)
 {
-    // Heights share the proportion domain with widths (work-area fractions,
-    // and the preset lists use the same 0-1 spellings); there is no separate
-    // height-proportion bound to consult, so the width accessors are the
-    // single source for the fraction range.
     if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
         return;
     }
-    if (proportion < ConfigDefaults::scrollingDefaultColumnWidthProportionMin()
-        || proportion > ConfigDefaults::scrollingDefaultColumnWidthProportionMax()) {
+    // Height-proportion accessors (they delegate to the width range today;
+    // the separate names keep the two wire contracts independently tunable).
+    // Same negated inclusive form as setColumnWidthProportion: NaN must not
+    // reach the stored intent, and "< min || > max" is false for NaN.
+    if (!(proportion >= ConfigDefaults::scrollingWindowHeightProportionMin()
+          && proportion <= ConfigDefaults::scrollingWindowHeightProportionMax())) {
         return;
     }
     m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makePreset(proportion), screenId);

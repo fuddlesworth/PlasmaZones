@@ -295,6 +295,9 @@ public:
     /// The stash-restore path re-applies the anchor AFTER re-focusing the
     /// stashed active window, overriding the focus change's own
     /// centering-policy reanchor with the user's actual view.
+    /// @p params is currently UNUSED (the raw restore needs no layout maths)
+    /// but stays in the exported signature: every sibling anchor mutator
+    /// takes it, and dropping it is an ABI break for no gain.
     void restoreViewAnchor(int anchor, const ScrollLayoutParams& params);
     /// Re-apply the centering policy to the current active column (settings
     /// change / work-area change) using the current anchor as the "no

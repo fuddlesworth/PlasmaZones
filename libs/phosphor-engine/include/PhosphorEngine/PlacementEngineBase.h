@@ -134,7 +134,15 @@ Q_SIGNALS:
     /// it. No window travels and no engine state changes; the compositor's
     /// answering focus report is what updates each engine. Monitor crossings
     /// only — a focus has no cross-desktop arm.
-    void crossModeFocusRequested(const QString& targetScreenId, const QString& direction);
+    ///
+    /// @p handled is an OUT parameter the handler sets true only when it
+    /// actually issued an activation. The connection is DirectConnection by
+    /// contract (enginewiring.cpp), so the emitter reads the verdict on
+    /// return and can report no_target instead of announcing a crossing that
+    /// never happened — an empty neighbour output is an ordinary state for a
+    /// focus, unlike a move, which always has a mover to hand over. A null
+    /// pointer is permitted for callers that do not need the verdict.
+    void crossModeFocusRequested(const QString& targetScreenId, const QString& direction, bool* handled);
 
     /// Emitted to sync floating state without restoring geometry.
     /// Passive state-sync: engine-internal divergence correction.

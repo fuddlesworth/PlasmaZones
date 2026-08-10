@@ -34,6 +34,14 @@
  *     re-announces an identical set on every desktop switch, and a wire
  *     consumer comparing successive payloads must not see a phantom one.
  * 10. clearEngine leaves every slot answering safely AND stops relaying.
+ * 11. The four absolute setters share focusColumn's ownership gate, refuse
+ *     out-of-range and non-finite values silently (inclusive at both bounds),
+ *     and write the intent kind each form documents — width proportion
+ *     exact, width/height px Fixed, height proportion a Preset anchor that
+ *     relayout snaps to the height vocabulary.
+ * 12. The tab-surface registry publishes, replaces, retracts and replays
+ *     per screen, and the scrollingScreens property never reaches
+ *     PropertiesChanged (the real-bus probe at the tail).
  */
 
 #include <QTest>
@@ -44,6 +52,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QVariantMap>
+
+#include <limits>
 
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorEngine/PlacementEngineBase.h>
@@ -394,22 +404,49 @@ private Q_SLOTS:
             return state->strip().columns().at(state->strip().activeColumnIndex());
         };
 
-        // Refusals: foreign screen, below the proportion floor, above the
-        // ceiling — none of them may disturb the default width intent.
+        // Refusals: foreign screen, empty screen id (the file's boundary
+        // convention), below the proportion floor, above the ceiling, just
+        // outside each inclusive bound, and NaN (D-Bus type 'd' carries it,
+        // and an exclusion-form range test would wave it through) — none of
+        // them may disturb the default width intent. Full-value compare, not
+        // kind-only: a refusal that clamped instead of refusing would keep
+        // the kind while corrupting the value.
         const ColumnWidth before = activeColumn().width;
         m_adaptor->setColumnWidthProportion(QStringLiteral("HDMI-2"), 0.25);
+        m_adaptor->setColumnWidthProportion(QString(), 0.25);
         m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.01);
         m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 1.5);
-        QCOMPARE(activeColumn().width.kind, before.kind);
+        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.049);
+        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 1.001);
+        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), std::numeric_limits<double>::quiet_NaN());
+        QCOMPARE(activeColumn().width, before);
+
+        // The bounds themselves are ACCEPTED (inclusive range): a `<` flipped
+        // to `<=` at either edge fails here.
+        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.05);
+        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Proportion);
+        QCOMPARE(activeColumn().width.proportion, 0.05);
+        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 1.0);
+        QCOMPARE(activeColumn().width.proportion, 1.0);
 
         m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.25);
         QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Proportion);
         QCOMPARE(activeColumn().width.proportion, 0.25);
 
-        // Pixel form: out-of-range refused, in-range writes a Fixed intent.
+        // Pixel form: out-of-range (including just-outside) refused with the
+        // full intent untouched; the bounds accepted; in-range writes Fixed.
+        const ColumnWidth beforePx = activeColumn().width;
         m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 50);
+        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 99);
+        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 10001);
         m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 20000);
-        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Proportion);
+        m_adaptor->setColumnWidthPixels(QString(), 640);
+        QCOMPARE(activeColumn().width, beforePx);
+        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 100);
+        QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Fixed);
+        QCOMPARE(activeColumn().width.fixedPx, 100);
+        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 10000);
+        QCOMPARE(activeColumn().width.fixedPx, 10000);
         m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 640);
         QCOMPARE(activeColumn().width.kind, ColumnWidth::Kind::Fixed);
         QCOMPARE(activeColumn().width.fixedPx, 640);
@@ -421,12 +458,26 @@ private Q_SLOTS:
             return col.tiles.at(col.activeTileIdx).height;
         };
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 50);
+        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 99);
+        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 10001);
+        m_adaptor->setWindowHeightPixels(QString(), 300);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Auto);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
         QCOMPARE(activeHeight().fixedPx, 300);
         m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.01);
+        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), std::numeric_limits<double>::quiet_NaN());
+        m_adaptor->setWindowHeightProportion(QString(), 0.5);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);
+        // An OFF-VOCABULARY fraction is accepted and stored VERBATIM as the
+        // anchor — the setter is not exact and does not snap at store time;
+        // relayout snaps the anchor to the nearest effective height preset,
+        // per the XML DocString. 0.42 sits between the default vocabulary's
+        // 1/3 and 1/2 entries, so a setter that stored the nearest entry
+        // instead of the anchor would fail the exact compare below.
+        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.42);
+        QCOMPARE(activeHeight().kind, WindowHeight::Kind::Preset);
+        QCOMPARE(activeHeight().presetFraction, 0.42);
         m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.5);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Preset);
         QCOMPARE(activeHeight().presetFraction, 0.5);
@@ -537,8 +588,15 @@ private Q_SLOTS:
         m_adaptor->clearEngine();
 
         QCOMPARE(m_adaptor->visibleStripJson(QStringLiteral("DP-1")), QStringLiteral("[]"));
+        QCOMPARE(m_adaptor->presetVocabularyJson(QStringLiteral("DP-1")), QStringLiteral("{}"));
         QVERIFY(m_adaptor->scrollingScreens().isEmpty());
         m_adaptor->focusColumn(QStringLiteral("DP-1"), -1); // must not crash
+        // The four setters open with the same `!m_engine` guard — this test
+        // is the shutdown path that guard exists for.
+        m_adaptor->setColumnWidthProportion(QStringLiteral("DP-1"), 0.5);
+        m_adaptor->setColumnWidthPixels(QStringLiteral("DP-1"), 640);
+        m_adaptor->setWindowHeightProportion(QStringLiteral("DP-1"), 0.5);
+        m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 300);
     }
 
     // clearEngine also DISCONNECTS: the engine outlives the adaptor's
@@ -656,8 +714,6 @@ public Q_SLOTS:
         }
     }
 
-private Q_SLOTS:
-
 private:
     /// Append a description of every way @p obj fails to describe @p expected
     /// at 1-based visible slot @p slot. Accumulating instead of asserting
@@ -704,8 +760,8 @@ private:
 
     ScrollEngine* m_engine = nullptr;
     QObject* m_parent = nullptr;
-    int m_propertiesChangedCount = 0;
     ScrollingAdaptor* m_adaptor = nullptr;
+    int m_propertiesChangedCount = 0;
 };
 
 QTEST_GUILESS_MAIN(TestScrollingAdaptor)

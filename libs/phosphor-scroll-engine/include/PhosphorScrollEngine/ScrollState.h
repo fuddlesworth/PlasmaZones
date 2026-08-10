@@ -8,6 +8,7 @@
 #include <phosphorscrollengine_export.h>
 
 #include <QObject>
+#include <QRect>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -49,8 +50,13 @@ public:
     }
     bool removeFloating(const QString& windowId)
     {
+        // The two focus-memory fields move together: a state must never claim
+        // "the float layer holds focus" while naming nobody. Every caller that
+        // needs the pre-teardown verdict (unfloatWindowInternal) reads
+        // floatingHasFocus() BEFORE calling this, per its own comment.
         if (m_lastFloatingFocus == windowId) {
             m_lastFloatingFocus.clear();
+            m_floatingHasFocus = false;
         }
         return m_floating.remove(windowId);
     }
@@ -60,6 +66,13 @@ public:
     /// the float layer holds focus RIGHT NOW. Both are fed exclusively by
     /// genuine focus reports (windowFocused) and the engine's own activation
     /// arm; neither is serialized — focus history dies with the session.
+    ///
+    /// PER-STATE, while focus is global: only the state owning the newly
+    /// focused window is updated by a focus report, so a sibling screen's
+    /// flag can stay stale until the next report names a window that sibling
+    /// tracks. Accepted: the flag self-heals on the next genuine focus report
+    /// for that state, and clearing across states would couple per-screen
+    /// ownership in ways no consumer currently needs.
     QString lastFloatingFocus() const
     {
         return m_lastFloatingFocus;
@@ -127,6 +140,18 @@ public:
         m_lastAppliedWorkArea = workArea;
         m_hasLastAppliedViewX = true;
     }
+    /// Invalidate the baseline entirely: the next emitted batch takes the
+    /// first-batch path (zero delta, outright placement). Called when the
+    /// strip EMPTIES — the state object survives an empty period, and a
+    /// baseline captured before it would describe a slide from a coordinate
+    /// nothing on screen occupies, flying the repopulating window in from
+    /// wherever the old view sat.
+    void clearLastAppliedViewX()
+    {
+        m_lastAppliedViewX = 0;
+        m_lastAppliedWorkArea = QRect();
+        m_hasLastAppliedViewX = false;
+    }
 
     // ── IPlacementState ─────────────────────────────────────────────────────
     QString screenId() const override
@@ -135,12 +160,23 @@ public:
     }
     int windowCount() const override
     {
-        return m_strip.windowCount() + m_floating.size();
+        // The two sets are disjoint by intent but not by construction — the
+        // engine explicitly tolerates a window transiently in both (see
+        // windowClosed's both-sets handling). Count the union, not the sum.
+        int overlap = 0;
+        for (const QString& id : m_floating) {
+            if (m_strip.containsWindow(id)) {
+                ++overlap;
+            }
+        }
+        return m_strip.windowCount() + m_floating.size() - overlap;
     }
     QStringList managedWindows() const override
     {
         QStringList all = m_strip.windowsInOrder();
         all += floatingWindows();
+        // Same union-not-sum rule as windowCount.
+        all.removeDuplicates();
         return all;
     }
     bool containsWindow(const QString& windowId) const override

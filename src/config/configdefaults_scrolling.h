@@ -142,6 +142,9 @@ public:
     /// value key, since a pixel width can never be smaller than a proportion,
     /// but it bounds the PROPORTION range — the fixed range has its own floor
     /// in scrollingDefaultColumnWidthFixedMin.
+    /// NOTE the D-Bus DocStrings in dbus/org.plasmazones.Scrolling.xml spell
+    /// these bounds (and the fixed/height ranges below) as literals, kept in
+    /// sync BY HAND — retuning any of them means updating that XML too.
     static constexpr qreal scrollingDefaultColumnWidthProportionMin()
     {
         return 0.05;
@@ -597,6 +600,20 @@ public:
     {
         return 10000.0;
     }
+    /// Height-PROPORTION bounds (the D-Bus setWindowHeightProportion gate and
+    /// the height preset-list canonicalizer). Delegate to the width
+    /// proportion range today — both are work-area fractions sharing the 0-1
+    /// spelling — but exist as their own accessors so the height wire
+    /// contract and preset vocabulary cannot be silently retargeted by a
+    /// future retune of the WIDTH range.
+    static constexpr qreal scrollingWindowHeightProportionMin()
+    {
+        return scrollingDefaultColumnWidthProportionMin();
+    }
+    static constexpr qreal scrollingWindowHeightProportionMax()
+    {
+        return scrollingDefaultColumnWidthProportionMax();
+    }
     /// Editing granularity for the fixed-height spin box, in whole pixels.
     /// Its own accessor rather than a reuse of the width step: the two
     /// controls govern different dimensions and nothing pins them equal.
@@ -740,15 +757,18 @@ public:
     // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
     // Meta+Ctrl families in configdefaults.h. NOTE: the Meta+Alt family is
     // SHARED with the layouts pair (Meta+Alt+[ ]), the cheatsheet (Meta+Alt+/),
-    // cycle-in-zone (Meta+Alt+, .), and the quick-layout digits (Meta+Alt+1-9) —
+    // cycle-in-zone (Meta+Alt+, .), and the quick-layout digit slots
+    // (Meta+Alt+<digit>, 1..QuickLayoutSlotCount) —
     // KGlobalAccel routes one action per chord, so every default here must be
     // unique across the WHOLE inheritance chain (test_scrolling_settings pins
     // this). Shift+symbol spellings are forbidden: see
     // toggleCheatsheetShortcut() — KWin consumes Shift in the keysym
     // translation on Wayland and the chord can never fire.
-    // Directional focus/move/swap reuse the existing generic navigation
-    // shortcuts; only the scroll-specific column vocabulary gets its own
-    // chords.
+    // The GENERIC directional focus/move/swap chords stay shared with the
+    // other modes; the scroll-specific column vocabulary gets its own chords,
+    // and the niri-parity focus variants (edge-stop, wrap) plus the one-way
+    // float verbs have their own keys that SHIP UNBOUND — see each accessor's
+    // rationale.
     //
     // EXTERNALLY OWNED CHORDS the internal-uniqueness test can NOT catch:
     // KGlobalAccel silently gives a chord to whichever action registered
@@ -790,7 +810,9 @@ public:
         // spelling needs Shift on the user's layout can never fire on
         // Wayland (see toggleCheatsheetShortcut). I as in "into the
         // column"; Shift+I is the opposite direction. Shift+letter is safe
-        // — only Shift+SYMBOL spellings are forbidden.
+        // — only Shift+SYMBOL spellings are forbidden. (The autotile
+        // master-count pair keeps the KDE-wide Meta+Ctrl+= / - idiom as a
+        // documented exception — see autotileIncMasterCountShortcut.)
         return QStringLiteral("Meta+Alt+I");
     }
     static QString scrollingExpelWindowShortcut()
@@ -895,10 +917,14 @@ public:
     {
         // Unbound by default: the generic focus chords already walk columns
         // and cross monitors at the strip edge. These plain variants exist
-        // for users who want niri's exact stop-at-the-edge behaviour and
-        // bind them in the Shortcuts KCM; a default would spend two letters
-        // from the shrinking Meta+Alt pool on a behaviour nothing defaults
-        // to.
+        // for users who want niri's exact stop-at-the-edge behaviour; a
+        // default would spend two letters from the shrinking Meta+Alt pool
+        // on a behaviour nothing defaults to. NOTE an unbound entry never
+        // registers with KGlobalAccel (the registry skips empty sequences),
+        // so it does NOT appear in the system Shortcuts KCM — binding one
+        // means writing its Shortcuts.Scrolling key in
+        // ~/.config/plasmazones/config.json or over the settings D-Bus
+        // surface; the daemon rebinds live on the settings change.
         return QString();
     }
     static QString scrollingFocusColumnRightShortcut()
