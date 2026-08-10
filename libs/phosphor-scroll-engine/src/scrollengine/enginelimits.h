@@ -38,4 +38,22 @@ inline constexpr int kMaxTemplateEntries = 16;
 /// same value as the settings validator's kMaxPresetScan (settingsschema_p.h).
 inline constexpr int kMaxTemplateScan = 256;
 
+/// Restore caps: persisted strip blobs are a user-writable system boundary
+/// (the file's own header calls them that), and restoreStripState bounds
+/// every NUMERIC field it reads — these bound the COUNTS the same way. A
+/// hand-edited or corrupted blob with a huge array would otherwise be
+/// staged verbatim into the stash, and restoreFromStripStash walks the
+/// staged columns/tiles on every window open for that key until the
+/// entries age out over three sessions. The column/tile caps sit far above
+/// any real strip; the key cap has to clear the full screens x desktops
+/// (KDE allows 20) x activities product, so it is sized for the corrupt
+/// blob (thousands of keys), not the power user — 512 covers 4 outputs x
+/// 20 desktops x 6 activities with headroom. Skipped keys (stash-exists /
+/// live-strip continues) do not consume it, it bounds ONE restore call
+/// (loadState may run more than once; the stash-exists skip covers the
+/// repeat-blob case), and drops are logged, never silent.
+inline constexpr int kMaxRestoredKeys = 512;
+inline constexpr int kMaxRestoredColumnsPerKey = 64;
+inline constexpr int kMaxRestoredTilesPerColumn = 32;
+
 } // namespace PhosphorScrollEngine

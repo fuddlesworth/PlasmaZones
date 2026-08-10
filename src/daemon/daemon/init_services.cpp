@@ -413,7 +413,13 @@ void Daemon::initLayoutAndSettingsWiring()
                 for (const ZoneAssignmentEntry& e : m_pendingSnapFloatRestores) {
                     restoredWindows.insert(e.windowId);
                 }
-                QVector<ZoneAssignmentEntry> entries = buildAutotileRestoreEntries(restoredWindows);
+                // Scope to the CURRENT activity: m_lastEngineOrders can hold
+                // orders captured on other activities, and this caller is
+                // desktop-unscoped (per-screen desktops differ, so no single
+                // desktop filter applies) — the builder's per-window guards
+                // cover the rest.
+                QVector<ZoneAssignmentEntry> entries =
+                    buildAutotileRestoreEntries(restoredWindows, -1, currentActivity());
                 entries.append(m_pendingSnapFloatRestores);
                 m_pendingSnapFloatRestores.clear();
                 if (!entries.isEmpty()) {

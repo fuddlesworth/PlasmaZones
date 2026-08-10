@@ -13,6 +13,7 @@
 
 #include <QTest>
 #include <QCoreApplication>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QObject>
 
@@ -45,11 +46,12 @@ class TestTilingAdaptorPanelGate : public QObject
 private Q_SLOTS:
 
     // -------------------------------------------------------------------------
-    // Baseline: with no ScreenManager injected, windowOpened forwards straight
-    // to the engine without queueing. The adaptor must not force a dependency
-    // on ScreenManager — headless unit tests inject nullptr.
+    // Baseline: with no ScreenManager injected, windowOpened must not force a
+    // dependency on ScreenManager (headless unit tests inject nullptr) and
+    // must not QUEUE — the open is dropped outright here because no engine
+    // claims the screen, and "did not queue" is all this case pins.
     // -------------------------------------------------------------------------
-    void testNoScreenManager_passThrough()
+    void testNoScreenManager_noQueueing()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
@@ -346,28 +348,70 @@ private Q_SLOTS:
         TilingAdaptor adaptor(nullptr, &adaptorParent);
         QSignalSpy spy(&adaptor, &TilingAdaptor::windowsTileRequested);
 
+        // The two validator drops below (c|3 illegal edge, d|4 flag on
+        // floating) warn by design at this boundary — expected output, not
+        // noise, so keep the ctest log clean.
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("dropping entry")));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("dropping entry")));
+
         const QString json = QStringLiteral(
             "["
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"left\"},"
-            "{\"windowId\":\"b|2\",\"screenId\":\"S1\",\"x\":600,\"y\":0,\"width\":600,\"height\":800},"
+            "{\"windowId\":\"b|2\",\"screenId\":\"S1\",\"x\":600,\"y\":0,\"width\":600,\"height\":800,"
+            "\"windowedFullscreen\":true},"
             "{\"windowId\":\"c|3\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"up\"},"
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":50,\"y\":0,\"width\":600,\"height\":800,"
-            "\"scrollEdge\":\"right\"}"
+            "\"scrollEdge\":\"right\"},"
+            "{\"windowId\":\"d|4\",\"screenId\":\"S1\",\"floating\":true,\"windowedFullscreen\":true},"
+            "{\"windowId\":\"e|5\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
+            "\"visualX\":100},"
+            "{\"windowId\":\"f|6\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
+            "\"visualX\":4000.5,\"visualY\":10},"
+            "{\"windowId\":\"g|7\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
+            "\"visualX\":-1200,\"visualY\":40},"
+            "{\"windowId\":\"h|8\",\"screenId\":\"S1\",\"floating\":true,\"visualX\":5,\"visualY\":6}"
             "]");
         adaptor.relayTileRequestsJson(json);
 
         QCOMPARE(spy.count(), 1);
         const auto requests = spy.first().at(0).value<PhosphorProtocol::TileRequestList>();
         // c|3 dropped by the validator (illegal edge), the second a|1 dropped
-        // as a duplicate (first entry wins).
-        QCOMPARE(requests.size(), 2);
+        // as a duplicate (first entry wins), and d|4 dropped by the
+        // windowedFullscreen-on-floating rejection — pinning that the
+        // adaptor's parse order (floating first, geometry skipped) still
+        // reaches the validator; a reorder that set the flag before parsing
+        // floating, or an early continue on the zero geometry, would stop
+        // rejecting the pair with no failing test.
+        QCOMPARE(requests.size(), 6);
         QCOMPARE(requests.at(0).windowId, QStringLiteral("a|1"));
         QCOMPARE(requests.at(0).scrollEdge, QStringLiteral("left"));
         QCOMPARE(requests.at(0).x, 0);
         QCOMPARE(requests.at(1).windowId, QStringLiteral("b|2"));
         QVERIFY(requests.at(1).scrollEdge.isEmpty());
+        // The windowedFullscreen key parses through the same JSON hop (a
+        // producer-side rename would otherwise silently read false), and its
+        // absence on a|1 reads false.
+        QCOMPARE(requests.at(1).windowedFullscreen, true);
+        QCOMPARE(requests.at(0).windowedFullscreen, false);
+        // The visual-position unmarshal guard, per arm (previously
+        // untested): visualX alone stays unset (the keys are a required
+        // PAIR), a fractional value FAILS CLOSED (the floor check is what
+        // separates 4000.5 decoding to 0-with-the-flag-latched from a clean
+        // reject), a valid integral pair relays (negative x is legal — the
+        // park is off-canvas), and a floating entry never carries one.
+        QCOMPARE(requests.at(2).windowId, QStringLiteral("e|5"));
+        QCOMPARE(requests.at(2).hasVisualPos, false);
+        QCOMPARE(requests.at(3).windowId, QStringLiteral("f|6"));
+        QCOMPARE(requests.at(3).hasVisualPos, false);
+        QCOMPARE(requests.at(4).windowId, QStringLiteral("g|7"));
+        QCOMPARE(requests.at(4).hasVisualPos, true);
+        QCOMPARE(requests.at(4).visualX, -1200);
+        QCOMPARE(requests.at(4).visualY, 40);
+        QCOMPARE(requests.at(5).windowId, QStringLiteral("h|8"));
+        QCOMPARE(requests.at(5).floating, true);
+        QCOMPARE(requests.at(5).hasVisualPos, false);
     }
 };
 

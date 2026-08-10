@@ -434,7 +434,7 @@ public:
     // disambiguated by group)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_KEY(tabIndicatorStyleKey, "Style")
+    P_CONFIG_KEY(styleKey, "Style")
     P_CONFIG_KEY(hideWhenSingleTabKey, "HideWhenSingleTab")
     P_CONFIG_KEY(placeWithinColumnKey, "PlaceWithinColumn")
     P_CONFIG_KEY(gapKey, "Gap")
@@ -445,10 +445,13 @@ public:
     P_CONFIG_KEY(inactiveColorKey, "InactiveColor")
     P_CONFIG_KEY(urgentColorKey, "UrgentColor")
 
-    // Scrolling.DropIndicator. Reuses the shared enabledKey / opacityKey /
-    // widthKey / radiusKey leaves above, the same way Snapping.Zones.Border
-    // spells its border as Width + Radius. Only the fill and border colours
-    // need names of their own.
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.DropIndicator
+    // Reuses the shared enabledKey / opacityKey / widthKey / radiusKey
+    // leaves above, the same way Snapping.Zones.Border spells its border as
+    // Width + Radius. Only the fill and border colours need names of their
+    // own.
+    // ═══════════════════════════════════════════════════════════════════════════
     P_CONFIG_KEY(colorKey, "Color")
     P_CONFIG_KEY(borderColorKey, "BorderColor")
 
@@ -656,31 +659,9 @@ public:
     P_CONFIG_KEY(rotateVirtualScreensClockwiseKey, "RotateVirtualScreensClockwise")
     P_CONFIG_KEY(rotateVirtualScreensCounterclockwiseKey, "RotateVirtualScreensCounterclockwise")
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Shortcuts.Scrolling
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    P_CONFIG_KEY(focusColumnFirstKey, "FocusColumnFirst")
-    P_CONFIG_KEY(focusColumnLastKey, "FocusColumnLast")
-    P_CONFIG_KEY(moveColumnToFirstKey, "MoveColumnToFirst")
-    P_CONFIG_KEY(moveColumnToLastKey, "MoveColumnToLast")
-    P_CONFIG_KEY(consumeWindowKey, "ConsumeWindow")
-    P_CONFIG_KEY(expelWindowKey, "ExpelWindow")
-    P_CONFIG_KEY(consumeOrExpelLeftKey, "ConsumeOrExpelLeft")
-    P_CONFIG_KEY(consumeOrExpelRightKey, "ConsumeOrExpelRight")
-    P_CONFIG_KEY(centerColumnKey, "CenterColumn")
-    P_CONFIG_KEY(toggleColumnTabbedKey, "ToggleColumnTabbed")
-    P_CONFIG_KEY(cycleColumnWidthKey, "CycleColumnWidth")
-    P_CONFIG_KEY(cycleColumnWidthBackKey, "CycleColumnWidthBack")
-    P_CONFIG_KEY(increaseColumnWidthKey, "IncreaseColumnWidth")
-    P_CONFIG_KEY(decreaseColumnWidthKey, "DecreaseColumnWidth")
-    P_CONFIG_KEY(maximizeColumnKey, "MaximizeColumn")
-    P_CONFIG_KEY(expandColumnKey, "ExpandColumn")
-    P_CONFIG_KEY(cycleWindowHeightKey, "CycleWindowHeight")
-    P_CONFIG_KEY(cycleWindowHeightBackKey, "CycleWindowHeightBack")
-    P_CONFIG_KEY(increaseWindowHeightKey, "IncreaseWindowHeight")
-    P_CONFIG_KEY(decreaseWindowHeightKey, "DecreaseWindowHeight")
-    P_CONFIG_KEY(resetWindowHeightsKey, "ResetWindowHeights")
+    // Shortcuts.Scrolling keys live in configkeys_scrolling.h
+    // (ConfigKeysScrolling, the next link in the inheritance chain) — split
+    // by concern when this file hit its size ceiling.
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Tiling
@@ -753,7 +734,9 @@ public:
     P_CONFIG_GROUP(scrollingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Legacy v1/v2/v3/v4 accessors — used ONLY by migration code.
+    // Legacy v1/v2/v3/v4 accessors — for migration code, plus the two
+    // documented non-migration readers (configdefaults.cpp's
+    // v1RenderingBackendKey read and settings.cpp's v4 stash-key list).
     //
     // Wrapped in a nested `Legacy` struct so a stray
     // ConfigKeys::v1ActivationGroup() call outside configmigration.cpp

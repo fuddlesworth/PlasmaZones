@@ -3,6 +3,7 @@
 
 #include "daemon/daemon.h"
 #include "daemon/overlayservice.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "daemon/controllers/unifiedlayoutcontroller.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
@@ -251,15 +252,20 @@ void Daemon::updateEngineScreens()
     // screens are retiled with the correct per-screen algorithm (not the global
     // fallback).  applyPerScreenConfig lazily creates TilingStates via
     // tilingStateForScreen(), which setActiveScreens reuses for added screens.
-    if (m_settings) {
+    {
+        // The loop is NOT gated on m_settings: the algorithm injection and
+        // the rule-parameter layering derive from the layout assignment and
+        // the rule resolver, so a null settings service (defensive-only in
+        // practice) must not silently drop them. Only the config-derived
+        // reads below guard on m_settings individually.
         for (const QString& screenId : effectiveIds) {
             if (!autotileScreens.contains(screenId))
                 continue;
             // Virtual->physical fallback: a per-screen autotile override stored on
             // a physical monitor must still apply when this screenId is one of its
             // virtual sub-screens.
-            QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
-            if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+            QVariantMap overrides = m_settings ? m_settings->getPerScreenAutotileSettings(screenId) : QVariantMap();
+            if (overrides.isEmpty() && m_settings && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
                 overrides = m_settings->getPerScreenAutotileSettings(
                     PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
             }
@@ -280,12 +286,14 @@ void Daemon::updateEngineScreens()
             // global config. Clamp before the enum compare exactly as the resolver
             // does (qBound), so a corrupt out-of-range stored value can't make the two
             // determinations drift (which would reintroduce the injected-cap defeat).
-            const int effectiveOverflow = qBound(
-                PhosphorTiles::AutotileDefaults::MinOverflowBehavior,
-                tilingParams.overflowBehavior.value_or(overrides.contains(PerScreenKeys::OverflowBehavior)
-                                                           ? overrides.value(PerScreenKeys::OverflowBehavior).toInt()
-                                                           : m_settings->autotileOverflowBehaviorInt()),
-                PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
+            const int effectiveOverflow =
+                qBound(PhosphorTiles::AutotileDefaults::MinOverflowBehavior,
+                       tilingParams.overflowBehavior.value_or(
+                           overrides.contains(PerScreenKeys::OverflowBehavior)
+                               ? overrides.value(PerScreenKeys::OverflowBehavior).toInt()
+                               : (m_settings ? m_settings->autotileOverflowBehaviorInt()
+                                             : PhosphorTiles::AutotileDefaults::MinOverflowBehavior)),
+                       PhosphorTiles::AutotileDefaults::MaxOverflowBehavior);
             const bool contextUnlimited =
                 effectiveOverflow == static_cast<int>(PhosphorTiles::AutotileOverflowBehavior::Unlimited);
             // Inject algorithm from layout assignment (authoritative source)
@@ -427,9 +435,13 @@ void Daemon::updateEngineScreens()
     // retiling them twice (setActiveScreens already did). Diffing gaps here to skip
     // the retile on truly-unrelated edits (appearance/lock/exclude) would have to
     // replicate that exact provider context and risk silently dropping gap
-    // application; the blanket retile is the simple correct choice. Cost is bounded:
-    // rulesChanged fires only on a user rule save, the retile is deferred + coalesced,
-    // and it produces identical geometry (no window movement) when nothing changed.
+    // application; the blanket retile is the simple correct choice. Cost is
+    // bounded by the two clauses that actually hold on every caller (this
+    // runs on every updateEngineScreens entry — desktop/activity switches,
+    // startup, layoutAssigned, settingsChanged, the re-entrancy replay —
+    // not only on a user rule save): the retile is deferred + coalesced,
+    // and it produces identical geometry (no window movement) when nothing
+    // changed.
     for (const QString& screenId : autotileScreens) {
         if (!addedScreens.contains(screenId)) {
             m_autotileEngine->scheduleRetileForScreen(screenId);
@@ -510,17 +522,6 @@ QSet<QString> Daemon::diffActiveAssignments()
         // resolves to the same snapping id and is correctly ignored.
         ActiveAssignmentSnapshot snapshot;
         snapshot.assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        // The resolved template rides the snapshot for the KCM apply's
-        // template-only OSD gate. Mode-gated resolver: empty on every
-        // non-Scrolling context. Deliberately NOT part of the `changed` key —
-        // a template swap moves no windows, so it must not trigger the
-        // resnap/OSD apply below (the engine re-derives its vocabulary via
-        // the unconditional updateEngineScreens either way).
-        const PhosphorZones::ScrollingTemplate templ =
-            m_layoutManager->scrollingTemplateForContext(screenId, desktop, activity);
-        if (templ.isValid()) {
-            snapshot.templateId = templ.id.toString();
-        }
         next.insert(screenId, snapshot);
         if (m_activeAssignmentByScreen.value(screenId).assignmentId != snapshot.assignmentId) {
             changed.insert(screenId);
@@ -739,7 +740,14 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
     // rely on the same invariant.
     PhosphorPlacement::WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     for (auto it = m_lastEngineOrders.constBegin(); it != m_lastEngineOrders.constEnd(); ++it) {
-        if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
+        // Independent scopes: the activity compare must not hide behind the
+        // desktop sentinel, or a desktop-unscoped caller (the master-switch
+        // toggle) emits float restores for orders captured on OTHER
+        // activities.
+        if (desktop >= 0 && it.key().desktop != desktop) {
+            continue;
+        }
+        if (!activity.isEmpty() && it.key().activity != activity) {
             continue;
         }
         // Scope to the toggled screen when the caller says so. The per-screen
@@ -909,7 +917,13 @@ void Daemon::processPendingGeometryUpdates()
     }
     // Timer-driven entry (the geometry debounce fires from the event loop),
     // so unlike the signal-wired paths nothing upstream vouches for these
-    // members during a stop() teardown window.
+    // members during a stop() teardown window — and the same shutdown guard
+    // the async tails below carry applies to the synchronous body too: a
+    // debounce firing after stop() must not retile torn-down engines or
+    // restart the reapply timer stop() just stopped.
+    if (m_shuttingDown) {
+        return;
+    }
     if (!m_screenManager || !m_layoutManager || !m_layoutComputeService || !m_overlayService) {
         return;
     }
@@ -964,14 +978,49 @@ void Daemon::processPendingGeometryUpdates()
     // engine's current one, and that branch retiles every screen
     // unconditionally (engine_core.cpp, `screens == m_scrollingScreens`) —
     // the same guarantee scrolling.cpp's LOAD-BEARING gate leans on. The
-    // retile loop at the tail of this function is an extra pass that only
-    // runs when the compute barrier below is non-empty (an empty barrier
-    // returns early), so it cannot be the mechanism relied on here.
+    // retile loop below runs on every pass (hoisted above the
+    // compute-barrier early return), but it is a deferred, coalesced extra
+    // pass — this push stays the documented mechanism: it is what
+    // re-resolves the override map, not just the geometry.
     if (m_scrollEngine && !m_scrollEngine->activeScreens().isEmpty()) {
         updateScrollingScreens(m_scrollEngine->activeScreens());
     }
 
+    // The panel-settle requery and the tiling-family retiles run BEFORE the
+    // empty-barrier early return below: a geometry pass in which no screen
+    // produced a compute request (all screens in a tiling mode, say) still
+    // changed the work areas, so the settled-panel follow-up pass must still
+    // arm and both engines must still pick up the new geometry. They are
+    // independent of the compute barrier — the barrier watches the layout
+    // compute service, the retiles drive the engines directly.
+    //
+    // Re-query panel geometry once after a delay to pick up settled state
+    // (e.g. panel editor close). That completion emits
+    // availableGeometryChanged → debounce → processPendingGeometryUpdates →
+    // reapply.
+    m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
+
+    // Retile BOTH tiling-family engines to adapt to new screen geometry
+    // (panels added/removed, resolution changes, etc.). The scroll engine
+    // reads the available geometry only at relayout time and subscribes to
+    // no ScreenManager signal of its own, so without this its columns keep
+    // stale widths/offsets until an unrelated event happens to retile.
+    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+        m_autotileEngine->retile();
+    }
+    if (m_scrollEngine && m_scrollEngine->isEnabled()) {
+        for (const QString& screenId : m_scrollEngine->activeScreens()) {
+            m_scrollEngine->scheduleRetileForScreen(screenId);
+        }
+    }
+
     if (pending->isEmpty()) {
+        // pending is empty only when EVERY effective screen yielded a null
+        // layout (registry holds zero layouts — reachable, the template
+        // store works with zero manual layouts loaded) or an invalid
+        // geometry. The retiles and the settled-panel requery already ran
+        // above the barrier (hoisted so this arm and the barrier path share
+        // one copy), so this arm only finishes the overlay refresh.
         m_overlayService->updateGeometries();
         m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
         m_reapplyGeometriesTimer.start();
@@ -999,6 +1048,14 @@ void Daemon::processPendingGeometryUpdates()
     *conn = connect(
         m_layoutComputeService.get(), &PhosphorZones::LayoutComputeService::geometriesComputedForGeneration, this,
         [this, pending, conn](const QString& screenId, const QUuid&, PhosphorZones::Layout*, uint64_t generation) {
+            // Shutdown guard, the async-completion idiom lifecycle.cpp's
+            // D-Bus replies use: stop() has already hidden the overlays and
+            // stopped the reapply timer, and restarting it here would push a
+            // geometry reapply at the effect against torn-down engine state
+            // up to 3s after shutdown began.
+            if (m_shuttingDown) {
+                return;
+            }
             auto expected = pending->find(screenId);
             if (expected == pending->end() || generation < expected.value()) {
                 return;
@@ -1022,6 +1079,12 @@ void Daemon::processPendingGeometryUpdates()
     // empty pending set and an already-disconnected conn — the timeout then
     // no-ops.
     QTimer::singleShot(COMPUTE_BARRIER_TIMEOUT_MS, this, [this, pending, conn]() {
+        // Same shutdown guard as the completion lambda above; the barrier
+        // connection still gets torn down with the daemon.
+        if (m_shuttingDown) {
+            QObject::disconnect(*conn);
+            return;
+        }
         if (pending->isEmpty()) {
             return;
         }
@@ -1033,24 +1096,6 @@ void Daemon::processPendingGeometryUpdates()
         m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
         m_reapplyGeometriesTimer.start();
     });
-
-    // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
-    // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.
-    m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
-
-    // Retile BOTH tiling-family engines to adapt to new screen geometry
-    // (panels added/removed, resolution changes, etc.). The scroll engine
-    // reads the available geometry only at relayout time and subscribes to
-    // no ScreenManager signal of its own, so without this its columns keep
-    // stale widths/offsets until an unrelated event happens to retile.
-    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
-        m_autotileEngine->retile();
-    }
-    if (m_scrollEngine && m_scrollEngine->isEnabled()) {
-        for (const QString& screenId : m_scrollEngine->activeScreens()) {
-            m_scrollEngine->scheduleRetileForScreen(screenId);
-        }
-    }
 }
 
 } // namespace PlasmaZones

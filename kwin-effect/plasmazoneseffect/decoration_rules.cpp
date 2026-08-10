@@ -40,6 +40,17 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     //           contributes a force-show, see resolveEffectiveWindowAppearance)
     // The manager owns the capability gate and the geometry re-assert across
     // veto-driven decoration flips.
+    //
+    // Windowed-fullscreen hold: skipped outright, mirroring the layer
+    // reconciler below. The manager's veto path re-asserts geometry across a
+    // decoration flip, and mid-hold that re-assert would fight the strip's
+    // committed column rect (the hold's whole contract is that the rect
+    // stays the slot). The un-flag paths all drive updateAllDecorations,
+    // which re-runs this reconciler, so a rule change made during the hold
+    // lands at un-flag time.
+    if (m_windowedFullscreenWindows.contains(windowId)) {
+        return;
+    }
     const ResolvedWindowAppearance ovr = resolveEffectiveWindowAppearance(w, windowId);
     m_decorationManager->setRuleOverride(windowId, ovr.hideTitleBar);
 }
@@ -58,6 +69,26 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     // layer (opacity/border-only rule sets included). A lingering snapshot
     // still falls through so the restore below drains it.
     if (!m_shaderManager.hasWindowLayerRules() && !m_ruleWindowLayerSnapshots.contains(windowId)) {
+        return;
+    }
+    // Windowed-fullscreen tiles own their keep flags for the duration of
+    // the hold: the feature keeps keep-below applied to defeat KWin's
+    // active-fullscreen layer promotion (TilingHandler::
+    // applyWindowedFullscreenLayerDemotion), and a rule writing over it
+    // would re-promote the tile above its strip. While flagged the window
+    // is skipped OUTRIGHT — apply and restore both: draining a parked rule
+    // snapshot here would clobber the demotion with the user's flags. The
+    // un-flag paths restore the pre-demotion flags, and the reconcile-driving
+    // ones (the batch un-flag arm's onComplete, the client self-exit arm, the
+    // float cleanups, the mode-swap/desktop-demote sweeps) run
+    // updateAllDecorations on the same edge, so those drain a parked
+    // snapshot at un-flag time. The snap<->snap screen-leave release
+    // (outputchange.cpp) is the one un-flag path that drives no reconcile of
+    // its own — a snapshot parked there drains at the next natural
+    // updateAllDecorations (any focus change), and restoreAllRuleWindowLayers
+    // covers teardown, so the wait is bounded by the next sweep rather than
+    // by the un-flag edge itself.
+    if (m_windowedFullscreenWindows.contains(windowId)) {
         return;
     }
     KWin::Window* kw = w->window();

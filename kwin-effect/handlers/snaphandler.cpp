@@ -265,7 +265,7 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
     // size floats the window back full-screen. freeGeometryForCapture substitutes the
     // pre-maximize restore rect (shared with the autotile capture path).
     QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : QRectF(w->frameGeometry());
-    geom = PlasmaZonesEffect::freeGeometryForCapture(w, geom);
+    geom = m_effect->freeGeometryForCapture(w, geom);
     if (geom.width() <= 0 || geom.height() <= 0) {
         return;
     }
@@ -276,8 +276,11 @@ void SnapHandler::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QStri
     // its TILE rect, never a free-floating position. Capturing it here would
     // poison the shared float-back with the tile rect (the reverse of the
     // per-mode leak that guard closes).
+    // Unguarded deref, this file's convention: m_tilingHandler is declared
+    // before m_snapHandler on the effect, so it outlives every SnapHandler
+    // call (documented at the adoptMinimizeFloated site).
     if (TilingHandler* autotile = m_effect->tilingHandler();
-        autotile && (autotile->isTiledWindow(windowId) || autotile->isMinimizeFloated(windowId))) {
+        autotile->isTiledWindow(windowId) || autotile->isMinimizeFloated(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-snap geometry for autotile-owned window (frame is tile rect)" << windowId;
         return;
     }
@@ -435,6 +438,14 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 m_effect->tilingHandler()->adoptMinimizeFloated(windowId, /*untiled=*/true);
             } else {
                 m_minimizeFloatedWindows.insert(windowId);
+                // Refund the retry budget on the countermand's snap-side
+                // re-claim too, matching the ordinary fall-through below:
+                // after three failed retries plus a re-minimize landing
+                // mid-flight, the NEXT unminimize's commit would otherwise
+                // start with zero retries. Kept inside the non-autotile
+                // branch so the refund's documented scoping (never reset by
+                // a screen snap refuses to handle) holds.
+                m_unfloatRetryAttempts.remove(windowId);
             }
             return;
         }
@@ -499,9 +510,11 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
             // current mode or the unminimize leaves the window floating
             // until the next mode toggle. removeMinimizeFloated also cancels
             // that handler's pending deferred commit for the window.
+            // Unguarded deref per this file's convention (declaration order
+            // on the effect guarantees the handler outlives us).
             TilingHandler* autotile = m_effect->tilingHandler();
-            const int autotileBudgetUsed = autotile ? autotile->unfloatRetryBudgetUsed(windowId) : 0;
-            if (autotile && autotile->removeMinimizeFloated(windowId)) {
+            const int autotileBudgetUsed = autotile->unfloatRetryBudgetUsed(windowId);
+            if (autotile->removeMinimizeFloated(windowId)) {
                 m_minimizeFloatedWindows.insert(windowId);
                 // Budget survives the hop (see seedUnfloatRetryBudget).
                 seedUnfloatRetryBudget(windowId, autotileBudgetUsed);
@@ -515,7 +528,14 @@ void SnapHandler::handleMinimizeChanged(KWin::EffectWindow* window, const QStrin
                 // deadline if no reposition arrives, so the window appears
                 // once, at its snap placement.
                 qCInfo(lcEffect) << "Snap: adopted autotile-mode minimize-float, unfloating immediately:" << windowId;
-                m_effect->beginRestoreSuppression(window);
+                // Daemon-ready gated: commitUnminimizeUnfloat's own early
+                // return on a closed gate would otherwise leave the
+                // suppression armed with nothing dispatched and no
+                // reposition ever coming — the window withheld from
+                // compositing until the hard 250 ms deadline for no reason.
+                if (m_effect->isDaemonReady("snap adopt suppression")) {
+                    m_effect->beginRestoreSuppression(window);
+                }
                 commitUnminimizeUnfloat(window, windowId, screenId);
                 return;
             } else {
@@ -789,13 +809,27 @@ void SnapHandler::retryVisibleMinimizeFloats()
             // not be silently refunded by an unrelated screen-set change.
             continue;
         }
-        m_unfloatRetryAttempts.remove(windowId);
         const QString screenId = m_effect->getWindowScreenId(window);
         TilingHandler* autotile = m_effect->tilingHandler();
-        if (autotile && autotile->isManagedScreen(screenId)) {
-            autotile->slotWindowMinimizedChanged(window);
+        if (autotile->isManagedScreen(screenId)) {
+            // offerMinimizeEdge, not the void slot: the slot silently
+            // returns on its entry gates (unhandleable, non-tileable), and a
+            // refused transfer would otherwise leave the window floating
+            // with no armed timer — recoverable only by another screen-set
+            // change. Both sibling transfer sites use this refusal shape.
+            // The budget refund happens per-arm, AFTER the hop offer: the
+            // autotile adopt path seeds its own budget from
+            // unfloatRetryBudgetUsed(), so refunding before the offer would
+            // hand every adopted window a fresh budget (same rule as the
+            // deferred-commit transfer's refund placement).
+            if (!autotile->offerMinimizeEdge(window)) {
+                qCInfo(lcEffect) << "Snap: autotile refused visible-float transfer, re-arming retry:" << windowId;
+                m_unfloatRetryAttempts.remove(windowId);
+                scheduleUnminimizeUnfloatRetry(windowId);
+            }
             continue;
         }
+        m_unfloatRetryAttempts.remove(windowId);
         commitUnminimizeUnfloat(window, windowId, screenId);
     }
 }
@@ -1016,11 +1050,21 @@ void SnapHandler::slotSnapAllWindowsRequested(const QString& screenId)
 
             PhosphorProtocol::SnapAllResultList snapResults = calcReply.value();
 
-            // Build WindowGeometryList for the batch geometry path
+            // Build WindowGeometryList for the batch geometry path. Stamp the
+            // screen the batch was computed for onto every entry:
+            // toGeometryEntry() has no screen to give (SnapAllResultEntry
+            // carries none), and an EMPTY screenId makes the batch consumer's
+            // discriminator take the float/restore arm — clearWindowSnapped
+            // instead of markWindowSnapped — so no snap-all window would ever
+            // enter the border set. The collection loop above already skipped
+            // any window whose screen differs, so this id IS each window's
+            // real screen.
             PhosphorProtocol::WindowGeometryList snapGeometries;
             snapGeometries.reserve(snapResults.size());
             for (const auto& r : snapResults) {
-                snapGeometries.append(r.toGeometryEntry());
+                PhosphorProtocol::WindowGeometryEntry entry = r.toGeometryEntry();
+                entry.screenId = screenId;
+                snapGeometries.append(entry);
             }
             m_effect->slotApplyGeometriesBatch(snapGeometries, QStringLiteral("snap_all"));
 

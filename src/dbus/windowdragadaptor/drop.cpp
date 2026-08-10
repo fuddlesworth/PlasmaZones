@@ -223,6 +223,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 ctx.sourceGeometry = capturedOriginalGeometry;
                 ctx.minSize = windowMinSize;
                 ctx.wasFloating = m_windowTracking->service()->isWindowFloating(windowId);
+                // Both sides of the compare are canonical (windowActivated
+                // stores the shadow id): a dragged window normally holds
+                // focus, and a floating arrival's receive must know — no
+                // focus report follows a drop that never moved focus.
+                ctx.heldFocus = m_windowTracking->lastActiveWindowId()
+                    == m_windowTracking->service()->canonicalizeForLookup(windowId);
                 if (capturedWasSnapped && !ctx.wasFloating && !capturedZoneId.isEmpty()) {
                     // sourceZoneIds is informational for receiving engines —
                     // populated from the pre-drop captured zone (the

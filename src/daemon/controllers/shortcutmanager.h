@@ -89,10 +89,13 @@ public:
      */
     void unregisterAdhocShortcut(const QString& id) override;
 
-    /// Batch forms: every entry goes through the per-id path with the backend
-    /// flush deferred to one trailing call, so a multi-chord burst (the six
-    /// layout-picker navigation grabs) costs one Portal round-trip instead of
-    /// superseding its own in-flight Responses.
+    /// Batch forms: every entry goes through the per-id path. On the REGISTER
+    /// side the backend flush is deferred to one trailing call, so a
+    /// multi-chord burst (the six layout-picker navigation grabs) costs one
+    /// Portal round-trip instead of superseding its own in-flight Responses.
+    /// The unregister side keeps the same bracketed shape for symmetry only:
+    /// Registry::unbind applies immediately by contract and flush() does not
+    /// include unbinds, so no round-trip is actually coalesced there.
     void registerAdhocShortcuts(
         const QVector<PhosphorShortcutsIntegration::IAdhocRegistrar::AdhocBinding>& bindings) override;
     void unregisterAdhocShortcuts(const QStringList& ids) override;
@@ -104,10 +107,15 @@ public:
      *   category (translated QString), categoryOrder (int),
      *   triggers (QStringList — the user's EFFECTIVE keys via backend
      *   read-back, falling back to the config value), assigned (bool),
-     *   mode ("all" | "snapping" | "autotile" | "scrolling" — which tiling mode the
-     *   action is meaningful in; the overlay filters on it),
+     *   mode ("all" | "snapping" | "autotile" | "scrolling" | "layouts" —
+     *   which tiling mode the action is meaningful in; the overlay filters
+     *   on it. "layouts" is a capability tag rather than a mode: it marks
+     *   the layout-selection actions shown only when the screen's engine
+     *   provides layouts — see the catalog's contract block),
      *   description (translated QString — plain-prose explanation shown as
-     *   the row's tooltip; always present, empty when the action needs none).
+     *   the row's tooltip; always present, empty when the action needs none),
+     *   templatesDescription (translated QString — Templates-capability
+     *   variant of description, falling back to it when the row has none).
      * Ad-hoc/transient grabs never appear. Empty before registerShortcuts()
      * and again after unregisterShortcuts() (the daemon stop path).
      */
@@ -240,6 +248,7 @@ Q_SIGNALS:
     void scrollConsumeOrExpelRequested(int delta);
     void scrollCenterColumnRequested();
     void scrollToggleColumnTabbedRequested();
+    void scrollToggleWindowedFullscreenRequested();
     void scrollCycleColumnWidthRequested(int delta);
     void scrollAdjustColumnWidthRequested(int deltaPercent);
     void scrollMaximizeColumnRequested();
@@ -247,6 +256,17 @@ Q_SIGNALS:
     void scrollCycleWindowHeightRequested(int delta);
     void scrollAdjustWindowHeightRequested(int deltaPercent);
     void scrollResetWindowHeightsRequested();
+    void scrollCenterVisibleColumnsRequested();
+    /// false = top of the column, true = bottom.
+    void scrollFocusWindowEndRequested(bool bottom);
+    /// Edge-stop adjacent-column focus (the generic focus chords cross
+    /// monitors instead). delta -1 = left, +1 = right; same for the wrap
+    /// variant, which falls through to the far end at the strip edge.
+    void scrollFocusColumnPlainRequested(int delta);
+    void scrollFocusColumnWrapRequested(int delta);
+    void scrollSwitchFocusFloatTilingRequested();
+    /// true = move the focused window to the float layer, false = re-tile it.
+    void scrollMoveToFloatRequested(bool floating);
 
 private:
     struct Entry
@@ -313,7 +333,16 @@ private:
     /// Re-applies every entry's current sequence; returns true when any
     /// binding actually differed from the registry's stored sequence.
     bool rebindAll();
-    void drainPendingAdhocOps();
+    /// updateShortcuts' body. @p deferFlush leaves the rebinds pending AND
+    /// the cheatsheetModelChanged emit to the caller — settleRegistration
+    /// coalesces the flush with the drained adhoc ops into ONE backend round
+    /// trip (a second flush supersedes the first's in-flight portal Request,
+    /// and a superseded request whose RPC errors loses its grabs outright)
+    /// and emits only after that flush, since the model prefers the
+    /// backend's read-back.
+    bool applyShortcutUpdates(bool deferFlush);
+    /// Returns true when it drained ops and issued the trailing flush.
+    bool drainPendingAdhocOps();
     /// Drop every queued adhoc op for @p id. Both queueing paths supersede an
     /// earlier op for the same id (last write wins), so they share this.
     void erasePendingAdhocOps(const QString& id);

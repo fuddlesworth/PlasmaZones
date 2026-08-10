@@ -130,29 +130,34 @@ public:
     {
         return true;
     }
+    // Spelled as the enumerators, not literals, so each bound READS as the
+    // entry it means (a new enumerator still needs the Max retargeted by
+    // hand). The remaining consumers are the D-Bus registry guards and the
+    // runtime default asserts; the schema rows validate against explicit
+    // enumerator lists and no longer read these.
     static constexpr int osdStyleMin()
     {
-        return 0;
+        return static_cast<int>(OsdStyle::None);
     }
     static constexpr int osdStyleMax()
     {
-        return 2;
+        return static_cast<int>(OsdStyle::Preview);
     }
     static int osdStyle()
     {
-        return 2;
+        return static_cast<int>(OsdStyle::Preview);
     }
     static constexpr int overlayDisplayModeMin()
     {
-        return 0;
+        return static_cast<int>(OverlayDisplayMode::ZoneRectangles);
     }
     static constexpr int overlayDisplayModeMax()
     {
-        return 1;
+        return static_cast<int>(OverlayDisplayMode::LayoutPreview);
     }
     static int overlayDisplayMode()
     {
-        return 0;
+        return static_cast<int>(OverlayDisplayMode::ZoneRectangles);
     }
     // ═══════════════════════════════════════════════════════════════════════════
     // Window Behavior Settings
@@ -385,10 +390,48 @@ public:
         return {baselineBorderRuleId(), baselineTitleBarRuleId(), baselineGapRuleId()};
     }
 
-    // Returns the absolute path to quicklayouts.json (the numbered quick-layout
-    // shortcut slots 1..9). Quick-layout slots are NOT rules, so they
-    // sit in a sibling sidecar next to rules.json rather than in the
-    // rule store. LayoutRegistry reads/writes this file directly.
+    /// Default user-defined sort orders for the layout picker and the tiling
+    /// algorithm menu: empty (no custom order; consumers fall back to their
+    /// natural sort). Comma-joined QString on disk, matching the keys' stored
+    /// type — the schema rows source their defaults here per the
+    /// every-default-through-ConfigDefaults rule.
+    static QString snappingLayoutOrder()
+    {
+        return QString();
+    }
+    static QString tilingAlgorithmOrder()
+    {
+        return QString();
+    }
+
+    /// Default snapping default-layout id: empty (no explicit default; the
+    /// daemon falls back to its bundled template pick). Same
+    /// every-default-through-ConfigDefaults rationale as the orders above.
+    static QString defaultLayoutId()
+    {
+        return QString();
+    }
+
+    /// Default per-algorithm settings map: empty (every algorithm runs on
+    /// its own schema defaults until the user tweaks one).
+    static QVariantMap autotilePerAlgorithmSettings()
+    {
+        return {};
+    }
+
+    /// Default tiling locked-screens list: empty comma-joined QString (no
+    /// screen locked), matching the key's stored type.
+    static QString autotileLockedScreens()
+    {
+        return QString();
+    }
+
+    // Returns the absolute path to quicklayouts.json (the numbered
+    // quick-layout shortcut slots 1..QuickLayoutSlotCount — the key builders
+    // in configkeys.h read the count from PhosphorProtocol::Service, so this
+    // prose names the constant rather than a literal). Quick-layout slots are
+    // NOT rules, so they sit in a sibling sidecar next to rules.json rather
+    // than in the rule store. LayoutRegistry reads/writes this file directly.
     PLASMAZONES_EXPORT static QString quickLayoutsFilePath();
 
     // Returns the absolute path to layout-settings.json — the per-layout
@@ -948,7 +991,16 @@ public:
         // NOT Meta+Shift+] — Shift+symbol chords never fire on Wayland
         // (KWin consumes Shift in the keysym translation; see
         // toggleCheatsheetShortcut). Meta+Ctrl+[ ] belong to the rotate
-        // pair; = and - are the free count-adjust idiom.
+        // pair; = and - are the KDE-wide count/zoom-adjust idiom.
+        //
+        // ACCEPTED EXCEPTION to the letters-only rule the scrolling family
+        // follows (configdefaults_scrolling.h): on layouts where "=" itself
+        // is a shifted key (German among them) this chord is dead until the
+        // user rebinds. The unshifted-symbol idiom is kept anyway because
+        // +/- is what every KDE count control ships, and the scrolling rule
+        // targets the harder failure (Shift+SYMBOL spellings, dead on every
+        // layout under Wayland). The scrolling banner's blanket wording
+        // points here.
         return QStringLiteral("Meta+Ctrl+=");
     }
     static QString autotileDecMasterCountShortcut()
@@ -957,7 +1009,11 @@ public:
     }
     static QString autotileRetileShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+R");
+        // T as in re-Tile. NOT Meta+Ctrl+R: Spectacle owns every
+        // Meta-modified R chord (that one is its window recording) — see
+        // the externally-owned table in configdefaults_scrolling.h's
+        // Scrolling Shortcuts banner.
+        return QStringLiteral("Meta+Ctrl+T");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1053,5 +1109,16 @@ static_assert(ConfigDefaults::autotileSplitRatio() >= ConfigDefaults::autotileSp
 static_assert(ConfigDefaults::autotileSplitRatioStep() >= ConfigDefaults::autotileSplitRatioStepMin()
                   && ConfigDefaults::autotileSplitRatioStep() <= ConfigDefaults::autotileSplitRatioStepMax(),
               "ConfigDefaults::autotileSplitRatioStep() outside declared [min, max] range");
+// The zone-selector quick-size pair: both re-seed the RANGED PreviewWidth
+// key (the Small/Large buttons write them through the store), so an
+// out-of-range edit here would be silently snapped by the schema clamp on
+// the next press instead of failing the build — the same rationale as the
+// scrolling tab-indicator width re-seeds' asserts.
+static_assert(ConfigDefaults::previewWidthSmall() >= ConfigDefaults::previewWidthMin()
+                  && ConfigDefaults::previewWidthSmall() <= ConfigDefaults::previewWidthMax(),
+              "ConfigDefaults::previewWidthSmall() outside declared [min, max] range");
+static_assert(ConfigDefaults::previewWidthLarge() >= ConfigDefaults::previewWidthMin()
+                  && ConfigDefaults::previewWidthLarge() <= ConfigDefaults::previewWidthMax(),
+              "ConfigDefaults::previewWidthLarge() outside declared [min, max] range");
 
 } // namespace PlasmaZones

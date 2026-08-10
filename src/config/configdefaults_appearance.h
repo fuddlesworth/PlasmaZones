@@ -3,21 +3,15 @@
 
 #pragma once
 
-#include <QColor>
-#include <QHash>
-#include <QRectF>
-#include <QJsonObject>
-#include <QSet>
-#include <QString>
-#include <QStringList>
-#include <QUuid>
-#include <QVariantList>
-#include <QVariantMap>
-#include <QtCore/qnamespace.h>
-
+// NOTE ON THE INCLUDE SET: this is the FIRST link of the ConfigDefaults
+// inheritance chain, and the links below it (gaps → limits → shaders →
+// screens → scrolling → configdefaults.h) include only their parent — so
+// this header deliberately hosts the Qt and project includes the WHOLE chain
+// consumes, not just what its own 300 lines read. Trimming an include that
+// looks unused here breaks a downstream link.
 #include "core/types/constants.h"
 #include "core/types/enums.h"
-#include "configkeys.h"
+#include "configkeys_scrolling.h"
 #include "plasmazones_export.h"
 // PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
@@ -33,6 +27,22 @@
 // window-manager border/title-bar APPEARANCE defaults live in the
 // config-backed window-appearance settings above, not in this tree's default.
 #include <PhosphorSurface/DecorationProfileTree.h>
+// Zone-overlay colour/opacity/border defaults this header's own accessors
+// delegate to. Explicit rather than transitive (the chain also reaches it
+// through AssignmentEntry.h) — same policy as configdefaults_scrolling.h.
+#include <PhosphorZones/ZoneDefaults.h>
+
+#include <QColor>
+#include <QHash>
+#include <QRectF>
+#include <QJsonObject>
+#include <QSet>
+#include <QString>
+#include <QStringList>
+#include <QUuid>
+#include <QVariantList>
+#include <QVariantMap>
+#include <QtCore/qnamespace.h>
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -44,7 +54,7 @@ namespace PlasmaZones {
 // Zone-overlay + window-decoration appearance default accessors. Inherited by
 // ConfigDefaultsGaps and ultimately ConfigDefaults, so every ConfigDefaults::foo()
 // call site resolves these static members through inheritance.
-class ConfigDefaultsAppearance : public ConfigKeys
+class ConfigDefaultsAppearance : public ConfigKeysScrolling
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════

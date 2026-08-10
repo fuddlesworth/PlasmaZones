@@ -134,6 +134,9 @@ bool ScrollStrip::insertWindow(const QString& windowId, const ColumnWidth& width
             break;
         }
     }
+    // Cheap hardening only: the -1 active-index sentinel exists solely under
+    // isEmpty(), so a non-empty strip implies insertAt is already in range.
+    insertAt = qBound(0, insertAt, int(m_columns.size()));
     m_columns.insert(insertAt, col);
     if (m_preMaximizeColumnIdx >= insertAt) {
         ++m_preMaximizeColumnIdx;
@@ -183,9 +186,11 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     }
     // No re-anchor and no re-clamp, unlike every sibling insert verb: the
     // arrival joins the column that is ALREADY active, so no column index
-    // shifts, the active column does not change, and the strip's total width
-    // is unchanged (a stack adds no width). The anchor is active-relative,
-    // so it still means exactly what it did before the append.
+    // shifts and the active column does not change. The strip's total width
+    // is USUALLY unchanged — under respectMinimumSize a new tile's declared
+    // minimum can widen the host column, and updateViewForFocus backstops
+    // the view for that case. The anchor is active-relative, so it still
+    // means exactly what it did before the append.
     Q_UNUSED(width)
     return true;
 }
@@ -278,6 +283,9 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     }
     const int oldViewX = viewXFor(params);
     int prevIdx = m_activeColumnIdx;
+    // Captured in PRE-removal indexing, where colIdx and the active index
+    // are still comparable — the side decides the anchor policy below.
+    const bool removedLeftOfActive = colIdx < m_activeColumnIdx;
 
     Column& col = m_columns[colIdx];
     const int tileIdx = col.indexOfWindow(windowId);
@@ -319,23 +327,46 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     }
     clampActiveIndices();
 
-    // Keep survivors visually stationary: the anchor is relative to the
-    // active column, so re-derive it from the pre-removal viewX. Without
-    // refocus (take/transfer path) the same math applies — the caller wants
-    // zero visual churn while it re-homes the window. The one hard rule is
-    // the strip's left edge: never expose space left of the first column.
-    // DELIBERATE asymmetry with keepOrRecenterAnchor (minimize-collapse /
-    // consume), which also clamps the RIGHT edge: on a removal the user
-    // just lost a window, and keeping the survivors pixel-stationary beats
-    // reclaiming right-edge dead space. The next focus change reclaims it;
-    // the engine's applyLayout does NOT (updateViewForFocus leaves a
-    // fully-visible column's anchor alone precisely to preserve this).
-    const int stripX = columnStripX(m_activeColumnIdx, params);
-    int anchor = stripX - oldViewX;
-    if (stripX - anchor < 0) {
-        anchor = stripX;
+    // Anchor policy splits on which SIDE of the active column the removal
+    // happened, matching niri's remove_column_by_idx ("A column to the left
+    // was removed; preserve the current position"):
+    //
+    // LEFT of active — keep the anchor. The anchor is the active column's
+    // on-screen offset, so keeping it holds the column the user is looking
+    // at pixel-stationary while the left-side survivors slide right to
+    // close the gap. Re-deriving from the old viewX here (the previous
+    // behaviour) slid the WHOLE visible strip left instead, active column
+    // included.
+    //
+    // AT or RIGHT of active — re-derive from the pre-removal viewX. The
+    // active-and-left strip coordinates are unchanged there, so this keeps
+    // every surviving on-screen column stationary and the gap closes from
+    // the right. Without refocus (take/transfer path) the same math
+    // applies — the caller wants zero visual churn while it re-homes the
+    // window.
+    //
+    // The one hard rule for BOTH sides is the strip's left edge: never
+    // expose space left of the first column. DELIBERATE asymmetry with
+    // keepOrRecenterAnchor (minimize-collapse / consume), which also clamps
+    // the RIGHT edge: on a removal the user just lost a window, and keeping
+    // the view stationary beats reclaiming right-edge dead space. The next
+    // focus change reclaims it; the engine's applyLayout does NOT
+    // (updateViewForFocus leaves a fully-visible column's anchor alone
+    // precisely to preserve this).
+    // Degenerate-area guard, same rationale as clampedAnchor's
+    // (scrollstrip_relayout.cpp): every width resolves to 0 here, so the
+    // left-edge rule below collapses any positive anchor to 0 — and the
+    // anchor is PERSISTED. The removal itself stands; only the anchor
+    // bookkeeping is skipped, and the first relayout against a real area
+    // re-clamps whatever survived.
+    if (params.workArea.width() > 0) {
+        const int stripX = columnStripX(m_activeColumnIdx, params);
+        int anchor = removedLeftOfActive ? m_viewAnchor : stripX - oldViewX;
+        if (stripX - anchor < 0) {
+            anchor = stripX;
+        }
+        m_viewAnchor = anchor;
     }
-    m_viewAnchor = anchor;
 
     if (refocus) {
         const int workW = params.workArea.width();
@@ -451,6 +482,11 @@ QSize ScrollStrip::windowMinimumSize(const QString& windowId) const
     if (colIdx < 0) {
         return QSize(0, 0);
     }
+    // The unguarded .at(indexOfWindow(...)) here (and in the minimized /
+    // set-min-size siblings) is safe BY CONSTRUCTION: columnOfWindow returns
+    // colIdx only when this exact column's indexOfWindow answered >= 0, both
+    // are pure const scans over the same unmutated container, so the
+    // re-derived index cannot be -1. A runtime guard would be dead code.
     const Column& col = m_columns.at(colIdx);
     const Tile& tile = col.tiles.at(col.indexOfWindow(windowId));
     return QSize(tile.minWidth, tile.minHeight);
@@ -680,6 +716,9 @@ bool ScrollStrip::consumeOrExpel(int delta, const ScrollLayoutParams& params)
         }
         Column newCol;
         newCol.width = col->width;
+        // Explicit, matching the consume twin: a single expelled tile is a
+        // Normal column regardless of the host's (possibly Tabbed) display.
+        newCol.display = ColumnDisplay::Normal;
         newCol.tiles.append(expelled);
         const int insertAt = delta > 0 ? m_activeColumnIdx + 1 : m_activeColumnIdx;
         m_columns.insert(insertAt, newCol);
@@ -778,7 +817,17 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
         Column& dest = m_columns[visible.at(i)];
         dest.tiles = tiles.at(from);
         dest.activeTileIdx = activeTileIdx.at(from);
-        rotated += dest.tiles.size();
+        // Count non-minimized tiles only: the total feeds the user-facing
+        // "Rotated %n windows" OSD copy, and a partly-minimized column's
+        // hidden tiles did not visibly move. (visibleColumnIndices already
+        // excludes FULLY minimized columns, so every counted column
+        // contributes at least one — the caller's rotated < 2 no-op test
+        // still holds.)
+        for (const Tile& t : dest.tiles) {
+            if (!t.minimized) {
+                ++rotated;
+            }
+        }
     }
     // Width/display intents stayed with the slot, but a column's RESOLVED
     // width also carries its tiles' min-width clamp — so a rotate that lands
@@ -805,6 +854,45 @@ bool ScrollStrip::toggleActiveColumnTabbed()
     }
     col->display = (col->display == ColumnDisplay::Tabbed) ? ColumnDisplay::Normal : ColumnDisplay::Tabbed;
     return true;
+}
+
+bool ScrollStrip::toggleActiveWindowedFullscreen()
+{
+    // activeWindowId() already skips a minimized active tile, mirroring
+    // relayout's fallback; toggling the raw activeTileIdx tile could flag
+    // a window that never resolves and so never reaches the compositor —
+    // while the engine verb's read-back (also activeWindowId-keyed) would
+    // report a different window's state.
+    const QString id = activeWindowId();
+    if (id.isEmpty()) {
+        return false;
+    }
+    return setWindowedFullscreen(id, !isWindowedFullscreen(id));
+}
+
+bool ScrollStrip::setWindowedFullscreen(const QString& windowId, bool on)
+{
+    const int colIdx = columnOfWindow(windowId);
+    if (colIdx < 0) {
+        return false;
+    }
+    Column& col = m_columns[colIdx];
+    Tile& tile = col.tiles[col.indexOfWindow(windowId)];
+    if (tile.windowedFullscreen == on) {
+        return false;
+    }
+    tile.windowedFullscreen = on;
+    return true;
+}
+
+bool ScrollStrip::isWindowedFullscreen(const QString& windowId) const
+{
+    const int colIdx = columnOfWindow(windowId);
+    if (colIdx < 0) {
+        return false;
+    }
+    const Column& col = m_columns.at(colIdx);
+    return col.tiles.at(col.indexOfWindow(windowId)).windowedFullscreen;
 }
 
 } // namespace PhosphorScrollEngine

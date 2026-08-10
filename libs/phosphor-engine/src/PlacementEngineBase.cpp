@@ -3,6 +3,12 @@
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 
+#include <QLoggingCategory>
+
+// Filterable like every other diagnostic in this library (the bare qWarning
+// it replaces could not be silenced per-category).
+Q_LOGGING_CATEGORY(lcPlacementEngineBase, "org.phosphor.engine.placementbase")
+
 namespace PhosphorEngine {
 
 PlacementEngineBase::PlacementEngineBase(QObject* parent)
@@ -24,7 +30,7 @@ int PlacementEngineBase::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
 void PlacementEngineBase::setEngineSettings(QObject* settings)
 {
     if (Q_UNLIKELY(!settings)) {
-        qWarning("PlacementEngineBase::setEngineSettings called with nullptr");
+        qCWarning(lcPlacementEngineBase, "PlacementEngineBase::setEngineSettings called with nullptr");
         return;
     }
     m_engineSettings = settings;

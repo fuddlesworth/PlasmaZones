@@ -1,6 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): this file is just past the 1150 hard
+// ceiling. The case for it: the shortcut-invariant guards (duplicate
+// defaults, Shift+symbol spellings, the schema/manager parity derivations)
+// and the scrolling schema guards read each other's fixtures and pin the
+// SAME defaults table, so a split would duplicate the advertised-chord
+// pins across two files and let them drift apart — the exact defect class
+// this suite exists to prevent. If a genuinely separate concern lands,
+// it takes a sibling rather than growing this.
+
 /**
  * @file test_scrolling_settings.cpp
  * @brief Schema-level guards for the Scrolling group and the
@@ -40,6 +49,8 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <QtNumeric>
+
+#include <utility>
 
 #include <PhosphorConfig/Schema.h>
 // For the drop indicator's radius default, which is deliberately the zone
@@ -186,6 +197,31 @@ private Q_SLOTS:
         QVERIFY2(offenders.isEmpty(), qPrintable(offenders.join(QLatin1String("; "))));
     }
 
+    /// The specific chords the CHANGELOG and README advertise, plus the
+    /// ships-unbound set, pinned by VALUE. The structural guards above
+    /// cannot see a retune that moves an advertised default (or binds a
+    /// deliberately-unbound verb) while staying unique and parseable — this
+    /// is what fails when a shipped doc claim and a default disagree.
+    void advertisedChordValues()
+    {
+        QCOMPARE(ConfigDefaults::scrollingCenterVisibleColumnsShortcut(), QStringLiteral("Meta+Alt+Shift+C"));
+        QCOMPARE(ConfigDefaults::scrollingFocusWindowTopShortcut(), QStringLiteral("Meta+Alt+V"));
+        QCOMPARE(ConfigDefaults::scrollingFocusWindowBottomShortcut(), QStringLiteral("Meta+Alt+Shift+V"));
+        QCOMPARE(ConfigDefaults::scrollingSwitchFocusFloatTilingShortcut(), QStringLiteral("Meta+Alt+X"));
+        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthShortcut(), QStringLiteral("Meta+Alt+D"));
+        QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthBackShortcut(), QStringLiteral("Meta+Alt+Shift+D"));
+        QCOMPARE(ConfigDefaults::autotileRetileShortcut(), QStringLiteral("Meta+Ctrl+T"));
+
+        // Ships unbound, per the same docs: the edge-stop/wrap focus
+        // variants and the one-way float verbs.
+        QVERIFY(ConfigDefaults::scrollingFocusColumnLeftShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingFocusColumnRightShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingFocusColumnLeftOrLastShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingFocusColumnRightOrFirstShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingMoveToFloatingShortcut().isEmpty());
+        QVERIFY(ConfigDefaults::scrollingMoveToTilingShortcut().isEmpty());
+    }
+
     /// The scrolling enums fall back to their DEFAULT on out-of-range input
     /// (validIntOr), never to the nearest enumerator, matching the engine's
     /// own snap-to-default guard.
@@ -240,7 +276,7 @@ private Q_SLOTS:
         // floor is the "fully rounded" sentinel.
         const QString tabGroup = ConfigDefaults::scrollingTabIndicatorGroup();
 
-        const auto* style = findKey(schema, tabGroup, ConfigDefaults::tabIndicatorStyleKey());
+        const auto* style = findKey(schema, tabGroup, ConfigDefaults::styleKey());
         QVERIFY(style && style->validator);
         QCOMPARE(style->defaultValue.toInt(), ConfigDefaults::scrollingTabIndicatorStyle());
         QCOMPARE(style->validator(ConfigDefaults::scrollingTabIndicatorStyleBar()).toInt(),
@@ -317,13 +353,30 @@ private Q_SLOTS:
         QCOMPARE(length->validator(0.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMin());
         QCOMPARE(length->validator(5.0).toDouble(), ConfigDefaults::scrollingTabIndicatorLengthProportionMax());
 
-        // The colours carry no validator: EMPTY is the meaningful "follow the
-        // theme" value, and no closed set can express that alongside hex.
-        for (const QString& colorKey :
-             {ConfigDefaults::activeColorKey(), ConfigDefaults::inactiveColorKey(), ConfigDefaults::urgentColorKey()}) {
+        // The colours carry canonicalThemeFallbackColor (not a closed set —
+        // EMPTY is the meaningful "follow the theme" value). Pin the
+        // validator like the drop-indicator loop below does: it is the DISK
+        // path's only guard, and without these compares deleting it from the
+        // schema would leave the suite green while junk reached QML as an
+        // invalid QColor and painted black.
+        const std::pair<QString, QString> colourPins[] = {
+            {ConfigDefaults::activeColorKey(), ConfigDefaults::scrollingTabIndicatorActiveColor()},
+            {ConfigDefaults::inactiveColorKey(), ConfigDefaults::scrollingTabIndicatorInactiveColor()},
+            {ConfigDefaults::urgentColorKey(), ConfigDefaults::scrollingTabIndicatorUrgentColor()},
+        };
+        for (const auto& [colorKey, defaultColour] : colourPins) {
             const auto* color = findKey(schema, tabGroup, colorKey);
             QVERIFY2(color, qPrintable(colorKey));
+            // Pin the schema default to the ConfigDefaults accessor (today
+            // the schema reads the accessor directly, so this only guards
+            // against the entry being replaced with a literal), and
+            // separately pin that it is EMPTY (the "follow the theme" value).
+            QCOMPARE(color->defaultValue.toString(), defaultColour);
             QVERIFY(color->defaultValue.toString().isEmpty());
+            QVERIFY(color->validator);
+            QVERIFY(color->validator(QStringLiteral("not-a-colour")).toString().isEmpty());
+            QVERIFY(color->validator(QString()).toString().isEmpty());
+            QCOMPARE(color->validator(QStringLiteral("#FF3366CC")).toString(), QStringLiteral("#FF3366CC"));
         }
 
         // The old flat Scrolling/TabStripEnabled key is GONE, not aliased: the

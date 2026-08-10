@@ -368,6 +368,9 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
         saveAndRecordPreTileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
+        // Seed the change-poll cache with the announced value so the batch
+        // consumer's re-report leg only fires when the hints actually move.
+        m_effect->m_lastReportedMinSize.insert(windowId, minSize);
 
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Tiling,
@@ -382,6 +385,12 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
                             << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
                         m_notifiedWindows.remove(windowId);
                         m_notifiedWindowScreens.remove(windowId);
+                        // Min-size seed rollback, mirroring the batch error
+                        // arm's rationale: on a failed announce the daemon
+                        // never heard the size, and the cache would
+                        // otherwise record it as sent. (Symmetry only — a
+                        // later re-announce re-seeds it either way.)
+                        m_effect->m_lastReportedMinSize.remove(windowId);
                         // The spawn-provenance marker was consumed above on the
                         // assumption the announce landed. Put it back, or the
                         // re-announce passes knownFreeFloating=false and the floating
@@ -499,6 +508,10 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         saveAndRecordPreTileGeometry(windowId, screenId, w, w->frameGeometry(), knownFreeFloating);
 
         const QSize minSize = declaredMinSize(w);
+        // Seed the last-reported cache like the single-window announce does:
+        // the batch carries the same minSize, and an unseeded entry costs one
+        // redundant windowMinSizeUpdated on the window's first tile batch.
+        m_effect->m_lastReportedMinSize.insert(windowId, minSize);
 
         PhosphorProtocol::WindowOpenedEntry entry;
         entry.windowId = windowId;
@@ -531,6 +544,10 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
                     for (const QString& wid : batchWindowIds) {
                         m_notifiedWindows.remove(wid);
                         m_notifiedWindowScreens.remove(wid);
+                        // The min-size seed rolls back with the tracking: on
+                        // a failed batch the daemon never heard the size,
+                        // and the cache would otherwise record it as sent.
+                        m_effect->m_lastReportedMinSize.remove(wid);
                     }
                     // The consumed spawn-provenance markers roll back with the
                     // tracking — see the single-window handler above.
@@ -563,6 +580,27 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
     // id's first genuine report (the success-path re-arm only runs when the
     // predicate answers).
     m_scrollClipLossReported.remove(windowId);
+    // The commanded-rect entry dies with the tracking too: the cross-output
+    // transfer path otherwise leaves the OLD screen's rect behind, and once
+    // the window is re-announced onto another scrolling screen the
+    // counter-assert could fight one legitimate position with it before the
+    // first batch overwrites it. The parked paint hint goes with it for the
+    // same reason (inert off a scrolling output, but a stale relocation the
+    // moment the window returns to one).
+    m_effect->m_scrollCommandedRects.remove(windowId);
+    m_effect->m_scrollVisualPos.remove(windowId);
+    // Windowed fullscreen dies with the tracking: this funnel serves the
+    // close path (where slotWindowClosed already removed the membership,
+    // making this belt) and the cross-output transfer (where nothing else
+    // does, and a window landing on a snapping screen would otherwise stay
+    // KWin-fullscreen forever — snapping emits no tile batch to un-flag
+    // it). Forget-then-release, membership first, so a synchronous
+    // re-entry from setFullScreen finds the entry already gone.
+    if (m_effect->m_windowedFullscreenWindows.contains(windowId)) {
+        forgetWindowedFullscreen(windowId);
+        releaseWindowedFullscreenState(windowId);
+    }
+    m_windowedFsClearInFlight.remove(windowId);
     cancelPendingMinimizeFloat(windowId);
     cancelPendingUnminimizeUnfloat(windowId);
     // KWin-specific cleanup. NOTE: m_savedPreTileForDesktopMove is NOT cleared
@@ -819,6 +857,16 @@ void TilingHandler::onDaemonReady()
     // loadSettings' own batch lands — and bump per-screen stagger generations
     // that m_tileStaggerGenByScreen.clear() then discards. loadSettings owns
     // the bring-up re-announce.
+    //
+    // Release the dead session's windowed-fullscreen members FIRST: a
+    // straight old-to-new owner handover produces no serviceUnregistered
+    // edge (the layout-map comment below documents the same gap), so the
+    // daemon-loss restore never ran — and the announceFlipped=false call
+    // below cannot release either, its collection loop riding the announce
+    // enumeration this path skips. Bring-up is exactly when the effect's
+    // flags are stale; the adopt-on-batch arm re-establishes them from the
+    // new daemon's truth.
+    restoreAllWindowedFullscreen();
     setScrollingScreens({}, /*announceFlipped=*/false);
     // The per-screen active-layout map is the same shape of dead-session
     // ruleQuery input, and it needs the clear here for a reason the scrolling
@@ -876,6 +924,26 @@ void TilingHandler::onDaemonReady()
     m_scrollClipLossReported.clear();
     m_savedNotifiedForDesktopReturn.clear();
     m_savedPreTileForDesktopMove.clear();
+    // The three per-session scroll maps the serviceUnregistered teardown
+    // clears, for the same handover reason as everything here: a straight
+    // old→new daemon handover produces no unregistered edge, so bring-up
+    // arrives with the dead session's state intact. A stale commanded rect
+    // re-arms the counter-assert against the dead session's position the
+    // moment the new daemon's batches re-open the gates (and before they
+    // overwrite the entry); a stale visual pos paints a parked column at
+    // the dead session's strip position; the min-size cache says "already
+    // sent" about a daemon that never heard it (mildest — the re-announce
+    // re-seeds it, cleared for symmetry with the teardown). The visual-pos
+    // clear pairs with damage like its teardown twin: the removal changes
+    // where the paint path draws those windows.
+    if (!m_effect->m_scrollVisualPos.isEmpty()) {
+        m_effect->m_scrollVisualPos.clear();
+        if (KWin::effects) {
+            KWin::effects->addRepaintFull();
+        }
+    }
+    m_effect->m_scrollCommandedRects.clear();
+    m_effect->m_lastReportedMinSize.clear();
     // Tiled membership belongs to the dead session as well. The
     // serviceUnregistered teardown normally clears it (paired there with the
     // decoration restore), but a straight old→new owner handover produces no

@@ -405,6 +405,18 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     }
     m_windowAnimator->removeAnimation(w);
     m_scrollVisualPos.remove(closingWindowId);
+    // A dying window needs no setFullScreen(false) — just the membership.
+    // The keep-flag snapshot is RESTORED, not discarded: with the close
+    // shader's holdCloseGrab the EffectWindow keeps painting for the
+    // transition, and a bare drop left the corpse playing its close leg at
+    // keepBelow=true — stacked below its strip neighbours instead of where
+    // it visually was. The restore helper erases before its setters and
+    // null-guards, so it is safe on a dying window (and on the
+    // no-close-shader path it degrades to the plain removal).
+    m_windowedFullscreenWindows.remove(closingWindowId);
+    m_tilingHandler->restoreWindowedFullscreenLayerDemotion(closingWindowId, w->window());
+    m_lastReportedMinSize.remove(closingWindowId);
+    m_scrollCommandedRects.remove(closingWindowId);
 
     // Same value as closingWindowId above: the windowId cache isn't dropped
     // until later in this slot (m_idCaches.windowIdCache.remove near the end), so a
@@ -476,8 +488,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_trackedScreenPerWindow.remove(w);
     m_restoreSuppress.remove(w);
     // Drop any pending-but-not-yet-flushed frame geometry for the
-    // closing window. The windowDeleted lambda in lifecycle.cpp does
-    // the same removal as belt-and-suspenders against a
+    // closing window. The windowDeleted lambda in lifecycle_wiring.cpp
+    // does the same removal as belt-and-suspenders against a
     // windowFrameGeometryChanged emission re-inserting between this
     // slot and windowDeleted (possible for windows held alive via
     // WindowClosedGrabRole). Daemon would discard a stale
@@ -487,7 +499,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // window set.
     m_pendingFrameGeometry.remove(closedWindowId);
     m_focusFade.remove(closedWindowId);
-    // Symmetric with the `windowDeleted` lambda in `lifecycle.cpp`
+    // Symmetric with the `windowDeleted` lambda in `lifecycle_wiring.cpp`
     // (which removes the same key from `m_frameOpacityCache` after the
     // close-grab unref). Close shaders held via `holdCloseGrab=true`
     // keep the EffectWindow alive past slotWindowClosed and the
@@ -594,10 +606,10 @@ void PlasmaZonesEffect::notifyWindowResized(KWin::EffectWindow* w, const QRect& 
          newGeometry.y(), newGeometry.width(), newGeometry.height()});
 }
 
-void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
+bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 {
     if (!w) {
-        return;
+        return false;
     }
 
     // Skip non-manageable window types but NOT user-excluded apps — the daemon
@@ -606,14 +618,14 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // m_lastActiveWindowId.
     const QString windowClass = w->windowClass();
     if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass)) {
-        return;
+        return false;
     }
     // Plasma shell surfaces — independent filter chain from shouldHandleWindow()
     // because notifyWindowActivated() intentionally skips user-exclusion lists
     // (the daemon still needs focus updates for excluded apps). The plasmashell
     // rejection must apply in both chains; see isPlasmaShellSurface().
     if (isPlasmaShellSurface(windowClass)) {
-        return;
+        return false;
     }
     // Reject structurally unmanageable window types via the predicate shared
     // verbatim with shouldHandleWindow() — see isStructurallyUnmanageableWindowType().
@@ -626,8 +638,25 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // transient_for set but isPopupWindow false) leaked through an older
     // hand-maintained copy of this list — the shared predicate makes that
     // drift impossible.
-    if (isStructurallyUnmanageableWindowType(w)) {
-        return;
+    // Fullscreen-on-a-scrolling-screen exception, mirroring the eligibility
+    // exemption: the strip keeps tiling a window through real fullscreen, so
+    // the daemon must keep hearing its focus — otherwise the scrolling verbs
+    // (windowed fullscreen's own toggle first among them) act on whatever
+    // window was reported active BEFORE the game went fullscreen. Seen
+    // live: the toggle pressed over a fullscreen Proton game landed on the
+    // neighbouring terminal. Scoped HERE rather than in the shared
+    // predicate so focus-follows-mouse and the other consumers keep
+    // treating a genuinely fullscreen window as an occluder. The exemption
+    // waives the fullscreen term AND the bare transientFor() term (Wine and
+    // Proton toplevels carry transient_for on the real game window — the
+    // original live bug); every EXPLICIT type term stays authoritative, so
+    // a fullscreen dialog/splash/popup still cannot pin the daemon's focus
+    // tracking. The residual accepted leak class is "fullscreen, no
+    // explicit type, has a transient parent" — the intended target.
+    const bool fullscreenOnScrollingScreen =
+        w->isFullScreen() && m_tilingHandler->isScrollingScreen(getWindowScreenId(w));
+    if (isStructurallyUnmanageableWindowType(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)) {
+        return false;
     }
 
     // window.focus shader transition. Fires after the rejection-filter cascade
@@ -648,7 +677,10 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     }
 
     if (!isDaemonReady("notify windowActivated")) {
-        return;
+        // True on purpose: the window IS an acceptable activation target;
+        // only the transient daemon gate stopped the report (see the header
+        // doc — a bring-up fallback to another window would be wrong here).
+        return true;
     }
 
     QString windowId = getWindowId(w);
@@ -700,6 +732,7 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
                                                        QStringLiteral("notifyWindowFocused"), {windowId, screenId},
                                                        QStringLiteral("notifyWindowFocused"));
     }
+    return true;
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowByIdExact(const QString& windowId) const

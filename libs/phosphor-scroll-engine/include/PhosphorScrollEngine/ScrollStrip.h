@@ -171,6 +171,9 @@ public:
     /// Focus the previous/next non-minimized tile within the active column
     /// (cycles tabs in a tabbed column exactly the same way). @p delta -1/+1.
     bool focusAdjacentTile(int delta);
+    /// Focus the first (@p last false) or last non-minimized tile of the
+    /// active column (niri focus-window-top/bottom). False when already there.
+    bool focusTileAtEnd(bool last);
     /// Make @p windowId the active tile of its (newly active) column.
     /// Externally-driven focus (compositor activation). Returns false when
     /// untracked or already the focused window.
@@ -208,11 +211,10 @@ public:
     bool takeWindow(const QString& windowId, const ScrollLayoutParams& params);
 
     // ── Sizing ───────────────────────────────────────────────────────────────
-    /// Set the active column's width intent, verbatim. TEST SEAM: every
-    /// production width change arrives through the cycle/adjust/maximize
-    /// verbs below, which validate and re-anchor; this one is the direct
-    /// write those verbs are built on and the tests use to reach an exact
-    /// intent.
+    /// Set the active column's width intent, verbatim. The direct write the
+    /// cycle/adjust/maximize verbs below are built on, and the absolute
+    /// set-column-width verb's (and the tests') way to reach an exact intent.
+    /// Callers own validation — nothing here clamps.
     bool setActiveColumnWidth(const ColumnWidth& width);
     /// Cycle the active column through the preset width list. @p delta -1/+1.
     /// Enters the cycle at the nearest preset when the current width is not
@@ -227,10 +229,10 @@ public:
     /// Grow the active column into the on-screen space not covered by any
     /// column at the current view (niri expand-column-to-available-width).
     bool expandActiveColumnToAvailableWidth(const ScrollLayoutParams& params);
-    /// Set the active tile's height intent, verbatim. TEST SEAM, the height
-    /// twin of setActiveColumnWidth: production height changes come through
-    /// the cycle/adjust verbs, or through setWindowHeightIntent on the
-    /// restore paths.
+    /// Set the active tile's height intent, verbatim. The height twin of
+    /// setActiveColumnWidth: the direct write under the cycle/adjust verbs,
+    /// the restore paths' setWindowHeightIntent, and the absolute
+    /// set-window-height verb. Callers own validation.
     bool setActiveWindowHeight(const WindowHeight& height);
     /// Cycle the active tile through the preset height list. @p delta -1/+1.
     bool cycleActiveWindowPresetHeight(int delta, const ScrollLayoutParams& params);
@@ -252,6 +254,18 @@ public:
     // ── Display ──────────────────────────────────────────────────────────────
     /// Toggle the active column between Normal and Tabbed presentation.
     bool toggleActiveColumnTabbed();
+
+    /// Toggle windowed fullscreen on the active tile of the active column.
+    /// Layout-neutral: the tile keeps its column slot; the flag only rides
+    /// the apply payload so the compositor flips the client's fullscreen
+    /// state. Returns false when there is no active tile.
+    bool toggleActiveWindowedFullscreen();
+    /// Direct flag write for @p windowId (any tile, not just the active
+    /// one) — compositor-driven reconciliation clears through this, and the
+    /// mode-round-trip restore path re-applies stashed flags through it.
+    /// Returns false for an unknown window or an unchanged flag.
+    bool setWindowedFullscreen(const QString& windowId, bool on);
+    bool isWindowedFullscreen(const QString& windowId) const;
 
     /// Direct height-intent write for @p windowId (any tile, not just the
     /// active one) — the mode-round-trip restore path re-applies stashed
@@ -293,6 +307,9 @@ public:
     /// The stash-restore path re-applies the anchor AFTER re-focusing the
     /// stashed active window, overriding the focus change's own
     /// centering-policy reanchor with the user's actual view.
+    /// @p params is currently UNUSED (the raw restore needs no layout maths)
+    /// but stays in the exported signature: every sibling anchor mutator
+    /// takes it, and dropping it is an ABI break for no gain.
     void restoreViewAnchor(int anchor, const ScrollLayoutParams& params);
     /// Re-apply the centering policy to the current active column (settings
     /// change / work-area change) using the current anchor as the "no
@@ -301,6 +318,10 @@ public:
     /// Center the active column in the view (niri center-column).
     /// Returns true when the anchor actually moved.
     bool centerActiveColumn(const ScrollLayoutParams& params);
+    /// Center the span of FULLY visible columns in the view (niri
+    /// center-visible-columns). Falls back to centerActiveColumn when no
+    /// column is fully visible. Returns true when the anchor actually moved.
+    bool centerVisibleColumns(const ScrollLayoutParams& params);
 
     // ── Relayout ─────────────────────────────────────────────────────────────
     /// Resolve every non-minimized tile's absolute pixel rect against

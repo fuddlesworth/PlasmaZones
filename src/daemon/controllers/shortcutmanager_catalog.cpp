@@ -52,7 +52,8 @@ using namespace ShortcutIds;
 //    span quad and the empty-zone push
 //  - "autotile" for the master-stack ops, hard no-ops off autotile
 //  - "scrolling" for column/strip ops (consume/expel, column widths, tab
-//    display), hard no-ops off scrolling
+//    display, the windowed-fullscreen presentation toggle), hard no-ops off
+//    scrolling
 //  - "layouts" is a CAPABILITY tag, not a mode name: rows shown whenever
 //    the bound screen's engine consumes user-selectable layouts
 //    (IPlacementEngine::layoutSupport, pushed to the sheet as
@@ -272,6 +273,11 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the focused column sits centered on the screen."));
         add(kIdScrollToggleColumnTabbed, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Switches the focused column between stacked windows and tabs."));
+        add(kIdScrollToggleWindowedFullscreen, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Puts the focused window into its fullscreen presentation while it keeps its "
+                              "place in the column, so it does not cover the screen. Press again to leave "
+                              "it."));
         add(kIdScrollCycleColumnWidth, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Cycle Column Width"),
             QT_TRANSLATE_NOOP("plasmazones", "Steps the focused column through the screen's width presets."));
@@ -311,6 +317,45 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones",
                               "Clears manual window heights in the focused column so its windows share the "
                               "height evenly."));
+        add(kIdScrollCenterVisibleColumns, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the fully visible columns sit centered as a group."));
+        add(kIdScrollFocusWindowTop, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Top Window"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the first window of the focused column."));
+        add(kIdScrollFocusWindowBottom, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Bottom Window"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the last window of the focused column."));
+        add(kIdScrollFocusColumnLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left (Edge Stop)"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus one column left and stops at the strip edge. The regular focus "
+                              "shortcut continues onto the next monitor instead."));
+        add(kIdScrollFocusColumnRight, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right (Edge Stop)"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus one column right and stops at the strip edge. The regular focus "
+                              "shortcut continues onto the next monitor instead."));
+        add(kIdScrollFocusColumnLeftOrLast, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left (Wrap)"),
+            QT_TRANSLATE_NOOP("plasmazones", "Moves focus one column left, wrapping to the last column at the edge."));
+        add(kIdScrollFocusColumnRightOrFirst, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right (Wrap)"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus one column right, wrapping to the first column at the edge."));
+        add(kIdScrollSwitchFocusFloatTiling, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Switch Floating and Tiled Focus"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus between the floating windows and the tiled columns, returning to "
+                              "the most recent window on each side."));
+        add(kIdScrollMoveToFloating, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Move to Floating"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Makes the focused window float. Unlike the float toggle, it never re-tiles."));
+        add(kIdScrollMoveToTiling, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
+            QT_TRANSLATE_NOOP("plasmazones", "Move to Tiled"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Returns the focused floating window to its column. Unlike the float toggle, "
+                              "it never floats."));
         return m;
     }();
 
@@ -323,16 +368,30 @@ CatalogMeta catalogMetaForId(const QString& id)
     // tests together instead of compiling clean and quietly dumping the whole
     // family into the "Other" bucket below.
     if (id.startsWith(QLatin1String(kQuickLayoutPrefix))) {
-        // Same capability tag as the enumerated Layouts rows above.
-        return {QT_TRANSLATE_NOOP("plasmazones", "Layouts"), 1, "layouts"};
+        // Same capability tag as the enumerated Layouts rows above — and the
+        // same per-capability tooltip split those rows carry, since the
+        // digit family's meaning shifts with the capability too.
+        return {QT_TRANSLATE_NOOP("plasmazones", "Layouts"),
+                1,
+                "layouts",
+                nullptr,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones", "Applies the numbered layout to this screen."),
+                QT_TRANSLATE_NOOP("plasmazones", "Applies the numbered column template to this screen.")};
     }
     if (id.startsWith(QLatin1String(kSnapToZonePrefix))) {
         // Every engine implements moveFocusedToPosition: zone N in
         // snapping, layout slot N in tiling, visible tile slot N in
         // scrolling. Only 1 to 9 have shortcuts, so a scrolling strip with
         // more visible tiles than that numbers them all but leaves the ones
-        // past 9 with no digit that reaches them.
-        return {QT_TRANSLATE_NOOP("plasmazones", "Zones"), 3, "all"};
+        // past 9 with no digit that reaches them. The tooltip stays
+        // mode-neutral for exactly that per-mode divergence.
+        return {QT_TRANSLATE_NOOP("plasmazones", "Zones"),
+                3,
+                "all",
+                nullptr,
+                nullptr,
+                QT_TRANSLATE_NOOP("plasmazones", "Sends the focused window to the numbered slot on this screen.")};
     }
     // A shortcut added to the table without catalog metadata still shows up
     // (miscategorised beats invisible), and the log points at the fix.
@@ -437,9 +496,9 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // default, any user rebind of either member uncompresses this pair for
     // good, where a digit or arrow family recompresses as soon as the rebind
     // still lands on its structural token. The one exception is a member
-    // whose default is empty (every default ships bound today, but a user
-    // can clear one), whose expectation is taken from the live binding
-    // instead — see addScrollPair below.
+    // whose default is empty — several verbs now SHIP unbound, and a user
+    // can clear a bound one — whose expectation is taken from the live
+    // binding instead; see addScrollPair below.
     const auto lastKeyOf = [](const QString& sequence) {
         // Normalize to PortableText first, exactly as the row builder above
         // does to the LIVE triggers before the compare. The defaults are
@@ -534,9 +593,9 @@ QVariantList ShortcutManager::cheatsheetModel() const
     };
 
     // The scrolling family's natural pairs collapse the same way the
-    // directional quads do. Only the four pairs whose OPPOSED members end in
+    // directional quads do. Only the pairs whose OPPOSED members end in
     // DIFFERENT keys are listed: the letter+Shift pairs (consume/expel on I,
-    // adjust width on W, both preset cycles on R and H) share their final
+    // adjust width on W, both preset cycles on D and H) share their final
     // key, so compression would require both members to carry the identical
     // full sequence — a duplicate chord KGlobalAccel refuses — and a spec
     // for them would sit in the table permanently dead, extracting merged
@@ -545,27 +604,21 @@ QVariantList ShortcutManager::cheatsheetModel() const
     // A pair is SKIPPED when either member has no sequence to expect: an
     // expectation of "" can never match a live trigger, so a spelled-out
     // pair for a default-less member would sit in the table looking active
-    // while being structurally dead. Every default ships bound today, but a
-    // user can clear one; where they instead REBOUND such a member, its
-    // live single trigger stands in for the missing default and the pair
-    // collapses normally.
-    const auto liveSequenceFor = [this](const char* id) -> QString {
-        if (!m_registry) {
-            return QString();
-        }
-        const QStringList triggers = m_registry->effectiveTriggers(QString::fromLatin1(id));
-        // Only a single unambiguous binding can serve as the expectation; a
-        // member with an alternate binding cannot compress anyway.
-        return triggers.size() == 1 ? triggers.first() : QString();
-    };
+    // while being structurally dead. Several defaults now SHIP unbound (the
+    // edge-stop/wrap focus variants and the one-way float verbs) and no
+    // specs are listed for those pairs — until a user binds both members
+    // such a spec is dead weight, and once they do, the individual rows
+    // still render each binding on its own. (A member a user cleared keeps
+    // the shipped default as its expectation; a cleared member has no
+    // trigger, so its row fails the single-trigger compression test either
+    // way and renders individually.)
+    //
     // Both members' key tokens joined for the merged chip. The digit family
     // reads as a range and the directional one as a class name; a bare
     // space-joined pair instead read as one chord, so the alternatives are
     // separated the way the row labels separate them.
-    const auto addScrollPair = [&](const char* firstId, const QString& firstDefault, const char* secondId,
-                                   const QString& secondDefault, const QString& label, const QString& description) {
-        const QString firstSeq = firstDefault.isEmpty() ? liveSequenceFor(firstId) : firstDefault;
-        const QString secondSeq = secondDefault.isEmpty() ? liveSequenceFor(secondId) : secondDefault;
+    const auto addScrollPair = [&](const char* firstId, const QString& firstSeq, const char* secondId,
+                                   const QString& secondSeq, const QString& label, const QString& description) {
         if (firstSeq.isEmpty() || secondSeq.isEmpty()) {
             return;
         }

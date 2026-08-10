@@ -764,7 +764,11 @@ add_executable(test_navigation_cross_surface
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_navigation_cross_surface
                PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
-target_link_libraries(test_navigation_cross_surface PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+# QTEST_MAIN expands to a QGuiApplication main whenever QT_GUI_LIB is
+# defined, which here would otherwise arrive only through plasmazones_core's
+# transitive Qt6::Gui — coincidental, not contractual (the same reason
+# test_scrolling_settings links Gui explicitly above).
+target_link_libraries(test_navigation_cross_surface PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_navigation_cross_surface COMMAND test_navigation_cross_surface)
 
 # Real-retile cross-output test: drives the actual tile pipeline, so it needs
@@ -944,6 +948,16 @@ add_executable(test_shader_timing ui/effect/test_shader_timing.cpp)
 target_link_libraries(test_shader_timing PRIVATE Qt6::Test Qt6::Core Qt6::Gui PhosphorAnimation::PhosphorAnimation)
 target_include_directories(test_shader_timing PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
 add_test(NAME test_shader_timing COMMAND test_shader_timing)
+
+# Pure-logic test for the scroll-managed window decision helpers
+# (tilinghandler/scrolldecisions.h) — the windowed-fullscreen 5-way batch
+# decision with its clear-in-flight marker contract (full 16-row truth
+# table) and the counter-assert burst budget (rate limit, rollover,
+# fresh-batch re-arm). Same header-only reach as the anchor test.
+add_executable(test_scroll_decisions ui/effect/test_scroll_decisions.cpp)
+target_link_libraries(test_scroll_decisions PRIVATE Qt6::Test Qt6::Core)
+target_include_directories(test_scroll_decisions PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+add_test(NAME test_scroll_decisions COMMAND test_scroll_decisions)
 
 # Pure-geometry test for per-VS wallpaper cropping (PR #333). Pins the C++
 # cover-fit math against hand-worked expected rects so it can't silently

@@ -547,6 +547,8 @@ public:
                    setScrollingCenterColumnShortcut NOTIFY scrollingCenterColumnShortcutChanged)
     Q_PROPERTY(QString scrollingToggleColumnTabbedShortcut READ scrollingToggleColumnTabbedShortcut WRITE
                    setScrollingToggleColumnTabbedShortcut NOTIFY scrollingToggleColumnTabbedShortcutChanged)
+    Q_PROPERTY(QString scrollingToggleWindowedFullscreenShortcut READ scrollingToggleWindowedFullscreenShortcut WRITE
+                   setScrollingToggleWindowedFullscreenShortcut NOTIFY scrollingToggleWindowedFullscreenShortcutChanged)
     Q_PROPERTY(QString scrollingCycleColumnWidthShortcut READ scrollingCycleColumnWidthShortcut WRITE
                    setScrollingCycleColumnWidthShortcut NOTIFY scrollingCycleColumnWidthShortcutChanged)
     Q_PROPERTY(QString scrollingCycleColumnWidthBackShortcut READ scrollingCycleColumnWidthBackShortcut WRITE
@@ -569,6 +571,26 @@ public:
                    setScrollingDecreaseWindowHeightShortcut NOTIFY scrollingDecreaseWindowHeightShortcutChanged)
     Q_PROPERTY(QString scrollingResetWindowHeightsShortcut READ scrollingResetWindowHeightsShortcut WRITE
                    setScrollingResetWindowHeightsShortcut NOTIFY scrollingResetWindowHeightsShortcutChanged)
+    Q_PROPERTY(QString scrollingCenterVisibleColumnsShortcut READ scrollingCenterVisibleColumnsShortcut WRITE
+                   setScrollingCenterVisibleColumnsShortcut NOTIFY scrollingCenterVisibleColumnsShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusWindowTopShortcut READ scrollingFocusWindowTopShortcut WRITE
+                   setScrollingFocusWindowTopShortcut NOTIFY scrollingFocusWindowTopShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusWindowBottomShortcut READ scrollingFocusWindowBottomShortcut WRITE
+                   setScrollingFocusWindowBottomShortcut NOTIFY scrollingFocusWindowBottomShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnLeftShortcut READ scrollingFocusColumnLeftShortcut WRITE
+                   setScrollingFocusColumnLeftShortcut NOTIFY scrollingFocusColumnLeftShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnRightShortcut READ scrollingFocusColumnRightShortcut WRITE
+                   setScrollingFocusColumnRightShortcut NOTIFY scrollingFocusColumnRightShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnLeftOrLastShortcut READ scrollingFocusColumnLeftOrLastShortcut WRITE
+                   setScrollingFocusColumnLeftOrLastShortcut NOTIFY scrollingFocusColumnLeftOrLastShortcutChanged)
+    Q_PROPERTY(QString scrollingFocusColumnRightOrFirstShortcut READ scrollingFocusColumnRightOrFirstShortcut WRITE
+                   setScrollingFocusColumnRightOrFirstShortcut NOTIFY scrollingFocusColumnRightOrFirstShortcutChanged)
+    Q_PROPERTY(QString scrollingSwitchFocusFloatTilingShortcut READ scrollingSwitchFocusFloatTilingShortcut WRITE
+                   setScrollingSwitchFocusFloatTilingShortcut NOTIFY scrollingSwitchFocusFloatTilingShortcutChanged)
+    Q_PROPERTY(QString scrollingMoveToFloatingShortcut READ scrollingMoveToFloatingShortcut WRITE
+                   setScrollingMoveToFloatingShortcut NOTIFY scrollingMoveToFloatingShortcutChanged)
+    Q_PROPERTY(QString scrollingMoveToTilingShortcut READ scrollingMoveToTilingShortcut WRITE
+                   setScrollingMoveToTilingShortcut NOTIFY scrollingMoveToTilingShortcutChanged)
 
     // Rendering
     Q_PROPERTY(QString renderingBackend READ renderingBackend WRITE setRenderingBackend NOTIFY renderingBackendChanged)
@@ -1340,6 +1362,8 @@ public:
     void setScrollingCenterColumnShortcut(const QString& shortcut);
     QString scrollingToggleColumnTabbedShortcut() const;
     void setScrollingToggleColumnTabbedShortcut(const QString& shortcut);
+    QString scrollingToggleWindowedFullscreenShortcut() const;
+    void setScrollingToggleWindowedFullscreenShortcut(const QString& shortcut);
     QString scrollingCycleColumnWidthShortcut() const;
     void setScrollingCycleColumnWidthShortcut(const QString& shortcut);
     QString scrollingCycleColumnWidthBackShortcut() const;
@@ -1362,6 +1386,26 @@ public:
     void setScrollingDecreaseWindowHeightShortcut(const QString& shortcut);
     QString scrollingResetWindowHeightsShortcut() const;
     void setScrollingResetWindowHeightsShortcut(const QString& shortcut);
+    QString scrollingCenterVisibleColumnsShortcut() const;
+    void setScrollingCenterVisibleColumnsShortcut(const QString& shortcut);
+    QString scrollingFocusWindowTopShortcut() const;
+    void setScrollingFocusWindowTopShortcut(const QString& shortcut);
+    QString scrollingFocusWindowBottomShortcut() const;
+    void setScrollingFocusWindowBottomShortcut(const QString& shortcut);
+    QString scrollingFocusColumnLeftShortcut() const;
+    void setScrollingFocusColumnLeftShortcut(const QString& shortcut);
+    QString scrollingFocusColumnRightShortcut() const;
+    void setScrollingFocusColumnRightShortcut(const QString& shortcut);
+    QString scrollingFocusColumnLeftOrLastShortcut() const;
+    void setScrollingFocusColumnLeftOrLastShortcut(const QString& shortcut);
+    QString scrollingFocusColumnRightOrFirstShortcut() const;
+    void setScrollingFocusColumnRightOrFirstShortcut(const QString& shortcut);
+    QString scrollingSwitchFocusFloatTilingShortcut() const;
+    void setScrollingSwitchFocusFloatTilingShortcut(const QString& shortcut);
+    QString scrollingMoveToFloatingShortcut() const;
+    void setScrollingMoveToFloatingShortcut(const QString& shortcut);
+    QString scrollingMoveToTilingShortcut() const;
+    void setScrollingMoveToTilingShortcut(const QString& shortcut);
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
     QString autotileToggleShortcut() const;

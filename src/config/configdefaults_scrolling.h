@@ -142,6 +142,9 @@ public:
     /// value key, since a pixel width can never be smaller than a proportion,
     /// but it bounds the PROPORTION range — the fixed range has its own floor
     /// in scrollingDefaultColumnWidthFixedMin.
+    /// NOTE the D-Bus DocStrings in dbus/org.plasmazones.Scrolling.xml spell
+    /// these bounds (and the fixed/height ranges below) as literals, kept in
+    /// sync BY HAND — retuning any of them means updating that XML too.
     static constexpr qreal scrollingDefaultColumnWidthProportionMin()
     {
         return 0.05;
@@ -215,10 +218,10 @@ public:
         return v == scrollingColumnDisplayNormal() || v == scrollingColumnDisplayTabbed();
     }
     /// Preset proportion lists, comma-joined decimals (the niri defaults).
-    /// KEEP IN SYNC with the engine's hard-coded fallback in
-    /// ScrollEngine (engine_core.cpp refreshConfigFromSettings) — same
-    /// {1/3, 1/2, 2/3} intent spelled twice because the LGPL engine cannot
-    /// include this GPL header.
+    /// KEEP IN SYNC with the other THREE copies of the {1/3, 1/2, 2/3}
+    /// intent — ScrollLayoutParams' member seeds document the full four-copy
+    /// map (ScrollTypes.h, presetColumnWidths). Spelled separately because
+    /// the LGPL engine cannot include this GPL header.
     static QString scrollingPresetColumnWidths()
     {
         return QStringLiteral("0.333,0.5,0.667");
@@ -504,7 +507,7 @@ public:
     /// One opacity, not the snapping overlay's active/inactive pair: there is
     /// exactly one drop target at a time, so there is no inactive state to
     /// give a second value to.
-    static constexpr double scrollingDropIndicatorOpacity()
+    static constexpr qreal scrollingDropIndicatorOpacity()
     {
         return 0.25;
     }
@@ -598,6 +601,22 @@ public:
     static constexpr qreal scrollingDefaultWindowHeightMax()
     {
         return 10000.0;
+    }
+    /// Height-PROPORTION floor: the D-Bus setWindowHeightProportion gate's
+    /// alone (canonicalProportionList hardcodes its own <= 0.0 floor and
+    /// never consults a Min). Delegates to the width proportion range today —
+    /// both are work-area fractions sharing the 0-1 spelling — but exists as
+    /// its own accessor so the height wire contract cannot be silently
+    /// retargeted by a future retune of the WIDTH range.
+    static constexpr qreal scrollingWindowHeightProportionMin()
+    {
+        return scrollingDefaultColumnWidthProportionMin();
+    }
+    /// Height-PROPORTION ceiling: the D-Bus gate AND the height preset-list
+    /// canonicalizer read this one. Same delegation rationale as Min.
+    static constexpr qreal scrollingWindowHeightProportionMax()
+    {
+        return scrollingDefaultColumnWidthProportionMax();
     }
     /// Editing granularity for the fixed-height spin box, in whole pixels.
     /// Its own accessor rather than a reuse of the width step: the two
@@ -742,15 +761,34 @@ public:
     // Anchored on Meta+Alt to stay clear of stock Plasma and the Meta+Shift /
     // Meta+Ctrl families in configdefaults.h. NOTE: the Meta+Alt family is
     // SHARED with the layouts pair (Meta+Alt+[ ]), the cheatsheet (Meta+Alt+/),
-    // cycle-in-zone (Meta+Alt+, .), and the quick-layout digits (Meta+Alt+1-9) —
+    // cycle-in-zone (Meta+Alt+, .), and the quick-layout digit slots
+    // (Meta+Alt+<digit>, 1..QuickLayoutSlotCount) —
     // KGlobalAccel routes one action per chord, so every default here must be
     // unique across the WHOLE inheritance chain (test_scrolling_settings pins
     // this). Shift+symbol spellings are forbidden: see
     // toggleCheatsheetShortcut() — KWin consumes Shift in the keysym
     // translation on Wayland and the chord can never fire.
-    // Directional focus/move/swap reuse the existing generic navigation
-    // shortcuts; only the scroll-specific column vocabulary gets its own
-    // chords.
+    // The GENERIC directional focus/move/swap chords stay shared with the
+    // other modes; the scroll-specific column vocabulary gets its own chords,
+    // and the niri-parity focus variants (edge-stop, wrap) plus the one-way
+    // float verbs have their own keys that SHIP UNBOUND — see each accessor's
+    // rationale.
+    //
+    // EXTERNALLY OWNED CHORDS the internal-uniqueness test can NOT catch:
+    // KGlobalAccel silently gives a chord to whichever action registered
+    // first, so a default colliding with a stock KDE app just never fires
+    // for one of the two. Known occupied on a stock Plasma 6 install:
+    //   - Spectacle owns the whole R family: Meta+R and Meta+Shift+R
+    //     (region recording), Meta+Ctrl+R (window recording), Meta+Alt+R
+    //     (screen recording). R is unusable with any Meta-based modifier.
+    //   - Plasma owns Meta+Alt+K and Meta+Alt+L (keyboard layouts),
+    //     Meta+Alt+S (screen reader), Meta+Alt+P (panel focus), and
+    //     Meta+Alt+Arrows (KWin switch-window).
+    //   - KWin core owns Meta+Alt+wheel (desktop switch; axis registrations
+    //     that lose the race are silently dropped).
+    // Check a candidate against this table AND a live session
+    // (~/.config/kglobalshortcutsrc plus kglobalaccel's component list)
+    // before shipping a new default.
     // ═══════════════════════════════════════════════════════════════════════════
 
     static QString scrollingFocusColumnFirstShortcut()
@@ -776,7 +814,9 @@ public:
         // spelling needs Shift on the user's layout can never fire on
         // Wayland (see toggleCheatsheetShortcut). I as in "into the
         // column"; Shift+I is the opposite direction. Shift+letter is safe
-        // — only Shift+SYMBOL spellings are forbidden.
+        // — only Shift+SYMBOL spellings are forbidden. (The autotile
+        // master-count pair keeps the KDE-wide Meta+Ctrl+= / - idiom as a
+        // documented exception — see autotileIncMasterCountShortcut.)
         return QStringLiteral("Meta+Alt+I");
     }
     static QString scrollingExpelWindowShortcut()
@@ -800,18 +840,32 @@ public:
     {
         return QStringLiteral("Meta+Alt+T");
     }
+    static QString scrollingToggleWindowedFullscreenShortcut()
+    {
+        // Shares the F letter with Meta+Alt+F (maximize column) because both
+        // are fullscreen-adjacent presentation toggles, and Shift+F was the
+        // free spelling on that letter. NOT an opposed pair in the
+        // letter+Shift convention's sense (see
+        // scrollingCycleColumnWidthShortcut) — windowed fullscreen never
+        // resizes the window; it flips the client's fullscreen presentation
+        // while the tile keeps its column slot.
+        return QStringLiteral("Meta+Alt+Shift+F");
+    }
     static QString scrollingCycleColumnWidthShortcut()
     {
         // The letter pairs in this family follow one convention: a mnemonic
         // letter for the primary action and Shift on the same letter for the
         // opposed one (I/Shift+I consume/expel, W/Shift+W widen/narrow,
-        // R/Shift+R and H/Shift+H cycle forward/back). R is niri's preset
-        // width mnemonic, H is height.
-        return QStringLiteral("Meta+Alt+R");
+        // D/Shift+D and H/Shift+H cycle forward/back). D as in the column's
+        // Dimensions, H is height. NOT R (niri's preset-width mnemonic):
+        // Spectacle owns the entire Meta-modified R family — see the
+        // externally-owned table in the section banner — and Meta+Alt+R was
+        // a live collision with its screen recording.
+        return QStringLiteral("Meta+Alt+D");
     }
     static QString scrollingCycleColumnWidthBackShortcut()
     {
-        return QStringLiteral("Meta+Alt+Shift+R");
+        return QStringLiteral("Meta+Alt+Shift+D");
     }
     static QString scrollingIncreaseColumnWidthShortcut()
     {
@@ -834,7 +888,7 @@ public:
     }
     static QString scrollingCycleWindowHeightShortcut()
     {
-        // NOT Meta+Alt+Shift+R: that slot is the width cycle's reverse
+        // NOT Meta+Alt+Shift+D: that slot is the width cycle's reverse
         // (see scrollingCycleColumnWidthShortcut for the letter+Shift
         // convention).
         return QStringLiteral("Meta+Alt+H");
@@ -857,6 +911,66 @@ public:
     static QString scrollingResetWindowHeightsShortcut()
     {
         return QStringLiteral("Meta+Alt+0");
+    }
+    static QString scrollingCenterVisibleColumnsShortcut()
+    {
+        // Shift twin of centerColumn's C: the whole-span variant of the same
+        // centering idea, no new letter consumed from the shrinking pool.
+        return QStringLiteral("Meta+Alt+Shift+C");
+    }
+    static QString scrollingFocusWindowTopShortcut()
+    {
+        // V for vertical: the within-column axis. Shift+V is the opposed
+        // end, per the family's letter+Shift convention.
+        return QStringLiteral("Meta+Alt+V");
+    }
+    static QString scrollingFocusWindowBottomShortcut()
+    {
+        return QStringLiteral("Meta+Alt+Shift+V");
+    }
+    static QString scrollingFocusColumnLeftShortcut()
+    {
+        // Unbound by default: the generic focus chords already walk columns
+        // and cross monitors at the strip edge. These plain variants exist
+        // for users who want niri's exact stop-at-the-edge behaviour; a
+        // default would spend two letters from the shrinking Meta+Alt pool
+        // on a behaviour nothing defaults to. NOTE an unbound entry never
+        // registers with KGlobalAccel (the registry skips empty sequences),
+        // so it does NOT appear in the system Shortcuts KCM — binding one
+        // means writing its Shortcuts.Scrolling key in
+        // ~/.config/plasmazones/config.json or over the settings D-Bus
+        // surface; the daemon rebinds live on the settings change.
+        return QString();
+    }
+    static QString scrollingFocusColumnRightShortcut()
+    {
+        return QString();
+    }
+    static QString scrollingFocusColumnLeftOrLastShortcut()
+    {
+        // Unbound like the plain pair above, and for the same reason: the
+        // wrap variants are alternatives a user binds INSTEAD of the
+        // monitor-crossing default.
+        return QString();
+    }
+    static QString scrollingFocusColumnRightOrFirstShortcut()
+    {
+        return QString();
+    }
+    static QString scrollingSwitchFocusFloatTilingShortcut()
+    {
+        // X as in eXchange the focused layer.
+        return QStringLiteral("Meta+Alt+X");
+    }
+    static QString scrollingMoveToFloatingShortcut()
+    {
+        // Unbound: Meta+F already toggles float, and the explicit one-way
+        // verbs are for users scripting a deterministic direction.
+        return QString();
+    }
+    static QString scrollingMoveToTilingShortcut()
+    {
+        return QString();
     }
 };
 

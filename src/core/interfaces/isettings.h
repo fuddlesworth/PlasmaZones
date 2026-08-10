@@ -869,6 +869,7 @@ Q_SIGNALS:
     void scrollingConsumeOrExpelRightShortcutChanged();
     void scrollingCenterColumnShortcutChanged();
     void scrollingToggleColumnTabbedShortcutChanged();
+    void scrollingToggleWindowedFullscreenShortcutChanged();
     void scrollingCycleColumnWidthShortcutChanged();
     void scrollingCycleColumnWidthBackShortcutChanged();
     void scrollingIncreaseColumnWidthShortcutChanged();
@@ -880,6 +881,16 @@ Q_SIGNALS:
     void scrollingIncreaseWindowHeightShortcutChanged();
     void scrollingDecreaseWindowHeightShortcutChanged();
     void scrollingResetWindowHeightsShortcutChanged();
+    void scrollingCenterVisibleColumnsShortcutChanged();
+    void scrollingFocusWindowTopShortcutChanged();
+    void scrollingFocusWindowBottomShortcutChanged();
+    void scrollingFocusColumnLeftShortcutChanged();
+    void scrollingFocusColumnRightShortcutChanged();
+    void scrollingFocusColumnLeftOrLastShortcutChanged();
+    void scrollingFocusColumnRightOrFirstShortcutChanged();
+    void scrollingSwitchFocusFloatTilingShortcutChanged();
+    void scrollingMoveToFloatingShortcutChanged();
+    void scrollingMoveToTilingShortcutChanged();
 };
 
 } // namespace PlasmaZones

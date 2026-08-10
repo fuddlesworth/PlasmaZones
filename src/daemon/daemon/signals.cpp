@@ -156,16 +156,17 @@ void Daemon::connectLayoutSignals()
     // template. The recompute is cheap and store mutations are user-paced,
     // so no per-screen template-id matching is needed here.
     //
-    // The per-screen active-assignment snapshot is re-diffed for the same
-    // reason: store CRUD can retarget or clear a context's template without
-    // touching its assignment id, and the KCM apply's template-only OSD gate
-    // reads the snapshot's templateId. Its changed-set return is ignored, as
-    // at the other refresh-only call sites.
+    // The per-screen active-assignment snapshot is re-diffed to re-prime the
+    // assignmentId baseline after the store mutation (the KCM apply's
+    // template-only OSD gate keys on m_lastAnnouncedTemplateByScreen and
+    // re-resolves the template itself — the snapshot carries no template).
+    // Its changed-set return is ignored, as at the other refresh-only call
+    // sites.
     if (m_scrollingTemplateStore) {
         m_restartScopedConnections << connect(m_scrollingTemplateStore.get(),
                                               &PhosphorZones::ScrollingTemplateStore::templatesChanged, this, [this]() {
                                                   updateEngineScreens();
-                                                  // Refresh the snapshot's templateId — see above.
+                                                  // Re-prime the assignment baseline — see above.
                                                   diffActiveAssignments();
                                                   // Relay to the D-Bus surface so the settings app
                                                   // refreshes its template views on store CRUD.
@@ -439,7 +440,7 @@ void Daemon::connectOverlaySignals()
                 m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
                 return;
             }
-            if (m_settings && m_settings->showNavigationOsd()) {
+            if (m_settings && m_settings->showNavigationOsd() && !shouldSuppressOsd()) {
                 if (m_overlayService) {
                     m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
                 }
@@ -672,7 +673,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
     }
 
     // Use "Floating" and "Tiled" labels for autotile (not "Snapped" for unfloat)
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !shouldSuppressOsd()) {
         QString reason = floating ? QStringLiteral("floated") : QStringLiteral("tiled");
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), reason, QString(), QString(), screenId);
     }
@@ -806,7 +807,8 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
             wts->clearPreFloatZone(windowId);
         }
     }
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !windowIds.isEmpty()) {
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !windowIds.isEmpty()
+        && !shouldSuppressOsd()) {
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), QStringLiteral("overflow"), QString(),
                                             QString(), screenId);
     }

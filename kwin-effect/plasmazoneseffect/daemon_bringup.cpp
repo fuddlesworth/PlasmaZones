@@ -270,11 +270,36 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     }
 
     // Re-notify active window (gives daemon lastActiveScreenName).
-    // Use notifyWindowActivated which bypasses user exclusion lists — the daemon
-    // must always know which window is active for correct shortcut handling.
-    KWin::EffectWindow* activeWindow = getActiveWindow();
-    if (activeWindow) {
-        notifyWindowActivated(activeWindow);
+    // Hand KWin's RAW active window to notifyWindowActivated and let ITS
+    // filter decide — that filter carries the fullscreen-on-a-scrolling-
+    // screen exemption. Pre-filtering through getActiveWindow() (plain
+    // shouldHandleWindow) rejected a genuinely fullscreen active window and
+    // fell through to the topmost OTHER window in the stacking walk, so the
+    // re-seed reported the NEIGHBOUR as active — the exact wrong-target
+    // failure the exemption exists for (the toggle pressed over a
+    // fullscreen Proton game landing on the terminal beside it), and no
+    // further windowActivated fires while the game keeps focus. The raw
+    // window still has to be genuinely active-eligible (present, on the
+    // current desktop/activity, not minimized) — those terms came from
+    // getActiveWindow()'s stage-1 predicate, not its shouldHandleWindow
+    // pre-filter, and dropping them would let a minimized or off-desktop
+    // window be reported as active. When the raw candidate is unusable,
+    // fall back to getActiveWindow()'s stacking walk so bring-up still
+    // seeds lastActiveScreenName (the walk's pre-filter only loses the
+    // fullscreen exemption, which cannot matter when the raw active window
+    // was rejected for reasons other than being fullscreen).
+    // notifyWindowActivated's bool return covers its INTERNAL rejections too
+    // (plasmashell surface, unmanageable popup): a raw candidate that passes
+    // the eligibility terms here but is rejected inside still falls back to
+    // the stacking walk, so bring-up seeds lastActiveScreenName whenever any
+    // reportable window exists.
+    KWin::EffectWindow* activeWindow = KWin::effects ? KWin::effects->activeWindow() : nullptr;
+    const bool rawEligible = activeWindow && !activeWindow->isDeleted() && !activeWindow->isMinimized()
+        && activeWindow->isOnCurrentDesktop() && activeWindow->isOnCurrentActivity();
+    if (!rawEligible || !notifyWindowActivated(activeWindow)) {
+        if (KWin::EffectWindow* fallback = getActiveWindow(); fallback && fallback != activeWindow) {
+            notifyWindowActivated(fallback);
+        }
     }
 
     // Fetch virtual screen definitions from daemon — needed before any screen ID

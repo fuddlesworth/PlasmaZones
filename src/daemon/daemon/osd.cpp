@@ -319,9 +319,11 @@ void Daemon::showLayoutsUnavailableOsd(const QString& screenId)
     qCDebug(lcDaemon) << "Layout shortcut ignored — engine provides no layouts for screen" << screenId;
     // Same gate as the navigationFeedback relay in signals.cpp — this is a
     // navigation-style failure OSD, not a layout-switch OSD, so it follows
-    // the showNavigationOsd toggle rather than osdStyle (and, like the whole
-    // navigation-OSD family, it carries no shouldSuppressOsd gate).
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+    // the showNavigationOsd toggle rather than osdStyle. The whole
+    // navigation-OSD family also carries the shouldSuppressOsd gate now:
+    // shutdown, phantom sessions and the screen-settling cooldown suppress
+    // navigation feedback the same way they suppress layout cards.
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !shouldSuppressOsd()) {
         m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("not_supported"), QString(),
                                             QString(), screenId);
     }

@@ -271,7 +271,17 @@ StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
         // a silent no-op is the wrong failure for the one that does not.
         sc.activeWindowId = col.tiles.at(qBound(0, col.activeTileIdx, col.tiles.size() - 1)).windowId;
         for (const Tile& tile : col.tiles) {
-            sc.tiles.append({tile.windowId, tile.height, tile.minimized});
+            // Named member assignment, not positional brace-init:
+            // StashedTile's next members are lease state that must stay
+            // defaulted here, and a future field inserted before
+            // windowedFullscreen would mis-bind two same-typed bools
+            // silently under a positional init.
+            StashedTile st;
+            st.windowId = tile.windowId;
+            st.height = tile.height;
+            st.minimized = tile.minimized;
+            st.windowedFullscreen = tile.windowedFullscreen;
+            sc.tiles.append(st);
         }
         out.columns.append(sc);
     }
@@ -309,7 +319,8 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // A consumed id must not re-enter (same reasoning as the order seed's
     // consumed guard: a later unrelated open reusing the id would be
     // re-positioned by the stale entry).
-    if (m_stripStashConsumed.value(key).contains(windowId)) {
+    if (const auto consumedIt = m_stripStashConsumed.constFind(key);
+        consumedIt != m_stripStashConsumed.cend() && consumedIt->contains(windowId)) {
         return false;
     }
     StashedStrip& stashStrip = it.value();
@@ -447,6 +458,17 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // detach there would leave `sc` dangling (the alias hazard the fuzzy-match
     // loop above documents). Every read past this point goes through stash.
     state->strip().setWindowHeightIntent(windowId, stash.at(colIdx).tiles.at(tileIdx).height);
+    // Windowed fullscreen is strip-owned state the compositor mirrors, so a
+    // claim hands it back (minimized deliberately is not re-applied — the
+    // effect re-reports live minimize state; see StashedTile). EXACT-id
+    // claims only: the fuzzy appId claim above deliberately lets a NEW
+    // same-app window take a dead sibling's slot, and its accepted cost is
+    // the slot, width and height — putting a fresh window into fullscreen
+    // presentation because a previous instance was is not part of that
+    // bargain.
+    if (claimedCandidate.isEmpty() && stash.at(colIdx).tiles.at(tileIdx).windowedFullscreen) {
+        state->strip().setWindowedFullscreen(windowId, true);
+    }
     // Re-assert the column's stashed ACTIVE tile: every insert makes the
     // arriving tile active, so a tabbed column's shown tab would otherwise
     // be whichever sibling announced last.
@@ -712,7 +734,16 @@ void ScrollEngine::refreshConfigFromSettings()
     m_alwaysCenterSingleColumn = settings->scrollingAlwaysCenterSingleColumn();
     m_cropStraddlers = settings->scrollingCropStraddlers();
 
-    const auto widthKind = static_cast<DefaultWidthKind>(settings->scrollingDefaultColumnWidthKind());
+    // Guarded cast, matching every sibling enum in this function (center,
+    // insertPos, sticky, indicator position): the shared value key can hold
+    // a figure from the OTHER kind in a hand-edited config, and an
+    // out-of-range kind falling through to the Proportion arm would clamp
+    // a Fixed pixel figure to 1.0 — every new column full-width.
+    const int widthKindRaw = settings->scrollingDefaultColumnWidthKind();
+    const auto widthKind = (widthKindRaw >= static_cast<int>(DefaultWidthKind::Proportion)
+                            && widthKindRaw <= static_cast<int>(DefaultWidthKind::Preset))
+        ? static_cast<DefaultWidthKind>(widthKindRaw)
+        : DefaultWidthKind::Proportion;
     const qreal widthValue = settings->scrollingDefaultColumnWidthValue();
     m_defaultWidthClientDecides = (widthKind == DefaultWidthKind::ClientDecides);
     if (widthKind == DefaultWidthKind::Fixed) {
@@ -807,6 +838,14 @@ void ScrollEngine::retile(const QString& screenId)
         for (const QString& sid : std::as_const(m_scrollingScreens)) {
             applyLayout(sid);
         }
+        return;
+    }
+    // Membership guard, matching scheduleRetileForScreen and the queued
+    // callback: a caller naming a screen this engine does not manage would
+    // otherwise pay a full layoutParamsForScreen resolve and, if that
+    // screen still carries a tab-strip latch, emit a tabStripsChanged for a
+    // screen the engine does not own.
+    if (!m_scrollingScreens.contains(screenId)) {
         return;
     }
     applyLayout(screenId);

@@ -12,7 +12,8 @@
 
 namespace PhosphorProtocol {
 
-/// D-Bus struct for autotile tile requests: (siiiissbbssiiib)
+/// D-Bus struct for the shared tiling-family tile requests (autotile +
+/// scrolling ride the same windowsTileRequested pipeline): (siiiissbbbssiiib)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -20,10 +21,19 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     int y = 0;
     int width = 0;
     int height = 0;
+    /// Reserved and currently always empty on this wire: no producer writes
+    /// it and no consumer reads it (it predates the autotile-to-tiling
+    /// generalization). Kept because removing a mid-struct field is another
+    /// wire break for zero functional gain.
     QString zoneId;
     QString screenId;
     bool monocle = false;
     bool floating = false;
+    /// Scrolling mode: windowed fullscreen (niri toggle-windowed-fullscreen).
+    /// The effect tells the client it is fullscreen (KWin fullscreen state)
+    /// while committing the column rect above — the tile never leaves its
+    /// slot. False for every other placement.
+    bool windowedFullscreen = false;
     /// Overlap-layout stacking direction: "firstOnTop" or "lastOnTop".
     /// Empty for non-overlap layouts (the effect leaves z-order alone).
     QString stacking;
@@ -97,7 +107,7 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 using TileRequestList = QList<TileRequestEntry>;
 
 /// D-Bus struct for algorithm metadata: (sssbbbbdibsbbb)
-struct AlgorithmInfoEntry
+struct PHOSPHORPROTOCOLTYPES_EXPORT AlgorithmInfoEntry
 {
     QString id;
     QString name;
@@ -119,7 +129,7 @@ using AlgorithmInfoList = QList<AlgorithmInfoEntry>;
 
 /// D-Bus struct for pre-tile geometry entries: (siiiis)
 /// Replaces the JSON blob previously returned by getPreTileGeometriesJson.
-struct PreTileGeometryEntry
+struct PHOSPHORPROTOCOLTYPES_EXPORT PreTileGeometryEntry
 {
     QString appId;
     int x = 0;

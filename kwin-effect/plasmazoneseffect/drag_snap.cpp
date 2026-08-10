@@ -132,6 +132,12 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
 
 void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo)
 {
+    // Null-guarded beside the KWin::effects guard below: every current call
+    // site passes a checked pointer, but the bare deref two lines above a
+    // teardown guard read as an oversight and costs nothing to close.
+    if (!window) {
+        return;
+    }
     window->addRepaintFull();
     // Guard the global compositor repaint requests: this method can run
     // from late D-Bus reply callbacks (callEndDrag → applySnap → here)
@@ -164,10 +170,36 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     }
 
     // Don't call moveResize() on fullscreen windows, it can crash KWin.
-    // See KDE bugs #429752, #301529, #489546.
+    // See KDE bugs #429752, #301529, #489546 (X11-era; moveResize on a
+    // fullscreen window is spike-verified safe on KWin >= 6.7).
+    //
+    // Two narrow exemptions, both keyed on KWin's REQUESTED state (the
+    // committed isFullScreen() lags a client round-trip):
+    //   - a window in scrolling WINDOWED FULLSCREEN holds fullscreen state
+    //     at its column rect on purpose — geometry applies ARE the feature,
+    //     and every re-apply path (screen change, daemon retile) must keep
+    //     working or KWin's ensureSpecialStateGeometry clobber wins;
+    //   - a window whose fullscreen was just requested OFF (the windowed-
+    //     fullscreen exit) would otherwise have its restoring batch rect
+    //     swallowed while the committed state drains.
     if (window->isFullScreen()) {
-        qCDebug(lcEffect) << "applyGeometry: window is fullscreen, skipping";
-        return;
+        KWin::Window* kwFs = window->window();
+        const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
+        // isEmpty() fast path for sessions that never use the feature, and
+        // the isDeleted() term, both the structural predicate's gate style:
+        // getWindowId on a corpse would re-insert the reverse-map entry
+        // buildWindowMap deliberately skips.
+        const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty() && !window->isDeleted()
+            && m_windowedFullscreenWindows.contains(getWindowId(window));
+        if (requestedFullScreen && !windowedFsMember) {
+            qCDebug(lcEffect) << "applyGeometry: window is fullscreen, skipping";
+            // Release the hold-suppression on this bail like the no-op skip
+            // below does: no reposition is coming at all, so a suppressed
+            // window would be withheld from compositing until the hard
+            // 250 ms deadline for nothing.
+            endRestoreSuppression(window);
+            return;
+        }
     }
 
     // For X11/XWayland windows, KWin constrains the frame size to align with
@@ -184,9 +216,16 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             const QSizeF constrained = kw->constrainFrameSize(QSizeF(geo.size()));
             const int cw = qRound(constrained.width());
             const int ch = qRound(constrained.height());
-            if (cw < geo.width() || ch < geo.height()) {
-                // Clamp to non-negative: if min-size exceeds the zone in one
-                // dimension, don't shift the window beyond the zone's edge.
+            if (cw != geo.width() || ch != geo.height()) {
+                // BOTH directions, not shrink-only: a min size larger than
+                // the zone previously skipped this branch entirely, so KWin
+                // committed the constrained-larger frame unanchored while
+                // every downstream comparand held the requested rect. Apply
+                // the constrained size here so the pre-computed geo matches
+                // what KWin will commit. Clamp the centring shift to
+                // non-negative: when min-size exceeds the zone in a
+                // dimension the window stays anchored at the zone's origin
+                // rather than shifting past its edge.
                 const int dx = qMax(0, geo.width() - cw) / 2;
                 const int dy = qMax(0, geo.height() - ch) / 2;
                 geo = QRect(geo.x() + dx, geo.y() + dy, cw, ch);
@@ -269,8 +308,22 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                     [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen, originOverride,
                      visualTargetOverride](KWin::EffectWindow*) {
                         disconnect(*conn);
-                        if (!safeWindow || safeWindow->isDeleted() || safeWindow->isFullScreen()) {
+                        if (!safeWindow || safeWindow->isDeleted()) {
                             return;
+                        }
+                        // Same predicate as the top-of-function fullscreen
+                        // bail, exemptions included: a deferred apply for a
+                        // windowed-fullscreen member must not be silently
+                        // dropped by a plain isFullScreen() test the entry
+                        // bail was deliberately opened for.
+                        if (safeWindow->isFullScreen()) {
+                            KWin::Window* kwFs = safeWindow->window();
+                            const bool requestedFullScreen = !kwFs || kwFs->isRequestedFullScreen();
+                            const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty()
+                                && m_windowedFullscreenWindows.contains(getWindowId(safeWindow.data()));
+                            if (requestedFullScreen && !windowedFsMember) {
+                                return;
+                            }
                         }
                         const QString nowScreen = getWindowScreenId(safeWindow.data());
                         if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
@@ -800,7 +853,11 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // branch above happened to overwrite it.
         m_dragBypassScreenId.clear();
         m_dragActivation.detected = false;
-        if (!m_keyboardGrabbed) {
+        // KWin::effects guarded: this slot runs from a D-Bus signal
+        // dispatch (slotDragPolicyChanged), which can land during compositor
+        // teardown when the global is already gone — same rule and reason
+        // repaintSnapRegions documents above.
+        if (!m_keyboardGrabbed && KWin::effects) {
             KWin::effects->grabKeyboard(this);
             m_keyboardGrabbed = true;
         }

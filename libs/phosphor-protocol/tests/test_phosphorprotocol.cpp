@@ -132,6 +132,31 @@ private Q_SLOTS:
         QVERIFY(e.validationError().contains(QStringLiteral("scrollEdge")));
     }
 
+    void testTileRequestValidationWindowedFullscreen()
+    {
+        // The lib's own coverage of its newest cross-field invariants (the
+        // app tree pins the same rules at its boundary): the flag is legal
+        // on a plain tiled entry and rejected beside either contradictory
+        // placement action.
+        TileRequestEntry e;
+        e.windowId = QStringLiteral("w");
+        e.screenId = QStringLiteral("s");
+        e.width = 100;
+        e.height = 100;
+        e.windowedFullscreen = true;
+        QVERIFY(e.validationError().isEmpty());
+        // Discriminating substrings on both arms: "windowedFullscreen" alone
+        // is shared by the two rejection messages, so each arm also pins the
+        // partner flag its message names.
+        e.floating = true;
+        QVERIFY(e.validationError().contains(QStringLiteral("windowedFullscreen")));
+        QVERIFY(e.validationError().contains(QStringLiteral("floating")));
+        e.floating = false;
+        e.monocle = true;
+        QVERIFY(e.validationError().contains(QStringLiteral("windowedFullscreen")));
+        QVERIFY(e.validationError().contains(QStringLiteral("monocle")));
+    }
+
     void testDragPolicyValidationAutotileNoScreen()
     {
         DragPolicy p;
@@ -181,13 +206,13 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 9 alongside Snap.resolveWindowRestore's isOpenPath
-        // in-arg, for the same reason v6-v8 were bumped: Qt matches
-        // signatures before demarshalling, so an older effect's four-arg
-        // call would silently never match the widened slot — both sides must
-        // move together.
-        QCOMPARE(Service::ApiVersion, 9);
-        QCOMPARE(Service::MinPeerApiVersion, 9);
+        // Bumped to 10 alongside the TileRequestEntry windowedFullscreen
+        // widening (a(siiiissbbssiiib) → a(siiiissbbbssiiib)), for the same
+        // reason v6 through v9 were bumped: Qt matches signal-hook signatures
+        // before demarshalling, so a v9 effect's tiling slot would silently
+        // never fire — both sides must move together.
+        QCOMPARE(Service::ApiVersion, 10);
+        QCOMPARE(Service::MinPeerApiVersion, 10);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.

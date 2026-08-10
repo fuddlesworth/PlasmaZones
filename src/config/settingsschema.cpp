@@ -1,6 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// SANCTIONED FILE-SIZE EXCEPTION. This TU sits just past the 1150-line
+// ceiling and stays whole deliberately: it is a flat sequence of one
+// appendXxxSchema function per config domain plus the file-local validator
+// helpers several of them share (canonicalCommaList,
+// sanitizePerAlgorithmSettings, the colour canonicalizers). The two domains
+// big enough to carry their own weight are already split
+// (settingsschema_scrolling.cpp); each remaining function is well under a
+// hundred lines, and moving one out drags its shared helpers into a header
+// for a single consumer. When a domain grows past that, split it the way
+// scrolling was — do not grow this banner's scope instead.
+
 #include "settingsschema.h"
 
 #include <QColor>
@@ -102,13 +113,11 @@ constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction
 
 } // namespace
 
-/// Canonicalize a trigger list: cap size, coerce each entry to a
-/// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
-/// every write so the flush loop enforces the cap even when the setter
-/// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
-///
-/// See the header. Namespace scope so settingsschema_scrolling.cpp can reach
-/// it for the five colour keys that carry the empty sentinel.
+/// Canonicalize a theme-fallback colour: the EMPTY sentinel ("follow the
+/// theme") and any valid colour name pass through unchanged; anything else
+/// maps back to empty rather than reaching QML as an invalid QColor. See the
+/// header. Namespace scope so settingsschema_scrolling.cpp can reach it for
+/// the five colour keys that carry the empty sentinel.
 QVariant canonicalThemeFallbackColor(const QVariant& v)
 {
     const QString s = v.toString();
@@ -118,6 +127,10 @@ QVariant canonicalThemeFallbackColor(const QVariant& v)
     return QString();
 }
 
+/// Canonicalize a trigger list: cap size, coerce each entry to a
+/// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
+/// every write so the flush loop enforces the cap even when the setter
+/// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
 /// Namespace scope (declared in settingsschema.h): shared with
 /// settingsschema_scrolling.cpp, whose Scrolling.Behavior group carries the
 /// scrolling drag-insert trigger list.
@@ -306,8 +319,8 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::orderingGroup()] = {
-        {CD::snappingLayoutOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::tilingAlgorithmOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::snappingLayoutOrderKey(), CD::snappingLayoutOrder(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::tilingAlgorithmOrderKey(), CD::tilingAlgorithmOrder(), QMetaType::QString, {}, canonicalCommaList},
     };
 }
 
@@ -698,11 +711,16 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
         {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool},
         {CD::osdOnDesktopSwitchKey(), CD::showOsdOnDesktopSwitch(), QMetaType::Bool},
         {CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool},
+        // validIntOr, not clampInt, per the enum-key convention documented in
+        // settingsschema_p.h: qBound would reinterpret an out-of-range stored
+        // value as the nearest enumerator instead of snapping to the default.
         {CD::osdStyleKey(),
          CD::osdStyle(),
          QMetaType::Int,
          {},
-         clampInt(CD::osdStyleMin(), CD::osdStyleMax()),
+         validIntOr(
+             {static_cast<int>(OsdStyle::None), static_cast<int>(OsdStyle::Text), static_cast<int>(OsdStyle::Preview)},
+             CD::osdStyle()),
          intChoices({{static_cast<int>(OsdStyle::None), "none"_L1},
                      {static_cast<int>(OsdStyle::Text), "text"_L1},
                      {static_cast<int>(OsdStyle::Preview), "preview"_L1}})},
@@ -710,7 +728,9 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
          CD::overlayDisplayMode(),
          QMetaType::Int,
          {},
-         clampInt(CD::overlayDisplayModeMin(), CD::overlayDisplayModeMax()),
+         validIntOr({static_cast<int>(OverlayDisplayMode::ZoneRectangles),
+                     static_cast<int>(OverlayDisplayMode::LayoutPreview)},
+                    CD::overlayDisplayMode()),
          intChoices({{static_cast<int>(OverlayDisplayMode::ZoneRectangles), "zoneRectangles"_L1},
                      {static_cast<int>(OverlayDisplayMode::LayoutPreview), "layoutPreview"_L1}})},
     };
@@ -731,11 +751,18 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::triggerDistanceMin(), CD::triggerDistanceMax())},
+        // validIntOr for the three enum keys below, same convention note as
+        // the Effects group's OSD enums.
         {CD::positionKey(),
          CD::position(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(ZoneSelectorPosition::TopLeft), static_cast<int>(ZoneSelectorPosition::BottomRight)),
+         validIntOr({static_cast<int>(ZoneSelectorPosition::TopLeft), static_cast<int>(ZoneSelectorPosition::Top),
+                     static_cast<int>(ZoneSelectorPosition::TopRight), static_cast<int>(ZoneSelectorPosition::Left),
+                     static_cast<int>(ZoneSelectorPosition::Center), static_cast<int>(ZoneSelectorPosition::Right),
+                     static_cast<int>(ZoneSelectorPosition::BottomLeft), static_cast<int>(ZoneSelectorPosition::Bottom),
+                     static_cast<int>(ZoneSelectorPosition::BottomRight)},
+                    CD::position()),
          intChoices({{static_cast<int>(ZoneSelectorPosition::TopLeft), "topLeft"_L1},
                      {static_cast<int>(ZoneSelectorPosition::Top), "top"_L1},
                      {static_cast<int>(ZoneSelectorPosition::TopRight), "topRight"_L1},
@@ -749,7 +776,10 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          CD::layoutMode(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(ZoneSelectorLayoutMode::Grid), static_cast<int>(ZoneSelectorLayoutMode::Vertical)),
+         validIntOr({static_cast<int>(ZoneSelectorLayoutMode::Grid),
+                     static_cast<int>(ZoneSelectorLayoutMode::Horizontal),
+                     static_cast<int>(ZoneSelectorLayoutMode::Vertical)},
+                    CD::layoutMode()),
          intChoices({{static_cast<int>(ZoneSelectorLayoutMode::Grid), "grid"_L1},
                      {static_cast<int>(ZoneSelectorLayoutMode::Horizontal), "horizontal"_L1},
                      {static_cast<int>(ZoneSelectorLayoutMode::Vertical), "vertical"_L1}})},
@@ -773,7 +803,8 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          CD::sizeMode(),
          QMetaType::Int,
          {},
-         clampInt(static_cast<int>(ZoneSelectorSizeMode::Auto), static_cast<int>(ZoneSelectorSizeMode::Manual)),
+         validIntOr({static_cast<int>(ZoneSelectorSizeMode::Auto), static_cast<int>(ZoneSelectorSizeMode::Manual)},
+                    CD::sizeMode()),
          intChoices({{static_cast<int>(ZoneSelectorSizeMode::Auto), "auto"_L1},
                      {static_cast<int>(ZoneSelectorSizeMode::Manual), "manual"_L1}})},
         {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
@@ -864,7 +895,7 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::unfloatFallbackToZoneKey(), CD::snapUnfloatFallbackToZone(), QMetaType::Bool},
         {CD::autoAssignAllLayoutsKey(), CD::autoAssignAllLayouts(), QMetaType::Bool},
         {CD::suppressDefaultLayoutAssignmentKey(), CD::suppressDefaultLayoutAssignment(), QMetaType::Bool},
-        {CD::defaultLayoutIdKey(), QString(), QMetaType::QString},
+        {CD::defaultLayoutIdKey(), CD::defaultLayoutId(), QMetaType::QString},
     };
     schema.groups[CD::snappingBehaviorSnapAssistGroup()] = {
         {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool},
@@ -911,7 +942,11 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::autotileMaxWindowsMin(), CD::autotileMaxWindowsMax())},
-        {CD::perAlgorithmSettingsKey(), QVariantMap{}, QMetaType::QVariantMap, {}, sanitizePerAlgorithmSettings},
+        {CD::perAlgorithmSettingsKey(),
+         CD::autotilePerAlgorithmSettings(),
+         QMetaType::QVariantMap,
+         {},
+         sanitizePerAlgorithmSettings},
     };
 
     schema.groups[CD::tilingBehaviorGroup()] = {
@@ -946,7 +981,7 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          validIntOr({static_cast<int>(AutotileDragBehavior::Float), static_cast<int>(AutotileDragBehavior::Reorder)},
-                    static_cast<int>(AutotileDragBehavior::Float)),
+                    CD::autotileDragBehavior()),
          intChoices({{static_cast<int>(AutotileDragBehavior::Float), "float"_L1},
                      {static_cast<int>(AutotileDragBehavior::Reorder), "reorder"_L1}})},
         {CD::overflowBehaviorKey(),
@@ -955,10 +990,10 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          {},
          validIntOr(
              {static_cast<int>(AutotileOverflowBehavior::Float), static_cast<int>(AutotileOverflowBehavior::Unlimited)},
-             static_cast<int>(AutotileOverflowBehavior::Float)),
+             CD::autotileOverflowBehavior()),
          intChoices({{static_cast<int>(AutotileOverflowBehavior::Float), "float"_L1},
                      {static_cast<int>(AutotileOverflowBehavior::Unlimited), "unlimited"_L1}})},
-        {CD::lockedScreensKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::lockedScreensKey(), CD::autotileLockedScreens(), QMetaType::QString, {}, canonicalCommaList},
         {CD::triggersKey(), CD::autotileDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
     };

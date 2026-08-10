@@ -3,6 +3,7 @@
 
 #include "scrollingadaptor.h"
 
+#include "config/configdefaults.h"
 #include "core/platform/logging.h"
 
 #include <algorithm>
@@ -19,6 +20,21 @@
 #include <QVector>
 
 namespace PlasmaZones {
+
+namespace {
+/// The presetVocabularyJson payload keys, in one place so the two writes
+/// cannot drift apart (the sibling payloads use ZoneJsonKeys:: /
+/// ScrollOpenKeys:: the same way). The XML DocString spells them by hand,
+/// per the same kept-in-sync-BY-HAND rule the bounds literals follow.
+inline QLatin1String presetColumnWidthsKey()
+{
+    return QLatin1String("columnWidths");
+}
+inline QLatin1String presetWindowHeightsKey()
+{
+    return QLatin1String("windowHeights");
+}
+} // namespace
 
 ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -68,15 +84,28 @@ QStringList ScrollingAdaptor::scrollingScreens() const
 
 void ScrollingAdaptor::setScrollTabSurface(const QString& screenId, quint32 surfaceId)
 {
-    // No engine gate, and no change gate either: the producer (the overlay
-    // service) already only calls this on a real change, and re-broadcasting a
-    // value the compositor may have missed is the safe direction for a
-    // registration the compositor cannot re-derive.
-    if (screenId.isEmpty()) {
+    // No engine POINTER gate, and a deliberate opt-out from the
+    // emit-on-change rule for the non-zero path: the producer (the overlay
+    // service) already only calls this on a real change, and re-broadcasting
+    // a value the compositor may have missed is the safe direction for a
+    // registration the compositor cannot re-derive. The zero path IS gated
+    // on membership below — a retraction for a registration that never
+    // existed is not a re-broadcast of anything, just a spurious event on
+    // the wire.
+    //
+    // Cleared latch: the overlay connection outlives clearEngine (its
+    // context object is this adaptor), and a push landing after the
+    // terminal clear must not repopulate the registry — the ordinary
+    // late arrival is a surfaceId-0 retraction from the overlay's
+    // destructor-time PreDestroy hooks, but a monitor-hotplug rekey in the
+    // same window could carry a non-zero id.
+    if (m_engineCleared || screenId.isEmpty()) {
         return;
     }
     if (surfaceId == 0) {
-        m_scrollTabSurfaces.remove(screenId);
+        if (m_scrollTabSurfaces.remove(screenId) == 0) {
+            return;
+        }
     } else {
         m_scrollTabSurfaces.insert(screenId, surfaceId);
     }
@@ -108,6 +137,88 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
     }
     m_engine->focusInDirection(delta < 0 ? QStringLiteral("left") : QStringLiteral("right"),
                                PhosphorEngine::NavigationContext{QString(), screenId});
+}
+
+void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double proportion)
+{
+    // Wire-boundary validation in focusColumn's terms: the screen gate keeps
+    // a stray call from being redirected by the engine's screen fallback, and
+    // the range refusal is silent per the interface's documented convention.
+    // The bounds are the same accessors the settings UI and the hand-written
+    // width setter enforce.
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    // Negated inclusive form rather than "< min || > max": both of those
+    // comparisons are false for NaN, which D-Bus type 'd' can carry, so the
+    // exclusion form would wave a NaN through into the stored intent. The
+    // conjunction is false for NaN by construction.
+    if (!(proportion >= ConfigDefaults::scrollingDefaultColumnWidthProportionMin()
+          && proportion <= ConfigDefaults::scrollingDefaultColumnWidthProportionMax())) {
+        return;
+    }
+    m_engine->setColumnWidth(PhosphorScrollEngine::ColumnWidth::makeProportion(proportion), screenId);
+}
+
+void ScrollingAdaptor::setColumnWidthPixels(const QString& screenId, int px)
+{
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    if (px < ConfigDefaults::scrollingDefaultColumnWidthFixedMin()
+        || px > ConfigDefaults::scrollingDefaultColumnWidthFixedMax()) {
+        return;
+    }
+    m_engine->setColumnWidth(PhosphorScrollEngine::ColumnWidth::makeFixed(px), screenId);
+}
+
+void ScrollingAdaptor::setWindowHeightProportion(const QString& screenId, double proportion)
+{
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    // Height-proportion accessors (they delegate to the width range today;
+    // the separate names keep the two wire contracts independently tunable).
+    // Same negated inclusive form as setColumnWidthProportion: NaN must not
+    // reach the stored intent, and "< min || > max" is false for NaN.
+    if (!(proportion >= ConfigDefaults::scrollingWindowHeightProportionMin()
+          && proportion <= ConfigDefaults::scrollingWindowHeightProportionMax())) {
+        return;
+    }
+    m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makePreset(proportion), screenId);
+}
+
+void ScrollingAdaptor::setWindowHeightPixels(const QString& screenId, int px)
+{
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return;
+    }
+    if (px < ConfigDefaults::scrollingDefaultWindowHeightMin()
+        || px > ConfigDefaults::scrollingDefaultWindowHeightMax()) {
+        return;
+    }
+    m_engine->setWindowHeight(PhosphorScrollEngine::WindowHeight::makeFixed(px), screenId);
+}
+
+void ScrollingAdaptor::clearWindowedFullscreen(const QString& windowId)
+{
+    // Same wire-boundary policy as focusColumn: malformed input is a silent
+    // no-op, and the engine's own lookup rejects an untracked window.
+    if (!m_engine || windowId.isEmpty()) {
+        return;
+    }
+    m_engine->clearWindowedFullscreen(windowId);
+}
+
+void ScrollingAdaptor::reapplyWindowGeometry(const QString& windowId)
+{
+    // Same wire-boundary policy as clearWindowedFullscreen: malformed input
+    // is a silent no-op, and the engine's own lookup rejects an untracked
+    // window.
+    if (!m_engine || windowId.isEmpty()) {
+        return;
+    }
+    m_engine->reapplyWindowGeometry(windowId);
 }
 
 QString ScrollingAdaptor::visibleStripJson(const QString& screenId) const
@@ -172,8 +283,8 @@ QString ScrollingAdaptor::presetVocabularyJson(const QString& screenId) const
         return arr;
     };
     QJsonObject obj;
-    obj[QLatin1String("columnWidths")] = toArray(m_engine->effectivePresetColumnWidths(screenId));
-    obj[QLatin1String("windowHeights")] = toArray(m_engine->effectivePresetWindowHeights(screenId));
+    obj[presetColumnWidthsKey()] = toArray(m_engine->effectivePresetColumnWidths(screenId));
+    obj[presetWindowHeightsKey()] = toArray(m_engine->effectivePresetWindowHeights(screenId));
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
@@ -190,12 +301,19 @@ void ScrollingAdaptor::clearEngine()
     // would just mean a detached adaptor whose "last broadcast" memory
     // contradicts every other slot it answers.
     m_lastBroadcastScreens.clear();
-    // The tab-surface registry goes for the same reason, and it is the more
-    // visible half: scrollTabSurfaces() stays a live D-Bus method for the
-    // window between clearEngine and the adaptor's delete, so a peer asking
-    // then would be handed surfaces from a session that no longer exists while
-    // scrollingScreens() answers empty beside it.
+    // The tab-surface registry goes for the same object-state reason — NOT
+    // because a peer could still read it: the bus object was unregistered
+    // (lifecycle.cpp) before clearEngine runs, so scrollTabSurfaces() is
+    // unreachable in the window between here and the adaptor's delete. No
+    // retraction signals are emitted for the cleared entries either (they
+    // would not reach the bus); the overlay service's own PreDestroy hooks
+    // are what announce surface teardown while the session is alive.
     m_scrollTabSurfaces.clear();
+    // Terminal latch: the overlay-service connection that feeds
+    // setScrollTabSurface has the ADAPTOR as its context object, so it
+    // survives this call until the adaptor is deleted — a late push landing
+    // in that gap must not repopulate the registry just cleared.
+    m_engineCleared = true;
 }
 
 } // namespace PlasmaZones
