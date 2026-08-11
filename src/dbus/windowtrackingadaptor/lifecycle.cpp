@@ -641,6 +641,20 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId, int windowKind
     // case canonicalization exists for and leak the entry for the session.
     // Identical to windowId whenever the id never mutated.
     m_tabColorMemo.remove(shadowId);
+    // The evaluator's shared memo needs the same close-time drop, and it is
+    // keyed differently: resolveCachedFiltered is called with the RAW windowId
+    // its callers were handed, not the canonical shadow id. Evict both — the
+    // two coincide for a well-behaved app, and for a class-mutating one the
+    // window can have seeded an entry under either. evictCached is a no-op for
+    // a key with no entry. Without this the entry lingers until the evaluator's
+    // own cap eviction or the next rules save retires its whole generation, and
+    // a reused window id would read a dead window's verdict.
+    if (m_ruleEvaluator) {
+        m_ruleEvaluator->evictCached(shadowId);
+        if (windowId != shadowId) {
+            m_ruleEvaluator->evictCached(windowId);
+        }
+    }
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
     // rely on other WTS state still being present during their cleanup. The
@@ -882,9 +896,12 @@ void WindowTrackingAdaptor::screenDesktopChanged(const QString& screenId, int de
     if (screenId.isEmpty() || desktop < 1 || !m_virtualDesktopManager) {
         return;
     }
-    // The effect reports the PHYSICAL screen id; VirtualDesktopManager keys its
-    // per-screen map on the same id the daemon uses everywhere. updateScreenDesktop
-    // emits screenDesktopChanged only on a real change (emit-on-change).
+    // The effect reports the PHYSICAL screen id, and VirtualDesktopManager keys its
+    // per-screen map on that physical id. The daemon asks with EFFECTIVE ids, which
+    // on a subdivided output are the vs:N children and never the physical parent, so
+    // currentDesktopForScreen resolves an effective id up to its parent output on a
+    // key miss before falling back to the global desktop. updateScreenDesktop emits
+    // screenDesktopChanged only on a real change (emit-on-change).
     m_virtualDesktopManager->updateScreenDesktop(screenId, desktop);
 }
 
@@ -1077,6 +1094,13 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     int frameGeoPruned = 0;
     for (auto it = m_frameGeometry.begin(); it != m_frameGeometry.end();) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
+            // The evaluator's shared memo has no enumeration API, so it cannot
+            // be swept by the alive-set predicate the local maps use. Evict by
+            // the dead key instead: this map holds an entry for every window
+            // the daemon tracked, so its dead keys are the dead windows.
+            if (m_ruleEvaluator) {
+                m_ruleEvaluator->evictCached(it.key());
+            }
             it = m_frameGeometry.erase(it);
             ++frameGeoPruned;
         } else {
@@ -1105,6 +1129,12 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     // class-mutating app's live entry every pass.
     for (auto it = m_tabColorMemo.begin(); it != m_tabColorMemo.end();) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
+            // Canonical-id twin of the evaluator eviction in the frame-geometry
+            // sweep above: a resolve reached the shared memo under whichever id
+            // its caller held, and evictCached is a no-op for a missing key.
+            if (m_ruleEvaluator) {
+                m_ruleEvaluator->evictCached(it.key());
+            }
             it = m_tabColorMemo.erase(it);
         } else {
             ++it;

@@ -10,6 +10,7 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/ScreenContextTracker.h>
 #include <PhosphorEngine/WindowPlacement.h>
+#include <PhosphorScrollEngine/ScrollEngineTypes.h>
 #include <PhosphorScrollEngine/ScrollStashTypes.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
@@ -37,21 +38,6 @@ class ScreenManager;
 }
 
 namespace PhosphorScrollEngine {
-
-/// Per-window open-behaviour overrides resolved from window rules
-/// (openColumnWidth / openTabbed / openColumnPlacement). Unset fields fall
-/// through to the engine's config-backed defaults — config stays the
-/// authoritative base, rules layer on top.
-struct ScrollOpenParams
-{
-    std::optional<qreal> widthFraction;
-    /// Work-area height fraction (openWindowHeight rule), committed as a
-    /// Fixed pixel intent against the live work area after the insert.
-    std::optional<qreal> heightFraction;
-    std::optional<bool> tabbed;
-    /// True: join the focused column instead of opening a new one.
-    std::optional<bool> consume;
-};
 
 /**
  * @brief niri-style scrolling placement engine.
@@ -277,42 +263,12 @@ public:
     QString screenForTrackedWindow(const QString& windowId) const override;
     QRect lastManagedRect(const QString& rawWindowId) const override;
     QStringList managedWindowOrder(const QString& screenId) const override;
-    /// One visible tile of a strip: the unit of the scroll "zone number"
-    /// space. Zone number N is visibleTiles(screenId).at(N - 1) —
-    /// sequential in strip order (columns left to right, tiles top to
-    /// bottom). That is the ADDRESS space, and it is single-sourced:
-    /// previews label it and the Snap-to-Zone digits resolve against it
-    /// through moveFocusedToPosition, both from this one walk, so they
-    /// always name the same tile.
-    ///
-    /// The ACTION a digit performs is COARSER than the address it resolves.
-    /// A digit naming a stack-mate of the operated window reorders that
-    /// window inside its column, but a digit naming a tile in ANOTHER
-    /// column moves the whole active COLUMN to that column's strip
-    /// position — the deliberate pre-tile-numbering behaviour, kept because
-    /// the column is the strip's unit of travel. The consequence is real
-    /// and is not a bug: stack-mates travel along, and after a cross-column
-    /// move the operated window's own number may differ from the digit
-    /// pressed (any stacked column shifts the walk, and Always/OnOverflow
-    /// centering re-derives the visible set around the new active column).
-    struct VisibleTile
-    {
-        QString windowId;
-        /// Strip index of the owning column. Not the zone number, and not
-        /// unique across the walk — a stacked column contributes one entry
-        /// per visible tile, all carrying the same index. Read by callers
-        /// that need to tell stack-mates apart from separate columns; the
-        /// engine's own tests and the D-Bus adaptor test are the only such
-        /// callers today.
-        int columnIndex = -1;
-        /// The tile's 1-based zone number, stamped by the walk. THE number
-        /// space: every consumer (preview labels, the OSD, the Snap-to-Zone
-        /// digits) reads this rather than re-deriving an ordinal from its
-        /// own iteration, so no consumer can drift out of step with another.
-        int zoneNumber = 0;
-        /// Absolute pixel rect, clipped to the work area.
-        QRect rect;
-    };
+    /// The zone-number unit. Declared in ScrollEngineTypes.h (the header's
+    /// file-size split) and aliased here, so ScrollEngine::VisibleTile keeps
+    /// naming it for every consumer — the daemon's strip zones alias it by
+    /// that spelling. Its full contract, including why a digit's ACTION is
+    /// coarser than the address it resolves, lives on ScrollVisibleTile.
+    using VisibleTile = ScrollVisibleTile;
     /// The visible tiles of @p screenId's current-context strip in zone-
     /// number order. Not every on-screen window is here: hidden tabs of a
     /// tabbed column, minimized tiles, parked columns, and tiles whose
@@ -386,12 +342,8 @@ public:
     QVector<QRectF> visibleTileRectsRelative(const QString& screenId) const;
 
     /// A tile paired with its screen-normalized rect, from ONE strip walk.
-    struct VisibleTileWithRect
-    {
-        VisibleTile tile;
-        /// Same basis and fallback as visibleTileRectsRelative.
-        QRectF relativeRect;
-    };
+    /// Aliased out of ScrollEngineTypes.h like VisibleTile above.
+    using VisibleTileWithRect = ScrollVisibleTileWithRect;
 
     /// visibleTiles and visibleTileRectsRelative in a single resolve.
     ///
@@ -867,9 +819,13 @@ private:
     /// recorded-slot / plain-insert ladder. Returns false only when every
     /// insert was refused — today that means the strip already holds the
     /// window — in which case nothing about the placement changed and the
-    /// caller must not announce one.
+    /// caller must not announce one. @p outOpenParams, when given, receives
+    /// the per-window open-rule verdict resolved inside (default-constructed
+    /// on the early FLOAT exits, which return before the resolver runs) so
+    /// the caller's focus arm can read the openFocused override without a
+    /// second rule resolve.
     bool insertOpenedWindow(ScrollState* state, const QString& windowId, const QString& screenId, int minWidthIn,
-                            int minHeightIn);
+                            int minHeightIn, ScrollOpenParams* outOpenParams = nullptr);
     /// Give a window that floats WITHOUT ever having been a strip tile
     /// (floated at open, or arriving already-floating over the handoff) the
     /// FloatRestore entry the clamp lives in while it floats. column stays
@@ -944,6 +900,28 @@ private:
     void queueSelfActivation(const QString& windowId);
     /// Cap for m_pendingSelfActivations (enforced in queueSelfActivation).
     static constexpr int kMaxPendingSelfActivations = 16;
+    /// The one arrival whose focus an `openFocused = false` rule declined, held
+    /// until its compositor focus report arrives and is consumed exactly once.
+    ///
+    /// Why this exists: declining focus rewinds the STRIP's active column, but
+    /// the compositor has already focused the arriving window on its own and
+    /// reports that focus independently. Without this mark the report reaches
+    /// the strip adopt below and re-takes the column the rewind just left, so
+    /// the rule reads as a no-op. Confirmed live in a nested session before it
+    /// was added.
+    ///
+    /// Consumed ONCE, deliberately: the rewind also asks the compositor to
+    /// re-activate the prior window, so swallowing this single report is what
+    /// keeps the strip and the compositor agreeing rather than hiding a
+    /// disagreement. A LATER report for the same window is a real user click
+    /// and must adopt normally, which is why this is a one-shot rather than a
+    /// standing veto.
+    ///
+    /// A single slot rather than a FIFO: only one window opens per rewind, and
+    /// a second declined open before the first report lands simply overwrites,
+    /// which degrades to the pre-fix behaviour for the older arrival instead of
+    /// growing without bound.
+    QString m_declinedOpenFocus;
     /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
     /// While positive, windowOpened defers its per-arrival applyLayout into
     /// m_burstPendingApplies (context key → whether any deferred arrival took
@@ -1093,11 +1071,38 @@ private:
     /// Effective per-screen values: the rule override when present, else the
     /// cached config default. Each accessor is a thin screenId wrapper over a
     /// map-taking overload, so a caller resolving several values for one
-    /// screen (layoutParamsForScreen resolves six per relayout) fetches the
-    /// override map ONCE and threads it through instead of re-looking it up
-    /// per accessor.
+    /// screen (layoutParamsForScreen resolves nine per relayout, and the open
+    /// path four more) fetches the override map ONCE and threads it through
+    /// instead of re-looking it up per accessor.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
+    /// The six scrolling BEHAVIOUR toggles, rule-only per-screen keys layered
+    /// over the config-seeded members. Three of them (always-center-single-
+    /// column, respect-minimum-size and smart gaps) are consumed inside
+    /// layoutParamsForScreen and exist ONLY in map-taking form, since that is
+    /// the one call site and it has already fetched the map. The other three
+    /// (the straddler clamp, the open-path focus arm and the sticky gate) are
+    /// consumed outside it and carry a screenId wrapper; the sticky gate also
+    /// keeps a map-taking form, because the open path resolves several values
+    /// for one screen off a single fetch.
+    bool effectiveAlwaysCenterSingleColumn(const QVariantMap& overrides) const;
+    bool effectiveRespectMinimumSize(const QVariantMap& overrides) const;
+    bool effectiveSmartGaps(const QVariantMap& overrides) const;
+    /// Hoisted out of the emit loop by its one caller: it is a per-SCREEN
+    /// verdict, so re-resolving it per tile would rebuild the override map
+    /// once per window on the relayout path.
+    bool effectiveCropStraddlers(const QString& screenId) const;
+    /// Falls back to the LIVE IScrollSettings read rather than a cached
+    /// member: focus-new-windows is the one behaviour the engine never
+    /// cached, and reading it live keeps a settings change effective without
+    /// waiting for a settings-reload pass.
+    bool effectiveFocusNewWindows(const QString& screenId) const;
+    PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QString& screenId) const;
+    PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QVariantMap& overrides) const;
+    /// Shared bool-override reader for the five toggles above: takes the
+    /// override only when it is a real bool, so a hand-edited string cannot
+    /// coerce to false and silently disable a behaviour.
+    static bool effectiveBoolOverride(const QVariantMap& overrides, const QString& key, bool fallback);
     ColumnWidth effectiveDefaultColumnWidth(const QString& screenId) const;
     ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides) const;
     /// Vocabulary-taking overload, the same "resolve it ONCE" shape as the
@@ -1107,13 +1112,23 @@ private:
     /// form (above) is a wrapper that parses it again, for the call sites that
     /// need only this one value.
     ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides, const QList<qreal>& presetWidths) const;
+    /// The RULE channel's bare default-width fraction, when the map carries
+    /// one that clears the range effectiveDefaultColumnWidth accepts. The
+    /// open path's ClientDecides gate asks THIS rather than testing the key's
+    /// presence: an out-of-range rule value contributes no width (the
+    /// resolver falls through to the configured default), so a presence test
+    /// suppressed the client-sized open on the strength of a value that
+    /// changed nothing.
+    static std::optional<qreal> ruleColumnWidthFraction(const QVariantMap& overrides);
     /// Whether "the client decides" is the EFFECTIVE default-width verdict
     /// for @p screenId: a per-screen kind override answers for itself (true
-    /// only when it IS ClientDecides), and only an absent override defers to
-    /// the cached global flag. The open path must use this rather than the
-    /// raw global, or a monitor scoped TO ClientDecides reads as "pinned to
-    /// a width" and gets the opposite of what the user chose.
+    /// only when it IS ClientDecides), and an absent — or unrecognised —
+    /// override defers to the cached global flag, on the same terms
+    /// effectiveDefaultColumnWidth falls through. The open path must use this
+    /// rather than the raw global, or a monitor scoped TO ClientDecides reads
+    /// as "pinned to a width" and gets the opposite of what the user chose.
     bool effectiveWidthClientDecides(const QString& screenId) const;
+    bool effectiveWidthClientDecides(const QVariantMap& overrides) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QString& screenId) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QVariantMap& overrides) const;
     /// Height needs the work area: the rule channel's bare fraction is

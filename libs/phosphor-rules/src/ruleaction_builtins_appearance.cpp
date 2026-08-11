@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Built-in action descriptor table, per-window appearance / gap / autotile-param
-// half. Split from ruleaction.cpp for file-size; registerBuiltins() calls
-// registerBuiltinsEngine() then this, in that order. Shared param validators and
-// slot helpers live in ruleaction_builtins_p.h.
+// / scrolling-param half. Split from ruleaction.cpp for file-size;
+// registerBuiltins() calls registerBuiltinsEngine(), then this, then
+// registerBuiltinsIndicators() (the tab- and drop-indicator families, split off
+// here for the same reason), in that order. Shared param validators and slot
+// helpers live in ruleaction_builtins_p.h.
 
 #include <PhosphorRules/RuleAction.h>
 
@@ -45,19 +47,25 @@ void ActionRegistry::registerBuiltinsAppearance()
         .displayOrder = 9,
     });
 
-    // Two more per-window restore-policy overrides, same shape as RestorePosition
-    // (bool, seeds FALSE because both governing settings default ON — the only
-    // meaningful fresh-rule value is "opt this window OUT"). Consumed daemon-side
-    // (the managed-restore predicate / the drag-out unsnap paths), not the effect.
+    // Three more per-window snap-policy overrides, same bool shape as
+    // RestorePosition, consumed daemon-side (the managed-restore predicate /
+    // the drag-out unsnap paths / the unfloat-fallback predicate), not the
+    // effect. The SEED differs per row: the two restore policies seed FALSE
+    // (their governing settings default ON, so the meaningful fresh rule is
+    // "opt this window OUT"), while the unfloat fallback seeds TRUE (its
+    // global `snapUnfloatFallbackToZone` defaults OFF, so the meaningful
+    // fresh rule is "opt this window IN").
     struct RestorePolicy
     {
         QLatin1StringView type;
         QLatin1StringView slot;
         int order;
+        double seed;
     };
     for (const RestorePolicy& rp : {
-             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 6},
-             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 7},
+             RestorePolicy{ActionType::SetRestoreToZoneOnLogin, ActionSlot::RestoreToZoneOnLogin, 6, 0.0},
+             RestorePolicy{ActionType::SetRestoreSizeOnUnsnap, ActionSlot::RestoreSizeOnUnsnap, 7, 0.0},
+             RestorePolicy{ActionType::SetUnfloatFallbackToZone, ActionSlot::UnfloatFallbackToZone, 10, 1.0},
          }) {
         const QString slot = QString(rp.slot);
         registerAction(ActionDescriptor{
@@ -73,7 +81,9 @@ void ActionRegistry::registerBuiltinsAppearance()
             .terminal = false,
             .allowedKeys = {QString(ActionParam::Value)},
             .domain = ActionDomain::Window,
-            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+            .params = {P{.key = QString(ActionParam::Value),
+                         .kind = QStringLiteral("bool"),
+                         .defaultDisplay = rp.seed}},
             .category = QStringLiteral("windowManagement"),
             .displayOrder = rp.order,
         });
@@ -103,6 +113,51 @@ void ActionRegistry::registerBuiltinsAppearance()
         .category = QStringLiteral("windowManagement"),
         .displayOrder = 8,
         .tags = {QString(Tag::Effect)},
+    });
+
+    // Per-window scroll-speed multiplier (niri's scroll-factor window rule).
+    // Effect-consumed: the input filter rescales axis events in place while
+    // the pointer hovers the matched window. Wayland sessions only.
+    //
+    // Tag::EffectVerdict, not Tag::Effect: this is a one-shot input verdict,
+    // not an appearance override, and a user's "no animations" rule must not
+    // cancel it — see the Tag::EffectVerdict doc in RuleAction.h.
+    //
+    // The wire value is the MULTIPLIER itself ([MinScrollFactor,
+    // MaxScrollFactor], a fraction below 1), so the editor renders it as a
+    // PERCENT with the usual 0.01 scale — the split-ratio / column-width
+    // shape. A plain `number` kind would hand the fractional range to the
+    // integer spin box, where every value below 1 is unreachable and the
+    // floored 0 it saves instead fails this validator on the next load.
+    //
+    // Category stays "windowManagement" even though its three niri
+    // window-rule siblings (OpenFullscreen / OpenFocused / OpenMaximized) are
+    // "layoutEngine": the settings picker's layoutEngine branch buckets by
+    // explicit type lists and its fall-through lands in the CONTEXT-domain
+    // "Engine" group, so moving this window-domain action there without the
+    // matching settings-side row would put it on the wrong side of the
+    // picker's context/window divider.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::ScrollFactor),
+        .slotFor = constantSlot(ActionSlot::ScrollFactor),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinScrollFactor, kMaxScrollFactor);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Window,
+        // defaultDisplay 100 %: a fresh rule starts at "no visible change" and
+        // the user deliberately moves off it — SetOpacity's 100% rationale.
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("percent"),
+                     .min = kMinScrollFactorPercent,
+                     .max = kMaxScrollFactorPercent,
+                     .scale = 0.01,
+                     .defaultDisplay = 100.0}},
+        .category = QStringLiteral("windowManagement"),
+        .displayOrder = 11,
+        .tags = {QString(Tag::EffectVerdict)},
     });
 
     // ── per-window border / title-bar appearance slots (domain Window) ──
@@ -457,12 +512,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .validate =
             [](const QJsonObject& p) {
                 // Wire is the [kMinSplitRatio, kMaxSplitRatio] ratio; edited as a percent.
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= kMinSplitRatio && d <= kMaxSplitRatio;
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinSplitRatio, kMaxSplitRatio);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -593,12 +643,7 @@ void ActionRegistry::registerBuiltinsAppearance()
             [](const QJsonObject& p) {
                 // Wire is the [kMinColumnWidthRatio, kMaxColumnWidthRatio] fraction of
                 // the work area; edited as a percent (mirrors SetSplitRatio).
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= kMinColumnWidthRatio && d <= kMaxColumnWidthRatio;
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinColumnWidthRatio, kMaxColumnWidthRatio);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -684,12 +729,7 @@ void ActionRegistry::registerBuiltinsAppearance()
                 // Same wire shape as the width pair — a work-area fraction
                 // sharing the same shared bounds (a height may take the
                 // whole column, so the 1.0 ceiling is right here too).
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= kMinColumnWidthRatio && d <= kMaxColumnWidthRatio;
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinColumnWidthRatio, kMaxColumnWidthRatio);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -705,6 +745,78 @@ void ActionRegistry::registerBuiltinsAppearance()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
+    // ── per-context scrolling BEHAVIOUR overrides (domain Context) ──
+    // The six boolean toggles that had no rule seam until now. Same shape as
+    // the sizing slots above: five ride the per-screen override map and the
+    // engine reads each through an `effective*` accessor falling back to the
+    // global config value, while focus-follows-mouse is resolved per screen
+    // and pushed to the compositor instead (its consumer lives there).
+    // Each seeds the polarity a user reaches for: the three whose global
+    // default is ON seed FALSE (the meaningful rule is "turn it off here"),
+    // and the three whose global default is OFF — cropStraddlers,
+    // alwaysCenterSingleColumn and focusFollowsMouse — seed TRUE.
+    struct ScrollBehaviourToggle
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+        int order;
+        double seed;
+    };
+    for (const ScrollBehaviourToggle& t : {
+             ScrollBehaviourToggle{ActionType::SetScrollAlwaysCenterSingleColumn,
+                                   ActionSlot::ScrollAlwaysCenterSingleColumn, 30, 1.0},
+             ScrollBehaviourToggle{ActionType::SetScrollRespectMinimumSize, ActionSlot::ScrollRespectMinimumSize, 31,
+                                   0.0},
+             ScrollBehaviourToggle{ActionType::SetScrollCropStraddlers, ActionSlot::ScrollCropStraddlers, 32, 1.0},
+             ScrollBehaviourToggle{ActionType::SetScrollFocusNewWindows, ActionSlot::ScrollFocusNewWindows, 33, 0.0},
+             ScrollBehaviourToggle{ActionType::SetScrollSmartGaps, ActionSlot::ScrollSmartGaps, 34, 0.0},
+             // Effect-consumed rather than engine-consumed, but structurally
+             // the same context bool, so it registers with its neighbours.
+             ScrollBehaviourToggle{ActionType::SetScrollFocusFollowsMouse, ActionSlot::ScrollFocusFollowsMouse, 36,
+                                   1.0},
+         }) {
+        const QString slot = QString(t.slot);
+        registerAction(ActionDescriptor{
+            .type = QString(t.type),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    return hasBool(p, ActionParam::Value);
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Context,
+            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = t.seed}},
+            .category = QStringLiteral("layoutEngine"),
+            .displayOrder = t.order,
+            .tags = {QString(Tag::LayoutEngine)},
+        });
+    }
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollStickyWindowHandling),
+        .slotFor = constantSlot(ActionSlot::ScrollStickyWindowHandling),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == StickyWindowHandlingToken::TreatAsNormal || v == StickyWindowHandlingToken::RestoreOnly
+                    || v == StickyWindowHandlingToken::IgnoreAll;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(StickyWindowHandlingToken::TreatAsNormal),
+                                        QString(StickyWindowHandlingToken::RestoreOnly),
+                                        QString(StickyWindowHandlingToken::IgnoreAll)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 35,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
     // ── per-window scrolling open overrides (domain Window) ──
     // Read on the open path for the matched window and layered over the context /
     // config defaults above, so one application opens wide, tabbed, or into the
@@ -715,12 +827,7 @@ void ActionRegistry::registerBuiltinsAppearance()
         .validate =
             [](const QJsonObject& p) {
                 // Same wire shape as SetScrollDefaultColumnWidth — a work-area fraction.
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= kMinColumnWidthRatio && d <= kMaxColumnWidthRatio;
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinColumnWidthRatio, kMaxColumnWidthRatio);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -776,12 +883,7 @@ void ActionRegistry::registerBuiltinsAppearance()
             [](const QJsonObject& p) {
                 // Same wire shape as the width slots — a work-area fraction
                 // against the shared column-width bounds, applied to the height.
-                const QJsonValue v = p.value(ActionParam::Value);
-                if (!v.isDouble()) {
-                    return false;
-                }
-                const double d = v.toDouble();
-                return d >= kMinColumnWidthRatio && d <= kMaxColumnWidthRatio;
+                return hasNumberInSignedRange(p, ActionParam::Value, kMinColumnWidthRatio, kMaxColumnWidthRatio);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
@@ -796,465 +898,58 @@ void ActionRegistry::registerBuiltinsAppearance()
         .displayOrder = 25,
         .tags = {QString(Tag::LayoutEngine)},
     });
-
-    // ── per-context tab-indicator slots (domain Context) ──
-    // niri's `tab-indicator` layout block. One action per property, so a
-    // layout rule that sets the position and a theme rule that sets the
-    // colours compose instead of clobbering each other. The GEOMETRY half is
-    // layered onto the scrolling engine's per-screen override map (the
-    // ScrollPerScreenKeys::tabIndicator* keys); the PAINT half never reaches
-    // that library and is applied to the overlay daemon-side.
-    //
-    // Their own category, not layoutEngine: sixteen more rows (the thirteen
-    // context knobs below plus the three per-window tab colours further down)
-    // would swamp that group's list, and the indicator is one coherent feature
-    // a user reaches for as a unit.
     registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorEnabled),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorEnabled),
+        .type = QString(ActionType::OpenMaximized),
+        .slotFor = constantSlot(ActionSlot::OpenMaximized),
         .validate =
             [](const QJsonObject& p) {
                 return hasBool(p, ActionParam::Value);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
+        .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 1,
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 26,
         .tags = {QString(Tag::LayoutEngine)},
     });
     registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorStyle),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorStyle),
-        .validate =
-            [](const QJsonObject& p) {
-                const QString v = p.value(ActionParam::Value).toString();
-                return v == TabIndicatorStyleToken::Chips || v == TabIndicatorStyleToken::Bar;
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("enum"),
-                     .enumWireValues = {QString(TabIndicatorStyleToken::Chips), QString(TabIndicatorStyleToken::Bar)}}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 2,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorPosition),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorPosition),
-        .validate =
-            [](const QJsonObject& p) {
-                const QString v = p.value(ActionParam::Value).toString();
-                return v == TabIndicatorPositionToken::Left || v == TabIndicatorPositionToken::Right
-                    || v == TabIndicatorPositionToken::Top || v == TabIndicatorPositionToken::Bottom;
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{
-            .key = QString(ActionParam::Value),
-            .kind = QStringLiteral("enum"),
-            .enumWireValues = {QString(TabIndicatorPositionToken::Left), QString(TabIndicatorPositionToken::Right),
-                               QString(TabIndicatorPositionToken::Top), QString(TabIndicatorPositionToken::Bottom)}}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 3,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorHideWhenSingleTab),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorHideWhenSingleTab),
+        .type = QString(ActionType::OpenFocused),
+        .slotFor = constantSlot(ActionSlot::OpenFocused),
         .validate =
             [](const QJsonObject& p) {
                 return hasBool(p, ActionParam::Value);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 4,
+        .domain = ActionDomain::Window,
+        // defaultDisplay 0.0: the global focus-new-windows setting defaults ON,
+        // so the meaningful fresh-rule value is "do not steal focus".
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 27,
         .tags = {QString(Tag::LayoutEngine)},
     });
+    // Effect-consumed, unlike its Open* siblings: Tag::EffectVerdict (not
+    // LayoutEngine) admits the rule into the KWin effect's rule set, where
+    // the open-time fullscreen flip lives. The VERDICT tag rather than
+    // Tag::Effect because this is a one-shot open verdict, not an appearance
+    // override, and an ExcludeAnimations rule must not cancel it — see the
+    // Tag::EffectVerdict doc in RuleAction.h. See also the ActionType doc.
     registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorPlaceWithinColumn),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorPlaceWithinColumn),
+        .type = QString(ActionType::OpenFullscreen),
+        .slotFor = constantSlot(ActionSlot::OpenFullscreen),
         .validate =
             [](const QJsonObject& p) {
                 return hasBool(p, ActionParam::Value);
             },
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
+        .domain = ActionDomain::Window,
         .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 5,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    // Signed range: a negative gap draws the indicator over the window, which
-    // is the whole point of allowing it (niri parity).
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorGap),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorGap),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasNumberInSignedRange(p, ActionParam::Value, kMinTabIndicatorGap, kMaxTabIndicatorGap);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("number"),
-                     .min = kMinTabIndicatorGap,
-                     .max = kMaxTabIndicatorGap,
-                     .defaultDisplay = 5.0}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 6,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorWidth),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorWidth),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasNumberInSignedRange(p, ActionParam::Value, kMinTabIndicatorWidth, kMaxTabIndicatorWidth);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("number"),
-                     .min = kMinTabIndicatorWidth,
-                     .max = kMaxTabIndicatorWidth,
-                     .defaultDisplay = 4.0}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 7,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorLength),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorLength),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasNumberInSignedRange(p, ActionParam::Value, kMinTabIndicatorLengthRatio,
-                                              kMaxTabIndicatorLengthRatio);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        // Stored as a fraction, edited as a percent — the SetScrollDefaultColumnWidth shape.
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("percent"),
-                     .min = kMinTabIndicatorLengthPercent,
-                     .max = kMaxTabIndicatorLengthPercent,
-                     .scale = 0.01,
-                     .defaultDisplay = 50.0}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 8,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorGapsBetweenTabs),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorGapsBetweenTabs),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, kMaxTabIndicatorGap);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("number"),
-                     .min = 0.0,
-                     .max = kMaxTabIndicatorGap,
-                     .defaultDisplay = 0.0}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 9,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    // Signed like the gap, but for a different reason: -1 is the config
-    // layer's "fully rounded" sentinel, not a real negative radius.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorCornerRadius),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorCornerRadius),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasNumberInSignedRange(p, ActionParam::Value, kTabIndicatorCornerRadiusPill,
-                                              kMaxTabIndicatorCornerRadius);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("number"),
-                     .min = kTabIndicatorCornerRadiusPill,
-                     .max = kMaxTabIndicatorCornerRadius,
-                     // Square, the shipped default. The pill sentinel is a
-                     // value the user opts into, not one a fresh rule seeds.
-                     .defaultDisplay = 0.0}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 10,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    // HEX ONLY, no accent sentinel — the same contract the overlay colour
-    // actions carry and for the same reason: no consumer on either the context
-    // or the per-window path resolves the token. Both readColor helpers
-    // (layoutregistry_contextresolve.cpp, windowtrackingadaptor/rules.cpp) pass
-    // the string through verbatim to a QML colour property, so an accepted
-    // "accent" would reach the overlay as an unparseable colour. Only the
-    // border/tint family has a resolver for it.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorActiveColor),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorActiveColor),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 11,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorInactiveColor),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorInactiveColor),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 12,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetTabIndicatorUrgentColor),
-        .slotFor = constantSlot(ActionSlot::TabIndicatorUrgentColor),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 13,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-
-    // ── per-window tab colours (domain Window) ──
-    // niri's `tab-indicator` WINDOW rule: recolours only the matched window's
-    // own tab, so one app can be marked out inside a shared column. Resolved
-    // per tab when the daemon builds the indicator model, where they outrank
-    // the per-context colours registered above.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::TabColorActive),
-        .slotFor = constantSlot(ActionSlot::TabColorActive),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 14,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::TabColorInactive),
-        .slotFor = constantSlot(ActionSlot::TabColorInactive),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 15,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::TabColorUrgent),
-        .slotFor = constantSlot(ActionSlot::TabColorUrgent),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("tabIndicator"),
-        .displayOrder = 16,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-
-    // ── per-context drop-indicator overrides (domain Context) ──
-    // Its own category, not folded into tabIndicator: the two indicators are
-    // separate features a user reaches for independently, and the drop
-    // indicator is armed by a drag while the tab indicator is a property of a
-    // tabbed column. Every action here is PAINT — there is no geometry half,
-    // because the rect comes from the engine's layout math and cannot be
-    // positioned independently of where the drop lands.
-    // Master switch, the peer of SetTabIndicatorEnabled.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetDropIndicatorEnabled),
-        .slotFor = constantSlot(ActionSlot::DropIndicatorEnabled),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasBool(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 1.0}},
-        .category = QStringLiteral("dropIndicator"),
-        .displayOrder = 1,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    // Fill colour. A rule cannot express the EMPTY "follow the colour scheme" sentinel; not setting the action leaves
-    // it in place.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetDropIndicatorColor),
-        .slotFor = constantSlot(ActionSlot::DropIndicatorColor),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("dropIndicator"),
-        .displayOrder = 2,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    // Border colour. Drawn opaque whatever alpha the value carries, matching the paint site.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetDropIndicatorBorderColor),
-        .slotFor = constantSlot(ActionSlot::DropIndicatorBorderColor),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("dropIndicator"),
-        .displayOrder = 3,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    // Fill opacity as a stored fraction, edited as a percent. Zero is legal and means an outline with no fill.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetDropIndicatorOpacity),
-        .slotFor = constantSlot(ActionSlot::DropIndicatorOpacity),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, kMaxDropIndicatorOpacity);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("percent"),
-                     .min = kMinDropIndicatorOpacityPercent,
-                     .max = kMaxDropIndicatorOpacityPercent,
-                     .scale = 0.01,
-                     .defaultDisplay = 25.0}},
-        .category = QStringLiteral("dropIndicator"),
-        .displayOrder = 4,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    // Border thickness in px. Floors at 0, which is a fill with no edge.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetDropIndicatorBorderWidth),
-        .slotFor = constantSlot(ActionSlot::DropIndicatorBorderWidth),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, kMaxDropIndicatorBorderWidth);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("number"),
-                     .min = kMinDropIndicatorBorderWidth,
-                     .max = kMaxDropIndicatorBorderWidth,
-                     .defaultDisplay = 2.0}},
-        .category = QStringLiteral("dropIndicator"),
-        .displayOrder = 5,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    // Corner radius in px. UNSIGNED, unlike the tab indicator: 0 is square, not a pill sentinel.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::SetDropIndicatorBorderRadius),
-        .slotFor = constantSlot(ActionSlot::DropIndicatorBorderRadius),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasNumberInRange(p, ActionParam::Value, kMaxDropIndicatorBorderRadius);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Context,
-        .params = {P{.key = QString(ActionParam::Value),
-                     .kind = QStringLiteral("number"),
-                     .min = kMinDropIndicatorBorderRadius,
-                     .max = kMaxDropIndicatorBorderRadius,
-                     .defaultDisplay = 8.0}},
-        .category = QStringLiteral("dropIndicator"),
-        .displayOrder = 6,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-
-    // ── per-window drop-indicator colours (domain Window) ──
-    // Keyed on the DRAGGED window, resolved once at drag start. The only
-    // per-window slice of this family with a coherent referent: exactly one
-    // window is dragged at a time. They outrank the per-context colours above,
-    // which outrank the config, which falls back to the theme — the same order
-    // the tab colours use.
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::DropIndicatorColor),
-        .slotFor = constantSlot(ActionSlot::DragDropIndicatorColor),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("dropIndicator"),
-        .displayOrder = 7,
-        .tags = {QString(Tag::LayoutEngine)},
-    });
-    registerAction(ActionDescriptor{
-        .type = QString(ActionType::DropIndicatorBorderColor),
-        .slotFor = constantSlot(ActionSlot::DragDropIndicatorBorderColor),
-        .validate =
-            [](const QJsonObject& p) {
-                return hasHexColor(p, ActionParam::Value);
-            },
-        .terminal = false,
-        .allowedKeys = {QString(ActionParam::Value)},
-        .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("color")}},
-        .category = QStringLiteral("dropIndicator"),
-        .displayOrder = 8,
-        .tags = {QString(Tag::LayoutEngine)},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 28,
+        .tags = {QString(Tag::EffectVerdict)},
     });
 }
 

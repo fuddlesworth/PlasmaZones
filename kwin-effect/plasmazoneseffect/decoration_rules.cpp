@@ -19,6 +19,7 @@
 #include <PhosphorRules/RuleAction.h>
 
 #include "shader_resolve.h"
+#include "tilinghandler/tilinghandler.h"
 #include "window_query.h"
 
 #include <optional>
@@ -150,6 +151,80 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     const bool below = (*layer == PhosphorRules::WindowLayerToken::Below);
     kw->setKeepAbove(above);
     kw->setKeepBelow(below);
+}
+
+void PlasmaZonesEffect::applyRuleOpenFullscreen(const QString& windowId, KWin::EffectWindow* w)
+{
+    if (!w || w->isDeleted() || windowId.isEmpty()) {
+        return;
+    }
+    // No-rules fast path, same shape as the layer reconcile above — no
+    // snapshot map to drain here because the verdict is one-shot: it is
+    // applied exactly once, at windowAdded, and never re-reconciled (a rule
+    // edit mid-session must not yank an open window into or out of
+    // fullscreen; that is niri's open-fullscreen contract too).
+    if (!m_shaderManager.hasOpenFullscreenRules()) {
+        return;
+    }
+    // Same structural shield as the layer reconcile: a broad match must
+    // never fullscreen a dock, a notification, or our own overlay. Shielded
+    // windows skip the resolve entirely — with no snapshot to drain there is
+    // no restore branch to route them through.
+    const QString winClass = w->windowClass();
+    if (isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass) || isXdgDesktopPortalSurface(winClass)
+        || w->isDesktop() || w->isDock() || w->isNotification() || w->isCriticalNotification()
+        || w->isOnScreenDisplay()) {
+        return;
+    }
+    // Through the VERDICT evaluator, not the animation/appearance one: that
+    // evaluator honours ExcludeAnimations as a walk-stopper, so an
+    // "exclude this app from animations" rule at a higher priority cancelled
+    // the open-fullscreen decision before its slot could fill.
+    const std::optional<bool> verdict = resolveOpenFullscreen(resolveRuleVerdictActions(w, windowId));
+    if (!verdict) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    // Gate on the REQUESTED state (synchronous), not the committed one: at
+    // windowAdded a client that mapped fullscreen already carries the
+    // requested bit while the committed state may lag a round-trip. The flip
+    // runs BEFORE the window is announced to the daemon (this is called from
+    // slotWindowAdded ahead of the routing block), and isEligibleForTilingNotify
+    // rejects on requested-OR-committed fullscreen, so the announce path sees
+    // this window's final state either way.
+    //
+    // Bracketed through TilingHandler: on XWayland setFullScreen emits
+    // windowFullScreenChanged SYNCHRONOUSLY, re-entering
+    // slotWindowFullScreenChanged from inside slotWindowAdded — before this
+    // window has been announced at all. Its never-tracked exit arm then runs
+    // notifyWindowAdded for a window mid-open, releasing the first-frame
+    // restore suppression slotWindowAdded is about to arm and producing a
+    // visible spawn-then-jump. The counter is TilingHandler-private, so the
+    // bracketed write lives there (applyFullScreenSuppressed) rather than
+    // widening access to it.
+    if (*verdict && !kw->isRequestedFullScreen()) {
+        m_tilingHandler->applyFullScreenSuppressed(kw, true);
+    } else if (!*verdict && kw->isRequestedFullScreen()) {
+        m_tilingHandler->applyFullScreenSuppressed(kw, false);
+    }
+}
+
+std::optional<qreal> PlasmaZonesEffect::ruleScrollFactorFor(KWin::EffectWindow* w) const
+{
+    if (!w || w->isDeleted() || !m_shaderManager.hasScrollFactorRules()) {
+        return std::nullopt;
+    }
+    const QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return std::nullopt;
+    }
+    // Verdict evaluator, same reason as applyRuleOpenFullscreen above: a
+    // scroll multiplier is not an animation, so ExcludeAnimations must not
+    // stop the walk that fills its slot.
+    return resolveScrollFactor(resolveRuleVerdictActions(w, windowId));
 }
 
 void PlasmaZonesEffect::restoreAllRuleWindowLayers()

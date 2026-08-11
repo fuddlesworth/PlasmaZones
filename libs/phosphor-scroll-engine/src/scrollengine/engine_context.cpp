@@ -95,10 +95,17 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
         m_pendingSelfActivations.removeAll(windowId);
         ++pruned;
     }
-    // Seed lists hold dead ids too (a captured order whose window died before
-    // arriving); left behind they would pin insert positions against ghosts
-    // forever. One sweep for the whole batch — per dead window it would
-    // re-walk every screen's list again.
+    // Seed lists are swept against the ids this batch just untracked, NOT
+    // against aliveness. A seeded id the engine has never tracked is the
+    // normal, load-bearing case: the captured order names windows that have
+    // not opened yet, and each one is meant to sit out however many prunes
+    // happen before it arrives and claims its column. Sweeping on aliveness
+    // instead would reap exactly those pending entries, because a window that
+    // has not mapped yet is legitimately absent from the caller's alive set —
+    // see pruneStaleWindowsReclaimsRectsAndSeeds, which pins that {a,c} must
+    // survive a prune naming only c. So the reaper here is a window that WAS
+    // tracked and has now gone, which is what `dead` holds. One sweep for the
+    // whole batch — per dead window it would re-walk every screen's list.
     if (!dead.isEmpty()) {
         const QSet<QString> deadSet(dead.cbegin(), dead.cend());
         for (auto seedIt = m_pendingInitialOrder.begin(); seedIt != m_pendingInitialOrder.end();) {

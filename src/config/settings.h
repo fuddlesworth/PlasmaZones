@@ -1868,14 +1868,26 @@ public:
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
 
-    /// Re-announces the zone colours whose stored value is the empty
-    /// theme-fallback sentinel when the application palette changes at
-    /// runtime (theme switch). Resolution happens in the getters, so nothing
-    /// is written and no dirty tracking is involved; without the re-announce,
-    /// every long-running process (daemon, settings app) would keep serving
-    /// the palette SNAPSHOT its bindings read last and show stale zone colors
-    /// until something else re-read them.
-    bool eventFilter(QObject* watched, QEvent* event) override;
+    /// The system colour scheme as a "light" / "dark" token, derived from
+    /// the live application palette's window-background lightness. Empty
+    /// with no GUI application (headless tools) and off the GUI thread
+    /// (QGuiApplication::palette() is not documented thread-safe, matching
+    /// resolvedSystemColor's refusal), so a ColorScheme match predicate stays
+    /// inert in both cases and the resolvers' negation guards hold rules that
+    /// negate it out. Static: it is the one place the palette is classified.
+    ///
+    /// Callers: eventFilter()'s flip detection and the seed in
+    /// trackSystemPaletteChanges(), the daemon's registry colour-scheme
+    /// provider, and colorSchemeToken() below — which is the path injected
+    /// consumers (the WindowTrackingAdaptor query builder) take, so a test
+    /// double can substitute a fixed scheme.
+    static QString systemColorSchemeToken();
+
+    /// ISettings' injectable view of systemColorSchemeToken().
+    QString colorSchemeToken() const override
+    {
+        return Settings::systemColorSchemeToken();
+    }
 
     /// True while eventFilter() is fanning out the palette-change NOTIFYs.
     /// Those emissions are palette-driven, not user edits —
@@ -1914,9 +1926,23 @@ Q_SIGNALS:
     // virtualScreenConfigs signals live on ISettings and are inherited
     // here — see src/core/interfaces/isettings.h.
 
+protected:
+    /// Re-announces the zone colours whose stored value is the empty
+    /// theme-fallback sentinel when the application palette changes at
+    /// runtime (theme switch). Resolution happens in the getters, so nothing
+    /// is written and no dirty tracking is involved; without the re-announce,
+    /// every long-running process (daemon, settings app) would keep serving
+    /// the palette SNAPSHOT its bindings read last and show stale zone colors
+    /// until something else re-read them.
+    ///
+    /// Protected, matching QObject's own access: nothing calls this directly —
+    /// Qt dispatches it through the filter installed by
+    /// trackSystemPaletteChanges().
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
     /// Installs the QEvent::ApplicationPaletteChange filter on the application
-    /// object (see eventFilter above). Called once per constructor, after load().
+    /// object (see eventFilter). Called once per constructor, after load().
     void trackSystemPaletteChanges();
 
     /// Member-function-pointer alias used by the indexed shortcut setters
@@ -2001,6 +2027,12 @@ private:
         LabelFont
     };
     static QColor resolvedSystemColor(SystemColorRole role);
+
+    // Shared body of the four resolved QColor getters: the stored raw string
+    // when it names a colour Qt can parse, otherwise the palette-derived role.
+    // Unparseable counts as the empty "follow the palette" sentinel — see the
+    // definition in settings/storescalars.cpp for why.
+    static QColor resolveThemeColor(const QString& raw, SystemColorRole role);
 
     // Groups that reset() deletes exhaustively (excludes unmanaged groups like
     // Updates). NOT used by save() — save() iterates the schema and lets
@@ -2097,6 +2129,12 @@ private:
     // these so an ApplicationPaletteChange that moved no relevant role stays
     // silent instead of re-running the aggregate consumers.
     std::array<QColor, 4> m_paletteBaseline{};
+
+    // Last-announced "light" / "dark" token for the systemColorSchemeChanged
+    // signal, seeded from the live palette in trackSystemPaletteChanges so
+    // the first ApplicationPaletteChange only announces a real flip. Not a
+    // config value — it never touches the store or dirty tracking.
+    QString m_lastColorSchemeToken;
 
     static QString normalizeUuidString(const QString& uuidStr);
 

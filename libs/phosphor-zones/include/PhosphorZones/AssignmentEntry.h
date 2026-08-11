@@ -351,8 +351,9 @@ struct ContextTilingParams
  * Each field is set only when a matching context rule fills the corresponding
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
  * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
- * SetScrollDefaultWindowHeight, plus the thirteen SetTabIndicator* slots
- * documented in their own block below); an unset field means "use the config
+ * SetScrollDefaultWindowHeight, the seven scrolling behaviour toggles, the
+ * thirteen SetTabIndicator* slots and the six SetDropIndicator* slots, each
+ * documented in its own block below); an unset field means "use the config
  * value".
  * Consumed daemon-side: the values are layered onto the scrolling engine's
  * per-screen parameters (config stays the base, the rule wins where present),
@@ -376,6 +377,27 @@ struct ContextScrollingParams
     /// Height a newly-opened window takes, as a fraction of the work-area
     /// height (0.05-1.0); the engine commits it as fixed pixels at relayout.
     std::optional<double> defaultWindowHeight;
+
+    /// The scrolling BEHAVIOUR toggles, filled by the SetScroll* actions of
+    /// the same names. Most are layered onto the engine's per-screen override
+    /// map exactly like the sizing fields above, where each `effective*` reader
+    /// falls back to the global config value. Two are not purely engine-side:
+    /// `cropStraddlers` is layered on the engine map AND pushed to the KWin
+    /// effect, whose paint clip and direct-scanout gate need it, and
+    /// `focusFollowsMouse` is effect-only (see its own note below).
+    std::optional<bool> alwaysCenterSingleColumn;
+    std::optional<bool> respectMinimumSize;
+    std::optional<bool> cropStraddlers;
+    std::optional<bool> focusNewWindows;
+    std::optional<bool> smartGaps;
+    /// EFFECT-consumed, unlike its neighbours: the daemon collects the
+    /// resolved per-screen verdict into a set and pushes it to the KWin
+    /// effect, which owns focus-follows-mouse entirely.
+    std::optional<bool> focusFollowsMouse;
+    /// StickyWindowHandling ints (treatAsNormal 0 / restoreOnly 1 /
+    /// ignoreAll 2); the resolver maps the wire token to the int the config
+    /// store uses, matching centerFocusedColumn's treatment.
+    std::optional<int> stickyWindowHandling;
 
     /// The tab indicator's overrides, niri's `tab-indicator` layout block.
     /// Split the way IScrollSettings splits the family: the GEOMETRY fields
@@ -428,10 +450,20 @@ struct ContextScrollingParams
             || tabIndicatorInactiveColor || tabIndicatorUrgentColor;
     }
 
+    /// True when at least one of the seven behaviour toggles resolved. Same
+    /// purpose as the two indicator predicates: the daemon skips the whole
+    /// behaviour-override block when it is false.
+    bool hasBehaviourOverrides() const
+    {
+        return alwaysCenterSingleColumn || respectMinimumSize || cropStraddlers || focusNewWindows || smartGaps
+            || stickyWindowHandling || focusFollowsMouse;
+    }
+
     bool isEmpty() const
     {
         return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay && !insertPosition
-            && !defaultWindowHeight && !hasTabIndicatorOverrides() && !hasDropIndicatorOverrides();
+            && !defaultWindowHeight && !hasTabIndicatorOverrides() && !hasDropIndicatorOverrides()
+            && !hasBehaviourOverrides();
     }
 };
 

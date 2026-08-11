@@ -65,6 +65,30 @@ void Settings::setAudioSpectrumBarCount(int count)
 // (EMPTY = follow the system palette); the QColor getters resolve through
 // resolvedSystemColor and the QColor setters store the concrete #AARRGGBB
 // form, so every non-UI consumer keeps its concrete-colour contract.
+
+/// Resolve one theme-fallback colour key: the stored @p raw when it names a
+/// colour Qt can parse, otherwise the palette-derived @p role.
+///
+/// UNPARSEABLE counts as the empty sentinel, not as a colour. Only the setters
+/// write this key and they write a concrete #AARRGGBB, so a raw that does not
+/// parse can only come from a hand-edited config — and QColor(raw) would then
+/// hand an INVALID QColor to the overlay and to QML, where it renders as black
+/// or as nothing at all. Falling back to the palette is what "I could not read
+/// your colour" already means for the empty case, so both unusable inputs
+/// resolve the same way.
+///
+/// Deliberately QColor's own parse, not the hex-shape check the rule paths use:
+/// those feed a value straight to a QML `color` property where an SVG keyword
+/// like "transparent" would silently make the indicator invisible, whereas this
+/// key is user-owned and a hand-written "red" is a colour the user meant.
+QColor Settings::resolveThemeColor(const QString& raw, SystemColorRole role)
+{
+    if (raw.isEmpty()) {
+        return resolvedSystemColor(role);
+    }
+    const QColor parsed(raw);
+    return parsed.isValid() ? parsed : resolvedSystemColor(role);
+}
 P_STORE_GET(QString, highlightColorRaw, snappingZonesColorsGroup, highlightKey, QString)
 P_STORE_SET_STRING2(setHighlightColorRaw, snappingZonesColorsGroup, highlightKey, highlightColorRawChanged,
                     highlightColorChanged)
@@ -76,8 +100,7 @@ P_STORE_SET_STRING2(setBorderColorRaw, snappingZonesColorsGroup, borderKey, bord
 
 QColor Settings::highlightColor() const
 {
-    const QString raw = highlightColorRaw();
-    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Highlight) : QColor(raw);
+    return resolveThemeColor(highlightColorRaw(), SystemColorRole::Highlight);
 }
 // The QColor setters guard on isValid(): an invalid QColor's name() still
 // produces a non-empty "#ff000000", which would silently PIN opaque black
@@ -89,8 +112,7 @@ void Settings::setHighlightColor(const QColor& color)
 }
 QColor Settings::inactiveColor() const
 {
-    const QString raw = inactiveColorRaw();
-    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Inactive) : QColor(raw);
+    return resolveThemeColor(inactiveColorRaw(), SystemColorRole::Inactive);
 }
 void Settings::setInactiveColor(const QColor& color)
 {
@@ -98,8 +120,7 @@ void Settings::setInactiveColor(const QColor& color)
 }
 QColor Settings::borderColor() const
 {
-    const QString raw = borderColorRaw();
-    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::Border) : QColor(raw);
+    return resolveThemeColor(borderColorRaw(), SystemColorRole::Border);
 }
 void Settings::setBorderColor(const QColor& color)
 {
@@ -113,8 +134,7 @@ P_STORE_SET_STRING2(setLabelFontColorRaw, snappingZonesLabelsGroup, fontColorKey
 
 QColor Settings::labelFontColor() const
 {
-    const QString raw = labelFontColorRaw();
-    return raw.isEmpty() ? resolvedSystemColor(SystemColorRole::LabelFont) : QColor(raw);
+    return resolveThemeColor(labelFontColorRaw(), SystemColorRole::LabelFont);
 }
 void Settings::setLabelFontColor(const QColor& color)
 {

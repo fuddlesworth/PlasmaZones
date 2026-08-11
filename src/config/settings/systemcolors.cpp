@@ -66,6 +66,10 @@ void Settings::trackSystemPaletteChanges()
                                    "(installEventFilter requires same-thread objects)";
             return;
         }
+        // Seed the colour-scheme token from the live palette so the first
+        // ApplicationPaletteChange only announces a REAL flip, not the
+        // startup read.
+        m_lastColorSchemeToken = Settings::systemColorSchemeToken();
         qGuiApp->installEventFilter(this);
         // Seed the change gate so the first ApplicationPaletteChange can
         // compare against what the process started with.
@@ -75,9 +79,39 @@ void Settings::trackSystemPaletteChanges()
     }
 }
 
+QString Settings::systemColorSchemeToken()
+{
+    // Window-background lightness is the scheme discriminator the desktop
+    // itself uses (a dark scheme is one whose surfaces are dark); the
+    // midpoint split matches how portals classify light vs dark. Empty when
+    // there is no GUI application — the match field then stays inert.
+    //
+    // Off the GUI thread it degrades the same way, and for the same reason
+    // resolvedSystemColor below refuses: QGuiApplication::palette() is not
+    // documented thread-safe, so reading it here would race the GUI thread.
+    // The degraded answer differs from that sibling's on purpose — a colour
+    // has a defensible constant to fall back on, a colour SCHEME does not, and
+    // empty is already this accessor's honest "cannot classify" answer.
+    if (!qGuiApp || QThread::currentThread() != qGuiApp->thread()) {
+        return QString();
+    }
+    const int lightness = QGuiApplication::palette().color(QPalette::Active, QPalette::Window).lightness();
+    return lightness < 128 ? QStringLiteral("dark") : QStringLiteral("light");
+}
+
 bool Settings::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange) {
+        // ColorScheme match-field feed: derive the light/dark token and
+        // announce a flip. Runs ahead of the colour fan-out below and outside
+        // its value gates — this is not a config value, so it must not touch
+        // dirty tracking, and the field must fire even when every zone colour
+        // is pinned to a concrete value.
+        const QString schemeToken = Settings::systemColorSchemeToken();
+        if (schemeToken != m_lastColorSchemeToken) {
+            m_lastColorSchemeToken = schemeToken;
+            Q_EMIT systemColorSchemeChanged();
+        }
         // Re-announce whichever colours FOLLOW the palette (stored sentinel
         // empty) AND actually moved. Qt delivers ApplicationPaletteChange
         // after the palette is already updated, so the "before" values come

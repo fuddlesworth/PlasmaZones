@@ -353,6 +353,7 @@ void TestRuleController::authoringMetadata()
     bool sawOrientationKind = false;
     bool sawLayoutKind = false;
     bool sawVirtualDesktopKind = false;
+    bool sawColorSchemeKind = false;
     for (const QVariant& v : fields) {
         const QVariantMap f = v.toMap();
         QVERIFY(f.contains(QStringLiteral("value")));
@@ -362,7 +363,7 @@ void TestRuleController::authoringMetadata()
                 || kind == QLatin1String("screen") || kind == QLatin1String("activity")
                 || kind == QLatin1String("windowType") || kind == QLatin1String("virtualDesktop")
                 || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
-                || kind == QLatin1String("layout"));
+                || kind == QLatin1String("layout") || kind == QLatin1String("colorScheme"));
         if (kind == QLatin1String("screen")) {
             sawScreenKind = true;
         }
@@ -379,14 +380,19 @@ void TestRuleController::authoringMetadata()
         // label} triples so the editor can render the dropdown. ScreenOrientation
         // (orientation) is one of these — it mirrors mode — so it is validated here
         // too, guarding against a regression that reverts it to a bare string field.
-        if (kind == QLatin1String("windowType") || kind == QLatin1String("mode")
-            || kind == QLatin1String("orientation")) {
+        // ColorScheme (light/dark) is the third of the same shape: without it in
+        // this loop a dropped options array would leave the editor's dropdown
+        // empty with nothing failing.
+        if (kind == QLatin1String("windowType") || kind == QLatin1String("mode") || kind == QLatin1String("orientation")
+            || kind == QLatin1String("colorScheme")) {
             if (kind == QLatin1String("windowType")) {
                 sawWindowTypeKind = true;
             } else if (kind == QLatin1String("mode")) {
                 sawModeKind = true;
-            } else {
+            } else if (kind == QLatin1String("orientation")) {
                 sawOrientationKind = true;
+            } else {
+                sawColorSchemeKind = true;
             }
             const QVariantList options = f.value(QStringLiteral("options")).toList();
             QVERIFY2(!options.isEmpty(), "enum valueKind must expose options for the dropdown");
@@ -410,6 +416,10 @@ void TestRuleController::authoringMetadata()
     // VirtualDesktop keeps its dedicated "virtualDesktop" kind, which drives the
     // desktop-name picker in the editor and the name resolution in the summaries.
     QVERIFY(sawVirtualDesktopKind);
+    // ColorScheme keeps its own "colorScheme" kind. Reverting it to a bare
+    // string field would drop the light/dark dropdown and leave the user
+    // hand-typing the token, so the kind is pinned the same way the others are.
+    QVERIFY(sawColorSchemeKind);
 
     // Picker categories drive the fly-out submenu grouping. Every field carries
     // a non-empty category label + a categoryOrder int. The Field enum
@@ -443,6 +453,11 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(fieldCategoryOrder.value(QStringLiteral("width"), -1), 2); // Size
     QCOMPARE(fieldCategoryOrder.value(QStringLiteral("height"), -1), 2); // Size
     QCOMPARE(fieldCategoryOrder.value(QStringLiteral("screenId"), -1), 0); // Context
+    // ColorScheme is a context field, not a window-state one: it resolves per
+    // screen/desktop/activity like screenId, so it belongs in the Context
+    // bucket. A descriptor that dropped it into State would bury it under the
+    // window properties in the fly-out.
+    QCOMPARE(fieldCategoryOrder.value(QStringLiteral("colorScheme"), -1), 0); // Context
 
     // The four match conditions (IsTransient/IsNotification/Width/Height) must be
     // authorable: present in the picker with the correct value kind, and with
@@ -531,6 +546,12 @@ void TestRuleController::authoringMetadata()
         const QString label = a.value(QStringLiteral("label")).toString();
         QVERIFY2(!label.isEmpty(), qPrintable(wire));
         QVERIFY2(label != wire, qPrintable(wire));
+        // Description canary: every picker entry carries the info-icon hover
+        // help (actionDescription's if-ladder has no compiler exhaustiveness
+        // like fieldDescription's switch, so this sweep is what keeps it
+        // covering every registered type — an action added without a
+        // description entry fails here by name).
+        QVERIFY2(!a.value(QStringLiteral("description")).toString().isEmpty(), qPrintable(wire));
         actionCategoryOrder.insert(wire, a.value(QStringLiteral("categoryOrder")).toInt());
     }
     QVERIFY(sawFloat);
@@ -554,6 +575,30 @@ void TestRuleController::authoringMetadata()
     // bucket (or Other=99) with no other test noticing.
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludePlacement"), -1), 8); // Window (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeDecorations"), -1), 7); // Appearance (window)
+    // The per-context scrolling behaviour toggles ride the Scrolling bucket
+    // with the sizing knobs they sit beside. Every one of them shares the
+    // `layoutEngine` descriptor category with the engine controls, so the
+    // bucket is decided by a hand-written per-type dispatch: an action left
+    // out of that list falls through to Engine=1 and lands in the wrong
+    // submenu with nothing else noticing. Pin the whole set rather than a
+    // sample, because the omission is per type.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollAlwaysCenterSingleColumn"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollRespectMinimumSize"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollCropStraddlers"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusNewWindows"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollSmartGaps"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusFollowsMouse"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStickyWindowHandling"), -1), 4);
+    // The per-window Open* actions are window-domain and share plain Window's
+    // order 8 through the Window/Scrolling submenu, the same way openTabbed
+    // above does. A miss here puts them above the picker's context/window
+    // divider.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openMaximized"), -1), 8);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFocused"), -1), 8);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("openFullscreen"), -1), 8);
+    // The unfloat fallback is a windowManagement action, riding Window with
+    // the blanket Exclude.
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setUnfloatFallbackToZone"), -1), 8);
 }
 
 void TestRuleController::matchIsContextOnlyClassifies()

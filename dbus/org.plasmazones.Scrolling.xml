@@ -12,6 +12,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine, sorted, matching the ordering of the scrollingScreensChanged payload so a consumer can compare the two for the same set. The KWin effect uses it as the discriminator that stamps Mode 'scrolling' rather than 'tiling' in window rule queries, but it does not answer from this raw set: it intersects it at read time with the engine-managed union published on org.plasmazones.Tiling, because the two sets arrive as independent signals with no ordering guarantee and this one can transiently name a screen the union has already dropped. Changes are announced on the scrollingScreensChanged signal below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
         </property>
 
+        <property name="scrollEffectBehaviour" type="a{sv}" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="The two scrolling behaviours the COMPOSITOR owns, as already-resolved screen-id lists: {'focusFollowsMouse': as, 'cropStraddlers': as}. Both are per-context rule slots (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) whose consumer lives in the KWin effect rather than the scroll engine, so unlike their four sibling behaviour slots they cannot ride the engine's per-screen override map. The daemon resolves rule-then-config per scrolling screen and publishes the RESOLVED membership, which keeps the effect free of any config knowledge: it answers each question with a set lookup and holds no fallback of its own. A screen absent from a list has that behaviour off; a screen that is not scrolling appears in neither. Both lists are sorted, matching the scrollEffectBehaviourChanged payload. One map rather than two list properties so the compositor pays a single bring-up query and a single subscription. Changes are announced on scrollEffectBehaviourChanged below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
+        </property>
+
         <method name="focusColumn">
             <annotation name="org.gtk.GDBus.DocString" value="Focus the adjacent column on a scrolling screen. Called by the KWin effect's Meta+wheel axis shortcut with the cursor's screen. A press at the strip's edge CROSSES to the adjacent output when one exists — including a neighbour running a different mode, where the daemon activates that engine's entry-edge window — and a press on an EMPTY scrolling screen crosses the same way instead of dead-ending, so a wheel notch can move focus to another monitor. Every rejected call is a silent no-op with no error reply: an empty screenId, a screen the scrolling engine does not own, and any delta other than -1 or +1 are all ignored, so a caller cannot tell a refusal from a call that landed on an empty strip."/>
             <arg name="screenId" type="s" direction="in">
@@ -117,6 +121,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using the scrolling engine changes."/>
             <arg name="screenIds" type="as">
                 <annotation name="org.gtk.GDBus.DocString" value="List of screen IDs currently using the scrolling engine."/>
+            </arg>
+        </signal>
+
+        <signal name="scrollEffectBehaviourChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the resolved per-screen behaviour the compositor owns changes. The payload is the WHOLE map, never a delta, so a receiver that missed an earlier emission never has to merge against a stale copy."/>
+            <arg name="behaviour" type="a{sv}">
+                <annotation name="org.gtk.GDBus.DocString" value="Same shape as the scrollEffectBehaviour property."/>
             </arg>
         </signal>
     </interface>

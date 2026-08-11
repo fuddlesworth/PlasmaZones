@@ -35,6 +35,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <functional>
 
 namespace PlasmaZones {
 
@@ -86,6 +87,27 @@ const QSet<PhosphorRules::Field>& neverStampedFields()
     return fields;
 }
 
+/// The WINDOW-sourced fields buildRuleQueryForWindow cannot answer, so a
+/// negated leaf on one of them would invert and fire for every window.
+///
+/// Deliberately NOT PhosphorRules::windowSourcedFields(): unlike the windowless
+/// context resolvers, this query DOES engage most window fields (appId, title,
+/// role, type, pid, the state / geometry / accessory flags, captionNormal), and
+/// excluding a rule that merely negates one of those would drop legitimate
+/// user rules. Only these five are unanswerable here — WindowClass is not
+/// tracked daemon-side at all (the compositor reports appId), and the four
+/// placement fields describe a placement that does not exist yet on the open
+/// path, which is exactly what the buildRuleQueryForWindow doc calls "inert".
+/// Inert holds for a POSITIVE leaf only; this closes the negated half.
+const QSet<PhosphorRules::Field>& unanswerableWindowFields()
+{
+    static const QSet<PhosphorRules::Field> fields = {
+        PhosphorRules::Field::WindowClass, PhosphorRules::Field::IsFloating, PhosphorRules::Field::IsSnapped,
+        PhosphorRules::Field::Zone,        PhosphorRules::Field::IsTiled,
+    };
+    return fields;
+}
+
 /// Admission test for a resolver that stamps ScreenId but NOT Mode — the shape
 /// every resolveCached caller on this path shares. Passed identically by all
 /// six so the memo they share stays coherent (see resolveCachedFiltered's
@@ -93,22 +115,33 @@ const QSet<PhosphorRules::Field>& neverStampedFields()
 bool admitScreenStamped(const PhosphorRules::Rule& rule)
 {
     return !rule.match.referencesAnyField(neverStampedFields())
-        && !rule.match.referencesAnyField({PhosphorRules::Field::Mode});
+        && !rule.match.referencesAnyField({PhosphorRules::Field::Mode})
+        && !rule.match.negatesAnyField(unanswerableWindowFields());
 }
 
 /// Admission test for a resolver that stamps BOTH ScreenId and Mode
 /// (shouldFloatByRule, scrollOpenRuleParams, shouldRestoreSizeOnUnsnap). Mode
-/// stays admitted; only the never-stamped context fields are excluded.
+/// stays admitted; only the never-stamped context fields are excluded, plus
+/// the negated-only guard on the window fields this query cannot answer.
 bool admitScreenAndModeStamped(const PhosphorRules::Rule& rule)
 {
-    return !rule.match.referencesAnyField(neverStampedFields());
+    return !rule.match.referencesAnyField(neverStampedFields())
+        && !rule.match.negatesAnyField(unanswerableWindowFields());
 }
 
 /// Admission test for a query that stamps NO context field at all (the
 /// tab-colour and drop-indicator paths, and any stamper whose inputs came
 /// up empty): ScreenId joins the exclusions, because valueForField answers
 /// an ENGAGED empty for it and a `None{ScreenId Equals …}` group would then
-/// match for every window — the same inversion documented above.
+/// match for every window — the same inversion documented above. The
+/// unanswerable-window-field negation guard rides in from admitScreenStamped.
+///
+/// The name is about the CONTEXT stamps only: the window fields
+/// buildRuleQueryForWindow does engage (appId, title, type, the state flags)
+/// are answerable on all of these paths and stay admitted. VirtualDesktop,
+/// Activity and ColorScheme are stamped by the builder itself, so they are
+/// admitted here too — the fields this test additionally excludes over
+/// admitScreenStamped are ScreenId and (via that test) Mode.
 bool admitNothingStamped(const PhosphorRules::Rule& rule)
 {
     return admitScreenStamped(rule) && !rule.match.referencesAnyField({PhosphorRules::Field::ScreenId});
@@ -125,6 +158,48 @@ auto admissionForStamped(const PhosphorRules::WindowQuery& query)
         return &admitNothingStamped;
     }
     return query.mode.isEmpty() ? &admitScreenStamped : &admitScreenAndModeStamped;
+}
+
+/// Bind @p base to the ColorScheme guard @p query needs.
+///
+/// buildRuleQueryForWindow stamps the colour-scheme token from the injected
+/// settings, but the token comes up EMPTY in a process with no GUI application (or off
+/// the GUI thread, which the accessor refuses). An engaged empty makes the leaf
+/// fail, so `None{ColorScheme Equals dark}` would invert and fire for every
+/// window — the same defect the field sets above close, except that here the
+/// answer depends on the process rather than the field, so it cannot live in a
+/// static set.
+///
+/// The emptiness is a property of the PROCESS (does it have a GUI application),
+/// not of the individual resolver, so every one of the six shared-memo callers
+/// computes the same value and resolveCachedFiltered's equivalent-admit
+/// precondition still holds.
+std::function<bool(const PhosphorRules::Rule&)> admitWith(bool (*base)(const PhosphorRules::Rule&),
+                                                          const PhosphorRules::WindowQuery& query)
+{
+    if (!query.colorScheme.isEmpty()) {
+        return base;
+    }
+    return [base](const PhosphorRules::Rule& rule) {
+        return base(rule) && !rule.match.negatesAnyField({PhosphorRules::Field::ColorScheme});
+    };
+}
+
+/// The Field::Mode MATCH vocabulary for a placement mode — NOT the SetEngineMode
+/// action vocabulary, which spells the middle one "autotile". The one spelling
+/// site in this file: every resolver that stamps Mode goes through here, so a
+/// token cannot drift between the stampers and the scrolling open path.
+QString modeMatchToken(PhosphorZones::AssignmentEntry::Mode mode)
+{
+    switch (mode) {
+    case PhosphorZones::AssignmentEntry::Autotile:
+        return QStringLiteral("tiling");
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        return QStringLiteral("scrolling");
+    case PhosphorZones::AssignmentEntry::Snapping:
+        break;
+    }
+    return QStringLiteral("snapping");
 }
 
 /// Read one hex-colour action slot into @p out under @p key. Shared by the
@@ -185,7 +260,8 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     if (!m_ruleStore) {
         return globalDefault;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorRules::WindowQuery> query =
+        buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return globalDefault;
     }
@@ -226,7 +302,7 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     // memoized under the window id, so a caller admitting a different rule set
     // would poison the memo for the others.
     const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestorePosition))) {
         // A matched RestorePosition rule overrides the global setting.
@@ -243,13 +319,14 @@ bool WindowTrackingAdaptor::shouldRestoreToZoneOnLogin(const QString& windowId)
     if (!m_ruleStore) {
         return globalDefault;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorRules::WindowQuery> query =
+        buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return globalDefault;
     }
     ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestoreToZoneOnLogin))) {
         return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
@@ -264,7 +341,7 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     if (!m_ruleStore) {
         return globalDefault;
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return globalDefault;
     }
@@ -293,9 +370,40 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     // missing registry leaves fields unstamped, and admitting rules that
     // reference an unstamped field inverts negated leaves — see the helper).
     const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveFiltered(*query, admissionForStamped(*query));
+        m_ruleEvaluator->resolveFiltered(*query, admitWith(admissionForStamped(*query), *query));
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestoreSizeOnUnsnap))) {
+        return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
+    }
+    return globalDefault;
+}
+
+bool WindowTrackingAdaptor::shouldUnfloatFallbackToZone(const QString& windowId, const QString& screenId)
+{
+    // A matched SetUnfloatFallbackToZone rule wins, otherwise the global
+    // setting decides — the rule ?? config layering the SnapEngine's
+    // UnfloatFallbackPredicate contract names.
+    const bool globalDefault = m_settings->snapUnfloatFallbackToZone();
+    if (!m_ruleStore) {
+        return globalDefault;
+    }
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
+    if (!query) {
+        return globalDefault;
+    }
+    // Stamp the CALLER's screen, not screenForWindow: the engine hands us the
+    // RESOLVED restore screen (tracked float screen with output-unplugged
+    // fallback), which is where the fallback zone would land — the screen a
+    // ScreenId-scoped rule should be judged against.
+    stampScreenAndMode(*query, windowId, screenId);
+    ensureRuleEvaluator();
+    // Mid-session resolver: an unfloat fires long after open, so the same
+    // uncached-resolve reasoning as shouldRestoreSizeOnUnsnap above applies
+    // verbatim (resolveCached would return the open-time verdict).
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveFiltered(*query, admitWith(admissionForStamped(*query), *query));
+    if (const std::optional<PhosphorRules::RuleAction> action =
+            resolved.slot(QString(PhosphorRules::ActionSlot::UnfloatFallbackToZone))) {
         return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
     }
     return globalDefault;
@@ -330,19 +438,7 @@ void WindowTrackingAdaptor::stampScreenAndMode(PhosphorRules::WindowQuery& query
             activity = ctx->effectiveActivity(activity);
         }
     }
-    // The MATCH vocabulary ("snapping" / "tiling" / "scrolling"), not the
-    // SetEngineMode action vocabulary, which spells the middle one "autotile".
-    switch (m_layoutManager->modeForScreen(screenId, desktop, activity)) {
-    case PhosphorZones::AssignmentEntry::Snapping:
-        query.mode = QStringLiteral("snapping");
-        break;
-    case PhosphorZones::AssignmentEntry::Autotile:
-        query.mode = QStringLiteral("tiling");
-        break;
-    case PhosphorZones::AssignmentEntry::Scrolling:
-        query.mode = QStringLiteral("scrolling");
-        break;
-    }
+    query.mode = modeMatchToken(m_layoutManager->modeForScreen(screenId, desktop, activity));
 }
 
 bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QString& screenId)
@@ -352,7 +448,7 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
     if (!m_ruleStore) {
         return false;
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return false;
     }
@@ -370,7 +466,7 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, const QSt
     // wrong mode. One resolve per open is the cost. Filter picked from what
     // the stamp actually landed, same as shouldRestoreSizeOnUnsnap.
     const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveFiltered(*query, admissionForStamped(*query));
+        m_ruleEvaluator->resolveFiltered(*query, admitWith(admissionForStamped(*query), *query));
     // The Float action carries free-form params (no Value key), so the verdict is
     // the PRESENCE of the filled slot, not a bool payload.
     return resolved.slot(QString(PhosphorRules::ActionSlot::Float)).has_value();
@@ -381,7 +477,7 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     if (!m_ruleStore) {
         return {};
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return {};
     }
@@ -421,6 +517,9 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     // window. Title is load-bearing: the enrichment refresh that calls this is
     // driven by title changes, so a revision-only key would pin a
     // `Title contains …` rule to its first verdict for the window's lifetime.
+    // The colour-scheme token is in the key for the same reason with a
+    // different trigger: it moves on a light/dark flip with no rules edit, so
+    // the revision does not budge (see the TabColorMemoEntry doc).
     const quint64 revision = m_ruleStore->ruleSet().revision();
     // Shadow-keyed so the writer and the windowClosed remover share one key
     // space BY CONSTRUCTION — the close path removes by shadowWindowId, and
@@ -431,18 +530,40 @@ QVariantMap WindowTrackingAdaptor::tabColorRuleParams(const QString& windowId)
     const auto memoIt = m_tabColorMemo.constFind(memoKey);
     if (memoIt != m_tabColorMemo.constEnd() && memoIt->revision == revision && memoIt->title == query->title
         && memoIt->captionNormal == query->captionNormal && memoIt->virtualDesktop == query->virtualDesktop
-        && memoIt->activity == query->activity) {
+        && memoIt->activity == query->activity && memoIt->colorScheme == query->colorScheme) {
         return memoIt->colors;
     }
     // admitNothingStamped, not admitScreenStamped: this query stamps NO
     // context field, so ScreenId joins the exclusions (the helper's doc
     // carries the negated-leaf rationale).
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveFiltered(*query, admitNothingStamped);
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveFiltered(*query, admitWith(&admitNothingStamped, *query));
     const QVariantMap colors = tabColorsFromResolved(resolved);
     m_tabColorMemo.insert(memoKey,
                           TabColorMemoEntry{revision, query->title, query->captionNormal, query->virtualDesktop,
-                                            query->activity, colors});
+                                            query->activity, query->colorScheme, colors});
     return colors;
+}
+
+void WindowTrackingAdaptor::invalidateRuleMemosForColorSchemeChange()
+{
+    // Only the tab-colour memo. This deliberately does NOT clear the shared
+    // RuleEvaluator cache, and that restraint is load-bearing: the six cached
+    // resolvers seed one memo keyed on (windowId, revision), and the ordering
+    // invariant documented above shouldRestoreFloatedPosition requires a
+    // ScreenId-STAMPING resolver to seed it first. Four of the six stamp and
+    // run only at open; the other two are engine-injected predicates that run
+    // mid-session on unfloat and restore. Dropping the cache under a live
+    // session therefore hands the next seed to an unstamped predicate, which
+    // writes an empty screenId and makes every ScreenId-scoped rule either
+    // stop firing or, negated, fire for every window — until the next revision
+    // bump. Nothing is lost by keeping it: those six slots are open-path
+    // verdicts, and a colour-scheme flip does not re-run the open path.
+    //
+    // The tab-colour memo is the one that genuinely needs a flip to re-drive,
+    // and its key now carries the scheme token, so this clear is a
+    // determinism belt rather than the correctness mechanism.
+    m_tabColorMemo.clear();
 }
 
 QVariantMap WindowTrackingAdaptor::tabColorsFromResolved(const PhosphorRules::ResolvedActions& resolved)
@@ -450,9 +571,9 @@ QVariantMap WindowTrackingAdaptor::tabColorsFromResolved(const PhosphorRules::Re
     QVariantMap out;
     // readHexColorSlot (shared with the drop-indicator builder) carries the
     // empty-means-no-override and shape-check rationale.
-    readHexColorSlot(resolved, PhosphorRules::ActionSlot::TabColorActive, QStringLiteral("activeColor"), out);
-    readHexColorSlot(resolved, PhosphorRules::ActionSlot::TabColorInactive, QStringLiteral("inactiveColor"), out);
-    readHexColorSlot(resolved, PhosphorRules::ActionSlot::TabColorUrgent, QStringLiteral("urgentColor"), out);
+    readHexColorSlot(resolved, PhosphorRules::ActionSlot::TabColorActive, WindowColorKeys::activeColor(), out);
+    readHexColorSlot(resolved, PhosphorRules::ActionSlot::TabColorInactive, WindowColorKeys::inactiveColor(), out);
+    readHexColorSlot(resolved, PhosphorRules::ActionSlot::TabColorUrgent, WindowColorKeys::urgentColor(), out);
     return out;
 }
 
@@ -461,7 +582,7 @@ QVariantMap WindowTrackingAdaptor::dropIndicatorRuleParams(const QString& window
     if (!m_ruleStore) {
         return {};
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return {};
     }
@@ -477,15 +598,16 @@ QVariantMap WindowTrackingAdaptor::dropIndicatorRuleParams(const QString& window
     // invalidation correctness than the single resolve it saves.
     ensureRuleEvaluator();
     // admitNothingStamped: same no-stamp shape as the tab colours above.
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveFiltered(*query, admitNothingStamped);
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveFiltered(*query, admitWith(&admitNothingStamped, *query));
     QVariantMap out;
     // Keyed by the QML property names the drop-indicator slot reads, so the
     // overlay's layering is one lookup per property; readHexColorSlot
     // carries the shape-check rationale.
-    readHexColorSlot(resolved, PhosphorRules::ActionSlot::DragDropIndicatorColor, QStringLiteral("indicatorColor"),
+    readHexColorSlot(resolved, PhosphorRules::ActionSlot::DragDropIndicatorColor, WindowColorKeys::indicatorColor(),
                      out);
     readHexColorSlot(resolved, PhosphorRules::ActionSlot::DragDropIndicatorBorderColor,
-                     QStringLiteral("indicatorBorderColor"), out);
+                     WindowColorKeys::indicatorBorderColor(), out);
     return out;
 }
 
@@ -495,7 +617,7 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
     if (!m_ruleStore) {
         return out;
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return out;
     }
@@ -514,7 +636,7 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
     // never matches, and those are the two conditions the settings editor
     // offers alongside the scrolling open actions.
     query->screenId = screenId;
-    query->mode = QStringLiteral("scrolling");
+    query->mode = modeMatchToken(PhosphorZones::AssignmentEntry::Scrolling);
 
     ensureRuleEvaluator();
     // Deliberately UNCACHED, unlike the sibling predicates. resolveCached is
@@ -523,7 +645,8 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
     // verdict built under a Mode condition it never asked for (and vice
     // versa, on whichever path resolves first). This is one resolve per
     // window open on a scrolling screen.
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveFiltered(*query, admitScreenAndModeStamped);
+    const PhosphorRules::ResolvedActions resolved =
+        m_ruleEvaluator->resolveFiltered(*query, admitWith(&admitScreenAndModeStamped, *query));
     if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenColumnWidth))) {
         // Only forward a genuinely numeric fraction inside the SHARED
         // column-width bounds (PhosphorRules::Min/MaxColumnWidthRatio, the
@@ -555,6 +678,14 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
         const QString token = action->params.value(QString(PhosphorRules::ActionParam::Value)).toString();
         out.insert(ScrollOpenKeys::consume(), token == QLatin1String(PhosphorRules::ColumnPlacementToken::Consume));
     }
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenMaximized))) {
+        out.insert(ScrollOpenKeys::maximized(),
+                   action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool());
+    }
+    if (const auto action = resolved.slot(QString(PhosphorRules::ActionSlot::OpenFocused))) {
+        out.insert(ScrollOpenKeys::focused(),
+                   action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool());
+    }
     return out;
 }
 
@@ -566,7 +697,7 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     if (!m_ruleStore) {
         return {};
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return {};
     }
@@ -591,7 +722,7 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // slot, so reading the Placement slot off the same verdict is free. Same open-path
     // lifetime guarantee (resolved once per window lifetime) as the sibling predicates.
     const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
 
     PhosphorSnapEngine::PlacementDirective directive;
 
@@ -670,7 +801,7 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     if (!m_ruleStore) {
         return;
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return;
     }
@@ -679,7 +810,8 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     // this reuses the verdict placementZonesByRule already seeded — no second evaluation.
     query->screenId = screenId;
     ensureRuleEvaluator();
-    emitRouteToDesktopIfMatched(m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped), windowId);
+    emitRouteToDesktopIfMatched(
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query)), windowId);
 }
 
 bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId)
@@ -687,7 +819,7 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     if (!m_ruleStore) {
         return false;
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return false;
     }
@@ -695,7 +827,7 @@ bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     query->screenId = screenId;
     ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
 
     // Bare RouteToScreen only. A rule that ALSO carries SnapToZone routes AND snaps
     // via the placement directive (calculateSnapToPlacementRule resolves the zones
@@ -803,14 +935,14 @@ QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId
     if (!m_ruleStore) {
         return QString();
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
     if (!query) {
         return QString();
     }
     query->screenId = screenId;
     ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitScreenStamped);
+        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
 
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.
     emitRouteToDesktopIfMatched(resolved, windowId);

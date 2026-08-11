@@ -103,6 +103,10 @@ void TestRuleControllerOverview::monitorOverviewReportsLock()
     // presence), mirroring resolveContextLocked.
     RuleController controller;
 
+    // The helper RETURNS the new id rather than asserting on it: a QVERIFY
+    // inside a void lambda returns from the lambda, not from the slot, so a
+    // failed add would let the rest of the slot go on asserting against a
+    // model it already knew was wrong.
     const auto lockRule = [&](const QString& screenId, bool locked) {
         QVariantMap rule = controller.newEmptyRule(QStringLiteral("monitor"));
         QVariantMap match = rule.value(QStringLiteral("match")).toMap();
@@ -110,10 +114,10 @@ void TestRuleControllerOverview::monitorOverviewReportsLock()
         rule[QStringLiteral("match")] = match;
         rule[QStringLiteral("actions")] = QVariantList{
             QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), locked}}};
-        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+        return controller.addRuleFromJson(rule);
     };
-    lockRule(QStringLiteral("DP-2"), true);
-    lockRule(QStringLiteral("DP-3"), false);
+    QVERIFY(!lockRule(QStringLiteral("DP-2"), true).isEmpty());
+    QVERIFY(!lockRule(QStringLiteral("DP-3"), false).isEmpty());
 
     const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-2")}},
                                QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-3")}},
@@ -161,15 +165,18 @@ void TestRuleControllerOverview::monitorOverviewLockPriorityResolution()
         rule[QStringLiteral("match")] = match;
         rule[QStringLiteral("actions")] = QVariantList{
             QVariantMap{{QStringLiteral("type"), QStringLiteral("lockContext")}, {QStringLiteral("value"), locked}}};
-        QVERIFY(!controller.addRuleFromJson(rule).isEmpty());
+        return controller.addRuleFromJson(rule);
     };
     // DP-A: lock=true added FIRST (higher priority) over a later unlock → locked.
-    lockRule(QStringLiteral("DP-A"), true);
-    lockRule(QStringLiteral("DP-A"), false);
+    // The adds are asserted at the CALL SITE, not inside the helper: a QVERIFY
+    // in a void lambda returns from the lambda and lets the slot carry on
+    // against a model it knows is short a rule.
+    QVERIFY(!lockRule(QStringLiteral("DP-A"), true).isEmpty());
+    QVERIFY(!lockRule(QStringLiteral("DP-A"), false).isEmpty());
     // DP-B: the inverse — unlock added first (higher priority) over a later
     // lock → not locked. Proves the winner is priority, not the value.
-    lockRule(QStringLiteral("DP-B"), false);
-    lockRule(QStringLiteral("DP-B"), true);
+    QVERIFY(!lockRule(QStringLiteral("DP-B"), false).isEmpty());
+    QVERIFY(!lockRule(QStringLiteral("DP-B"), true).isEmpty());
 
     const QVariantList screens{QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-A")}},
                                QVariantMap{{QStringLiteral("name"), QStringLiteral("DP-B")}}};
@@ -649,10 +656,10 @@ void TestRuleControllerOverview::engineModePickerExposesAllVocabularyTokens()
     };
     for (const QString& actionWire : {QStringLiteral("setEngineMode"), QStringLiteral("disableEngine")}) {
         const QVariantList options = findModeOptions(actionWire);
-        // QVERIFY2 with the action name rather than a bare QCOMPARE: a
-        // failure on the first action would otherwise abort the loop and
-        // hide the second action's state, and the report would not say
-        // which action failed.
+        // QVERIFY2 with the action name rather than a bare QCOMPARE: the
+        // failure aborts the slot either way, so this buys the report, not
+        // the second iteration — without the message neither the line nor
+        // the count says WHICH action was short.
         QVERIFY2(options.size() == 3,
                  qPrintable(QStringLiteral("%1 exposes %2 mode options").arg(actionWire).arg(options.size())));
         QStringList wireValues;
@@ -777,6 +784,23 @@ void TestRuleControllerOverview::templatesProduceSeededRules()
     QCOMPARE(undecorateActions.size(), 1);
     QCOMPARE(undecorateActions.at(0).toMap().value(QStringLiteral("type")).toString(),
              QStringLiteral("excludeDecorations"));
+
+    // `noZoneRestoreApp` is the per-app veto of the zone-restore setting
+    // (discussion #889): Application subject + a single SetRestoreToZoneOnLogin
+    // action seeded FALSE. The seeded value is the contract — the template
+    // exists to opt an app OUT, so a dropped or inverted seed would author a
+    // rule that silently changes nothing.
+    const QVariantMap noRestoreRule = controller.newRuleFromTemplate(QStringLiteral("noZoneRestoreApp"));
+    QCOMPARE(noRestoreRule.value(QStringLiteral("match")).toMap().value(QStringLiteral("field")).toString(),
+             QStringLiteral("appId"));
+    const QVariantList noRestoreActions = noRestoreRule.value(QStringLiteral("actions")).toList();
+    QCOMPARE(noRestoreActions.size(), 1);
+    QCOMPARE(noRestoreActions.at(0).toMap().value(QStringLiteral("type")).toString(),
+             QStringLiteral("setRestoreToZoneOnLogin"));
+    // The key must be PRESENT with an explicit false — QVariant().toBool()
+    // also reads false, so pin presence first.
+    QVERIFY(noRestoreActions.at(0).toMap().contains(QStringLiteral("value")));
+    QCOMPARE(noRestoreActions.at(0).toMap().value(QStringLiteral("value")).toBool(), false);
 
     // `excludeSmallFromAnimations` showcases the new Width numeric match field:
     // a `Width LessThan 300` leaf + a single terminal ExcludeAnimations action.
@@ -982,6 +1006,44 @@ void TestRuleControllerOverview::defaultPayloadForSeedsParams()
     QVERIFY(lockPayload.contains(QStringLiteral("value")));
     QCOMPARE(lockPayload.value(QStringLiteral("value")).toBool(), true);
 
+    // The bool actions added for the scrolling and unfloat parity work seed
+    // DELIBERATELY ASYMMETRIC polarities: each one opens on the value a user
+    // authoring that rule is actually reaching for, which is the opposite of
+    // whatever its governing global setting defaults to. That asymmetry is
+    // the contract (the unfloat seed is spelled out in the changelog), and it
+    // is exactly the kind of thing a descriptor edit flips by accident, so
+    // pin both polarities rather than a sample of one. Presence is asserted
+    // before the value because QVariant().toBool() also reads false.
+    struct BoolSeed
+    {
+        QString wire;
+        bool seed;
+    };
+    for (const BoolSeed& s : {
+             // Global snapUnfloatFallbackToZone defaults OFF, so the rule opts in.
+             BoolSeed{QStringLiteral("setUnfloatFallbackToZone"), true},
+             // No global counterpart — the rule exists to maximize, so it opens on.
+             BoolSeed{QStringLiteral("openMaximized"), true},
+             // Global focus-new-windows defaults ON, so the rule opts out.
+             BoolSeed{QStringLiteral("openFocused"), false},
+             BoolSeed{QStringLiteral("openFullscreen"), true},
+             // The per-context scrolling toggles, each seeded against its own
+             // global default.
+             BoolSeed{QStringLiteral("setScrollAlwaysCenterSingleColumn"), true},
+             BoolSeed{QStringLiteral("setScrollRespectMinimumSize"), false},
+             BoolSeed{QStringLiteral("setScrollCropStraddlers"), true},
+             BoolSeed{QStringLiteral("setScrollFocusNewWindows"), false},
+             BoolSeed{QStringLiteral("setScrollSmartGaps"), false},
+             BoolSeed{QStringLiteral("setScrollFocusFollowsMouse"), true},
+         }) {
+        const QVariantMap payload = controller.defaultPayloadFor(s.wire);
+        QCOMPARE(payload.value(QStringLiteral("type")).toString(), s.wire);
+        // QVERIFY2 over QVERIFY so a failing row names itself: an abort here
+        // hides every later row, and the rows differ only by wire string.
+        QVERIFY2(payload.contains(QStringLiteral("value")), qPrintable(s.wire));
+        QVERIFY2(payload.value(QStringLiteral("value")).toBool() == s.seed, qPrintable(s.wire));
+    }
+
     // Unknown type → bare `{type: X}` map. The QML side will never call this
     // with an unknown wire (the picker only offers registered types), but
     // returning a sane shape keeps the contract total.
@@ -997,6 +1059,12 @@ void TestRuleControllerOverview::curveLabelResolverBridgesQmlNaming()
     // in production). Exercise the actual QJSValue bridge end-to-end: install a
     // real engine-backed resolver and confirm the summary renders its output,
     // and that a non-callable value clears the resolver back to the raw value.
+    //
+    // The engine is declared BEFORE the controller so it outlives it: the
+    // controller holds the installed QJSValue, and destruction runs in reverse
+    // declaration order, so the other order would tear the engine down while
+    // one of its values was still held by the controller.
+    QJSEngine engine;
     RuleController controller;
 
     Rule curveRule;
@@ -1016,7 +1084,6 @@ void TestRuleControllerOverview::curveLabelResolverBridgesQmlNaming()
     // No resolver wired yet → the raw wire string round-trips behind the label.
     QCOMPARE(summary(), QStringLiteral("Curve: 0.33,1.00,0.68,1.00"));
 
-    QJSEngine engine;
     QJSValue resolver = engine.evaluate(
         QStringLiteral("(function(c){ return c === '0.33,1.00,0.68,1.00' ? 'Standard (Cubic)' : c; })"));
     QVERIFY(resolver.isCallable());

@@ -70,7 +70,12 @@ ImportResult importFromKwinrc()
 
     ImportResult result = importLayouts(doc.array());
     if (result.imported > 0) {
-        result.message = PhosphorI18n::tr("Imported %n layout(s) from KZones", "", result.imported);
+        // Two sources rather than "layout(s)": Qt's plural tr() falls back to
+        // the single source verbatim when untranslated, so a combined form
+        // reads "layout(s)" to every English user. Both arms keep %n.
+        result.message = result.imported == 1
+            ? PhosphorI18n::tr("Imported %n layout from KZones", nullptr, result.imported)
+            : PhosphorI18n::tr("Imported %n layouts from KZones", nullptr, result.imported);
     } else if (result.message.isEmpty()) {
         result.message = PhosphorI18n::tr("No layouts found in KZones configuration");
     }
@@ -113,7 +118,9 @@ ImportResult importFromFile(const QString& filePath)
 
     ImportResult result = importLayouts(array);
     if (result.imported > 0) {
-        result.message = PhosphorI18n::tr("Imported %n layout(s) from KZones file", "", result.imported);
+        result.message = result.imported == 1
+            ? PhosphorI18n::tr("Imported %n layout from KZones file", nullptr, result.imported)
+            : PhosphorI18n::tr("Imported %n layouts from KZones file", nullptr, result.imported);
     } else if (result.message.isEmpty()) {
         result.message = PhosphorI18n::tr("No valid layouts found in file");
     }

@@ -96,9 +96,12 @@ using GeometryFn = std::function<QRect(const QString&)>;
 /// @p availableGeometry defaults to @p screenGeometry — pass a DIFFERENT one
 /// (a panel inset) when the test needs to tell the work area apart from the
 /// screen rect, which is what the parking bounds are measured against.
-inline PhosphorScrollEngine::ScrollEngine* makeProviderEngine(QObject* parent, const QSet<QString>& screens,
-                                                              GeometryFn screenGeometry = {},
-                                                              GeometryFn availableGeometry = {})
+/// @p windowTracker is null for every suite but the behaviour one: the sticky
+/// gate and the client-decides width short-circuit on a null tracker, so
+/// those two paths need a stub (scrollstubtracking.h) to be observable at all.
+inline PhosphorScrollEngine::ScrollEngine*
+makeProviderEngine(QObject* parent, const QSet<QString>& screens, GeometryFn screenGeometry = {},
+                   GeometryFn availableGeometry = {}, PhosphorEngine::IWindowTrackingService* windowTracker = nullptr)
 {
     if (!screenGeometry) {
         screenGeometry = [](const QString&) {
@@ -108,7 +111,7 @@ inline PhosphorScrollEngine::ScrollEngine* makeProviderEngine(QObject* parent, c
     if (!availableGeometry) {
         availableGeometry = screenGeometry;
     }
-    auto* engine = new PhosphorScrollEngine::ScrollEngine(nullptr, nullptr, parent);
+    auto* engine = new PhosphorScrollEngine::ScrollEngine(windowTracker, nullptr, parent);
     engine->setScreenGeometryProviders(availableGeometry, screenGeometry);
     // A well-behaved compositor answers every activation request with a
     // windowFocused report (the effect relays each KWin windowActivated back

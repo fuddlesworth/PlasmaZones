@@ -188,8 +188,8 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
     // is setScrollingScreens' invalidateAllRuleCaches plus its border sweep,
     // which drop and rebuild every verdict memoised against the empty set once
     // the reply lands.
-    if (query.mode == QLatin1String("tiling") && m_tilingHandler->isScrollingScreen(screenId)) {
-        query.mode = QStringLiteral("scrolling");
+    if (query.mode == PhosphorRules::ModeToken::Tiling && m_tilingHandler->isScrollingScreen(screenId)) {
+        query.mode = QString(PhosphorRules::ModeToken::Scrolling);
     }
     // Stamp the rules-visible active layout the daemon pushed for this
     // window's screen (snapping UUID / "autotile:<algo>" /
@@ -325,6 +325,28 @@ PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::Effec
     // slot, so return empty actions WITHOUT caching to avoid a useless cache entry.
     // In practice a non-null w always engages placement/state attributes, so this
     // only ever covers the already-handled empty-windowId case — kept as a belt.
+    const PhosphorRules::WindowQuery query = ruleQuery(w);
+    if (!query.hasWindow()) {
+        return {};
+    }
+    return evaluator.resolveCached(windowId, query);
+}
+
+PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleVerdictActions(KWin::EffectWindow* w,
+                                                                            const QString& windowId) const
+{
+    // Structurally identical to resolveRuleActions above, against the
+    // effect-VERDICT evaluator instead. The two caches are keyed the same way
+    // but live on different evaluators, so a hit in one says nothing about the
+    // other — which is the point: the verdict walk must not stop at an
+    // ExcludeAnimations action the appearance walk correctly honours.
+    const PhosphorRules::RuleEvaluator& evaluator = m_shaderManager.effectVerdictRuleEvaluator();
+    if (windowId.isEmpty()) {
+        return {};
+    }
+    if (std::optional<PhosphorRules::ResolvedActions> cached = evaluator.resolveCachedIfPresent(windowId)) {
+        return std::move(*cached);
+    }
     const PhosphorRules::WindowQuery query = ruleQuery(w);
     if (!query.hasWindow()) {
         return {};
@@ -665,15 +687,22 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
     // it — the user's act of authoring a matching rule is the opt-in signal.
     // (Type exclusions are handled above and are NOT bypassable here.)
     //
-    // `m_shaderManager.animationRuleSet()` admits every rule carrying a
-    // Tag::Effect action (shader_config_dbus.cpp's `hasTag(type, Tag::Effect)`
-    // loop; the tag assignments in ruleaction.cpp are the authoritative
-    // membership list). So a rule
-    // whose only action is an appearance or layer override also force-animates
-    // its matches here — deliberate, consistent opt-in semantics across every
-    // effect-consumed action. `hasAnyMatch` never surfaces a rule whose
-    // actions are EXCLUSIVELY `ExcludeAnimations` — those route through the
-    // exclusion gate below.
+    // The gate keys on the ANIMATION/APPEARANCE set only, which is what
+    // narrows it: `m_shaderManager.animationRuleSet()` admits every rule
+    // carrying a Tag::Effect action (shader_config_dbus.cpp's
+    // `hasTag(type, Tag::Effect)` loop; the tag assignments in ruleaction.cpp
+    // are the authoritative membership list), and Tag::Effect is now the
+    // APPEARANCE family alone — the animation overrides, SetOpacity, the
+    // border / title-bar / decoration-chain actions and SetWindowLayer. Each
+    // of those changes how the window is drawn, so authoring one is a
+    // legitimate opt-in signal for animating it too.
+    // The two VERDICT actions (OpenFullscreen, ScrollFactor) carry
+    // Tag::EffectVerdict instead and are bound to a different rule set, so a
+    // rule whose only action is a scroll multiplier or an open-fullscreen
+    // decision no longer force-animates its matches past the min-size and
+    // user-exclusion filters below — neither action is an appearance change.
+    // `hasAnyMatch` never surfaces a rule whose actions are EXCLUSIVELY
+    // `ExcludeAnimations` — those route through the exclusion gate below.
     if (haveAnimationRules && animationEvaluator.hasAnyMatch(query())) {
         return true;
     }

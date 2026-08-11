@@ -309,7 +309,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // TEARDOWN variant (no border sweep, no repaint) for the same reason.
         m_tilingHandler->clearActiveLayoutsForTeardown();
         // That call also re-slices the ActiveLayout-scoped rules back out of
-        // the four effect-bound rule sets, which the teardown otherwise
+        // the five effect-bound rule sets, which the teardown otherwise
         // preserves — bound against an empty map they over-match on their
         // negated polarity — and SETS m_activeLayoutRulesWithheld when it
         // removed any, so the next bring-up's seeding edge re-drives
@@ -317,8 +317,8 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         //
         // m_activeLayoutRulesWithheld is deliberately never CLEARED here. Each
         // loadRuleAnimationsFromDbus reply that PARSES recomputes it from the
-        // live store (the malformed-payload arms return before the assignment,
-        // having run no slice either), so a clear here would disarm the next
+        // live store (the refusal arms return before the assignment and re-arm
+        // the marker to true instead), so a clear here would disarm the next
         // seeding edge (it
         // is gated on the marker in TilingHandler's setActiveLayouts) if the
         // next bring-up's getAllRules never lands, stranding the withheld

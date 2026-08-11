@@ -24,6 +24,7 @@ set(CMAKE_AUTOMOC ON)
 add_library(PhosphorScrollEngine SHARED
     include/PhosphorScrollEngine/ScrollTypes.h
     include/PhosphorScrollEngine/ScrollStashTypes.h
+    include/PhosphorScrollEngine/ScrollEngineTypes.h
     include/PhosphorScrollEngine/ScrollStrip.h
     include/PhosphorScrollEngine/ScrollState.h
     include/PhosphorScrollEngine/ScrollEngine.h

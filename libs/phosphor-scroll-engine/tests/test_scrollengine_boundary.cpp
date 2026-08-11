@@ -33,6 +33,9 @@ using ScrollTestUtils::makeProviderEngine;
 namespace {
 
 const QString kS1 = QStringLiteral("S1");
+/// The comparison screen for the per-screen crop case: same geometry, no
+/// override map, so the only difference between the two is the rule slot.
+const QString kS2 = QStringLiteral("S2");
 
 /// Minimal IScrollSettings whose centering and crop answers are test-set.
 /// Everything else answers the engine's own defaults.
@@ -316,6 +319,53 @@ private Q_SLOTS:
             qPrintable(
                 QStringLiteral("expected a park below the screen, got y=%1").arg(b.value(QLatin1String("y")).toInt())));
         QCOMPARE(b.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
+    }
+
+    // Crop mode is a per-SCREEN rule slot, and the emit loop must read the
+    // override rather than the config-seeded member. Global crop OFF, S1
+    // scoped ON: S1's straddlers keep their true rects while the same
+    // fixture on S2 commits clamped ones. Without the second screen this
+    // reads identically to a member-only implementation, which is exactly
+    // the regression the per-screen keys keep having.
+    void cropStraddlersOverrideIsPerScreen()
+    {
+        QObject owner;
+        auto* settings = new BoundaryStubSettings(&owner);
+        settings->cropStraddlers = false;
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1, kS2});
+        engine->setEngineSettings(settings);
+        engine->refreshConfigFromSettings();
+
+        QVariantMap crop;
+        crop.insert(PhosphorScrollEngine::ScrollPerScreenKeys::cropStraddlers(), true);
+        engine->applyPerScreenConfig(kS1, crop);
+
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        for (const QString& id : {QStringLiteral("app|a1"), QStringLiteral("app|a2"), QStringLiteral("app|a3")}) {
+            engine->windowOpened(id, kS1, 0, 0);
+        }
+        for (const QString& id : {QStringLiteral("app|b1"), QStringLiteral("app|b2"), QStringLiteral("app|b3")}) {
+            engine->windowOpened(id, kS2, 0, 0);
+        }
+        // Center the middle column on each screen, so its two neighbours
+        // straddle (the always-center stub is the straddler generator).
+        engine->windowFocused(QStringLiteral("app|a2"), kS1);
+        engine->windowFocused(QStringLiteral("app|b2"), kS2);
+        engine->retile(kS1);
+        engine->retile(kS2);
+        QCoreApplication::processEvents();
+
+        const QRect screen = defaultScreenRect();
+        const QJsonObject cropped = lastEntryFor(tiled, QStringLiteral("app|a1"));
+        const QJsonObject clamped = lastEntryFor(tiled, QStringLiteral("app|b1"));
+        QVERIFY(!cropped.isEmpty());
+        QVERIFY(!clamped.isEmpty());
+        // S1 keeps the true 600px rect, overhanging the left screen edge.
+        QCOMPARE(cropped.value(QLatin1String("width")).toInt(), 600);
+        QVERIFY(cropped.value(QLatin1String("x")).toInt() < screen.left());
+        // S2 is clamped at the edge and narrower for it.
+        QCOMPARE(clamped.value(QLatin1String("x")).toInt(), screen.left());
+        QVERIFY(clamped.value(QLatin1String("width")).toInt() < 600);
     }
 
     // The park lands below the union of ALL outputs — the headline rule of

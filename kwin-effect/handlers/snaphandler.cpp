@@ -222,6 +222,30 @@ void SnapHandler::callResolveWindowRestore(KWin::EffectWindow* window, std::func
     // daemon restart or from KWin session restore), so its current frameGeometry is the
     // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
     // float toggle to restore to the zone geometry instead of the original free-floating position.
+    // Seed the daemon's frame-geometry shadow before the resolve below, but
+    // only on the open path. The daemon translates a bare RouteToScreen onto
+    // the target monitor from that shadow, and the shadow has exactly two
+    // writers (the debounced motion flush and the bring-up bulk seed), so a
+    // window that has never MOVED has no entry at all — which is precisely a
+    // freshly opened one. Without this the daemon reads an invalid rect and
+    // takes its "the rule owns this window, but there is nothing to
+    // translate" branch, leaving the window on its spawn monitor and
+    // suppressing the remembered-placement fallback too. Confirmed live in a
+    // nested session: the same rule routed an already-open window (shadow
+    // seeded by a daemon restart) and silently did nothing for a fresh one.
+    //
+    // Ordering is why this can be fire-and-forget: both calls ride the same
+    // D-Bus connection, and per-connection message order is preserved, so the
+    // daemon has applied this push before it handles the resolve.
+    if (isOpenPath) {
+        const QRect openGeo = window->frameGeometry().toRect();
+        if (openGeo.isValid()) {
+            PhosphorProtocol::ClientHelpers::fireAndForget(
+                m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setFrameGeometry"),
+                {windowId, openGeo.x(), openGeo.y(), openGeo.width(), openGeo.height()},
+                QStringLiteral("setFrameGeometry open-path seed"));
+        }
+    }
     const int kindInt = static_cast<int>(m_effect->classifyWindowKind(window));
     // Thread the applied outcome to onComplete: onSnapSuccess fires only on
     // the zone-applied branch of tryAsyncSnapCall, and every branch calls

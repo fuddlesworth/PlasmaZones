@@ -82,6 +82,43 @@ QStringList ScrollingAdaptor::scrollingScreens() const
     return out;
 }
 
+QVariantMap ScrollingAdaptor::scrollEffectBehaviour() const
+{
+    // No engine gate, unlike scrollingScreens above: this map is daemon-built
+    // (the engine never sees the two effect-owned behaviours), so a cleared
+    // engine pointer during shutdown does not invalidate it. The last
+    // published value stands until the daemon pushes another.
+    return m_scrollEffectBehaviour;
+}
+
+void ScrollingAdaptor::setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens,
+                                                const QStringList& cropStraddlerScreens)
+{
+    // Canonicalized HERE, not assumed: the published contract (the XML
+    // DocString and the property doc) says both lists are sorted, and the
+    // change compare below is a LIST compare, so an unsorted producer would
+    // both break the documented wire shape and make the emit-on-change gate
+    // order-sensitive — the same membership arriving in a different order
+    // would re-broadcast. The in-tree producer builds these lists from a
+    // QSet, whose iteration order is a hash order, so this is the site that
+    // makes the contract true rather than a belt over one that already held.
+    // Duplicates go with the sort: two spellings of one membership must not
+    // compare unequal either.
+    const auto canonical = [](QStringList screens) {
+        std::sort(screens.begin(), screens.end());
+        screens.erase(std::unique(screens.begin(), screens.end()), screens.end());
+        return screens;
+    };
+    QVariantMap next;
+    next.insert(focusFollowsMouseKey(), canonical(focusFollowsMouseScreens));
+    next.insert(cropStraddlersKey(), canonical(cropStraddlerScreens));
+    if (next == m_scrollEffectBehaviour) {
+        return;
+    }
+    m_scrollEffectBehaviour = next;
+    Q_EMIT scrollEffectBehaviourChanged(m_scrollEffectBehaviour);
+}
+
 void ScrollingAdaptor::setScrollTabSurface(const QString& screenId, quint32 surfaceId)
 {
     // No engine POINTER gate, and a deliberate opt-out from the
@@ -309,6 +346,15 @@ void ScrollingAdaptor::clearEngine()
     // would not reach the bus); the overlay service's own PreDestroy hooks
     // are what announce surface teardown while the session is alive.
     m_scrollTabSurfaces.clear();
+    // m_scrollEffectBehaviour is deliberately NOT cleared, and it is the one
+    // member that differs: the two above are engine- and overlay-derived, so
+    // a detached adaptor holding them contradicts every other slot it
+    // answers. The behaviour map is daemon-built and its getter has no engine
+    // gate (scrollEffectBehaviour documents why), so the last published value
+    // stays the honest answer for as long as this object exists — clearing it
+    // would replace a true answer with an empty one that reads as "no screen
+    // has either behaviour".
+    //
     // Terminal latch: the overlay-service connection that feeds
     // setScrollTabSurface has the ADAPTOR as its context object, so it
     // survives this call until the adaptor is deleted — a late push landing

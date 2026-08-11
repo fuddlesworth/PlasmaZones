@@ -91,6 +91,7 @@ PickerCategory fieldCategory(Field f)
     case Field::TiledWindowCount:
     case Field::ScreenOrientation:
     case Field::ActiveLayout:
+    case Field::ColorScheme:
         return {PhosphorI18n::tr("Context"), 0};
     }
     return {PhosphorI18n::tr("Other"), 99};
@@ -197,6 +198,11 @@ QString fieldDescription(Field f)
             "The layout currently active on the monitor, or the scrolling template in use there. Lets a rule change "
             "gaps, the overlay or the lock state for the screen showing a given layout or template. It cannot change "
             "which layout is assigned (that would be circular).");
+    case Field::ColorScheme:
+        return PhosphorI18n::tr(
+            "Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or "
+            "layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme "
+            "changes.");
     }
     return QString();
 }
@@ -289,6 +295,10 @@ QList<ClosedTokenOption> orientationOptions()
     return {{QStringLiteral("landscape"), PhosphorI18n::tr("Landscape")},
             {QStringLiteral("portrait"), PhosphorI18n::tr("Portrait")}};
 }
+QList<ClosedTokenOption> colorSchemeOptions()
+{
+    return {{QStringLiteral("light"), PhosphorI18n::tr("Light")}, {QStringLiteral("dark"), PhosphorI18n::tr("Dark")}};
+}
 QString closedTokenLabel(const QList<ClosedTokenOption>& opts, const QString& token)
 {
     for (const ClosedTokenOption& o : opts) {
@@ -321,6 +331,11 @@ QString modeLabel(const QString& modeToken)
 QString orientationLabel(const QString& orientationToken)
 {
     return closedTokenLabel(orientationOptions(), orientationToken);
+}
+
+QString colorSchemeLabel(const QString& schemeToken)
+{
+    return closedTokenLabel(colorSchemeOptions(), schemeToken);
 }
 
 QString templateDisplayLabel(const QString& templateName)
@@ -446,6 +461,19 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Into the focused column");
         }
     }
+    if (type == ActionType::SetScrollStickyWindowHandling && key == ActionParam::Value) {
+        // Same phrasing as the Scrolling settings page's own choices, so the
+        // rule and the setting it overrides read alike.
+        if (wireValue == PhosphorRules::StickyWindowHandlingToken::TreatAsNormal) {
+            return PhosphorI18n::tr("Treat as normal windows");
+        }
+        if (wireValue == PhosphorRules::StickyWindowHandlingToken::RestoreOnly) {
+            return PhosphorI18n::tr("Restore only");
+        }
+        if (wireValue == PhosphorRules::StickyWindowHandlingToken::IgnoreAll) {
+            return PhosphorI18n::tr("Ignore entirely");
+        }
+    }
     if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
         if (wireValue == PhosphorRules::WindowLayerToken::Above) {
             return PhosphorI18n::tr("Above other windows");
@@ -566,6 +594,21 @@ QVariantList matchFields()
                 options.append(option);
             }
             entry[QStringLiteral("options")] = options;
+        } else if (f == Field::ColorScheme) {
+            // Closed light/dark vocabulary — a dropdown of the friendly
+            // tokens, same shape as Mode and ScreenOrientation. The value IS
+            // the wire token; options come from the single-source
+            // colorSchemeOptions() table (also used by the summary).
+            kind = QStringLiteral("colorScheme");
+            QVariantList options;
+            for (const ClosedTokenOption& opt : colorSchemeOptions()) {
+                QVariantMap option;
+                option[QStringLiteral("value")] = opt.wire;
+                option[QStringLiteral("wire")] = opt.wire;
+                option[QStringLiteral("label")] = opt.label;
+                options.append(option);
+            }
+            entry[QStringLiteral("options")] = options;
         } else if (f == Field::ActiveLayout) {
             // The value is a layout id (snap UUID, "autotile:<algo>", the
             // bare "scrolling:" sentinel of a template-less Scrolling
@@ -592,10 +635,10 @@ QVariantList operatorsForField(int fieldValue)
     const Field field = static_cast<Field>(fieldValue);
     QList<Operator> ops;
     if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ActiveLayout
-        || field == Field::Zone) {
+        || field == Field::Zone || field == Field::ColorScheme) {
         // These are string-valued but their vocabulary is closed or opaque
-        // (placement mode, portrait/landscape, a concrete layout id, a zone
-        // UUID) — only an exact-token Equals is meaningful. A substring or
+        // (placement mode, portrait/landscape, light/dark, a concrete layout
+        // id, a zone UUID) — only an exact-token Equals is meaningful. A substring or
         // regex against a closed token set, a layout UUID, or a zone UUID is a
         // footgun the picker cannot author sensibly. Mirrors the WindowType
         // enum treatment. Zone has no picker of its own yet, so its value is

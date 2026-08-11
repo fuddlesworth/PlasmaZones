@@ -137,7 +137,7 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
         // zone onto B (zone lookup spans all layouts), and the suspension
         // confinement can never fire because home == live by construction.
         m_windowTracker->unsnapForFloat(windowId);
-        // Own store first — see performToggleFloat's float branch for why the
+        // Own store first — see toggleWindowFloat's float branch for why the
         // routed WTS write alone cannot be trusted to land here.
         setFloating(windowId, true);
         m_windowTracker->setWindowFloating(windowId, true);
@@ -149,9 +149,10 @@ void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat, const
         // Cause derived from the live classification: a minimize-suspension
         // unfloat restores prior state only, a user float toggle gets the
         // rule tier and the cross-monitor go-home restore.
-        const UnfloatCause cause = (m_windowTracker && m_windowTracker->isSuspensionFloat(windowId))
-            ? UnfloatCause::Suspension
-            : UnfloatCause::UserToggle;
+        // No null guard on the tracker: this function already derefs it
+        // unguarded on the float branch above, per this file's TRACKER CONTRACT.
+        const UnfloatCause cause =
+            m_windowTracker->isSuspensionFloat(windowId) ? UnfloatCause::Suspension : UnfloatCause::UserToggle;
         if (!unfloatToZone(windowId, screenId, cause)) {
             // No restore target — keep the window floating rather than leaving
             // it in a limbo state (not floating, not snapped to any zone). For
@@ -458,22 +459,40 @@ UnfloatResult SnapEngine::resolveFallbackUnfloatGeometry(const QString& windowId
 {
     UnfloatResult result;
 
-    // Opt-in only: when the setting is off, a no-pre-float-zone unfloat leaves the
-    // window floating (the caller emits feedback). The engine reads the bool via the
-    // settings-agnostic ISnapSettings seam, like moveNewWindowsToLastZone.
-    auto* s = snapSettings();
-    if (!s || !s->unfloatFallbackToZone()) {
+    // Resolve the window's effective screen — the CALLER's screen first, else
+    // the window's tracked float screen. The caller's screen is the effect's
+    // authoritative live output threaded down from setWindowFloatingForScreen,
+    // and it wins for the same reason setWindowFloat's tier list gives it tier 1
+    // (:104-114): the tracked association goes stale the moment a floating
+    // window drifts across monitors without a windowScreenChanged (Discussion
+    // #724), and this screen is load-bearing twice over — the fallback zone is
+    // resolved on it AND the rule predicate below stamps ScreenId / derives Mode
+    // from it, so a stale monitor evaluates a ScreenId-pinned rule against the
+    // wrong output. A caller screen that no longer exists (output unplugged) is
+    // discarded in favour of the tracked screen. stateForWindow is never null;
+    // an untracked window yields an empty tracked screen, which only matters
+    // when the caller passed none either.
+    //
+    // Resolved BEFORE the opt-in gate below so the rule predicate receives
+    // the actual restore screen.
+    const QString screen = resolveUnfloatScreen(fallbackScreen, stateForWindow(windowId)->screenForWindow(windowId));
+    if (screen.isEmpty() || !m_layoutManager) {
         return result;
     }
 
-    // Resolve the window's effective screen — its tracked float screen, else the
-    // caller's fallback. A tracked screen that no longer exists (output unplugged)
-    // is discarded in favour of the caller's fallback. Zone geometry is resolved on
-    // the resulting screen so the fallback lands where the window currently is.
-    // stateForWindow is never null; an untracked window yields an empty
-    // tracked screen and the caller's fallback wins.
-    const QString screen = resolveUnfloatScreen(stateForWindow(windowId)->screenForWindow(windowId), fallbackScreen);
-    if (screen.isEmpty() || !m_layoutManager) {
+    // Opt-in only: when neither the rule predicate nor the setting says
+    // fall back, a no-pre-float-zone unfloat leaves the window floating (the
+    // caller emits feedback). The injected predicate — when set — implements
+    // the full rule ?? config layering; unset, the engine reads the bool via
+    // the settings-agnostic ISnapSettings seam, like moveNewWindowsToLastZone.
+    bool fallbackEnabled = false;
+    if (m_unfloatFallbackPredicate) {
+        fallbackEnabled = m_unfloatFallbackPredicate(windowId, screen);
+    } else {
+        auto* s = snapSettings();
+        fallbackEnabled = s && s->unfloatFallbackToZone();
+    }
+    if (!fallbackEnabled) {
         return result;
     }
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screen);

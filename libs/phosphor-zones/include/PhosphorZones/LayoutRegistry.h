@@ -322,7 +322,8 @@ public:
      *
      * The token is stamped onto every windowless context WindowQuery this
      * registry builds (assignment, gap, lock, overlay, default-assignment,
-     * tiling-params, scrolling-params), so an orientation rule can drive any context slot — for example a different
+     * osd, tiling-params, scrolling-params), so an orientation rule can drive any
+     * context slot — for example a different
      * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
      * screen geometry alone, independent of the resolved layout, so it carries no
      * recursion risk (unlike an active-layout query). The daemon wires this to
@@ -330,6 +331,24 @@ public:
      * @ref setTiledWindowCountProvider.
      */
     void setScreenOrientationProvider(std::function<std::optional<QString>(const QString& screenId)> provider);
+
+    /**
+     * @brief Inject a callback that reports the system colour scheme
+     * ("light" / "dark"), or std::nullopt when it is unknown (so a
+     * colour-scheme predicate stays inert).
+     *
+     * Session-wide, not per-screen — the scheme is one value for the whole
+     * desktop, so the provider takes no arguments. The token is stamped onto
+     * every windowless context WindowQuery this registry builds AND folded
+     * into every cached resolver's key (see @ref contextCacheKeyToken): a
+     * scheme flip is a non-rule-set input, exactly like a monitor rotation,
+     * so key-based invalidation is what keeps cached verdicts honest across
+     * it. Scheme derives from the application palette alone, independent of
+     * the resolved layout, so it carries no recursion risk and is stamped in
+     * the assignment cascade too. The daemon wires this to a palette read.
+     * Same threading contract as @ref setScreenOrientationProvider.
+     */
+    void setColorSchemeProvider(std::function<std::optional<QString>()> provider);
 
     /**
      * @brief Inject a callback that returns true when Snapping is the
@@ -523,6 +542,20 @@ public:
     std::optional<bool> resolveContextDefaultAssignment(const QString& screenId, int virtualDesktop,
                                                         const QString& activity) const;
 
+    /// Resolve a per-context override of the OSD toggles for the
+    /// (screen, desktop, activity) context by evaluating a windowless
+    /// WindowQuery and reading the `ActionSlot::OsdEnabled` slot. Per-slot
+    /// read (mirrors @ref resolveContextLocked, including the activeLayout +
+    /// orientation stamping — OSD resolution never runs inside the assignment
+    /// cascade, so there is no recursion hazard): returns the winning
+    /// `SetOsdEnabled` action's boolean `value` (true = force OSDs on past
+    /// the per-trigger toggles, false = suppress them), or @c std::nullopt
+    /// when no matching rule fills the slot (the context then follows the
+    /// global toggles). Same owner-thread affinity as the rest of the
+    /// registry.
+    std::optional<bool> resolveContextOsdEnabled(const QString& screenId, int virtualDesktop,
+                                                 const QString& activity) const;
+
     /// Resolve the per-context overlay-property override (shader / style)
     /// for (screen, desktop, activity) by evaluating a windowless WindowQuery and
     /// reading the OverlayShader / OverlayStyle slots. Per-slot
@@ -572,7 +605,8 @@ public:
     /// Stamp the screen-orientation token onto @p query from
     /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
     /// returns nullopt). Used by the two UNCACHED param resolvers
-    /// (tiling-params, scrolling-params); the five cached resolvers assign
+    /// (tiling-params, scrolling-params); the six cached resolvers (assignment,
+    /// gap, lock, default-assignment, osd, overlay) assign
     /// @ref screenOrientationToken directly, because they must fold the very
     /// same token into their cache key and re-reading the provider could hand
     /// the query a token the key does not describe. Either way every
@@ -586,19 +620,87 @@ public:
         query.screenOrientation = screenOrientationToken(screenId);
     }
 
+    /// The colour-scheme token from @ref m_colorSchemeProvider ("light" /
+    /// "dark"), or an empty string when the provider is unset or returns
+    /// nullopt. Shared by the query stamp and the cache-key fold, the same
+    /// one-read discipline as @ref screenOrientationToken.
+    ///
+    /// PROVIDER-DEPENDENT, and only the daemon wires one: in the settings and
+    /// editor processes this reads back EMPTY, so a `ColorScheme Equals "dark"`
+    /// leaf never matches there while a negated `none{ColorScheme Equals
+    /// "dark"}` matches everything. A preview rendered in those processes can
+    /// therefore disagree with what the daemon resolves. Wire a provider in any
+    /// process that must agree with the daemon's verdict.
+    QString colorSchemeToken() const
+    {
+        if (m_colorSchemeProvider) {
+            if (const auto token = m_colorSchemeProvider()) {
+                return *token;
+            }
+        }
+        return QString();
+    }
+
+    /// Stamp the colour-scheme token onto @p query from
+    /// @ref m_colorSchemeProvider (a no-op when unset). Used by the two
+    /// UNCACHED param resolvers; the cached resolvers assign
+    /// @ref colorSchemeToken directly for the same key-vs-query consistency
+    /// reason @ref stampScreenOrientation documents. Palette-derived and
+    /// layout-independent, so safe from the assignment cascade.
+    void stampColorScheme(PhosphorRules::WindowQuery& query) const
+    {
+        query.colorScheme = colorSchemeToken();
+    }
+
     /// Compose the extra cache-key token a daemon-facing context resolver (gap /
-    /// lock / overlay / default-assignment) passes to @ref resolveCachedContext,
-    /// folding in the placement @p modeToken (empty for the non-gap resolvers), the
-    /// @p activeLayoutId, and the @p orientationToken. Both the active layout AND
-    /// the screen orientation are NON-rule-set inputs — each can change without a
-    /// rule-set revision bump (the layout via the external global-default provider,
-    /// the orientation via a live monitor rotation) — so, exactly like the
+    /// lock / overlay / default-assignment / osd) passes to
+    /// @ref resolveCachedContext, folding in the placement @p modeToken (empty for
+    /// every resolver but the gap one), the @p activeLayoutId, the
+    /// @p orientationToken and the @p colorSchemeToken. All three of the active
+    /// layout, the screen orientation and the colour scheme are NON-rule-set
+    /// inputs — each can change without a rule-set revision bump (the layout via
+    /// the external global-default provider, the orientation via a live monitor
+    /// rotation, the scheme via a palette switch) — so, exactly like the
     /// tiledWindowCount "twc:" token, they must ride the cache KEY rather than the
     /// value, or the change would return a stale hit. See resolveCachedContext.
     static QString contextCacheKeyToken(const QString& modeToken, const QString& activeLayoutId,
-                                        const QString& orientationToken)
+                                        const QString& orientationToken, const QString& colorSchemeToken)
     {
-        return modeToken + QLatin1String("|al:") + activeLayoutId + QLatin1String("|or:") + orientationToken;
+        return escapeKeyComponent(modeToken) + QLatin1String("|al:") + escapeKeyComponent(activeLayoutId)
+            + QLatin1String("|or:") + escapeKeyComponent(orientationToken) + QLatin1String("|cs:")
+            + escapeKeyComponent(colorSchemeToken);
+    }
+
+    /// The @ref resolveAssignmentEntry cache's own extra token. The assignment
+    /// resolver stamps the tiled-window count but NOT the active layout (reading
+    /// it there would recurse), so its key carries a "twc:" component the
+    /// daemon-facing resolvers have no use for and no "al:" component — a
+    /// different shape, composed here rather than open-coded at the call site so
+    /// both key formats live next to each other and share
+    /// @ref escapeKeyComponent. @p tiledCount contributes nothing when
+    /// disengaged, which is the "count unknown" key.
+    static QString assignmentCacheKeyToken(const std::optional<int>& tiledCount, const QString& orientationToken,
+                                           const QString& colorSchemeToken)
+    {
+        return (tiledCount ? (QLatin1String("twc:") + QString::number(*tiledCount)) : QString()) + QLatin1String("|or:")
+            + escapeKeyComponent(orientationToken) + QLatin1String("|cs:") + escapeKeyComponent(colorSchemeToken);
+    }
+
+    /// Make a cache-key component unambiguous under concatenation. The key
+    /// formats above join their parts with a literal '|', so a component that
+    /// itself contains one would let two different (layout, orientation, scheme)
+    /// tuples compose the SAME key and share a cached verdict. Layout ids are
+    /// normally braced UUIDs and orientation / scheme tokens are fixed words, so
+    /// this is latent rather than live — but the "scrolling:<uuid>" and
+    /// "autotile:<algorithmId>" prefixed forms carry an algorithm id that is
+    /// only as constrained as the algorithm that supplied it. Escaping '%'
+    /// first, then '|', keeps the mapping injective.
+    static QString escapeKeyComponent(const QString& component)
+    {
+        QString escaped = component;
+        escaped.replace(QLatin1Char('%'), QLatin1String("%25"));
+        escaped.replace(QLatin1Char('|'), QLatin1String("%7C"));
+        return escaped;
     }
 
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
@@ -978,9 +1080,10 @@ private:
     /// the caller's (layoutForScreen) retry loop.
     ///
     /// Hot-path cache: the result is memoized in @c m_contextResolveCache keyed
-    /// by (screenId, virtualDesktop, activity) plus a "twc:N|or:<token>"
-    /// composite of the tiled-window-count and screen-orientation tokens (each
-    /// empty when unknown), so a count or rotation change yields a fresh entry
+    /// by (screenId, virtualDesktop, activity) plus a
+    /// "twc:N|or:<token>|cs:<token>" composite of the tiled-window-count,
+    /// screen-orientation and colour-scheme tokens (each
+    /// empty when unknown), so a count, rotation or palette change yields a fresh entry
     /// rather than a stale hit while steady callers keep hitting the
     /// cache. The cache is invalidated
     /// lazily by comparing the bound rule set's monotonic
@@ -1143,10 +1246,13 @@ private:
     /// its own qHash); the alias keeps existing qualified uses compiling.
     using ContextResolveKey = PhosphorZones::ContextResolveKey;
 
-    /// Shared revision-invalidated memoization for the five context resolvers
-    /// (@ref resolveAssignmentEntry, @ref resolveContextGaps,
+    /// Shared revision-invalidated memoization for the six cached context
+    /// resolvers (@ref resolveAssignmentEntry, @ref resolveContextGaps,
     /// @ref resolveContextLocked, @ref resolveContextDefaultAssignment,
-    /// @ref resolveContextOverlay). Drops @p cache wholesale whenever the rule
+    /// @ref resolveContextOsdEnabled, @ref resolveContextOverlay). The two
+    /// per-engine param resolvers (@ref resolveContextTilingParams,
+    /// @ref resolveContextScrollingParams) are deliberately uncached.
+    /// Drops @p cache wholesale whenever the rule
     /// set's monotonic revision moves past @p cacheRevision, returns a cached
     /// hit, else runs @p compute, then soft-caps the cache at 256 entries —
     /// dropping the whole cache on overflow rather than evicting one key, which
@@ -1181,9 +1287,10 @@ private:
     /// Holds ONLY what the rule set produced for each of the four independent
     /// slots. Given a fixed cache key the value is a pure function of the rule
     /// set (the cache's revision-invalidation contract). The live tiled-window
-    /// count and the screen orientation are the non-rule-set inputs that affect
+    /// count, the screen orientation and the colour scheme are the non-rule-set
+    /// inputs that affect
     /// the result; rather than break that contract they participate in the cache
-    /// KEY (the "twc:N" and "|or:<token>" components), so each combination resolves
+    /// KEY (the "twc:N", "|or:<token>" and "|cs:<token>" components), so each combination resolves
     /// its own entry. The global default — an external
     /// provider, not part of the rule set and not revision-tracked — is folded
     /// in AFTER the cache returns, so a default-setting change is reflected
@@ -1239,6 +1346,15 @@ private:
     mutable QHash<ContextResolveKey, std::optional<bool>> m_contextDefaultAssignmentCache;
     mutable quint64 m_contextDefaultAssignmentCacheRevision = 0;
 
+    /// Hot-path cache for @ref resolveContextOsdEnabled, keyed and
+    /// revision-invalidated exactly like @c m_contextLockCache. Every OSD
+    /// show gate consults the override (navigation feedback fires per verb),
+    /// so memoizing the per-slot walk collapses repeats to one walk per
+    /// rule-set revision. A @c std::nullopt value (no override rule) is
+    /// cached too.
+    mutable QHash<ContextResolveKey, std::optional<bool>> m_contextOsdCache;
+    mutable quint64 m_contextOsdCacheRevision = 0;
+
     /// Hot-path cache for @ref resolveContextOverlay, keyed and
     /// revision-invalidated exactly like @c m_contextGapCache. The overlay
     /// build path resolves the same (screen, desktop, activity) tuple on every
@@ -1265,6 +1381,8 @@ private:
     /// onto every windowless context query so a Field::ScreenOrientation predicate
     /// can match. See @ref setScreenOrientationProvider.
     std::function<std::optional<QString>(const QString& screenId)> m_screenOrientationProvider;
+    /// Session-wide "light" / "dark" provider — see @ref setColorSchemeProvider.
+    std::function<std::optional<QString>()> m_colorSchemeProvider;
     /// Borrowed native scrolling-template store (see setScrollingTemplateStore);
     /// null in registries that never wire one (some tests) — every template
     /// resolve then answers "no template".

@@ -6,10 +6,14 @@
 #include "tilinghandler/tilinghandler.h"
 
 #include <input_event.h>
+#include <pointer_input.h>
 #include <window.h>
 #include <workspace.h>
 
 #include <QLoggingCategory>
+
+#include <cmath>
+#include <optional>
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
@@ -122,7 +126,83 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
     // Scrolling over the invisible overhang must not reach the straddler;
     // consuming (rather than retargeting) matches how the region reads
     // visually — inert until clicked.
-    return overhangTargetAt(event->position) != nullptr;
+    if (overhangTargetAt(event->position) != nullptr) {
+        // The consumed stream ends here, so drop the residues with it: the
+        // next tick this filter DOES scale belongs to a different window (or
+        // to this one after a gap), and either way it must start clean rather
+        // than inherit a remainder from a stream the client never saw.
+        resetScrollFactorStream();
+        return true;
+    }
+    // ScrollFactor rule: rescale the event in place and pass it on. Ordering
+    // note: this runs at Popup weight, after the global-shortcut filter, so
+    // the Meta+wheel strip binding is consumed before it can be scaled.
+    applyScrollFactor(event);
+    return false;
+}
+
+void ScrollOverhangInputFilter::resetScrollFactorStream()
+{
+    m_scrollFactorWindow = nullptr;
+    m_v120ResidueVertical = 0.0;
+    m_v120ResidueHorizontal = 0.0;
+}
+
+void ScrollOverhangInputFilter::applyScrollFactor(KWin::PointerAxisEvent* event)
+{
+    // Fast path: no enabled ScrollFactor rule in the session. Checked BEFORE
+    // any window lookup so the no-rules case pays two pointer reads per tick,
+    // matching the effect's other has*Rules gates.
+    if (!m_effect->m_shaderManager.hasScrollFactorRules()) {
+        resetScrollFactorStream();
+        return;
+    }
+    // POINTER FOCUS, not a positional hit test. Two reasons, and they point
+    // the same way: the focused window is the one the forwarding filter will
+    // actually deliver this event to (during an implicit grab — a button held
+    // while the cursor leaves the window — that is NOT the window under the
+    // cursor, so a positional lookup would scale by the wrong app's rule or
+    // by none at all), and it costs no second hit test on top of the one
+    // overhangTargetAt already performed for this same event.
+    KWin::PointerInputRedirection* pointer = KWin::input()->pointer();
+    KWin::Window* target = pointer ? pointer->focus() : nullptr;
+    if (!target || target->isDeleted()) {
+        resetScrollFactorStream();
+        return;
+    }
+    if (target != m_scrollFactorWindow) {
+        // Fresh stream: another window's fractional remainder must not leak
+        // into this one's first tick.
+        m_v120ResidueVertical = 0.0;
+        m_v120ResidueHorizontal = 0.0;
+        m_scrollFactorWindow = target;
+    }
+    const std::optional<qreal> factor = m_effect->ruleScrollFactorFor(target->effectWindow());
+    if (!factor || qFuzzyCompare(*factor, 1.0)) {
+        return;
+    }
+    // In-place mutation is the API's natural expression: returning false
+    // hands the mutated struct to the remaining filters, ending at the
+    // forwarding filter that delivers to the client. The smooth delta scales
+    // directly; the discrete deltaV120 carries a per-orientation fractional
+    // residue so a factor below 1 accumulates into full steps instead of
+    // truncating every notch to zero.
+    event->delta *= *factor;
+    if (event->deltaV120 != 0) {
+        qreal& residue = event->orientation == Qt::Vertical ? m_v120ResidueVertical : m_v120ResidueHorizontal;
+        // A reversal within the same window and orientation abandons the
+        // remainder it was accumulating: carrying it across the turn subtracts
+        // from the first notch of the new direction (and, with a small factor,
+        // can swallow it outright), so the wheel feels like it sticks when the
+        // user changes their mind mid-scroll.
+        if ((event->deltaV120 > 0 && residue < 0.0) || (event->deltaV120 < 0 && residue > 0.0)) {
+            residue = 0.0;
+        }
+        const qreal scaled = event->deltaV120 * *factor + residue;
+        const qint32 emitted = qint32(std::trunc(scaled));
+        residue = scaled - emitted;
+        event->deltaV120 = emitted;
+    }
 }
 
 bool ScrollOverhangInputFilter::touchDown(KWin::TouchDownEvent* event)

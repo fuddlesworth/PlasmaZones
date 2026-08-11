@@ -41,8 +41,13 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
     // Tag::Effect admission and would silently break the moment any future
     // decoration source falls outside those three — so the gate carries its
     // own term rather than borrowing the coupling.
+    // The verdict term is here for the same reason as the two exclusion terms:
+    // a verdict-only session leaves every other term false, and the flush is
+    // where its cache clear lives — gating it out would pin a placement-scoped
+    // ScrollFactor verdict for the session.
     if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()
-        && m_snappingExclusionRuleSet.isEmpty() && m_decorationExclusionRuleSet.isEmpty()) {
+        && m_snappingExclusionRuleSet.isEmpty() && m_decorationExclusionRuleSet.isEmpty()
+        && m_shaderManager.effectVerdictRuleSet().isEmpty()) {
         return;
     }
     // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
@@ -69,6 +74,12 @@ void PlasmaZonesEffect::invalidateRuleCachesForWindowGeometry(const QString& win
     // verdict a geometry-scoped rule can produce (appearance/animation
     // overrides, placement exclusion, decoration exclusion).
     m_shaderManager.animationRuleEvaluator().evictCached(windowId);
+    // The verdict evaluator caches per (windowId, revision) exactly like the
+    // one above and resolves the same geometry-scoped match fields, so it
+    // needs the same eviction: a ScrollFactor rule scoped on Width would
+    // otherwise keep answering from the pre-resize verdict for the rest of
+    // the window's life.
+    m_shaderManager.effectVerdictRuleEvaluator().evictCached(windowId);
     m_snappingExclusionEvaluator.evictCached(windowId);
     m_decorationExclusionEvaluator.evictCached(windowId);
     if (!w || w->isDeleted()) {
@@ -106,6 +117,14 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
     // (an ExcludeDecorations match can pin IsSnapped / IsFloating / Zone).
     if (!m_decorationExclusionRuleSet.isEmpty()) {
         m_decorationExclusionEvaluator.clearCache();
+    }
+    // Verdicts are placement-scoped too (a ScrollFactor rule can
+    // pin IsFloating / Zone / Mode), and they are NOT covered by the appearance
+    // guard below — a verdict-only session leaves the animation set empty. The
+    // clear is cheap and unconditional for the same reason the exclusion
+    // clears above are.
+    if (!m_shaderManager.effectVerdictRuleSet().isEmpty()) {
+        m_shaderManager.effectVerdictRuleEvaluator().clearCache();
     }
     if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()) {
         return;
@@ -178,6 +197,12 @@ void PlasmaZonesEffect::invalidateAllRuleCaches()
     }
     if (!m_decorationExclusionRuleSet.isEmpty()) {
         m_decorationExclusionEvaluator.clearCache();
+    }
+    // Verdicts share the placement-scoped staleness and must be dropped
+    // ahead of the early return below, which only accounts for the appearance
+    // set and the layer snapshots — a verdict-only rule store leaves both empty.
+    if (!m_shaderManager.effectVerdictRuleSet().isEmpty()) {
+        m_shaderManager.effectVerdictRuleEvaluator().clearCache();
     }
     if (m_shaderManager.animationRuleSet().isEmpty() && m_ruleWindowLayerSnapshots.isEmpty()) {
         return;

@@ -20,7 +20,11 @@
 #include <PhosphorZones/AssignmentEntry.h>
 
 #include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonValue>
 #include <QStringList>
+
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -81,6 +85,12 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
     if (predicate.field == Field::ScreenOrientation) {
         return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
                                               RuleAuthoring::orientationLabel(predicate.value.toString()));
+    }
+
+    // Colour scheme: same closed-vocabulary treatment via the shared table.
+    if (predicate.field == Field::ColorScheme) {
+        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
+                                              RuleAuthoring::colorSchemeLabel(predicate.value.toString()));
     }
 
     // Window type is the int underlying the WindowType enum — resolve it to the
@@ -152,8 +162,22 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
                                                                        : PhosphorI18n::tr("Off"));
     }
 
-    return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
-                                          resolveOne(predicate.value.toString()));
+    // A JSON array or object value converts to an EMPTY QString, which would
+    // render the leaf as a bare "Title: " with nothing after it — the one place
+    // a hand-edited rule's value vanishes instead of round-tripping verbatim
+    // the way every other unresolvable value in this file does. No field's
+    // editor authors a container, so this is reachable only from hand-edited
+    // JSON; echo its compact JSON form so the user can see what the rule holds.
+    QString shown = resolveOne(predicate.value.toString());
+    if (shown.isEmpty()) {
+        const QJsonValue json = QJsonValue::fromVariant(predicate.value);
+        if (json.isArray()) {
+            shown = QString::fromUtf8(QJsonDocument(json.toArray()).toJson(QJsonDocument::Compact));
+        } else if (json.isObject()) {
+            shown = QString::fromUtf8(QJsonDocument(json.toObject()).toJson(QJsonDocument::Compact));
+        }
+    }
+    return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), shown);
 }
 
 /// Localise a single engine-mode wire token. Returns an empty QString
@@ -256,6 +280,63 @@ bool isHexColorShape(const QString& value)
         }
     }
     return true;
+}
+
+/// The descriptor schema for an action's single `value` param, or nullopt when
+/// the type is unregistered or declares no such param. The descriptor is the
+/// same source the editor's SpinBox range comes from, so a summary guarded
+/// through it can never claim a value the editor would refuse to author.
+std::optional<PhosphorRules::ParamSchema> valueParamSchema(const QString& type)
+{
+    const auto descriptor = PhosphorRules::ActionRegistry::instance().descriptor(type);
+    if (!descriptor.has_value()) {
+        return std::nullopt;
+    }
+    for (const PhosphorRules::ParamSchema& schema : descriptor->params) {
+        if (schema.key == PhosphorRules::ActionParam::Value) {
+            return schema;
+        }
+    }
+    return std::nullopt;
+}
+
+/// True when @p wire (a payload already in WIRE units) falls inside the declared
+/// bounds of @p type's single `value` param. Descriptor bounds are declared in
+/// DISPLAY units (`stored = display * scale`), so they scale up before the
+/// comparison. A type with no descriptor, or a param with no declared bound on
+/// that side, admits anything.
+bool valueParamInRange(const QString& type, double wire)
+{
+    const auto schema = valueParamSchema(type);
+    if (!schema.has_value()) {
+        return true;
+    }
+    const double scale = schema->scale.value_or(1.0);
+    if (schema->min.has_value() && wire < *schema->min * scale) {
+        return false;
+    }
+    if (schema->max.has_value() && wire > *schema->max * scale) {
+        return false;
+    }
+    return true;
+}
+
+/// The integer `value` payload of an action of type @p type, or nullopt when the
+/// staged payload is not a JSON number inside the descriptor's declared range.
+/// The editor can hold an action whose validator has not run yet, so a bool, a
+/// string, or an out-of-range number is reachable here; the fraction, colour and
+/// enum families all reject those already, and this is the integer twin of that
+/// discipline, so a pixel summary never claims a size the runtime discards.
+std::optional<int> intValueParam(const QString& type, const QJsonValue& raw)
+{
+    if (!raw.isDouble()) {
+        return std::nullopt;
+    }
+    const double v = raw.toDouble();
+    if (!valueParamInRange(type, v)) {
+        return std::nullopt;
+    }
+    return qRound(v);
 }
 
 /// True when a closed-vocabulary token failed to resolve to a label.
@@ -363,10 +444,19 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         if (nums.isEmpty()) {
             return PhosphorI18n::tr("Snap to zone");
         }
+        // Two source strings rather than one "zone(s)" spelling. Qt's plural
+        // tr() takes a SINGLE source and falls back to it verbatim when there
+        // is no translation, so a combined form would read "zone(s) 1" to
+        // every English user. Splitting at one keeps English correct in both
+        // numbers while the n>1 call still passes the real count, so a locale
+        // with more than two plural forms can still select among them — the
+        // n=21 case in Russian, which needs its singular form, resolves
+        // through that call rather than through the size==1 branch.
         if (nums.size() == 1) {
             return PhosphorI18n::tr("Snap to zone %1").arg(nums.first());
         }
-        return PhosphorI18n::tr("Snap to zones %1").arg(nums.join(QStringLiteral(", ")));
+        return PhosphorI18n::tr("Snap to zones %1", nullptr, static_cast<int>(nums.size()))
+            .arg(nums.join(QStringLiteral(", ")));
     }
     if (action.type == ActionType::RouteToScreen) {
         // Resolve the canonical target screen id to the same friendly monitor
@@ -399,7 +489,7 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         if (!ok || v < 0.0 || v > 1.0) {
             return PhosphorI18n::tr("Opacity (invalid)");
         }
-        return PhosphorI18n::tr("Opacity: %1%").arg(static_cast<int>(v * 100.0 + 0.5));
+        return PhosphorI18n::tr("Opacity: %1%").arg(qRound(v * 100.0));
     }
     if (action.type == ActionType::OverrideAnimationShader) {
         const QString id = action.params.value(PhosphorRules::ActionParam::EffectId).toString();
@@ -476,10 +566,12 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return boolLabel;
         }
         if (action.type == ActionType::SetBorderWidth) {
-            return PhosphorI18n::tr("Border width: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Border width: %1 px").arg(*px) : PhosphorI18n::tr("Border width (invalid)");
         }
         if (action.type == ActionType::SetBorderRadius) {
-            return PhosphorI18n::tr("Corner radius: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Corner radius: %1 px").arg(*px) : PhosphorI18n::tr("Corner radius (invalid)");
         }
         if (action.type == ActionType::SetBorderColorActive || action.type == ActionType::SetBorderColorInactive) {
             // Each action carries a single colour in `value`. The accent sentinel
@@ -519,14 +611,29 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         }
         // ── autotile parameter overrides ──
         if (action.type == ActionType::SetMaxWindows) {
-            return PhosphorI18n::tr("Max tiled windows: %1").arg(raw.toInt());
+            const auto n = intValueParam(action.type, raw);
+            return n ? PhosphorI18n::tr("Max tiled windows: %1").arg(*n)
+                     : PhosphorI18n::tr("Max tiled windows (invalid)");
         }
         if (action.type == ActionType::SetMasterCount) {
-            return PhosphorI18n::tr("Master count: %1").arg(raw.toInt());
+            const auto n = intValueParam(action.type, raw);
+            return n ? PhosphorI18n::tr("Master count: %1").arg(*n) : PhosphorI18n::tr("Master count (invalid)");
         }
         if (action.type == ActionType::SetSplitRatio) {
-            // Wire value is the [0,1] ratio; shown as a percent to match the editor.
-            return PhosphorI18n::tr("Split ratio: %1%").arg(qRound(raw.toDouble() * 100.0));
+            // Wire value is a ratio inside the descriptor's declared band, shown
+            // as a percent to match the editor. Mirror the validator's reject
+            // paths the way SetTintStrength and the scrolling fractions do, so a
+            // staged payload the runtime discards never renders as a confident
+            // percent: null/undefined (present but unset) → bare label, a
+            // non-number or an out-of-band ratio → "(invalid)".
+            if (raw.isNull() || raw.isUndefined()) {
+                return PhosphorI18n::tr("Split ratio");
+            }
+            const double v = raw.toDouble();
+            if (!raw.isDouble() || !valueParamInRange(action.type, v)) {
+                return PhosphorI18n::tr("Split ratio (invalid)");
+            }
+            return PhosphorI18n::tr("Split ratio: %1%").arg(qRound(v * 100.0));
         }
         if (action.type == ActionType::SetInsertPosition) {
             return PhosphorI18n::tr("Insert: %1")
@@ -576,6 +683,12 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Insert new windows (invalid)")
                                                        : PhosphorI18n::tr("Insert new windows: %1").arg(shown);
         }
+        if (action.type == ActionType::SetScrollStickyWindowHandling) {
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Sticky windows (invalid)")
+                                                       : PhosphorI18n::tr("Sticky windows: %1").arg(shown);
+        }
         if (action.type == ActionType::SetCenterFocusedColumn) {
             const QString token = raw.toString();
             const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
@@ -611,10 +724,14 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                                                        : PhosphorI18n::tr("Tab indicator position: %1").arg(shown);
         }
         if (action.type == ActionType::SetTabIndicatorGap) {
-            return PhosphorI18n::tr("Tab indicator gap: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Tab indicator gap: %1 px").arg(*px)
+                      : PhosphorI18n::tr("Tab indicator gap (invalid)");
         }
         if (action.type == ActionType::SetTabIndicatorWidth) {
-            return PhosphorI18n::tr("Tab indicator thickness: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Tab indicator thickness: %1 px").arg(*px)
+                      : PhosphorI18n::tr("Tab indicator thickness (invalid)");
         }
         if (action.type == ActionType::SetTabIndicatorLength) {
             const int pct = scrollFractionPercent(raw);
@@ -622,14 +739,19 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                            : PhosphorI18n::tr("Tab indicator length: %1%").arg(pct);
         }
         if (action.type == ActionType::SetTabIndicatorGapsBetweenTabs) {
-            return PhosphorI18n::tr("Gap between tabs: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Gap between tabs: %1 px").arg(*px)
+                      : PhosphorI18n::tr("Gap between tabs (invalid)");
         }
         if (action.type == ActionType::SetTabIndicatorCornerRadius) {
-            const int px = raw.toInt();
+            const auto px = intValueParam(action.type, raw);
+            if (!px) {
+                return PhosphorI18n::tr("Tab corner radius (invalid)");
+            }
             // The sentinel is spelled as the outcome, not as -1: a rule list
             // reading "Tab corner radius: -1 px" would look like a bad value.
-            return px < 0 ? PhosphorI18n::tr("Tab corners: fully rounded")
-                          : PhosphorI18n::tr("Tab corner radius: %1 px").arg(px);
+            return *px < 0 ? PhosphorI18n::tr("Tab corners: fully rounded")
+                           : PhosphorI18n::tr("Tab corner radius: %1 px").arg(*px);
         }
         if (action.type == ActionType::SetTabIndicatorActiveColor
             || action.type == ActionType::SetTabIndicatorInactiveColor
@@ -672,11 +794,15 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                            : PhosphorI18n::tr("Drop indicator fill opacity: %1%").arg(pct);
         }
         if (action.type == ActionType::SetDropIndicatorBorderWidth) {
-            return PhosphorI18n::tr("Drop indicator border width: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Drop indicator border width: %1 px").arg(*px)
+                      : PhosphorI18n::tr("Drop indicator border width (invalid)");
         }
         if (action.type == ActionType::SetDropIndicatorBorderRadius) {
             // No sentinel here, unlike the tab corner radius: 0 is square.
-            return PhosphorI18n::tr("Drop indicator corner radius: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Drop indicator corner radius: %1 px").arg(*px)
+                      : PhosphorI18n::tr("Drop indicator corner radius (invalid)");
         }
         if (action.type == ActionType::SetDropIndicatorColor || action.type == ActionType::SetDropIndicatorBorderColor
             || action.type == ActionType::DropIndicatorColor || action.type == ActionType::DropIndicatorBorderColor) {
@@ -713,6 +839,24 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             }
             return PhosphorI18n::tr("Layer: %1")
                 .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v));
+        }
+        if (action.type == ActionType::ScrollFactor) {
+            // Mirror the resolver's reject-not-clamp bounds
+            // (shader_resolve.cpp's resolveScrollFactor): an out-of-range or
+            // non-numeric payload produces no runtime scaling, so the label
+            // must not claim one.
+            const double factor = raw.toDouble();
+            if (!raw.isDouble() || factor < PhosphorRules::MinScrollFactor || factor > PhosphorRules::MaxScrollFactor) {
+                return PhosphorI18n::tr("Scroll speed (invalid)");
+            }
+            // Rendered as a percent, not the raw multiplier: the editor is a
+            // percent spin box (the descriptor is `percent` with scale 0.01),
+            // and every other fraction family in this file already shows a
+            // percent. An "0.75x" summary beside a "75" editor would be the
+            // only place the two disagree on units. Whole percents match what
+            // the editor can author, the same rounding scrollFractionPercent
+            // applies.
+            return PhosphorI18n::tr("Scroll speed: %1%").arg(qRound(factor * 100.0));
         }
         // ── overlay-appearance overrides (colours upper-cased hex; opacities
         //    are [0,1] on the wire, shown as a percent to match the editor).
@@ -753,29 +897,39 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                           : PhosphorI18n::tr("Inactive opacity: %1%").arg(qRound(v * 100.0));
         }
         if (action.type == ActionType::SetOverlayBorderWidth) {
-            return PhosphorI18n::tr("Overlay border width: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Overlay border width: %1 px").arg(*px)
+                      : PhosphorI18n::tr("Overlay border width (invalid)");
         }
         if (action.type == ActionType::SetOverlayBorderRadius) {
-            return PhosphorI18n::tr("Overlay corner radius: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Overlay corner radius: %1 px").arg(*px)
+                      : PhosphorI18n::tr("Overlay corner radius (invalid)");
         }
         // ── per-context gap overrides ──
         if (action.type == ActionType::SetInnerGap) {
-            return PhosphorI18n::tr("Gap: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Gap: %1 px").arg(*px) : PhosphorI18n::tr("Gap (invalid)");
         }
         if (action.type == ActionType::SetOuterGap) {
-            return PhosphorI18n::tr("Outer gap: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Outer gap: %1 px").arg(*px) : PhosphorI18n::tr("Outer gap (invalid)");
         }
         if (action.type == ActionType::SetOuterGapTop) {
-            return PhosphorI18n::tr("Top gap: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Top gap: %1 px").arg(*px) : PhosphorI18n::tr("Top gap (invalid)");
         }
         if (action.type == ActionType::SetOuterGapBottom) {
-            return PhosphorI18n::tr("Bottom gap: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Bottom gap: %1 px").arg(*px) : PhosphorI18n::tr("Bottom gap (invalid)");
         }
         if (action.type == ActionType::SetOuterGapLeft) {
-            return PhosphorI18n::tr("Left gap: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Left gap: %1 px").arg(*px) : PhosphorI18n::tr("Left gap (invalid)");
         }
         if (action.type == ActionType::SetOuterGapRight) {
-            return PhosphorI18n::tr("Right gap: %1 px").arg(raw.toInt());
+            const auto px = intValueParam(action.type, raw);
+            return px ? PhosphorI18n::tr("Right gap: %1 px").arg(*px) : PhosphorI18n::tr("Right gap (invalid)");
         }
     }
     return RuleModel::actionTypeFallbackLabel(action.type);
@@ -885,6 +1039,8 @@ QString RuleModel::fieldLabel(Field field)
         return PhosphorI18n::tr("Screen orientation");
     case Field::ActiveLayout:
         return PhosphorI18n::tr("Active layout");
+    case Field::ColorScheme:
+        return PhosphorI18n::tr("Color scheme");
     }
     return QString();
 }
@@ -913,7 +1069,14 @@ QString RuleModel::matchSummary(const MatchExpression& match) const
     }
     // Any composite that is not a flat AND — count the leaves.
     const int n = conditionCount(match);
-    return PhosphorI18n::tr("%n condition(s)", nullptr, n);
+    // Split at one for the reason spelled out at the SnapToZone summary above:
+    // a single "%n condition(s)" source would render literally for every
+    // English user. Both arms keep %n so no numeral is hardcoded, and the n>1
+    // arm still carries the real count for locales with more than two forms.
+    if (n == 1) {
+        return PhosphorI18n::tr("%n condition", nullptr, n);
+    }
+    return PhosphorI18n::tr("%n conditions", nullptr, n);
 }
 
 QString RuleModel::actionSummary(const QList<RuleAction>& actions) const

@@ -240,10 +240,9 @@ void Daemon::connectLayoutSignals()
                 // ~100-300ms). Capture layout ID (not raw pointer) to avoid
                 // use-after-free if the layout is ever replaced between now and
                 // next event loop pass.
-                if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-                    QUuid layoutId = layout->id();
-                    QString screenId = m_unifiedLayoutController->currentScreenName();
-                    showLayoutOsdDeferred(layoutId, screenId);
+                const QString osdScreenId = m_unifiedLayoutController->currentScreenName();
+                if (isOsdTriggerEnabled(OsdTrigger::LayoutSwitch, osdScreenId)) {
+                    showLayoutOsdDeferred(layout->id(), osdScreenId);
                 }
             });
 
@@ -257,7 +256,7 @@ void Daemon::connectLayoutSignals()
                 if (!m_running || !m_scrollingTemplateStore) {
                     return;
                 }
-                if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+                if (isOsdTriggerEnabled(OsdTrigger::LayoutSwitch, screenId)) {
                     QTimer::singleShot(0, this, [this, templateId, screenId]() {
                         if (!m_scrollingTemplateStore) {
                             return;
@@ -294,10 +293,10 @@ void Daemon::connectLayoutSignals()
                 // calls. Without this, first toggle to autotile has perceptible lag
                 // because the daemon can't process incoming tiling requests until the
                 // OSD handler returns.
-                if (m_settings && m_settings->showOsdOnLayoutSwitch() && m_autotileEngine && m_overlayService) {
-                    QString algorithmId = m_autotileEngine->algorithmId();
-                    QString screenId = m_unifiedLayoutController->currentScreenName();
-                    showAlgorithmOsdDeferred(algorithmId, algorithmName, screenId);
+                const QString osdScreenId = m_unifiedLayoutController->currentScreenName();
+                if (isOsdTriggerEnabled(OsdTrigger::LayoutSwitch, osdScreenId) && m_autotileEngine
+                    && m_overlayService) {
+                    showAlgorithmOsdDeferred(m_autotileEngine->algorithmId(), algorithmName, osdScreenId);
                 }
             });
 
@@ -452,10 +451,8 @@ void Daemon::connectOverlaySignals()
                 m_suppressResnapOsd = std::max(0, m_suppressResnapOsd - 1);
                 return;
             }
-            if (m_settings && m_settings->showNavigationOsd() && !shouldSuppressOsd()) {
-                if (m_overlayService) {
-                    m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
-                }
+            if (navigationOsdAllowed(screenId)) {
+                m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenId);
             }
         });
 
@@ -563,7 +560,11 @@ void Daemon::finalizeStartup()
     // timeout fallback keeps the OSD from being suppressed forever where
     // KActivities is unavailable, still emitting the empty-activity OSD that
     // activity-less environments already got.
-    if (m_settings && m_settings->showOsdOnDesktopSwitch()) {
+    // Through isOsdTriggerEnabled, not a raw setting read: this is an
+    // all-screens batch with no screen in hand, so it resolves to the plain
+    // toggle today, but leaving a second rule-blind reader of the same setting
+    // behind is how the two halves of the OSD gating drift apart.
+    if (m_settings && isOsdTriggerEnabled(OsdTrigger::DesktopSwitch)) {
         const QString activity = currentActivity();
         // activityReady: either we already have a non-empty activity, or
         // KActivities is unavailable on this system (no point waiting).
@@ -685,7 +686,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
     }
 
     // Use "Floating" and "Tiled" labels for autotile (not "Snapped" for unfloat)
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !shouldSuppressOsd()) {
+    if (navigationOsdAllowed(screenId)) {
         QString reason = floating ? QStringLiteral("floated") : QStringLiteral("tiled");
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), reason, QString(), QString(), screenId);
     }
@@ -819,8 +820,7 @@ void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QSt
             wts->clearPreFloatZone(windowId);
         }
     }
-    if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !windowIds.isEmpty()
-        && !shouldSuppressOsd()) {
+    if (!windowIds.isEmpty() && navigationOsdAllowed(screenId)) {
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), QStringLiteral("overflow"), QString(),
                                             QString(), screenId);
     }

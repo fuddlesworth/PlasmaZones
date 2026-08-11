@@ -303,6 +303,28 @@ public:
     }
 
     /**
+     * @brief Predicate deciding whether an unfloat with NO remembered
+     *        pre-float zone falls back to a zone anyway (the
+     *        SetUnfloatFallbackToZone rule layered over the global
+     *        `unfloatFallbackToZone` setting — the predicate itself
+     *        implements rule ?? config). Daemon-injected, keyed by the live
+     *        windowId plus the RESOLVED restore screen (so the resolver can
+     *        stamp ScreenId and derive Mode), consulted inside
+     *        resolveFallbackUnfloatGeometry — which covers both the live
+     *        user-toggle unfloat and SnapAdaptor::calculateUnfloatRestore.
+     *        When UNSET (default) the engine reads the ISnapSettings bool
+     *        directly, preserving the historical behaviour the unit tests
+     *        rely on. Same lifetime contract as setFloatPredicate — clear
+     *        with `{}` before destroying any state the closure captured.
+     */
+    using UnfloatFallbackPredicate = std::function<bool(const QString& windowId, const QString& screenId)>;
+
+    void setUnfloatFallbackPredicate(UnfloatFallbackPredicate predicate)
+    {
+        m_unfloatFallbackPredicate = std::move(predicate);
+    }
+
+    /**
      * @brief Resolver yielding the open-placement directive — SnapToZone ordinals
      *        plus an optional RouteToScreen target and an optional RouteToDesktop
      *        target — for an opening window because a placement rule matched
@@ -752,11 +774,16 @@ public:
                                                          bool confineToFallbackScreen) const;
 
     /// Fallback unfloat target for a window with NO pre-float zone (a never-snapped
-    /// window that defaulted to floating). Returns a found result ONLY when the
-    /// `unfloatFallbackToZone` setting is on, resolving last-used → first-empty →
-    /// first zone in the window's screen's layout. Returns not-found when the
-    /// setting is off or no zone can be resolved (so the caller keeps the window
-    /// floating with feedback).
+    /// window that defaulted to floating). Opt-in: it returns a found result only
+    /// when the fallback is enabled for this window, which is the injected
+    /// predicate's verdict (rule ?? config layering) when one is wired via
+    /// setUnfloatFallbackPredicate, else the `unfloatFallbackToZone` setting read
+    /// through ISnapSettings. Enabled, it resolves last-used → first-empty → first
+    /// zone in the resolved screen's layout. The screen is @p fallbackScreen (the
+    /// caller's live output) when it still exists, else the window's tracked float
+    /// screen, and it is resolved BEFORE the opt-in gate because the predicate is
+    /// evaluated against it. Returns not-found when the fallback is disabled or no
+    /// zone resolves (so the caller keeps the window floating with feedback).
     PhosphorEngine::UnfloatResult resolveFallbackUnfloatGeometry(const QString& windowId,
                                                                  const QString& fallbackScreen) const;
 
@@ -998,10 +1025,18 @@ private:
                         PhosphorEngine::SnapIntent intent, int virtualDesktop = 0);
 
     /// Resolve an unfloat target screen: take @p primaryScreen if it still exists
-    /// (resolving virtual IDs), otherwise fall back to @p fallbackScreen. Returns an
-    /// empty string when neither resolves. Shared by resolveUnfloatGeometry (primary
-    /// = pre-float screen) and resolveFallbackUnfloatGeometry (primary = tracked
-    /// float screen) so the screen-existence handling stays in one place.
+    /// (resolving virtual IDs), otherwise take @p fallbackScreen. Only the primary
+    /// arm is existence-tested — a non-empty @p fallbackScreen is returned resolved
+    /// but unverified, deliberately, because it is the caller's live output and the
+    /// callers below need a screen to resolve zone geometry against. The result is
+    /// empty only when both arguments are empty (or the primary fails its existence
+    /// test and the fallback is empty). Shared by resolveUnfloatGeometry (primary =
+    /// the remembered pre-float home screen, fallback = the caller's screen) and
+    /// resolveFallbackUnfloatGeometry (primary = the caller's screen, fallback = the
+    /// tracked float screen) so the screen-existence handling stays in one place.
+    /// The two orders differ on purpose: an unfloat-to-home restore goes to the
+    /// remembered home, while a fresh fallback snap lands where the caller says the
+    /// window actually is.
     QString resolveUnfloatScreen(const QString& primaryScreen, const QString& fallbackScreen) const;
 
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
@@ -1197,6 +1232,11 @@ private:
     // Rule-driven open-floating gate. Empty until the daemon wires it; while
     // empty no window is rule-floated. See FloatPredicate doc above.
     FloatPredicate m_floatPredicate{};
+
+    // Rule-driven unfloat-fallback gate. Empty until the daemon wires it;
+    // while empty the ISnapSettings bool decides alone. See
+    // UnfloatFallbackPredicate doc above.
+    UnfloatFallbackPredicate m_unfloatFallbackPredicate{};
 
     // Rule-driven open-placement resolver (SnapToZone). Empty until the daemon
     // wires it; while empty no window is rule-snapped. See PlacementZonesResolver

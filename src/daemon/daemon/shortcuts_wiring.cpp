@@ -275,7 +275,13 @@ void Daemon::connectShortcutSignals()
         // pick the sizing template — the apply path routes per mode, so the
         // picker is no longer an exit door out of scrolling. Only a
         // capability-less engine gets feedback.
-        if (layoutSupportForScreen(screenId) == LayoutSupport::None) {
+        //
+        // ONE capability resolve for the whole handler: the refusal gate, the
+        // controller push and the empty-list wording all ask the same question
+        // of the same screen inside one keypress, and nothing between them can
+        // change the answer.
+        const LayoutSupport support = layoutSupportForScreen(screenId);
+        if (support == LayoutSupport::None) {
             showLayoutsUnavailableOsd(screenId);
             return;
         }
@@ -287,7 +293,7 @@ void Daemon::connectShortcutSignals()
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         // Live capability for applyEntry's template routing — see the
         // quick-slot handler above.
-        m_unifiedLayoutController->setCurrentLayoutSupport(layoutSupportForScreen(screenId));
+        m_unifiedLayoutController->setCurrentLayoutSupport(support);
         updateLayoutFilterForScreen(screenId);
         // An empty candidate list (allow-lists plus the aspect filter can
         // wipe it on a screen with no current selection) makes the picker's
@@ -305,9 +311,9 @@ void Daemon::connectShortcutSignals()
             // card — showDisabledOsd is the MonitorDisabled/DesktopDisabled
             // family and follows osdStyle, not the showNavigationOsd toggle
             // this refusal is gated on.
-            if (layoutSupportForScreen(screenId) == LayoutSupport::Templates) {
+            if (support == LayoutSupport::Templates) {
                 qCDebug(lcDaemon) << "Layout picker: no templates in the store for screen" << screenId;
-                if (m_settings && m_settings->showNavigationOsd() && !shouldSuppressOsd()) {
+                if (navigationOsdAllowed(screenId)) {
                     m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
                                                         QString(), QString(), screenId);
                 }
@@ -477,7 +483,11 @@ void Daemon::connectShortcutSignals()
         // Screen-targeted (locks a screen's layout) — resolve cursor-first.
         // See layoutPickerRequested above for the rationale.
         const QString screenId = resolveCursorScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
-        if (screenId.isEmpty() || !m_settings || !m_contextResolver) {
+        // m_layoutManager is in the guard because the unlock card below derefs
+        // it — the sibling handlers that resolve a layout carry it too, and
+        // this one only ever reached it after a settings write, so a shutdown
+        // window would have crashed AFTER mutating the lock state.
+        if (screenId.isEmpty() || !m_settings || !m_contextResolver || !m_layoutManager) {
             return;
         }
         // Layout lock pins a screen's layout choice (its template, on a

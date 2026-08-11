@@ -177,7 +177,9 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
     // zone-selector-drop). The locked-context OSD bypasses the toggle by design — it
     // explains why a requested change had no visible effect on that screen, the same
     // pattern used for the mode-toggle locked feedback in connectShortcutSignals().
-    const bool osdEnabled = m_settings && m_settings->showOsdOnLayoutSwitch();
+    // The trigger gate runs per screen inside the loop (isOsdTriggerEnabled)
+    // so a SetOsdEnabled context rule can force a card past an off toggle on
+    // one monitor without opening every other.
     for (const auto& osd : std::as_const(osdEntries)) {
         // Every card this loop can still show for the screen replaces whatever
         // it announced last, so drop the recorded template up front and let the
@@ -230,7 +232,7 @@ void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsL
             } else {
                 showLockedOsd(osd.screenId);
             }
-        } else if (!osdEnabled) {
+        } else if (!isOsdTriggerEnabled(OsdTrigger::LayoutSwitch, osd.screenId)) {
             continue;
         } else if (osd.mode == PhosphorZones::AssignmentEntry::Scrolling) {
             // The ledger advance lives inside showScrollingModeOsd /

@@ -250,7 +250,7 @@ private Q_SLOTS:
         // succeeds with only the screen pinned and the Mode leaf ignored.
         const MatchExpression m = MatchExpression::makeAll({
             MatchExpression::makeLeaf(Field::ScreenId, Operator::Equals, QStringLiteral("DP-1")),
-            MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QStringLiteral("tiling")),
+            MatchExpression::makeLeaf(Field::Mode, Operator::Equals, QString(ModeToken::Tiling)),
         });
         QString sid;
         int desk = 0;

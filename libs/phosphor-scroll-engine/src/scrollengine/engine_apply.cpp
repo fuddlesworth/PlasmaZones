@@ -114,7 +114,12 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // That is one settle each way, consistent with the neighbours-close-up
     // settle detach-once already makes, and gating on the preview would
     // give the opposite artifact (gaps around a visually single column).
-    if (m_smartGaps) {
+    // The override map is fetched here rather than at its old site further
+    // down: smart gaps is now a per-screen rule slot too, and its gate runs
+    // before the rest of the effective* reads. One fetch still serves them
+    // all — the later reads take this same map.
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    if (effectiveSmartGaps(overrides)) {
         if (columnCountOverride >= 0) {
             if (columnCountOverride == 1) {
                 top = bottom = left = right = 0;
@@ -134,11 +139,11 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     const QRect adjusted = area.adjusted(qMax(0, left), qMax(0, top), -qMax(0, right), -qMax(0, bottom));
     params.workArea = (adjusted.width() > 0 && adjusted.height() > 0) ? adjusted : QRect();
     params.gap = innerGap;
-    params.respectMinimumSize = m_respectMinimumSize;
-    // The override map resolved ONCE for all six effective* reads below —
-    // the accessors' screenId wrappers would otherwise re-fetch it per call
-    // on this per-relayout path.
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    // The override map was resolved ONCE above (before the smart-gaps gate)
+    // and is threaded through every effective* read here — the accessors'
+    // screenId wrappers would otherwise re-fetch it per call on this
+    // per-relayout path.
+    params.respectMinimumSize = effectiveRespectMinimumSize(overrides);
     // Each template preset VOCABULARY is likewise parsed once and threaded
     // through: the two default resolvers below resolve a Preset kind against
     // the same list the params already carry, so the plain map-taking
@@ -147,7 +152,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     params.presetWindowHeights = effectivePresetWindowHeights(overrides);
     params.defaultWindowHeight = effectiveDefaultWindowHeight(overrides, params.workArea, params.presetWindowHeights);
     params.centerFocusedColumn = effectiveCenterFocusedColumn(overrides);
-    params.alwaysCenterSingleColumn = m_alwaysCenterSingleColumn;
+    params.alwaysCenterSingleColumn = effectiveAlwaysCenterSingleColumn(overrides);
     params.defaultColumnWidth = effectiveDefaultColumnWidth(overrides, params.presetColumnWidths);
     params.tabIndicator = effectiveTabIndicator(overrides);
     return params;
@@ -514,6 +519,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // Consumed at the strip loop.
     QHash<int, bool> columnAllParked;
     QSet<int> columnHadSkippedTile;
+    // Resolved ONCE for the whole batch, not per tile: crop mode is a
+    // per-SCREEN verdict, and the screenId accessor rebuilds this screen's
+    // override map on every call — which, inside the emit loop, is once per
+    // window per relayout. Same doctrine as layoutParamsForScreen's single
+    // fetch at the top of this file.
+    const bool cropStraddlers = effectiveCropStraddlers(screenId);
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
@@ -660,7 +671,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // not qualify — the asymmetry is QRect's: setLeft moves x1 and
             // holds x2, setRight holds x1 and moves x2.
             bool clampPinnedX = false;
-            if (!m_cropStraddlers && !parkedNow) {
+            if (!cropStraddlers && !parkedNow) {
                 const bool straddleRight = rect.right() > screenRect.right() && rect.left() <= screenRect.right();
                 // Both predicates read the PRE-mutation rect, and the left one
                 // is consumed after the right branch may have called setRight.

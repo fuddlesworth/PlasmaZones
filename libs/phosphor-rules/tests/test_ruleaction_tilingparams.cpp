@@ -388,10 +388,84 @@ private Q_SLOTS:
                 != QLatin1StringView(ActionSlot::DragDropIndicatorBorderColor));
     }
 
+    /// The seven per-context scrolling BEHAVIOUR actions — the six bools and
+    /// the sticky-handling enum — each pinned to its OWN slot, plus the enum's
+    /// closed vocabulary and the per-window unfloat-fallback bool that shipped
+    /// beside them.
+    ///
+    /// The slot pins are the point, for the reason
+    /// testTabIndicatorActions_slotsBoundsAndVocabularies spells out: the six
+    /// bools are registered from ONE table whose rows are {type, slot} pairs,
+    /// so a mistyped slot column is a silent cross-wire that every validation
+    /// assertion in the suite still passes. The sticky enum was the only closed
+    /// vocabulary in the whole action set with no vocabulary test, so a
+    /// validator widened to accept an unknown token would have shipped too.
+    void testScrollBehaviourActions_slotsAndVocabulary()
+    {
+        const auto rejects = [](QLatin1StringView type, const QJsonValue& value) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), value);
+            QVERIFY2(!RuleAction::fromJson(o).has_value(), type.data());
+        };
+        const auto acceptsWithSlot = [](QLatin1StringView type, const QJsonValue& value, QLatin1StringView slot) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+            o.insert(QStringLiteral("value"), value);
+            const auto loaded = RuleAction::fromJson(o);
+            QVERIFY2(loaded.has_value(), type.data());
+            QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(slot));
+            const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+            QVERIFY2(roundTripped.has_value(), type.data());
+            QCOMPARE(*roundTripped, *loaded);
+        };
+
+        // ── the six context bools, plus the per-window unfloat-fallback bool
+        // that shipped in the same batch. Both polarities matter for every
+        // row: each is a live veto of its global setting in one direction and
+        // a force-on in the other, so an explicit false must survive load as a
+        // value rather than being read back as absent. ──
+        for (const auto& pair : QList<QPair<QLatin1StringView, QLatin1StringView>>{
+                 {ActionType::SetScrollAlwaysCenterSingleColumn, ActionSlot::ScrollAlwaysCenterSingleColumn},
+                 {ActionType::SetScrollRespectMinimumSize, ActionSlot::ScrollRespectMinimumSize},
+                 {ActionType::SetScrollCropStraddlers, ActionSlot::ScrollCropStraddlers},
+                 {ActionType::SetScrollFocusNewWindows, ActionSlot::ScrollFocusNewWindows},
+                 {ActionType::SetScrollSmartGaps, ActionSlot::ScrollSmartGaps},
+                 {ActionType::SetScrollFocusFollowsMouse, ActionSlot::ScrollFocusFollowsMouse},
+                 {ActionType::SetUnfloatFallbackToZone, ActionSlot::UnfloatFallbackToZone}}) {
+            QJsonObject missing;
+            missing.insert(QStringLiteral("type"), QString::fromLatin1(pair.first));
+            QVERIFY2(!RuleAction::fromJson(missing).has_value(), pair.first.data());
+            rejects(pair.first, QStringLiteral("true")); // a string is not a bool
+            rejects(pair.first, 1); // nor is a number — no truthiness coercion
+            acceptsWithSlot(pair.first, true, pair.second);
+            acceptsWithSlot(pair.first, false, pair.second);
+        }
+
+        // ── the sticky-handling enum: a CLOSED three-token vocabulary. The
+        // scrolling engine collapses both non-normal tokens to "float it", but
+        // the distinction is preserved on the wire (the snapping and tiling
+        // engines honour it), so the load boundary must keep all three and
+        // refuse everything else. ──
+        QJsonObject missingSticky;
+        missingSticky.insert(QStringLiteral("type"), QString(ActionType::SetScrollStickyWindowHandling));
+        QVERIFY(!RuleAction::fromJson(missingSticky).has_value());
+        rejects(ActionType::SetScrollStickyWindowHandling, QStringLiteral("float")); // the engine's verb, not a token
+        rejects(ActionType::SetScrollStickyWindowHandling, QStringLiteral("ignore")); // near-miss spelling
+        rejects(ActionType::SetScrollStickyWindowHandling, true); // bool rejected — the wire is a token string
+        rejects(ActionType::SetScrollStickyWindowHandling, 2); // nor an ordinal
+        for (const QLatin1StringView token :
+             {StickyWindowHandlingToken::TreatAsNormal, StickyWindowHandlingToken::RestoreOnly,
+              StickyWindowHandlingToken::IgnoreAll}) {
+            acceptsWithSlot(ActionType::SetScrollStickyWindowHandling, QString::fromLatin1(token),
+                            ActionSlot::ScrollStickyWindowHandling);
+        }
+    }
+
     void testScrollingParamActions_range()
     {
-        // The nine scrolling actions are the only load-time defence for a
-        // hand-edited rules.json — pin bounds and the four closed token
+        // The scrolling sizing and open actions are the only load-time defence
+        // for a hand-edited rules.json — pin bounds and the closed token
         // vocabularies exactly like the tiling family above. Every accepted
         // payload also round-trips through toJson→fromJson, so a descriptor
         // that validates on load but serialises a shape it cannot read back
@@ -508,6 +582,63 @@ private Q_SLOTS:
                 QVERIFY(roundTripped.has_value());
                 QCOMPARE(*roundTripped, *loaded);
                 QCOMPARE(roundTripped->params.value(QStringLiteral("value")).toBool(!value), value);
+            }
+        }
+        // OpenMaximized / OpenFocused / OpenFullscreen: the same strict-bool
+        // shape as OpenTabbed. Both polarities matter — false is a live veto
+        // for each (of a focus-new-windows ON global, of the app's own
+        // fullscreen at open) — so each must survive load as an explicit
+        // value rather than being read as absent.
+        {
+            const QList<std::pair<QLatin1StringView, QLatin1StringView>> boolOpenActions = {
+                {ActionType::OpenMaximized, ActionSlot::OpenMaximized},
+                {ActionType::OpenFocused, ActionSlot::OpenFocused},
+                {ActionType::OpenFullscreen, ActionSlot::OpenFullscreen},
+            };
+            for (const auto& [type, slot] : boolOpenActions) {
+                rejectsMissingValue(type);
+                QJsonObject o;
+                o.insert(QStringLiteral("type"), QString::fromLatin1(type));
+                o.insert(QStringLiteral("value"), QStringLiteral("yes")); // non-bool rejected
+                QVERIFY(!RuleAction::fromJson(o).has_value());
+                o.insert(QStringLiteral("value"), 1); // number rejected (no truthiness coercion)
+                QVERIFY(!RuleAction::fromJson(o).has_value());
+                const QString expectedSlot = QString(slot);
+                for (const bool value : {true, false}) {
+                    o.insert(QStringLiteral("value"), value);
+                    const auto loaded = RuleAction::fromJson(o);
+                    QVERIFY2(loaded.has_value(), type.data());
+                    QCOMPARE(ActionRegistry::instance().slotFor(*loaded), expectedSlot);
+                    const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                    QVERIFY(roundTripped.has_value());
+                    QCOMPARE(*roundTripped, *loaded);
+                    QCOMPARE(roundTripped->params.value(QStringLiteral("value")).toBool(!value), value);
+                }
+            }
+        }
+        // ScrollFactor: numeric multiplier, reject-not-clamp against the
+        // shared Min/MaxScrollFactor bounds — an out-of-range hand-edit must
+        // fail load, not saturate into a 10x scroll.
+        {
+            rejectsMissingValue(ActionType::ScrollFactor);
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString::fromLatin1(ActionType::ScrollFactor));
+            o.insert(QStringLiteral("value"), QStringLiteral("0.75")); // string rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), true); // bool rejected
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), MinScrollFactor - 0.01); // below floor
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            o.insert(QStringLiteral("value"), MaxScrollFactor + 0.01); // above ceiling
+            QVERIFY(!RuleAction::fromJson(o).has_value());
+            for (const double value : {MinScrollFactor, 0.75, 1.0, 2.0, MaxScrollFactor}) {
+                o.insert(QStringLiteral("value"), value);
+                const auto loaded = RuleAction::fromJson(o);
+                QVERIFY(loaded.has_value());
+                QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::ScrollFactor));
+                const auto roundTripped = RuleAction::fromJson(loaded->toJson());
+                QVERIFY(roundTripped.has_value());
+                QCOMPARE(*roundTripped, *loaded);
             }
         }
         // SetScrollInsertPosition: the five position tokens; unknown rejected.

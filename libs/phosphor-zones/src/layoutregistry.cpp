@@ -67,11 +67,9 @@ void LayoutRegistry::initCommon()
     //
     // A rule store is a HARD construction precondition, not an optional
     // dependency: the evaluator is built here and never reset, so every
-    // resolver derefs m_evaluator unguarded. Fatal on a null store rather than
-    // dereferencing it one line down, matching the subdirectory checks above.
-    if (m_ruleStore == nullptr) {
-        qFatal("LayoutRegistry: a rule store is required — every context resolver evaluates against it");
-    }
+    // resolver derefs m_evaluator unguarded. The sole constructor is the only
+    // caller of this function and it already qFatals on a null store, so the
+    // dereference below is guarded there rather than re-checked here.
     m_evaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     // Context resolution honours only the blanket Exclude as a walk-stopper.
     // The scoped exclusions (ExcludePlacement / ExcludeDecorations /
@@ -113,6 +111,11 @@ void LayoutRegistry::setTiledWindowCountProvider(
     std::function<std::optional<int>(const QString& screenId, int virtualDesktop, const QString& activity)> provider)
 {
     m_tiledWindowCountProvider = std::move(provider);
+}
+
+void LayoutRegistry::setColorSchemeProvider(std::function<std::optional<QString>()> provider)
+{
+    m_colorSchemeProvider = std::move(provider);
 }
 
 void LayoutRegistry::setScreenOrientationProvider(
@@ -583,11 +586,29 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
         }
     }
 
+    // Delete the layout file (using the stored path) BEFORE the layout leaves
+    // m_layouts, and take the whole removal down when it fails — the same
+    // leave-it-consistent-and-retry discipline the sidecar write above follows.
+    // Ignoring the result was the asymmetry: with the settings entry already
+    // dropped and the layout already out of memory, a file that survived on
+    // disk would be re-read by the next loadLayouts() and the layout would come
+    // back wearing default settings. QFile::remove() also reports false for a
+    // file that was never written (a layout added but never saved), so the
+    // existence test comes first and that case removes cleanly.
+    if (QFile::exists(filePath) && !QFile::remove(filePath)) {
+        qCWarning(lcZonesLib) << "Failed to delete the layout file" << filePath << "— keeping layout" << layoutIdStr;
+        if (!removedSettings.isEmpty()) {
+            m_layoutSettings.setSettingsFor(layoutIdStr, removedSettings);
+            if (!m_layoutSettings.saveToFile(layoutSettingsFilePath())) {
+                qCWarning(lcZonesLib) << "Failed to restore the layout settings sidecar for" << layoutIdStr
+                                      << "after its layout file could not be deleted";
+            }
+        }
+        return;
+    }
+
     // Remove from layouts list
     m_layouts.removeOne(layout);
-
-    // Delete layout file (using stored path)
-    QFile::remove(filePath);
 
     // Clear every pointer that could capture the about-to-deleteLater
     // layout. m_previousLayout is obvious. m_activeLayout is the subtle
@@ -653,9 +674,10 @@ PhosphorZones::Layout* LayoutRegistry::duplicateLayout(PhosphorZones::Layout* so
         return nullptr;
     }
 
-    auto newLayout = new PhosphorZones::Layout(*source);
+    // Unparented: addLayout() below takes ownership. clone() already leaves
+    // sourcePath and systemSourcePath empty, making the duplicate a user layout.
+    auto* newLayout = source->clone();
     newLayout->setName(source->name() + duplicateNameSuffix());
-    // Note: Copy constructor already leaves sourcePath empty, making it a user layout
 
     // Reset visibility restrictions so duplicated layout starts fresh
     newLayout->setHiddenFromSelector(false);

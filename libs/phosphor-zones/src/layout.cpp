@@ -97,142 +97,58 @@ Layout::Layout(const QString& name, QObject* parent)
 {
 }
 
-// Copy semantics: the copy represents a distinct user-owned layout. It gets a
-// fresh id, and we deliberately do NOT carry over m_sourcePath or
-// m_systemSourcePath — a duplicate of a system layout becomes a plain user
-// layout with no system-origin tracking, so the "restore system original"
-// path doesn't think the duplicate is a user-override of the same entry.
-//
-// Why: parenting to other.parent() would silently re-parent the copy under the
-// source's QObject owner (typically a LayoutManager), which tracks layouts in
-// its own internal container — the copy would show up as a child without ever
-// being inserted into the manager's list, leading to either a leak or a
-// double-track. Callers reparent or insert the copy into the appropriate
-// manager themselves.
-Layout::Layout(const Layout& other)
-    : QObject(nullptr)
-    , m_id(QUuid::createUuid()) // New layout gets new ID
-    , m_name(other.m_name)
-    , m_description(other.m_description)
-    , m_zonePadding(other.m_zonePadding)
-    , m_outerGap(other.m_outerGap)
-    , m_usePerSideOuterGap(other.m_usePerSideOuterGap)
-    , m_outerGapTop(other.m_outerGapTop)
-    , m_outerGapBottom(other.m_outerGapBottom)
-    , m_outerGapLeft(other.m_outerGapLeft)
-    , m_outerGapRight(other.m_outerGapRight)
-    , m_showZoneNumbers(other.m_showZoneNumbers)
-    , m_overlayDisplayMode(other.m_overlayDisplayMode)
-    , m_sourcePath() // Copies have no source path (will be saved to user directory)
-    , m_systemSourcePath() // Copies carry no system-origin tracking (see class comment)
-    , m_defaultOrder(other.m_defaultOrder)
-    , m_autoAssign(other.m_autoAssign)
-    , m_useFullScreenGeometry(other.m_useFullScreenGeometry)
-    , m_shaderId(other.m_shaderId)
-    , m_shaderParams(other.m_shaderParams)
-    , m_aspectRatioClass(other.m_aspectRatioClass)
-    , m_minAspectRatio(other.m_minAspectRatio)
-    , m_maxAspectRatio(other.m_maxAspectRatio)
-    , m_hiddenFromSelector(other.m_hiddenFromSelector)
-    , m_allowedScreens(other.m_allowedScreens)
-    , m_allowedDesktops(other.m_allowedDesktops)
-    , m_allowedActivities(other.m_allowedActivities)
-{
-    // Deep copy zones using clone() method
-    for (const auto* zone : other.m_zones) {
-        auto* newZone = zone->clone(this);
-        m_zones.append(newZone);
-    }
-}
-
+// Zones are QObject children (addZone parents them), so ~QObject would reap
+// them anyway. Deleting them here first is deliberate and harmless: each Zone
+// de-registers itself from this object's child list as it is destroyed, so the
+// base destructor finds nothing left to do. Keeping the explicit sweep means
+// the zone list is torn down at a known point rather than during base-class
+// destruction, which matters for any zone slot still connected at that moment.
 Layout::~Layout()
 {
     qDeleteAll(m_zones);
 }
 
-Layout& Layout::operator=(const Layout& other)
+Layout* Layout::clone(QObject* parent) const
 {
-    if (this != &other) {
-        beginBatchModify();
+    // Clone semantics: the clone represents a distinct user-owned layout. It
+    // gets a fresh id, and it deliberately carries over neither m_sourcePath
+    // nor m_systemSourcePath — a clone of a system layout becomes a plain user
+    // layout with no system-origin tracking, so the "restore system original"
+    // path doesn't think the clone is a user-override of the same entry.
+    // Starting from the plain constructor keeps every field the clone does NOT
+    // carry (the source paths and the m_isSystemLayout cache derived from them,
+    // the dirty flag, the geometry cache) at its constructed default instead of
+    // needing a per-field reset.
+    auto* copy = new Layout(parent);
+    copy->m_name = m_name;
+    copy->m_description = m_description;
+    copy->m_zonePadding = m_zonePadding;
+    copy->m_outerGap = m_outerGap;
+    copy->m_usePerSideOuterGap = m_usePerSideOuterGap;
+    copy->m_outerGapTop = m_outerGapTop;
+    copy->m_outerGapBottom = m_outerGapBottom;
+    copy->m_outerGapLeft = m_outerGapLeft;
+    copy->m_outerGapRight = m_outerGapRight;
+    copy->m_showZoneNumbers = m_showZoneNumbers;
+    copy->m_overlayDisplayMode = m_overlayDisplayMode;
+    copy->m_defaultOrder = m_defaultOrder;
+    copy->m_autoAssign = m_autoAssign;
+    copy->m_useFullScreenGeometry = m_useFullScreenGeometry;
+    copy->m_shaderId = m_shaderId;
+    copy->m_shaderParams = m_shaderParams;
+    copy->m_aspectRatioClass = m_aspectRatioClass;
+    copy->m_minAspectRatio = m_minAspectRatio;
+    copy->m_maxAspectRatio = m_maxAspectRatio;
+    copy->m_hiddenFromSelector = m_hiddenFromSelector;
+    copy->m_allowedScreens = m_allowedScreens;
+    copy->m_allowedDesktops = m_allowedDesktops;
+    copy->m_allowedActivities = m_allowedActivities;
 
-        // Track visibility changes for signal emission
-        bool hiddenChanged = m_hiddenFromSelector != other.m_hiddenFromSelector;
-        bool screensChanged = m_allowedScreens != other.m_allowedScreens;
-        bool desktopsChanged = m_allowedDesktops != other.m_allowedDesktops;
-        bool activitiesChanged = m_allowedActivities != other.m_allowedActivities;
-        // Snapshot the pre-assignment source paths so we can compare against
-        // the post-assignment values (both cleared, per the copy-assign
-        // contract — see class comment above the copy constructor). Emitting
-        // sourcePathChanged only when at least one member actually changed
-        // value matches the "compare old vs new" pattern used for every
-        // other Q_PROPERTY in this function.
-        const QString oldSourcePath = m_sourcePath;
-        const QString oldSystemSourcePath = m_systemSourcePath;
-
-        m_name = other.m_name;
-        m_description = other.m_description;
-        m_zonePadding = other.m_zonePadding;
-        m_outerGap = other.m_outerGap;
-        m_usePerSideOuterGap = other.m_usePerSideOuterGap;
-        m_outerGapTop = other.m_outerGapTop;
-        m_outerGapBottom = other.m_outerGapBottom;
-        m_outerGapLeft = other.m_outerGapLeft;
-        m_outerGapRight = other.m_outerGapRight;
-        m_showZoneNumbers = other.m_showZoneNumbers;
-        m_overlayDisplayMode = other.m_overlayDisplayMode;
-        m_defaultOrder = other.m_defaultOrder;
-        m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
-        m_systemSourcePath.clear(); // New copy has no system origin
-        m_isSystemLayout = false; // Cache stays consistent with the cleared source path
-        m_shaderId = other.m_shaderId;
-        m_shaderParams = other.m_shaderParams;
-        bool autoAssignDiff = m_autoAssign != other.m_autoAssign;
-        m_autoAssign = other.m_autoAssign;
-        bool fullScreenGeomDiff = m_useFullScreenGeometry != other.m_useFullScreenGeometry;
-        m_useFullScreenGeometry = other.m_useFullScreenGeometry;
-        bool arChanged = m_aspectRatioClass != other.m_aspectRatioClass
-            || !qFuzzyCompare(1.0 + m_minAspectRatio, 1.0 + other.m_minAspectRatio)
-            || !qFuzzyCompare(1.0 + m_maxAspectRatio, 1.0 + other.m_maxAspectRatio);
-        m_aspectRatioClass = other.m_aspectRatioClass;
-        m_minAspectRatio = other.m_minAspectRatio;
-        m_maxAspectRatio = other.m_maxAspectRatio;
-        m_hiddenFromSelector = other.m_hiddenFromSelector;
-        m_allowedScreens = other.m_allowedScreens;
-        m_allowedDesktops = other.m_allowedDesktops;
-        m_allowedActivities = other.m_allowedActivities;
-
-        // Deep copy zones using clone() method
-        qDeleteAll(m_zones);
-        m_zones.clear();
-        for (const auto* zone : other.m_zones) {
-            auto* newZone = zone->clone(this);
-            m_zones.append(newZone);
-        }
-        m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
-        Q_EMIT zonesChanged();
-
-        // Emit visibility signals for changed properties
-        if (hiddenChanged)
-            Q_EMIT hiddenFromSelectorChanged();
-        if (screensChanged)
-            Q_EMIT allowedScreensChanged();
-        if (desktopsChanged)
-            Q_EMIT allowedDesktopsChanged();
-        if (activitiesChanged)
-            Q_EMIT allowedActivitiesChanged();
-        if (autoAssignDiff)
-            Q_EMIT autoAssignChanged();
-        if (fullScreenGeomDiff)
-            Q_EMIT useFullScreenGeometryChanged();
-        if (arChanged)
-            Q_EMIT aspectRatioClassChanged();
-        if (oldSourcePath != m_sourcePath || oldSystemSourcePath != m_systemSourcePath)
-            Q_EMIT sourcePathChanged();
-
-        m_dirty = true;
-        endBatchModify();
+    // Deep copy zones using Zone::clone(), parented to the new layout.
+    for (const Zone* zone : m_zones) {
+        copy->m_zones.append(zone->clone(copy));
     }
-    return *this;
+    return copy;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -261,7 +261,14 @@ void Daemon::connectScreenSignals()
                 // announce ledger — a replugged monitor must not carry a
                 // stale "already saw template X" verdict across the unplug.
                 diffActiveAssignments();
-                m_lastAnnouncedTemplateByScreen.remove(removedScreenId);
+                // Keyed by EFFECTIVE id like the two maps above, while this
+                // handler carries the PHYSICAL one — match on the physical
+                // prefix so a subdivided output's vs:N entries go too.
+                for (auto it = m_lastAnnouncedTemplateByScreen.begin(); it != m_lastAnnouncedTemplateByScreen.end();) {
+                    it = PhosphorIdentity::VirtualScreenId::samePhysical(it.key(), removedScreenId)
+                        ? m_lastAnnouncedTemplateByScreen.erase(it)
+                        : std::next(it);
+                }
                 // Same union-park staleness rule as the screenAdded tail: a
                 // removed bottom monitor lowers the output union, so every
                 // scroll park must re-derive against the new topology.
@@ -649,16 +656,18 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     // Layout cycling is meaningless on a screen whose engine has no layout
     // concept (scrolling) — answer with feedback instead of applying a snap
     // layout there (the old one-way-door-out-of-scrolling policy).
-    // Push the LIVE capability first so applyEntry's template branch routes
-    // on the engine that actually owns the screen (see the quick-slot
-    // handler in shortcuts_wiring.cpp).
     const LayoutSupport support = layoutSupportForScreen(screenId);
-    m_unifiedLayoutController->setCurrentLayoutSupport(support);
     if (support == LayoutSupport::None) {
         showLayoutsUnavailableOsd(screenId);
         return;
     }
+    // Bind the screen, THEN push the LIVE capability, so applyEntry's template
+    // branch routes on the engine that actually owns the screen it is about to
+    // act on (same order as the picker and quick-slot handlers in
+    // shortcuts_wiring.cpp). Pushing ahead of the None bail left the
+    // controller describing a screen this handler then refused to act on.
     m_unifiedLayoutController->setCurrentScreenName(screenId);
+    m_unifiedLayoutController->setCurrentLayoutSupport(support);
     if (isScreenLockedForLayoutChange(screenId)) {
         return;
     }
@@ -674,7 +683,7 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     if (m_overlayService && m_overlayService->visibleLayoutCount(screenId) == 0) {
         if (support == LayoutSupport::Templates) {
             qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
-            if (m_settings && m_settings->showNavigationOsd() && !shouldSuppressOsd()) {
+            if (navigationOsdAllowed(screenId)) {
                 m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
                                                     QString(), QString(), screenId);
             }
@@ -768,6 +777,20 @@ void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
         if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physicalScreenId
             && !keepIds.contains(it.key())) {
             it = m_lastScrollTabStripsJson.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // And the template-announce ledger, on the same boundary. Un-subdividing an
+    // output is reachable with no unplug at all, so without this its vs:N
+    // verdicts outlive the screens they were recorded for, and a later
+    // re-subdivision inherits a "already announced template X" claim for a
+    // context the user has not seen since.
+    for (auto it = m_lastAnnouncedTemplateByScreen.begin(); it != m_lastAnnouncedTemplateByScreen.end();) {
+        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physicalScreenId
+            && !keepIds.contains(it.key())) {
+            it = m_lastAnnouncedTemplateByScreen.erase(it);
         } else {
             ++it;
         }

@@ -90,8 +90,11 @@ ColumnLayout {
         if (effectId.length === 0)
             return [];
 
-        var controller = row.appSettings ? row.appSettings.animationsController : null;
-        return controller ? controller.shaderParameters(effectId) : [];
+        // Named for the registry it comes from: a bare `controller` here shadows
+        // the row's own required `controller` property (the RuleController),
+        // which is a different object entirely.
+        var animationsController = row.appSettings ? row.appSettings.animationsController : null;
+        return animationsController ? animationsController.shaderParameters(effectId) : [];
     }
     /// Shader-uniform schema for OverrideOverlayShader — same shape as
     /// `_shaderParamSchema` but sourced from the overlay/snapping shader
@@ -104,11 +107,12 @@ ColumnLayout {
         if (effectId.length === 0)
             return [];
 
-        var controller = row.appSettings ? row.appSettings.snappingShadersPage : null;
-        if (!controller)
+        // Named for its registry, for the same shadowing reason as above.
+        var overlayShadersController = row.appSettings ? row.appSettings.snappingShadersPage : null;
+        if (!overlayShadersController)
             return [];
 
-        var effects = controller.availableShaderEffects() || [];
+        var effects = overlayShadersController.availableShaderEffects() || [];
         for (var i = 0; i < effects.length; ++i) {
             if (effects[i].id === effectId)
                 return effects[i].parameters || [];
@@ -366,6 +370,33 @@ ColumnLayout {
                     return;
 
                 row.actionEdited(row._payloadForType(value));
+            }
+        }
+
+        // Info icon — per-action hover help, the WHAT-side mirror of the WHEN
+        // leaf editor's field info icon (MatchLeafEditor's fieldInfoIcon).
+        // The description comes off the actionTypeOptions entry for the
+        // row's current type; an unknown / legacy type yields no text, so
+        // the icon simply hides rather than showing an empty bubble.
+        Kirigami.Icon {
+            // Off the row's own resolved descriptor rather than a second
+            // hand-rolled scan of actionTypeOptions — `_typeEntry` already is
+            // that lookup, and every other consumer on the row reads it.
+            readonly property string _actionDesc: row._typeEntry !== undefined ? (row._typeEntry.description || "") : ""
+
+            visible: _actionDesc !== ""
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: Kirigami.Units.iconSizes.small
+            Layout.preferredHeight: Kirigami.Units.iconSizes.small
+            source: "dialog-information"
+            color: Kirigami.Theme.highlightColor
+            Accessible.name: _actionDesc
+            ToolTip.text: _actionDesc
+            ToolTip.visible: actionInfoHover.hovered && _actionDesc !== ""
+            ToolTip.delay: Kirigami.Units.toolTipDelay
+
+            HoverHandler {
+                id: actionInfoHover
             }
         }
 

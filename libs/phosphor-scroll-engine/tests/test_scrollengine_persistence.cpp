@@ -29,6 +29,7 @@ class TestScrollEnginePersistence : public QObject
 private Q_SLOTS:
     void modeRoundTripRestoresFocusAndAnchor();
     void presetIntentRoundTripsExactly();
+    void stashedShapeOutranksTheOpenHeightRule();
     void legacyPresetIndexBlobResolvesAgainstEffectiveList();
     void outOfRangePresetFractionIsClampedAtTheBoundary();
     void serializedStripRestoreSurvivesIdDrift();
@@ -150,6 +151,59 @@ void TestScrollEnginePersistence::presetIntentRoundTripsExactly()
     QCOMPARE(col.width.presetFraction, 0.42);
     QCOMPARE(col.tiles.first().height.kind, WindowHeight::Fixed);
     QCOMPARE(col.tiles.first().height.fixedPx, 333);
+}
+
+void TestScrollEnginePersistence::stashedShapeOutranksTheOpenHeightRule()
+{
+    // Precedence between the stash and the per-window open rules, on BOTH
+    // axes. A stash restore rebuilds the shape the user left the strip in,
+    // and the width verdicts are structurally dropped on that arm (the
+    // restore inserts with the stashed width, never the resolved one), so
+    // the height must not be the single axis that overrides it — that
+    // combination returns a window at its old width and its rule height,
+    // a shape the user never had.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|u1"), QStringLiteral("S1"), 0, 0);
+    ScrollState* live = stateFor(engine1, QStringLiteral("S1"));
+    QVERIFY(live);
+    QVERIFY(live->strip().setActiveColumnWidth(ColumnWidth::makeProportion(0.42)));
+    QVERIFY(live->strip().setActiveWindowHeight(WindowHeight::makeFixed(333)));
+    const QJsonObject blob = engine1->serializeStripState();
+    QVERIFY(!blob.isEmpty());
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    // Rules that would reshape BOTH axes if they reached the restored tile.
+    engine2->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.widthFraction = 0.9;
+        params.heightFraction = 0.9;
+        return params;
+    });
+    engine2->windowOpened(QStringLiteral("app|n1"), QStringLiteral("S1"), 0, 0);
+
+    ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columns().size(), 1);
+    const Column& claimed = state->strip().columns().first();
+    QCOMPARE(claimed.width.kind, ColumnWidth::Proportion);
+    QCOMPARE(claimed.width.proportion, 0.42);
+    QCOMPARE(claimed.tiles.first().height.kind, WindowHeight::Fixed);
+    QCOMPARE(claimed.tiles.first().height.fixedPx, 333);
+
+    // Control: with every stashed tile consumed, the SAME rules do land on
+    // the next arrival — so the assertions above pin the stash's precedence
+    // and not an inert resolver.
+    engine2->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
+    const int freshCol = columnOf(engine2, QStringLiteral("app|n2"));
+    const Column& fresh = state->strip().columns().at(freshCol);
+    QCOMPARE(fresh.width.kind, ColumnWidth::Proportion);
+    QCOMPARE(fresh.width.proportion, 0.9);
+    QCOMPARE(fresh.tiles.first().height.kind, WindowHeight::Fixed);
+    QCOMPARE(fresh.tiles.first().height.fixedPx, qRound(0.9 * ScrollTestUtils::kScreenHeight));
 }
 
 void TestScrollEnginePersistence::legacyPresetIndexBlobResolvesAgainstEffectiveList()

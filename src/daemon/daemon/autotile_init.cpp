@@ -77,10 +77,7 @@ void Daemon::initializeAutotile()
                     // Also gate on isAnyScreenAutotile() — loadState() may emit even
                     // when no screen is in autotile mode, and a runtime algorithm
                     // change is irrelevant in that case.
-                    if (m_running && isAnyScreenAutotile() && m_settings && m_settings->showOsdOnLayoutSwitch()
-                        && m_overlayService) {
-                        auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
-                        QString displayName = algo ? algo->name() : algorithmId;
+                    if (m_running && isAnyScreenAutotile() && m_overlayService) {
                         QString screenId;
                         if (m_autotileEngine) {
                             screenId = m_autotileEngine->activeScreen();
@@ -91,7 +88,18 @@ void Daemon::initializeAutotile()
                         if (screenId.isEmpty() && m_windowTrackingAdaptor) {
                             screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
                         }
-                        showAlgorithmOsdDeferred(algorithmId, displayName, screenId);
+                        // Trigger gate AFTER the screen resolve so the
+                        // SetOsdEnabled rule's force-ON half can consult the
+                        // context (the plain toggle read used to sit in the
+                        // outer condition, before a screen was known). The
+                        // screen resolve is the price of that and cannot move;
+                        // the registry lookup below can, so it sits past the
+                        // gate and costs nothing when the OSD is off.
+                        if (isOsdTriggerEnabled(OsdTrigger::LayoutSwitch, screenId)) {
+                            auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
+                            const QString displayName = algo ? algo->name() : algorithmId;
+                            showAlgorithmOsdDeferred(algorithmId, displayName, screenId);
+                        }
                     }
                 });
 
@@ -428,7 +436,7 @@ void Daemon::handleTilingModeToggle()
         // silent one. showScrollingModeOsd exists for exactly this
         // announcement and was reachable only from the KCM apply path
         // and the desktop-switch OSD.
-        if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+        if (isOsdTriggerEnabled(OsdTrigger::LayoutSwitch, screenId)) {
             showScrollingModeOsd(screenId, OsdTrigger::LayoutSwitch);
         }
         // A snap-assist popup is stale the moment placement changes;

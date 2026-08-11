@@ -14,6 +14,7 @@
 #include <window.h>
 
 #include <QAction>
+#include <QDBusArgument>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -279,12 +280,14 @@ void TilingHandler::clearTiledTracking()
 void TilingHandler::setFocusFollowsMouse(bool enabled)
 {
     m_focusFollowsMouse = enabled;
-    if (!m_focusFollowsMouse && !m_scrollingFocusFollowsMouse) {
+    if (ffmOffEverywhere()) {
         // handleCursorMoved bails before the suppression latch while FFM is
         // off everywhere, so a latch set just before the setting was turned
         // off would survive with a long-stale anchor and swallow the first
-        // move after it is turned back on. With the per-mode split the
-        // latch is shared, so it clears only when BOTH flags drop.
+        // move after it is turned back on. The latch is shared across both
+        // modes, so it clears only when NO screen can focus-follow — which is
+        // the ffmOffEverywhere predicate, per-screen scrolling membership
+        // included.
         m_ffmSuppressPending = false;
     }
 }
@@ -292,7 +295,7 @@ void TilingHandler::setFocusFollowsMouse(bool enabled)
 void TilingHandler::setScrollingFocusFollowsMouse(bool enabled)
 {
     m_scrollingFocusFollowsMouse = enabled;
-    if (!m_focusFollowsMouse && !m_scrollingFocusFollowsMouse) {
+    if (ffmOffEverywhere()) {
         // Same shared-latch reasoning as setFocusFollowsMouse.
         m_ffmSuppressPending = false;
     }
@@ -523,6 +526,118 @@ QRectF TilingHandler::findPreTileGeometry(const QString& windowId, QString* buck
 bool TilingHandler::isManagedScreen(const QString& screenId) const
 {
     return m_managedScreens.contains(screenId);
+}
+
+void TilingHandler::slotScrollEffectBehaviourChanged(const QVariantMap& behaviour)
+{
+    applyScrollEffectBehaviour(behaviour);
+}
+
+void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
+{
+    // The daemon publishes the whole map every time (never a delta), so a
+    // straight replace is correct even if a previous signal was missed.
+    //
+    // Boundary validation, mirroring slotActiveLayoutsChanged: this map
+    // crosses D-Bus from another process, and both halves decide compositor
+    // behaviour (focus stealing, forced composition). An a{sv} value arrives
+    // either already demarshalled (the property Get path, which qdbus_cast
+    // unwraps) or still wrapped in a QDBusVariant (a signal delivered without
+    // a registered argument type) — unwrap one level before the type test, or
+    // every live update silently clears BOTH sets. Empty screen ids are
+    // dropped: no window resolves to one, and they only defeat the change
+    // gate below. A wire regression is warned about rather than being
+    // indistinguishable from a legitimately-off session.
+    const auto toSet = [](const QVariant& raw, QLatin1StringView key) {
+        QVariant v = raw;
+        if (v.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
+            v = qvariant_cast<QDBusVariant>(v).variant();
+        }
+        // Qt's demarshaller hands an `as` back as a ready QStringList, but a
+        // container it did not special-case arrives as a raw QDBusArgument —
+        // which converts to nothing and would read as "off everywhere". Demarshal
+        // it explicitly rather than letting a transport-shape change silently
+        // disable both behaviours.
+        if (v.typeId() == QMetaType::fromType<QDBusArgument>().id()) {
+            v = QVariant::fromValue(qdbus_cast<QStringList>(v));
+        }
+        QSet<QString> out;
+        if (!v.isValid()) {
+            // Absent half. Not a warning: the daemon may legitimately publish
+            // only the keys it has resolved, and an absent key reads as "off
+            // everywhere", the same safe direction bring-up takes.
+            return out;
+        }
+        if (!v.canConvert<QStringList>()) {
+            qCWarning(lcEffect) << "scrollEffectBehaviour: dropping non-list value for" << key << "type"
+                                << v.typeName();
+            return out;
+        }
+        const QStringList list = v.toStringList();
+        out.reserve(list.size());
+        for (const QString& screenId : list) {
+            if (screenId.isEmpty()) {
+                qCWarning(lcEffect) << "scrollEffectBehaviour: dropping empty screen id from" << key;
+                continue;
+            }
+            out.insert(screenId);
+        }
+        return out;
+    };
+    const QSet<QString> ffm =
+        toSet(behaviour.value(QStringLiteral("focusFollowsMouse")), QLatin1String("focusFollowsMouse"));
+    const QSet<QString> crop =
+        toSet(behaviour.value(QStringLiteral("cropStraddlers")), QLatin1String("cropStraddlers"));
+    // Seeded BEFORE the change gate, the m_activeLayoutsSeeded shape: an
+    // identical map is still a real map, and the daemon's first publish is
+    // legitimately all-empty on a session with no scrolling screen. Gating the
+    // flag would leave blocksDirectScanout permanently falling back to the
+    // global setting there.
+    m_scrollEffectBehaviourSeeded = true;
+    m_scrollFocusFollowsMouseScreens = ffm;
+    // Fourth site of the ffmOffEverywhere predicate: this write is what can
+    // take the LAST focus-follows-mouse screen away while both globals were
+    // already off, and handleCursorMoved's bail (the latch's only other
+    // disarm) sits behind the very predicate that just went true — so a latch
+    // armed by an engine-driven strip move would survive here with a stale
+    // anchor and swallow the first move after the rule turns FFM back on.
+    if (ffmOffEverywhere()) {
+        m_ffmSuppressPending = false;
+    }
+    if (crop == m_scrollCropStraddlerScreens) {
+        return;
+    }
+    m_scrollCropStraddlerScreens = crop;
+    // The crop set is PAINTED state: a screen that just started (or stopped)
+    // cropping has stale pixels on it, and nothing else will revisit them —
+    // the strip's geometry did not move, so no tile batch is coming. The
+    // focus-follows-mouse set needs no such bookend; it is read fresh on the
+    // next pointer move.
+    if (KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
+}
+
+void TilingHandler::clearScrollEffectBehaviourForTeardown()
+{
+    m_scrollEffectBehaviourSeeded = false;
+    m_scrollFocusFollowsMouseScreens.clear();
+    if (ffmOffEverywhere()) {
+        // Same latch reasoning as the apply above — the dead session's set was
+        // the last thing keeping FFM alive anywhere, and its anchor names a
+        // cursor position from before the teardown.
+        m_ffmSuppressPending = false;
+    }
+    if (m_scrollCropStraddlerScreens.isEmpty()) {
+        return;
+    }
+    m_scrollCropStraddlerScreens.clear();
+    // Painted state, so the same bookend the live apply takes: the clip stops
+    // cutting on every screen that was cropping, and nothing else repaints
+    // those outputs.
+    if (KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
 }
 
 void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
@@ -940,7 +1055,18 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // membership hash) that made the documented re-adoption of a flagged
     // column unreachable — the window was never announced, so no batch could
     // ever restore membership. Mirrors notifyWindowActivated's exemption.
-    const bool fullscreenOnScrollingScreen = w->isFullScreen() && isScrollingScreen(m_effect->getWindowScreenId(w));
+    // REQUESTED or committed. EffectWindow::isFullScreen() is the committed
+    // bit, which lags a client round-trip on Wayland — so a window the
+    // OpenFullscreen rule just fullscreened (the flip writes the requested bit
+    // synchronously at windowAdded, decoration_rules.cpp) read as NOT
+    // fullscreen here and was announced, pushing the about-to-be-fullscreen
+    // frame to the daemon as free geometry with overwrite=true, which the
+    // free-geometry guard's own contract forbids. The union closes that window
+    // and costs nothing elsewhere: the exit path re-announces on the committed
+    // exit signal, by which point neither bit is set.
+    KWin::Window* kwFs = w->window();
+    const bool fullScreen = w->isFullScreen() || (kwFs && kwFs->isRequestedFullScreen());
+    const bool fullscreenOnScrollingScreen = fullScreen && isScrollingScreen(m_effect->getWindowScreenId(w));
     if (!m_effect->shouldHandleWindow(w, nullptr, /*exemptFullscreen=*/fullscreenOnScrollingScreen)) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (not handleable)" << m_effect->getWindowId(w);
         return false;
@@ -973,9 +1099,11 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // the geometry apply bails on its requested state, and its exit lands
     // in an already-consistent strip instead of a never-announced limbo.
     // Snapping/autotile screens keep the reject in full.
-    // isFullScreen() first so the overwhelmingly common non-fullscreen
-    // window pays neither the id lookup nor the screen resolve.
-    if (w->isFullScreen()
+    // The fullscreen term first so the overwhelmingly common non-fullscreen
+    // window pays neither the id lookup nor the screen resolve. Reuses the
+    // requested-OR-committed answer computed above — see its comment for why
+    // the committed bit alone is not enough.
+    if (fullScreen
         && !(m_effect->m_windowedFullscreenWindows.contains(m_effect->getWindowId(w))
              || isScrollingScreen(m_effect->getWindowScreenId(w)))) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (fullscreen)" << m_effect->getWindowId(w);

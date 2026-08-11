@@ -358,6 +358,55 @@ private Q_SLOTS:
         QCOMPARE(placeIssues.first().actionType, QString(ActionType::Float));
     }
 
+    void testValidationIssues_effectVerdictActionsNotCancelledByScopedExcludes()
+    {
+        // The Tag::EffectVerdict actions sit outside BOTH scoped exclusions'
+        // slices: the compositor consumes them, so the daemon's placement
+        // evaluator never resolves them (ExcludePlacement cannot cancel them),
+        // and their effect-side evaluator scopes terminal actions to the
+        // blanket Exclude alone (ExcludeAnimations cannot either). That is the
+        // entire reason the tag is separate from Tag::Effect, and the
+        // classification lives in one place — validationIssues' two tag reads
+        // — so pin both directions here.
+        //
+        // Both tag memberships are pinned too: an EffectVerdict descriptor
+        // silently reverted to Tag::Effect would make the ExcludeAnimations
+        // pairing below start flagging, but a descriptor that lost BOTH tags
+        // would make it start flagging as a placement action instead, and only
+        // the membership assertions tell those two regressions apart.
+        const ActionRegistry& registry = ActionRegistry::instance();
+        for (const QLatin1StringView type : {ActionType::OpenFullscreen, ActionType::ScrollFactor}) {
+            QVERIFY2(registry.hasTag(QString(type), Tag::EffectVerdict), type.data());
+            QVERIFY2(!registry.hasTag(QString(type), Tag::Effect), type.data());
+        }
+
+        RuleAction fullscreen;
+        fullscreen.type = QString(ActionType::OpenFullscreen);
+        fullscreen.params.insert(QString(ActionParam::Value), true);
+
+        RuleAction scrollFactor;
+        scrollFactor.type = QString(ActionType::ScrollFactor);
+        scrollFactor.params.insert(QString(ActionParam::Value), 0.5);
+
+        for (const RuleAction& verdict : {fullscreen, scrollFactor}) {
+            const Rule animations = makeRule(QStringLiteral("unanimate + verdict"), 500, MatchExpression{},
+                                             {excludeAnimationsAction(), verdict});
+            QVERIFY2(animations.validationIssues().isEmpty(), qPrintable(verdict.type));
+
+            const Rule placement = makeRule(QStringLiteral("unplace + verdict"), 500, MatchExpression{},
+                                            {excludePlacementAction(), verdict});
+            QVERIFY2(placement.validationIssues().isEmpty(), qPrintable(verdict.type));
+
+            // The blanket Exclude still cancels them — it is in every
+            // evaluator's scope, verdict evaluator included.
+            const Rule blanket =
+                makeRule(QStringLiteral("exclude + verdict"), 500, MatchExpression{}, {excludeAction(), verdict});
+            const auto issues = blanket.validationIssues();
+            QCOMPARE(issues.size(), 1);
+            QCOMPARE(issues.first().actionType, verdict.type);
+        }
+    }
+
     void testValidationIssues_blanketExcludeBesideScopedExcludeFlagged()
     {
         // The blanket Exclude is honoured by every full-store evaluator, so it

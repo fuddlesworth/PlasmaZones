@@ -536,6 +536,67 @@ void Daemon::initEnginesAndWiring()
             reconcileActiveAssignments();
         });
     });
+
+    // A system colour-scheme flip changes Field::ColorScheme rule verdicts
+    // WITHOUT a rule-set revision bump. The registry's cached context
+    // resolvers self-heal through the |cs: cache-key component; what does not
+    // self-heal is state already applied from an old verdict, so mirror the
+    // rulesChanged re-resolution: drop the WTA's per-window rule memos,
+    // reconcile the per-screen assignments (same deferred pending-flag shape
+    // as above) and refresh the live selector / overlay surfaces.
+    //
+    // Duplicate-stacking is prevented by registering the handle in the shared
+    // settings-wiring list rather than by a (sender, signal, receiver) sweep:
+    // init() drops that list wholesale at the top of
+    // initLayoutAndSettingsWiring, which runs earlier in the same pass, so a
+    // stop() -> init() cycle drops last cycle's handle before this line
+    // reinstalls it. The sweep this replaced was only safe while the daemon was
+    // the sole subscriber to the signal.
+    m_layoutSettingsWiringConnections.append(
+        connect(m_settings.get(), &ISettings::systemColorSchemeChanged, this, [this]() {
+            // FIRST, and synchronously: the WTA's per-window rule memos are keyed
+            // on (window id, rule revision) and a fixed field list, neither of
+            // which moves on a scheme flip, so every window-rule verdict resolved
+            // from a ColorScheme condition is stale until they are dropped. This
+            // is a map clear plus a cache clear, and it has to precede anything
+            // below that could re-resolve and re-seed them with the old token.
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->invalidateRuleMemosForColorSchemeChange();
+            }
+            // The overlay refreshes are DEFERRED, unlike the inline shape this
+            // block inherited from the rulesChanged twin. They are not the cheap,
+            // self-bounding reads that shape assumed: refreshOverlayPropertiesIfShown
+            // can reach recreateOverlayWindowsOnTypeMismatch, which destroys and
+            // recreates QQuickWindows and reloads their Loaders — and this handler
+            // runs while the application's palette-change event is still being
+            // delivered. One event-loop pass later the palette has settled.
+            //
+            // Its OWN latch rather than the reconcile's: sharing that flag would
+            // let a rule edit landing in the same turn swallow the scheme flip's
+            // refresh entirely and leave a visible overlay on the old palette.
+            if (!m_colorSchemeRefreshPending) {
+                m_colorSchemeRefreshPending = true;
+                QTimer::singleShot(0, this, [this]() {
+                    m_colorSchemeRefreshPending = false;
+                    if (m_shuttingDown || !m_overlayService) {
+                        return;
+                    }
+                    m_overlayService->refreshContextLockState();
+                    m_overlayService->refreshOverlayPropertiesIfShown();
+                });
+            }
+            if (m_reconcileAssignmentsPending) {
+                return;
+            }
+            m_reconcileAssignmentsPending = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_reconcileAssignmentsPending = false;
+                if (m_shuttingDown) {
+                    return;
+                }
+                reconcileActiveAssignments();
+            });
+        }));
     // Prime the snapshot from the initial rule set so the first real rule edit
     // diffs against the live assignments rather than an empty baseline.
     diffActiveAssignments();
@@ -1051,7 +1112,7 @@ void Daemon::initEnginesAndWiring()
                 if (floating && m_windowTrackingAdaptor) {
                     m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenId);
                 }
-                if (m_settings && m_settings->showNavigationOsd() && m_overlayService && !shouldSuppressOsd()) {
+                if (navigationOsdAllowed(screenId)) {
                     const QString reason = floating ? QStringLiteral("floated") : QStringLiteral("tiled");
                     m_overlayService->showNavigationOsd(true, QStringLiteral("float"), reason, QString(), QString(),
                                                         screenId);

@@ -138,7 +138,10 @@ ColumnLayout {
                 var paths = sections[s].paths || [];
                 for (var p = 0; p < paths.length; ++p) {
                     if (paths[p].path === raw && !paths[p].isCategory)
-                        return sections[s].label + " · " + paths[p].label;
+                        // Composed inside one i18nc so translators control the
+                        // order and the separator, rather than a hardcoded
+                        // join around two translated halves.
+                        return i18nc("animation section, then the event inside it", "%1 · %2", sections[s].label, paths[p].label);
                 }
             }
             return rawStr;
@@ -205,7 +208,9 @@ ColumnLayout {
             var f = parseFloat(raw);
             if (isFinite(f)) {
                 var scale = param.scale || 1;
-                return Math.round(f / scale) + "%";
+                // Through i18nc rather than a JS append: locales differ on
+                // where the sign sits and whether a space precedes it.
+                return i18nc("a whole-number percentage", "%1%", Math.round(f / scale));
             }
             return rawStr;
         }
@@ -232,7 +237,10 @@ ColumnLayout {
             var names = root.appSettings && root.appSettings.virtualDesktopNames ? root.appSettings.virtualDesktopNames : [];
             var num = parseInt(raw, 10);
             if (num >= 1 && names.length >= num && names[num - 1])
-                return num + ": " + names[num - 1];
+                // Same one-i18nc composition as the desktop pickers in
+                // MatchLeafEditor and ActionParamEditors, so the summary and
+                // the editors render a desktop identically.
+                return i18nc("virtual desktop number, then its name", "%1: %2", num, names[num - 1]);
             return num > 0 ? String(num) : rawStr;
         }
         if (kind === "color") {
@@ -394,6 +402,13 @@ ColumnLayout {
                             // padded out to 8 gu before the largeSpacing to
                             // the pill kicked in.
                             Layout.minimumWidth: paramRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
+                            // Cap and elide: the bool params carry the longest
+                            // labels in the table ("Focus the window when it
+                            // opens (off = keep the current focus)") and render
+                            // all-caps in an anchored row, so an uncapped label
+                            // pushes its value pill off the row.
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 16
+                            elide: Text.ElideRight
                             text: paramRow.modelData.label
                             // One binding: a font.<sub> sibling next to a whole-group `font:` is an
                             // illegal duplicate binding that fails the whole document. FontUtils
@@ -408,6 +423,10 @@ ColumnLayout {
                             Layout.alignment: Qt.AlignVCenter
                             implicitWidth: pillContent.implicitWidth + Kirigami.Units.largeSpacing * 2
                             implicitHeight: pillContent.implicitHeight + Kirigami.Units.smallSpacing
+                            // Cap matching the WHEN-side value pill so a long
+                            // decoration-pack list or a raw id elides inside the
+                            // pill rather than running past the row edge.
+                            Layout.maximumWidth: Kirigami.Units.gridUnit * 20
                             radius: Kirigami.Units.smallSpacing
                             Kirigami.Theme.colorSet: Kirigami.Theme.View
                             Kirigami.Theme.inherit: false
@@ -419,6 +438,12 @@ ColumnLayout {
                                 id: pillContent
 
                                 anchors.centerIn: parent
+                                // Fit inside the (possibly capped) pill so the
+                                // value label below has something to elide
+                                // against. Not a loop: the pill sizes from this
+                                // row's implicitWidth, which eliding does not
+                                // change.
+                                width: Math.min(implicitWidth, parent.width - Kirigami.Units.largeSpacing * 2)
                                 spacing: Kirigami.Units.smallSpacing
 
                                 // Colour swatch for `color`-kind params — the raw
@@ -441,8 +466,17 @@ ColumnLayout {
                                     id: valueLabel
 
                                     Layout.alignment: Qt.AlignVCenter
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
                                     text: root._resolveParamValue(paramRow.modelData, actionDelegate._action)
                                     font.family: Kirigami.Theme.smallFont.family
+                                    ToolTip.text: valueLabel.text
+                                    ToolTip.visible: valueHover.hovered && valueLabel.truncated
+                                    ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                                    HoverHandler {
+                                        id: valueHover
+                                    }
                                 }
                             }
                         }

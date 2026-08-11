@@ -687,6 +687,15 @@ private:
     /// per-frame opacity / border resolvers consume the returned ResolvedActions.
     PhosphorRules::ResolvedActions resolveRuleActions(KWin::EffectWindow* w, const QString& windowId) const;
 
+    /// The same peek-then-build resolve against the effect-VERDICT evaluator
+    /// (`Tag::EffectVerdict`: OpenFullscreen / ScrollFactor). A separate
+    /// evaluator, so a separate entry point: the verdict evaluator's terminal
+    /// scope is `{Exclude}` only, which is what keeps an `ExcludeAnimations`
+    /// rule from cancelling a scroll multiplier or an open-fullscreen
+    /// decision. Its per-window match cache is independent of the animation
+    /// one and is invalidated alongside it (rule_invalidation.cpp).
+    PhosphorRules::ResolvedActions resolveRuleVerdictActions(KWin::EffectWindow* w, const QString& windowId) const;
+
     /**
      * @brief True if the window is currently snap-managed (tiled into a snap zone).
      * Its frame geometry is the zone rect, NOT a free-floating position — callers
@@ -1169,7 +1178,7 @@ private:
     /// fetchAllRulesOnce call and captured by its reply handler, so when the
     /// debounce, the bring-up load and the seed-edge re-drive put several
     /// round-trips in flight at once only the newest reply is applied. Without
-    /// it an older reply landing last rewrites all four effect-bound rule sets
+    /// it an older reply landing last rewrites all five effect-bound rule sets
     /// and republishes m_activeLayoutRulesWithheld from a stale store snapshot.
     quint64 m_ruleFetchQueryGeneration = 0;
 
@@ -1888,6 +1897,28 @@ private:
     /// writes mid-hold.
     void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
 
+    /// One-shot fullscreen-at-open verdict for the OpenFullscreen rule:
+    /// true fullscreens the opening window, false vetoes the app's own
+    /// fullscreen request. Called exactly once per window, from
+    /// slotWindowAdded ahead of the routing block. The flip writes KWin's
+    /// REQUESTED bit synchronously while the committed one lags a client
+    /// round-trip on Wayland, so the announce path is kept honest by
+    /// isEligibleForTilingNotify rejecting on requested-OR-committed
+    /// fullscreen rather than by the commit having landed. Never re-reconciled — a
+    /// rule edit mid-session leaves open windows alone (niri's
+    /// open-fullscreen contract), which is also why there is no snapshot /
+    /// restore pair here.
+    void applyRuleOpenFullscreen(const QString& windowId, KWin::EffectWindow* w);
+
+    /// The ScrollFactor rule's multiplier for @p w, or nullopt when no
+    /// enabled rule scales it (or none exists at all — the no-rules fast
+    /// path is two pointer reads). Consulted by ScrollOverhangInputFilter's
+    /// pointerAxis per wheel tick; the resolve rides the verdict evaluator's
+    /// per-window cache (resolveRuleVerdictActions), so repeats are a hash
+    /// lookup. The verdict evaluator — not the animation one — is what keeps
+    /// an ExcludeAnimations rule from cancelling the multiplier.
+    std::optional<qreal> ruleScrollFactorFor(KWin::EffectWindow* w) const;
+
     /// The window's OWN keep-above flag — the app/user-set state, with
     /// written values substituted from the pre-write snapshot while either
     /// flag owner (a SetWindowLayer rule, or the windowed-fullscreen layer
@@ -2480,14 +2511,17 @@ private:
     //
     // Cleared on exactly one path: consumption by that seeding edge. Every
     // loadRuleAnimationsFromDbus reply that PARSES recomputes it outright
-    // (shader_config_dbus.cpp assigns the pass verdict, never ORs). The two
-    // malformed-payload arms (non-object JSON, RuleSet::fromJson refusal)
-    // return before that assignment, which is the right answer rather than a
-    // gap: no slice ran either, so the standing marker still describes the
-    // standing rule sets. The unseeding paths themselves deliberately do NOT
+    // (shader_config_dbus.cpp assigns the pass verdict, never ORs). The
+    // refusal arms (over-cap payload, non-object JSON, RuleSet::fromJson
+    // refusal) return before that assignment and RE-ARM the marker to true on
+    // the way out: the seeding edge consumed it before dispatching the fetch,
+    // and those arms admit nothing, so leaving it false would disarm the next
+    // unseed→seed cycle while the rules are still out of every evaluator.
+    // TRUE is the safe polarity — a spare re-drive is one redundant fetch.
+    // The unseeding paths themselves deliberately do NOT
     // clear it — see
     // TilingHandler::clearActiveLayoutsForTeardown, which re-slices the
-    // ActiveLayout rules out of the four rule sets and SETS this marker when
+    // ActiveLayout rules out of the five rule sets and SETS this marker when
     // it removed any. Clearing on teardown or bring-up would disarm the edge
     // for the session whenever the following getAllRules never lands; a
     // stale-TRUE marker only costs one redundant re-drive.
@@ -2598,11 +2632,16 @@ private:
     // ms between each window start when cascading. Canonical constant for the
     // reason the member above now gives; it was 30 against a shipped 40.
     int m_cachedAnimationStaggerInterval = PhosphorAnimation::Limits::DefaultAnimationStaggerIntervalMs;
-    /// Mirror of the scrollingCropStraddlers setting. While true and any
-    /// scrolling screen exists, blocksDirectScanout() answers true so the
-    /// per-output cull is guaranteed to run for straddler overhangs (a
-    /// surface presented on a hardware plane bypasses the effect chain and
-    /// with it the crop).
+    /// Mirror of the scrollingCropStraddlers setting, and the BRING-UP-ONLY
+    /// fallback for the direct-scanout gate: blocksDirectScanout consults it
+    /// solely while the daemon's resolved per-screen crop map is unseeded, so
+    /// the gate is never worse than the old global-flag test before the first
+    /// reply lands. Once the map is seeded, membership in it is the whole
+    /// answer — that is what lets a per-context SetScrollCropStraddlers=false
+    /// hand direct scanout back while the global setting stays on (a surface
+    /// presented on a hardware plane bypasses the effect chain and with it
+    /// the crop, so the gate only forces composition where a crop is actually
+    /// resolved).
     bool m_cachedScrollCropStraddlers = false;
 
     // Per-drag activation / float tracking. Fields + rationale in effect_state.h
@@ -2744,7 +2783,7 @@ private Q_SLOTS:
     void loadRuleAnimationsFromDbus();
 
 private:
-    /// Re-slice the four effect-bound rule sets for an active-layout map that
+    /// Re-slice the five effect-bound rule sets for an active-layout map that
     /// has just gone UNSEEDED (daemon-loss teardown / bring-up clear), by
     /// removing every rule whose match references `Field::ActiveLayout`.
     /// A plain member, not a slot: nothing connects to it — the sole caller is

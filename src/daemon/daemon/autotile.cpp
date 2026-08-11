@@ -537,17 +537,19 @@ void Daemon::reconcileActiveAssignments()
     const QSet<QString> changed = diffActiveAssignments();
     // Per-context tiling rules change a screen's resolved layout WITHOUT changing
     // its assignment id, so they never appear in `changed` (diffActiveAssignments
-    // only tracks the active snapping-layout uuid / "autotile:<algo>" id). Three
+    // only tracks the active snapping-layout uuid / "autotile:<algo>" id). These
     // families need updateEngineScreens() to apply them live: tiling-PARAM rules
     // (SetMaxWindows / SetSplitRatio / SetMasterCount / SetInsertPosition /
     // SetOverflowBehavior / SetAlgorithmParam), which land in the per-screen overrides
     // map and self-retile via applyPerScreenConfig; GAP rules, which resolve
     // through the context-gap provider at retile time and rely on the force-retile
-    // inside updateEngineScreens (see the comment there); and SCROLLING TEMPLATE
+    // inside updateEngineScreens (see the comment there); SCROLLING TEMPLATE
     // rules (SetScrollingTemplate), whose id stays the bare "scrolling:" sentinel
-    // while the resolved template — and so the pushed preset vocabulary — changes.
-    // SetDragBehavior needs no
-    // retile — it is read live by the drag adaptor.
+    // while the resolved template — and so the pushed preset vocabulary — changes;
+    // and the per-context SCROLLING BEHAVIOUR rules, which updateScrollingScreens
+    // resolves into the same per-screen override map plus the effect-owned
+    // focus-follows-mouse / crop-straddlers membership push. SetDragBehavior needs
+    // no retile — it is read live by the drag adaptor.
     updateEngineScreens();
     // A rule edit that demotes a screen from tiling to snapping releases its
     // windows in the recompute above, and nothing on this path consumes the

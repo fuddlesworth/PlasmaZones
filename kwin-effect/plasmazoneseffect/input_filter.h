@@ -6,6 +6,7 @@
 #include <input.h>
 
 #include <QPointF>
+#include <QPointer>
 #include <QSet>
 
 namespace KWin {
@@ -77,7 +78,42 @@ private:
     /// @p straddler and not itself hit through a clipped overhang.
     void focusVisibleWindowAt(const QPointF& pos, KWin::Window* straddler);
 
+    /// Rescale @p event's delta/deltaV120 in place when a ScrollFactor rule
+    /// matches the window that will RECEIVE it. Returns nothing — the caller
+    /// always forwards the (possibly mutated) event; scaling never consumes.
+    ///
+    /// The mutated event continues down the filter chain, so the Decoration,
+    /// WindowAction and XWayland filters below this one see the scaled delta
+    /// as well as the forwarding filter that delivers it to the client. That
+    /// is the intended reading of the action: "this app's scroll moves this
+    /// much per notch" applies wherever that app's scroll is consumed,
+    /// including its own title bar. Filters ABOVE this one (global shortcuts,
+    /// interactive move/resize, the Meta+wheel strip binding) are ordered
+    /// earlier and always see the raw delta.
+    void applyScrollFactor(KWin::PointerAxisEvent* event);
+
+    /// Forget the window the v120 residues belong to and zero them. Called on
+    /// every axis tick that does not scale (no rule, no target, consumed
+    /// overhang) so one window's fractional remainder can never be applied to
+    /// the next stream the filter does scale.
+    void resetScrollFactorStream();
+
     PlasmaZonesEffect* m_effect;
+    /// Fractional deltaV120 remainder carried between ticks so a factor
+    /// below 1 still accumulates into full v120 steps instead of rounding
+    /// every tick to zero. One residue per axis orientation, reset when the
+    /// pointer-FOCUS window changes, when the stream ends, and on a direction
+    /// reversal within one stream — so neither another window's remainder nor
+    /// an abandoned one from the opposite direction ever eats a notch.
+    qreal m_v120ResidueVertical = 0.0;
+    qreal m_v120ResidueHorizontal = 0.0;
+    /// The window the residues belong to. QPointer, not a raw pointer: the
+    /// comparison is by identity, and a destroyed KWin::Window's address can
+    /// be reused by the next one allocated — a raw pointer would then compare
+    /// EQUAL to an unrelated window and hand it the dead window's fractional
+    /// remainder instead of resetting the stream. A QPointer reads null after
+    /// the window dies, so the reset fires.
+    QPointer<KWin::Window> m_scrollFactorWindow;
     /// Buttons whose PRESS this filter consumed — their releases are consumed
     /// too, even if the cursor has left the overhang, so the client never
     /// sees an unpaired release.

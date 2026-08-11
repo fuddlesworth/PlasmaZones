@@ -11,6 +11,7 @@
 #include <QString>
 #include <QPointer>
 #include <optional>
+#include "core/interfaces/isettings.h"
 #include "core/types/constants.h"
 #include "core/utils/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
@@ -131,10 +132,19 @@ inline QJsonObject rectToJsonObject(const QRect& rect)
 // straight through from the effect's snapshot (setWindowMetadata's a{sv}), so a
 // Float / RestorePosition rule keyed on e.g. IsModal or Width matches the same
 // values the effect path resolves live. Placement state (IsFloating / IsSnapped /
-// Zone) is deliberately absent: these resolvers run at window-open, before any
-// placement exists, so a predicate over them must stay inert.
+// IsTiled / Zone) is deliberately absent: these resolvers run at window-open,
+// before any placement exists. A POSITIVE predicate over one of them stays
+// inert, which is the design; a NEGATED one would invert and match every
+// window, so the admission tests in rules.cpp refuse rules that negate any of
+// those four plus WindowClass (unanswerableWindowFields).
+//
+// @p settings supplies the session colour scheme. It is the caller's INJECTED
+// ISettings, not Settings' static, so a test double substitutes a scheme like
+// any other setting; a null @p settings leaves the field empty, which the
+// resolvers' admission tests already treat as unanswerable.
 inline std::optional<PhosphorRules::WindowQuery>
-buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId)
+buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId,
+                        const ISettings* settings)
 {
     if (registry.isNull()) {
         return std::nullopt;
@@ -154,6 +164,14 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // degenerate `AppId Equals ""` / negated-appId predicate resolve differently on the
     // daemon open-path than on the effect live-path (WindowQuery::appId is optional, so
     // an unknown appId must stay disengaged per the engage-only-when-known contract).
+    // Consequence, stated so it is not read as an oversight: for a window whose
+    // appId the compositor never reported, `None{AppId Equals X}` inverts and
+    // matches. That cannot be closed by a blanket holdout the way
+    // unanswerableWindowFields closes WindowClass and the placement fields,
+    // because appId IS answerable for every other window and excluding
+    // appId-negating rules outright would drop the common `everything except
+    // this app` rule. The effect-side builder has the identical shape, so the
+    // two paths at least agree.
     if (!meta->appId.isEmpty()) {
         query.appId = meta->appId;
     }
@@ -172,6 +190,22 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     query.windowType = meta->windowType;
     query.virtualDesktop = meta->virtualDesktop;
     query.activity = meta->activity;
+    // Colour scheme is session-wide (not window metadata), read through the
+    // injected settings so a `ColorScheme == dark` clause composes with any
+    // window predicate on the daemon open path. The EFFECT-side query leaves
+    // it unstamped and its admission filter holds such rules out there
+    // (effectNeverStampedFields), so pairing ColorScheme with an
+    // effect-consumed action is inert by design; the daemon-resolved actions
+    // honour it.
+    //
+    // The token is EMPTY in a process with no GUI application (and off the GUI
+    // thread), which engages the field with a value no leaf can match — inert
+    // for a positive leaf, INVERTING for a negated one. rules.cpp's admitWith
+    // binds the ColorScheme negation guard on exactly that condition, so an
+    // empty token here is handled rather than merely tolerated.
+    if (settings) {
+        query.colorScheme = settings->colorSchemeToken();
+    }
     // Screen-derived context fields (ScreenId, Mode, ScreenOrientation, ActiveLayout)
     // are intentionally NOT stamped here: the window metadata does not carry the
     // window's screen geometry / active layout, and this daemon-side query feeds the
@@ -182,10 +216,11 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // query this builds. Stamping ScreenId: placementZonesByRule,
     // applyOpenDesktopRouting, applyOpenScreenRouting, applyOpenRoutingForTiling.
     // Stamping ScreenId AND the derived Mode: shouldFloatByRule,
-    // scrollOpenRuleParams and shouldRestoreSizeOnUnsnap, all three of which
-    // resolve UNCACHED for that reason (resolveCached is keyed on windowId and
-    // rule revision alone, so a hit discards the freshly stamped query). Each
-    // is documented at its own site.
+    // scrollOpenRuleParams, shouldRestoreSizeOnUnsnap and
+    // shouldUnfloatFallbackToZone, all four of which resolve UNCACHED for that
+    // reason (resolveCached is keyed on windowId and rule revision alone, so a
+    // hit discards the freshly stamped query). Each is documented at its own
+    // site.
     //
     // KNOWN GAP, stated so it is not mistaken for a deliberate design: no
     // resolveCached-path resolver stamps Mode. There are SIX resolveCached
@@ -208,11 +243,18 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // rule fires for EVERY window — the far worse half, and one the editor
     // lets users author as a none-group. Neither is left to the empty-value
     // coincidence: each resolver in rules.cpp passes a structural admission
-    // test (admitScreenStamped / admitScreenAndModeStamped) that drops any
-    // rule referencing a field that resolver does not stamp, mirroring the
+    // test (admitScreenStamped / admitScreenAndModeStamped /
+    // admitNothingStamped, bound through admitWith) that drops any rule
+    // referencing a field that resolver does not stamp, mirroring the
     // zones-layer predicate at seven sites in
     // layoutregistry_contextresolve.cpp. The gap above is therefore about
     // which rules can WIN, not about a negated rule wrongly firing.
+    //
+    // Two of those exclusions are NEGATION-scoped rather than blanket, because
+    // the field is answerable for most windows and a blanket exclusion would
+    // drop legitimate rules: the five window fields this builder cannot answer
+    // (rules.cpp's unanswerableWindowFields) and ColorScheme when the process
+    // has no palette to classify (rules.cpp's admitWith).
     //
     // ActiveLayout is populated only by the windowless context cascade (never
     // by either per-window query), so it is context-scoped in practice —
@@ -266,6 +308,46 @@ inline QString heightFraction()
 {
     return QStringLiteral("heightFraction");
 }
+inline QString maximized()
+{
+    return QStringLiteral("maximized");
+}
+inline QString focused()
+{
+    return QStringLiteral("focused");
+}
 } // namespace ScrollOpenKeys
+
+/// Keys of the per-window colour-override maps: tabColorRuleParams (consumed by
+/// the daemon's scroll tab-strip enrichment) and dropIndicatorRuleParams
+/// (consumed by the overlay service's drop-indicator slot). Same rationale as
+/// ScrollOpenKeys above — the seam was five hand-repeated literals across four
+/// files, where a typo silently drops an override instead of failing to build.
+///
+/// These are also the QML property names the overlay items expose, so the
+/// producer, the layering step and the property write all have to agree on the
+/// same spelling; that is exactly what makes one home worth having.
+namespace WindowColorKeys {
+inline QString activeColor()
+{
+    return QStringLiteral("activeColor");
+}
+inline QString inactiveColor()
+{
+    return QStringLiteral("inactiveColor");
+}
+inline QString urgentColor()
+{
+    return QStringLiteral("urgentColor");
+}
+inline QString indicatorColor()
+{
+    return QStringLiteral("indicatorColor");
+}
+inline QString indicatorBorderColor()
+{
+    return QStringLiteral("indicatorBorderColor");
+}
+} // namespace WindowColorKeys
 
 } // namespace PlasmaZones
