@@ -11,23 +11,16 @@
 #include <QGuiApplication>
 #include <QPalette>
 #include <QScopedValueRollback>
+#include <QThread>
 
 namespace PlasmaZones {
 
-// ── Appearance: system-colour derivation (PhosphorConfig::Store-backed) ──────
-
-void Settings::setUseSystemColors(bool use)
-{
-    if (useSystemColors() == use) {
-        return;
-    }
-    m_store->write(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey(), use);
-    if (use) {
-        applySystemColorScheme();
-    }
-    Q_EMIT useSystemColorsChanged();
-    Q_EMIT settingsChanged();
-}
+// ── Appearance: palette-following zone colours ───────────────────────────────
+// The four zone-colour keys are theme-fallback strings: EMPTY means "follow
+// the system palette". Resolution lives here, in the getters' shared helper,
+// so a palette change needs no writes, no baseline bookkeeping, and no
+// squelch flags — the old useSystemColors machinery that WROTE derived
+// colours into config is gone with the bool itself.
 
 // ── Color helpers ────────────────────────────────────────────────────────────
 
@@ -37,26 +30,20 @@ QString Settings::loadColorsFromFile(const QString& filePath)
     if (!result.success) {
         return result.errorMessage;
     }
+    // The QColor setters store concrete #AARRGGBB strings, which is exactly
+    // what "stop following the palette" means now — no mode bool to flip.
     setHighlightColor(result.highlightColor);
     setInactiveColor(result.inactiveColor);
     setBorderColor(result.borderColor);
     setLabelFontColor(result.labelFontColor);
-    if (useSystemColors()) {
-        setUseSystemColors(false);
-    }
     return QString(); // Success - no error
 }
 
 void Settings::trackSystemPaletteChanges()
 {
-    // Track system palette changes at runtime. load() derives the zone
-    // colors from the CURRENT QGuiApplication palette when useSystemColors
-    // is on — a one-time snapshot. The palette changes underneath every
-    // long-running process whenever the desktop color scheme changes
-    // (wallpaper-driven schemes switch often), so without re-deriving, the
-    // daemon's overlays and the settings app's previews render colors from
-    // whichever scheme was active when the process started — they only
-    // matched again after a daemon restart. Qt 6 delivers
+    // Track system palette changes at runtime so bindings on the resolved
+    // colour getters refresh when the desktop colour scheme changes
+    // (wallpaper-driven schemes switch often). Qt 6 delivers
     // QEvent::ApplicationPaletteChange to the application object; there is
     // no signal for it, hence the event filter. Guarded: the config
     // library is also used by non-GUI tools where qGuiApp is null.
@@ -84,6 +71,11 @@ void Settings::trackSystemPaletteChanges()
         // startup read.
         m_lastColorSchemeToken = Settings::systemColorSchemeToken();
         qGuiApp->installEventFilter(this);
+        // Seed the change gate so the first ApplicationPaletteChange can
+        // compare against what the process started with.
+        m_paletteBaseline = {
+            resolvedSystemColor(SystemColorRole::Highlight), resolvedSystemColor(SystemColorRole::Inactive),
+            resolvedSystemColor(SystemColorRole::Border), resolvedSystemColor(SystemColorRole::LabelFont)};
     }
 }
 
@@ -104,102 +96,112 @@ bool Settings::eventFilter(QObject* watched, QEvent* event)
 {
     if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange) {
         // ColorScheme match-field feed: derive the light/dark token and
-        // announce a flip. Deliberately BEFORE the useSystemColors gate (the
-        // field must work with custom zone colours too) and OUTSIDE the
-        // squelch / rebaseline machinery below (this is not a config value,
-        // so it must not perturb dirty tracking).
+        // announce a flip. Runs ahead of the colour fan-out below and outside
+        // its value gates — this is not a config value, so it must not touch
+        // dirty tracking, and the field must fire even when every zone colour
+        // is pinned to a concrete value.
         const QString schemeToken = Settings::systemColorSchemeToken();
         if (schemeToken != m_lastColorSchemeToken) {
             m_lastColorSchemeToken = schemeToken;
             Q_EMIT systemColorSchemeChanged();
         }
-    }
-    if (watched == qGuiApp && event->type() == QEvent::ApplicationPaletteChange && useSystemColors()) {
-        // Derived values, not user edits. TWO mechanisms keep a runtime theme
-        // switch from reading as unsaved changes:
-        //  1. m_applyingSystemPalette (RAII, restored even if a setter throws)
-        //     is up for the whole synchronous re-derive, so
-        //     SettingsController::onSettingsPropertyChanged() — wired to every
-        //     color NOTIFY — sees isApplyingSystemPalette() and skips
-        //     setNeedsSave(true), keeping the global footer quiet.
-        //  2. rebaselineDerivedColorKeys() refreshes the committed baseline so
-        //     value-based isKeyModified() checks stay false afterwards. See
-        //     that function for why ONLY this path rebaselines — and it is
-        //     further gated here: when the useSystemColors toggle itself is a
-        //     PENDING unsaved edit, the toggle and the colors it derived must
-        //     stay discardable together, so the baseline is left alone.
-        QScopedValueRollback<bool> applying(m_applyingSystemPalette, true);
-        // Batch the announcement like load(): snapshot the four derived
-        // colors, run the derive with the per-setter NOTIFY + settingsChanged
-        // emissions squelched, then emit each changed NOTIFY exactly once plus
-        // ONE aggregate settingsChanged. Without the squelch a single palette
-        // event fired up to 4 settingsChanged (one per color setter), each of
-        // which re-ran every aggregate consumer (daemon refreshConfigFrom-
-        // Settings, KWin effect reload) mid-derive with partially-applied
-        // colors. The explicit emissions stay INSIDE the m_applyingSystemPalette
-        // scope so NOTIFY-driven dirty tracking still sees the flag up.
-        //
-        // Known (theoretical) misclassification: the derive window is
-        // synchronous, but a NOTIFY handler above could re-enter a color
-        // setter with a genuine user edit; that write lands while the squelch
-        // flag is up, so it is announced by THIS batch (fine) yet also counted
-        // as palette-derived by the rebaseline below (its baseline entry would
-        // absorb the user's value). No in-tree handler writes colors from a
-        // color NOTIFY, so this stays a documented hazard rather than code.
-        const QColor highlightBefore = highlightColor();
-        const QColor inactiveBefore = inactiveColor();
-        const QColor borderBefore = borderColor();
-        const QColor labelFontBefore = labelFontColor();
-        {
-            QScopedValueRollback<bool> squelch(m_suppressDerivedColorEmissions, true);
-            applySystemColorScheme();
-        }
-        const bool highlightChanged = highlightColor() != highlightBefore;
-        const bool inactiveChanged = inactiveColor() != inactiveBefore;
-        const bool borderChanged = borderColor() != borderBefore;
-        const bool labelFontChanged = labelFontColor() != labelFontBefore;
-        if (highlightChanged)
+        // Re-announce whichever colours FOLLOW the palette (stored sentinel
+        // empty) AND actually moved. Qt delivers ApplicationPaletteChange
+        // after the palette is already updated, so the "before" values come
+        // from the cached quartet rather than a re-read — without the value
+        // gate every palette event (a style change, a plasma-integration
+        // re-push with identical roles) would run the aggregate consumers
+        // (daemon refreshConfigFromSettings, KWin effect reload) for
+        // nothing. The resolved getters read the new palette on the next
+        // call, so this is purely a NOTIFY fan-out: nothing is written,
+        // dirty tracking never engages, and a colour the user pinned to a
+        // concrete value stays silent. One aggregate settingsChanged,
+        // batched like the setters, so aggregate consumers run once per
+        // theme switch rather than four times.
+        const QColor newHighlight = resolvedSystemColor(SystemColorRole::Highlight);
+        const QColor newInactive = resolvedSystemColor(SystemColorRole::Inactive);
+        const QColor newBorder = resolvedSystemColor(SystemColorRole::Border);
+        const QColor newLabelFont = resolvedSystemColor(SystemColorRole::LabelFont);
+        const bool highlightMoved = highlightColorRaw().isEmpty() && newHighlight != m_paletteBaseline[0];
+        const bool inactiveMoved = inactiveColorRaw().isEmpty() && newInactive != m_paletteBaseline[1];
+        const bool borderMoved = borderColorRaw().isEmpty() && newBorder != m_paletteBaseline[2];
+        const bool labelFontMoved = labelFontColorRaw().isEmpty() && newLabelFont != m_paletteBaseline[3];
+        // Refresh the baseline unconditionally (pinned colours included) so
+        // a later un-pin compares against the current palette, not a stale
+        // capture.
+        m_paletteBaseline = {newHighlight, newInactive, newBorder, newLabelFont};
+        // The NOTIFYs below are palette-driven, not user edits; the flag lets
+        // SettingsController::onSettingsPropertyChanged() keep the
+        // unsaved-changes footer quiet through a theme switch. RAII so an
+        // emission handler that throws cannot leave it stuck up.
+        QScopedValueRollback<bool> announcing(m_announcingPaletteChange, true);
+        if (highlightMoved)
             Q_EMIT highlightColorChanged();
-        if (inactiveChanged)
+        if (inactiveMoved)
             Q_EMIT inactiveColorChanged();
-        if (borderChanged)
+        if (borderMoved)
             Q_EMIT borderColorChanged();
-        if (labelFontChanged)
+        if (labelFontMoved)
             Q_EMIT labelFontColorChanged();
-        if (highlightChanged || inactiveChanged || borderChanged || labelFontChanged)
+        if (highlightMoved || inactiveMoved || borderMoved || labelFontMoved)
             Q_EMIT settingsChanged();
-        if (!isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::useSystemKey())) {
-            rebaselineDerivedColorKeys();
-        }
     }
     return ISettings::eventFilter(watched, event);
 }
 
-void Settings::applySystemColorScheme()
+QColor Settings::resolvedSystemColor(SystemColorRole role)
 {
+    // Headless config tools have no palette to follow; serve the shipped
+    // constants so resolution stays deterministic there. An off-main-thread
+    // caller degrades the same way: QGuiApplication::palette() is not
+    // documented thread-safe, and trackSystemPaletteChanges() already
+    // tolerates off-main-thread Settings by disabling tracking — this keeps
+    // the read side equally safe instead of racing the GUI thread. Note the
+    // degraded value is deliberately WRONG-but-safe (the constants, not the
+    // live palette); no in-tree caller reads these colours off-thread, and
+    // one that starts to will get stable colours rather than a race.
+    if (!qGuiApp || QThread::currentThread() != qGuiApp->thread()) {
+        switch (role) {
+        case SystemColorRole::Highlight:
+            return ConfigDefaults::highlightFallbackColor();
+        case SystemColorRole::Inactive:
+            return ConfigDefaults::inactiveFallbackColor();
+        case SystemColorRole::Border:
+            return ConfigDefaults::borderFallbackColor();
+        case SystemColorRole::LabelFont:
+            return ConfigDefaults::labelFontFallbackColor();
+        }
+        return ConfigDefaults::highlightFallbackColor();
+    }
+
     // QPalette respects QT_QPA_PLATFORMTHEME — on non-KDE desktops, Qt reads
     // the platform theme (qt6ct, gnome, lxqt) to populate the palette.
     const QPalette pal = QGuiApplication::palette();
-
-    QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
-    highlight.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
-    setHighlightColor(highlight);
-
+    switch (role) {
+    case SystemColorRole::Highlight: {
+        QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
+        highlight.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
+        return highlight;
+    }
     // Inactive fill and border derive from the background family, not Text.
     // Text-at-alpha renders as a washed grey film on every dark scheme (the
     // same fabrication the QML side eliminated); AlternateBase is the View
     // alternate surface, and Mid is the palette's separator-grade shade, so
     // both follow the active color scheme with the intended emphasis.
-    QColor inactive = pal.color(QPalette::Active, QPalette::AlternateBase);
-    inactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
-    setInactiveColor(inactive);
-
-    QColor border = pal.color(QPalette::Active, QPalette::Mid);
-    border.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
-    setBorderColor(border);
-
-    const QColor fontColor = pal.color(QPalette::Active, QPalette::Text);
-    setLabelFontColor(fontColor);
+    case SystemColorRole::Inactive: {
+        QColor inactive = pal.color(QPalette::Active, QPalette::AlternateBase);
+        inactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
+        return inactive;
+    }
+    case SystemColorRole::Border: {
+        QColor border = pal.color(QPalette::Active, QPalette::Mid);
+        border.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
+        return border;
+    }
+    case SystemColorRole::LabelFont:
+        return pal.color(QPalette::Active, QPalette::Text);
+    }
+    return pal.color(QPalette::Active, QPalette::Highlight);
 }
 
 } // namespace PlasmaZones

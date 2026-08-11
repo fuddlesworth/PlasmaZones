@@ -93,9 +93,9 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
 
     // Set PlasmaZones-specific default colors from ConfigDefaults
     // (the library defaults are all-transparent).
-    setCustomColor1(ConfigDefaults::highlightColor());
-    setCustomColor2(ConfigDefaults::inactiveColor());
-    setCustomColor3(ConfigDefaults::borderColor());
+    setCustomColor1(ConfigDefaults::highlightFallbackColor());
+    setCustomColor2(ConfigDefaults::inactiveFallbackColor());
+    setCustomColor3(ConfigDefaults::borderFallbackColor());
 }
 
 ZoneShaderItem::~ZoneShaderItem()

@@ -219,17 +219,6 @@ ColumnLayout {
         row: row
     }
 
-    /// Encode a QML color to a `#AARRGGBB` wire string (alpha-first) — the form
-    /// the border-colour validator accepts and the consumer parses back via
-    /// QColor::HexArgb. Mirrors how general-settings border colours are stored.
-    function _toHexArgb(c) {
-        function h(v) {
-            var s = Math.round(v * 255).toString(16);
-            return s.length < 2 ? "0" + s : s;
-        }
-        return "#" + h(c.a) + h(c.r) + h(c.g) + h(c.b);
-    }
-
     // `actionEdited`, not `actionChanged`, because `property var action`
     // auto-generates `actionChanged()` and QML rejects the duplicate signal.
     signal actionEdited(var updatedAction)
@@ -271,8 +260,18 @@ ColumnLayout {
             // key AND the kind — anything looser risks slotting a value
             // typed for one picker into a slot for another (e.g. dropping
             // a layoutId into a tilingAlgorithm field).
-            if (oldKindByKey[newParam.key] === newParam.kind && row.action[newParam.key] !== undefined)
-                payload[newParam.key] = row.action[newParam.key];
+            if (oldKindByKey[newParam.key] !== newParam.kind || row.action[newParam.key] === undefined)
+                continue;
+            // Colour params share key+kind across the accent-capable trio
+            // and the plain-hex actions, but the "accent" sentinel (the
+            // frozen BorderColorToken wire spelling) is only valid where the
+            // descriptor says so — carrying it into a hasHexColor action
+            // would produce a payload its validator rejects while the editor
+            // shows a healthy "Accent" state with no Reset to escape it.
+            // Keep the new type's seeded hex instead.
+            if (newParam.kind === "color" && newParam.acceptsAccent !== true && row.action[newParam.key] === "accent")
+                continue;
+            payload[newParam.key] = row.action[newParam.key];
         }
         return payload;
     }

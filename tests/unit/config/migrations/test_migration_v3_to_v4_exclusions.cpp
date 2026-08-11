@@ -95,6 +95,10 @@ private:
 
         QJsonObject colors;
         colors.insert(QStringLiteral("UseSystem"), false);
+        // A pinned colour riding the rename: its survival at the new path is
+        // what actually witnesses the relocation carried values (the
+        // UseSystem strip alone would also hold if the rename moved nothing).
+        colors.insert(QStringLiteral("Highlight"), QStringLiteral("#ff112233"));
         QJsonObject opacity;
         opacity.insert(QStringLiteral("Active"), 0.5);
         QJsonObject border;
@@ -292,16 +296,22 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         const QJsonObject cfg = readJson(ConfigDefaults::configFilePath());
-        // The migration chain now runs v3 → v4 → v5, so config.json lands at
-        // the current schema version (the v3→v4 step still stamps 4 mid-chain).
+        // The migration chain runs every remaining step (v3→v4→v5→v6), so
+        // config.json lands at the current schema version (the v3→v4 step
+        // still stamps 4 mid-chain).
         QCOMPARE(cfg.value(QStringLiteral("_version")).toInt(), PlasmaZones::ConfigSchemaVersion);
 
         const QJsonObject snapping = cfg.value(QStringLiteral("Snapping")).toObject();
 
         // The four zone sub-groups now live under Snapping.Zones.* with their
-        // exact keys/values preserved.
+        // keys/values preserved through the rename. The chain then runs the
+        // v5→v6 colour conversion on top, which strips the UseSystem bool
+        // outright (the colours became per-key theme-fallback strings).
         const QJsonObject zones = snapping.value(QStringLiteral("Zones")).toObject();
-        QCOMPARE(zones.value(QStringLiteral("Colors")).toObject().value(QStringLiteral("UseSystem")).toBool(), false);
+        QCOMPARE(zones.value(QStringLiteral("Colors")).toObject().value(QStringLiteral("Highlight")).toString(),
+                 QStringLiteral("#ff112233"));
+        QVERIFY2(!zones.value(QStringLiteral("Colors")).toObject().contains(QStringLiteral("UseSystem")),
+                 "the v5->v6 step must strip the UseSystem key the v3->v4 rename relocated");
         QVERIFY(qFuzzyCompare(
             zones.value(QStringLiteral("Opacity")).toObject().value(QStringLiteral("Active")).toDouble(), 0.5));
         QCOMPARE(zones.value(QStringLiteral("Border")).toObject().value(QStringLiteral("Width")).toInt(), 3);
@@ -319,11 +329,10 @@ private Q_SLOTS:
             true);
 
         // End-state load check: a Settings loaded from the migrated config must
-        // read the zone-overlay UseSystem flag from its new Snapping.Zones.Colors
-        // home (the migration relocated the v3 UseSystem=false there), proving the
-        // renamed group is wired to the live getter.
+        // read the relocated Labels group from its new Snapping.Zones home,
+        // proving the renamed group is wired to the live getters.
         Settings settings;
-        QCOMPARE(settings.useSystemColors(), false);
+        QCOMPARE(settings.labelFontFamily(), QStringLiteral("X"));
     }
 
     void testZoneRename_absentSourceIsNoOp()
@@ -351,9 +360,13 @@ private Q_SLOTS:
         // An already-v4 config whose zone groups are at the NEW Snapping.Zones.*
         // paths. The v4 version gate short-circuits migrateV3ToV4 entirely (the
         // move code is never reached), so the groups must not be moved or
-        // duplicated and no Snapping.Appearance group is resurrected.
+        // duplicated and no Snapping.Appearance group is resurrected. The
+        // marker is a pinned colour with UseSystem off, so the later v5→v6
+        // colour conversion carries it through unchanged instead of pruning
+        // the group.
         QJsonObject zonesColors;
-        zonesColors.insert(QStringLiteral("UseSystem"), true);
+        zonesColors.insert(QStringLiteral("UseSystem"), false);
+        zonesColors.insert(QStringLiteral("Highlight"), QStringLiteral("#ff112233"));
         QJsonObject zones;
         zones.insert(QStringLiteral("Colors"), zonesColors);
         QJsonObject snapping;
@@ -373,9 +386,9 @@ private Q_SLOTS:
                      .toObject()
                      .value(QStringLiteral("Colors"))
                      .toObject()
-                     .value(QStringLiteral("UseSystem"))
-                     .toBool(),
-                 true);
+                     .value(QStringLiteral("Highlight"))
+                     .toString(),
+                 QStringLiteral("#ff112233"));
         QVERIFY(!snappingAfter.contains(QStringLiteral("Appearance")));
     }
 
@@ -388,8 +401,11 @@ private Q_SLOTS:
         // disturb the existing disable-list / assignment fold.
         QJsonObject cfg = makeV3Config();
         QJsonObject snapping = cfg.value(QStringLiteral("Snapping")).toObject();
+        // A pinned colour with UseSystem off, so the later v5→v6 colour
+        // conversion keeps the group as the observable marker of the move.
         QJsonObject colors;
         colors.insert(QStringLiteral("UseSystem"), false);
+        colors.insert(QStringLiteral("Highlight"), QStringLiteral("#ff112233"));
         QJsonObject appearance;
         appearance.insert(QStringLiteral("Colors"), colors);
         snapping.insert(QStringLiteral("Appearance"), appearance);
@@ -415,9 +431,9 @@ private Q_SLOTS:
                      .toObject()
                      .value(QStringLiteral("Colors"))
                      .toObject()
-                     .value(QStringLiteral("UseSystem"))
-                     .toBool(),
-                 false);
+                     .value(QStringLiteral("Highlight"))
+                     .toString(),
+                 QStringLiteral("#ff112233"));
     }
 };
 

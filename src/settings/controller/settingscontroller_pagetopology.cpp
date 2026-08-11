@@ -285,7 +285,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          }},
         {QStringLiteral("snapping-overlay-appearance"),
          {
-             {CD::snappingZonesColorsGroup(), CD::useSystemKey()},
              {CD::snappingZonesColorsGroup(), CD::highlightKey()},
              {CD::snappingZonesColorsGroup(), CD::inactiveKey()},
              {CD::snappingZonesColorsGroup(), CD::borderKey()},
@@ -314,6 +313,10 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::snappingZoneSelectorGroup(), CD::maxRowsKey()},
              {CD::snappingZoneSelectorGroup(), CD::previewWidthKey()},
              {CD::snappingZoneSelectorGroup(), CD::previewHeightKey()},
+             // No editor row exists for this key (it is set over D-Bus or by
+             // hand), but it belongs to this page's group, so per-page
+             // Reset/Discard must cover it rather than walking past it.
+             {CD::snappingZoneSelectorGroup(), CD::previewLockAspectKey()},
          }},
         {QStringLiteral("snapping-window-behavior"),
          {

@@ -293,6 +293,14 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
     // authoritative source. Types outside this allow-list (custom QObject
     // pointers, exotic Q_DECLARE_METATYPE payloads) fall through to the
     // full setter to avoid false negatives from a non-structural operator==.
+    //
+    // For the RESOLVING colour keys (the zone quartet and the three window
+    // colours, whose getters resolve the empty theme-fallback sentinel to a
+    // concrete colour) this guard gives echo writes a defined meaning:
+    // writing back the currently-resolved colour keeps the key FOLLOWING
+    // the theme rather than pinning it. That is deliberate — it is what
+    // makes a get→set echo non-destructive — and a caller that wants an
+    // exact pin (or an un-pin) has the unambiguous *Raw companion keys.
     const int typeId = converted.metaType().id();
     const bool comparableType =
         (typeId == QMetaType::Bool || typeId == QMetaType::Int || typeId == QMetaType::UInt

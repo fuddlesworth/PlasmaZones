@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * @brief Scrolling → Tabs: the indicator drawn alongside a tabbed column.
@@ -46,7 +47,22 @@ SettingsFlickable {
     ColorDialog {
         id: tabColorDialog
 
+        title: i18n("Choose Tab Color")
         options: ColorDialog.ShowAlphaChannel
+    }
+
+    // Publish the open state so page-stepping cannot swap the page out from
+    // under the open dialog — same pattern (and standalone-host guard) as
+    // RulesPage.
+    readonly property bool anyModalOpen: tabColorDialog.visible
+    onAnyModalOpenChanged: {
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = anyModalOpen;
+    }
+    // Clear a latched true on page swap (RulesPage's own teardown pattern).
+    Component.onDestruction: {
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = false;
     }
 
     contentHeight: content.implicitHeight
@@ -340,39 +356,46 @@ SettingsFlickable {
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
 
+                // Swatch previews bind the SHARED fallback constants (see
+                // ZoneColorDefaults) so they show exactly what the renderer
+                // draws, including the style-dependent inactive fallback:
+                // titled chips rest unfilled, so previewing the bar's grey
+                // there would show a colour the indicator never paints.
                 ThemeFallbackColorRow {
-                    Layout.fillWidth: true
                     title: i18n("Active tab")
                     searchAnchor: "tabIndicatorActiveColor"
                     description: i18n("The tab of the window the column is currently showing.")
                     storedColor: appSettings.scrollingTabIndicatorActiveColor
-                    themeColor: Kirigami.Theme.highlightColor
+                    themeColor: QFZCommon.ZoneColorDefaults.tabActiveColor
                     picker: tabColorDialog
                     onColorChosen: function (hex) {
                         appSettings.scrollingTabIndicatorActiveColor = hex;
                     }
                 }
 
+                SettingsSeparator {}
+
                 ThemeFallbackColorRow {
-                    Layout.fillWidth: true
                     title: i18n("Inactive tabs")
                     searchAnchor: "tabIndicatorInactiveColor"
                     description: i18n("The tabs of the column's other windows.")
                     storedColor: appSettings.scrollingTabIndicatorInactiveColor
-                    themeColor: Qt.alpha(Kirigami.Theme.textColor, 0.35)
+                    // 0 = titled chips (see ISettings::scrollingTabIndicatorStyle).
+                    themeColor: appSettings.scrollingTabIndicatorStyle === 0 ? QFZCommon.ZoneColorDefaults.tabInactiveChipColor : QFZCommon.ZoneColorDefaults.tabInactiveBarColor
                     picker: tabColorDialog
                     onColorChosen: function (hex) {
                         appSettings.scrollingTabIndicatorInactiveColor = hex;
                     }
                 }
 
+                SettingsSeparator {}
+
                 ThemeFallbackColorRow {
-                    Layout.fillWidth: true
                     title: i18n("Urgent tab")
                     searchAnchor: "tabIndicatorUrgentColor"
                     description: i18n("The tab of a window that is asking for attention.")
                     storedColor: appSettings.scrollingTabIndicatorUrgentColor
-                    themeColor: Kirigami.Theme.negativeTextColor
+                    themeColor: QFZCommon.ZoneColorDefaults.tabUrgentColor
                     picker: tabColorDialog
                     onColorChosen: function (hex) {
                         appSettings.scrollingTabIndicatorUrgentColor = hex;

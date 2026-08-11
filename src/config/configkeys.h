@@ -293,7 +293,6 @@ public:
     // Config Keys — Snapping.Zones.Colors
     // ═══════════════════════════════════════════════════════════════════════════
 
-    P_CONFIG_KEY(useSystemKey, "UseSystem")
     P_CONFIG_KEY(highlightKey, "Highlight")
     P_CONFIG_KEY(inactiveKey, "Inactive")
     P_CONFIG_KEY(borderKey, "Border")

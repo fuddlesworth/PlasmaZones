@@ -50,6 +50,13 @@ static_assert(BorderRadius >= BorderRadiusMin && BorderRadius <= BorderRadiusMax
 static_assert(FocusFadeMs >= FocusFadeMsMin && FocusFadeMs <= FocusFadeMsMax,
               "FocusFadeMs default must lie within its declared bounds");
 
+// Cold-start colour fallbacks for the effect's decoration path: what a
+// border/glow/shadow renders with before the daemon's first colour replies
+// land (Breeze accent blue and the Breeze inactive grey, both opaque).
+// Single-sourced here so the effect's call sites cannot drift apart.
+inline constexpr QLatin1StringView FallbackAccentHex{"#ff3daee9"};
+inline constexpr QLatin1StringView FallbackInactiveHex{"#ff5c6370"};
+
 } // namespace DecorationDefaults
 
 /**

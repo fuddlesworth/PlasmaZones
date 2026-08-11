@@ -637,15 +637,157 @@ private Q_SLOTS:
 
     /// Pin the profile envelope version to the config schema version.
     ///
-    /// readProfileFile refuses any file stamped with a different version, and
-    /// loadAll drops it — so a ConfigSchemaVersion bump makes every saved
-    /// profile vanish unless the bump ships a profile-envelope migration
-    /// alongside the config one. This pin turns that silent data loss into a
-    /// loud failure at exactly the moment someone bumps the version: extend
-    /// the migration chain to cover profile files, then update this pin.
+    /// readProfileFile migrates a file stamped with an OLDER version (v5 and
+    /// up) forward through the config migration chain, so a bump no longer
+    /// orphans saved profiles — but that only holds while every new step is a
+    /// pure config→config transform the profile-delta path may run. This pin
+    /// fails loudly at exactly the moment someone bumps the version, forcing
+    /// them to confirm the new step qualifies (and add an olderProfile*
+    /// migration test beside olderProfileFileMigratesForward) before
+    /// updating the pin.
     void profileFormatTracksConfigSchemaVersion()
     {
-        QCOMPARE(ConfigSchemaVersion, 5);
+        QCOMPARE(ConfigSchemaVersion, 6);
+    }
+
+    /// A profile file stamped v5 whose delta carries the old zone-colour
+    /// shape loads through the migration path: palette-snapshot colours drop
+    /// (UseSystem was on), pinned colours survive, the UseSystem key is gone,
+    /// and the record is served under the current version.
+    /// A store expecting the CURRENT version, unlike the fixture stores
+    /// above (which pin formatVersion 5 for their synthetic groups). The
+    /// current-schema defaults blob must declare the zone-colour groups —
+    /// the migration path flattens the migrated delta back through the
+    /// schema's group/key lists, dropping anything undeclared.
+    ProfileStore::Config makeCurrentVersionConfig()
+    {
+        ProfileStore::Config config;
+        config.profilesDir = [this]() {
+            return m_dir->path();
+        };
+        config.currentConfig = [this]() {
+            return m_current;
+        };
+        config.defaultConfig = []() {
+            QJsonObject defaults = baseDefaults();
+            defaults[QStringLiteral("Snapping.Zones.Colors")] = QJsonObject{{QStringLiteral("Highlight"), QString()},
+                                                                            {QStringLiteral("Inactive"), QString()},
+                                                                            {QStringLiteral("Border"), QString()}};
+            defaults[QStringLiteral("Snapping.Zones.Labels")] = QJsonObject{{QStringLiteral("FontColor"), QString()}};
+            defaults[QStringLiteral("_version")] = ConfigSchemaVersion;
+            return defaults;
+        };
+        config.applyConfig = [this](const QJsonObject& blob) {
+            m_lastApplied = blob;
+            return true;
+        };
+        config.stagedActiveId = [this]() {
+            return m_staged;
+        };
+        config.setStagedActiveId = [this](const QString& id) {
+            m_staged = id;
+        };
+        config.formatVersion = ConfigSchemaVersion;
+        return config;
+    }
+
+    [[nodiscard]] bool writeProfileFileFixture(const QUuid& id, int version, const QJsonObject& delta,
+                                               const QUuid& parent = QUuid())
+    {
+        QJsonObject file;
+        file.insert(QStringLiteral("_version"), version);
+        file.insert(QStringLiteral("id"), id.toString());
+        file.insert(QStringLiteral("name"), QStringLiteral("Old"));
+        if (!parent.isNull()) {
+            file.insert(QStringLiteral("parent"), parent.toString());
+        }
+        file.insert(QStringLiteral("config"), delta);
+        const QString path =
+            m_dir->path() + QLatin1Char('/') + id.toString(QUuid::WithoutBraces) + QStringLiteral(".json");
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly)) {
+            return false;
+        }
+        return f.write(QJsonDocument(file).toJson()) >= 0;
+    }
+
+    void olderProfileFileMigratesForward()
+    {
+        const QUuid id = QUuid::createUuid();
+        // The delta is FLAT — dot-path group names as top-level keys, the
+        // Store::exportToJson shape diffConfig actually produces. A nested
+        // fixture here would pass regardless of whether the store performs
+        // the flat↔nested translation the migration helpers need.
+        QJsonObject colors;
+        colors.insert(QStringLiteral("UseSystem"), false);
+        colors.insert(QStringLiteral("Highlight"), QStringLiteral("#80112233"));
+        QJsonObject delta;
+        delta.insert(QStringLiteral("Snapping.Zones.Colors"), colors);
+        QVERIFY(writeProfileFileFixture(id, 5, delta));
+
+        ProfileStore store(makeCurrentVersionConfig());
+        const QVariantList rows = store.availableProfiles();
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Old"));
+
+        // The served delta went through migrateV5ToV6: the pinned colour
+        // survives, UseSystem is gone (dropped by the schema-key filter on
+        // the way back out).
+        QVERIFY(store.activateProfile(id.toString()));
+        const QJsonObject appliedColors = m_lastApplied.value(QStringLiteral("Snapping.Zones.Colors")).toObject();
+        QCOMPARE(appliedColors.value(QStringLiteral("Highlight")).toString(), QStringLiteral("#80112233"));
+        QVERIFY(!appliedColors.contains(QStringLiteral("UseSystem")));
+        // Provenance note: the applied blob's stamp comes from the resolve
+        // seed (defaultConfig), not the delta — readProfileFile strips the
+        // delta's version key after migrating. This pins the seed's stamp,
+        // not the migration.
+        QCOMPARE(m_lastApplied.value(QStringLiteral("_version")).toInt(), ConfigSchemaVersion);
+    }
+
+    /// The version guards around the forward migration: a file older than
+    /// the readable floor and a file newer than the build are refused, while
+    /// a pre-v6 CHILD whose delta overrides zone colours is KEPT with those
+    /// entries dropped (their snapshot-vs-pick intent needs its parents,
+    /// which the per-file path cannot see, so inheriting the parent's
+    /// colours is the closest defensible reading — refusing the whole file
+    /// would silently re-root its own children).
+    void unreadableProfileVersionsAreRefusedAndAmbiguousChildColorsDrop()
+    {
+        const QUuid tooOld = QUuid::createUuid();
+        QVERIFY(writeProfileFileFixture(tooOld, 4, QJsonObject()));
+        const QUuid tooNew = QUuid::createUuid();
+        QVERIFY(writeProfileFileFixture(tooNew, 99, QJsonObject()));
+        const QUuid parent = QUuid::createUuid();
+        QVERIFY(writeProfileFileFixture(parent, ConfigSchemaVersion, QJsonObject()));
+        const QUuid ambiguousChild = QUuid::createUuid();
+        QJsonObject childColors;
+        childColors.insert(QStringLiteral("Highlight"), QStringLiteral("#ffaa0000"));
+        QJsonObject childDelta;
+        childDelta.insert(QStringLiteral("Snapping.Zones.Colors"), childColors);
+        // A non-colour override that must SURVIVE the colour strip.
+        childDelta.insert(QStringLiteral("GroupA"), QJsonObject{{QStringLiteral("k1"), 42}});
+        QVERIFY(writeProfileFileFixture(ambiguousChild, 5, childDelta, parent));
+
+        ProfileStore store(makeCurrentVersionConfig());
+        QHash<QString, QVariantMap> rowById;
+        for (const QVariant& v : store.availableProfiles()) {
+            rowById.insert(v.toMap().value(QStringLiteral("id")).toString(), v.toMap());
+        }
+        // The two out-of-range versions are refused; parent and child load.
+        QCOMPARE(rowById.size(), 2);
+        QVERIFY(rowById.contains(parent.toString()));
+        QVERIFY(rowById.contains(ambiguousChild.toString()));
+
+        // The child's zone-colour override was dropped (the resolved blob
+        // carries the defaults seed's empty sentinel, not the child's pin)
+        // while its other override survived the strip.
+        QVERIFY(store.activateProfile(ambiguousChild.toString()));
+        QCOMPARE(m_lastApplied.value(QStringLiteral("Snapping.Zones.Colors"))
+                     .toObject()
+                     .value(QStringLiteral("Highlight"))
+                     .toString(),
+                 QString());
+        QCOMPARE(m_lastApplied.value(QStringLiteral("GroupA")).toObject().value(QStringLiteral("k1")).toInt(), 42);
     }
 
     /// When the settings store refuses the staged blob, activation aborts

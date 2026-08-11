@@ -381,14 +381,8 @@ SettingsFlickable {
     ColorDialog {
         id: colorParamDialog
 
+        title: i18n("Choose Color")
         options: ColorDialog.ShowAlphaChannel
-
-        // Seed imperatively at open: ColorDialog writes selectedColor itself as
-        // the user drags, and that JS-side write severs a declarative binding.
-        function openFor(c) {
-            colorParamDialog.selectedColor = c;
-            colorParamDialog.open();
-        }
     }
 
     // Page-level curve editor for ActionRow's curve-param slots, exposed via the

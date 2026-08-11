@@ -42,7 +42,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setSetting">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a single setting by key. Returns true if the setting now holds the supplied value — a same-value write is a no-op but still returns true (the value-equality guard suppresses the redundant write without reporting failure)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set a single setting by key. Returns true if the setting now holds the supplied value — a same-value write is a no-op but still returns true (the value-equality guard suppresses the redundant write without reporting failure). One carve-out: the resolving color keys (the zone colors and the window border/tint colors) accept the empty string or the legacy accent token to put the color back on the color scheme; the write succeeds, but reading the key back returns the RESOLVED concrete color, never the sentinel — read the matching *Raw key for the stored follow-or-pinned state. The normalizing token-enum keys (renderingBackend, audioChannelMode, audioInputMethod) accept any case and surrounding whitespace their option set recognizes and store the canonical lowercase spelling; the window scope keys require their exact lowercase token."/>
             <arg name="key" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
             </arg>
@@ -90,11 +90,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
             </arg>
             <arg name="schemaJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON: {key, type}. Type is bool, int, double, string, color, stringlist, or map."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {key, type}. Type is bool, int, double, string, color, themeColor, stringlist, or map. A themeColor key stores a theme-fallback string: empty means the value follows the system color scheme, anything else is a pinned color."/>
             </arg>
         </method>
         <method name="getAllSettingSchemas">
-            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for all settings. Returns JSON object mapping keys to type info (type is one of bool, int, double, string, color, stringlist, map)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get metadata for all settings. Returns JSON object mapping keys to type info (type is one of bool, int, double, string, color, themeColor, stringlist, map; themeColor marks a theme-fallback string whose empty value follows the system color scheme)."/>
             <arg name="schemasJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object: {key: {type}, ...}."/>
             </arg>

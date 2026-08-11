@@ -127,6 +127,7 @@ set(plasmazones_core_SRCS
     config/configmigration_v4rules.cpp
     config/configmigration_v4finalize.cpp
     config/configmigration_v5.cpp
+    config/configmigration_v6.cpp
     config/colorimporter.cpp
     config/colorimporter.h
     dbus/dbushelpers.cpp

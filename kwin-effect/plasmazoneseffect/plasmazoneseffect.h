@@ -1048,9 +1048,12 @@ private:
     // resolves as: this default (each slot gated by its scope token) filling the
     // slots the user's per-window rules left unset — rules still win per slot.
     // Pushed from the daemon over the settings D-Bus wire in loadCachedSettings,
-    // re-fetched on every settingsChanged. The two colour strings carry a hex
-    // "#AARRGGBB" OR the "accent" sentinel (resolved to m_borderAccentColor /
-    // m_borderInactiveColor at merge time, mirroring the rule colour path).
+    // re-fetched on every settingsChanged. The three colour strings carry a
+    // hex "#AARRGGBB"; a current daemon resolves its empty follow-the-theme
+    // sentinel before the value crosses D-Bus, so the "accent" token
+    // (resolved to m_borderAccentColor / m_borderInactiveColor at merge
+    // time, mirroring the rule colour path) only arrives from an older
+    // daemon or through the rule vocabulary.
     // Scope tokens live in PhosphorCompositor::WindowAppearanceScope: "tiled"
     // (snapped OR autotile-managed), "normal" (Normal type AND not transient),
     // "all" (every window). Defaults match ConfigDefaults::windowBorderScope().
@@ -1939,6 +1942,12 @@ private:
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
     std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;
+    // The two snap-assist toggles cached from independent D-Bus replies; the
+    // handler is enabled on their AND (see loadCachedSettings). Both seed
+    // false so the handler stays off until the replies land, matching the
+    // pre-split cold-start behaviour.
+    bool m_snapAssistFeatureEnabled = false;
+    bool m_snapAssistBehaviorEnabled = false;
     // Per-output motion clocks. One `CompositorClock` per `LogicalOutput`
     // so mixed refresh-rate displays (e.g., 60 Hz + 144 Hz) phase-lock
     // independently — see IMotionClock docs. Populated on construction

@@ -11,6 +11,11 @@ Rectangle {
     id: root
 
     property int buttonSize: Kirigami.Units.gridUnit * 2
+    /// What a screen reader reads as the swatch's description. Overridable so
+    /// a host whose swatch previews a DERIVED colour (the theme-fallback
+    /// control while following the scheme) can announce the state instead of
+    /// a hex the user never picked.
+    property string accessibleDescription: i18n("Current color: %1", root.color.toString())
 
     signal clicked
 
@@ -21,9 +26,12 @@ Rectangle {
     border.width: activeFocus ? 2 : 1
     // Accessibility
     Accessible.name: i18n("Color picker")
-    Accessible.description: i18n("Current color: %1", root.color.toString())
+    Accessible.description: root.accessibleDescription
     Accessible.role: Accessible.Button
     Accessible.focusable: true
+    // Assistive-technology activation (as opposed to a real key event) has no
+    // key handler to reach — wire the AT press action to the same signal.
+    Accessible.onPressAction: root.clicked()
     // Keyboard and focus support
     activeFocusOnTab: true
     Keys.onReturnPressed: root.clicked()

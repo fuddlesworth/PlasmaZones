@@ -32,6 +32,8 @@
 
 #include <QFont>
 #include <QHash>
+
+#include <array>
 #include <QJsonValue>
 #include <QList>
 #include <QPair>
@@ -144,12 +146,25 @@ public:
     Q_PROPERTY(int overlayDisplayMode READ overlayDisplayModeInt WRITE setOverlayDisplayModeInt NOTIFY
                    overlayDisplayModeChanged)
 
-    // Appearance (ricer-friendly)
-    Q_PROPERTY(bool useSystemColors READ useSystemColors WRITE setUseSystemColors NOTIFY useSystemColorsChanged)
+    // Appearance (ricer-friendly). The four zone colours are theme-fallback
+    // keys: stored as strings where the EMPTY string means "follow the system
+    // palette". The QColor properties read RESOLVED — palette-derived while
+    // the stored value is empty — so every consumer keeps seeing a concrete
+    // colour. The *Raw string twins expose the stored value for the settings
+    // UI's theme-fallback rows and carry their own NOTIFY: a store write
+    // fires both (the resolved view reads through the same stored value),
+    // while a palette change fires only the resolved signal, since the raw
+    // value did not move.
     Q_PROPERTY(QColor highlightColor READ highlightColor WRITE setHighlightColor NOTIFY highlightColorChanged)
     Q_PROPERTY(QColor inactiveColor READ inactiveColor WRITE setInactiveColor NOTIFY inactiveColorChanged)
     Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor NOTIFY borderColorChanged)
     Q_PROPERTY(QColor labelFontColor READ labelFontColor WRITE setLabelFontColor NOTIFY labelFontColorChanged)
+    Q_PROPERTY(
+        QString highlightColorRaw READ highlightColorRaw WRITE setHighlightColorRaw NOTIFY highlightColorRawChanged)
+    Q_PROPERTY(QString inactiveColorRaw READ inactiveColorRaw WRITE setInactiveColorRaw NOTIFY inactiveColorRawChanged)
+    Q_PROPERTY(QString borderColorRaw READ borderColorRaw WRITE setBorderColorRaw NOTIFY borderColorRawChanged)
+    Q_PROPERTY(
+        QString labelFontColorRaw READ labelFontColorRaw WRITE setLabelFontColorRaw NOTIFY labelFontColorRawChanged)
     Q_PROPERTY(qreal activeOpacity READ activeOpacity WRITE setActiveOpacity NOTIFY activeOpacityChanged)
     Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
     Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
@@ -839,8 +854,12 @@ public:
     // Appearance — backed by PhosphorConfig::Store (see settingsschema.cpp).
     // Getters read through the store on demand with validator-driven
     // clamping; setters go through the store so persistence is immediate.
-    bool useSystemColors() const override;
-    void setUseSystemColors(bool use) override;
+    // The four zone colours resolve their empty theme-fallback sentinel to
+    // palette-derived colours (see resolvedSystemColor) — on that branch the
+    // QColor getter returns a palette value the store validator never sees;
+    // only the Raw string surface is validator-covered. The QColor setters
+    // store the concrete colour as an #AARRGGBB string, and the Raw accessors
+    // read/write the stored string itself, including the empty sentinel.
     QColor highlightColor() const override;
     void setHighlightColor(const QColor& color) override;
     QColor inactiveColor() const override;
@@ -849,6 +868,14 @@ public:
     void setBorderColor(const QColor& color) override;
     QColor labelFontColor() const override;
     void setLabelFontColor(const QColor& color) override;
+    QString highlightColorRaw() const;
+    void setHighlightColorRaw(const QString& color);
+    QString inactiveColorRaw() const;
+    void setInactiveColorRaw(const QString& color);
+    QString borderColorRaw() const;
+    void setBorderColorRaw(const QString& color);
+    QString labelFontColorRaw() const;
+    void setLabelFontColorRaw(const QString& color);
     qreal activeOpacity() const override;
     void setActiveOpacity(qreal opacity) override;
     qreal inactiveOpacity() const override;
@@ -1840,17 +1867,14 @@ public:
 
     // Additional methods
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
-    /// Derives the four zone-color keys from the current application palette.
-    /// Deliberately NOT Q_INVOKABLE: there is no QML caller, and an ad-hoc
-    /// QML invocation would write the derived keys without the baseline /
-    /// dirty-tracking bookkeeping its three C++ call sites provide (see the
-    /// ownership rule at rebaselineDerivedColorKeys()).
-    void applySystemColorScheme();
 
-    /// Re-derives the system-scheme zone colors when the application palette
-    /// changes at runtime (theme switch). Without this, every long-running
-    /// process (daemon, settings app) keeps the palette SNAPSHOT taken at
-    /// load() and serves stale zone colors until restart.
+    /// Re-announces the zone colours whose stored value is the empty
+    /// theme-fallback sentinel when the application palette changes at
+    /// runtime (theme switch). Resolution happens in the getters, so nothing
+    /// is written and no dirty tracking is involved; without the re-announce,
+    /// every long-running process (daemon, settings app) would keep serving
+    /// the palette SNAPSHOT its bindings read last and show stale zone colors
+    /// until something else re-read them.
     bool eventFilter(QObject* watched, QEvent* event) override;
 
     /// The system colour scheme as a "light" / "dark" token, derived from
@@ -1860,18 +1884,26 @@ public:
     /// and eventFilter()'s change detection share this one derivation.
     static QString systemColorSchemeToken();
 
-    /// True while eventFilter() is re-deriving the zone colors from a runtime
-    /// ApplicationPaletteChange. The re-derive is palette-driven, not a user
-    /// edit — SettingsController::onSettingsPropertyChanged() checks this to
-    /// avoid flipping the global unsaved-changes footer on a theme switch
-    /// (the baseline rebaseline alone keeps isKeyModified() honest, but the
-    /// controller's NOTIFY-driven dirty flag fires before any value check).
-    bool isApplyingSystemPalette() const
+    /// True while eventFilter() is fanning out the palette-change NOTIFYs.
+    /// Those emissions are palette-driven, not user edits —
+    /// SettingsController::onSettingsPropertyChanged() checks this to avoid
+    /// flipping the global unsaved-changes footer on a theme switch. Nothing
+    /// is written during the window, so no baseline bookkeeping rides on it.
+    bool isAnnouncingPaletteChange() const
     {
-        return m_applyingSystemPalette;
+        return m_announcingPaletteChange;
     }
 
 Q_SIGNALS:
+    /// NOTIFYs for the four raw theme-fallback colour strings. Distinct from
+    /// the resolved QColor twins' ISettings signals so a palette change
+    /// (which moves only the resolved view) does not announce a raw change;
+    /// the raw setters emit both.
+    void highlightColorRawChanged();
+    void inactiveColorRawChanged();
+    void borderColorRawChanged();
+    void labelFontColorRawChanged();
+
     /// Emitted when the whole animation Profile blob is replaced via
     /// `setAnimationProfile`. Fires alongside every per-field *Changed
     /// signal. Consumers that want to observe the Profile atomically
@@ -1950,7 +1982,11 @@ private:
     // bindings never refresh. snapshotNotifyProperties() captures every own
     // NOTIFY-able Q_PROPERTY value (index-aligned to the metaobject) BEFORE the
     // mutation; emitChangedNotifyProperties() fires the NOTIFY of each property
-    // whose value changed and returns whether any fired.
+    // whose value changed and returns whether any fired. One added
+    // precondition since the theme-fallback colours: the four resolved
+    // QColor properties are palette-derived, so the snapshot/compare span
+    // must stay synchronous — an event-loop spin between the two calls could
+    // let a palette change masquerade as (or mask) a store mutation.
     QVector<QVariant> snapshotNotifyProperties() const;
     bool emitChangedNotifyProperties(const QVector<QVariant>& before);
 
@@ -1959,19 +1995,19 @@ private:
     // points where the in-memory store equals disk); discardKeys() reverts to
     // this baseline and isKeyModified() compares against it. Private: mutating
     // the baseline anywhere but a load/save commit point desyncs dirty tracking.
-    // ONE narrow exception: rebaselineDerivedColorKeys() below refreshes just
-    // the four palette-derived zone-color entries after a runtime palette
-    // re-derive — those keys are palette-owned, never user edits.
     void captureBaseline();
 
-    // Refresh the baseline for ONLY the four palette-derived zone-color keys
-    // after a runtime re-derive. System-colors mode owns these keys: they
-    // follow the palette and are never user edits, so a theme switch must not
-    // flip isKeyModified() (phantom unsaved-changes footer) or arm Discard
-    // with the stale pre-switch colors. The one legitimate caller is the
-    // ApplicationPaletteChange path in eventFilter(); see the definition for
-    // why the setUseSystemColors() and load() paths must NOT call it.
-    void rebaselineDerivedColorKeys();
+    // Palette-following zone colours: resolve one of the four theme-fallback
+    // roles from the live application palette (with the ZoneDefaults alphas),
+    // falling back to the ConfigDefaults constants when no GUI application
+    // exists (headless config tools).
+    enum class SystemColorRole {
+        Highlight,
+        Inactive,
+        Border,
+        LabelFont
+    };
+    static QColor resolvedSystemColor(SystemColorRole role);
 
     // Groups that reset() deletes exhaustively (excludes unmanaged groups like
     // Updates). NOT used by save() — save() iterates the schema and lets
@@ -2051,30 +2087,23 @@ private:
 
     // Committed baseline: the last-persisted value of every schema-declared
     // key, keyed group → {key → value}. Refreshed by captureBaseline() at the
-    // end of load() and save() — plus one targeted exception: eventFilter()'s
-    // ApplicationPaletteChange path calls rebaselineDerivedColorKeys() to
-    // refresh ONLY the four palette-derived zone-color entries, so a runtime
-    // theme switch doesn't read as an unsaved edit. Backs per-page Discard
-    // (revert to baseline) and value-based per-page dirty checks
-    // (isKeyModified).
+    // end of load() and save(). Backs per-page Discard (revert to baseline)
+    // and value-based per-page dirty checks (isKeyModified). A runtime theme
+    // switch never touches it: the palette-following zone colours store the
+    // empty sentinel and resolve in their getters, so nothing is written.
     QHash<QString, QVariantMap> m_baseline;
 
-    // Raised (RAII, via QScopedValueRollback) around eventFilter()'s runtime
-    // palette re-derive; surfaced through isApplyingSystemPalette() so
-    // NOTIFY-driven dirty tracking can tell a palette-driven refresh from a
-    // user edit. Never true outside that synchronous window.
-    bool m_applyingSystemPalette = false;
+    // Raised (RAII, via QScopedValueRollback) around eventFilter()'s
+    // palette-change NOTIFY fan-out; surfaced through
+    // isAnnouncingPaletteChange(). Never true outside that synchronous window.
+    bool m_announcingPaletteChange = false;
 
-    // Raised (RAII, via QScopedValueRollback) around the two batched
-    // applySystemColorScheme() call sites: load() and eventFilter()'s runtime
-    // palette re-derive. The derive routes through the public color setters,
-    // whose per-setter NOTIFY + settingsChanged emissions would duplicate the
-    // caller's own snapshot-based announcement (each changed NOTIFY exactly
-    // once plus a single settingsChanged). While true, the color setters
-    // persist silently and the caller remains the sole announcer. Never true
-    // outside those synchronous windows — setUseSystemColors relies on the
-    // setters emitting normally.
-    bool m_suppressDerivedColorEmissions = false;
+    // The last-announced resolved values of the four theme-fallback zone
+    // colours (Highlight, Inactive, Border, LabelFont — in that order),
+    // seeded by trackSystemPaletteChanges(). eventFilter() compares against
+    // these so an ApplicationPaletteChange that moved no relevant role stays
+    // silent instead of re-running the aggregate consumers.
+    std::array<QColor, 4> m_paletteBaseline{};
 
     // Last-announced "light" / "dark" token for the systemColorSchemeChanged
     // signal, seeded from the live palette in trackSystemPaletteChanges so

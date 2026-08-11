@@ -197,8 +197,10 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
 
     // BEFORE the rect, so the Behaviors are already gated when the new value
     // lands. Written after it, the change would animate under the old flag and
-    // the first frame of a scroll would still stretch.
-    writeQmlProperty(slot, QStringLiteral("animateMoves"), animate);
+    // the first frame would still stretch. The first rect of a (re)show
+    // snaps rather than tweening in from the previous drag's stale rect —
+    // hadIndicator is exactly "the slot is already showing a rect".
+    writeQmlProperty(slot, QStringLiteral("animateMoves"), animate && hadIndicator);
     writeQmlProperty(slot, QStringLiteral("indicatorRect"), local);
 
     // Paint settings, pushed on every RECT CHANGE rather than only on the

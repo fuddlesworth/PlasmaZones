@@ -307,39 +307,20 @@ private Q_SLOTS:
 
     /**
      * A reload that leaves the effective (palette-derived) values unchanged
-     * must stay silent. Pins the system-colors regression where load()'s
-     * palette re-derive routed through the public color setters, firing each
-     * color NOTIFY twice and settingsChanged several times per themed reload
-     * even when no value changed.
-     *
-     * The on-disk highlight color is deliberately made stale before load():
-     * with useSystemColors on, the mid-load derive silently restores the
-     * palette color, so no signal may fire. Without the load-suppression
-     * guard the derive would route the palette value through the public
-     * setter (disk value != palette value, so the same-value early-return
-     * cannot mask the regression) and emit highlightColorChanged +
-     * settingsChanged mid-load.
+     * must stay silent. The zone colours follow the palette by default (empty
+     * theme-fallback sentinel, resolved in the getters), so a themed reload
+     * carries no colour writes at all; a reload of unchanged on-disk state
+     * must fire neither a colour NOTIFY nor settingsChanged.
      */
     void testLoad_noSignal_whenUnchanged()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
-        QVERIFY(settings.useSystemColors()); // default: themed reload path
-        settings.save(); // commit the constructor-derived state to disk
+        QCOMPARE(settings.highlightColorRaw(), QString()); // default: follows the palette
+        settings.save(); // commit the default state to disk
 
-        const QColor derivedHighlight = settings.highlightColor();
-
-        // Hand-write a stale highlight color to disk so load()'s reparse sees
-        // a value that differs from the palette-derived one.
-        const QColor staleHighlight(1, 2, 3);
-        QVERIFY(staleHighlight != derivedHighlight);
-        {
-            auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto g = backend->group(ConfigDefaults::snappingZonesColorsGroup());
-            g->writeColor(ConfigDefaults::highlightKey(), staleHighlight);
-            backend->sync();
-        }
+        const QColor resolvedHighlight = settings.highlightColor();
 
         QSignalSpy spy(&settings, &Settings::settingsChanged);
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
@@ -348,12 +329,73 @@ private Q_SLOTS:
 
         settings.load();
 
-        // The derive restored the palette color over the stale disk value...
-        QCOMPARE(settings.highlightColor(), derivedHighlight);
+        // The reload kept the palette-resolved colour...
+        QCOMPARE(settings.highlightColor(), resolvedHighlight);
         // ...without any signal traffic.
         QCOMPARE(spy.count(), 0);
         QCOMPARE(highlightSpy.count(), 0);
         QCOMPARE(fontColorSpy.count(), 0);
+
+        // The pinned leg gives the guard teeth beyond the trivially-default
+        // case: a CONCRETE stored colour reloaded from unchanged disk state
+        // must be equally silent, which is what actually exercises the
+        // same-value early-return against a non-default value.
+        settings.setHighlightColorRaw(QStringLiteral("#ff123456"));
+        settings.save();
+        highlightSpy.clear();
+        spy.clear();
+        settings.load();
+        QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff123456"));
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(highlightSpy.count(), 0);
+    }
+
+    /**
+     * A pinned zone colour must survive save() → fresh Settings → read-back:
+     * the four keys moved from QMetaType::QColor to QMetaType::QString with
+     * a new validator underneath them, so the stored JSON type and the
+     * read-side coercion both changed and nothing else round-trips them.
+     */
+    void testSave_load_pinnedZoneColorsRoundTrip()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            Settings settings;
+            settings.setHighlightColorRaw(QStringLiteral("#80112233"));
+            settings.setInactiveColorRaw(QStringLiteral("#40223344"));
+            settings.setBorderColorRaw(QStringLiteral("#c8334455"));
+            settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+            settings.save();
+        }
+
+        Settings fresh;
+        QCOMPARE(fresh.highlightColorRaw(), QStringLiteral("#80112233"));
+        QCOMPARE(fresh.inactiveColorRaw(), QStringLiteral("#40223344"));
+        QCOMPARE(fresh.borderColorRaw(), QStringLiteral("#c8334455"));
+        QCOMPARE(fresh.labelFontColorRaw(), QStringLiteral("#ffddeeff"));
+        // The resolved getters serve the pins, not palette-derived values.
+        QCOMPARE(fresh.highlightColor(), QColor(QStringLiteral("#80112233")));
+        QCOMPARE(fresh.labelFontColor(), QColor(QStringLiteral("#ffddeeff")));
+    }
+
+    /**
+     * reset() must return the four colour keys to the empty theme-fallback
+     * sentinel (the schema default), after which the resolved getters follow
+     * the palette again.
+     */
+    void testReset_returnsZoneColorsToSentinel()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        settings.setHighlightColorRaw(QStringLiteral("#80112233"));
+        settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+        settings.reset();
+        QCOMPARE(settings.highlightColorRaw(), QString());
+        QCOMPARE(settings.labelFontColorRaw(), QString());
+        QVERIFY(settings.highlightColor().isValid());
+        QVERIFY(settings.labelFontColor().isValid());
     }
 
     /**
@@ -1069,19 +1111,12 @@ private Q_SLOTS:
         // pass over.
         QVERIFY(!exported.keys().isEmpty());
         QCOMPARE(defaults.value(QStringLiteral("_version")), exported.value(QStringLiteral("_version")));
-        // The palette-derived keys are the one legitimate divergence: with
-        // UseSystem on (the default), load() runs applySystemColorScheme and
-        // writes the live palette's highlight/inactive/border/font colours
-        // into the store, so a fresh export carries THOSE, not the schema
-        // defaults. Everything else must be value-identical — any other
-        // difference is one serializer coercing what the other does not,
-        // the exact drift the delegation to Store::defaultsToJson prevents.
-        const QSet<QString> paletteDerived{
-            QStringLiteral("Snapping.Zones.Colors/Highlight"),
-            QStringLiteral("Snapping.Zones.Colors/Inactive"),
-            QStringLiteral("Snapping.Zones.Colors/Border"),
-            QStringLiteral("Snapping.Zones.Labels/FontColor"),
-        };
+        // Every key must be value-identical: the zone colours now store the
+        // empty theme-fallback sentinel (their schema default) rather than
+        // palette-derived snapshots, so a fresh export has NO legitimate
+        // divergence from the defaults blob. Any difference is one serializer
+        // coercing what the other does not, the exact drift the delegation to
+        // Store::defaultsToJson prevents.
         for (const QString& group : exported.keys()) {
             if (group == QStringLiteral("_version")) {
                 continue;
@@ -1090,9 +1125,6 @@ private Q_SLOTS:
             const QJsonObject exportedGroup = exported.value(group).toObject();
             QVERIFY(!exportedGroup.keys().isEmpty());
             for (const QString& key : exportedGroup.keys()) {
-                if (paletteDerived.contains(group + QLatin1Char('/') + key)) {
-                    continue;
-                }
                 QVERIFY2(
                     defaultGroup.value(key) == exportedGroup.value(key),
                     qPrintable(QStringLiteral("%1/%2: default %3 != fresh export %4")

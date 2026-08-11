@@ -9,14 +9,17 @@
  * out-of-range values, then construct a Settings object and verify that the
  * schema validator coerces the value on read. Covers:
  *  1. clampInt validator -- out-of-range int snaps to the violated clamp bound.
- *  2. validColorOr validator -- invalid color string falls back to default.
+ *  2. canonicalThemeFallbackColor -- an invalid colour string snaps to the
+ *     empty theme-fallback sentinel (all four zone keys).
  *  3. Trigger list JSON parse -- invalid JSON drops back to the default,
  *     max-size cap at MaxTriggersPerAction is enforced.
  *  4. validIntOr enum validator -- unknown enum value snaps to the safe
  *     default rather than the nearest in-range neighbour.
  *  5. clampDouble validator -- window opacity / tint strength scalars.
  *  6. validStringOr closed-set validator -- the three scope token settings.
- *  7. validBorderColorOr -- hex / "accent" border and tint colour strings.
+ *  7. canonicalThemeFallbackColor on the Windows border/tint keys --
+ *     "#AARRGGBB" or the empty follow-the-system sentinel; the legacy
+ *     "accent" token snaps to the sentinel.
  *  8. Decorations.Performance -- absent-group defaults and reset() round-trip.
  */
 
@@ -330,32 +333,46 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Schema validColorOr validator (invalid color string)
+    // Schema canonicalThemeFallbackColor validator (invalid color string)
     // =========================================================================
 
     /**
-     * The validColorOr validator must fall back to the schema default when
-     * the stored string fails to parse as a valid QColor. Seeds at
-     * Snapping.Zones.Colors/Highlight and disables useSystemColors so
-     * Settings::load() doesn't call applySystemColorScheme and overwrite the
-     * validated value with a palette-derived tint.
+     * The canonicalThemeFallbackColor validator must snap a stored string that
+     * fails to parse as a valid QColor back to the empty sentinel, so the
+     * colour falls back to following the system palette rather than painting
+     * black. Seeds garbage at ALL FOUR zone colour keys: each key carries its
+     * own validator wiring, and covering only one would let a validator
+     * silently fall off the other three (deleting it would leave the suite
+     * green).
      */
-    void testReadValidatedColor_invalidColor_returnsDefault()
+    void testReadValidatedColor_invalidColor_fallsBackToSentinel()
     {
         IsolatedConfigGuard guard;
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto appearance = backend->group(ConfigDefaults::snappingZonesColorsGroup());
-            appearance->writeBool(ConfigDefaults::useSystemKey(), false);
-            appearance->writeString(ConfigDefaults::highlightKey(), QStringLiteral("not-a-color"));
-            appearance.reset();
+            auto colors = backend->group(ConfigDefaults::snappingZonesColorsGroup());
+            colors->writeString(ConfigDefaults::highlightKey(), QStringLiteral("not-a-color"));
+            colors->writeString(ConfigDefaults::inactiveKey(), QStringLiteral("also-not-a-color"));
+            colors->writeString(ConfigDefaults::borderKey(), QStringLiteral("#zz1122"));
+            colors.reset();
+            auto labels = backend->group(ConfigDefaults::snappingZonesLabelsGroup());
+            labels->writeString(ConfigDefaults::fontColorKey(), QStringLiteral("nope"));
+            labels.reset();
             backend->sync();
         }
 
         Settings settings;
-        // Must fall back to the schema default (which is always valid).
-        QCOMPARE(settings.highlightColor(), ConfigDefaults::highlightColor());
+        // The garbage snaps to the sentinel: each stored value reads empty
+        // and the resolved colour follows the palette (valid either way).
+        QCOMPARE(settings.highlightColorRaw(), QString());
+        QCOMPARE(settings.inactiveColorRaw(), QString());
+        QCOMPARE(settings.borderColorRaw(), QString());
+        QCOMPARE(settings.labelFontColorRaw(), QString());
+        QVERIFY(settings.highlightColor().isValid());
+        QVERIFY(settings.inactiveColor().isValid());
+        QVERIFY(settings.borderColor().isValid());
+        QVERIFY(settings.labelFontColor().isValid());
     }
 
     // =========================================================================
@@ -420,9 +437,12 @@ private Q_SLOTS:
     }
 
     /**
-     * A hand-edited garbage border colour (neither the "accent" sentinel nor a
-     * valid QColor) snaps to the schema default so garbage can't flow to the
-     * effect; a valid hex round-trips untouched.
+     * A hand-edited garbage border colour (not a valid QColor) snaps to the
+     * schema default so garbage can't flow to the effect; a valid hex
+     * round-trips untouched. NOTE: the schema default IS the empty sentinel
+     * now, so this and the accent-token test below assert the same OUTCOME
+     * for different INPUTS — the distinguishing power of each test lives in
+     * its hex-preserved leg.
      */
     void testReadValidatedBorderColor_garbageSnaps_hexPreserved()
     {
@@ -443,20 +463,15 @@ private Q_SLOTS:
     }
 
     /**
-     * The "accent" sentinel is a valid border-colour value (the effect resolves it
-     * to the live system colour) and must pass validation.
-     *
-     * COVERAGE LIMIT, stated so nobody trusts this beyond what it proves: every
-     * string-colour key defaults to "accent", so a validator that DROPPED the
-     * sentinel and fell back to the schema default would also return "accent"
-     * and still pass. The sentinel branch is therefore covered only indirectly —
-     * the hex legs above are what prove the validator preserves a non-default
-     * valid value rather than blanket-snapping. There is no in-tree way to make
-     * this assertion falsifiable (the validator is TU-local and sparse
-     * persistence deletes a default-equal write), so the test stands as a
-     * smoke check that "accent" does not trip the invalid-colour path.
+     * "accent" is no longer a stored value for the window colour keys — their
+     * v6 sentinel is the empty string, resolved by the daemon before the
+     * value crosses D-Bus (rules keep the token, the config does not). A
+     * hand-edited leftover "accent" is neither the sentinel nor a QColor, so
+     * canonicalThemeFallbackColor snaps it to the sentinel and the key falls
+     * back to following the system accent rather than painting a black
+     * border.
      */
-    void testReadValidatedBorderColor_accentPreserved()
+    void testReadValidatedBorderColor_accentTokenSnapsToSentinel()
     {
         IsolatedConfigGuard guard;
 
@@ -469,13 +484,15 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.windowBorderColorActive(), QStringLiteral("accent"));
+        QCOMPARE(settings.windowBorderColorActive(), QString());
     }
 
     /**
-     * windowTintColor carries the identical "#AARRGGBB"-or-"accent" contract as the border
-     * colours, and a missing/mis-wired validColorOr on its key would ship silently. Pin both
-     * legs: garbage snaps to the schema default, a valid hex round-trips untouched.
+     * windowTintColor carries the identical theme-fallback contract as the
+     * border colours ("#AARRGGBB" or the empty follow-the-system sentinel),
+     * and a missing or mis-wired canonicalThemeFallbackColor on its key
+     * would ship silently. Pin both legs: garbage snaps to the sentinel
+     * default, a valid hex round-trips untouched.
      */
     void testReadValidatedTintColor_garbageSnaps_hexPreserved()
     {
@@ -510,13 +527,11 @@ private Q_SLOTS:
     }
 
     /**
-     * The "accent" sentinel is a valid tint-colour value (the effect resolves it to the
-     * live system colour) and must pass validation. Same coverage limit as the
-     * border-colour sibling above: the sentinel equals the default, so this is a
-     * smoke check that "accent" avoids the invalid-colour path, not proof the
-     * validator preserves it — the hex leg carries that proof.
+     * The tint colour shares the border keys' v6 contract: "accent" is not a
+     * stored value any more, so a hand-edited leftover snaps to the empty
+     * sentinel (see the border sibling above).
      */
-    void testReadValidatedTintColor_accentPreserved()
+    void testReadValidatedTintColor_accentTokenSnapsToSentinel()
     {
         IsolatedConfigGuard guard;
 
@@ -529,7 +544,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        QCOMPARE(settings.windowTintColor(), QStringLiteral("accent"));
+        QCOMPARE(settings.windowTintColor(), QString());
     }
 
     // =========================================================================

@@ -57,7 +57,9 @@ struct WindowAppearanceDefault
     QString titleBarScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
     // Plain opacity+tint layer (Windows.* ShowOpacityTint/Opacity/Tint*),
     // rendered by the built-in "opacity-tint" pack in easy mode. The tint
-    // colour carries hex or the accent sentinel like the border colours.
+    // colour carries concrete hex like the border colours (a current daemon
+    // resolves the follow-the-theme sentinel before D-Bus; only an older
+    // daemon still marshals the legacy "accent" token).
     bool showOpacityTint = false;
     QString opacityTintScope = QString(PhosphorCompositor::WindowAppearanceScope::Tiled);
     double opacity = 1.0;

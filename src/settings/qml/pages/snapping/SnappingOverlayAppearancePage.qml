@@ -55,86 +55,83 @@ SettingsFlickable {
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    SettingsRow {
-                        title: i18n("System accent color")
-                        searchAnchor: "systemAccentColor"
-                        description: i18n("Use your desktop color scheme for zone colors")
+                    // Each colour follows the desktop colour scheme until the
+                    // user picks one, and resets back per row — the same
+                    // theme-fallback vocabulary as the scrolling and Windows
+                    // pages, replacing the old all-or-nothing "system accent
+                    // color" switch. appSettings.*Raw is the stored string
+                    // (EMPTY = follow); the resolved appSettings.* colour
+                    // previews what the overlay actually draws.
+                    ThemeFallbackColorRow {
+                        id: highlightColorRow
+                        title: i18n("Highlight color")
+                        // Overridden because the title already says "color".
+                        swatchAccessibleName: i18nc("@action:button", "Zone highlight color")
+                        searchAnchor: "highlightColor"
+                        description: i18n("Color for the active/hovered zone. Follows the color scheme unless you pick one. The opacity sliders below replace any transparency carried by the color.")
 
-                        SettingsSwitch {
-                            id: useSystemColorsSwitch
+                        storedColor: appSettings.highlightColorRaw
+                        // Alpha-stripped like the tint row's preview: the
+                        // fill paints at the opacity slider's alpha, so
+                        // previewing the zone alpha here would make the
+                        // swatch jump from half-transparent to solid the
+                        // moment a colour is picked (picks store opaque).
+                        themeColor: Qt.rgba(appSettings.highlightColor.r, appSettings.highlightColor.g, appSettings.highlightColor.b, 1)
+                        picker: zoneColorDialog
+                        onColorChosen: function (hex) {
+                            // The FILL alpha is owned by the opacity sliders
+                            // (the paint path premultiplies the fill RGB by
+                            // the slider and ignores the colour's own alpha),
+                            // so store the pick opaque rather than letting
+                            // the shared alpha-capable dialog record a
+                            // transparency the zone never draws. The border
+                            // and label rows below DO honour alpha, which is
+                            // why the dialog keeps the channel.
+                            appSettings.highlightColorRaw = hex === highlightColorRow.sentinel ? hex : "#FF" + hex.slice(3);
+                        }
+                    }
 
-                            checked: appSettings.useSystemColors
-                            accessibleName: i18n("Use system accent color")
-                            onToggled: function (newValue) {
-                                appSettings.useSystemColors = newValue;
-                            }
+                    SettingsSeparator {}
+
+                    ThemeFallbackColorRow {
+                        id: inactiveColorRow
+                        title: i18n("Inactive color")
+                        // See the highlight row above.
+                        swatchAccessibleName: i18nc("@action:button", "Inactive zone color")
+                        searchAnchor: "inactiveColor"
+                        description: i18n("Color for zones that are not hovered. Follows the color scheme unless you pick one. The opacity sliders below replace any transparency carried by the color.")
+
+                        storedColor: appSettings.inactiveColorRaw
+                        // Alpha-stripped — see the highlight row above.
+                        themeColor: Qt.rgba(appSettings.inactiveColor.r, appSettings.inactiveColor.g, appSettings.inactiveColor.b, 1)
+                        picker: zoneColorDialog
+                        onColorChosen: function (hex) {
+                            // Fill alpha owned by the opacity sliders — see
+                            // the highlight row above.
+                            appSettings.inactiveColorRaw = hex === inactiveColorRow.sentinel ? hex : "#FF" + hex.slice(3);
+                        }
+                    }
+
+                    SettingsSeparator {}
+
+                    ThemeFallbackColorRow {
+                        title: i18n("Border color")
+                        // See the highlight row above.
+                        swatchAccessibleName: i18nc("@action:button", "Zone border color")
+                        searchAnchor: "borderColor"
+                        description: i18n("Color for zone borders. Follows the color scheme unless you pick one.")
+
+                        storedColor: appSettings.borderColorRaw
+                        themeColor: appSettings.borderColor
+                        picker: zoneColorDialog
+                        onColorChosen: function (hex) {
+                            appSettings.borderColorRaw = hex;
                         }
                     }
 
                     SettingsSeparator {}
 
                     SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
-                        title: i18n("Highlight color")
-                        searchAnchor: "highlightColor"
-                        description: i18n("Color for the active/hovered zone")
-
-                        ColorSwatchRow {
-                            accessibleName: i18nc("@action:button", "Zone highlight color")
-                            color: appSettings.highlightColor
-                            onClicked: {
-                                highlightColorDialog.selectedColor = appSettings.highlightColor;
-                                highlightColorDialog.open();
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {
-                        visible: !useSystemColorsSwitch.checked
-                    }
-
-                    SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
-                        title: i18n("Inactive color")
-                        searchAnchor: "inactiveColor"
-                        description: i18n("Color for zones that are not hovered")
-
-                        ColorSwatchRow {
-                            accessibleName: i18nc("@action:button", "Inactive zone color")
-                            color: appSettings.inactiveColor
-                            onClicked: {
-                                inactiveColorDialog.selectedColor = appSettings.inactiveColor;
-                                inactiveColorDialog.open();
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {
-                        visible: !useSystemColorsSwitch.checked
-                    }
-
-                    SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
-                        title: i18n("Border color")
-                        searchAnchor: "borderColor"
-                        description: i18n("Color for zone borders")
-
-                        ColorSwatchRow {
-                            accessibleName: i18nc("@action:button", "Zone border color")
-                            color: appSettings.borderColor
-                            onClicked: {
-                                borderColorDialog.selectedColor = appSettings.borderColor;
-                                borderColorDialog.open();
-                            }
-                        }
-                    }
-
-                    SettingsSeparator {
-                        visible: !useSystemColorsSwitch.checked
-                    }
-
-                    SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
                         title: i18n("Import colors")
                         searchAnchor: "importColors"
                         description: i18n("Load a color scheme from pywal or a JSON file")
@@ -329,25 +326,21 @@ SettingsFlickable {
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    SettingsRow {
-                        visible: !useSystemColorsSwitch.checked
+                    ThemeFallbackColorRow {
                         title: i18n("Label color")
+                        swatchAccessibleName: i18nc("@action:button", "Zone label text color")
                         searchAnchor: "labelColor"
-                        description: i18n("Text color for zone labels")
+                        description: i18n("Text color for zone labels. Follows the color scheme unless you pick one.")
 
-                        ColorSwatchRow {
-                            accessibleName: i18nc("@action:button", "Zone label text color")
-                            color: appSettings.labelFontColor
-                            onClicked: {
-                                labelFontColorDialog.selectedColor = appSettings.labelFontColor;
-                                labelFontColorDialog.open();
-                            }
+                        storedColor: appSettings.labelFontColorRaw
+                        themeColor: appSettings.labelFontColor
+                        picker: zoneColorDialog
+                        onColorChosen: function (hex) {
+                            appSettings.labelFontColorRaw = hex;
                         }
                     }
 
-                    SettingsSeparator {
-                        visible: !useSystemColorsSwitch.checked
-                    }
+                    SettingsSeparator {}
 
                     SettingsRow {
                         title: i18n("Font")
@@ -464,38 +457,30 @@ SettingsFlickable {
     }
 
     // =====================================================================
-    // COLOR DIALOGS
+    // COLOR DIALOG — page-level and shared by the four theme-fallback rows,
+    // like the scrolling pages: a page rebuild while a row-scoped dialog is
+    // open would tear the popup down under the user. The rows connect
+    // transiently and write on accept, so no onAccepted lives here.
     // =====================================================================
     ColorDialog {
-        id: highlightColorDialog
+        id: zoneColorDialog
 
         options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Highlight Color")
-        onAccepted: appSettings.highlightColor = selectedColor
+        title: i18n("Choose Zone Color")
     }
 
-    ColorDialog {
-        id: inactiveColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Inactive Zone Color")
-        onAccepted: appSettings.inactiveColor = selectedColor
+    // Publish the open state so page-stepping cannot swap the page out from
+    // under an open page-level dialog — same pattern (and standalone-host
+    // guard) as RulesPage, covering every dialog this page hosts.
+    readonly property bool anyModalOpen: zoneColorDialog.visible || fontPickerDialog.visible || colorFileDialog.visible || colorImportErrorDialog.visible
+    onAnyModalOpenChanged: {
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = anyModalOpen;
     }
-
-    ColorDialog {
-        id: borderColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Border Color")
-        onAccepted: appSettings.borderColor = selectedColor
-    }
-
-    ColorDialog {
-        id: labelFontColorDialog
-
-        options: ColorDialog.ShowAlphaChannel
-        title: i18n("Choose Label Color")
-        onAccepted: appSettings.labelFontColor = selectedColor
+    // Clear a latched true on page swap (RulesPage's own teardown pattern).
+    Component.onDestruction: {
+        if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
+            window._pageOwnedModalOpen = false;
     }
 
     FontPickerDialog {
@@ -535,6 +520,11 @@ SettingsFlickable {
     }
 
     Connections {
+        // `target` before the handlers, matching the convention ActionRow
+        // documents (a readability rule — declaration order inside a
+        // Connections block does not change resolution at runtime).
+        target: root.zonesBridge
+
         function onColorImportError(message) {
             colorImportErrorDialog.subtitle = message;
             colorImportErrorDialog.open();
@@ -545,7 +535,5 @@ SettingsFlickable {
             colorImportMessage.visible = true;
             colorImportHideTimer.restart();
         }
-
-        target: root.zonesBridge
     }
 }

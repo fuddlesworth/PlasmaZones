@@ -95,17 +95,20 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
     });
     // System colours for window-border rules: the zone highlight / inactive
-    // colours track the Plasma colour scheme (when "use system colours" is on the
-    // daemon keeps them in sync), and they are what a border-colour `accent`
-    // sentinel resolves to in updateWindowDecoration — highlight for the focused
+    // colours track the Plasma colour scheme (the daemon's getters resolve
+    // their theme-fallback keys against the live palette and marshal concrete
+    // colours), and they are what a border-colour `accent` sentinel resolves
+    // to in updateWindowDecoration — highlight for the focused
     // (active) slot, inactive for the unfocused (inactive) slot, mirroring the
     // distinct active/inactive system border colours the per-mode appearance
     // settings used before they folded into rules. Both are re-fetched on every
     // settingsChanged, so an accent / colour-scheme change repaints accent-
     // following borders without a relog.
-    // Both reject an invalid parse: an older daemon's valid-empty reply for an
-    // unknown key builds an INVALID QColor, which would discard the live accent
-    // for the hardcoded fallback and cost a full border sweep to do it.
+    // Both reject an invalid parse: these keys exist on every daemon
+    // vintage, so the guard is against a malformed or half-answered reply
+    // (not unknown-key skew), where an INVALID QColor would discard the live
+    // accent for the hardcoded fallback and cost a full border sweep to do
+    // it.
     loadSettingAsync(QStringLiteral("highlightColor"), [this](const QVariant& v) {
         const QColor c(v.toString());
         if (c.isValid() && m_borderAccentColor != c) {
@@ -233,6 +236,14 @@ void PlasmaZonesEffect::loadCachedSettings()
     // Empty-reply guard — see windowBorderScope above. An empty colour maps to
     // nullopt in decoration_appearance, so a valid-empty skew reply would drop
     // the configured colour outright and sweep every border to do it.
+    //
+    // Trade-off note: because the daemon pre-resolves the theme-fallback
+    // sentinel, these slots cache a CONCRETE colour updated by their own
+    // reply, independent of the highlightColor/inactiveColor replies above.
+    // The pre-v6 "accent" token self-healed from the accent reply alone; now
+    // a lost reply in one burst leaves this slot one theme switch behind
+    // until the next settingsChanged re-runs the full burst and re-converges.
+    // Accepted rather than retried — the divergence is transient by design.
     loadSettingAsync(QStringLiteral("windowBorderColorActive"), [this](const QVariant& v) {
         const QString s = v.toString();
         if (!s.isEmpty() && m_windowAppearanceDefault.activeColor != s) {
@@ -338,12 +349,30 @@ void PlasmaZonesEffect::loadCachedSettings()
                                            PhosphorCompositor::DecorationDefaults::FocusFadeMsMax);
         }
     });
+    // Snap assist is gated by TWO user toggles ANDed together, mirroring the
+    // daemon (drop.cpp) and the overlay (overlayadaptor.cpp): the master
+    // feature switch and the per-drag behaviour toggle. Caching only the
+    // latter made the effect's own continuation path (showContinuationIfNeeded)
+    // run its two D-Bus round trips plus the GPU thumbnail captures with the
+    // master OFF, only for the overlay to drop the result. The two replies
+    // arrive independently, so BOTH callbacks re-apply the AND — a
+    // single-callback apply would be order-dependent on whichever lands first.
+    loadSettingAsync(QStringLiteral("snapAssistFeatureEnabled"), [this](const QVariant& v) {
+        // Type-guard — see showWindowBorder above. Default-true, so a
+        // non-bool reply must not silently flip it.
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        m_snapAssistFeatureEnabled = v.toBool();
+        m_snapAssistHandler->setEnabled(m_snapAssistFeatureEnabled && m_snapAssistBehaviorEnabled);
+    });
     loadSettingAsync(QStringLiteral("snapAssistEnabled"), [this](const QVariant& v) {
         // Type-guard — see showWindowBorder above.
         if (v.typeId() != QMetaType::Bool) {
             return;
         }
-        m_snapAssistHandler->setEnabled(v.toBool());
+        m_snapAssistBehaviorEnabled = v.toBool();
+        m_snapAssistHandler->setEnabled(m_snapAssistFeatureEnabled && m_snapAssistBehaviorEnabled);
     });
     // Audio-reactive surface decorations and animation packs: the same daemon
     // audio-viz toggle + parameter set that drive the daemon's overlay audio
@@ -423,10 +452,16 @@ void PlasmaZonesEffect::loadCachedSettings()
         scheduleEffectAudioSync();
     });
     loadSettingAsync(QStringLiteral("audioInputSource"), [this](const QVariant& v) {
-        const QString source = v.toString();
-        if (!source.isEmpty()) {
-            m_audioOptions.inputSource = source;
+        // Unlike its two siblings above, inputSource has NO schema normalizer
+        // and EMPTY is a legitimate stored value (CavaSpectrumProvider maps
+        // it to "auto"). Rejecting empty here latched a stale device string
+        // forever once the user cleared the field back to auto — every
+        // subsequent settingsChanged re-delivered the empty value into the
+        // same rejection. Guard on type instead.
+        if (v.typeId() != QMetaType::QString) {
+            return;
         }
+        m_audioOptions.inputSource = v.toString();
         scheduleEffectAudioSync();
     });
     loadSettingAsync(QStringLiteral("animationsEnabled"), [this](const QVariant& v) {
@@ -650,10 +685,12 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadShaderProfileFromDbus();
     loadMotionProfileTreeFromDbus();
     loadShaderRegistryFromDbus();
-    // Unified Rule store — pull in any rules carrying an
-    // OverrideAnimation* action. The subscription below refreshes whenever
-    // the daemon broadcasts `rulesChanged`, so an edit in the settings UI
-    // lands without restarting the effect.
+    // Unified Rule store — pull in every rule carrying an effect-consumed
+    // (Tag::Effect) action, which covers the OverrideAnimation* actions AND
+    // the window-appearance ones (border colour, hide-title-bar,
+    // opacity/tint). The subscription below refreshes whenever the daemon
+    // broadcasts `rulesChanged`, so an edit in the settings UI lands without
+    // restarting the effect.
     loadRuleAnimationsFromDbus();
     // Subscription to the daemon's rulesChanged broadcast is installed once from
     // continueDaemonReadySetup() — installing it here would re-subscribe on every

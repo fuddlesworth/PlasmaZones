@@ -345,6 +345,10 @@ private:
     /// ignoring the profile @p excludeId (the one being renamed).
     QString uniqueName(const QString& desired, const QHash<QUuid, Record>& all, const QUuid& excludeId = QUuid()) const;
 
+    /// Const in the query sense only: a CORRUPT index.json is quarantined
+    /// (renamed to .corrupt.bak) as a side effect, so the next writers do
+    /// not commit an empty index over the surviving order and active
+    /// pointer. Bounded to once per process by m_indexCache.
     QJsonObject readIndex() const;
     /// False when the directory or file could not be written (already logged).
     bool writeIndex(const QJsonObject& index);
@@ -372,7 +376,11 @@ private:
     /// notifyProfilesChanged: readIndex() fills it, writeIndex() (the ONE
     /// writer) replaces it on a successful commit — so availableProfiles()'
     /// per-settingsChanged re-reads skip the disk parse for the sibling order
-    /// too. Same hand-edit trade-off as m_recordCache.
+    /// too. Unlike m_recordCache it is NOT dropped by notifyProfilesChanged
+    /// (write-through only), so refresh() re-scans the profile files but a
+    /// hand edit of index.json's order or active pointer is not picked up
+    /// until the next writeIndex commit — a deliberately narrower trade-off,
+    /// since a hand-placed profile still appears via the leftovers ordering.
     mutable std::optional<QJsonObject> m_indexCache;
     QList<QUuid> readOrder() const;
     void appendToOrder(const QUuid& id);
