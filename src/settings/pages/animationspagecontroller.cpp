@@ -717,10 +717,18 @@ void AnimationsPageController::asyncRevertPending()
             // routes through the worker-aware paths (e.g. test harnesses
             // that read state on the result signal). The mutator gate
             // re-opens together with the flag clear.
+            // Two source strings, not one "file(s)" spelling: Qt's plural tr()
+            // falls back to the single source verbatim when untranslated, so a
+            // combined form reads "file(s)" to every English user. Both arms
+            // keep %n, and the n>1 arm carries the real count for locales with
+            // more than two plural forms.
+            const int retainedCount = static_cast<int>(result.retained.size());
             const QString errorMsg = result.retained.isEmpty()
                 ? QString()
-                : PhosphorI18n::tr("Could not restore %n profile file(s). They remain pending.", nullptr,
-                                   static_cast<int>(result.retained.size()));
+                : (retainedCount == 1 ? PhosphorI18n::tr("Could not restore %n profile file. It remains pending.",
+                                                         nullptr, retainedCount)
+                                      : PhosphorI18n::tr("Could not restore %n profile files. They remain pending.",
+                                                         nullptr, retainedCount));
             Q_EMIT discardResult(result.retained.isEmpty(), errorMsg);
             m_asyncRevertInFlight = false;
         },

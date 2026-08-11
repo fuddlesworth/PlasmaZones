@@ -444,11 +444,18 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         if (nums.isEmpty()) {
             return PhosphorI18n::tr("Snap to zone");
         }
-        // Plural-aware through the count argument, like the condition-count
-        // summary further down, rather than a hand-rolled two-form pick: a
-        // locale with more than two plural forms can express all of them, and
-        // the "(s)" source spelling is the same convention that summary uses.
-        return PhosphorI18n::tr("Snap to zone(s) %1", nullptr, static_cast<int>(nums.size()))
+        // Two source strings rather than one "zone(s)" spelling. Qt's plural
+        // tr() takes a SINGLE source and falls back to it verbatim when there
+        // is no translation, so a combined form would read "zone(s) 1" to
+        // every English user. Splitting at one keeps English correct in both
+        // numbers while the n>1 call still passes the real count, so a locale
+        // with more than two plural forms can still select among them — the
+        // n=21 case in Russian, which needs its singular form, resolves
+        // through that call rather than through the size==1 branch.
+        if (nums.size() == 1) {
+            return PhosphorI18n::tr("Snap to zone %1").arg(nums.first());
+        }
+        return PhosphorI18n::tr("Snap to zones %1", nullptr, static_cast<int>(nums.size()))
             .arg(nums.join(QStringLiteral(", ")));
     }
     if (action.type == ActionType::RouteToScreen) {
@@ -1062,7 +1069,14 @@ QString RuleModel::matchSummary(const MatchExpression& match) const
     }
     // Any composite that is not a flat AND — count the leaves.
     const int n = conditionCount(match);
-    return PhosphorI18n::tr("%n condition(s)", nullptr, n);
+    // Split at one for the reason spelled out at the SnapToZone summary above:
+    // a single "%n condition(s)" source would render literally for every
+    // English user. Both arms keep %n so no numeral is hardcoded, and the n>1
+    // arm still carries the real count for locales with more than two forms.
+    if (n == 1) {
+        return PhosphorI18n::tr("%n condition", nullptr, n);
+    }
+    return PhosphorI18n::tr("%n conditions", nullptr, n);
 }
 
 QString RuleModel::actionSummary(const QList<RuleAction>& actions) const
