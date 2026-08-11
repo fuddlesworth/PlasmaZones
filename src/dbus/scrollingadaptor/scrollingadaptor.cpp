@@ -82,6 +82,33 @@ QStringList ScrollingAdaptor::scrollingScreens() const
     return out;
 }
 
+QVariantMap ScrollingAdaptor::scrollEffectBehaviour() const
+{
+    // No engine gate, unlike scrollingScreens above: this map is daemon-built
+    // (the engine never sees the two effect-owned behaviours), so a cleared
+    // engine pointer during shutdown does not invalidate it. The last
+    // published value stands until the daemon pushes another.
+    return m_scrollEffectBehaviour;
+}
+
+void ScrollingAdaptor::setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens,
+                                                const QStringList& cropStraddlerScreens)
+{
+    // Both lists arrive sorted from the daemon's screen walk (it iterates a
+    // sorted screen set), so the change compare below is a value compare and
+    // not order-sensitive by accident. Sorting here anyway would hide a
+    // future unsorted producer rather than fix it, so the contract is stated
+    // instead: the setter takes sorted lists.
+    QVariantMap next;
+    next.insert(focusFollowsMouseKey(), focusFollowsMouseScreens);
+    next.insert(cropStraddlersKey(), cropStraddlerScreens);
+    if (next == m_scrollEffectBehaviour) {
+        return;
+    }
+    m_scrollEffectBehaviour = next;
+    Q_EMIT scrollEffectBehaviourChanged(m_scrollEffectBehaviour);
+}
+
 void ScrollingAdaptor::setScrollTabSurface(const QString& screenId, quint32 surfaceId)
 {
     // No engine POINTER gate, and a deliberate opt-out from the

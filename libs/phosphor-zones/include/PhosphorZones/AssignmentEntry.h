@@ -377,6 +377,26 @@ struct ContextScrollingParams
     /// height (0.05-1.0); the engine commits it as fixed pixels at relayout.
     std::optional<double> defaultWindowHeight;
 
+    /// The scrolling BEHAVIOUR toggles, filled by the SetScroll* actions of
+    /// the same names. Like the sizing fields above they are layered onto the
+    /// engine's per-screen override map, where each `effective*` reader falls
+    /// back to the global config value. `cropStraddlers` is the one with a
+    /// second consumer: the daemon also pushes the resolved per-screen set to
+    /// the KWin effect, whose paint clip and direct-scanout gate need it.
+    std::optional<bool> alwaysCenterSingleColumn;
+    std::optional<bool> respectMinimumSize;
+    std::optional<bool> cropStraddlers;
+    std::optional<bool> focusNewWindows;
+    std::optional<bool> smartGaps;
+    /// EFFECT-consumed, unlike its neighbours: the daemon collects the
+    /// resolved per-screen verdict into a set and pushes it to the KWin
+    /// effect, which owns focus-follows-mouse entirely.
+    std::optional<bool> focusFollowsMouse;
+    /// StickyWindowHandling ints (treatAsNormal 0 / restoreOnly 1 /
+    /// ignoreAll 2); the resolver maps the wire token to the int the config
+    /// store uses, matching centerFocusedColumn's treatment.
+    std::optional<int> stickyWindowHandling;
+
     /// The tab indicator's overrides, niri's `tab-indicator` layout block.
     /// Split the way IScrollSettings splits the family: the GEOMETRY fields
     /// are layered onto the scrolling engine's per-screen override map, while
@@ -428,10 +448,20 @@ struct ContextScrollingParams
             || tabIndicatorInactiveColor || tabIndicatorUrgentColor;
     }
 
+    /// True when at least one of the six behaviour toggles resolved. Same
+    /// purpose as the two indicator predicates: the daemon skips the whole
+    /// behaviour-override block when it is false.
+    bool hasBehaviourOverrides() const
+    {
+        return alwaysCenterSingleColumn || respectMinimumSize || cropStraddlers || focusNewWindows || smartGaps
+            || stickyWindowHandling || focusFollowsMouse;
+    }
+
     bool isEmpty() const
     {
         return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay && !insertPosition
-            && !defaultWindowHeight && !hasTabIndicatorOverrides() && !hasDropIndicatorOverrides();
+            && !defaultWindowHeight && !hasTabIndicatorOverrides() && !hasDropIndicatorOverrides()
+            && !hasBehaviourOverrides();
     }
 };
 

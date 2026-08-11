@@ -86,6 +86,17 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     ActionType::SetScrollDefaultColumnDisplay,
     ActionType::SetScrollInsertPosition,
     ActionType::SetScrollDefaultWindowHeight,
+    // The scrolling BEHAVIOUR toggles — context-domain like the sizing slots
+    // above, riding the same per-screen override map.
+    ActionType::SetScrollAlwaysCenterSingleColumn,
+    ActionType::SetScrollRespectMinimumSize,
+    ActionType::SetScrollCropStraddlers,
+    ActionType::SetScrollFocusNewWindows,
+    ActionType::SetScrollSmartGaps,
+    ActionType::SetScrollStickyWindowHandling,
+    // Effect-consumed rather than engine-consumed (the daemon pushes the
+    // resolved set to the compositor), but structurally a context bool.
+    ActionType::SetScrollFocusFollowsMouse,
     // Tab indicator — context-domain. The geometry half is layered onto the
     // scrolling engine's per-screen map and the paint half onto the overlay,
     // but both resolve in the same context pass as the scroll params above.
@@ -839,6 +850,14 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetScrollDefaultColumnDisplay, QJsonValue(QStringLiteral("tabbed")));
         rejectsStray(ActionType::SetScrollInsertPosition, QJsonValue(QStringLiteral("last")));
         rejectsStray(ActionType::SetScrollDefaultWindowHeight, QJsonValue(0.5));
+        // The six behaviour toggles declare the same {Value} key set.
+        rejectsStray(ActionType::SetScrollAlwaysCenterSingleColumn, QJsonValue(true));
+        rejectsStray(ActionType::SetScrollRespectMinimumSize, QJsonValue(true));
+        rejectsStray(ActionType::SetScrollCropStraddlers, QJsonValue(true));
+        rejectsStray(ActionType::SetScrollFocusNewWindows, QJsonValue(true));
+        rejectsStray(ActionType::SetScrollSmartGaps, QJsonValue(true));
+        rejectsStray(ActionType::SetScrollStickyWindowHandling, QJsonValue(QStringLiteral("ignoreAll")));
+        rejectsStray(ActionType::SetScrollFocusFollowsMouse, QJsonValue(true));
         rejectsStray(ActionType::OpenColumnWidth, QJsonValue(0.5));
         rejectsStray(ActionType::OpenWindowHeight, QJsonValue(0.5));
         rejectsStray(ActionType::OpenTabbed, QJsonValue(true));

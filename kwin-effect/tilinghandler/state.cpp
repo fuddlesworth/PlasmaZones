@@ -525,6 +525,33 @@ bool TilingHandler::isManagedScreen(const QString& screenId) const
     return m_managedScreens.contains(screenId);
 }
 
+void TilingHandler::slotScrollEffectBehaviourChanged(const QVariantMap& behaviour)
+{
+    applyScrollEffectBehaviour(behaviour);
+}
+
+void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
+{
+    // The daemon publishes the whole map every time (never a delta), so a
+    // straight replace is correct even if a previous signal was missed.
+    const auto toSet = [](const QVariant& v) {
+        const QStringList list = v.toStringList();
+        return QSet<QString>(list.cbegin(), list.cend());
+    };
+    m_scrollFocusFollowsMouseScreens = toSet(behaviour.value(QStringLiteral("focusFollowsMouse")));
+    const QSet<QString> crop = toSet(behaviour.value(QStringLiteral("cropStraddlers")));
+    if (crop == m_scrollCropStraddlerScreens) {
+        return;
+    }
+    m_scrollCropStraddlerScreens = crop;
+    // The crop set is PAINTED state: a screen that just started (or stopped)
+    // cropping has stale pixels on it, and nothing else will revisit them —
+    // the strip's geometry did not move, so no tile batch is coming. The
+    // focus-follows-mouse set needs no such bookend; it is read fresh on the
+    // next pointer move.
+    KWin::effects->addRepaintFull();
+}
+
 void TilingHandler::slotScrollingScreensChanged(const QStringList& screenIds)
 {
     // Mode discriminator — no per-screen LIFECYCLE transitions here (the

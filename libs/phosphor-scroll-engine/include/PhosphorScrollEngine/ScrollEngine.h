@@ -1111,6 +1111,26 @@ private:
     /// per accessor.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
     CenterFocusedColumn effectiveCenterFocusedColumn(const QVariantMap& overrides) const;
+    /// The scrolling BEHAVIOUR toggles, rule-only per-screen keys layered over
+    /// the config-seeded members. The two consumed inside layoutParamsForScreen
+    /// take the already-fetched map; the three whose consumption sites sit
+    /// outside it (the straddler clamp, the open-path focus arm and the
+    /// sticky gate) take a screenId and fetch for themselves, since those
+    /// paths resolve exactly one value.
+    bool effectiveAlwaysCenterSingleColumn(const QVariantMap& overrides) const;
+    bool effectiveRespectMinimumSize(const QVariantMap& overrides) const;
+    bool effectiveSmartGaps(const QVariantMap& overrides) const;
+    bool effectiveCropStraddlers(const QString& screenId) const;
+    /// Falls back to the LIVE IScrollSettings read rather than a cached
+    /// member: focus-new-windows is the one behaviour the engine never
+    /// cached, and reading it live keeps a settings change effective without
+    /// waiting for a settings-reload pass.
+    bool effectiveFocusNewWindows(const QString& screenId) const;
+    PhosphorEngine::StickyWindowHandling effectiveStickyWindowHandling(const QString& screenId) const;
+    /// Shared bool-override reader for the five toggles above: takes the
+    /// override only when it is a real bool, so a hand-edited string cannot
+    /// coerce to false and silently disable a behaviour.
+    static bool effectiveBoolOverride(const QVariantMap& overrides, const QString& key, bool fallback);
     ColumnWidth effectiveDefaultColumnWidth(const QString& screenId) const;
     ColumnWidth effectiveDefaultColumnWidth(const QVariantMap& overrides) const;
     /// Vocabulary-taking overload, the same "resolve it ONCE" shape as the

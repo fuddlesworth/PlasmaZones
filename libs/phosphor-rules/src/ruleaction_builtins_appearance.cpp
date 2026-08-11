@@ -743,6 +743,76 @@ void ActionRegistry::registerBuiltinsAppearance()
         .tags = {QString(Tag::LayoutEngine)},
     });
 
+    // ── per-context scrolling BEHAVIOUR overrides (domain Context) ──
+    // The five boolean toggles that had no rule seam until now. Same shape as
+    // the sizing slots above: they ride the per-screen override map and the
+    // engine reads each through an `effective*` accessor falling back to the
+    // global config value. Each seeds the polarity a user reaches for: the
+    // three whose global default is ON seed FALSE (the meaningful rule is
+    // "turn it off here"), and cropStraddlers, whose global default is OFF,
+    // seeds TRUE.
+    struct ScrollBehaviourToggle
+    {
+        QLatin1StringView type;
+        QLatin1StringView slot;
+        int order;
+        double seed;
+    };
+    for (const ScrollBehaviourToggle& t : {
+             ScrollBehaviourToggle{ActionType::SetScrollAlwaysCenterSingleColumn,
+                                   ActionSlot::ScrollAlwaysCenterSingleColumn, 30, 1.0},
+             ScrollBehaviourToggle{ActionType::SetScrollRespectMinimumSize, ActionSlot::ScrollRespectMinimumSize, 31,
+                                   0.0},
+             ScrollBehaviourToggle{ActionType::SetScrollCropStraddlers, ActionSlot::ScrollCropStraddlers, 32, 1.0},
+             ScrollBehaviourToggle{ActionType::SetScrollFocusNewWindows, ActionSlot::ScrollFocusNewWindows, 33, 0.0},
+             ScrollBehaviourToggle{ActionType::SetScrollSmartGaps, ActionSlot::ScrollSmartGaps, 34, 0.0},
+             // Effect-consumed rather than engine-consumed, but structurally
+             // the same context bool, so it registers with its neighbours.
+             ScrollBehaviourToggle{ActionType::SetScrollFocusFollowsMouse, ActionSlot::ScrollFocusFollowsMouse, 36,
+                                   1.0},
+         }) {
+        const QString slot = QString(t.slot);
+        registerAction(ActionDescriptor{
+            .type = QString(t.type),
+            .slotFor =
+                [slot](const QJsonObject&) {
+                    return slot;
+                },
+            .validate =
+                [](const QJsonObject& p) {
+                    return hasBool(p, ActionParam::Value);
+                },
+            .terminal = false,
+            .allowedKeys = {QString(ActionParam::Value)},
+            .domain = ActionDomain::Context,
+            .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = t.seed}},
+            .category = QStringLiteral("layoutEngine"),
+            .displayOrder = t.order,
+            .tags = {QString(Tag::LayoutEngine)},
+        });
+    }
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetScrollStickyWindowHandling),
+        .slotFor = constantSlot(ActionSlot::ScrollStickyWindowHandling),
+        .validate =
+            [](const QJsonObject& p) {
+                const QString v = p.value(ActionParam::Value).toString();
+                return v == StickyWindowHandlingToken::TreatAsNormal || v == StickyWindowHandlingToken::RestoreOnly
+                    || v == StickyWindowHandlingToken::IgnoreAll;
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value),
+                     .kind = QStringLiteral("enum"),
+                     .enumWireValues = {QString(StickyWindowHandlingToken::TreatAsNormal),
+                                        QString(StickyWindowHandlingToken::RestoreOnly),
+                                        QString(StickyWindowHandlingToken::IgnoreAll)}}},
+        .category = QStringLiteral("layoutEngine"),
+        .displayOrder = 35,
+        .tags = {QString(Tag::LayoutEngine)},
+    });
+
     // ── per-window scrolling open overrides (domain Window) ──
     // Read on the open path for the matched window and layered over the context /
     // config defaults above, so one application opens wide, tabbed, or into the

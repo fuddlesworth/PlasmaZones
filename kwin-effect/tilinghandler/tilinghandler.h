@@ -316,6 +316,18 @@ public:
         return !m_scrollingScreens.isEmpty();
     }
 
+    /// True when at least one scrolling screen resolves to cropping its
+    /// straddlers. The direct-scanout gate needs a whole-session answer (the
+    /// hazard is any un-cropped overhang reaching a hardware plane), so it
+    /// asks this rather than per-screen membership. The per-screen
+    /// distinction never reaches the paint CLIP: on a screen that does not
+    /// crop the engine clamps the geometry so no rect straddles, leaving the
+    /// clip nothing to cut.
+    bool anyScreenCropsStraddlers() const
+    {
+        return !m_scrollCropStraddlerScreens.isEmpty();
+    }
+
     /// Daemon-loss teardown: drop the dead session's scrolling snapshot.
     /// Deliberately NOT the live chokepoint — setScrollingScreens schedules
     /// a border sweep, which on this path would re-create rule-matched
@@ -555,6 +567,7 @@ public Q_SLOTS:
     void slotEnabledChanged(bool enabled);
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
     void slotScrollingScreensChanged(const QStringList& screenIds);
+    void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
     void slotActiveLayoutsChanged(const QVariantMap& activeLayouts);
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
 
@@ -795,6 +808,15 @@ private:
     /// loadSettings is the budget-granting entry point, the same shape
     /// loadRuleAnimationsFromDbus has over fetchAllRulesOnce.
     void fetchScrollingScreens();
+    /// Bring-up fetch of the daemon-resolved scrolling behaviour the
+    /// compositor owns (focus-follows-mouse, straddler crop). Bounded retry,
+    /// the fetchScrollingScreens pattern.
+    void fetchScrollEffectBehaviour();
+    /// Shared apply for the fetch reply and the live signal: replaces both
+    /// sets from the wire map. Repaints when the CROP set moved, because the
+    /// clip is painted state the compositor will not otherwise revisit;
+    /// focus-follows-mouse is consulted per pointer move and needs nothing.
+    void applyScrollEffectBehaviour(const QVariantMap& behaviour);
     void fetchActiveLayouts();
     /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel).
     /// Registered while ANY screen runs the scrolling engine, unregistered
@@ -861,6 +883,18 @@ private:
     /// failure arms' own re-dispatches.
     int m_activeLayoutsFetchRetriesLeft = 0;
     int m_scrollingScreensFetchRetriesLeft = 0;
+    int m_scrollEffectBehaviourFetchRetriesLeft = 0;
+    /// Per-dispatch guard for the scroll-effect-behaviour fetch. No write
+    /// generation twin: nothing writes these two sets except the daemon, so
+    /// there is no local authoritative writer for a reply to race.
+    quint64 m_scrollEffectBehaviourQueryGeneration = 0;
+    /// Screens whose RESOLVED scrolling focus-follows-mouse is on, and whose
+    /// RESOLVED straddler crop is on (`rule ?? config`, decided daemon-side).
+    /// Membership is the whole answer — the effect holds no config fallback
+    /// for either, so an empty set reads as "off everywhere", which is what
+    /// bring-up before the daemon's first reply looks like.
+    QSet<QString> m_scrollFocusFollowsMouseScreens;
+    QSet<QString> m_scrollCropStraddlerScreens;
     /// Same stale-reply guard for the scrolling-screens property fetch.
     /// Bumped by setScrollingScreens on EVERY authoritative write (live
     /// signal, property reply, daemon-restart clear) — even an identical

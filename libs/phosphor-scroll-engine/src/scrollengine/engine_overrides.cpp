@@ -9,6 +9,12 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
+// Complete type needed for the qobject_cast in effectiveFocusNewWindows —
+// ScrollEngine.h forward declares IScrollSettings only. Included directly
+// rather than relied on through a unity batch neighbour (see the nounity
+// build's role in catching exactly this).
+#include <PhosphorScrollEngine/IScrollSettings.h>
+
 #include "enginelimits.h"
 
 #include <QList>
@@ -81,6 +87,69 @@ CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QVariantMap
         }
     }
     return m_centerFocusedColumn;
+}
+
+// ── behaviour toggles ──
+// One shape for all five: a rule-written per-screen key wins, an absent key
+// falls back to the member the global config seeded. The value is taken only
+// when it is a real bool — a hand-edited string would otherwise coerce to
+// false and silently disable a behaviour, the same reject-and-fall-through
+// stance the context resolver takes on the way in.
+bool ScrollEngine::effectiveBoolOverride(const QVariantMap& overrides, const QString& key, bool fallback)
+{
+    const auto it = overrides.constFind(key);
+    if (it != overrides.constEnd() && it->typeId() == QMetaType::Bool) {
+        return it->toBool();
+    }
+    return fallback;
+}
+
+bool ScrollEngine::effectiveAlwaysCenterSingleColumn(const QVariantMap& overrides) const
+{
+    return effectiveBoolOverride(overrides, ScrollPerScreenKeys::alwaysCenterSingleColumn(),
+                                 m_alwaysCenterSingleColumn);
+}
+
+bool ScrollEngine::effectiveRespectMinimumSize(const QVariantMap& overrides) const
+{
+    return effectiveBoolOverride(overrides, ScrollPerScreenKeys::respectMinimumSize(), m_respectMinimumSize);
+}
+
+bool ScrollEngine::effectiveCropStraddlers(const QString& screenId) const
+{
+    return effectiveBoolOverride(m_perScreenOverrides.value(screenId), ScrollPerScreenKeys::cropStraddlers(),
+                                 m_cropStraddlers);
+}
+
+bool ScrollEngine::effectiveFocusNewWindows(const QString& screenId) const
+{
+    bool fallback = true;
+    if (auto* settings = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings())) {
+        fallback = settings->scrollingFocusNewWindows();
+    }
+    return effectiveBoolOverride(m_perScreenOverrides.value(screenId), ScrollPerScreenKeys::focusNewWindows(),
+                                 fallback);
+}
+
+bool ScrollEngine::effectiveSmartGaps(const QVariantMap& overrides) const
+{
+    return effectiveBoolOverride(overrides, ScrollPerScreenKeys::smartGaps(), m_smartGaps);
+}
+
+PhosphorEngine::StickyWindowHandling ScrollEngine::effectiveStickyWindowHandling(const QString& screenId) const
+{
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    const auto it = overrides.constFind(ScrollPerScreenKeys::stickyWindowHandling());
+    if (it != overrides.constEnd()) {
+        const int mode = it->toInt();
+        // Same guarded cast as the config read in loadSettings: an
+        // out-of-range int must not become an undefined enumerator.
+        if (mode >= static_cast<int>(PhosphorEngine::StickyWindowHandling::TreatAsNormal)
+            && mode <= static_cast<int>(PhosphorEngine::StickyWindowHandling::IgnoreAll)) {
+            return static_cast<PhosphorEngine::StickyWindowHandling>(mode);
+        }
+    }
+    return m_stickyWindowHandling;
 }
 
 QList<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId) const

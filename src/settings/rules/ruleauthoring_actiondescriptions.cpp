@@ -310,6 +310,42 @@ QString actionDescription(const QString& type)
             "Sets the height newly opened windows take inside their column for the matched "
             "context.");
     }
+    if (type == ActionType::SetScrollAlwaysCenterSingleColumn) {
+        return PhosphorI18n::tr(
+            "Centers a column on the matched context whenever it is the only one on the strip, "
+            "whatever the centering policy says.");
+    }
+    if (type == ActionType::SetScrollRespectMinimumSize) {
+        return PhosphorI18n::tr(
+            "Keeps columns on the matched context at least as wide as each window asks to be. "
+            "Off lets a column go narrower, which the compositor then clamps on its own.");
+    }
+    if (type == ActionType::SetScrollCropStraddlers) {
+        return PhosphorI18n::tr(
+            "Clips a column that hangs over the screen edge on the matched context so only the "
+            "on-screen part is drawn. The column keeps its real size, so scrolling is unchanged.");
+    }
+    if (type == ActionType::SetScrollFocusNewWindows) {
+        return PhosphorI18n::tr(
+            "Gives windows opening on the matched context keyboard focus. A per-window Focus when "
+            "opened rule still wins over this.");
+    }
+    if (type == ActionType::SetScrollSmartGaps) {
+        return PhosphorI18n::tr(
+            "Drops the outer gaps on the matched context while a single column is on the strip, "
+            "so a lone window fills the screen.");
+    }
+    if (type == ActionType::SetScrollFocusFollowsMouse) {
+        return PhosphorI18n::tr(
+            "Focuses whichever column the pointer moves over on the matched context, without a "
+            "click. Covers scrolling screens only, so snapping and tiling screens keep following "
+            "the global setting.");
+    }
+    if (type == ActionType::SetScrollStickyWindowHandling) {
+        return PhosphorI18n::tr(
+            "Chooses how the matched context treats windows shown on all desktops. Anything other "
+            "than treating them as normal keeps them floating instead of in a column.");
+    }
     // ── Tab indicator (context + window colours) ──
     if (type == ActionType::SetTabIndicatorEnabled) {
         return PhosphorI18n::tr("Shows or hides the tab indicator on tabbed columns for the matched context.");

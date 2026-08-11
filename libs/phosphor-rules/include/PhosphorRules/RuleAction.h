@@ -609,6 +609,42 @@ inline constexpr QLatin1StringView SetScrollInsertPosition{"setScrollInsertPosit
 /// work-area height (numeric `ActionParam::Value`, edited as a percent;
 /// committed as a fixed pixel intent against the live work area).
 inline constexpr QLatin1StringView SetScrollDefaultWindowHeight{"setScrollDefaultWindowHeight"};
+/// Whether a lone column centres on the strip regardless of the centering
+/// policy. Boolean `ActionParam::Value`. Rides the per-screen override map to
+/// `ScrollLayoutParams::alwaysCenterSingleColumn`, beside CenterFocusedColumn.
+inline constexpr QLatin1StringView SetScrollAlwaysCenterSingleColumn{"setScrollAlwaysCenterSingleColumn"};
+/// Whether the strip honours each window's declared minimum size when sizing
+/// its column. Boolean `ActionParam::Value`. Off lets a column go narrower
+/// than the client asked for, which the compositor then clamps on commit.
+inline constexpr QLatin1StringView SetScrollRespectMinimumSize{"setScrollRespectMinimumSize"};
+/// Whether a column straddling the screen edge is clipped at the boundary
+/// (its true rect is kept, only the drawing is cropped). Boolean
+/// `ActionParam::Value`. Read by BOTH the engine's straddler clamp and the
+/// compositor's paint clip, so the daemon pushes the resolved per-screen set
+/// to the effect as well as onto the engine's override map.
+inline constexpr QLatin1StringView SetScrollCropStraddlers{"setScrollCropStraddlers"};
+/// Whether a window opening on the matched context takes focus. Boolean
+/// `ActionParam::Value`. The per-window `OpenFocused` rule outranks this, and
+/// this outranks the global focus-new-windows setting.
+inline constexpr QLatin1StringView SetScrollFocusNewWindows{"setScrollFocusNewWindows"};
+/// Whether a lone column drops the outer gaps (niri's smart gaps). Boolean
+/// `ActionParam::Value`. The CONFIG value forwards from the tiling toggle
+/// (the gap model is shared), but the rule slot is scrolling-only — a tiling
+/// screen keeps reading its own config.
+inline constexpr QLatin1StringView SetScrollSmartGaps{"setScrollSmartGaps"};
+/// Whether moving the pointer over a column focuses it on the matched
+/// context. Boolean `ActionParam::Value`. EFFECT-consumed: focus-follows-mouse
+/// lives entirely in the compositor, so the daemon resolves this per screen
+/// and pushes the resolved set over `org.plasmazones.Scrolling` rather than
+/// onto the engine's override map. It governs the SCROLLING half of the
+/// per-mode focus-follows-mouse split only — a snapping or tiling screen
+/// keeps reading the global setting.
+inline constexpr QLatin1StringView SetScrollFocusFollowsMouse{"setScrollFocusFollowsMouse"};
+/// How the strip treats windows shown on all desktops. Closed enum token
+/// (`ActionParam::Value`, StickyWindowHandlingToken). The scrolling engine
+/// collapses both non-normal values to "float it", matching its single
+/// consumption site.
+inline constexpr QLatin1StringView SetScrollStickyWindowHandling{"setScrollStickyWindowHandling"};
 
 // ── Per-context tab-indicator overrides (domain Context) ──
 // niri's `tab-indicator` layout block, one action per property so independent
@@ -990,6 +1026,21 @@ inline constexpr QLatin1StringView Last{"last"};
 inline constexpr QLatin1StringView IntoActiveColumn{"intoActiveColumn"};
 } // namespace ScrollInsertPositionToken
 
+/// Wire tokens for SetScrollStickyWindowHandling's `value` param — how the
+/// strip treats a window shown on all desktops. Ints match
+/// `PhosphorEngine::StickyWindowHandling` (treatAsNormal 0 / restoreOnly 1 /
+/// ignoreAll 2) and the spellings match the settings schema's intChoices
+/// (settingsschema_scrolling.cpp) so a rule and the settings page name the
+/// same thing. The SCROLLING engine collapses both non-normal values to
+/// "float the window" at its single consumption site; the distinction is
+/// preserved on the wire because the snapping and tiling engines honour it
+/// and a future scrolling consumer may too.
+namespace StickyWindowHandlingToken {
+inline constexpr QLatin1StringView TreatAsNormal{"treatAsNormal"};
+inline constexpr QLatin1StringView RestoreOnly{"restoreOnly"};
+inline constexpr QLatin1StringView IgnoreAll{"ignoreAll"};
+} // namespace StickyWindowHandlingToken
+
 /// Wire tokens for SetWindowLayer's `value` param — the closed vocabulary the
 /// descriptor validator, the KWin-effect consumer (resolveWindowLayer), and the
 /// settings label layers all read from this single source. The tokens map onto
@@ -1106,6 +1157,19 @@ inline constexpr QLatin1StringView CenterFocusedColumn{"center-focused-column"};
 inline constexpr QLatin1StringView ScrollDefaultColumnDisplay{"scroll-default-column-display"};
 inline constexpr QLatin1StringView ScrollInsertPosition{"scroll-insert-position"};
 inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-window-height"};
+/// Per-context scrolling BEHAVIOUR slots — the toggles that had no rule seam
+/// until now. All six ride the same per-screen override map as the sizing
+/// slots above; the engine reads each through an `effective*` accessor that
+/// falls back to the global config value.
+inline constexpr QLatin1StringView ScrollAlwaysCenterSingleColumn{"scroll-always-center-single-column"};
+inline constexpr QLatin1StringView ScrollRespectMinimumSize{"scroll-respect-minimum-size"};
+inline constexpr QLatin1StringView ScrollCropStraddlers{"scroll-crop-straddlers"};
+inline constexpr QLatin1StringView ScrollFocusNewWindows{"scroll-focus-new-windows"};
+inline constexpr QLatin1StringView ScrollSmartGaps{"scroll-smart-gaps"};
+/// Effect-consumed, unlike its five neighbours: the daemon resolves it per
+/// screen and pushes the resolved set to the compositor.
+inline constexpr QLatin1StringView ScrollFocusFollowsMouse{"scroll-focus-follows-mouse"};
+inline constexpr QLatin1StringView ScrollStickyWindowHandling{"scroll-sticky-window-handling"};
 // Per-context tab-indicator slots, one per property so independent context
 // rules cascade per-property. Filled by the SetTabIndicator* actions and read
 // by LayoutRegistry::resolveContextScrollingParams into ContextScrollingParams.

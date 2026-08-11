@@ -17,6 +17,9 @@
 // Complete type needed for setScrollTabIndicatorOverrides — daemon.h forward
 // declares OverlayService only.
 #include "daemon/overlayservice.h"
+// Complete type needed for setScrollEffectBehaviour — daemon.h forward
+// declares ScrollingAdaptor only.
+#include "dbus/scrollingadaptor/scrollingadaptor.h"
 #include "seedorderfilter.h"
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -133,6 +136,14 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // ScrollPerScreenKeys settings channel), so the seed is a plain copy;
     // rules write their own channel keys (bare-fraction width/height plus the
     // shared int keys), which the engine reads first.
+    // The two EFFECT-owned behaviours are collected as this loop walks the
+    // scrolling screens, then published in one push below. They cannot ride
+    // the engine's override map like their four siblings: focus-follows-mouse
+    // and the straddler PAINT clip both live in the compositor, so the daemon
+    // resolves `rule ?? config` here and hands the compositor the resolved
+    // membership.
+    QStringList ffmScreens;
+    QStringList cropScreens;
     for (const QString& screenId : scrollingScreens) {
         QVariantMap overrides = m_settings->getPerScreenScrollingSettings(screenId);
         if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
@@ -163,6 +174,44 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         if (params.defaultWindowHeight) {
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultWindowHeight(),
                              *params.defaultWindowHeight);
+        }
+        // Behaviour toggles — rules-only keys (the per-screen settings store
+        // writes none of them), so an absent key leaves the engine on the
+        // global config value via its effective* readers.
+        if (params.alwaysCenterSingleColumn) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::alwaysCenterSingleColumn(),
+                             *params.alwaysCenterSingleColumn);
+        }
+        if (params.respectMinimumSize) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::respectMinimumSize(),
+                             *params.respectMinimumSize);
+        }
+        if (params.cropStraddlers) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::cropStraddlers(), *params.cropStraddlers);
+        }
+        if (params.focusNewWindows) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::focusNewWindows(), *params.focusNewWindows);
+        }
+        if (params.smartGaps) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::smartGaps(), *params.smartGaps);
+        }
+        if (params.stickyWindowHandling) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::stickyWindowHandling(),
+                             *params.stickyWindowHandling);
+        }
+        // The effect-owned pair, resolved to a verdict here rather than
+        // forwarded as an override: `rule ?? config`, so the compositor gets
+        // membership it can answer with a set lookup. cropStraddlers ALSO
+        // rides the override map above (the engine's own straddler clamp
+        // reads it), so it is the one behaviour with two consumers — both
+        // resolve from this same slot, so they cannot disagree.
+        if (m_settings) {
+            if (params.focusFollowsMouse.value_or(m_settings->scrollingFocusFollowsMouse())) {
+                ffmScreens.append(screenId);
+            }
+            if (params.cropStraddlers.value_or(m_settings->scrollingCropStraddlers())) {
+                cropScreens.append(screenId);
+            }
         }
         // TEMPLATE channel: the context's resolved native ScrollingTemplate
         // (cascade entry, else the default-template setting) pushes its
@@ -329,6 +378,15 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             }
             m_overlayService->setScrollDropIndicatorOverrides(screenId, drop);
         }
+    }
+    // Publish the effect-owned pair in ONE push, after the walk. The lists are
+    // built in the loop's iteration order, which is the sorted scrolling-screen
+    // set, so the adaptor's emit-on-change compare is a value compare (see
+    // setScrollEffectBehaviour's contract). Screens that LEFT scrolling are
+    // absent by construction — the walk only visits the current set — so the
+    // departing-screen cleanup below has nothing to undo here.
+    if (m_scrollingAdaptor) {
+        m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens);
     }
     m_scrollEngine->setActiveScreens(scrollingScreens);
 

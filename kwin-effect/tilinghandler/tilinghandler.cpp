@@ -99,7 +99,13 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // governs it. A plain return (no latch disarm), like the screen gate
     // above — a screen whose mode has FFM off must not clear a latch a
     // managed screen of the other mode still relies on.
-    if (isScrollingScreen(screenId) ? !m_scrollingFocusFollowsMouse : !m_focusFollowsMouse) {
+    // The scrolling arm reads the daemon's RESOLVED per-screen set rather
+    // than the global flag: a SetScrollFocusFollowsMouse context rule can
+    // turn the behaviour on for one monitor and off for another, and the
+    // daemon has already folded `rule ?? config` into membership. The
+    // non-scrolling arm keeps the global flag — that half has no per-screen
+    // rule (snapping and tiling share the one setting).
+    if (isScrollingScreen(screenId) ? !m_scrollFocusFollowsMouseScreens.contains(screenId) : !m_focusFollowsMouse) {
         return;
     }
 

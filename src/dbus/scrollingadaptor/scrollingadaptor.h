@@ -42,6 +42,7 @@ class PLASMAZONES_EXPORT ScrollingAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Scrolling")
 
     Q_PROPERTY(QStringList scrollingScreens READ scrollingScreens NOTIFY scrollingScreensChanged)
+    Q_PROPERTY(QVariantMap scrollEffectBehaviour READ scrollEffectBehaviour NOTIFY scrollEffectBehaviourChanged)
 
 public:
     explicit ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent = nullptr);
@@ -57,6 +58,45 @@ public:
     /// ordering guarantee and this set can transiently name a screen the
     /// union has already dropped.
     QStringList scrollingScreens() const;
+
+    /// The two scrolling behaviours the COMPOSITOR owns, as already-resolved
+    /// screen-id lists: `{"focusFollowsMouse": [...], "cropStraddlers": [...]}`.
+    ///
+    /// Both are per-context rule slots
+    /// (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) whose consumer
+    /// lives in the KWin effect, not the engine — so unlike their four
+    /// siblings they cannot ride the engine's per-screen override map. The
+    /// daemon resolves `rule ?? config` per scrolling screen and publishes the
+    /// RESOLVED membership, which keeps the effect free of any config
+    /// knowledge: it answers each question with a set lookup and needs no
+    /// fallback of its own. A screen absent from a list has that behaviour
+    /// OFF; a screen absent from the daemon's scrolling set appears in
+    /// neither.
+    ///
+    /// One map rather than two list properties so the compositor pays a
+    /// single bring-up query and a single change subscription for what is
+    /// really one push.
+    QVariantMap scrollEffectBehaviour() const;
+
+    /// Replace the published behaviour map and broadcast on a real change.
+    /// Driven by the daemon's per-screen scrolling pass, which resolves both
+    /// slots while it is already walking the scrolling screens. Emit-on-change
+    /// (unlike setScrollTabSurface's non-zero path): the compositor's copy is
+    /// a plain cache it can re-query, so a redundant broadcast would only cost
+    /// a rule-cache invalidation on the other side.
+    void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens);
+
+    /// Wire keys of the @ref scrollEffectBehaviour map — shared with the
+    /// compositor-side reader so a rename is one edit, not two spellings that
+    /// silently stop matching.
+    static QString focusFollowsMouseKey()
+    {
+        return QStringLiteral("focusFollowsMouse");
+    }
+    static QString cropStraddlersKey()
+    {
+        return QStringLiteral("cropStraddlers");
+    }
 
     /// Clear the engine pointer during shutdown (same late-D-Bus-call
     /// contract as the sibling adaptors' clearEngine).
@@ -218,6 +258,11 @@ Q_SIGNALS:
      */
     void scrollingScreensChanged(const QStringList& screenIds);
 
+    /// The resolved per-screen effect-owned behaviour changed. Payload is the
+    /// whole map (see @ref scrollEffectBehaviour), so a receiver never has to
+    /// merge a delta against a copy it might have missed an update to.
+    void scrollEffectBehaviourChanged(const QVariantMap& behaviour);
+
     /**
      * @brief The wl_surface drawing @p screenId's tab indicators changed.
      *
@@ -243,6 +288,11 @@ private:
     /// than read back from the overlay service so the replay getter answers
     /// from the same values the signal published.
     QHash<QString, quint32> m_scrollTabSurfaces;
+
+    /// Published copy of @ref scrollEffectBehaviour. Held as the built map so
+    /// the property read is a plain copy and the change compare is one
+    /// QVariantMap compare rather than two list compares.
+    QVariantMap m_scrollEffectBehaviour;
     /// Terminal latch set by clearEngine(): the overlay-service connection
     /// feeding setScrollTabSurface survives the clear (its context object is
     /// this adaptor), and a late push must not repopulate the registry.

@@ -91,7 +91,8 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // desktop-pin logic in updateStickyScreenPins stays unconditional — with
     // sticky windows floated, the all-sticky managed set never forms and the
     // pin degrades correctly on its own.
-    const bool stickyExcluded = m_stickyWindowHandling != PhosphorEngine::StickyWindowHandling::TreatAsNormal
+    const bool stickyExcluded =
+        effectiveStickyWindowHandling(screenId) != PhosphorEngine::StickyWindowHandling::TreatAsNormal
         && m_windowTracker && m_windowTracker->isWindowSticky(windowId);
     if (oversized || ruleFloated || stickyExcluded) {
         state->addFloating(windowId);
@@ -671,15 +672,14 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         }
     }
 
-    bool focusNew = true;
-    if (auto* settings = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings())) {
-        focusNew = settings->scrollingFocusNewWindows();
-    }
-    // Per-window openFocused rule layers over the global setting. It carries
-    // both of the setting's effects: false also rewinds the strip's active
-    // column to the pre-insert focus below, true adopts the arrival even
-    // when the global default would not.
-    focusNew = openParams.focused.value_or(focusNew);
+    // Three tiers, narrowest first: the per-window openFocused rule outranks
+    // the per-context SetScrollFocusNewWindows rule, which outranks the
+    // global setting — the same precedence OpenColumnWidth has over
+    // SetScrollDefaultColumnWidth. Whichever wins carries BOTH of the
+    // setting's effects: false also rewinds the strip's active column to the
+    // pre-insert focus below, true adopts the arrival even when the global
+    // default would not.
+    bool focusNew = openParams.focused.value_or(effectiveFocusNewWindows(screenId));
     const bool arrivalTookFocus = focusNew && state->strip().activeWindowId() == windowId;
     if (!focusNew && !priorActive.isEmpty() && state->strip().activeWindowId() == windowId
         && state->strip().containsWindow(priorActive)) {

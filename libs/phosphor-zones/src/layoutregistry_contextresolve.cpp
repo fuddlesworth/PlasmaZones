@@ -1105,6 +1105,30 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
             params.tabIndicatorPosition = 3;
         }
     }
+
+    // ── scrolling behaviour toggles ──
+    // Read last so they share readBool's reject-and-fall-through policy: a
+    // hand-edited non-bool leaves the field unset and the engine keeps its
+    // configured value, rather than coercing to false and silently disabling
+    // a behaviour the user never turned off.
+    readBool(PWR::ActionSlot::ScrollAlwaysCenterSingleColumn, params.alwaysCenterSingleColumn);
+    readBool(PWR::ActionSlot::ScrollRespectMinimumSize, params.respectMinimumSize);
+    readBool(PWR::ActionSlot::ScrollCropStraddlers, params.cropStraddlers);
+    readBool(PWR::ActionSlot::ScrollFocusNewWindows, params.focusNewWindows);
+    readBool(PWR::ActionSlot::ScrollSmartGaps, params.smartGaps);
+    readBool(PWR::ActionSlot::ScrollFocusFollowsMouse, params.focusFollowsMouse);
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollStickyWindowHandling))) {
+        // Wire token → the StickyWindowHandling int the config store holds
+        // (treatAsNormal 0 / restoreOnly 1 / ignoreAll 2).
+        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+        if (token == PWR::StickyWindowHandlingToken::TreatAsNormal) {
+            params.stickyWindowHandling = 0;
+        } else if (token == PWR::StickyWindowHandlingToken::RestoreOnly) {
+            params.stickyWindowHandling = 1;
+        } else if (token == PWR::StickyWindowHandlingToken::IgnoreAll) {
+            params.stickyWindowHandling = 2;
+        }
+    }
     return params;
 }
 

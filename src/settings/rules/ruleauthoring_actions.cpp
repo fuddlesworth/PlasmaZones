@@ -68,7 +68,10 @@ PickerCategory actionCategory(const QString& type)
         }
         if (type == ActionType::SetScrollDefaultColumnWidth || type == ActionType::SetCenterFocusedColumn
             || type == ActionType::SetScrollDefaultColumnDisplay || type == ActionType::SetScrollInsertPosition
-            || type == ActionType::SetScrollDefaultWindowHeight || type == ActionType::SetScrollingTemplate) {
+            || type == ActionType::SetScrollDefaultWindowHeight || type == ActionType::SetScrollingTemplate
+            || type == ActionType::SetScrollAlwaysCenterSingleColumn || type == ActionType::SetScrollRespectMinimumSize
+            || type == ActionType::SetScrollCropStraddlers || type == ActionType::SetScrollFocusNewWindows
+            || type == ActionType::SetScrollSmartGaps || type == ActionType::SetScrollStickyWindowHandling) {
             return {PhosphorI18n::tr("Scrolling", "tiling mode name"), 4};
         }
         // The per-app open actions are WINDOW-domain: they must sit in the
@@ -216,6 +219,9 @@ QString paramLabel(const QString& type, const QString& key)
     }
     if (type == ActionType::OpenMaximized && key == ActionParam::Value) {
         return PhosphorI18n::tr("Open at the full work-area width (off = the default width)");
+    }
+    if (type == ActionType::SetScrollStickyWindowHandling && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Handling");
     }
     if (type == ActionType::OpenFocused && key == ActionParam::Value) {
         return PhosphorI18n::tr("Focus the window when it opens (off = keep the current focus)");
@@ -604,6 +610,27 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::OpenColumnPlacement) {
         return PhosphorI18n::tr("Open into column");
     }
+    if (type == ActionType::SetScrollAlwaysCenterSingleColumn) {
+        return PhosphorI18n::tr("Center a lone column");
+    }
+    if (type == ActionType::SetScrollRespectMinimumSize) {
+        return PhosphorI18n::tr("Respect minimum window sizes");
+    }
+    if (type == ActionType::SetScrollCropStraddlers) {
+        return PhosphorI18n::tr("Crop columns at the screen edge");
+    }
+    if (type == ActionType::SetScrollFocusNewWindows) {
+        return PhosphorI18n::tr("Focus new windows");
+    }
+    if (type == ActionType::SetScrollSmartGaps) {
+        return PhosphorI18n::tr("Smart gaps");
+    }
+    if (type == ActionType::SetScrollFocusFollowsMouse) {
+        return PhosphorI18n::tr("Focus follows the mouse");
+    }
+    if (type == ActionType::SetScrollStickyWindowHandling) {
+        return PhosphorI18n::tr("Set sticky window handling");
+    }
     if (type == ActionType::OpenMaximized) {
         return PhosphorI18n::tr("Open maximized");
     }
@@ -919,6 +946,30 @@ QString boolActionStateLabel(const QString& type, bool on)
         // Off is inert today (there is no context default that maximizes),
         // but the phrase still names the outcome for symmetry with the family.
         return on ? PhosphorI18n::tr("Open maximized") : PhosphorI18n::tr("Open at the default width");
+    }
+    // The scrolling behaviour toggles. Each off phrase names the OUTCOME, the
+    // same discipline the tab-indicator family follows: these override a
+    // config value, so switching one off is an instruction rather than an
+    // absence.
+    if (type == ActionType::SetScrollAlwaysCenterSingleColumn) {
+        return on ? PhosphorI18n::tr("Center a lone column") : PhosphorI18n::tr("Leave a lone column where it sits");
+    }
+    if (type == ActionType::SetScrollRespectMinimumSize) {
+        return on ? PhosphorI18n::tr("Respect minimum window sizes") : PhosphorI18n::tr("Ignore minimum window sizes");
+    }
+    if (type == ActionType::SetScrollCropStraddlers) {
+        return on ? PhosphorI18n::tr("Crop columns at the screen edge")
+                  : PhosphorI18n::tr("Keep columns whole at the screen edge");
+    }
+    if (type == ActionType::SetScrollFocusNewWindows) {
+        return on ? PhosphorI18n::tr("Focus new windows") : PhosphorI18n::tr("Keep focus where it is");
+    }
+    if (type == ActionType::SetScrollSmartGaps) {
+        return on ? PhosphorI18n::tr("Drop the outer gaps for a lone column")
+                  : PhosphorI18n::tr("Keep the outer gaps for a lone column");
+    }
+    if (type == ActionType::SetScrollFocusFollowsMouse) {
+        return on ? PhosphorI18n::tr("Focus follows the mouse") : PhosphorI18n::tr("Focus stays until you click");
     }
     if (type == ActionType::OpenFocused) {
         // Both polarities are live: on forces focus past a focus-new-windows

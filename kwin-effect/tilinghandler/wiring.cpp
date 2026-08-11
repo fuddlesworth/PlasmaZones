@@ -63,6 +63,9 @@ void TilingHandler::connectSignals()
                    PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
                    SLOT(slotScrollingScreensChanged(QStringList)));
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollEffectBehaviourChanged"),
+                   this, SLOT(slotScrollEffectBehaviourChanged(QVariantMap)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
                    SLOT(slotActiveLayoutsChanged(QVariantMap)));
 
@@ -89,6 +92,10 @@ void TilingHandler::connectSignals()
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollingScreensChanged"), this,
                 SLOT(slotScrollingScreensChanged(QStringList)));
+
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollEffectBehaviourChanged"), this,
+                SLOT(slotScrollEffectBehaviourChanged(QVariantMap)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
@@ -203,8 +210,10 @@ void TilingHandler::loadSettings()
     // held out until the next live signal or a daemon restart.
     m_scrollingScreensFetchRetriesLeft = kBringUpFetchRetryMax;
     m_activeLayoutsFetchRetriesLeft = kBringUpFetchRetryMax;
+    m_scrollEffectBehaviourFetchRetriesLeft = kBringUpFetchRetryMax;
     fetchScrollingScreens();
     fetchActiveLayouts();
+    fetchScrollEffectBehaviour();
 }
 
 // Scrolling screen subset — the Mode-stamp discriminator only, no
@@ -267,6 +276,48 @@ void TilingHandler::fetchScrollingScreens()
                     }
                 }
             });
+}
+
+// The two scrolling behaviours the compositor owns, published by the daemon
+// as ALREADY-RESOLVED screen-id lists (rule ?? config decided daemon-side).
+// Bring-up fetch with the same bounded retry as the scrolling-screens query
+// above; a failed Get leaves both sets empty, which reads as "off everywhere"
+// — the historical behaviour before either was per-screen, and the safe
+// direction: focus-follows-mouse stays quiet and no column is cropped until
+// the daemon answers.
+void TilingHandler::fetchScrollEffectBehaviour()
+{
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                       QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    msg << PhosphorProtocol::Service::Interface::Scrolling << QStringLiteral("scrollEffectBehaviour");
+    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    // Per-dispatch guard only — unlike the scrolling-screens set there is no
+    // authoritative local writer to race, so a write generation would have
+    // nothing to compare against. A live signal landing first simply wins,
+    // and this reply is discarded when a newer query superseded it.
+    const quint64 queryGeneration = ++m_scrollEffectBehaviourQueryGeneration;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, queryGeneration](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (queryGeneration != m_scrollEffectBehaviourQueryGeneration) {
+            return; // a newer query superseded this one
+        }
+        QDBusPendingReply<QDBusVariant> reply = *w;
+        if (reply.isValid()) {
+            applyScrollEffectBehaviour(reply.value().variant().toMap());
+            qCInfo(lcEffect) << "Loaded scrolling effect behaviour: ffm=" << m_scrollFocusFollowsMouseScreens
+                             << "crop=" << m_scrollCropStraddlerScreens;
+        } else {
+            qCDebug(lcEffect) << "Scrolling effect behaviour: query failed, daemon may not be running";
+            if (m_scrollEffectBehaviourFetchRetriesLeft > 0) {
+                --m_scrollEffectBehaviourFetchRetriesLeft;
+                QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
+                    fetchScrollEffectBehaviour();
+                });
+            }
+        }
+    });
 }
 
 // Rules-visible active layout map — a pure ruleQuery input like the

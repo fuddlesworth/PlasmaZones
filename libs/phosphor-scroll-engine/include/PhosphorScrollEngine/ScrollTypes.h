@@ -71,6 +71,37 @@ inline QString insertPosition()
 {
     return QStringLiteral("InsertPosition");
 }
+/// RULE channel for the scrolling BEHAVIOUR toggles (SetScrollAlwaysCenter-
+/// SingleColumn / …RespectMinimumSize / …CropStraddlers / …FocusNewWindows /
+/// …SmartGaps / …StickyWindowHandling). Like insertPosition these are
+/// rules-only: the per-screen settings store does not write them, so an
+/// absent key means "use the global config value" and the engine's
+/// `effective*` readers supply exactly that fallback.
+inline QString alwaysCenterSingleColumn()
+{
+    return QStringLiteral("AlwaysCenterSingleColumn");
+}
+inline QString respectMinimumSize()
+{
+    return QStringLiteral("RespectMinimumSize");
+}
+inline QString cropStraddlers()
+{
+    return QStringLiteral("CropStraddlers");
+}
+inline QString focusNewWindows()
+{
+    return QStringLiteral("FocusNewWindows");
+}
+inline QString smartGaps()
+{
+    return QStringLiteral("SmartGaps");
+}
+/// StickyWindowHandling ints (treatAsNormal 0 / restoreOnly 1 / ignoreAll 2).
+inline QString stickyWindowHandling()
+{
+    return QStringLiteral("StickyWindowHandling");
+}
 /// RULE channel for the tab indicator's GEOMETRY half, one key per property
 /// so independent rules cascade per-property the way the width trio does.
 /// The indicator's paint half never reaches this library (see

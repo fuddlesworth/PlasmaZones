@@ -461,6 +461,19 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Into the focused column");
         }
     }
+    if (type == ActionType::SetScrollStickyWindowHandling && key == ActionParam::Value) {
+        // Same phrasing as the Scrolling settings page's own choices, so the
+        // rule and the setting it overrides read alike.
+        if (wireValue == PhosphorRules::StickyWindowHandlingToken::TreatAsNormal) {
+            return PhosphorI18n::tr("Treat as normal windows");
+        }
+        if (wireValue == PhosphorRules::StickyWindowHandlingToken::RestoreOnly) {
+            return PhosphorI18n::tr("Restore only");
+        }
+        if (wireValue == PhosphorRules::StickyWindowHandlingToken::IgnoreAll) {
+            return PhosphorI18n::tr("Ignore entirely");
+        }
+    }
     if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
         if (wireValue == PhosphorRules::WindowLayerToken::Above) {
             return PhosphorI18n::tr("Above other windows");

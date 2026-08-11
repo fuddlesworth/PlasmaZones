@@ -71,7 +71,14 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     // an effect-side ack the settings path does not have; crop is off by
     // default and the flip is an explicit user action, so the window is
     // accepted rather than engineered away.
-    if (m_cachedScrollCropStraddlers && m_tilingHandler && m_tilingHandler->hasScrollingScreens()) {
+    // Either the daemon has resolved at least one screen to cropping (the
+    // per-context SetScrollCropStraddlers rule folded with the setting), or
+    // the global setting says crop and we have not received the resolved map
+    // yet. The OR keeps the bring-up window no worse than it was before the
+    // rule existed: an empty map during bring-up falls back to exactly the
+    // old global-flag test rather than silently permitting scanout.
+    if (m_tilingHandler && m_tilingHandler->hasScrollingScreens()
+        && (m_tilingHandler->anyScreenCropsStraddlers() || m_cachedScrollCropStraddlers)) {
         return true;
     }
     // A live view spring translates every strip column in the COMPOSITE
