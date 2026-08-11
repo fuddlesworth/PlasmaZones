@@ -424,10 +424,18 @@ public:
     // Scrolling.DropIndicator
     Q_PROPERTY(bool scrollingDropIndicatorEnabled READ scrollingDropIndicatorEnabled WRITE
                    setScrollingDropIndicatorEnabled NOTIFY scrollingDropIndicatorEnabledChanged)
-    Q_PROPERTY(QString scrollingDropIndicatorColor READ scrollingDropIndicatorColor WRITE setScrollingDropIndicatorColor
+    // The two indicator colours are theme-fallback keys with the same resolved
+    // + Raw pair as the zone quartet above, and for the same reason: the
+    // overlay paints a concrete colour while the settings UI edits the stored
+    // sentinel.
+    Q_PROPERTY(QColor scrollingDropIndicatorColor READ scrollingDropIndicatorColor WRITE setScrollingDropIndicatorColor
                    NOTIFY scrollingDropIndicatorColorChanged)
-    Q_PROPERTY(QString scrollingDropIndicatorBorderColor READ scrollingDropIndicatorBorderColor WRITE
+    Q_PROPERTY(QColor scrollingDropIndicatorBorderColor READ scrollingDropIndicatorBorderColor WRITE
                    setScrollingDropIndicatorBorderColor NOTIFY scrollingDropIndicatorBorderColorChanged)
+    Q_PROPERTY(QString scrollingDropIndicatorColorRaw READ scrollingDropIndicatorColorRaw WRITE
+                   setScrollingDropIndicatorColorRaw NOTIFY scrollingDropIndicatorColorRawChanged)
+    Q_PROPERTY(QString scrollingDropIndicatorBorderColorRaw READ scrollingDropIndicatorBorderColorRaw WRITE
+                   setScrollingDropIndicatorBorderColorRaw NOTIFY scrollingDropIndicatorBorderColorRawChanged)
     Q_PROPERTY(double scrollingDropIndicatorOpacity READ scrollingDropIndicatorOpacity WRITE
                    setScrollingDropIndicatorOpacity NOTIFY scrollingDropIndicatorOpacityChanged)
     Q_PROPERTY(int scrollingDropIndicatorBorderWidth READ scrollingDropIndicatorBorderWidth WRITE
@@ -1263,10 +1271,18 @@ public:
     // math the drop uses).
     bool scrollingDropIndicatorEnabled() const override;
     void setScrollingDropIndicatorEnabled(bool enabled) override;
-    QString scrollingDropIndicatorColor() const override;
-    void setScrollingDropIndicatorColor(const QString& color) override;
-    QString scrollingDropIndicatorBorderColor() const override;
-    void setScrollingDropIndicatorBorderColor(const QString& color) override;
+    // Theme-fallback pair, same split as the zone quartet: the QColor getters
+    // resolve (palette-derived while the stored string is empty) and the QColor
+    // setters store the concrete #AARRGGBB form, while the Raw accessors
+    // read/write the stored string itself, including the empty sentinel.
+    QColor scrollingDropIndicatorColor() const override;
+    void setScrollingDropIndicatorColor(const QColor& color) override;
+    QColor scrollingDropIndicatorBorderColor() const override;
+    void setScrollingDropIndicatorBorderColor(const QColor& color) override;
+    QString scrollingDropIndicatorColorRaw() const;
+    void setScrollingDropIndicatorColorRaw(const QString& color);
+    QString scrollingDropIndicatorBorderColorRaw() const;
+    void setScrollingDropIndicatorBorderColorRaw(const QString& color);
     double scrollingDropIndicatorOpacity() const override;
     void setScrollingDropIndicatorOpacity(double opacity) override;
     int scrollingDropIndicatorBorderWidth() const override;
@@ -1908,6 +1924,10 @@ Q_SIGNALS:
     void inactiveColorRawChanged();
     void borderColorRawChanged();
     void labelFontColorRawChanged();
+    /// The drop indicator's two raw strings, same pairing with their resolved
+    /// ISettings twins as the four above.
+    void scrollingDropIndicatorColorRawChanged();
+    void scrollingDropIndicatorBorderColorRawChanged();
 
     /// Emitted when the whole animation Profile blob is replaced via
     /// `setAnimationProfile`. Fires alongside every per-field *Changed
@@ -2016,15 +2036,19 @@ private:
     // the baseline anywhere but a load/save commit point desyncs dirty tracking.
     void captureBaseline();
 
-    // Palette-following zone colours: resolve one of the four theme-fallback
-    // roles from the live application palette (with the ZoneDefaults alphas),
-    // falling back to the ConfigDefaults constants when no GUI application
-    // exists (headless config tools).
+    // Palette-following colours: resolve one of the theme-fallback roles from
+    // the live application palette (with the ZoneDefaults alphas), falling back
+    // to the ConfigDefaults constants when no GUI application exists (headless
+    // config tools). The first four are the zone overlay's; DropIndicator is
+    // the scrolling drop target's, which takes the same palette Highlight but
+    // OPAQUE — its fill alpha comes from the opacity slider and its border has
+    // no slider at all.
     enum class SystemColorRole {
         Highlight,
         Inactive,
         Border,
-        LabelFont
+        LabelFont,
+        DropIndicator
     };
     static QColor resolvedSystemColor(SystemColorRole role);
 
@@ -2123,12 +2147,15 @@ private:
     // isAnnouncingPaletteChange(). Never true outside that synchronous window.
     bool m_announcingPaletteChange = false;
 
-    // The last-announced resolved values of the four theme-fallback zone
-    // colours (Highlight, Inactive, Border, LabelFont — in that order),
-    // seeded by trackSystemPaletteChanges(). eventFilter() compares against
-    // these so an ApplicationPaletteChange that moved no relevant role stays
-    // silent instead of re-running the aggregate consumers.
-    std::array<QColor, 4> m_paletteBaseline{};
+    // The last-announced resolved values of the theme-fallback colours
+    // (Highlight, Inactive, Border, LabelFont, then the drop indicator's fill
+    // and border — in that order), seeded by trackSystemPaletteChanges().
+    // eventFilter() compares against these so an ApplicationPaletteChange that
+    // moved no relevant role stays silent instead of re-running the aggregate
+    // consumers. The last two share one role and so always hold the same
+    // colour; they are separate slots because their stored sentinels are
+    // independent, and the gate is per key, not per role.
+    std::array<QColor, 6> m_paletteBaseline{};
 
     // Last-announced "light" / "dark" token for the systemColorSchemeChanged
     // signal, seeded from the live palette in trackSystemPaletteChanges so

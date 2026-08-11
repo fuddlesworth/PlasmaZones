@@ -485,11 +485,12 @@ public:
     {
         return true;
     }
-    /// Fill and border colours. EMPTY MEANS "follow the theme" — the overlay
-    /// falls back to Kirigami.Theme's highlight colour, same resolution tier
-    /// as the tab colours above. Two colours rather than one so the highlight
-    /// can be a tinted fill with a contrasting edge, which is how the snapping
-    /// zone overlay spells the same idea (Highlight + Border).
+    /// Fill and border colours. EMPTY MEANS "follow the theme", resolved the
+    /// way the zone quartet resolves it: Settings::resolvedSystemColor reads
+    /// the live palette and the getters hand the overlay a concrete colour, so
+    /// the sentinel never leaves the config layer. Two colours rather than one
+    /// so the highlight can be a tinted fill with a contrasting edge, which is
+    /// how the snapping zone overlay spells the same idea (Highlight + Border).
     static QString scrollingDropIndicatorColor()
     {
         return QString();
@@ -497,6 +498,21 @@ public:
     static QString scrollingDropIndicatorBorderColor()
     {
         return QString();
+    }
+    /// The resolution fallback for both colours when there is no GUI
+    /// application to take a palette from (headless config tools), the peer of
+    /// the zone quartet's *FallbackColor accessors. NOT the stored default,
+    /// which is the empty sentinel above.
+    ///
+    /// OPAQUE, unlike ZoneDefaults::HighlightColor's own half alpha: the fill's
+    /// alpha comes from the opacity slider, which replaces whatever the colour
+    /// carries, and the border has no slider at all, so an alpha here would
+    /// only ever show up as an unset border quietly drawing half transparent.
+    static QColor scrollingDropIndicatorFallbackColor()
+    {
+        QColor color = ::PhosphorZones::ZoneDefaults::HighlightColor;
+        color.setAlpha(255);
+        return color;
     }
     /// Fill opacity. Replaces the fill colour's own alpha, matching the
     /// snapping zone overlay's fill, so the fill can be faint enough to read

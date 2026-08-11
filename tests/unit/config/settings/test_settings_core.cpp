@@ -380,6 +380,38 @@ private Q_SLOTS:
     }
 
     /**
+     * The scrolling drop indicator's two colours are the same theme-fallback
+     * pair as the zone quartet, so they owe the same four guarantees: the raw
+     * accessor owns the stored sentinel, the resolved getter never serves an
+     * invalid colour, the QColor setter pins through the raw key, and an
+     * INVALID QColor un-pins rather than storing opaque black.
+     */
+    void testDropIndicatorColorsResolveAndPin()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        // Following the palette: concrete and, for the border's sake, OPAQUE.
+        QVERIFY(settings.scrollingDropIndicatorColor().isValid());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor().alpha(), 255);
+
+        settings.setScrollingDropIndicatorColor(QColor(QStringLiteral("#80112233")));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QStringLiteral("#80112233"));
+        QCOMPARE(settings.scrollingDropIndicatorColor(), QColor(QStringLiteral("#80112233")));
+
+        settings.setScrollingDropIndicatorColor(QColor());
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QVERIFY(settings.scrollingDropIndicatorColor().isValid());
+
+        // A hand-edited config can hold junk the D-Bus boundary would refuse;
+        // it must resolve like the sentinel rather than paint black.
+        settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("not-a-colour"));
+        QVERIFY(settings.scrollingDropIndicatorBorderColor().isValid());
+    }
+
+    /**
      * reset() must return the four colour keys to the empty theme-fallback
      * sentinel (the schema default), after which the resolved getters follow
      * the palette again.

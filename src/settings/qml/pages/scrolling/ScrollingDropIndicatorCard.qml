@@ -75,8 +75,13 @@ SettingsCard {
             description: i18n("Color filling the space the window will land in. Follows the color scheme unless you pick one.")
             enabled: root.indicatorOn
 
-            storedColor: appSettings.scrollingDropIndicatorColor
-            themeColor: Kirigami.Theme.highlightColor
+            storedColor: appSettings.scrollingDropIndicatorColorRaw
+            // The RESOLVED colour, not Kirigami.Theme's own highlight: Settings
+            // owns the fallback now (resolvedSystemColor), and previewing a
+            // second resolution here could show a swatch the indicator never
+            // paints. Its NOTIFY rides the palette-change fan-out, so the
+            // preview still follows a theme switch live.
+            themeColor: appSettings.scrollingDropIndicatorColor
             picker: root.picker
             onColorChosen: function (hex) {
                 // The FILL alpha is owned by the opacity slider below (the
@@ -86,7 +91,7 @@ SettingsCard {
                 // indicator never draws. The border row keeps its alpha:
                 // it has no slider, so the colour's alpha is its single
                 // control.
-                appSettings.scrollingDropIndicatorColor = hex === dropFillColorRow.sentinel ? hex : "#FF" + hex.slice(3);
+                appSettings.scrollingDropIndicatorColorRaw = hex === dropFillColorRow.sentinel ? hex : "#FF" + hex.slice(3);
             }
         }
 
@@ -123,11 +128,13 @@ SettingsCard {
             description: i18n("Color of the indicator's edge. Follows the color scheme unless you pick one.")
             enabled: root.indicatorOn
 
-            storedColor: appSettings.scrollingDropIndicatorBorderColor
-            themeColor: Kirigami.Theme.highlightColor
+            storedColor: appSettings.scrollingDropIndicatorBorderColorRaw
+            // See the fill row: the resolved colour, which is opaque so an
+            // unset border previews as solid as it draws.
+            themeColor: appSettings.scrollingDropIndicatorBorderColor
             picker: root.picker
             onColorChosen: function (hex) {
-                appSettings.scrollingDropIndicatorBorderColor = hex;
+                appSettings.scrollingDropIndicatorBorderColorRaw = hex;
             }
         }
 

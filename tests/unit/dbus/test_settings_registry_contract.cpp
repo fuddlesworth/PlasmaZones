@@ -35,6 +35,7 @@
  */
 
 #include <QTest>
+#include <QColor>
 #include <QDBusVariant>
 #include <QDir>
 #include <QDirIterator>
@@ -364,6 +365,15 @@ private Q_SLOTS:
             case QMetaType::QString:
                 perturbed = QVariant(original.toString() + QStringLiteral("zz"));
                 break;
+            case QMetaType::QColor:
+                // A colour no default resolves to, so a transposition between
+                // the drop indicator's fill and border cannot hide behind the
+                // one palette role they share. Pinning it is the point: the
+                // restore below writes the RESOLVED colour back rather than the
+                // follow-the-theme sentinel, which is harmless here because the
+                // config is per-test and nothing after this reads the sentinel.
+                perturbed = QVariant::fromValue(QColor(0x12, 0x34, 0x56));
+                break;
             default:
                 break;
             }
@@ -375,7 +385,13 @@ private Q_SLOTS:
             }
             const QVariant direct = prop.read(m_settings);
             const QVariant perturbedViaBus = m_adaptor->getSetting(name).variant();
-            if (direct.isValid() && perturbedViaBus != direct) {
+            // A colour key crosses the bus as its #AARRGGBB spelling, so the
+            // comparison is between COLOURS, not between a colour and a string
+            // (QColor's own toString drops the alpha and would never match).
+            const bool agrees = direct.metaType().id() == QMetaType::QColor
+                ? QColor(perturbedViaBus.toString()) == direct.value<QColor>()
+                : perturbedViaBus == direct;
+            if (direct.isValid() && !agrees) {
                 transposed.append(
                     QStringLiteral("%1 (bus=%2 property=%3)").arg(name, perturbedViaBus.toString(), direct.toString()));
             }

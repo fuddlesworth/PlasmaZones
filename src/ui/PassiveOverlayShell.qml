@@ -408,13 +408,15 @@ Window {
         // arrives here: the daemon hides the slot instead.
         property rect indicatorRect: Qt.rect(0, 0, 0, 0)
         // Indicator colour (Scrolling.DropIndicator/Color), pushed by C++ on
-        // every rect update. EMPTY means "follow the theme" and the content
-        // item resolves that. Must be declared here AND forwarded below:
-        // setProperty on an undeclared name silently creates a dynamic
-        // property that no binding ever sees (see the zoneSelectorSlot
-        // contract note).
-        property string indicatorColor: ""
-        property string indicatorBorderColor: ""
+        // every rect update, always CONCRETE — the follow-the-theme sentinel is
+        // resolved in Settings before it reaches the overlay. Must be declared
+        // here AND forwarded below: setProperty on an undeclared name silently
+        // creates a dynamic property that no binding ever sees (see the
+        // zoneSelectorSlot contract note). The initialisers are placeholders
+        // that are never painted: C++ writes both colours before it writes
+        // `loaded`, so the content item is instantiated with the real values.
+        property color indicatorColor: Kirigami.Theme.highlightColor
+        property color indicatorBorderColor: Kirigami.Theme.highlightColor
         property real indicatorOpacity: 0.25
         property int indicatorBorderWidth: 2
         property int indicatorBorderRadius: 8

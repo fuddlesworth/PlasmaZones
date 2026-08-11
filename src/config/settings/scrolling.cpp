@@ -372,22 +372,49 @@ P_STORE_SET_STRING(setScrollingTabIndicatorUrgentColor, scrollingTabIndicatorGro
 // ── Scrolling drop indicator (Scrolling.DropIndicator) ──────────────────────
 // The drop-target highlight painted during a drag re-insert. Paint-only: the
 // engine never reads these, it resolves the indicator's rect from the same
-// layout math the drop uses. Like the tab colours above, the colour is a
-// free-form string whose EMPTY value means "follow the theme", so it carries
-// canonicalThemeFallbackColor rather than a closed set (the disk path's only
-// guard against a black-painting unparseable string).
+// layout math the drop uses. Like the tab colours above, each colour is stored
+// as a free-form string whose EMPTY value means "follow the theme", so it
+// carries canonicalThemeFallbackColor rather than a closed set (the disk path's
+// only guard against a black-painting unparseable string).
+//
+// UNLIKE the tab colours, the sentinel is resolved HERE rather than in the
+// overlay's QML: the Raw accessors own the stored string and the ISettings
+// getters hand every consumer a concrete colour, which is the zone quartet's
+// split (settings/storescalars.cpp). Both colours resolve through the same
+// DropIndicator role — one drop target, one palette answer — and the fill's
+// alpha is replaced by the opacity slider downstream either way.
 
 P_STORE_GET(bool, scrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setScrollingDropIndicatorEnabled, scrollingDropIndicatorGroup, enabledKey,
                  scrollingDropIndicatorEnabledChanged)
 
-P_STORE_GET(QString, scrollingDropIndicatorColor, scrollingDropIndicatorGroup, colorKey, QString)
-P_STORE_SET_STRING(setScrollingDropIndicatorColor, scrollingDropIndicatorGroup, colorKey,
-                   scrollingDropIndicatorColorChanged)
+P_STORE_GET(QString, scrollingDropIndicatorColorRaw, scrollingDropIndicatorGroup, colorKey, QString)
+P_STORE_SET_STRING2(setScrollingDropIndicatorColorRaw, scrollingDropIndicatorGroup, colorKey,
+                    scrollingDropIndicatorColorRawChanged, scrollingDropIndicatorColorChanged)
 
-P_STORE_GET(QString, scrollingDropIndicatorBorderColor, scrollingDropIndicatorGroup, borderColorKey, QString)
-P_STORE_SET_STRING(setScrollingDropIndicatorBorderColor, scrollingDropIndicatorGroup, borderColorKey,
-                   scrollingDropIndicatorBorderColorChanged)
+P_STORE_GET(QString, scrollingDropIndicatorBorderColorRaw, scrollingDropIndicatorGroup, borderColorKey, QString)
+P_STORE_SET_STRING2(setScrollingDropIndicatorBorderColorRaw, scrollingDropIndicatorGroup, borderColorKey,
+                    scrollingDropIndicatorBorderColorRawChanged, scrollingDropIndicatorBorderColorChanged)
+
+QColor Settings::scrollingDropIndicatorColor() const
+{
+    return resolveThemeColor(scrollingDropIndicatorColorRaw(), SystemColorRole::DropIndicator);
+}
+// Invalid means "no colour", which here is the follow-the-theme sentinel —
+// same guard and same reasoning as the zone quartet's QColor setters, where an
+// invalid QColor's name() would otherwise pin opaque black.
+void Settings::setScrollingDropIndicatorColor(const QColor& color)
+{
+    setScrollingDropIndicatorColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
+QColor Settings::scrollingDropIndicatorBorderColor() const
+{
+    return resolveThemeColor(scrollingDropIndicatorBorderColorRaw(), SystemColorRole::DropIndicator);
+}
+void Settings::setScrollingDropIndicatorBorderColor(const QColor& color)
+{
+    setScrollingDropIndicatorBorderColorRaw(color.isValid() ? color.name(QColor::HexArgb) : QString());
+}
 
 // `double`, not the `qreal` every other floating getter in this file spells,
 // because the type has to match the ISettings virtual it overrides and that

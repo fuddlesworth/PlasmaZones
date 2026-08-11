@@ -15,10 +15,12 @@
 using namespace PlasmaZones;
 
 /**
- * @brief Palette-following zone colours must TRACK palette changes at runtime.
+ * @brief Palette-following colours must TRACK palette changes at runtime.
  *
- * The four zone colours are theme-fallback keys: an EMPTY stored string means
- * "follow the system palette", resolved in the getters. A palette change must
+ * The four zone colours, plus the scrolling drop indicator's fill and border
+ * which share the machinery, are theme-fallback keys: an EMPTY stored string
+ * means "follow the system palette", resolved in the getters. A palette change
+ * must
  * re-announce the following colours (or a running daemon/settings app keeps
  * serving the snapshot its bindings read last), must never dirty any config
  * key (nothing is written), and must stay silent for a colour the user pinned
@@ -41,6 +43,9 @@ private Q_SLOTS:
         QSignalSpy inactiveSpy(&settings, &Settings::inactiveColorChanged);
         QSignalSpy borderSpy(&settings, &Settings::borderColorChanged);
         QSignalSpy labelFontSpy(&settings, &Settings::labelFontColorChanged);
+        // The scrolling drop indicator's two colours ride the same fan-out.
+        QSignalSpy dropSpy(&settings, &Settings::scrollingDropIndicatorColorChanged);
+        QSignalSpy dropBorderSpy(&settings, &Settings::scrollingDropIndicatorBorderColorChanged);
         QSignalSpy aggregateSpy(&settings, &Settings::settingsChanged);
 
         QPalette pal = qGuiApp->palette();
@@ -71,6 +76,12 @@ private Q_SLOTS:
         QCOMPARE(settings.borderColor(), expectedBorder);
         QCOMPARE(settings.labelFontColor(), QColor(0xDE, 0xAD, 0xBE));
 
+        // The drop indicator takes QPalette::Highlight OPAQUE — no
+        // ZoneDefaults alpha — because its fill alpha comes from the opacity
+        // slider and its border has no slider at all.
+        QCOMPARE(settings.scrollingDropIndicatorColor(), QColor(0x12, 0xAB, 0x34));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), QColor(0x12, 0xAB, 0x34));
+
         // The stored sentinels are untouched: resolution happens in the
         // getters, the palette event writes nothing.
         QCOMPARE(settings.highlightColorRaw(), QString());
@@ -84,6 +95,8 @@ private Q_SLOTS:
         QCOMPARE(inactiveSpy.count(), 1);
         QCOMPARE(borderSpy.count(), 1);
         QCOMPARE(labelFontSpy.count(), 1);
+        QCOMPARE(dropSpy.count(), 1);
+        QCOMPARE(dropBorderSpy.count(), 1);
         QCOMPARE(aggregateSpy.count(), 1);
     }
 
@@ -128,6 +141,9 @@ private Q_SLOTS:
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::inactiveKey()));
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::borderKey()));
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesLabelsGroup(), ConfigDefaults::fontColorKey()));
+        QVERIFY(!settings.isKeyModified(ConfigDefaults::scrollingDropIndicatorGroup(), ConfigDefaults::colorKey()));
+        QVERIFY(
+            !settings.isKeyModified(ConfigDefaults::scrollingDropIndicatorGroup(), ConfigDefaults::borderColorKey()));
     }
 
     void pinnedColorsIgnorePaletteChange()
@@ -136,10 +152,15 @@ private Q_SLOTS:
         Settings settings;
         settings.setHighlightColor(QColor(0xAA, 0x00, 0xAA, 0x80));
         QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#80aa00aa"));
+        // The drop indicator's pair resolves from the same palette role, so
+        // they have to be pinned too for "no follower moved" to hold.
+        settings.setScrollingDropIndicatorColor(QColor(0x11, 0x22, 0x33));
+        settings.setScrollingDropIndicatorBorderColor(QColor(0x44, 0x55, 0x66));
 
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
+        QSignalSpy dropSpy(&settings, &Settings::scrollingDropIndicatorColorChanged);
         QSignalSpy aggregateSpy(&settings, &Settings::settingsChanged);
-        // Only the Highlight ROLE moves: the pinned highlight must stay
+        // Only the Highlight ROLE moves: the pinned colours must stay
         // silent, and since no FOLLOWING colour's resolved value moved
         // either, the aggregate stays silent too (the fan-out is
         // change-gated, not merely follows-gated).
@@ -150,8 +171,10 @@ private Q_SLOTS:
         // Deliver any pending events, then confirm the pin held.
         QTest::qWait(50);
         QCOMPARE(highlightSpy.count(), 0);
+        QCOMPARE(dropSpy.count(), 0);
         QCOMPARE(aggregateSpy.count(), 0);
         QCOMPARE(settings.highlightColor(), QColor(0xAA, 0x00, 0xAA, 0x80));
+        QCOMPARE(settings.scrollingDropIndicatorColor(), QColor(0x11, 0x22, 0x33));
     }
 
     void unrelatedPaletteRoleChangeStaysSilent()

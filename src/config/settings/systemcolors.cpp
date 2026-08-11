@@ -15,9 +15,10 @@
 
 namespace PlasmaZones {
 
-// ── Appearance: palette-following zone colours ───────────────────────────────
-// The four zone-colour keys are theme-fallback strings: EMPTY means "follow
-// the system palette". Resolution lives here, in the getters' shared helper,
+// ── Appearance: palette-following colours ────────────────────────────────────
+// The four zone-colour keys (and the scrolling drop indicator's two, which
+// share the machinery) are theme-fallback strings: EMPTY means "follow the
+// system palette". Resolution lives here, in the getters' shared helper,
 // so a palette change needs no writes, no baseline bookkeeping, and no
 // squelch flags — the old useSystemColors machinery that WROTE derived
 // colours into config is gone with the bool itself.
@@ -73,9 +74,13 @@ void Settings::trackSystemPaletteChanges()
         qGuiApp->installEventFilter(this);
         // Seed the change gate so the first ApplicationPaletteChange can
         // compare against what the process started with.
-        m_paletteBaseline = {
-            resolvedSystemColor(SystemColorRole::Highlight), resolvedSystemColor(SystemColorRole::Inactive),
-            resolvedSystemColor(SystemColorRole::Border), resolvedSystemColor(SystemColorRole::LabelFont)};
+        const QColor drop = resolvedSystemColor(SystemColorRole::DropIndicator);
+        m_paletteBaseline = {resolvedSystemColor(SystemColorRole::Highlight),
+                             resolvedSystemColor(SystemColorRole::Inactive),
+                             resolvedSystemColor(SystemColorRole::Border),
+                             resolvedSystemColor(SystemColorRole::LabelFont),
+                             drop,
+                             drop};
     }
 }
 
@@ -129,14 +134,22 @@ bool Settings::eventFilter(QObject* watched, QEvent* event)
         const QColor newInactive = resolvedSystemColor(SystemColorRole::Inactive);
         const QColor newBorder = resolvedSystemColor(SystemColorRole::Border);
         const QColor newLabelFont = resolvedSystemColor(SystemColorRole::LabelFont);
+        // The scrolling drop indicator's two keys ride the same fan-out: they
+        // are theme-fallback keys resolved in their getters exactly like the
+        // quartet, so a theme switch moves their resolved view with nothing
+        // written. One resolve for both, since they share the role.
+        const QColor newDrop = resolvedSystemColor(SystemColorRole::DropIndicator);
         const bool highlightMoved = highlightColorRaw().isEmpty() && newHighlight != m_paletteBaseline[0];
         const bool inactiveMoved = inactiveColorRaw().isEmpty() && newInactive != m_paletteBaseline[1];
         const bool borderMoved = borderColorRaw().isEmpty() && newBorder != m_paletteBaseline[2];
         const bool labelFontMoved = labelFontColorRaw().isEmpty() && newLabelFont != m_paletteBaseline[3];
+        const bool dropMoved = scrollingDropIndicatorColorRaw().isEmpty() && newDrop != m_paletteBaseline[4];
+        const bool dropBorderMoved =
+            scrollingDropIndicatorBorderColorRaw().isEmpty() && newDrop != m_paletteBaseline[5];
         // Refresh the baseline unconditionally (pinned colours included) so
         // a later un-pin compares against the current palette, not a stale
         // capture.
-        m_paletteBaseline = {newHighlight, newInactive, newBorder, newLabelFont};
+        m_paletteBaseline = {newHighlight, newInactive, newBorder, newLabelFont, newDrop, newDrop};
         // The NOTIFYs below are palette-driven, not user edits; the flag lets
         // SettingsController::onSettingsPropertyChanged() keep the
         // unsaved-changes footer quiet through a theme switch. RAII so an
@@ -150,7 +163,11 @@ bool Settings::eventFilter(QObject* watched, QEvent* event)
             Q_EMIT borderColorChanged();
         if (labelFontMoved)
             Q_EMIT labelFontColorChanged();
-        if (highlightMoved || inactiveMoved || borderMoved || labelFontMoved)
+        if (dropMoved)
+            Q_EMIT scrollingDropIndicatorColorChanged();
+        if (dropBorderMoved)
+            Q_EMIT scrollingDropIndicatorBorderColorChanged();
+        if (highlightMoved || inactiveMoved || borderMoved || labelFontMoved || dropMoved || dropBorderMoved)
             Q_EMIT settingsChanged();
     }
     return ISettings::eventFilter(watched, event);
@@ -177,6 +194,8 @@ QColor Settings::resolvedSystemColor(SystemColorRole role)
             return ConfigDefaults::borderFallbackColor();
         case SystemColorRole::LabelFont:
             return ConfigDefaults::labelFontFallbackColor();
+        case SystemColorRole::DropIndicator:
+            return ConfigDefaults::scrollingDropIndicatorFallbackColor();
         }
         return ConfigDefaults::highlightFallbackColor();
     }
@@ -207,6 +226,13 @@ QColor Settings::resolvedSystemColor(SystemColorRole role)
     }
     case SystemColorRole::LabelFont:
         return pal.color(QPalette::Active, QPalette::Text);
+    // Same palette role as Highlight but at FULL alpha. The drop indicator's
+    // fill takes its alpha from the opacity slider, which replaces whatever the
+    // colour carries, and its border has no slider — so ZoneDefaults'
+    // HighlightAlpha would show up there as an unset border quietly drawing
+    // half transparent.
+    case SystemColorRole::DropIndicator:
+        return pal.color(QPalette::Active, QPalette::Highlight);
     }
     return pal.color(QPalette::Active, QPalette::Highlight);
 }

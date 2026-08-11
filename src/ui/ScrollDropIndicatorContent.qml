@@ -31,10 +31,12 @@ Item {
 
     /// Drop-target rect in shell-window coordinates.
     required property rect indicatorRect
-    /// Configured fill and border colours. EMPTY means "follow the theme",
-    /// which is the shipped default for both.
-    required property string indicatorColor
-    required property string indicatorBorderColor
+    /// Configured fill and border colours, always CONCRETE. The
+    /// follow-the-theme sentinel is resolved before it gets here, in Settings
+    /// (resolvedSystemColor), so this component holds no fallback rule of its
+    /// own and cannot disagree with the swatch the settings page previews.
+    required property color indicatorColor
+    required property color indicatorBorderColor
     /// Fill opacity. Applies to the fill only; the border's transparency
     /// comes from its own colour's alpha channel.
     required property real indicatorOpacity
@@ -50,20 +52,6 @@ Item {
     /// paint properties above, so a host that forgets the forward fails at
     /// instantiation instead of silently never gating.
     required property bool animateMoves
-
-    /// Resolved paint colours. The empty test is the only fallback: the D-Bus
-    /// boundary rejects anything that is neither empty nor a colour QColor can
-    /// parse, so nothing the SETTINGS APP writes can arrive unparseable.
-    ///
-    /// A hand-edited config.json is not covered by that guard — it reaches
-    /// here through P_STORE_GET unvalidated. Qt turns an unparseable string
-    /// into an invalid QColor, which paints as black rather than falling back
-    /// to the scheme colour, so the failure is a visibly wrong indicator
-    /// rather than a crash or a silently absent one. Left as is deliberately:
-    /// re-validating in QML would duplicate the boundary check in a second
-    /// place that cannot report the problem to anyone.
-    readonly property color fillColor: root.indicatorColor === "" ? Kirigami.Theme.highlightColor : root.indicatorColor
-    readonly property color edgeColor: root.indicatorBorderColor === "" ? Kirigami.Theme.highlightColor : root.indicatorBorderColor
 
     anchors.fill: parent
 
@@ -82,13 +70,13 @@ Item {
         // multiplying would make a picked colour that carries alpha come out
         // darker than the slider says, with no way to tell which of the two
         // was responsible.
-        color: Qt.rgba(root.fillColor.r, root.fillColor.g, root.fillColor.b, root.indicatorOpacity)
+        color: Qt.rgba(root.indicatorColor.r, root.indicatorColor.g, root.indicatorColor.b, root.indicatorOpacity)
         // The border carries the picked colour's alpha straight through,
         // matching the snapping zone overlay's border. There is no border
         // opacity slider, so the colour's own channel is the ONE control and
-        // no double-apply is possible; the theme fallback is opaque, so an
-        // unset border still draws solid.
-        border.color: root.edgeColor
+        // no double-apply is possible; the theme fallback resolves opaque, so
+        // an unset border still draws solid.
+        border.color: root.indicatorBorderColor
         // Zero width is legal and means a fill with no edge, so this is NOT
         // floored at 1 the way a fixed hairline would be.
         border.width: root.indicatorBorderWidth

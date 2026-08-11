@@ -15,6 +15,11 @@
 #include "core/types/enums.h"
 #include "settings_interfaces.h"
 
+// Explicit rather than transitive: the drop indicator's no-palette colour IS
+// the zone overlay's highlight, so this header genuinely depends on that
+// symbol.
+#include <PhosphorZones/ZoneDefaults.h>
+
 #include <QColor>
 #include <QObject>
 #include <QString>
@@ -25,6 +30,18 @@ class DecorationProfileTree;
 }
 
 namespace PlasmaZones {
+
+namespace isettings_detail {
+/// The drop indicator's colour when nothing can resolve one: the shipped zone
+/// highlight forced opaque. Shared by the two colour defaults below so the
+/// value is written once. See scrollingDropIndicatorColor() for why opaque.
+inline QColor opaqueDropIndicatorFallback()
+{
+    QColor color = ::PhosphorZones::ZoneDefaults::HighlightColor;
+    color.setAlpha(255);
+    return color;
+}
+} // namespace isettings_detail
 
 /**
  * @brief Abstract interface for settings management
@@ -416,20 +433,34 @@ public:
     virtual void setScrollingDropIndicatorEnabled(bool /*enabled*/)
     {
     }
-    /// Fill and border colours; empty means "follow the theme" (see
-    /// ConfigDefaults).
-    virtual QString scrollingDropIndicatorColor() const
+    /// Fill and border colours. Theme-fallback keys resolved the way the zone
+    /// quartet's are (settings_interfaces.h documents that contract): the
+    /// getters return RESOLVED colours, palette-derived while the stored string
+    /// is empty, and the setters pin a concrete colour, with an INVALID QColor
+    /// storing the follow-the-theme sentinel. The stored-string surface lives
+    /// on the concrete Settings as scrollingDropIndicator*ColorRaw, for the
+    /// settings UI. Resolving here rather than in the overlay's QML keeps the
+    /// sentinel inside the config layer, so every consumer of this interface
+    /// gets a colour it can paint without knowing the fallback rule.
+    ///
+    /// The default is the shipped zone highlight at full alpha, which is what
+    /// Settings resolves to with no palette to read (ConfigDefaults spells the
+    /// same value as scrollingDropIndicatorFallbackColor, unreachable from here
+    /// because config depends on core and not the other way round). A backend
+    /// that cannot resolve still hands the overlay a paintable colour rather
+    /// than the invalid one that renders as black.
+    virtual QColor scrollingDropIndicatorColor() const
     {
-        return QString();
+        return isettings_detail::opaqueDropIndicatorFallback();
     }
-    virtual void setScrollingDropIndicatorColor(const QString& /*color*/)
+    virtual void setScrollingDropIndicatorColor(const QColor& /*color*/)
     {
     }
-    virtual QString scrollingDropIndicatorBorderColor() const
+    virtual QColor scrollingDropIndicatorBorderColor() const
     {
-        return QString();
+        return isettings_detail::opaqueDropIndicatorFallback();
     }
-    virtual void setScrollingDropIndicatorBorderColor(const QString& /*color*/)
+    virtual void setScrollingDropIndicatorBorderColor(const QColor& /*color*/)
     {
     }
     /// Fill opacity; the border always draws opaque.
