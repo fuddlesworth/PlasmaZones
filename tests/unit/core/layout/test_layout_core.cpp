@@ -3,7 +3,7 @@
 
 /**
  * @file test_layout_core.cpp
- * @brief Unit tests for PhosphorZones::Layout dirty tracking, batch modify, per-side gaps, copy constructor
+ * @brief Unit tests for PhosphorZones::Layout dirty tracking, batch modify, per-side gaps, clone()
  */
 
 #include <QTest>
@@ -14,6 +14,8 @@
 #include <QJsonDocument>
 
 #include <QTemporaryDir>
+
+#include <memory>
 
 #include "core/types/constants.h"
 #include <PhosphorLayoutApi/AspectRatioClass.h>
@@ -205,10 +207,10 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // P1: Copy constructor
+    // P1: clone()
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testLayout_copyConstructor_deepCopiesZones()
+    void testLayout_clone_deepCopiesZones()
     {
         PhosphorZones::Layout original(QStringLiteral("Original"));
         auto* zone = new PhosphorZones::Zone();
@@ -216,34 +218,34 @@ private Q_SLOTS:
         zone->setName(QStringLiteral("Zone1"));
         original.addZone(zone);
 
-        PhosphorZones::Layout copy(original);
-        QCOMPARE(copy.zoneCount(), 1);
-        QCOMPARE(copy.zone(0)->name(), QStringLiteral("Zone1"));
+        const std::unique_ptr<PhosphorZones::Layout> copy(original.clone());
+        QCOMPARE(copy->zoneCount(), 1);
+        QCOMPARE(copy->zone(0)->name(), QStringLiteral("Zone1"));
 
-        copy.zone(0)->setName(QStringLiteral("Modified"));
+        copy->zone(0)->setName(QStringLiteral("Modified"));
         QCOMPARE(original.zone(0)->name(), QStringLiteral("Zone1"));
-        QCOMPARE(copy.zone(0)->name(), QStringLiteral("Modified"));
+        QCOMPARE(copy->zone(0)->name(), QStringLiteral("Modified"));
 
-        QVERIFY(original.zone(0) != copy.zone(0));
+        QVERIFY(original.zone(0) != copy->zone(0));
     }
 
-    void testLayout_copyConstructor_newId()
+    void testLayout_clone_newId()
     {
         PhosphorZones::Layout original(QStringLiteral("Original"));
-        PhosphorZones::Layout copy(original);
+        const std::unique_ptr<PhosphorZones::Layout> copy(original.clone());
 
-        QVERIFY(copy.id() != original.id());
-        QVERIFY(!copy.id().isNull());
+        QVERIFY(copy->id() != original.id());
+        QVERIFY(!copy->id().isNull());
     }
 
-    void testLayout_copyConstructor_noSourcePath()
+    void testLayout_clone_noSourcePath()
     {
         PhosphorZones::Layout original(QStringLiteral("Original"));
         original.setSourcePath(QStringLiteral("/usr/share/plasmazones/layouts/test.json"));
 
-        PhosphorZones::Layout copy(original);
+        const std::unique_ptr<PhosphorZones::Layout> copy(original.clone());
 
-        QVERIFY(copy.sourcePath().isEmpty());
+        QVERIFY(copy->sourcePath().isEmpty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -437,17 +439,17 @@ private Q_SLOTS:
         QVERIFY(!layout.matchesAspectRatio(3.001)); // just above max
     }
 
-    void testLayout_copyConstructor_copiesAspectRatio()
+    void testLayout_clone_copiesAspectRatio()
     {
         PhosphorZones::Layout original(QStringLiteral("Original"));
         original.setAspectRatioClass(AspectRatioClass::Portrait);
         original.setMinAspectRatio(0.3);
         original.setMaxAspectRatio(0.9);
 
-        PhosphorZones::Layout copy(original);
-        QCOMPARE(copy.aspectRatioClass(), AspectRatioClass::Portrait);
-        QCOMPARE(copy.minAspectRatio(), 0.3);
-        QCOMPARE(copy.maxAspectRatio(), 0.9);
+        const std::unique_ptr<PhosphorZones::Layout> copy(original.clone());
+        QCOMPARE(copy->aspectRatioClass(), AspectRatioClass::Portrait);
+        QCOMPARE(copy->minAspectRatio(), 0.3);
+        QCOMPARE(copy->maxAspectRatio(), 0.9);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

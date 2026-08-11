@@ -3,13 +3,14 @@
 //
 // Per-context rule resolution for LayoutRegistry — the read side of the
 // assignment cascade. Contents, in file order: resolveAssignmentEntry, the
-// gap / lock / default-assignment resolvers, the shared cascade-miss default
-// tail (resolveDefaultAssignmentEntryForContext), the overlay resolver, the
-// per-engine parameter resolvers (autotile tiling params + scrolling params),
-// and the exact-context-rule finders (exactContextEntry, hasExactContextRule,
-// findExactContextRule, exactContextRuleId). Split from
+// gap / lock / default-assignment / OSD resolvers, the shared cascade-miss
+// default tail (resolveDefaultAssignmentEntryForContext), the overlay
+// resolver, and the exact-context-rule finders (exactContextEntry,
+// hasExactContextRule, findExactContextRule, exactContextRuleId). Split from
 // layoutregistry_assignments.cpp for file-size; the assignment CRUD /
-// mutators / query wrappers stay there.
+// mutators / query wrappers stay there. The two UNCACHED per-engine parameter
+// resolvers (tiling params, scrolling params) split out again for the same
+// reason and live in layoutregistry_contextparams.cpp.
 //
 // Phase 3b: per-context assignment is resolved on the unified Rule engine.
 // See layoutregistry_assignments.cpp for the resolution-model overview.
@@ -46,27 +47,6 @@ namespace PWR = PhosphorRules;
 using namespace RuleHelpers;
 
 namespace {
-
-/// True if @p s is one of the three hex shapes PhosphorRules' `hasHexColor`
-/// admits: `#RGB`, `#RRGGBB` or `#AARRGGBB`. Kept as a local shape test rather
-/// than `QColor::isValidColorName`, which is wider (SVG keywords, and the
-/// longer `#RRRGGGBBB` forms) and would let "transparent" through to a QML
-/// `color` property as an invisible indicator.
-bool isHexColorString(const QString& s)
-{
-    if ((s.size() != 4 && s.size() != 7 && s.size() != 9) || s.at(0) != QLatin1Char('#')) {
-        return false;
-    }
-    for (int i = 1; i < s.size(); ++i) {
-        const QChar c = s.at(i);
-        const bool hex = (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
-            || (c >= QLatin1Char('a') && c <= QLatin1Char('f')) || (c >= QLatin1Char('A') && c <= QLatin1Char('F'));
-        if (!hex) {
-            return false;
-        }
-    }
-    return true;
-}
 
 /// True if @p match POSITIVELY pins @p field to a value — an `Equals` leaf on
 /// the field reachable without passing through a negation. Used to rank gap-rule
@@ -176,8 +156,7 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
     // different layout for a dark desk setup) are legitimate, and the token
     // is palette-derived so there is no recursion hazard.
     const QString schemeToken = colorSchemeToken();
-    const QString countCacheKey = (tiledCount ? (QLatin1String("twc:") + QString::number(*tiledCount)) : QString())
-        + QLatin1String("|or:") + orientationToken + QLatin1String("|cs:") + schemeToken;
+    const QString countCacheKey = assignmentCacheKeyToken(tiledCount, orientationToken, schemeToken);
 
     const std::optional<RuleSlotResolution> rules = resolveCachedContext(
         m_contextResolveCache, m_contextResolveCacheRevision, screenId, virtualDesktop, activity, countCacheKey,
@@ -722,19 +701,41 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
             query.screenOrientation = orientationToken;
             query.activeLayout = activeLayoutId;
             query.colorScheme = schemeToken;
+            // The ten slots this resolver reads. A rule carrying none of them
+            // is NOT admitted — the same slot-carrying gate resolveContextGaps
+            // applies, and for the same reason: the evaluator's walk STOPS at
+            // the first admitted rule carrying an in-scope terminal action
+            // (Exclude), so admitting unrelated rules lets a higher-priority
+            // context Exclude drop every overlay override below it.
+            static const QSet<QString> overlaySlots = {
+                QString(PWR::ActionSlot::OverlayShader),          QString(PWR::ActionSlot::OverlayStyle),
+                QString(PWR::ActionSlot::OverlayHighlightColor),  QString(PWR::ActionSlot::OverlayInactiveColor),
+                QString(PWR::ActionSlot::OverlayBorderColor),     QString(PWR::ActionSlot::OverlayActiveOpacity),
+                QString(PWR::ActionSlot::OverlayInactiveOpacity), QString(PWR::ActionSlot::OverlayBorderWidth),
+                QString(PWR::ActionSlot::OverlayBorderRadius),    QString(PWR::ActionSlot::OverlayShowZoneNumbers),
+            };
             // Mode-referencing rules are structurally excluded: this resolver
             // is mode-agnostic, so mode is unstamped and a negated
             // None{Mode Equals "tiling"} would spuriously match and apply an
             // overlay override the user scoped to another mode. Same rule the
             // assignment / default-assignment / lock resolvers enforce.
-            const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
+            const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
+            const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [&registry](const PWR::Rule& r) {
                 // TiledWindowCount joins Mode: neither is stamped on an overlay
                 // query, and an absent field makes a leaf false, so a negated
                 // leaf on it matches every context and restyles every screen.
                 // Window-sourced fields get the negation-scoped guard for the
                 // same inversion (positive leaves stay inert by design).
-                return !r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
-                    && !r.match.negatesAnyField(PWR::windowSourcedFields());
+                if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
+                    || r.match.negatesAnyField(PWR::windowSourcedFields())) {
+                    return false;
+                }
+                for (const PWR::RuleAction& a : r.actions) {
+                    if (overlaySlots.contains(registry.slotFor(a))) {
+                        return true;
+                    }
+                }
+                return false;
             });
 
             if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverlayShader))) {
@@ -817,319 +818,6 @@ ContextOverlayOverride LayoutRegistry::resolveContextOverlay(const QString& scre
             }
             return overlay;
         });
-}
-
-ContextTilingParams LayoutRegistry::resolveContextTilingParams(const QString& screenId, int virtualDesktop,
-                                                               const QString& activity) const
-{
-    // Per-slot read (mirrors resolveContextGaps), but NOT cached: this runs on
-    // screen / layout changes via the daemon's updateEngineScreens, not the hot
-    // per-cursor path. Being uncached lets us stamp the active layout AND the
-    // screen orientation onto the query without folding either into a cache key
-    // (no cached entry to go stale). Safe from recursion: rulesVisibleActiveLayoutId
-    // routes through resolveAssignmentEntry, which never calls this resolver.
-    // Mode IS stamped (same rationale as resolveContextScrollingParams): the
-    // resolver only runs for autotile screens, and a user rule pinning
-    // `Mode Equals "tiling"` alongside a tiling-param action would silently
-    // never fire against an unstamped query.
-    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QStringLiteral("tiling"));
-    stampScreenOrientation(query, screenId);
-    stampColorScheme(query);
-    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
-    // Filtered resolve, but with NO managed catch-all exclusion (unlike
-    // resolveContextGaps'): the baseline rule carries only gap/default slots,
-    // never tiling params, so there is no catch-all to exclude here. The
-    // predicate below is the field-polarity guard only.
-    const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
-        // TiledWindowCount is not stamped here either, and an absent field
-        // makes a leaf false, so a negated leaf on it would match every
-        // context. Mode IS stamped above, so it stays admitted. Window-sourced
-        // fields carry the negation-scoped guard (positive leaves stay inert
-        // by design; a `none{}` leaf inverts on absence).
-        return !r.match.referencesAnyField({PWR::Field::TiledWindowCount})
-            && !r.match.negatesAnyField(PWR::windowSourcedFields());
-    });
-
-    ContextTilingParams params;
-    // No defense-in-depth clamps here, unlike the scrolling resolver's
-    // width bound: the tile engine re-clamps every one of these on
-    // consumption (maxWindows/masterCount floors, split-ratio bounds), so a
-    // second clamp would only duplicate its policy. The scrolling width is
-    // clamped at THIS layer because the strip consumes it raw.
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::MaxWindows))) {
-        params.maxWindows = action->params.value(PWR::ActionParam::Value).toInt();
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::SplitRatio))) {
-        params.splitRatio = action->params.value(PWR::ActionParam::Value).toDouble();
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::MasterCount))) {
-        params.masterCount = action->params.value(PWR::ActionParam::Value).toInt();
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::InsertPosition))) {
-        // Wire token → AutotileInsertPosition int (End 0 / AfterFocused 1 / AsMaster 2),
-        // the same value the per-screen config store holds.
-        const QString token = action->params.value(PWR::ActionParam::Value).toString();
-        if (token == PWR::InsertPositionToken::End) {
-            params.insertPosition = 0;
-        } else if (token == PWR::InsertPositionToken::AfterFocused) {
-            params.insertPosition = 1;
-        } else if (token == PWR::InsertPositionToken::AsMaster) {
-            params.insertPosition = 2;
-        }
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::OverflowBehavior))) {
-        // Wire token → AutotileOverflowBehavior int (Float 0 / Unlimited 1).
-        const QString token = action->params.value(PWR::ActionParam::Value).toString();
-        if (token == PWR::OverflowBehaviorToken::Float) {
-            params.overflowBehavior = 0;
-        } else if (token == PWR::OverflowBehaviorToken::Unlimited) {
-            params.overflowBehavior = 1;
-        }
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::DragBehavior))) {
-        // Wire token → AutotileDragBehavior int (Float 0 / Reorder 1).
-        const QString token = action->params.value(PWR::ActionParam::Value).toString();
-        if (token == PWR::DragBehaviorToken::Float) {
-            params.dragBehavior = 0;
-        } else if (token == PWR::DragBehaviorToken::Reorder) {
-            params.dragBehavior = 1;
-        }
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::AlgorithmParams))) {
-        // Target algorithm token + free-form custom-param blob (mirrors the
-        // overlay shader-uniform override). The daemon applies the params only
-        // when the target matches the screen's effective algorithm.
-        params.algorithmParamTarget = action->params.value(PWR::ActionParam::Algorithm).toString();
-        params.algorithmParams = action->params.value(PWR::ActionParam::Params).toObject().toVariantMap();
-    }
-    return params;
-}
-
-ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QString& screenId, int virtualDesktop,
-                                                                     const QString& activity) const
-{
-    // Per-slot read, uncached for the same reasons resolveContextTilingParams is:
-    // it runs on screen / layout changes rather than the hot per-cursor path, which
-    // lets the query carry the active layout and the screen orientation without
-    // folding either into a cache key.
-    // Field::Mode IS stamped: this resolver only runs for screens the
-    // cascade already put in Scrolling mode, so the stamp costs nothing —
-    // but a user rule that pins `Mode Equals "scrolling"` alongside a
-    // scroll-param action (a redundant-but-legal spelling) would silently
-    // never fire against an unstamped query.
-    PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity, QStringLiteral("scrolling"));
-    stampScreenOrientation(query, screenId);
-    stampColorScheme(query);
-    query.activeLayout = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
-    // Filtered resolve with no managed catch-all exclusion: same baseline-slot
-    // rationale as the tiling-param resolver above.
-    const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [](const PWR::Rule& r) {
-        // TiledWindowCount is not stamped here, and an absent field makes a
-        // leaf false, so a negated leaf on it would match every context. Mode
-        // IS stamped above, so it stays admitted. Window-sourced fields carry
-        // the negation-scoped guard, same as the tiling-param twin.
-        return !r.match.referencesAnyField({PWR::Field::TiledWindowCount})
-            && !r.match.negatesAnyField(PWR::windowSourcedFields());
-    });
-
-    ContextScrollingParams params;
-    // Defense in depth for the two fraction slots (the descriptor validator
-    // already rejects out-of-range payloads at load). The policy is REJECT AND
-    // FALL THROUGH, not clamp, matching the open path in
-    // WindowTrackingAdaptor::scrollOpenRuleParams: a hand-edited rules.json
-    // carrying a non-numeric Value would toDouble() to 0.0 and CLAMP UP to the
-    // 5% minimum, and a 50.0 would saturate to full width — both of them
-    // applying an override the user never wrote. Left unset, the field falls
-    // through to the configured default instead. The bounds are the installed
-    // PhosphorRules constants, the same pair the descriptor validator checks.
-    // Both fractions share that pair: it is named for column WIDTH but bounds
-    // the window HEIGHT fraction too (see the Min/MaxColumnWidthRatio doc).
-    const auto readFraction = [&resolved](QLatin1StringView slot, std::optional<double>& out) {
-        const auto action = resolved.slot(QString(slot));
-        if (!action) {
-            return;
-        }
-        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        const double fraction = v.toDouble();
-        if (v.isDouble() && fraction >= PWR::MinColumnWidthRatio && fraction <= PWR::MaxColumnWidthRatio) {
-            out = fraction;
-        }
-    };
-    readFraction(PWR::ActionSlot::ScrollDefaultColumnWidth, params.defaultColumnWidth);
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::CenterFocusedColumn))) {
-        // Wire token → the centering int (never 0 / always 1 / on overflow 2), the
-        // same value the config store holds.
-        const QString token = action->params.value(PWR::ActionParam::Value).toString();
-        if (token == PWR::CenterFocusedColumnToken::Never) {
-            params.centerFocusedColumn = 0;
-        } else if (token == PWR::CenterFocusedColumnToken::Always) {
-            params.centerFocusedColumn = 1;
-        } else if (token == PWR::CenterFocusedColumnToken::OnOverflow) {
-            params.centerFocusedColumn = 2;
-        }
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollDefaultColumnDisplay))) {
-        // Wire token → the column display int (normal 0 / tabbed 1).
-        const QString token = action->params.value(PWR::ActionParam::Value).toString();
-        if (token == PWR::ColumnDisplayToken::Normal) {
-            params.defaultColumnDisplay = 0;
-        } else if (token == PWR::ColumnDisplayToken::Tabbed) {
-            params.defaultColumnDisplay = 1;
-        }
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollInsertPosition))) {
-        // Wire token → the ScrollInsertPosition int the engine consumes.
-        const QString token = action->params.value(PWR::ActionParam::Value).toString();
-        if (token == PWR::ScrollInsertPositionToken::RightOfActive) {
-            params.insertPosition = 0;
-        } else if (token == PWR::ScrollInsertPositionToken::LeftOfActive) {
-            params.insertPosition = 1;
-        } else if (token == PWR::ScrollInsertPositionToken::First) {
-            params.insertPosition = 2;
-        } else if (token == PWR::ScrollInsertPositionToken::Last) {
-            params.insertPosition = 3;
-        } else if (token == PWR::ScrollInsertPositionToken::IntoActiveColumn) {
-            params.insertPosition = 4;
-        }
-    }
-    readFraction(PWR::ActionSlot::ScrollDefaultWindowHeight, params.defaultWindowHeight);
-
-    // ── tab indicator (niri's `tab-indicator` layout block) ──
-    // Same REJECT AND FALL THROUGH policy as readFraction above: a hand-edited
-    // rules.json carrying the wrong JSON type must leave the field unset so it
-    // falls through to the configured value, never coerce to 0 and apply an
-    // override the user did not write. The descriptor validators already
-    // reject these at load; this is the defence in depth for what bypasses
-    // them.
-    const auto readBool = [&resolved](QLatin1StringView slot, std::optional<bool>& out) {
-        const auto action = resolved.slot(QString(slot));
-        if (!action) {
-            return;
-        }
-        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        if (v.isBool()) {
-            out = v.toBool();
-        }
-    };
-    // Bounds are the descriptors' own, so a value the validator accepts is a
-    // value this resolver accepts.
-    const auto readInt = [&resolved](QLatin1StringView slot, std::optional<int>& out, double lo, double hi) {
-        const auto action = resolved.slot(QString(slot));
-        if (!action) {
-            return;
-        }
-        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        const double d = v.toDouble();
-        if (v.isDouble() && d >= lo && d <= hi) {
-            out = qRound(d);
-        }
-    };
-    const auto readColor = [&resolved](QLatin1StringView slot, std::optional<QString>& out) {
-        const auto action = resolved.slot(QString(slot));
-        if (!action) {
-            return;
-        }
-        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        // Hex shapes only, matching the descriptors' hasHexColor exactly.
-        // This helper passes the string through verbatim to a QML `color`
-        // property, so a store that bypassed the loader's validation must not
-        // get its string through here either. Deliberately NOT
-        // QColor::isValidColorName, which is WIDER than the descriptor: it
-        // also admits SVG keywords, and "transparent" would reach the overlay
-        // as a fully invisible indicator while every setting reported it on.
-        if (v.isString() && isHexColorString(v.toString())) {
-            out = v.toString();
-        }
-    };
-
-    readBool(PWR::ActionSlot::TabIndicatorEnabled, params.tabIndicatorEnabled);
-    readBool(PWR::ActionSlot::TabIndicatorHideWhenSingleTab, params.tabIndicatorHideWhenSingleTab);
-    readBool(PWR::ActionSlot::TabIndicatorPlaceWithinColumn, params.tabIndicatorPlaceWithinColumn);
-    readInt(PWR::ActionSlot::TabIndicatorGap, params.tabIndicatorGap, PWR::MinTabIndicatorGap, PWR::MaxTabIndicatorGap);
-    readInt(PWR::ActionSlot::TabIndicatorWidth, params.tabIndicatorWidth, PWR::MinTabIndicatorWidth,
-            PWR::MaxTabIndicatorWidth);
-    readInt(PWR::ActionSlot::TabIndicatorGapsBetweenTabs, params.tabIndicatorGapsBetweenTabs, 0,
-            PWR::MaxTabIndicatorGap);
-    readInt(PWR::ActionSlot::TabIndicatorCornerRadius, params.tabIndicatorCornerRadius,
-            PWR::TabIndicatorCornerRadiusPill, PWR::MaxTabIndicatorCornerRadius);
-    readColor(PWR::ActionSlot::TabIndicatorActiveColor, params.tabIndicatorActiveColor);
-    readColor(PWR::ActionSlot::TabIndicatorInactiveColor, params.tabIndicatorInactiveColor);
-    readColor(PWR::ActionSlot::TabIndicatorUrgentColor, params.tabIndicatorUrgentColor);
-
-    // Drop indicator. Same per-property cascade as the tab indicator above, so
-    // a theme rule can set the colours while a separate rule turns it off.
-    readBool(PWR::ActionSlot::DropIndicatorEnabled, params.dropIndicatorEnabled);
-    readColor(PWR::ActionSlot::DropIndicatorColor, params.dropIndicatorColor);
-    readColor(PWR::ActionSlot::DropIndicatorBorderColor, params.dropIndicatorBorderColor);
-    readInt(PWR::ActionSlot::DropIndicatorBorderWidth, params.dropIndicatorBorderWidth,
-            PWR::MinDropIndicatorBorderWidth, PWR::MaxDropIndicatorBorderWidth);
-    readInt(PWR::ActionSlot::DropIndicatorBorderRadius, params.dropIndicatorBorderRadius,
-            PWR::MinDropIndicatorBorderRadius, PWR::MaxDropIndicatorBorderRadius);
-    // Fraction, not an int: read the way TabIndicatorLength is, and bounded to
-    // the same [min, max] the descriptor validates so a hand-edited rule
-    // cannot smuggle an out-of-range opacity past the authoring UI.
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::DropIndicatorOpacity))) {
-        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        const double fraction = v.toDouble();
-        if (v.isDouble() && fraction >= PWR::MinDropIndicatorOpacity && fraction <= PWR::MaxDropIndicatorOpacity) {
-            params.dropIndicatorOpacity = fraction;
-        }
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::TabIndicatorLength))) {
-        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        const double fraction = v.toDouble();
-        if (v.isDouble() && fraction >= PWR::MinTabIndicatorLengthRatio
-            && fraction <= PWR::MaxTabIndicatorLengthRatio) {
-            params.tabIndicatorLength = fraction;
-        }
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::TabIndicatorStyle))) {
-        // Wire token → the style int (chips 0 / bar 1).
-        const QString token = action->params.value(PWR::ActionParam::Value).toString();
-        if (token == PWR::TabIndicatorStyleToken::Chips) {
-            params.tabIndicatorStyle = 0;
-        } else if (token == PWR::TabIndicatorStyleToken::Bar) {
-            params.tabIndicatorStyle = 1;
-        }
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::TabIndicatorPosition))) {
-        // Wire token → TabIndicatorPosition (left 0 / right 1 / top 2 / bottom 3).
-        const QString token = action->params.value(PWR::ActionParam::Value).toString();
-        if (token == PWR::TabIndicatorPositionToken::Left) {
-            params.tabIndicatorPosition = 0;
-        } else if (token == PWR::TabIndicatorPositionToken::Right) {
-            params.tabIndicatorPosition = 1;
-        } else if (token == PWR::TabIndicatorPositionToken::Top) {
-            params.tabIndicatorPosition = 2;
-        } else if (token == PWR::TabIndicatorPositionToken::Bottom) {
-            params.tabIndicatorPosition = 3;
-        }
-    }
-
-    // ── scrolling behaviour toggles ──
-    // Read last so they share readBool's reject-and-fall-through policy: a
-    // hand-edited non-bool leaves the field unset and the engine keeps its
-    // configured value, rather than coercing to false and silently disabling
-    // a behaviour the user never turned off.
-    readBool(PWR::ActionSlot::ScrollAlwaysCenterSingleColumn, params.alwaysCenterSingleColumn);
-    readBool(PWR::ActionSlot::ScrollRespectMinimumSize, params.respectMinimumSize);
-    readBool(PWR::ActionSlot::ScrollCropStraddlers, params.cropStraddlers);
-    readBool(PWR::ActionSlot::ScrollFocusNewWindows, params.focusNewWindows);
-    readBool(PWR::ActionSlot::ScrollSmartGaps, params.smartGaps);
-    readBool(PWR::ActionSlot::ScrollFocusFollowsMouse, params.focusFollowsMouse);
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollStickyWindowHandling))) {
-        // Wire token → the StickyWindowHandling int the config store holds
-        // (treatAsNormal 0 / restoreOnly 1 / ignoreAll 2).
-        const QString token = action->params.value(PWR::ActionParam::Value).toString();
-        if (token == PWR::StickyWindowHandlingToken::TreatAsNormal) {
-            params.stickyWindowHandling = 0;
-        } else if (token == PWR::StickyWindowHandlingToken::RestoreOnly) {
-            params.stickyWindowHandling = 1;
-        } else if (token == PWR::StickyWindowHandlingToken::IgnoreAll) {
-            params.stickyWindowHandling = 2;
-        }
-    }
-    return params;
 }
 
 AssignmentEntry LayoutRegistry::exactContextEntry(const QString& screenId, int virtualDesktop,

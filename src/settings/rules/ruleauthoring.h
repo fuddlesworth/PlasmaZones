@@ -12,9 +12,10 @@ namespace PlasmaZones::RuleAuthoring {
 /// Match fields suitable for the leaf-editor field dropdown. Each entry:
 /// `{ value: int (Field enum), wire: QString (JSON wire string), label,
 ///    valueKind: "string"|"number"|"bool"|"screen"|"activity"|"windowType"|
-///    "virtualDesktop"|"mode"|"orientation"|"layout" }`. Closed-vocab kinds
-///    (windowType/mode/orientation) also carry an `options` array. QML keys off
-///    `wire` so it never has to reconstruct the enum↔wire-string table.
+///    "virtualDesktop"|"mode"|"orientation"|"colorScheme"|"layout" }`.
+///    Closed-vocab kinds (windowType/mode/orientation/colorScheme) also carry
+///    an `options` array. QML keys off `wire` so it never has to reconstruct
+///    the enum↔wire-string table.
 QVariantList matchFields();
 
 /// Operators valid for @p fieldValue (a `PhosphorRules::Field` enum int).
@@ -68,13 +69,15 @@ QString enumOptionLabel(const QString& typeWire, const QString& key, const QStri
 /// so the two never drift. Returns the raw int as a string for an unknown value.
 QString windowTypeLabel(int windowTypeValue);
 
-/// Translated label for a Mode / ScreenOrientation match token (e.g. "tiling" →
-/// "Tiling", "portrait" → "Portrait"). Single source shared by the editor dropdown
-/// (matchFields) and the collapsed rule-list summary (RuleModel) so they never drift.
-/// An unknown token round-trips verbatim.
+/// Translated label for a Mode / ScreenOrientation / ColorScheme match token
+/// (e.g. "tiling" → "Tiling", "portrait" → "Portrait", "dark" → "Dark"). Single
+/// source shared by the editor dropdown (matchFields) and the collapsed
+/// rule-list summary (RuleModel) so they never drift. An unknown token
+/// round-trips verbatim.
 QString modeLabel(const QString& modeToken);
 QString orientationLabel(const QString& orientationToken);
 QString colorSchemeLabel(const QString& schemeToken);
+
 /// One-line hover help for a registered action type — the action-side mirror
 /// of fieldDescription(), rendered by the action row's info icon. Empty for an
 /// unregistered type; the controller test canary keeps the ladder exhaustive.

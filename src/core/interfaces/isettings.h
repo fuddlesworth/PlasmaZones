@@ -177,6 +177,29 @@ public:
     // exactly so its existing Q_INVOKABLE annotation overrides this.
     virtual QString loadColorsFromFile(const QString& filePath) = 0;
 
+    /// The system colour scheme as a "light" / "dark" token, or empty when the
+    /// process cannot observe a palette (no GUI application, or an off-GUI-thread
+    /// caller). Pairs with the systemColorSchemeChanged signal below: the signal
+    /// says "it flipped", this says "to what".
+    ///
+    /// On the interface rather than only as Settings' static, so the consumers
+    /// that stamp the ColorScheme match field (the daemon's registry provider and
+    /// the WindowTrackingAdaptor query builder) reach it through their INJECTED
+    /// settings and a test double can substitute a fixed scheme. Settings
+    /// implements it by delegating to its static derivation, which stays the one
+    /// place the palette is classified.
+    ///
+    /// Defaulted rather than pure so an implementation with no palette to
+    /// classify (a test double) inherits the honest "unknown" answer instead of
+    /// being forced to fabricate one — empty is exactly what the real accessor
+    /// returns in a process without a GUI application, and the rule resolvers
+    /// already hold ColorScheme-negating rules out on an empty token. A double
+    /// that wants to exercise a light/dark rule overrides this.
+    virtual QString colorSchemeToken() const
+    {
+        return QString();
+    }
+
     // Snapping behavior triggers (dragActivation, zoneSpan, snapAssist)
     // are declared by the IZoneActivationSettings / IZoneSelectorSettings
     // sub-interfaces ISettings inherits from — see settings_interfaces.h.
@@ -599,13 +622,6 @@ Q_SIGNALS:
     void snappingRestoreFloatedWindowsOnLoginChanged();
     void autotileRestoreFloatedWindowsOnLoginChanged();
     void snapUnfloatFallbackToZoneChanged();
-    /// The system colour scheme flipped between light and dark. Derived from
-    /// QEvent::ApplicationPaletteChange in the config layer (the process's
-    /// one palette observer) INDEPENDENTLY of the useSystemColors setting.
-    /// Consumed by the daemon to re-resolve context rules matching the
-    /// ColorScheme field; carries no payload because consumers re-read the
-    /// live palette through the registry's colour-scheme provider.
-    void systemColorSchemeChanged();
     void autoAssignAllLayoutsChanged();
     void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();
@@ -913,6 +929,20 @@ Q_SIGNALS:
     void scrollingSwitchFocusFloatTilingShortcutChanged();
     void scrollingMoveToFloatingShortcutChanged();
     void scrollingMoveToTilingShortcutChanged();
+
+    // ── Environment signals ─────────────────────────────────────────────────
+    // Not setting NOTIFYs: nothing above them in the config schema fires these,
+    // no Q_PROPERTY is bound to them, and they never touch dirty tracking. They
+    // are kept apart from the key-backed run above so that stays a clean
+    // one-signal-per-key list.
+
+    /// The system colour scheme flipped between light and dark. Derived from
+    /// QEvent::ApplicationPaletteChange in the config layer (the process's one
+    /// palette observer). Consumed by the daemon to re-resolve context rules
+    /// matching the ColorScheme field and to drop the per-window rule memos
+    /// keyed on it; carries no payload because consumers re-read the scheme
+    /// through colorSchemeToken() (or the registry's colour-scheme provider).
+    void systemColorSchemeChanged();
 };
 
 } // namespace PlasmaZones

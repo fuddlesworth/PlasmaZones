@@ -28,6 +28,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "scrollstriptestutils.h"
+#include "scrollstubsettings.h"
 
 #include <QVariantMap>
 #include <QtTest>
@@ -40,162 +41,11 @@ using ScrollTestUtils::makeProviderEngine;
 
 namespace {
 
-/// Minimal IScrollSettings the engine can qobject_cast to. Only the width /
-/// height / preset accessors carry test-settable state; everything else
-/// answers the inert value that keeps the layout math out of the way (zero
-/// gaps, no smart-gaps, no minimum-size clamping), so a resolved rect is a
-/// clean function of the value under test.
-class StubScrollSettings : public QObject, public PhosphorEngine::IScrollSettings
-{
-    Q_OBJECT
-    Q_INTERFACES(PhosphorEngine::IScrollSettings)
-
-public:
-    using QObject::QObject;
-
-    int widthKind = static_cast<int>(DefaultWidthKind::Proportion);
-    qreal widthValue = 0.25;
-    int widthPresetIndex = 0;
-    int heightKind = static_cast<int>(DefaultHeightKind::Auto);
-    qreal heightValue = 0.0;
-    int heightPresetIndex = 0;
-    QStringList widthPresets{QStringLiteral("0.25"), QStringLiteral("0.5"), QStringLiteral("0.75")};
-    QStringList heightPresets{QStringLiteral("0.25"), QStringLiteral("0.5"), QStringLiteral("0.75")};
-
-    int scrollingInnerGap() const override
-    {
-        return 0;
-    }
-    bool scrollingUsePerSideOuterGap() const override
-    {
-        return false;
-    }
-    int scrollingOuterGap() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapTop() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapBottom() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapLeft() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapRight() const override
-    {
-        return 0;
-    }
-    bool scrollingFocusNewWindows() const override
-    {
-        return focusNewWindows;
-    }
-    bool focusNewWindows = true;
-    int scrollingStickyWindowHandling() const override
-    {
-        return 0;
-    }
-    bool scrollingRespectMinimumSize() const override
-    {
-        return false;
-    }
-    bool scrollingSmartGaps() const override
-    {
-        return false;
-    }
-    int scrollingCenterFocusedColumn() const override
-    {
-        return 0;
-    }
-    bool scrollingAlwaysCenterSingleColumn() const override
-    {
-        return false;
-    }
-    int scrollingDefaultColumnWidthKind() const override
-    {
-        return widthKind;
-    }
-    qreal scrollingDefaultColumnWidthValue() const override
-    {
-        return widthValue;
-    }
-    int scrollingDefaultColumnWidthPresetIndex() const override
-    {
-        return widthPresetIndex;
-    }
-    int scrollingDefaultWindowHeightKind() const override
-    {
-        return heightKind;
-    }
-    qreal scrollingDefaultWindowHeightValue() const override
-    {
-        return heightValue;
-    }
-    int scrollingDefaultWindowHeightPresetIndex() const override
-    {
-        return heightPresetIndex;
-    }
-    int scrollingInsertPosition() const override
-    {
-        return 0;
-    }
-    int scrollingDefaultColumnDisplay() const override
-    {
-        return 0;
-    }
-    QStringList scrollingPresetColumnWidths() const override
-    {
-        return widthPresets;
-    }
-    QStringList scrollingPresetWindowHeights() const override
-    {
-        return heightPresets;
-    }
-
-    // Tab-indicator geometry. Public fields so a case can drive the indicator
-    // the way it drives the width/height trios above; the seeds are the
-    // shipped defaults, so an untouched stub behaves like a fresh config.
-    bool tabIndicatorEnabled = true;
-    bool tabIndicatorHideWhenSingleTab = false;
-    bool tabIndicatorPlaceWithinColumn = false;
-    int tabIndicatorGap = 5;
-    int tabIndicatorWidth = 4;
-    qreal tabIndicatorLengthProportion = 0.5;
-    int tabIndicatorPosition = static_cast<int>(TabIndicatorPosition::Left);
-
-    bool scrollingTabIndicatorEnabled() const override
-    {
-        return tabIndicatorEnabled;
-    }
-    bool scrollingTabIndicatorHideWhenSingleTab() const override
-    {
-        return tabIndicatorHideWhenSingleTab;
-    }
-    bool scrollingTabIndicatorPlaceWithinColumn() const override
-    {
-        return tabIndicatorPlaceWithinColumn;
-    }
-    int scrollingTabIndicatorGap() const override
-    {
-        return tabIndicatorGap;
-    }
-    int scrollingTabIndicatorWidth() const override
-    {
-        return tabIndicatorWidth;
-    }
-    qreal scrollingTabIndicatorLengthProportion() const override
-    {
-        return tabIndicatorLengthProportion;
-    }
-    int scrollingTabIndicatorPosition() const override
-    {
-        return tabIndicatorPosition;
-    }
-};
+// The configured baseline every case here layers a per-screen override over.
+// Shared with the behaviour suite (scrollstubsettings.h) rather than copied:
+// both suites assert against "the configured default", and two stubs would
+// let that value drift apart between them.
+using ScrollTestUtils::StubScrollSettings;
 
 const QString kS1 = QStringLiteral("S1");
 const QString kS2 = QStringLiteral("S2");
@@ -217,6 +67,10 @@ private Q_SLOTS:
     void templatePresetHeightsReplaceSettingsHeights();
     void templateListShrinkClampsResolvedPresetWidth();
     void invalidTemplateEntriesFallBackToSettingsList();
+    void invalidTemplateHeightEntriesFallBackToSettingsList();
+    void templateListsAreCappedAtTheKeepAndScanBounds();
+    void wrongTypedKindAndSpinValuesFallThrough();
+    void autoHeightKindOverridesAFixedGlobal();
     void tabIndicatorOverridesArePerProperty();
     void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
@@ -224,6 +78,9 @@ private Q_SLOTS:
     void openRuleOutranksTemplateBlueprint();
     void openMaximizedRuleOutranksWidthRuleAndBlueprint();
     void openFocusedRuleOverridesFocusNewWindows();
+    void openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival();
+    void openMaximizedFalseLeavesTheDefaultWidth();
+    void openMaximizedIsDroppedByAConsumeOpen();
     void templateBlueprintNeverResizesExistingColumns();
     void templateBlueprintEntryWithoutDisplayKeepsTheDefault();
 
@@ -635,6 +492,176 @@ void TestScrollEnginePerScreen::invalidTemplateEntriesFallBackToSettingsList()
     QCOMPARE(rects.first().width(), qRound(0.3 * kScreenWidth));
 }
 
+void TestScrollEnginePerScreen::invalidTemplateHeightEntriesFallBackToSettingsList()
+{
+    // The height twin of the width case above. The two vocabularies are
+    // parsed by one shared helper but with DIFFERENT floors, so a case that
+    // only ever drove widths could not tell the height floor from the width
+    // one — and an entirely-invalid height list must be "no template" rather
+    // than an empty vocabulary, which would break height-preset cycling.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::Preset);
+    settings->heightPresetIndex = 1; // settings heights: 0.25 / 0.5 / 0.75
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap garbage;
+    garbage.insert(ScrollPerScreenKeys::presetWindowHeights(), QVariantList{0.01, 1.5, QStringLiteral("junk"), -0.5});
+    engine->applyPerScreenConfig(kS1, garbage);
+    QCOMPARE(engine->effectivePresetWindowHeights(kS1), QList<qreal>({0.25, 0.5, 0.75}));
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    const QVector<QRect> rects = engine->visibleTileRects(kS1);
+    QCOMPARE(rects.size(), 1);
+    QCOMPARE(rects.first().height(), qRound(0.5 * kScreenHeight));
+
+    // A mixed list keeps its valid entries, so the rejection above is a
+    // rejection and not a dead branch.
+    QVariantMap mixed;
+    mixed.insert(ScrollPerScreenKeys::presetWindowHeights(), QVariantList{0.01, 0.4});
+    engine->applyPerScreenConfig(kS1, mixed);
+    QCOMPARE(engine->effectivePresetWindowHeights(kS1), QList<qreal>({0.4}));
+    const QVector<QRect> snapped = engine->visibleTileRects(kS1);
+    QCOMPARE(snapped.size(), 1);
+    QCOMPARE(snapped.first().height(), qRound(0.4 * kScreenHeight));
+}
+
+void TestScrollEnginePerScreen::templateListsAreCappedAtTheKeepAndScanBounds()
+{
+    // applyPerScreenConfig is exported library surface and stores the map
+    // verbatim, so both bounds in enginelimits.h are public-API guards. The
+    // numbers are hand-mirrored here (the header is private to the library),
+    // which is the same kept-in-sync-by-hand rule the constants themselves
+    // carry against the settings validator.
+    constexpr int kKeepCap = 16;
+    constexpr int kScanCap = 256;
+
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // KEEP cap: twenty valid entries, sixteen survive — and they are the
+    // FIRST sixteen, so the cap truncates rather than sampling.
+    QVariantList overlong;
+    for (int i = 0; i < 20; ++i) {
+        overlong.append(0.05 + 0.01 * i);
+    }
+    QVariantMap keep;
+    keep.insert(ScrollPerScreenKeys::presetColumnWidths(), overlong);
+    engine->applyPerScreenConfig(kS1, keep);
+    const QList<qreal> kept = engine->effectivePresetColumnWidths(kS1);
+    QCOMPARE(kept.size(), kKeepCap);
+    QCOMPARE(kept.first(), 0.05);
+    QCOMPARE(kept.last(), 0.05 + 0.01 * (kKeepCap - 1));
+
+    // SCAN cap: the keep cap alone would let a long list of REJECTS be
+    // converted in full on every relayout, since nothing ever fills the
+    // output. Here every entry inside the scan window is invalid and the
+    // only valid ones sit past it, so a parse that respected the scan bound
+    // finds nothing and falls back to the settings vocabulary.
+    QVariantList mostlyRejects;
+    for (int i = 0; i < kScanCap; ++i) {
+        mostlyRejects.append(0.001); // below the width floor
+    }
+    mostlyRejects.append(0.6);
+    mostlyRejects.append(0.7);
+    QVariantMap scan;
+    scan.insert(ScrollPerScreenKeys::presetColumnWidths(), mostlyRejects);
+    engine->applyPerScreenConfig(kS2, scan);
+    QCOMPARE(engine->effectivePresetColumnWidths(kS2), QList<qreal>({0.25, 0.5, 0.75}));
+}
+
+void TestScrollEnginePerScreen::wrongTypedKindAndSpinValuesFallThrough()
+{
+    // Wrong TYPES, not out-of-range numbers. QVariant answers 0 for a value
+    // it cannot convert, and 0 is a legal kind (Proportion for width, Auto
+    // for height) and a legal spin — so an unchecked read would commit the
+    // first enumerator or the first preset while reporting nothing wrong.
+    // Every leg here must land on the configured GLOBAL instead.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Preset);
+    settings->widthPresetIndex = 2; // → 0.75
+    settings->heightKind = static_cast<int>(DefaultHeightKind::Fixed);
+    settings->heightValue = 200.0;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // A non-numeric KIND on both axes: the whole settings channel falls
+    // through, so both defaults stay the global ones.
+    QVariantMap badKind;
+    badKind.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), QStringLiteral("preset"));
+    badKind.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), QStringLiteral("fixed"));
+    engine->applyPerScreenConfig(kS1, badKind);
+
+    // A legitimate Preset kind beside a non-numeric SPIN: the kind is
+    // honoured and only the spin falls back, which for a matching global
+    // kind means the global's own anchor (0.75) — never index 0.
+    QVariantMap badSpin;
+    badSpin.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::Preset));
+    badSpin.insert(ScrollPerScreenKeys::defaultColumnWidthPresetIndex(), QStringLiteral("first"));
+    engine->applyPerScreenConfig(kS2, badSpin);
+
+    // A non-numeric rule FRACTION is rejected by the rule channel too.
+    QVariantMap badFraction;
+    badFraction.insert(ScrollPerScreenKeys::defaultColumnWidth(), QStringLiteral("half"));
+    engine->applyPerScreenConfig(kS3, badFraction);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), kS3, 0, 0);
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
+    QVERIFY(columnExists(engine, kS2, QStringLiteral("app|b")));
+    QVERIFY(columnExists(engine, kS3, QStringLiteral("app|c")));
+
+    const ColumnWidth kindRejected = openedWidth(engine, kS1, QStringLiteral("app|a"));
+    QCOMPARE(kindRejected.kind, ColumnWidth::Preset);
+    QCOMPARE(kindRejected.presetFraction, 0.75);
+    const WindowHeight heightKindRejected = openedHeight(engine, kS1, QStringLiteral("app|a"));
+    QCOMPARE(heightKindRejected.kind, WindowHeight::Fixed);
+    QCOMPARE(heightKindRejected.fixedPx, 200);
+
+    const ColumnWidth spinRejected = openedWidth(engine, kS2, QStringLiteral("app|b"));
+    QCOMPARE(spinRejected.kind, ColumnWidth::Preset);
+    QCOMPARE(spinRejected.presetFraction, 0.75);
+
+    const ColumnWidth fractionRejected = openedWidth(engine, kS3, QStringLiteral("app|c"));
+    QCOMPARE(fractionRejected.kind, ColumnWidth::Preset);
+    QCOMPARE(fractionRejected.presetFraction, 0.75);
+}
+
+void TestScrollEnginePerScreen::autoHeightKindOverridesAFixedGlobal()
+{
+    // The Auto arm of the height resolver, which no other case reaches: it
+    // is the one kind that returns a fresh WindowHeight rather than reading
+    // a slot, so a screen scoped to Auto must drop the global's Fixed
+    // pixels and take the even split instead.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::Fixed);
+    settings->heightValue = 200.0;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap autoKind;
+    autoKind.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::Auto));
+    engine->applyPerScreenConfig(kS1, autoKind);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
+    QVERIFY(columnExists(engine, kS2, QStringLiteral("app|b")));
+
+    const WindowHeight autoHeight = openedHeight(engine, kS1, QStringLiteral("app|a"));
+    QCOMPARE(autoHeight.kind, WindowHeight::Auto);
+    // Auto fills the column, unlike the global's 200px.
+    const QVector<QRect> filled = engine->visibleTileRects(kS1);
+    QCOMPARE(filled.size(), 1);
+    QCOMPARE(filled.first().height(), kScreenHeight);
+
+    const WindowHeight globalHeight = openedHeight(engine, kS2, QStringLiteral("app|b"));
+    QCOMPARE(globalHeight.kind, WindowHeight::Fixed);
+    QCOMPARE(globalHeight.fixedPx, 200);
+}
+
 void TestScrollEnginePerScreen::tabIndicatorOverridesArePerProperty()
 {
     // effectiveTabIndicator resolves SEVEN independent properties out of one
@@ -887,6 +914,89 @@ void TestScrollEnginePerScreen::openFocusedRuleOverridesFocusNewWindows()
     engine->setOpenParamsResolver({});
     engine->windowOpened(QStringLiteral("app|d"), kS1, 0, 0);
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+}
+
+void TestScrollEnginePerScreen::openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival()
+{
+    // The rewind arm needs a prior active column to rewind TO. On an empty
+    // strip there is none, so the first window becomes the active column
+    // whatever the rule says — a strip whose only column were not active
+    // would leave every later direction verb navigating from nowhere. The
+    // rule still governs the SECOND arrival, which is what makes this a
+    // guard on the empty case rather than the rule being inert.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.focused = false;
+        return params;
+    });
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+}
+
+void TestScrollEnginePerScreen::openMaximizedFalseLeavesTheDefaultWidth()
+{
+    // An EXPLICIT false must read exactly like an unset optional: the rule
+    // says "do not maximize", not "maximize to the default". Without this
+    // leg a resolver that treated the field's mere presence as a verdict
+    // would pass the whole suite.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
+    settings->widthValue = 0.25;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.maximized = false;
+        return params;
+    });
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
+    const ColumnWidth width = openedWidth(engine, kS1, QStringLiteral("app|a"));
+    QCOMPARE(width.kind, ColumnWidth::Proportion);
+    QCOMPARE(width.proportion, 0.25);
+}
+
+void TestScrollEnginePerScreen::openMaximizedIsDroppedByAConsumeOpen()
+{
+    // A consume open joins an existing column, and a joining tile carries NO
+    // width verdict — resizing the host would resize every sibling in the
+    // stack. So openMaximized (like openColumnWidth) reaches only a column
+    // the open CREATES. The header documents that on ScrollOpenParams; this
+    // pins it, because the drop is silent.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
+    settings->widthValue = 0.25;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.25);
+
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.consume = true;
+        params.maximized = true;
+        return params;
+    });
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    // One column holding both windows, still at the host's width.
+    QCOMPARE(state->strip().columns().size(), 1);
+    QVERIFY(state->strip().columns().first().indexOfWindow(QStringLiteral("app|b")) >= 0);
+    QCOMPARE(state->strip().columns().first().width.kind, ColumnWidth::Proportion);
+    QCOMPARE(state->strip().columns().first().width.proportion, 0.25);
 }
 
 void TestScrollEnginePerScreen::templateBlueprintNeverResizesExistingColumns()

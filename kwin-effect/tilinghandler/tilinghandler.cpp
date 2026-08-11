@@ -55,6 +55,20 @@ QSize TilingHandler::declaredMinSize(KWin::EffectWindow* w)
     return QSize(minWidth, minHeight);
 }
 
+void TilingHandler::applyFullScreenSuppressed(KWin::Window* kw, bool fullScreen)
+{
+    if (!kw) {
+        return;
+    }
+    // Counter, not a bool: releaseWindowedFullscreenState and the batch
+    // consumer nest their own brackets, and a plain set/clear here would hand
+    // an outer scope back an un-suppressed window (the save/restore rule the
+    // inGeometryApply guards follow for the same reason).
+    ++m_suppressFullScreenChanged;
+    kw->setFullScreen(fullScreen);
+    --m_suppressFullScreenChanged;
+}
+
 void TilingHandler::suppressFfmUntilCursorMoves()
 {
     m_ffmSuppressPending = true;
@@ -69,7 +83,13 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
     // naming a pre-event cursor position, and swallow the first move within
     // the resume radius once the condition cleared. Same reasoning as the
     // clears in setFocusFollowsMouse(false) and onDaemonReady.
-    if ((!m_focusFollowsMouse && !m_scrollingFocusFollowsMouse) || m_managedScreens.isEmpty()) {
+    // ffmOffEverywhere(), not the two global flags: the scrolling half's
+    // authority is the daemon's resolved per-screen set, so a
+    // SetScrollFocusFollowsMouse rule that turns the behaviour ON for one
+    // monitor while the global setting is off must not be bailed out from
+    // here — that bail sat upstream of the per-screen read below and made the
+    // rule a one-way switch (off yes, on never).
+    if (ffmOffEverywhere() || m_managedScreens.isEmpty()) {
         m_ffmSuppressPending = false;
         return;
     }
@@ -874,6 +894,14 @@ void TilingHandler::onDaemonReady()
     // new daemon's truth.
     restoreAllWindowedFullscreen();
     setScrollingScreens({}, /*announceFlipped=*/false);
+    // The resolved per-screen scroll behaviour belongs to the dead session for
+    // the same handover reason: no serviceUnregistered edge fires on a
+    // straight old→new owner swap, so without this the dead daemon's crop set
+    // keeps blocksDirectScanout forcing composition session-wide, and its
+    // focus-follows-mouse set answers for screens the new daemon has not
+    // published. loadSettings' fetch below re-seeds both. Idempotent on the
+    // teardown-first path (clearScrollingScreensForTeardown already ran it).
+    clearScrollEffectBehaviourForTeardown();
     // The per-screen active-layout map is the same shape of dead-session
     // ruleQuery input, and it needs the clear here for a reason the scrolling
     // set does not have: a straight old→new owner handover produces no
@@ -890,7 +918,7 @@ void TilingHandler::onDaemonReady()
     // scheduleBorderSweep rebuilds the decorations those verdicts baked in.
     clearActiveLayoutsForTeardown();
     // That call also re-slices the ActiveLayout-scoped rules back out of the
-    // four effect-bound rule sets (which SURVIVE the teardown by design) and
+    // five effect-bound rule sets (which SURVIVE the teardown by design) and
     // SETS m_activeLayoutRulesWithheld when it removed any — so on this path
     // the marker is correct by construction, and the seed edge fired by
     // loadSettings' reply below re-drives the fetch that restores them.
@@ -898,9 +926,9 @@ void TilingHandler::onDaemonReady()
     // m_activeLayoutRulesWithheld is deliberately never CLEARED alongside the
     // unseeding. Every loadRuleAnimationsFromDbus reply that PARSES recomputes
     // it outright (shader_config_dbus.cpp assigns, never ORs); the
-    // malformed-payload arms return before the assignment, and correctly so —
-    // they run no slice either, so the standing marker still matches the
-    // standing rule sets.
+    // malformed-payload and over-cap arms return before that assignment and
+    // re-arm the marker to TRUE on the way out, since the seed edge consumed
+    // it before dispatching and those arms admit nothing.
     // Clearing it here would be unsafe in the one case that matters: if this
     // bring-up's getAllRules errors or times out, no reply recomputes the
     // marker, and a cleared marker leaves the withheld ActiveLayout rules

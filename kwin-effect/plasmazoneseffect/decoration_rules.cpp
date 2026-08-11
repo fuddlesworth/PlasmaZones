@@ -19,6 +19,7 @@
 #include <PhosphorRules/RuleAction.h>
 
 #include "shader_resolve.h"
+#include "tilinghandler/tilinghandler.h"
 #include "window_query.h"
 
 #include <optional>
@@ -175,7 +176,11 @@ void PlasmaZonesEffect::applyRuleOpenFullscreen(const QString& windowId, KWin::E
         || w->isOnScreenDisplay()) {
         return;
     }
-    const std::optional<bool> verdict = resolveOpenFullscreen(resolveRuleActions(w, windowId));
+    // Through the VERDICT evaluator, not the animation/appearance one: that
+    // evaluator honours ExcludeAnimations as a walk-stopper, so an
+    // "exclude this app from animations" rule at a higher priority cancelled
+    // the open-fullscreen decision before its slot could fill.
+    const std::optional<bool> verdict = resolveOpenFullscreen(resolveRuleVerdictActions(w, windowId));
     if (!verdict) {
         return;
     }
@@ -187,15 +192,23 @@ void PlasmaZonesEffect::applyRuleOpenFullscreen(const QString& windowId, KWin::E
     // windowAdded a client that mapped fullscreen already carries the
     // requested bit while the committed state may lag a round-trip. The flip
     // runs BEFORE the window is announced to the daemon (this is called from
-    // slotWindowAdded ahead of the routing block), so eligibility and the
-    // placement engines see the final state. No m_suppressFullScreenChanged
-    // bracket: that counter guards the windowed-fullscreen hold, which this
-    // window is not part of, and the committed-signal tail for an untracked
-    // window is benign cleanup — the same path a user's own F11 takes.
+    // slotWindowAdded ahead of the routing block), and isEligibleForTilingNotify
+    // rejects on requested-OR-committed fullscreen, so the announce path sees
+    // this window's final state either way.
+    //
+    // Bracketed through TilingHandler: on XWayland setFullScreen emits
+    // windowFullScreenChanged SYNCHRONOUSLY, re-entering
+    // slotWindowFullScreenChanged from inside slotWindowAdded — before this
+    // window has been announced at all. Its never-tracked exit arm then runs
+    // notifyWindowAdded for a window mid-open, releasing the first-frame
+    // restore suppression slotWindowAdded is about to arm and producing a
+    // visible spawn-then-jump. The counter is TilingHandler-private, so the
+    // bracketed write lives there (applyFullScreenSuppressed) rather than
+    // widening access to it.
     if (*verdict && !kw->isRequestedFullScreen()) {
-        kw->setFullScreen(true);
+        m_tilingHandler->applyFullScreenSuppressed(kw, true);
     } else if (!*verdict && kw->isRequestedFullScreen()) {
-        kw->setFullScreen(false);
+        m_tilingHandler->applyFullScreenSuppressed(kw, false);
     }
 }
 
@@ -208,7 +221,10 @@ std::optional<qreal> PlasmaZonesEffect::ruleScrollFactorFor(KWin::EffectWindow* 
     if (windowId.isEmpty()) {
         return std::nullopt;
     }
-    return resolveScrollFactor(resolveRuleActions(w, windowId));
+    // Verdict evaluator, same reason as applyRuleOpenFullscreen above: a
+    // scroll multiplier is not an animation, so ExcludeAnimations must not
+    // stop the walk that fills its slot.
+    return resolveScrollFactor(resolveRuleVerdictActions(w, windowId));
 }
 
 void PlasmaZonesEffect::restoreAllRuleWindowLayers()

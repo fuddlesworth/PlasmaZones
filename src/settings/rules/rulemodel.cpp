@@ -406,7 +406,19 @@ RuleModel::Section RuleModel::sectionFor(const Rule& rule)
         const bool pinsScreen = fields.contains(Field::ScreenId);
         // A rule pinned to an Activity but no monitor reads naturally as an
         // Activity rule; a monitor-pinned one is Monitor & Layout.
-        return (pinsActivity && !pinsScreen) ? Section::Activity : Section::Monitor;
+        if (pinsActivity && !pinsScreen) {
+            return Section::Activity;
+        }
+        // Monitor & Layout means a rule scoped to a screen and to what runs on
+        // it. ColorScheme is the one context field that says nothing about a
+        // screen — it matches a system-wide light/dark state — so a rule whose
+        // whole match is the colour scheme would file under a monitor heading
+        // while naming no monitor. No curated section describes it, so it goes
+        // to Advanced / Custom.
+        const bool pinsScreenScoped = pinsScreen || fields.contains(Field::VirtualDesktop)
+            || fields.contains(Field::ScreenOrientation) || fields.contains(Field::ActiveLayout)
+            || fields.contains(Field::Mode) || fields.contains(Field::TiledWindowCount);
+        return pinsScreenScoped ? Section::Monitor : Section::Advanced;
     }
 
     // Window-property match with no animation action — Applications.

@@ -3,6 +3,8 @@
 
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 
+#include <PhosphorIdentity/VirtualScreenId.h>
+
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -254,7 +256,26 @@ int VirtualDesktopManager::currentDesktop() const
 int VirtualDesktopManager::currentDesktopForScreen(const QString& screenId) const
 {
     const auto it = m_screenDesktops.constFind(screenId);
-    return it != m_screenDesktops.constEnd() ? it.value() : currentDesktop();
+    if (it != m_screenDesktops.constEnd()) {
+        return it.value();
+    }
+
+    // The map is keyed by PHYSICAL output id (updateScreenDesktop is fed from
+    // the effect's per-output report), but most callers ask with an EFFECTIVE
+    // id, and a subdivided output only ever produces its `/vs:N` children. An
+    // exact-key miss on a virtual id is therefore the normal case there, not an
+    // unknown screen — resolve it against the parent output before falling back
+    // to the global desktop, which would otherwise be wrong on every virtual
+    // screen of a monitor running its own desktop.
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        const auto physical =
+            m_screenDesktops.constFind(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+        if (physical != m_screenDesktops.constEnd()) {
+            return physical.value();
+        }
+    }
+
+    return currentDesktop();
 }
 
 bool VirtualDesktopManager::perScreenModeActive() const

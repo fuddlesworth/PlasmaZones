@@ -305,7 +305,13 @@ void TilingHandler::fetchScrollEffectBehaviour()
         }
         QDBusPendingReply<QDBusVariant> reply = *w;
         if (reply.isValid()) {
-            applyScrollEffectBehaviour(reply.value().variant().toMap());
+            // a{sv} arrives as a QDBusArgument-wrapped variant; toMap() on it
+            // returns EMPTY — demarshal explicitly, exactly as fetchActiveLayouts
+            // does. reply.isValid() is true either way, so the silent-empty
+            // failure had no retry and logged two empty sets as a success:
+            // per-screen focus-follows-mouse and straddler cropping never
+            // populated at bring-up.
+            applyScrollEffectBehaviour(qdbus_cast<QVariantMap>(reply.value().variant()));
             qCInfo(lcEffect) << "Loaded scrolling effect behaviour: ffm=" << m_scrollFocusFollowsMouseScreens
                              << "crop=" << m_scrollCropStraddlerScreens;
         } else {

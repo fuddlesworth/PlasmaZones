@@ -10,10 +10,14 @@
  * file passed the 1150-line ceiling. Covers the overlay shader / style
  * per-slot composition, the overlay APPEARANCE colour and opacity overrides,
  * context locks (resolution, slot-conflict, and composition with an
- * assignment), the per-mode gap routing through the context `Mode` field, the
- * window-field negation-polarity guard that keeps `none{AppId == x}` rules off
- * windowless context queries, and the per-monitor-beats-per-mode specificity
- * order.
+ * assignment), the OSD override (resolution, structural field exclusions and
+ * the single-slot priority contest), the per-mode gap routing through the
+ * context `Mode` field, the window-field negation-polarity guard that keeps
+ * `none{AppId == x}` rules off windowless context queries, the
+ * per-monitor-beats-per-mode specificity order, the colour-scheme cache-key
+ * fold across every cached resolver, the slot-carrying admit gate that keeps a
+ * terminal Exclude from dropping unrelated context overrides, and the
+ * tiling-param payload type gates.
  *
  * The gap overrides, the orientation and ActiveLayout stamping (including the
  * scrolling template's prefixed stamp), the exactContextEntry pair, and the
@@ -723,6 +727,310 @@ private Q_SLOTS:
             f.registry->resolveContextGaps(QStringLiteral("DP-2"), 0, QString(), QStringLiteral("tiling"));
         QVERIFY(dp2.innerGap.has_value());
         QCOMPARE(*dp2.innerGap, 14);
+    }
+
+    // ─── ColorScheme key-fold across EVERY cached resolver ────────────────
+    // testContextLock_colorSchemeRuleFollowsProviderFlips proves the fold for
+    // ONE of the six cached resolvers. The scheme token is a non-rule-set
+    // input, so each cache that omitted it from its key would latch the first
+    // verdict and never re-resolve on a palette switch — a per-resolver bug
+    // the lock test cannot see. Drive the same provider flip through the other
+    // five (assignment, gaps, default-assignment, OSD, overlay).
+    void testColorSchemeKeyFold_appliesToEveryCachedResolver()
+    {
+        const auto darkRule = [](const QString& name, const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 400;
+            r.match =
+                PWR::MatchExpression::makeLeaf(PWR::Field::ColorScheme, PWR::Operator::Equals, QStringLiteral("dark"));
+            r.actions = actions;
+            return r;
+        };
+        const auto valueAction = [](QLatin1StringView type, const QJsonValue& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), value);
+            return a;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        PWR::RuleAction shader;
+        shader.type = QString(PWR::ActionType::OverrideOverlayShader);
+        shader.params.insert(QString(PWR::ActionParam::EffectId), QStringLiteral("night-glow"));
+        // A dark-scoped SNAPPING LAYOUT rule, so the assignment cache (whose
+        // key carries the scheme token in its own "twc:|or:|cs:" composite
+        // rather than through contextCacheKeyToken) is exercised too.
+        PWR::RuleAction darkLayout;
+        darkLayout.type = QString(PWR::ActionType::SetSnappingLayout);
+        darkLayout.params.insert(QString(PWR::ActionParam::LayoutId), QStringLiteral("{dark-layout}"));
+
+        QVERIFY(f.store->setAllRules({
+            darkRule(QStringLiteral("dark gap"), {valueAction(PWR::ActionType::SetInnerGap, 21)}),
+            darkRule(QStringLiteral("dark osd"), {valueAction(PWR::ActionType::SetOsdEnabled, false)}),
+            darkRule(QStringLiteral("dark default"), {valueAction(PWR::ActionType::DefaultLayoutAssignment, false)}),
+            darkRule(QStringLiteral("dark overlay"), {shader}),
+            darkRule(QStringLiteral("dark layout"), {darkLayout}),
+        }));
+
+        QString scheme = QStringLiteral("light");
+        f.registry->setColorSchemeProvider([&scheme]() -> std::optional<QString> {
+            return scheme;
+        });
+
+        // Prime every cache under "light", where the dark-scoped rules miss.
+        QVERIFY(!f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"))
+                     .innerGap.has_value());
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(f.registry->resolveContextDefaultAssignment(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QVERIFY(!f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString()).shaderId.has_value());
+        QVERIFY(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout
+                != QStringLiteral("{dark-layout}"));
+
+        // Flip the palette. No rule-set revision moves, so only a scheme token
+        // folded into each cache KEY can produce a fresh verdict here.
+        scheme = QStringLiteral("dark");
+        const PhosphorZones::ContextGapOverride gaps =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
+        QVERIFY2(gaps.innerGap.has_value() && *gaps.innerGap == 21, "the gap cache must fold the colour-scheme token");
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()),
+                 std::optional<bool>(false));
+        QCOMPARE(f.registry->resolveContextDefaultAssignment(QStringLiteral("DP-1"), 0, QString()),
+                 std::optional<bool>(false));
+        const PhosphorZones::ContextOverlayOverride overlay =
+            f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY2(overlay.shaderId.has_value() && *overlay.shaderId == QStringLiteral("night-glow"),
+                 "the overlay cache must fold the colour-scheme token");
+        QCOMPARE(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout,
+                 QStringLiteral("{dark-layout}"));
+
+        // And back to light, so each cache is shown re-resolving in BOTH
+        // directions rather than latching the second verdict.
+        scheme = QStringLiteral("light");
+        QVERIFY(!f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"))
+                     .innerGap.has_value());
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(f.registry->resolveContextDefaultAssignment(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QVERIFY(!f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString()).shaderId.has_value());
+        QVERIFY(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout
+                != QStringLiteral("{dark-layout}"));
+    }
+
+    // ─── OSD resolver: the guards its siblings already have proven ────────
+    // The OSD resolver carries the same structural exclusions as the lock
+    // resolver (Mode and TiledWindowCount unstamped, window-sourced fields
+    // negation-guarded) and the same single-slot priority contest. Neither had
+    // a test, so a dropped field in that predicate would let one negated leaf
+    // gate the OSD on every context and nothing would fail.
+    void testContextOsd_structuralExclusionsAndPriority()
+    {
+        const auto osdAction = [](bool enabled) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::SetOsdEnabled);
+            a.params.insert(QString(PWR::ActionParam::Value), enabled);
+            return a;
+        };
+        const auto negatedRule = [&osdAction](const QString& name, PWR::Field field, const QVariant& value) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 900;
+            r.match =
+                PWR::MatchExpression::makeNone({PWR::MatchExpression::makeLeaf(field, PWR::Operator::Equals, value)});
+            r.actions = {osdAction(false)};
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+
+        // None{Mode == "tiling"}: mode is unstamped on an OSD query and reads
+        // back as an ENGAGED empty string, so the inner leaf is false and the
+        // None matches EVERY context. Excluded structurally, so no verdict.
+        QVERIFY(f.store->setAllRules(
+            {negatedRule(QStringLiteral("not tiling"), PWR::Field::Mode, QStringLiteral("tiling"))}));
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+
+        // None{TiledWindowCount == 0}: the count is stamped only on the
+        // assignment query, so the same inversion applies here.
+        QVERIFY(f.store->setAllRules({negatedRule(QStringLiteral("not zero tiled"), PWR::Field::TiledWindowCount, 0)}));
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+
+        // None{AppId == firefox}: the window-sourced negation guard.
+        QVERIFY(f.store->setAllRules(
+            {negatedRule(QStringLiteral("not firefox"), PWR::Field::AppId, QStringLiteral("firefox"))}));
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+
+        // Positive control: a plain ScreenId rule on the same fixture DOES
+        // resolve, so the three nullopts above are the guards and not a dead
+        // resolver.
+        const auto screenRule = [&osdAction](const QString& name, const QString& screenId, bool enabled, int priority) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = priority;
+            r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
+            r.actions = {osdAction(enabled)};
+            return r;
+        };
+        QVERIFY(f.store->setAllRules({screenRule(QStringLiteral("plain"), QStringLiteral("DP-1"), false, 400)}));
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()),
+                 std::optional<bool>(false));
+
+        // Single-slot priority contest, run in BOTH directions so the winner is
+        // proven to be the priority and not a bias toward either value.
+        QVERIFY(f.store->setAllRules({
+            screenRule(QStringLiteral("dp20 high on"), QStringLiteral("DP-20"), true, 500),
+            screenRule(QStringLiteral("dp20 low off"), QStringLiteral("DP-20"), false, 400),
+            screenRule(QStringLiteral("dp21 high off"), QStringLiteral("DP-21"), false, 500),
+            screenRule(QStringLiteral("dp21 low on"), QStringLiteral("DP-21"), true, 400),
+        }));
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-20"), 0, QString()),
+                 std::optional<bool>(true));
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-21"), 0, QString()),
+                 std::optional<bool>(false));
+    }
+
+    // ─── A terminal Exclude must not drop unrelated context overrides ─────
+    // The evaluator's walk STOPS at the first ADMITTED rule carrying an
+    // in-scope terminal action, so every context resolver admits only rules
+    // that carry one of ITS OWN slots. Without that gate a single
+    // higher-priority context Exclude rule silently drops every overlay /
+    // tiling-param / scrolling-param override beneath it — the shape
+    // resolveContextGaps has always guarded and its three siblings did not.
+    void testTerminalExcludeDoesNotDropContextOverrides()
+    {
+        RegistryFixture f = makeRegistryFixture();
+
+        // A high-priority context Exclude on DP-1, carrying no context slot.
+        PWR::RuleAction excludeAction;
+        excludeAction.type = QString(PWR::ActionType::Exclude);
+        PWR::Rule exclude;
+        exclude.id = QUuid::createUuid();
+        exclude.name = QStringLiteral("exclude on DP-1");
+        exclude.enabled = true;
+        exclude.priority = 900;
+        exclude.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+        exclude.actions = {excludeAction};
+
+        const auto lowerRule = [](const QString& name, const QList<PWR::RuleAction>& actions) {
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 300; // below the Exclude, so the walk reaches it only if it continues
+            r.match =
+                PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+            r.actions = actions;
+            return r;
+        };
+
+        PWR::RuleAction shader;
+        shader.type = QString(PWR::ActionType::OverrideOverlayShader);
+        shader.params.insert(QString(PWR::ActionParam::EffectId), QStringLiteral("plasma-glow"));
+        PWR::RuleAction maxWindows;
+        maxWindows.type = QString(PWR::ActionType::SetMaxWindows);
+        maxWindows.params.insert(QString(PWR::ActionParam::Value), 4);
+        PWR::RuleAction smartGaps;
+        smartGaps.type = QString(PWR::ActionType::SetScrollSmartGaps);
+        smartGaps.params.insert(QString(PWR::ActionParam::Value), true);
+        PWR::RuleAction innerGap;
+        innerGap.type = QString(PWR::ActionType::SetInnerGap);
+        innerGap.params.insert(QString(PWR::ActionParam::Value), 17);
+
+        QVERIFY(f.store->setAllRules({
+            exclude,
+            lowerRule(QStringLiteral("overlay"), {shader}),
+            lowerRule(QStringLiteral("tiling params"), {maxWindows}),
+            lowerRule(QStringLiteral("scrolling params"), {smartGaps}),
+            lowerRule(QStringLiteral("gaps"), {innerGap}),
+        }));
+
+        const PhosphorZones::ContextOverlayOverride overlay =
+            f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY2(overlay.shaderId.has_value() && *overlay.shaderId == QStringLiteral("plasma-glow"),
+                 "a context Exclude must not terminate the overlay walk");
+
+        const PhosphorZones::ContextTilingParams tiling =
+            f.registry->resolveContextTilingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY2(tiling.maxWindows.has_value() && *tiling.maxWindows == 4,
+                 "a context Exclude must not terminate the tiling-param walk");
+
+        const PhosphorZones::ContextScrollingParams scrolling =
+            f.registry->resolveContextScrollingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY2(scrolling.smartGaps.has_value() && *scrolling.smartGaps,
+                 "a context Exclude must not terminate the scrolling-param walk");
+
+        // The gap resolver already had the gate; it is here as the control that
+        // the Exclude rule is genuinely matching this context.
+        const PhosphorZones::ContextGapOverride gaps =
+            f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
+        QVERIFY(gaps.innerGap.has_value());
+        QCOMPARE(*gaps.innerGap, 17);
+    }
+
+    // ─── Tiling-param payload type gates ──────────────────────────────────
+    // maxWindows / masterCount / splitRatio REJECT AND FALL THROUGH on a
+    // payload of the wrong JSON type, and round a fractional int rather than
+    // reading QJsonValue::toInt()'s zero default. A hand-edited rules.json is
+    // the only way to author these, and applying them would mean a maxWindows
+    // of 0 or a split ratio of 0.0 the user never wrote.
+    void testContextTilingParams_payloadTypeGates()
+    {
+        const auto paramRule = [](const QString& name, QLatin1StringView type, const QJsonValue& value) {
+            PWR::RuleAction a;
+            a.type = QString(type);
+            a.params.insert(QString(PWR::ActionParam::Value), value);
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 400;
+            r.match =
+                PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, QStringLiteral("DP-1"));
+            r.actions = {a};
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+
+        // A string payload leaves every slot unset (config wins).
+        QVERIFY(f.store->setAllRules({
+            paramRule(QStringLiteral("bad max"), PWR::ActionType::SetMaxWindows, QStringLiteral("four")),
+            paramRule(QStringLiteral("bad ratio"), PWR::ActionType::SetSplitRatio, QStringLiteral("half")),
+        }));
+        const PhosphorZones::ContextTilingParams bad =
+            f.registry->resolveContextTilingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY2(!bad.maxWindows.has_value(), "a string maxWindows payload must fall through, not resolve 0");
+        QVERIFY2(!bad.splitRatio.has_value(), "a string splitRatio payload must fall through, not resolve 0.0");
+
+        // A fractional count falls through rather than collapsing to toInt()'s
+        // zero OR being silently rounded. Rounding would be wrong here, not
+        // merely unnecessary: SetMaxWindows' own validator refuses a
+        // non-integral payload ("reject rather than silently truncating a
+        // hand-edited fractional count"), so a resolver that rounded would
+        // resolve a count the store would never have admitted.
+        QVERIFY(f.store->setAllRules({paramRule(QStringLiteral("frac max"), PWR::ActionType::SetMaxWindows, 3.5)}));
+        const PhosphorZones::ContextTilingParams frac =
+            f.registry->resolveContextTilingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY2(!frac.maxWindows.has_value(),
+                 "a fractional maxWindows payload must fall through, not round or resolve 0");
+
+        // Positive control: a well-formed payload still resolves.
+        QVERIFY(f.store->setAllRules({
+            paramRule(QStringLiteral("good max"), PWR::ActionType::SetMaxWindows, 5),
+            paramRule(QStringLiteral("good ratio"), PWR::ActionType::SetSplitRatio, 0.6),
+        }));
+        const PhosphorZones::ContextTilingParams good =
+            f.registry->resolveContextTilingParams(QStringLiteral("DP-1"), 0, QString());
+        QVERIFY(good.maxWindows.has_value());
+        QCOMPARE(*good.maxWindows, 5);
+        QVERIFY(good.splitRatio.has_value());
+        QCOMPARE(*good.splitRatio, 0.6);
     }
 };
 

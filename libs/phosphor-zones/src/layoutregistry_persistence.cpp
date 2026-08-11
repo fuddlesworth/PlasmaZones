@@ -640,7 +640,9 @@ PhosphorZones::Layout* LayoutRegistry::importLayout(const QString& filePath)
     PhosphorZones::Layout* layout = parsed;
     if (layoutById(parsed->id())) {
         qCInfo(lcZonesLib) << "importLayout: UUID collision, regenerating IDs";
-        layout = new PhosphorZones::Layout(*parsed);
+        // Unparented: addLayout() below takes ownership, the same handover the
+        // clone contract documents.
+        layout = parsed->clone();
         // deleteLater, not delete — see the override branch in loadLayouts().
         parsed->deleteLater();
     }

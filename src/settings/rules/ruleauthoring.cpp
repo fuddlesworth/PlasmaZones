@@ -200,9 +200,9 @@ QString fieldDescription(Field f)
             "which layout is assigned (that would be circular).");
     case Field::ColorScheme:
         return PhosphorI18n::tr(
-            "Whether the system colour scheme is light or dark. Lets a rule pick different gaps, overlay colours or "
-            "layouts when the desktop switches between day and night themes. Works with the context and daemon "
-            "resolved actions, and the rules re-apply on a theme switch.");
+            "Whether the system color scheme is light or dark. Lets a rule pick different gaps, overlay colors or "
+            "layouts when the desktop switches between day and night themes. The rules re-apply as soon as the theme "
+            "changes.");
     }
     return QString();
 }
@@ -637,8 +637,8 @@ QVariantList operatorsForField(int fieldValue)
     if (field == Field::Mode || field == Field::ScreenOrientation || field == Field::ActiveLayout
         || field == Field::Zone || field == Field::ColorScheme) {
         // These are string-valued but their vocabulary is closed or opaque
-        // (placement mode, portrait/landscape, a concrete layout id, a zone
-        // UUID) — only an exact-token Equals is meaningful. A substring or
+        // (placement mode, portrait/landscape, light/dark, a concrete layout
+        // id, a zone UUID) — only an exact-token Equals is meaningful. A substring or
         // regex against a closed token set, a layout UUID, or a zone UUID is a
         // footgun the picker cannot author sensibly. Mirrors the WindowType
         // enum treatment. Zone has no picker of its own yet, so its value is

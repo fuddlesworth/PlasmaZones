@@ -554,11 +554,16 @@ void Daemon::stop()
     // ~Daemon would still run their lambdas. Sever exactly those.
     //
     // NOT a blanket disconnect(m_settings.get(), nullptr, this, nullptr). That severs
-    // every m_settings→this connection — the gap-resnap sweep, the adjacent-threshold
-    // handler, the snapping/autotile enable-delta, the animation-profile republish, all
-    // eleven of them — and most are made in the constructor or init(), which start() does
-    // NOT re-run. A stop()→start() cycle (which this daemon supports deliberately, and
-    // says so in three places) would come back up with them silently gone.
+    // EVERY m_settings→this connection: the eight-signal gap-resnap sweep, the
+    // batch settingsChanged handler, the adjacent-threshold handler, the
+    // animation-profile republish, the system colour-scheme re-resolve, the two
+    // idle-timeout handlers this function is actually here for, and the
+    // snapping/autotile/scrolling enable deltas. No count is quoted on purpose —
+    // the list grows, and a stale number reads as an audit of a set nobody
+    // re-counted. Most of them are made in the constructor or init(), which
+    // start() does NOT re-run. A stop()→start() cycle (which this daemon supports
+    // deliberately, and says so in three places) would come back up with them
+    // silently gone.
     teardownIdleConnections();
 
     // Unregister D-Bus object path and service to prevent late calls during shutdown
@@ -870,6 +875,18 @@ void Daemon::stop()
         disconnect(conn);
     }
     m_perStartConnections.clear();
+    // The restart-scoped handles too. connectLayoutSignals() drops them at its
+    // own top on the NEXT start(), which is enough to prevent stacking, but it
+    // leaves them live for the whole stopped interval — and their senders
+    // (m_layoutManager, m_scrollingTemplateStore) are ctor-owned and keep
+    // emitting, so a store mutation between stop() and the next start() would
+    // run updateEngineScreens on a stopped daemon. Severing here makes the
+    // teardown symmetric with every other per-start list; the clear in
+    // connectLayoutSignals stays, because init() can re-run without a stop().
+    for (const QMetaObject::Connection& conn : std::as_const(m_restartScopedConnections)) {
+        disconnect(conn);
+    }
+    m_restartScopedConnections.clear();
 
     // Per-session change-gate state: a stale tiled-count entry would make the
     // first placementChanged of the next init/start cycle read as "unchanged"
@@ -885,6 +902,8 @@ void Daemon::stop()
     // Sibling latch, same per-session shape (its queued single-shot also
     // gates on m_shuttingDown, so this is symmetry rather than a live fix).
     m_reconcileAssignmentsPending = false;
+    // Its colour-scheme twin, same shape and same reasoning.
+    m_colorSchemeRefreshPending = false;
     // Per-session restore staging: entries computed against the pre-stop
     // window set must not feed a post-restart KCM apply with dead geometry.
     m_pendingSnapFloatRestores.clear();
@@ -894,12 +913,29 @@ void Daemon::stop()
     // them out was an asymmetry in a block whose whole purpose is that reset.
     m_derivedAutotileScreens.clear();
     m_derivedScrollingScreens.clear();
+    // And the latch pair that GUARDS those two derived sets. Resetting the
+    // state a latch protects while leaving the latch itself set is the half
+    // that bites: a stop() taken with the recompute in progress (a nested
+    // signal reaching here mid-pass) would come back with the daemon believing
+    // a recompute is still running, and every updateEngineScreens of the next
+    // session would set the queued flag and return without ever recomputing.
+    m_updateEngineScreensInProgress = false;
+    m_updateEngineScreensQueued = false;
     // Same shape again: the assignment snapshot is replaced wholesale by the
     // next diffActiveAssignments, but the announce map beside it is advanced
     // only when a card is shown, so a template announced before the stop would
     // otherwise still count as "already seen" a session later.
     m_activeAssignmentByScreen.clear();
     m_lastAnnouncedTemplateByScreen.clear();
+    // m_lastEngineOrders is the one per-context cache this block deliberately
+    // LEAVES ALONE. It is not change-gate state: it holds the window order
+    // captured when a context left a tiling engine, and a stop() does not close
+    // the windows, so the order it records is still the right seed when the
+    // same context re-enters after the restart. Clearing it would make every
+    // mode re-entry in the new session fall back to compositor announce order.
+    // Its own prunes (closed window, removed desktop, removed screen) keep it
+    // bounded.
+
     // Per-session OSD gates. A resnap armed just before the stop leaves its
     // outstanding count behind, and the screen-removal cooldown deadline can
     // still be in the future — either one carried into the next start()

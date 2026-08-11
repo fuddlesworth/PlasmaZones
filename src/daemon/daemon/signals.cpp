@@ -560,7 +560,11 @@ void Daemon::finalizeStartup()
     // timeout fallback keeps the OSD from being suppressed forever where
     // KActivities is unavailable, still emitting the empty-activity OSD that
     // activity-less environments already got.
-    if (m_settings && m_settings->showOsdOnDesktopSwitch()) {
+    // Through isOsdTriggerEnabled, not a raw setting read: this is an
+    // all-screens batch with no screen in hand, so it resolves to the plain
+    // toggle today, but leaving a second rule-blind reader of the same setting
+    // behind is how the two halves of the OSD gating drift apart.
+    if (m_settings && isOsdTriggerEnabled(OsdTrigger::DesktopSwitch)) {
         const QString activity = currentActivity();
         // activityReady: either we already have a non-empty activity, or
         // KActivities is unavailable on this system (no point waiting).

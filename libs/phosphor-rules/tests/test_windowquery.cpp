@@ -200,6 +200,55 @@ private Q_SLOTS:
         QCOMPARE(q.valueForField(Field::Zone)->toString(), QStringLiteral("{a1b2c3d4-0000-0000-0000-000000000001}"));
         QVERIFY(q.hasWindow());
     }
+
+    void testValueForField_isTiledIsWindowSourced()
+    {
+        // IsTiled is the fourth PlasmaZones state field and the one its three
+        // neighbours' test above never covered. It is WINDOW-sourced, which is
+        // load-bearing twice over: it must be absent on a windowless context
+        // query (so a positive leaf is inert there), and it must appear in
+        // windowSourcedFields() (so the context resolvers refuse a rule that
+        // NEGATES it — an absent field makes a negated leaf match every
+        // context unconditionally).
+        WindowQuery q;
+        QVERIFY(!q.valueForField(Field::IsTiled).has_value());
+        QVERIFY(!q.hasWindow());
+        QVERIFY(windowSourcedFields().contains(Field::IsTiled));
+
+        // False is a real value — a window explicitly known not to be tiled is
+        // not the same as one whose state is unknown.
+        q.isTiled = false;
+        QVERIFY(q.valueForField(Field::IsTiled).has_value());
+        QCOMPARE(q.valueForField(Field::IsTiled)->toBool(), false);
+        QVERIFY(q.hasWindow());
+
+        q.isTiled = true;
+        QCOMPARE(q.valueForField(Field::IsTiled)->toBool(), true);
+    }
+
+    void testValueForField_tiledWindowCountOptionalContext()
+    {
+        // TiledWindowCount is the ONE context field that is optional, and the
+        // asymmetry is deliberate: 0 is a meaningful count (an empty tiled
+        // desktop), so "unknown" cannot be spelled as a defaulted 0 the way the
+        // string context fields spell it as empty. Absent must therefore make
+        // a count predicate inert, and a present 0 must not.
+        WindowQuery q;
+        QVERIFY(!q.valueForField(Field::TiledWindowCount).has_value());
+        // Absent though it is, the field is CONTEXT-sourced — an absent
+        // context field must not make the query look per-window.
+        QVERIFY(!q.hasWindow());
+        QVERIFY(!windowSourcedFields().contains(Field::TiledWindowCount));
+
+        q.tiledWindowCount = 0;
+        QVERIFY(q.valueForField(Field::TiledWindowCount).has_value());
+        QCOMPARE(q.valueForField(Field::TiledWindowCount)->toInt(), 0);
+        QVERIFY(!q.hasWindow());
+
+        q.tiledWindowCount = 3;
+        QCOMPARE(q.valueForField(Field::TiledWindowCount)->toInt(), 3);
+        QVERIFY(!q.hasWindow());
+    }
 };
 
 QTEST_GUILESS_MAIN(TestWindowQuery)

@@ -84,11 +84,21 @@ public:
     /// (unlike setScrollTabSurface's non-zero path): the compositor's copy is
     /// a plain cache it can re-query, so a redundant broadcast would only cost
     /// a rule-cache invalidation on the other side.
+    ///
+    /// Both lists are SORTED and de-duplicated here rather than taken on
+    /// trust. The published contract says sorted, and the change gate is a
+    /// list compare, so canonicalizing at the one write site is what makes
+    /// both true whatever order the producer walked its screens in.
     void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens);
 
-    /// Wire keys of the @ref scrollEffectBehaviour map — shared with the
-    /// compositor-side reader so a rename is one edit, not two spellings that
-    /// silently stop matching.
+    /// Wire keys of the @ref scrollEffectBehaviour map, in one place for the
+    /// DAEMON side (this adaptor and its tests). They are not shared with the
+    /// compositor: the KWin effect is a separate module that does not link
+    /// this library and spells both literals itself when it reads the map
+    /// (kwin-effect/tilinghandler/state.cpp), and the XML DocString spells
+    /// them a third time. A rename is therefore an edit here, an edit in the
+    /// effect and an edit in the XML — the same kept-in-sync-BY-HAND rule the
+    /// presetVocabularyJson payload keys follow (scrollingadaptor.cpp).
     static QString focusFollowsMouseKey()
     {
         return QStringLiteral("focusFollowsMouse");

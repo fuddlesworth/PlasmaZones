@@ -307,6 +307,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             if (!m_shaderManager.animationRuleSet().isEmpty()) {
                 m_shaderManager.animationRuleEvaluator().clearCache();
             }
+            // The verdict cache keys on the same frozen id and matches on
+            // WindowClass / AppId just as readily (an Electron/CEF class swap
+            // is exactly how a per-app scroll multiplier starts or stops
+            // applying), so it takes the same clear.
+            if (!m_shaderManager.effectVerdictRuleSet().isEmpty()) {
+                m_shaderManager.effectVerdictRuleEvaluator().clearCache();
+            }
             // The exclusion verdict caches key on the same frozen id and the
             // WindowClass matcher — a class swap can flip an Exclude verdict.
             if (!m_snappingExclusionRuleSet.isEmpty()) {

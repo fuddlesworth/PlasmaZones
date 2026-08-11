@@ -244,6 +244,20 @@ public:
     /// Compositor half: drop KWin fullscreen state under the suppression
     /// counter and an own inGeometryApply bracket. Membership-independent.
     void releaseWindowedFullscreenState(const QString& windowId);
+    /// Write @p kw's fullscreen state with slotWindowFullScreenChanged
+    /// suppressed for the duration of the call.
+    ///
+    /// For effect-owned fullscreen flips made OUTSIDE this handler — today the
+    /// OpenFullscreen rule's one-shot at windowAdded. On XWayland
+    /// setFullScreen emits the state signal SYNCHRONOUSLY, so an unbracketed
+    /// call re-enters slotWindowFullScreenChanged from inside
+    /// slotWindowAdded, where its never-tracked exit arm announces a window
+    /// that is still mid-open and releases the first-frame restore
+    /// suppression that handler is about to arm. The counter is private, and
+    /// the friendship runs the other way (the effect befriends this class, not
+    /// the reverse), so the bracketed write lives here rather than as a
+    /// counter accessor. No-op for a null @p kw.
+    void applyFullScreenSuppressed(KWin::Window* kw, bool fullScreen);
     /// Hold keep-below on a flagged window (snapshot-once) so KWin's
     /// active-fullscreen layer promotion cannot stack it above its strip.
     void applyWindowedFullscreenLayerDemotion(const QString& windowId, KWin::Window* kw);
@@ -328,6 +342,22 @@ public:
         return !m_scrollCropStraddlerScreens.isEmpty();
     }
 
+    /// True once the daemon's scrollEffectBehaviour map has landed (live
+    /// signal or the bring-up Properties.Get reply), false again after either
+    /// teardown path clears it.
+    ///
+    /// The direct-scanout gate is the reason this flag exists rather than the
+    /// sets answering for themselves: an EMPTY crop set is ambiguous without
+    /// it — "the daemon resolved no screen to cropping" and "no reply yet"
+    /// look identical — and blocksDirectScanout has to fall back to the global
+    /// setting in the second case while treating the first as authoritative.
+    /// Without the distinction, a per-context SetScrollCropStraddlers=false
+    /// could never hand direct scanout back while the global setting was on.
+    bool scrollEffectBehaviourSeeded() const
+    {
+        return m_scrollEffectBehaviourSeeded;
+    }
+
     /// Daemon-loss teardown: drop the dead session's scrolling snapshot.
     /// Deliberately NOT the live chokepoint — setScrollingScreens schedules
     /// a border sweep, which on this path would re-create rule-matched
@@ -345,11 +375,25 @@ public:
     {
         ++m_scrollingScreensGeneration;
         m_scrollingScreens.clear();
+        // The per-screen behaviour sets belong to the same dead session, and
+        // BOTH outlive the screen set they are keyed by if they are not
+        // cleared here: a stale crop entry keeps forcing composition
+        // session-wide, and a stale focus-follows-mouse entry answers for a
+        // screen the new daemon may not run the scrolling engine on at all.
+        clearScrollEffectBehaviourForTeardown();
         // Release Meta+wheel with the dead session (no repaint interplay,
         // unlike the border sweep this path deliberately skips): a consumed
         // axis chord with no daemon to serve it would just eat input.
         updateScrollWheelShortcuts();
     }
+
+    /// Drop the dead session's resolved scroll-behaviour map (both per-screen
+    /// sets plus the seeded flag). Shared by the serviceUnregistered teardown
+    /// (via clearScrollingScreensForTeardown) and by onDaemonReady, which a
+    /// straight old→new owner handover reaches WITHOUT any unregistered edge
+    /// having fired. Takes the crop set's repaint bookend itself — that set is
+    /// painted state, so dropping it changes what the clip cuts.
+    void clearScrollEffectBehaviourForTeardown();
 
     /// True when @p screenId runs the SCROLLING engine. A subset of the
     /// engine-managed set the daemon publishes as managedScreens (which is
@@ -404,11 +448,13 @@ public:
     ///
     /// The marker is NOT cleared by either unseeding path — those paths SET
     /// it instead, from the re-slice clearActiveLayoutsForTeardown performs.
-    /// Every getAllRules reply that PARSES recomputes it outright (the
-    /// malformed-payload arms return first, having sliced nothing). Clearing it
-    /// on teardown or bring-up would disarm this edge for the session if the
-    /// following getAllRules never lands; a stale-TRUE marker only costs one
-    /// redundant re-drive.
+    /// Every getAllRules reply that PARSES recomputes it outright; the
+    /// malformed-payload and over-cap arms RE-ARM it to true instead, because
+    /// this edge consumed it before dispatching and those arms admit nothing —
+    /// leaving it false there would disarm the next unseed→seed cycle while
+    /// the rules are still withheld. Clearing it on teardown or bring-up would
+    /// disarm this edge for the session if the following getAllRules never
+    /// lands; a stale-TRUE marker only costs one redundant re-drive.
     bool activeLayoutsSeeded() const
     {
         return m_activeLayoutsSeeded;
@@ -443,7 +489,7 @@ public:
     /// updateAllDecorations would fight the teardown's clearAllDecorations.
     /// Instead the clear re-slices the rule sets in place, through
     /// PlasmaZonesEffect::sliceActiveLayoutRulesForUnseededMap: every rule
-    /// whose match references Field::ActiveLayout comes back OUT of the four
+    /// whose match references Field::ActiveLayout comes back OUT of the five
     /// effect-bound sets (the three exclusion slices and the shader manager's
     /// effect-rule set). Leaving them in was the defect — the rule sets
     /// survive daemon loss on purpose, but they were filled while the map was
@@ -797,7 +843,8 @@ private:
     /// loadSettings owns the re-announce — announcing there desyncs the
     /// daemon's view from the effect's until that batch lands.
     void setScrollingScreens(const QSet<QString>& newSet, bool announceFlipped = true);
-    /// The two bring-up property Gets loadSettings dispatches, factored out
+    /// The three bring-up property Gets loadSettings dispatches (scrolling
+    /// screens, active layouts, scroll effect behaviour), factored out
     /// so their bounded failure retries can re-dispatch exactly one fetch.
     /// Every dispatch bumps the matching per-query generation, so a stale
     /// retry reply loses to any newer query or live-signal write.
@@ -878,7 +925,7 @@ private:
     quint64 m_activeLayoutsQueryGeneration = 0;
     /// Same per-dispatch guard for the scrolling-screens property fetch.
     quint64 m_scrollingScreensQueryGeneration = 0;
-    /// Remaining bounded-retry attempts for the two bring-up fetches.
+    /// Remaining bounded-retry attempts for the three bring-up fetches.
     /// Reset to the cap by each loadSettings run, consumed only by the
     /// failure arms' own re-dispatches.
     int m_activeLayoutsFetchRetriesLeft = 0;
@@ -895,6 +942,13 @@ private:
     /// bring-up before the daemon's first reply looks like.
     QSet<QString> m_scrollFocusFollowsMouseScreens;
     QSet<QString> m_scrollCropStraddlerScreens;
+    /// Set by applyScrollEffectBehaviour on every apply (before its change
+    /// gate, the m_activeLayoutsSeeded shape: an identical map is still a real
+    /// map, and the daemon's first publish is legitimately all-empty on a
+    /// session with no scrolling screen). Cleared by
+    /// clearScrollEffectBehaviourForTeardown. See scrollEffectBehaviourSeeded()
+    /// for the one consumer and why an empty set alone cannot answer for it.
+    bool m_scrollEffectBehaviourSeeded = false;
     /// Same stale-reply guard for the scrolling-screens property fetch.
     /// Bumped by setScrollingScreens on EVERY authoritative write (live
     /// signal, property reply, daemon-restart clear) — even an identical
@@ -1022,13 +1076,39 @@ private:
     /// the slot are what protect the tiling state, not this counter.
     int m_suppressFullScreenChanged = 0;
     // ── Focus follows mouse ──
-    // Per-mode pair: m_focusFollowsMouse is the autotile flag
-    // (autotileFocusFollowsMouse), m_scrollingFocusFollowsMouse the
-    // scrolling one. handleCursorMoved picks per screen via
-    // isScrollingScreen — one shared boolean made the two settings fight
-    // over the union of managed screens.
+    // Per-mode pair of GLOBAL SETTING mirrors: m_focusFollowsMouse is the
+    // autotile flag (autotileFocusFollowsMouse), m_scrollingFocusFollowsMouse
+    // the scrolling one (scrollingFocusFollowsMouse).
+    //
+    // Only the autotile half is still the per-screen AUTHORITY. On a scrolling
+    // screen the authority is m_scrollFocusFollowsMouseScreens, the daemon's
+    // already-resolved `rule ?? config` membership — a SetScrollFocusFollowsMouse
+    // context rule can turn the behaviour on for one monitor while the global
+    // setting is off, so m_scrollingFocusFollowsMouse alone would answer "off"
+    // for a screen the rule turned on. handleCursorMoved therefore routes per
+    // screen (isScrollingScreen → membership, else the autotile flag), and
+    // every "is FFM off everywhere" gate goes through ffmOffEverywhere() so
+    // the scrolling half's real authority is a term in all of them.
     bool m_focusFollowsMouse = false;
     bool m_scrollingFocusFollowsMouse = false;
+    /// True when NO screen can focus-follow-mouse: both global settings off
+    /// AND the daemon's resolved scrolling set empty.
+    ///
+    /// The ONE spelling of that condition. It has three consumers — the
+    /// handleCursorMoved bail and the two setting-writer latch clears — plus
+    /// the applyScrollEffectBehaviour tail, and while they were spelled
+    /// separately the bail read only the two globals, so a rule that turned
+    /// FFM on for a screen was defeated before the per-screen read ever ran
+    /// (the rule could turn the behaviour OFF but never ON).
+    ///
+    /// The two globals stay as terms rather than being replaced by the set:
+    /// the autotile half has no per-screen set at all, and the scrolling
+    /// global still governs the pre-seed window before the daemon's first
+    /// scrollEffectBehaviour reply lands.
+    bool ffmOffEverywhere() const
+    {
+        return !m_focusFollowsMouse && !m_scrollingFocusFollowsMouse && m_scrollFocusFollowsMouseScreens.isEmpty();
+    }
     // ── Meta+wheel column focus ──
     bool m_wheelFocusEnabled = true;
     bool m_wheelFocusInverted = false;

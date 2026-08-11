@@ -508,12 +508,15 @@ public Q_SLOTS:
     QStringList getWindowsInZone(const QString& zoneId);
     QStringList getSnappedWindows();
 
-    /// Remove per-window state for windows not in the alive set: zone/screen/
-    /// desktop assignments, the sticky map and legacy float set, both engines'
-    /// tracking (via their pruneStaleWindows overrides — TilingState/SnapState
-    /// membership, pending orders, min-size and last-rect caches), the
-    /// registry's metadata + canonical entries, the tab-colour memo, and the
-    /// adaptor's own frame-geometry/broadcast shadow maps.
+    /// Remove per-window state for windows not in the alive set. The snap side
+    /// goes through the tracking service's pruneStaleAssignments: zone / screen
+    /// / desktop assignments, SnapState membership, the sticky map and legacy
+    /// float set. The two TILING-family engines (autotile and scrolling) prune
+    /// themselves via their pruneStaleWindows overrides — TilingState / strip
+    /// membership, pending orders, min-size and last-rect caches. On top of
+    /// that: the registry's metadata + canonical entries, the tab-colour memo,
+    /// the rule evaluator's shared per-window memo, and the adaptor's own
+    /// frame-geometry / broadcast shadow maps.
     /// Called by the KWin effect after daemon ready to clean up stale entries
     /// from windows that no longer exist (closed between save and daemon restart).
     void pruneStaleWindows(const QStringList& aliveWindowIds);
@@ -820,11 +823,13 @@ public:
     bool shouldFloatByRule(const QString& windowId, const QString& screenId);
 
     /// Per-window scrolling open-behaviour rule slots (openColumnWidth /
-    /// openWindowHeight / openTabbed / openColumnPlacement), returned as a
-    /// loose map so the header stays free of scroll-engine types. Keys
-    /// (present only when the slot matched): "widthFraction" (double),
-    /// "heightFraction" (double), "tabbed" (bool), "consume"
-    /// (bool). Resolves UNCACHED, like shouldFloatByRule and unlike the
+    /// openWindowHeight / openTabbed / openColumnPlacement / openMaximized /
+    /// openFocused), returned as a loose map so the header stays free of
+    /// scroll-engine types. Keys, present only when the slot matched, and
+    /// spelled by the ScrollOpenKeys namespace in internal.h rather than
+    /// literals: widthFraction (double), heightFraction (double), tabbed
+    /// (bool), consume (bool), maximized (bool), focused (bool).
+    /// Resolves UNCACHED, like shouldFloatByRule and unlike the
     /// Restore predicates: the query carries ScreenId and Mode stamps, and the
     /// evaluator cache is keyed on windowId and rule revision alone, so a hit
     /// would silently discard both. See rules.cpp.
@@ -853,6 +858,20 @@ public:
     /// than per tab per relayout.
     QVariantMap dropIndicatorRuleParams(const QString& windowId);
 
+    /// Drop every per-window rule memo this adaptor holds, because the system
+    /// colour scheme flipped.
+    ///
+    /// ColorScheme is the one field in buildRuleQueryForWindow's query that
+    /// changes without a rules edit, so neither memo notices it on its own: the
+    /// shared evaluator cache is keyed on (window id, rule revision) and the
+    /// private tab-colour memo compares a fixed field list. Both are dropped
+    /// here so the next resolve re-reads the live token.
+    ///
+    /// Wired by the daemon to ISettings::systemColorSchemeChanged. Cheap and
+    /// rare: a scheme flip is a user action, and the cost is one cold resolve
+    /// per window on the paths that resolve again.
+    void invalidateRuleMemosForColorSchemeChange();
+
 private:
     /// Extract the three tab-colour slots from an already-resolved verdict.
     /// Shared by the memo-hit and memo-miss paths so both produce the same map.
@@ -873,24 +892,44 @@ private:
     /// wants back, and it keeps this header free of the rules-engine include.
     ///
     /// The key carries the rule revision plus title, captionNormal
-    /// (title-derived), virtual desktop and activity. Title especially — the
-    /// refresh that consumes this memo is DRIVEN by title changes, so keying on
-    /// the revision alone would leave a `Title contains …` tab-colour rule
-    /// stuck on its first verdict until the next rules save.
+    /// (title-derived), virtual desktop, activity and the colour-scheme token.
+    /// Title especially — the refresh that consumes this memo is DRIVEN by title
+    /// changes, so keying on the revision alone would leave a `Title contains …`
+    /// tab-colour rule stuck on its first verdict until the next rules save.
+    ///
+    /// ColorScheme is in the key because it is the one context field
+    /// buildRuleQueryForWindow stamps that moves WITHOUT any rules edit: a
+    /// light/dark flip changes the verdict of a `ColorScheme Equals dark`
+    /// tab-colour rule while the revision stands still. The key alone is enough
+    /// here — unlike the extended fields below, this path re-reads the token on
+    /// every call, so the compare sees the flip on the next refresh, and
+    /// invalidateRuleMemosForColorSchemeChange() drops the stale entries at the
+    /// moment of the flip rather than waiting for one.
     ///
     /// KNOWN GAP, deliberate. buildRuleQueryForWindow also copies ~20 EXTENDED
     /// fields that move under a live window (isMaximized, isFocused,
     /// isMinimized, keepAbove, the geometry quartet, and the rest of the state
     /// flags). None is in this key, so a tab-colour rule conditioned on one
-    /// resolves once and stays pinned until the title, desktop, activity or
-    /// rule revision moves. Widening the key would NOT fix such a rule: nothing
-    /// re-drives the enrichment on those fields either
+    /// resolves once and stays pinned until the title, desktop, activity,
+    /// colour scheme or rule revision moves. Widening the key would NOT fix
+    /// such a rule: nothing re-drives the enrichment on those fields either
     /// (scheduleScrollTabEnrichmentRefresh fires on isDemandingAttention and
-    /// title only), so the verdict would still be stale between refreshes. The
+    /// title only), so the verdict would still be stale between refreshes.
+    /// ColorScheme is the exception that proves the shape of the argument, and
+    /// that is why it IS keyed: it has a re-drive signal
+    /// (ISettings::systemColorSchemeChanged, routed here through
+    /// invalidateRuleMemosForColorSchemeChange), so keying it actually buys
+    /// freshness rather than just extra compares. The
     /// honest fix is a second trigger, not a bigger key, and it is not worth ~20
     /// extra comparisons per tab per refresh until someone wants those pairings.
-    /// Only appId, windowRole, desktopFile, pid and windowType are genuinely
-    /// immutable for a given window id.
+    /// Genuinely immutable for a given window id: windowRole, pid and
+    /// windowType. appId and desktopFile are NOT — setWindowMetadata documents
+    /// both as mutable (a class-mutating app renames mid-life), and the memo key
+    /// is the INSTANCE-derived shadow id, which survives such a rename, so an
+    /// AppId-matched tab-colour rule would stay pinned across one. They are left
+    /// out of the key for the same reason as the extended fields: nothing
+    /// re-drives the enrichment on an appId change either, so a wider key would
+    /// not make that verdict fresh.
     struct TabColorMemoEntry
     {
         quint64 revision = 0;
@@ -898,6 +937,7 @@ private:
         std::optional<QString> captionNormal;
         int virtualDesktop = 0;
         QString activity;
+        QString colorScheme;
         QVariantMap colors;
     };
     QHash<QString, TabColorMemoEntry> m_tabColorMemo;
@@ -917,7 +957,12 @@ public:
     /// Resolve the open-placement directive for a window from its matched window
     /// rules: the 1-based `SnapToZone` ordinals to snap into (empty when no
     /// SnapToZone rule matches; multiple ordinals request a zone span) plus the
-    /// `RouteToScreen` target monitor (empty when unrouted). Consulted by the
+    /// `RouteToScreen` target monitor (empty when unrouted) plus the
+    /// `RouteToDesktop` target desktop (unset when unrouted, and only ever a
+    /// 1-based desktop). The desktop slot steers where the zones RESOLVE, so a
+    /// combined SnapToZone + RouteToDesktop rule lands in the right zone of the
+    /// destination desktop; the desktop MOVE itself is emitted separately by
+    /// applyOpenDesktopRouting. Consulted by the
     /// placement resolver the daemon injects into the SnapEngine (in-process, not
     /// via D-Bus). Builds a WindowQuery from the window registry metadata, pins it
     /// to @p screenId (the screen the window is opening on) so a

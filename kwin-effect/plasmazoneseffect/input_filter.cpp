@@ -6,6 +6,7 @@
 #include "tilinghandler/tilinghandler.h"
 
 #include <input_event.h>
+#include <pointer_input.h>
 #include <window.h>
 #include <workspace.h>
 
@@ -126,6 +127,11 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
     // consuming (rather than retargeting) matches how the region reads
     // visually — inert until clicked.
     if (overhangTargetAt(event->position) != nullptr) {
+        // The consumed stream ends here, so drop the residues with it: the
+        // next tick this filter DOES scale belongs to a different window (or
+        // to this one after a gap), and either way it must start clean rather
+        // than inherit a remainder from a stream the client never saw.
+        resetScrollFactorStream();
         return true;
     }
     // ScrollFactor rule: rescale the event in place and pass it on. Ordering
@@ -135,18 +141,33 @@ bool ScrollOverhangInputFilter::pointerAxis(KWin::PointerAxisEvent* event)
     return false;
 }
 
+void ScrollOverhangInputFilter::resetScrollFactorStream()
+{
+    m_scrollFactorWindow = nullptr;
+    m_v120ResidueVertical = 0.0;
+    m_v120ResidueHorizontal = 0.0;
+}
+
 void ScrollOverhangInputFilter::applyScrollFactor(KWin::PointerAxisEvent* event)
 {
     // Fast path: no enabled ScrollFactor rule in the session. Checked BEFORE
-    // the toplevel hit test so the no-rules case pays two pointer reads per
-    // tick, matching the effect's other has*Rules gates.
+    // any window lookup so the no-rules case pays two pointer reads per tick,
+    // matching the effect's other has*Rules gates.
     if (!m_effect->m_shaderManager.hasScrollFactorRules()) {
-        m_scrollFactorWindow = nullptr;
+        resetScrollFactorStream();
         return;
     }
-    KWin::Window* target = KWin::input()->findToplevel(event->position);
+    // POINTER FOCUS, not a positional hit test. Two reasons, and they point
+    // the same way: the focused window is the one the forwarding filter will
+    // actually deliver this event to (during an implicit grab — a button held
+    // while the cursor leaves the window — that is NOT the window under the
+    // cursor, so a positional lookup would scale by the wrong app's rule or
+    // by none at all), and it costs no second hit test on top of the one
+    // overhangTargetAt already performed for this same event.
+    KWin::PointerInputRedirection* pointer = KWin::input()->pointer();
+    KWin::Window* target = pointer ? pointer->focus() : nullptr;
     if (!target || target->isDeleted()) {
-        m_scrollFactorWindow = nullptr;
+        resetScrollFactorStream();
         return;
     }
     if (target != m_scrollFactorWindow) {
@@ -169,6 +190,14 @@ void ScrollOverhangInputFilter::applyScrollFactor(KWin::PointerAxisEvent* event)
     event->delta *= *factor;
     if (event->deltaV120 != 0) {
         qreal& residue = event->orientation == Qt::Vertical ? m_v120ResidueVertical : m_v120ResidueHorizontal;
+        // A reversal within the same window and orientation abandons the
+        // remainder it was accumulating: carrying it across the turn subtracts
+        // from the first notch of the new direction (and, with a small factor,
+        // can swallow it outright), so the wheel feels like it sticks when the
+        // user changes their mind mid-scroll.
+        if ((event->deltaV120 > 0 && residue < 0.0) || (event->deltaV120 < 0 && residue > 0.0)) {
+            residue = 0.0;
+        }
         const qreal scaled = event->deltaV120 * *factor + residue;
         const qint32 emitted = qint32(std::trunc(scaled));
         residue = scaled - emitted;

@@ -54,6 +54,13 @@ QtObject {
         TextField {
             readonly property var _param: parent.modelData
             readonly property var _zones: Array.isArray(row.action[_param.key]) ? row.action[_param.key] : []
+            // The SnapToZone ordinal cap (MaxZoneOrdinal = 64 in RuleAction.h).
+            // Both parse paths below clamp against it: the range path so an
+            // unbounded "1-100000" cannot build a huge array on the UI thread,
+            // and the single-ordinal path so a typed "70" is dropped at parse
+            // time rather than committed for the validator to discard on save
+            // with the Save button still enabled.
+            readonly property int _maxZoneOrdinal: 64
 
             // Normalised display (sorted, deduped) re-binds after each edit.
             text: _zones.join(", ")
@@ -74,13 +81,8 @@ QtObject {
                     if (range) {
                         var lo = parseInt(range[1], 10);
                         var hi = parseInt(range[2], 10);
-                        // Clamp the upper bound to the SnapToZone ordinal cap
-                        // (MaxZoneOrdinal = 64 in RuleAction.h). An unbounded
-                        // expansion (e.g. "1-100000") would build a huge array on
-                        // the UI thread and freeze it; ordinals past the cap are
-                        // rejected by the validator anyway.
-                        if (hi > 64)
-                            hi = 64;
+                        if (hi > _maxZoneOrdinal)
+                            hi = _maxZoneOrdinal;
                         if (lo >= 1 && hi >= lo) {
                             for (var z = lo; z <= hi; z++) {
                                 if (!seen[z]) {
@@ -93,7 +95,7 @@ QtObject {
                     }
                     if (/^\d+$/.test(t)) {
                         var n = parseInt(t, 10);
-                        if (n >= 1 && !seen[n]) {
+                        if (n >= 1 && n <= _maxZoneOrdinal && !seen[n]) {
                             seen[n] = true;
                             parsed.push(n);
                         }
@@ -388,7 +390,10 @@ QtObject {
                 for (var i = 1; i <= desktopCombo._count; ++i) {
                     var name = desktopCombo._names.length >= i ? desktopCombo._names[i - 1] : "";
                     items.push({
-                        "label": name && name.length > 0 ? (i + ": " + name) : ("" + i),
+                        // Composed inside one i18nc so translators control the
+                        // order and the separator, matching the monitor picker
+                        // above and the match-side desktop picker.
+                        "label": name && name.length > 0 ? i18nc("virtual desktop number, then its name", "%1: %2", i, name) : ("" + i),
                         "value": i
                     });
                 }

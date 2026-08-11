@@ -118,9 +118,9 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
     // ruleQuery() funnel re-stamps "scrolling" from the per-screen engine
     // discriminator, which this free helper cannot reach.
     if (isTiled) {
-        query.mode = QStringLiteral("tiling");
+        query.mode = QString(PhosphorRules::ModeToken::Tiling);
     } else if (isSnapped) {
-        query.mode = QStringLiteral("snapping");
+        query.mode = QString(PhosphorRules::ModeToken::Snapping);
     }
     // Context fields — let a window-domain rule pin screen / desktop / activity
     // (e.g. "red border on monitor 2"). screenId is resolved by the caller (the

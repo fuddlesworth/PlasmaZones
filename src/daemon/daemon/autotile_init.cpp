@@ -78,8 +78,6 @@ void Daemon::initializeAutotile()
                     // when no screen is in autotile mode, and a runtime algorithm
                     // change is irrelevant in that case.
                     if (m_running && isAnyScreenAutotile() && m_overlayService) {
-                        auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
-                        QString displayName = algo ? algo->name() : algorithmId;
                         QString screenId;
                         if (m_autotileEngine) {
                             screenId = m_autotileEngine->activeScreen();
@@ -93,8 +91,13 @@ void Daemon::initializeAutotile()
                         // Trigger gate AFTER the screen resolve so the
                         // SetOsdEnabled rule's force-ON half can consult the
                         // context (the plain toggle read used to sit in the
-                        // outer condition, before a screen was known).
+                        // outer condition, before a screen was known). The
+                        // screen resolve is the price of that and cannot move;
+                        // the registry lookup below can, so it sits past the
+                        // gate and costs nothing when the OSD is off.
                         if (isOsdTriggerEnabled(OsdTrigger::LayoutSwitch, screenId)) {
+                            auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algorithmId) : nullptr;
+                            const QString displayName = algo ? algo->name() : algorithmId;
                             showAlgorithmOsdDeferred(algorithmId, displayName, screenId);
                         }
                     }

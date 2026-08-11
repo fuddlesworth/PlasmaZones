@@ -209,7 +209,7 @@ void Daemon::armResnapOsdSuppression(int count)
     m_suppressResnapOsdWatchdog.start();
 }
 
-bool Daemon::shouldSuppressOsd(const QString& screenId) const
+bool Daemon::globalOsdSuppressed() const
 {
     if (m_shuttingDown) {
         return true;
@@ -219,16 +219,18 @@ bool Daemon::shouldSuppressOsd(const QString& screenId) const
         return true;
     }
     // Screen-removal cooldown — see m_screensSettlingUntil in daemon.h.
-    if (std::chrono::steady_clock::now() < m_screensSettlingUntil) {
+    return std::chrono::steady_clock::now() < m_screensSettlingUntil;
+}
+
+bool Daemon::shouldSuppressOsd(const QString& screenId) const
+{
+    if (globalOsdSuppressed()) {
         return true;
     }
     // Per-context SetOsdEnabled rule: an explicit false suppresses every OSD
     // for the screen's current context. A screenless caller skips the rule
     // (fail-open); the force-ON half is layered at the trigger gates.
-    if (!screenId.isEmpty() && contextOsdRuleVerdict(screenId) == std::optional<bool>(false)) {
-        return true;
-    }
-    return false;
+    return !screenId.isEmpty() && contextOsdRuleVerdict(screenId) == std::optional<bool>(false);
 }
 
 std::optional<bool> Daemon::contextOsdRuleVerdict(const QString& screenId) const
@@ -249,12 +251,26 @@ bool Daemon::navigationOsdAllowed(const QString& screenId) const
     if (!m_overlayService) {
         return false;
     }
+    if (globalOsdSuppressed()) {
+        return false;
+    }
+    // OSD style None means no cards at all, navigation feedback included. The
+    // settings page presents the style as "visual style of on-screen
+    // notifications" and enables it whenever ANY of the three OSD toggles is
+    // on — the navigation one among them — so None has to be honoured on this
+    // family too. It was the only family that never consulted the style, which
+    // a SetOsdEnabled rule's force-ON half made reachable without the user
+    // having any OSD toggle on at all.
+    if ((m_settings ? m_settings->osdStyle() : OsdStyle::Preview) == OsdStyle::None) {
+        return false;
+    }
+    // ONE verdict resolve for both halves of the rule: a false verdict is the
+    // suppress half (what shouldSuppressOsd would have applied) and a true one
+    // is the force-ON half, and value_or() collapses them into the same read.
+    // Asking shouldSuppressOsd separately re-resolved the same context rule a
+    // second time on every snap.
     const std::optional<bool> rule = contextOsdRuleVerdict(screenId);
-    const bool enabled = rule.value_or(m_settings && m_settings->showNavigationOsd());
-    // shouldSuppressOsd carries the rule's false half (plus the global
-    // suppressors); passing the screen keeps the two halves consistent for
-    // this context.
-    return enabled && !shouldSuppressOsd(screenId);
+    return rule.value_or(m_settings && m_settings->showNavigationOsd());
 }
 
 void Daemon::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId)
@@ -483,15 +499,6 @@ void Daemon::showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, S
         stopScrollingOsdSettleTimer(screenId);
         return;
     }
-    // This card (rendered now or a settle-beat later) announces the strip
-    // with the template currently in force, so the template-only gate's
-    // ledger advances HERE — the one funnel every mode-card producer routes
-    // through (shortcut toggle, KCM apply, unlock, desktop switch alike).
-    if (m_layoutManager) {
-        const PhosphorZones::ScrollingTemplate current = m_layoutManager->scrollingTemplateForContext(
-            screenId, currentDesktopForScreen(screenId), currentActivity());
-        m_lastAnnouncedTemplateByScreen.insert(screenId, current.isValid() ? current.id.toString() : QString());
-    }
     if (style == OsdStyle::Preview && m_overlayService) {
         // ONE strip resolve, threaded into the render: probing with a
         // different accessor than the renderer used meant two relayouts of
@@ -502,6 +509,7 @@ void Daemon::showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, S
             // A card is rendering NOW, so an earlier toggle's settle timer
             // would land a second, identical card a beat later.
             stopScrollingOsdSettleTimer(screenId);
+            recordAnnouncedScrollingTemplate(screenId);
             pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId, tiles);
             return;
         }
@@ -553,12 +561,28 @@ void Daemon::showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, S
         return;
     }
     stopScrollingOsdSettleTimer(screenId);
+    recordAnnouncedScrollingTemplate(screenId);
     showKdeTextOsd(QStringLiteral("plasmazones"), PhosphorI18n::tr("Scrolling", "tiling mode name"));
     qCInfo(lcDaemon) << "Showing scrolling-mode text OSD: screen=" << screenId;
 }
 
+void Daemon::recordAnnouncedScrollingTemplate(const QString& screenId)
+{
+    if (!m_layoutManager) {
+        return;
+    }
+    const PhosphorZones::ScrollingTemplate current =
+        m_layoutManager->scrollingTemplateForContext(screenId, currentDesktopForScreen(screenId), currentActivity());
+    m_lastAnnouncedTemplateByScreen.insert(screenId, current.isValid() ? current.id.toString() : QString());
+}
+
 void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
 {
+    // The settle dispatch's render point, so the ledger advances here rather
+    // than at request time: the settle lambda re-checks its gates and can
+    // return without rendering, and the template in force at dispatch is the
+    // one this card actually shows.
+    recordAnnouncedScrollingTemplate(screenId);
     pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId,
                           visibleStripTiles(m_scrollEngine.get(), screenId));
 }
@@ -932,7 +956,11 @@ void Daemon::showDesktopSwitchOsd(const QString& activity)
     if (shouldSuppressOsd()) {
         return;
     }
-    if (!m_settings || !m_settings->showOsdOnDesktopSwitch() || !m_overlayService || !m_layoutManager
+    // Through isOsdTriggerEnabled like every other trigger gate rather than a
+    // raw setting read: this batch is screenless, so it resolves to the plain
+    // toggle today, but routing it through the one gate keeps the rule layering
+    // in a single place instead of leaving a second, rule-blind reader behind.
+    if (!m_settings || !isOsdTriggerEnabled(OsdTrigger::DesktopSwitch) || !m_overlayService || !m_layoutManager
         || !m_screenManager) {
         return;
     }
@@ -946,16 +974,39 @@ void Daemon::showDesktopSwitchOsdForScreen(const QString& screenId, const QStrin
     if (!m_running) {
         return;
     }
-    if (shouldSuppressOsd(screenId)) {
+    if (!m_settings || !m_overlayService || !m_layoutManager || !m_screenManager) {
         return;
     }
-    // isOsdTriggerEnabled carries the SetOsdEnabled rule's force-ON half for
-    // this screen's context; the suppress half ran just above.
-    if (!m_settings || !isOsdTriggerEnabled(OsdTrigger::DesktopSwitch, screenId) || !m_overlayService
-        || !m_layoutManager || !m_screenManager) {
+    // The per-output desktop report names the PHYSICAL output, but every
+    // context this card reports against is keyed by EFFECTIVE id, and a
+    // subdivided monitor has no context of its own — only its vs:N children,
+    // which is all effectiveScreenIds() ever yields for it. Gating on the
+    // physical id therefore asked about a context nothing else uses and left
+    // the children that DID switch without a card. virtualScreenIdsFor()
+    // returns the plain id for an unsubdivided output, so the common case is
+    // unchanged.
+    // Screen-independent, so hoisted out of the per-screen walk.
+    if (globalOsdSuppressed()) {
         return;
     }
-    showOsdForScreens({screenId}, activity);
+    const bool toggle = m_settings->showOsdOnDesktopSwitch();
+    QStringList targets;
+    const QStringList effectiveIds = m_screenManager->virtualScreenIdsFor(screenId);
+    for (const QString& effectiveId : effectiveIds) {
+        // ONE verdict resolve per screen for both halves of the SetOsdEnabled
+        // rule, the same collapse navigationOsdAllowed makes: false is the
+        // suppress half, true is the force-ON half over an off toggle, and
+        // value_or() is both. Asking shouldSuppressOsd and isOsdTriggerEnabled
+        // in turn resolved the identical context rule twice per screen.
+        if (!contextOsdRuleVerdict(effectiveId).value_or(toggle)) {
+            continue;
+        }
+        targets.append(effectiveId);
+    }
+    if (targets.isEmpty()) {
+        return;
+    }
+    showOsdForScreens(targets, activity);
 }
 
 void Daemon::showOsdForAllScreens(const QString& activity)
@@ -985,16 +1036,15 @@ void Daemon::showOsdForScreens(const QStringList& screenIds, const QString& acti
             return;
         }
         for (const QString& screenId : screenIds) {
-            // Per-screen SetOsdEnabled suppression: an all-screens desktop
-            // switch must still skip a screen whose context rule says no
-            // (the whole-batch gates above are screenless, so only the
-            // global suppressors ran there). The force-ON half deliberately
-            // does not apply on this all-screens path — it would need the
-            // batch's toggle gate to open per screen, and the per-screen
+            // No per-screen SetOsdEnabled gate here: every card this loop can
+            // reach (disabled, not-assigned, scrolling-mode, algorithm, layout)
+            // opens with its own shouldSuppressOsd(screenId), so a rule-off
+            // screen is already skipped. Re-asking here only bought a second
+            // context-rule resolve per screen. The force-ON half deliberately
+            // does not apply on this all-screens path either — it would need
+            // the batch's toggle gate to open per screen, and the per-screen
             // desktop-switch variant already carries it.
-            if (shouldSuppressOsd(screenId)) {
-                continue;
-            }
+            //
             // Each screen reports against its OWN current virtual desktop
             // (Plasma 6.7 per-output virtual desktops, #648) — via the shared
             // helper so the null-manager fallback cannot drift from every

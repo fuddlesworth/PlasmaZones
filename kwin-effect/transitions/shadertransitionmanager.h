@@ -108,8 +108,11 @@ public:
     void setRuleAnimationRules(QList<PhosphorRules::Rule> rules);
 
     /// The evaluator bound to the effect-rule set. Resolution of the
-    /// per-window cascade for every effect-consumed (`Tag::Effect`)
-    /// action routes through this evaluator.
+    /// per-window cascade for every appearance/animation (`Tag::Effect`)
+    /// action routes through this evaluator. Its terminal scope honours
+    /// `ExcludeAnimations`, which is why the one-shot verdicts
+    /// (`Tag::EffectVerdict`) route through `effectVerdictRuleEvaluator()`
+    /// instead — see that accessor.
     const PhosphorRules::RuleEvaluator& animationRuleEvaluator() const
     {
         return m_animationRuleEvaluator;
@@ -145,11 +148,39 @@ public:
         return m_hasWindowLayerRules;
     }
 
+    /// Rebuild the effect-VERDICT `RuleSet` from `m_effectVerdictRules` — the
+    /// rules carrying any `Tag::EffectVerdict` action (OpenFullscreen /
+    /// ScrollFactor). Separate from the animation/appearance set above because
+    /// their evaluator honours `ExcludeAnimations` as a walk-stopper, and a
+    /// verdict is not an animation: "no animations for this app" must not
+    /// cancel the app's scroll multiplier or its open-fullscreen decision.
+    /// Call after every mutation of that list.
+    void rebuildEffectVerdictRuleSet();
+
+    /// Replace the set of rules carrying any `Tag::EffectVerdict` action.
+    /// Written from the same `getAllRules` pass that fills the animation set,
+    /// so the two never drift. Triggers `rebuildEffectVerdictRuleSet()` only
+    /// when the list actually changes.
+    void setEffectVerdictRules(QList<PhosphorRules::Rule> rules);
+
+    /// The evaluator bound to the effect-verdict set. Its terminal action
+    /// scope is `{Exclude}` ONLY — see rebuildEffectVerdictRuleSet.
+    const PhosphorRules::RuleEvaluator& effectVerdictRuleEvaluator() const
+    {
+        return m_effectVerdictRuleEvaluator;
+    }
+
+    /// The effect-verdict rule set itself — for the `!isEmpty()` fast path.
+    const PhosphorRules::RuleSet& effectVerdictRuleSet() const
+    {
+        return m_effectVerdictRuleSet;
+    }
+
     /// True when at least one enabled rule carries an `OpenFullscreen` action.
     /// Gates the open-time fullscreen reconcile (`applyRuleOpenFullscreen`'s
     /// fast path) so a session with no such rule pays two pointer reads per
     /// window open instead of a full WindowQuery build. Recomputed by
-    /// `rebuildAnimationRuleSet()` on every rule-set change.
+    /// `rebuildEffectVerdictRuleSet()` on every rule-set change.
     bool hasOpenFullscreenRules() const
     {
         return m_hasOpenFullscreenRules;
@@ -158,7 +189,7 @@ public:
     /// True when at least one enabled rule carries a `ScrollFactor` action.
     /// Gates the input filter's per-axis-event resolve so a session with no
     /// such rule pays two pointer reads per wheel tick instead of a rule
-    /// resolution. Recomputed by `rebuildAnimationRuleSet()` on every
+    /// resolution. Recomputed by `rebuildEffectVerdictRuleSet()` on every
     /// rule-set change.
     bool hasScrollFactorRules() const
     {
@@ -368,15 +399,27 @@ private:
     PhosphorRules::RuleSet m_animationRuleSet;
     PhosphorRules::RuleEvaluator m_animationRuleEvaluator{m_animationRuleSet};
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Effect-VERDICT view (Tag::EffectVerdict: OpenFullscreen / ScrollFactor)
+    //
+    // Its own set + evaluator rather than a slice of the animation one: the
+    // evaluators differ in TERMINAL SCOPE, which is a per-evaluator property.
+    // Same declaration-order requirement — the set must outlive the evaluator.
+    // ═══════════════════════════════════════════════════════════════════════════
+    QList<PhosphorRules::Rule> m_effectVerdictRules;
+    PhosphorRules::RuleSet m_effectVerdictRuleSet;
+    PhosphorRules::RuleEvaluator m_effectVerdictRuleEvaluator{m_effectVerdictRuleSet};
+
     // Cached "any enabled rule carries SetOpacity" predicate — recomputed in
     // rebuildAnimationRuleSet() so the per-frame opacity resolve can skip the
     // WindowQuery build entirely when no opacity rule exists. See hasOpacityRules().
     bool m_hasOpacityRules = false;
     // Same shape for SetWindowLayer. See hasWindowLayerRules().
     bool m_hasWindowLayerRules = false;
-    // Same shape for OpenFullscreen. See hasOpenFullscreenRules().
+    // Same shape for OpenFullscreen, recomputed over the VERDICT list. See
+    // hasOpenFullscreenRules().
     bool m_hasOpenFullscreenRules = false;
-    // Same shape for ScrollFactor. See hasScrollFactorRules().
+    // Same shape for ScrollFactor, over the verdict list. See hasScrollFactorRules().
     bool m_hasScrollFactorRules = false;
 
     // ═══════════════════════════════════════════════════════════════════════════

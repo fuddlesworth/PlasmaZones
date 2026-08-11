@@ -85,7 +85,14 @@ QString Settings::systemColorSchemeToken()
     // itself uses (a dark scheme is one whose surfaces are dark); the
     // midpoint split matches how portals classify light vs dark. Empty when
     // there is no GUI application — the match field then stays inert.
-    if (!qGuiApp) {
+    //
+    // Off the GUI thread it degrades the same way, and for the same reason
+    // resolvedSystemColor below refuses: QGuiApplication::palette() is not
+    // documented thread-safe, so reading it here would race the GUI thread.
+    // The degraded answer differs from that sibling's on purpose — a colour
+    // has a defensible constant to fall back on, a colour SCHEME does not, and
+    // empty is already this accessor's honest "cannot classify" answer.
+    if (!qGuiApp || QThread::currentThread() != qGuiApp->thread()) {
         return QString();
     }
     const int lightness = QGuiApplication::palette().color(QPalette::Active, QPalette::Window).lightness();

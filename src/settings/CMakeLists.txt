@@ -191,6 +191,7 @@ set(plasmazones_settings_SRCS
     rules/ruleauthoring_p.h
     rules/ruleauthoring.cpp
     rules/ruleauthoring_actiondescriptions.cpp
+    rules/ruleauthoring_actionparams.cpp
     rules/ruleauthoring_actions.cpp
     rules/ruletemplates.h
     rules/ruletemplates.cpp

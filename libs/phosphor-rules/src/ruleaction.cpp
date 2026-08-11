@@ -204,11 +204,13 @@ QStringList ActionRegistry::typesWithTag(QLatin1StringView tag) const
 
 void ActionRegistry::registerBuiltins()
 {
-    // Split across two TUs for file-size; the registration order (engine half
-    // first, then appearance half) is load-bearing for the descriptors'
-    // displayOrder / category grouping, so the call order here is fixed.
+    // Split across three TUs for file-size; the registration order (engine
+    // half, then appearance half, then the indicator families) is load-bearing
+    // for the descriptors' displayOrder / category grouping, so the call order
+    // here is fixed.
     registerBuiltinsEngine();
     registerBuiltinsAppearance();
+    registerBuiltinsIndicators();
 }
 
 } // namespace PhosphorRules

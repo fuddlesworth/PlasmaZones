@@ -29,6 +29,8 @@
 #include <QJsonValue>
 #include <QtGlobal>
 
+#include <cmath> // std::isfinite, in resolveScrollFactor
+
 namespace PlasmaZones {
 
 namespace {
@@ -428,6 +430,14 @@ std::optional<qreal> resolveScrollFactor(const PhosphorRules::ResolvedActions& r
         return std::nullopt;
     }
     const double factor = v.toDouble();
+    // Finiteness FIRST: NaN compares false against both bounds, so the
+    // reject-not-clamp test below passes it straight through, and the input
+    // filter's `qint32(std::trunc(scaled))` on a NaN-scaled v120 delta is
+    // undefined behaviour. Infinities are equally out of contract and are
+    // caught here rather than relying on the range test's sign.
+    if (!std::isfinite(factor)) {
+        return std::nullopt;
+    }
     if (factor < PhosphorRules::MinScrollFactor || factor > PhosphorRules::MaxScrollFactor) {
         return std::nullopt;
     }

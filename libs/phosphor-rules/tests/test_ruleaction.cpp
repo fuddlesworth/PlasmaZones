@@ -172,8 +172,8 @@ const QList<QLatin1StringView> kWindowDomainTypes = {
     ActionType::OpenWindowHeight,
     ActionType::OpenMaximized,
     ActionType::OpenFocused,
-    // Effect-consumed open verdict (Tag::Effect, unlike its Open* siblings) —
-    // the KWin effect flips real fullscreen at windowAdded.
+    // Effect-consumed open verdict (Tag::EffectVerdict, unlike its Open*
+    // siblings) — the KWin effect flips real fullscreen at windowAdded.
     ActionType::OpenFullscreen,
     // Effect-consumed scroll-speed multiplier — the input filter rescales
     // axis events for the hovered window (Wayland sessions only).
@@ -817,6 +817,29 @@ private Q_SLOTS:
         QVERIFY(!RuleAction::fromJson(bad).has_value());
     }
 
+    void testEffectVerdictActions_tagMembership()
+    {
+        // OpenFullscreen and ScrollFactor are delivered to the compositor, but
+        // through the VERDICT evaluator (terminal scope: the blanket Exclude
+        // alone), not the animation/appearance one. Tag::EffectVerdict is that
+        // evaluator's sole admission gate, exactly as Tag::Effect is the
+        // appearance evaluator's — a descriptor that drops the tag compiles
+        // and passes every validation test while the action is never
+        // delivered, and one that carries Tag::Effect INSTEAD is delivered but
+        // silently cancelled by any matching ExcludeAnimations rule (which is
+        // how the two shipped). Pin both halves for both actions.
+        const ActionRegistry& registry = ActionRegistry::instance();
+        for (const QLatin1StringView type : {ActionType::OpenFullscreen, ActionType::ScrollFactor}) {
+            QVERIFY2(registry.hasTag(QString(type), Tag::EffectVerdict), type.data());
+            QVERIFY2(!registry.hasTag(QString(type), Tag::Effect), type.data());
+        }
+
+        // …and the converse, so the two tags cannot be quietly merged: an
+        // appearance action carries Effect and NOT EffectVerdict.
+        QVERIFY(registry.hasTag(QString(ActionType::SetWindowLayer), Tag::Effect));
+        QVERIFY(!registry.hasTag(QString(ActionType::SetWindowLayer), Tag::EffectVerdict));
+    }
+
     void testNewActions_rejectStrayKeys()
     {
         // The Value-keyed families (border, gap, tint/layer, scrolling, tab
@@ -844,13 +867,15 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetTintStrength, QJsonValue(0.5));
         rejectsStray(ActionType::SetTintColor, QJsonValue(QStringLiteral("#FF0000")));
         rejectsStray(ActionType::SetOuterGapTop, QJsonValue(8));
-        // All nine scrolling actions declare the same {Value} key set.
+        // The five per-context scrolling SIZING / vocabulary actions declare
+        // the same {Value} key set.
         rejectsStray(ActionType::SetScrollDefaultColumnWidth, QJsonValue(0.5));
         rejectsStray(ActionType::SetCenterFocusedColumn, QJsonValue(QStringLiteral("always")));
         rejectsStray(ActionType::SetScrollDefaultColumnDisplay, QJsonValue(QStringLiteral("tabbed")));
         rejectsStray(ActionType::SetScrollInsertPosition, QJsonValue(QStringLiteral("last")));
         rejectsStray(ActionType::SetScrollDefaultWindowHeight, QJsonValue(0.5));
-        // The six behaviour toggles declare the same {Value} key set.
+        // The six behaviour toggles and the sticky-handling enum beside them
+        // declare the same {Value} key set.
         rejectsStray(ActionType::SetScrollAlwaysCenterSingleColumn, QJsonValue(true));
         rejectsStray(ActionType::SetScrollRespectMinimumSize, QJsonValue(true));
         rejectsStray(ActionType::SetScrollCropStraddlers, QJsonValue(true));
@@ -1065,6 +1090,35 @@ private Q_SLOTS:
             o.insert(QStringLiteral("value"), v);
             const auto action = RuleAction::fromJson(o);
             QVERIFY(action.has_value());
+            QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
+            const auto roundTripped = RuleAction::fromJson(action->toJson());
+            QVERIFY(roundTripped.has_value());
+            QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(v));
+        }
+    }
+
+    void testSetOsdEnabled_fromJsonRoundTrip()
+    {
+        // SetOsdEnabled is the third context-domain boolean of the family, and
+        // its two polarities are genuinely different verdicts: false suppresses
+        // every OSD for the context, true FORCES them past the per-trigger
+        // global toggles. Both must survive load as explicit values — an
+        // explicit true read back as absent would silently degrade the
+        // force-on half to "follow the globals". Mirrors
+        // testLockContext_fromJsonRoundTrip and its
+        // DefaultLayoutAssignment twin above.
+        QJsonObject bad;
+        bad.insert(QStringLiteral("type"), QString(ActionType::SetOsdEnabled));
+        bad.insert(QStringLiteral("value"), 1); // a number is not a bool
+        QVERIFY(!RuleAction::fromJson(bad).has_value());
+
+        for (const bool v : {true, false}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::SetOsdEnabled));
+            o.insert(QStringLiteral("value"), v);
+            const auto action = RuleAction::fromJson(o);
+            QVERIFY(action.has_value());
+            QCOMPARE(ActionRegistry::instance().slotFor(*action), QString(ActionSlot::OsdEnabled));
             QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
             const auto roundTripped = RuleAction::fromJson(action->toJson());
             QVERIFY(roundTripped.has_value());

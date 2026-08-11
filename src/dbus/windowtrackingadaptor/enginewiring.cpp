@@ -220,7 +220,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // them). Supplying the same full WindowQuery the float / restore
         // predicates use brings snapping to parity.
         snap->setExclusionQueryProvider([this](const QString& windowId) -> std::optional<PhosphorRules::WindowQuery> {
-            return buildRuleQueryForWindow(m_windowRegistry, windowId);
+            return buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
         });
 
         // Open-floating gate (snap). A matched "Float this app" rule opens the
@@ -422,11 +422,14 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         Q_EMIT applyGeometryRequested(windowId, geometry.x(), geometry.y(), geometry.width(), geometry.height(),
                                       QString(), screenId, false);
     };
-    if (snapEngine) {
-        connect(snapEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
+    // Gated on the MEMBERS, like every sibling connect in this method: they were
+    // assigned from these same parameters above, and being QPointers they also
+    // read null for an engine destroyed between assignment and here.
+    if (m_snapEngine) {
+        connect(m_snapEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
     }
-    if (autotileEngine) {
-        connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,
                 floatRestoreRelay);
     }
 
@@ -437,28 +440,29 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
     // Tile-request / floating / screens relays live on TilingAdaptor
     // (the scroll engine shares the org.plasmazones.Tiling surface).
     // ═══════════════════════════════════════════════════════════════════════════
-    if (scrollEngine) {
-        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,
+    if (m_scrollEngine) {
+        connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::navigationFeedback, this,
                 &WindowTrackingAdaptor::navigationFeedback);
-        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this,
+        connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::windowDesktopMoveRequested, this,
                 &WindowTrackingAdaptor::windowDesktopMoveRequested);
         // Empty source screen, same reasoning as the autotile relay above.
-        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
+        connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::windowOutputMoveExpected, this,
                 [this](const QString& windowId, const QString& targetScreenId) {
                     Q_EMIT windowOutputMoveExpected(windowId, targetScreenId, QString());
                 });
-        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this,
+        connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeMoveRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeMove, Qt::DirectConnection);
-        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
+        connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeSwapRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeSwap, Qt::DirectConnection);
         // Cross-MODE directional FOCUS: emitted by scroll (here) and autotile
         // (above); each probes its own same-mode neighbour first and defers
         // only for a different-mode one. Snap has no directional window-focus
         // vocabulary. DirectConnection so the activation lands within the
         // navigation call, like the move/swap.
-        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
+        connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::crossModeFocusRequested, this,
                 &WindowTrackingAdaptor::handleCrossModeFocus, Qt::DirectConnection);
-        connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this, floatRestoreRelay);
+        connect(m_scrollEngine, &PhosphorEngine::PlacementEngineBase::geometryRestoreRequested, this,
+                floatRestoreRelay);
         if (auto* scroll = m_cachedScrollEngine.data()) {
             // DELIBERATE SCOPE NOTE: of the injections the scroll engine
             // takes, THIS seam owns three — the float predicate, the
@@ -507,7 +511,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
                     }
                     return params;
                 });
-            // Plain else: this whole block is already inside `if (scrollEngine)`,
+            // Plain else: this whole block is already inside `if (m_scrollEngine)`,
             // so re-testing it read as a second condition that could fail.
         } else {
             // A non-ScrollEngine in the scroll slot leaves m_cachedScrollEngine

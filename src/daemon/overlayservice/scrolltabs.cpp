@@ -22,6 +22,10 @@
 // that window while a click anywhere else falls through to the window beneath.
 
 #include "internal.h"
+// Full path, because this directory has its own "internal.h" — this is the
+// WindowTracking one, for the WindowColorKeys spellings shared with the daemon
+// side that produces these overrides.
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
@@ -271,8 +275,7 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // Context rules win per property over the config value, so a rule that
         // sets only the style leaves the colours on their configured values.
         const QVariantMap overrides = m_scrollTabIndicatorOverrides.value(screenId);
-        const auto push = [&](const char* property, const QVariant& configured) {
-            const QString key = QString::fromLatin1(property);
+        const auto push = [&](const QString& key, const QVariant& configured) {
             writeQmlProperty(slot, key, overrides.value(key, configured));
         };
         // "tabStyle", not "style": these names address the SLOT's declared
@@ -280,12 +283,17 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // them into the content item. The slot is a shared-shape Item, so the
         // tab-specific spelling keeps it unambiguous there; the content item's
         // own property is plain `style`.
-        push("tabStyle", m_settings->scrollingTabIndicatorStyle());
-        push("gapsBetweenTabs", m_settings->scrollingTabIndicatorGapsBetweenTabs());
-        push("cornerRadius", m_settings->scrollingTabIndicatorCornerRadius());
-        push("activeColor", m_settings->scrollingTabIndicatorActiveColor());
-        push("inactiveColor", m_settings->scrollingTabIndicatorInactiveColor());
-        push("urgentColor", m_settings->scrollingTabIndicatorUrgentColor());
+        push(QStringLiteral("tabStyle"), m_settings->scrollingTabIndicatorStyle());
+        push(QStringLiteral("gapsBetweenTabs"), m_settings->scrollingTabIndicatorGapsBetweenTabs());
+        push(QStringLiteral("cornerRadius"), m_settings->scrollingTabIndicatorCornerRadius());
+        // The three colour keys come from WindowColorKeys, the shared home for
+        // the spellings the daemon-side producer writes into this override map
+        // (daemon/scrolling.cpp) and this slot exposes as QML properties. The
+        // three above are tab-shape properties with no such producer, so they
+        // stay literal here.
+        push(WindowColorKeys::activeColor(), m_settings->scrollingTabIndicatorActiveColor());
+        push(WindowColorKeys::inactiveColor(), m_settings->scrollingTabIndicatorInactiveColor());
+        push(WindowColorKeys::urgentColor(), m_settings->scrollingTabIndicatorUrgentColor());
     }
 
     // The user font, pushed here for the same reason the paint block above is

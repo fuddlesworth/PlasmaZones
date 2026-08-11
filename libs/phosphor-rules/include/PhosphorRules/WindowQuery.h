@@ -75,8 +75,8 @@ struct WindowQuery
     QString screenId;
     int virtualDesktop = 0; ///< 0 = all desktops
     QString activity; ///< empty = all activities
-    QString mode; ///< placement-mode wire token ("snapping" / "tiling" / "scrolling"); a floating window has no mode
-                  ///< (empty)
+    QString mode; ///< placement-mode wire token — the `ModeToken` vocabulary in MatchTypes.h; a floating window has no
+                  ///< mode (empty, which is not a token)
     QString
         screenOrientation; ///< "portrait" / "landscape" of the resolving screen; empty = unknown (no geometry provider)
     QString activeLayout; ///< layout id resolved for the screen (snap UUID / "autotile:<algo>" / "scrolling:"); empty

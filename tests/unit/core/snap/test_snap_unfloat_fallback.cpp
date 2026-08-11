@@ -34,6 +34,8 @@
 #include "helpers/IsolatedConfigGuard.h"
 #include "helpers/LayoutRegistryTestHelpers.h"
 #include "helpers/StubSettings.h"
+// Not for the stub detector itself (this suite never instantiates one) but for
+// the free createTestLayout() helper this header also declares.
 #include "helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
@@ -48,7 +50,6 @@ private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettings* m_settings = nullptr;
-    PlasmaZones::StubZoneDetector* m_zoneDetector = nullptr;
     PhosphorPlacement::WindowTrackingService* m_wts = nullptr;
 
     // Register a fresh equal-split layout of zoneCount zones as the active layout
@@ -84,18 +85,20 @@ private Q_SLOTS:
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettings(nullptr);
-        m_zoneDetector = new PlasmaZones::StubZoneDetector(nullptr);
         // screenManager == nullptr: zoneGeometry() then resolves against
         // QGuiApplication::primaryScreen() (valid under the offscreen QPA), which
         // is exactly what makes the on-success geometry path reachable here.
         m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
     }
 
+    // Runs after EVERY test function, so the per-test bodies do not repeat the
+    // snap-state detach: the engine they wired is a stack local that has already
+    // gone away by the time this runs, and setSnapState(nullptr) only drops the
+    // resolver (it never dereferences the outgoing store).
     void cleanup()
     {
         m_wts->setSnapState(nullptr);
         delete m_wts;
-        delete m_zoneDetector;
         delete m_settings;
         delete m_layoutManager;
         m_guard.reset();
@@ -134,7 +137,6 @@ private Q_SLOTS:
         QCOMPARE(r.zoneIds, QStringList{firstZone});
         QCOMPARE(r.screenId, QStringLiteral("DP-1"));
         QVERIFY(r.geometry.isValid());
-        m_wts->setSnapState(nullptr);
     }
 
     // ON + a recorded last-used zone that exists in this screen's layout → the
@@ -158,7 +160,6 @@ private Q_SLOTS:
 
         QVERIFY(r.found);
         QCOMPARE(r.zoneIds, QStringList{secondZone});
-        m_wts->setSnapState(nullptr);
     }
 
     // ON + a recorded last-used zone that belongs to a DIFFERENT layout (not the one
@@ -197,7 +198,6 @@ private Q_SLOTS:
         QVERIFY(r.found);
         QVERIFY2(r.zoneIds != QStringList{foreignZone}, "a last-used zone from another layout must not be selected");
         QCOMPARE(r.zoneIds, QStringList{firstZone});
-        m_wts->setSnapState(nullptr);
     }
 
     // ON + every zone occupied and no last-used → first-empty yields nothing, so
@@ -226,7 +226,6 @@ private Q_SLOTS:
         QVERIFY2(r.found, "all-occupied still resolves to the first zone (stacking)");
         QCOMPARE(r.zoneIds, QStringList{firstZone});
         QVERIFY(r.geometry.isValid());
-        m_wts->setSnapState(nullptr);
     }
 
     // OFF gate beats valid geometry: even though zoneGeometry would resolve here,
@@ -245,7 +244,6 @@ private Q_SLOTS:
         m_settings->setSnapUnfloatFallbackToZone(false);
         QVERIFY2(!engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|w"), QStringLiteral("DP-1")).found,
                  "off → not-found even though zoneGeometry is valid in this GUI fixture");
-        m_wts->setSnapState(nullptr);
     }
 
     // Predicate layering: an installed unfloat-fallback predicate REPLACES the
@@ -264,17 +262,24 @@ private Q_SLOTS:
         engine.snapState()->setFloatingOnScreen(QStringLiteral("app|w"), QStringLiteral("DP-1"), 0);
 
         // Setting OFF, predicate true → fallback found, and the predicate saw
-        // the resolved screen.
+        // BOTH of its keys: the live window id (the rule evaluator needs it to
+        // match window fields) and the resolved restore screen (it stamps
+        // ScreenId and derives Mode from it). A predicate handed the wrong
+        // window would silently evaluate another window's rules.
         m_settings->setSnapUnfloatFallbackToZone(false);
+        QString seenWindow;
         QString seenScreen;
-        engine.setUnfloatFallbackPredicate([&seenScreen](const QString&, const QString& screenId) {
-            seenScreen = screenId;
-            return true;
-        });
+        engine.setUnfloatFallbackPredicate(
+            [&seenWindow, &seenScreen](const QString& windowId, const QString& screenId) {
+                seenWindow = windowId;
+                seenScreen = screenId;
+                return true;
+            });
         const PhosphorEngine::UnfloatResult onResult =
             engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|w"), QStringLiteral("DP-1"));
         QVERIFY2(onResult.found, "predicate true overrides a setting that is off");
         QCOMPARE(onResult.zoneIds, QStringList{firstZone});
+        QCOMPARE(seenWindow, QStringLiteral("app|w"));
         QCOMPARE(seenScreen, QStringLiteral("DP-1"));
 
         // Setting ON, predicate false → suppressed.
@@ -288,7 +293,53 @@ private Q_SLOTS:
         // Cleared predicate → the setting decides again (historical behaviour).
         engine.setUnfloatFallbackPredicate({});
         QVERIFY(engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|w"), QStringLiteral("DP-1")).found);
-        m_wts->setSnapState(nullptr);
+    }
+
+    // The two screen inputs are DIFFERENT here, so the resolved screen is a real
+    // assertion rather than the same string arriving from both sides.
+    //
+    // resolveFallbackUnfloatGeometry asks resolveUnfloatScreen for
+    // (caller screen, tracked screen) in that order: the caller's screen is the
+    // effect's authoritative live output and wins WHEN IT NAMES A LIVE OUTPUT,
+    // because a floating window that drifted between monitors leaves the tracked
+    // association stale (Discussion #724). Only the first argument is
+    // existence-tested, so a caller screen that names no live output is discarded
+    // and the tracked screen supplies the answer — which is the arm this fixture
+    // exercises, since the offscreen QPA has exactly one screen and its name is
+    // empty, so NO connector-style id resolves here. That makes this test the
+    // regression guard on the argument ORDER: with the two arguments swapped the
+    // resolver returns the caller's "PZTEST-CALLER-GONE" instead.
+    //
+    // The "caller wins" arm itself cannot be shown in this fixture: demonstrating
+    // it needs two ids that both pass the existence test, and only one output
+    // exists here.
+    void testFallback_callerScreenNotALiveOutput_resolvesOnTrackedScreen()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString firstZone = layout->zones().first()->id().toString();
+
+        engine.snapState()->setFloatingOnScreen(QStringLiteral("app|w"), QStringLiteral("PZTEST-TRACKED-1"), 0);
+        m_settings->setSnapUnfloatFallbackToZone(false);
+
+        QString seenScreen;
+        engine.setUnfloatFallbackPredicate([&seenScreen](const QString&, const QString& screenId) {
+            seenScreen = screenId;
+            return true;
+        });
+
+        const PhosphorEngine::UnfloatResult r =
+            engine.resolveFallbackUnfloatGeometry(QStringLiteral("app|w"), QStringLiteral("PZTEST-CALLER-GONE"));
+
+        QVERIFY(r.found);
+        QCOMPARE(r.zoneIds, QStringList{firstZone});
+        QCOMPARE(r.screenId, QStringLiteral("PZTEST-TRACKED-1"));
+        QVERIFY2(seenScreen == QStringLiteral("PZTEST-TRACKED-1"),
+                 "the predicate must see the SAME screen the fallback zone was resolved on");
+        QVERIFY(r.geometry.isValid());
     }
 
     // ── SnapToZone placement-rule precedence ────────────────────────────────
@@ -337,7 +388,6 @@ private Q_SLOTS:
         const auto rebound = m_wts->placementStore().peek(QStringLiteral("app|new"), QStringLiteral("app"));
         QVERIFY(rebound.has_value());
         QCOMPARE(rebound->freeGeometryFor(QStringLiteral("DP-1")), floatGeo);
-        m_wts->setSnapState(nullptr);
     }
 
     // A SnapToZone rule snaps a fresh window that has no stored record at all
@@ -358,7 +408,6 @@ private Q_SLOTS:
 
         QVERIFY2(result.shouldSnap, "a SnapToZone rule must snap a fresh window with no stored record");
         QCOMPARE(result.zoneIds.size(), 1);
-        m_wts->setSnapState(nullptr);
     }
 
     // A RouteToScreen directive pins the placement to a different monitor than the
@@ -382,7 +431,6 @@ private Q_SLOTS:
         QVERIFY2(result.shouldSnap, "RouteToScreen + SnapToZone must snap the window");
         QCOMPARE(result.zoneIds.size(), 1);
         QCOMPARE(result.screenId, QStringLiteral("DP-2"));
-        m_wts->setSnapState(nullptr);
     }
 
     // A RouteToDesktop directive snaps the window into its zone on the DESTINATION
@@ -410,7 +458,6 @@ private Q_SLOTS:
         QVERIFY2(result.shouldSnap, "SnapToZone + RouteToDesktop must still snap the window");
         QCOMPARE(result.zoneIds.size(), 1);
         QCOMPARE(result.virtualDesktop, 2);
-        m_wts->setSnapState(nullptr);
     }
 
     // Un-floating a window into a matched SnapToZone + RouteToDesktop rule must
@@ -442,7 +489,6 @@ private Q_SLOTS:
         QVERIFY2(!engine.snapState()->zoneForWindow(QStringLiteral("fresh|win")).isEmpty(),
                  "un-floating into a SnapToZone + RouteToDesktop rule must assign the window to its rule zone");
         QCOMPARE(engine.snapState()->desktopForWindow(QStringLiteral("fresh|win")), 2);
-        m_wts->setSnapState(nullptr);
     }
 
     // An empty resolver result (no matching rule) must NOT snap — the window
@@ -462,7 +508,6 @@ private Q_SLOTS:
             engine.resolveWindowRestore(QStringLiteral("nomatch|win"), QStringLiteral("DP-1"), /*sticky*/ false);
 
         QVERIFY2(!result.shouldSnap, "no matching rule → the placement rule must not snap the window");
-        m_wts->setSnapState(nullptr);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -496,7 +541,6 @@ private Q_SLOTS:
         QVERIFY2(r.found, "record's floating slot carries the pre-float zones — unfloat must find them");
         QCOMPARE(r.zoneIds, QStringList{homeZone});
         QVERIFY(r.geometry.isValid());
-        m_wts->setSnapState(nullptr);
     }
 
     void testResolveUnfloat_noLiveCapture_fallsBackToRecordSnappedSlot()
@@ -516,7 +560,6 @@ private Q_SLOTS:
         QVERIFY2(r.found, "a stale snapped slot still names the window's home zone — unfloat must use it");
         QCOMPARE(r.zoneIds, QStringList{homeZone});
         QVERIFY(r.geometry.isValid());
-        m_wts->setSnapState(nullptr);
     }
 
     // The record's screenId is only a HINT: when it names a screen that no
@@ -548,7 +591,6 @@ private Q_SLOTS:
         QCOMPARE(r.zoneIds, QStringList{homeZone});
         QCOMPARE(r.screenId, QStringLiteral("DP-1"));
         QVERIFY(r.geometry.isValid());
-        m_wts->setSnapState(nullptr);
     }
 
     // Composed end-to-end join of the two resolvers through the public toggle:
@@ -575,7 +617,6 @@ private Q_SLOTS:
         QVERIFY2(!engine.snapState()->isFloating(w),
                  "with the fallback setting on, the unfloat toggle must leave the floating state");
         QCOMPARE(engine.snapState()->zoneForWindow(w), firstZone);
-        m_wts->setSnapState(nullptr);
     }
 
     void testResolveUnfloat_noLiveCapture_noRecord_staysNotFound()
@@ -590,7 +631,6 @@ private Q_SLOTS:
         const PhosphorEngine::UnfloatResult r =
             engine.resolveUnfloatGeometry(QStringLiteral("app|norec"), QStringLiteral("DP-1"));
         QVERIFY2(!r.found, "no live capture and no record → not-found (caller falls to the fallback-zone path)");
-        m_wts->setSnapState(nullptr);
     }
 
     // Suspension confinement (Discussion #724, 3.3.x regression): with
@@ -623,7 +663,6 @@ private Q_SLOTS:
         const PhosphorEngine::UnfloatResult unconfined = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
         QVERIFY2(unconfined.found, "a user unfloat must still restore the cross-monitor home from the record");
         QCOMPARE(unconfined.zoneIds, QStringList{homeZone});
-        m_wts->setSnapState(nullptr);
     }
 
     // The confinement compares PHYSICAL monitors: a per-virtual-screen home id
@@ -648,7 +687,6 @@ private Q_SLOTS:
             engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
         QVERIFY2(r.found, "a virtual-vs-bare id difference on ONE monitor must not read as cross-monitor");
         QCOMPARE(r.zoneIds, QStringList{homeZone});
-        m_wts->setSnapState(nullptr);
     }
 
     // The confinement's emptiness guard: a record with NO screen id cannot
@@ -671,7 +709,6 @@ private Q_SLOTS:
             engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
         QVERIFY2(r.found, "an empty record screen cannot be cross-monitor — it must restore on the live screen");
         QCOMPARE(r.screenId, QStringLiteral("DP-1"));
-        m_wts->setSnapState(nullptr);
     }
 
     void testResolveUnfloat_confined_recordScreenGone_refuses()
@@ -697,7 +734,6 @@ private Q_SLOTS:
         const PhosphorEngine::UnfloatResult r =
             engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
         QVERIFY2(!r.found, "a home screen that no longer exists must refuse under confinement, not degrade");
-        m_wts->setSnapState(nullptr);
     }
 
     // Confinement is a cross-monitor refusal ONLY: a record on the SAME
@@ -726,7 +762,6 @@ private Q_SLOTS:
         QCOMPARE(r.zoneIds, QStringList{homeZone});
         QCOMPARE(r.screenId, QStringLiteral("DP-1"));
         QVERIFY(r.geometry.isValid());
-        m_wts->setSnapState(nullptr);
     }
 
     // The record fallback consumes EXACT-windowId records only. A same-app
@@ -752,7 +787,173 @@ private Q_SLOTS:
         const PhosphorEngine::UnfloatResult r =
             engine.resolveUnfloatGeometry(QStringLiteral("app|recordless"), QStringLiteral("DP-1"));
         QVERIFY2(!r.found, "a same-app sibling's record must not supply the unfloat target");
-        m_wts->setSnapState(nullptr);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // UnfloatCause::Suspension through the public setWindowFloat entry point
+    //
+    // The cause is derived from the tracker's suspension classification, so
+    // these drive it the way the daemon does: markSuspensionFloat, then a
+    // routed unfloat. Each case pairs the suspension verdict with the SAME
+    // call after clearing the classification, so the assertion is "the cause
+    // changed the outcome", not merely "nothing happened".
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // A suspension unfloat takes neither the SnapToZone rule tier nor the
+    // no-pre-float-zone fallback tier: an unminimized window that was not
+    // snapped when it was minimized must come back floating, not freshly
+    // snapped. Both tiers are armed here (a matching rule AND the fallback
+    // setting on), so a suspension unfloat that took either one would snap.
+    void testSetWindowFloat_suspension_takesNeitherRuleNorFallbackTier()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(3);
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            return PlacementDirective{{1}};
+        });
+        m_settings->setSnapUnfloatFallbackToZone(true);
+
+        const QString w = QStringLiteral("app|minimized");
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        m_wts->markSuspensionFloat(w);
+        QVERIFY(m_wts->preFloatZones(w).isEmpty());
+
+        engine.setWindowFloat(w, false, QStringLiteral("DP-1"));
+
+        QVERIFY2(engine.snapState()->isFloating(w),
+                 "a suspension unfloat with nothing to restore must leave the window floating");
+        QVERIFY2(engine.snapState()->zoneForWindow(w).isEmpty(),
+                 "a suspension unfloat must take neither the rule tier nor the fallback-zone tier");
+
+        // Same window, same call, USER semantics: now the rule tier applies and
+        // the window is snapped into the rule's zone.
+        m_wts->clearSuspensionFloat(w);
+        engine.setWindowFloat(w, false, QStringLiteral("DP-1"));
+        QVERIFY2(!engine.snapState()->zoneForWindow(w).isEmpty(),
+                 "the same unfloat under user semantics must take the SnapToZone rule tier");
+        QVERIFY(!engine.snapState()->isFloating(w));
+    }
+
+    // Suspension confinement through the public entry point: a remembered home
+    // on another monitor is refused, and the refusal deliberately leaves that
+    // home intact so a later USER unfloat can still go there (the cross-monitor
+    // go-home restore). The second call proves the refusal repaired nothing and
+    // needed to repair nothing.
+    void testSetWindowFloat_suspension_crossMonitorHomeRefused_userToggleStillRestores()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|crossmon");
+
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                           QStringLiteral("HDMI-1"));
+        m_wts->markSuspensionFloat(w);
+
+        engine.setWindowFloat(w, false, QStringLiteral("DP-1"));
+        QVERIFY2(engine.snapState()->isFloating(w),
+                 "a cross-monitor home must not be restored by a suspension unfloat");
+        QVERIFY(engine.snapState()->zoneForWindow(w).isEmpty());
+
+        m_wts->clearSuspensionFloat(w);
+        engine.setWindowFloat(w, false, QStringLiteral("DP-1"));
+        QCOMPARE(engine.snapState()->zoneForWindow(w), homeZone);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // toggleWindowFloat: the four navigationFeedback reports + the suspension
+    // clear. The shortcut path calls the engine directly, so nothing else
+    // clears the classification — a stranded bit would make the next
+    // effect-driven unfloat wrongly read as a suspension.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testToggleWindowFloat_reportsNotManagedForAnUntrackedWindow()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(2);
+        QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+
+        engine.toggleWindowFloat(QStringLiteral("app|untracked"), QStringLiteral("DP-1"));
+
+        QCOMPARE(spy.count(), 1);
+        const QList<QVariant> args = spy.takeFirst();
+        QCOMPARE(args.at(0).toBool(), false);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("float"));
+        QCOMPARE(args.at(2).toString(), QStringLiteral("not_managed"));
+        QCOMPARE(args.at(5).toString(), QStringLiteral("DP-1"));
+    }
+
+    void testToggleWindowFloat_reportsNoPreFloatZoneWhenNothingToRestore()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        installLayout(2);
+        // Fallback tier off, no pre-float capture and no record → every unfloat
+        // tier misses and the toggle reports instead of absorbing the press.
+        m_settings->setSnapUnfloatFallbackToZone(false);
+        const QString w = QStringLiteral("app|nowhere");
+        engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
+
+        QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+        engine.toggleWindowFloat(w, QStringLiteral("DP-1"));
+
+        QCOMPARE(spy.count(), 1);
+        const QList<QVariant> args = spy.takeFirst();
+        QCOMPARE(args.at(0).toBool(), false);
+        QCOMPARE(args.at(2).toString(), QStringLiteral("no_pre_float_zone"));
+        QVERIFY2(engine.snapState()->isFloating(w), "a refused unfloat keeps the window floating");
+    }
+
+    // The full round trip: snapped → floated → unfloated. Pins the "floated"
+    // and "unfloated" reports, and that the successful unfloat drops the
+    // suspension classification (this path never crosses the adaptor edges
+    // that normally clear it).
+    void testToggleWindowFloat_roundTrip_reportsBothWaysAndClearsSuspension()
+    {
+        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        engine.setEngineSettings(m_settings);
+        m_wts->setSnapState(engine.snapState());
+
+        auto* layout = installLayout(2);
+        const QString homeZone = layout->zones().first()->id().toString();
+        const QString w = QStringLiteral("app|roundtrip");
+
+        engine.snapState()->assignWindowToZone(w, homeZone, QStringLiteral("DP-1"), 0);
+
+        QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+
+        engine.toggleWindowFloat(w, QStringLiteral("DP-1"));
+        QCOMPARE(spy.count(), 1);
+        QList<QVariant> args = spy.takeFirst();
+        QCOMPARE(args.at(0).toBool(), true);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("float"));
+        QCOMPARE(args.at(2).toString(), QStringLiteral("floated"));
+        QVERIFY(engine.snapState()->isFloating(w));
+
+        // A stranded suspension bit (an unminimize unfloat that was refused and
+        // then ran out of retries) must not survive an explicit user toggle,
+        // which is ALWAYS user semantics.
+        m_wts->markSuspensionFloat(w);
+
+        engine.toggleWindowFloat(w, QStringLiteral("DP-1"));
+        QCOMPARE(spy.count(), 1);
+        args = spy.takeFirst();
+        QCOMPARE(args.at(0).toBool(), true);
+        QCOMPARE(args.at(2).toString(), QStringLiteral("unfloated"));
+        QCOMPARE(engine.snapState()->zoneForWindow(w), homeZone);
+        QVERIFY2(!m_wts->isSuspensionFloat(w), "a successful unfloat toggle must drop the suspension classification");
     }
 };
 

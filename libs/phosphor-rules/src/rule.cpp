@@ -68,7 +68,7 @@ QList<ValidationIssue> Rule::validationIssues() const
     // Compute the match's domain once — context-only iff every leaf references
     // a context field, i.e. a `FieldSource::Context` row of `kFieldTable`
     // (currently ScreenId / VirtualDesktop / Activity / Mode / TiledWindowCount /
-    // ScreenOrientation / ActiveLayout). The catch-all is context-only by this
+    // ScreenOrientation / ActiveLayout / ColorScheme). The catch-all is context-only by this
     // definition and so is compatible with every action.
     const bool matchIsContextOnly = match.isContextOnly();
 
@@ -138,8 +138,14 @@ QList<ValidationIssue> Rule::validationIssues() const
     //  - ExcludePlacement rides the daemon's window-tracking evaluator (scope
     //    {Exclude, ExcludePlacement}), which resolves the window-domain
     //    placement/routing/open/restore slots — the slot-filling
-    //    window-domain actions that are NOT Tag::Effect.
+    //    window-domain actions the COMPOSITOR does not consume.
     //  - ExcludeDecorations' slice resolves no other slot, so it mixes freely.
+    // The Tag::EffectVerdict actions (OpenFullscreen, ScrollFactor) are
+    // cancelled by NEITHER scoped exclusion: they are delivered to the
+    // compositor, so the daemon's placement evaluator never resolves them, and
+    // their own effect-side evaluator scopes terminal actions to the blanket
+    // Exclude alone, so ExcludeAnimations does not stop its walk. That is the
+    // whole point of the separate tag — see Tag::EffectVerdict in RuleAction.h.
     // Context-domain slots (gaps, overlays, assignments, scroll knobs) resolve
     // under a {Exclude}-only evaluator, so a scoped exclusion beside them is
     // inert-and-honoured, not cancelling — they stay unflagged, which is what
@@ -158,9 +164,16 @@ QList<ValidationIssue> Rule::validationIssues() const
                 if (registry.isTerminal(action)) {
                     continue; // exclusions themselves are the intended effect
                 }
-                const bool effectConsumed = registry.hasTag(action.type, Tag::Effect);
-                const bool cancelled = (hasExcludeAnimations && effectConsumed)
-                    || (hasExcludePlacement && !effectConsumed && registry.domainFor(action) == ActionDomain::Window
+                // Two distinct questions, so two distinct tag reads: whether
+                // the ANIMATION evaluator resolves the action (Tag::Effect
+                // alone — its scope is what ExcludeAnimations stops), and
+                // whether the COMPOSITOR consumes it at all (either effect
+                // tag), which is what keeps it out of the daemon placement
+                // evaluator ExcludePlacement stops.
+                const bool animationResolved = registry.hasTag(action.type, Tag::Effect);
+                const bool compositorConsumed = animationResolved || registry.hasTag(action.type, Tag::EffectVerdict);
+                const bool cancelled = (hasExcludeAnimations && animationResolved)
+                    || (hasExcludePlacement && !compositorConsumed && registry.domainFor(action) == ActionDomain::Window
                         && !registry.slotFor(action).isEmpty());
                 if (!cancelled) {
                     continue;

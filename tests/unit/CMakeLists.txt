@@ -1530,6 +1530,9 @@ add_executable(test_rule_model
     # the editor via RuleAuthoring::boolActionStateLabel.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
+    # Per-param labels, hints, schema, and defaultPayloadFor, split from
+    # ruleauthoring_actions.cpp for file-size.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actionparams.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
 )
 target_link_libraries(test_rule_model
@@ -1557,6 +1560,9 @@ add_executable(test_rule_controller
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
+    # Per-param labels, hints, schema, and defaultPayloadFor, split from
+    # ruleauthoring_actions.cpp for file-size.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actionparams.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
 )
@@ -1585,6 +1591,9 @@ add_executable(test_rule_controller_overview
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
+    # Per-param labels, hints, schema, and defaultPayloadFor, split from
+    # ruleauthoring_actions.cpp for file-size.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actionparams.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
 )

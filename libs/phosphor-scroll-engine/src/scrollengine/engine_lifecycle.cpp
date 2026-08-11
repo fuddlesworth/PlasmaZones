@@ -6,7 +6,6 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
@@ -77,6 +76,11 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     const int minWidth = qMax(0, minWidthIn);
     const int minHeight = qMax(0, minHeightIn);
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
+    // ONE fetch for the whole open path. Four effective* values are resolved
+    // out of this map below (sticky handling, default display, the
+    // client-decides verdict and the insert position) plus the template
+    // blueprint, and the screenId-taking wrappers would each rebuild it.
+    const QVariantMap screenOverrides = m_perScreenOverrides.value(screenId);
 
     // Fixed-size / oversized windows cannot honour a column slot: float them
     // at their native size instead of forcing a tile (the min size is the
@@ -92,7 +96,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // sticky windows floated, the all-sticky managed set never forms and the
     // pin degrades correctly on its own.
     const bool stickyExcluded =
-        effectiveStickyWindowHandling(screenId) != PhosphorEngine::StickyWindowHandling::TreatAsNormal
+        effectiveStickyWindowHandling(screenOverrides) != PhosphorEngine::StickyWindowHandling::TreatAsNormal
         && m_windowTracker && m_windowTracker->isWindowSticky(windowId);
     if (oversized || ruleFloated || stickyExcluded) {
         state->addFloating(windowId);
@@ -171,7 +175,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // already resolved this exact value against this screen's override map and
     // preset vocabulary, and the screenId overload would parse both again.
     ColumnWidth width = params.defaultColumnWidth;
-    ColumnDisplay display = effectiveDefaultColumnDisplay(screenId);
+    ColumnDisplay display = effectiveDefaultColumnDisplay(screenOverrides);
     // "Client decides" is the CONFIG default, so a per-screen rule override
     // outranks it — the header documents these overrides as layering over the
     // config defaults. Overwriting unconditionally meant a
@@ -187,9 +191,14 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // that — testing the kind key's mere PRESENCE here inverted the setting,
     // gating the client-size branch off on precisely the monitors scoped to
     // it.
-    const QVariantMap screenOverrides = m_perScreenOverrides.value(screenId);
-    const bool rulePinsWidth = screenOverrides.contains(ScrollPerScreenKeys::defaultColumnWidth());
-    if (effectiveWidthClientDecides(screenId) && m_windowTracker && !rulePinsWidth) {
+    // The rule gate asks the RESOLVER's question, not "is the key there":
+    // effectiveDefaultColumnWidth validates the fraction and falls through on
+    // an out-of-range one, so a presence test let a rule that contributed no
+    // width suppress the client-sized open anyway — the column then took the
+    // configured default, which is neither what the rule asked for nor what
+    // the ClientDecides setting asked for.
+    const bool rulePinsWidth = ruleColumnWidthFraction(screenOverrides).has_value();
+    if (effectiveWidthClientDecides(screenOverrides) && m_windowTracker && !rulePinsWidth) {
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
         if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
@@ -210,7 +219,15 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     }
     // A maximized open is the stronger width verdict: it outranks the
     // fraction arm above and (via ruleMaximized) the template blueprint's
-    // width below, exactly as the manual maximize verb would leave it.
+    // width below. It leaves the column at the same WIDTH the manual
+    // maximize verb would, but not in the same state: the verb's
+    // pre-maximize memory is a single slot keyed to the column it was
+    // pressed on, and this open seeds nothing into it (there is no earlier
+    // width to remember, and the arriving column is not necessarily the
+    // active one). The first un-maximize toggle on such a column therefore
+    // takes toggleMaximizeActiveColumn's no-stored-intent arm and lands on
+    // the configured default width — the same place a column that was
+    // already full width at session restore lands.
     const bool ruleMaximized = openParams.maximized.value_or(false);
     if (ruleMaximized) {
         width = ColumnWidth::makeProportion(1.0);
@@ -224,6 +241,13 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // openColumnPlacement=consume while its config-driven twin (the
     // IntoActiveColumn arm below) applied it.
     bool inserted = false;
+    // Whether the tile came back out of the mode-round-trip stash. The height
+    // commit at the tail reads it: a stash restore rebuilds the remembered
+    // SHAPE, and the open rules' width verdicts are already dropped on that
+    // arm (the restore inserts with the stashed width, never `width`), so the
+    // height must not be the one axis that overrides it. See the height
+    // commit for the other half of this contract.
+    bool restoredFromStash = false;
     // Mode-round-trip structure restore FIRST — before the consume rule too:
     // a strip stashed at the last reassignment away from Scrolling rebuilds
     // exactly (stacks, widths, display, heights), which is strictly stronger
@@ -235,6 +259,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // entry is still consumed so it cannot linger past the adoption.
     if (restoreFromStripStash(state, currentKeyForScreen(screenId), windowId, params, minWidth, minHeight)) {
         inserted = true;
+        restoredFromStash = true;
         consumePendingInitialOrder(screenId, windowId);
     }
     if (!inserted && openParams.consume && *openParams.consume && !state->strip().isEmpty()) {
@@ -331,7 +356,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 }
             }
         }
-        const ScrollInsertPosition insertPos = effectiveInsertPosition(screenId);
+        const ScrollInsertPosition insertPos = effectiveInsertPosition(screenOverrides);
         if (insertPos == ScrollInsertPosition::IntoActiveColumn && !state->strip().isEmpty()) {
             inserted =
                 state->strip().insertWindowIntoActiveColumn(windowId, width, std::nullopt, params, minWidth, minHeight);
@@ -342,11 +367,18 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                 insertPos == ScrollInsertPosition::IntoActiveColumn ? ScrollInsertPosition::RightOfActive : insertPos);
         }
     }
-    if (inserted && openParams.heightFraction) {
-        // Per-window open rule wins over every default and remembered
-        // height, matching the width/tabbed precedence above. Committed as
-        // Fixed pixels against the live work area, the same resolution the
-        // adjust verbs use.
+    if (inserted && !restoredFromStash && openParams.heightFraction) {
+        // Per-window open rule wins over every DEFAULT height, matching the
+        // width/tabbed precedence above. Committed as Fixed pixels against
+        // the live work area, the same resolution the adjust verbs use.
+        //
+        // A stash restore is excluded, which is the same precedence the width
+        // arm already has: the stash carries the shape the user left the
+        // strip in at the last reassignment away from Scrolling, and that
+        // remembered shape outranks an open-time default on BOTH axes. Height
+        // overriding it while width did not made the round trip return a
+        // window at its old width and its rule height, which is a shape the
+        // user never had.
         //
         // Re-resolved AFTER the insert rather than reusing the params from
         // the top of this function: with smart gaps the work area depends on
@@ -364,6 +396,13 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     }
     if (!inserted) {
         qCWarning(lcScrollEngine) << "insertOpenedWindow: duplicate window" << windowId;
+        // A refusal is still an OUTCOME, and the seed's "consumed on every
+        // outcome" contract has no exception for it: the strip already holds
+        // this window, so the seed entry can never place it, and leaving the
+        // id behind pins the screen's seed list for the whole session (it can
+        // never reach the all-consumed drop) where it waits to re-position an
+        // unrelated later open that reuses the id.
+        consumePendingInitialOrder(screenId, windowId);
         // Do not leave a reverse-map key for a window no structure holds —
         // that is the exact inconsistency floatWindowInternal warns about.
         // (Keyed-but-present is fine: the insert also fails when the strip
@@ -679,7 +718,10 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
     // setting's effects: false also rewinds the strip's active column to the
     // pre-insert focus below, true adopts the arrival even when the global
     // default would not.
-    bool focusNew = openParams.focused.value_or(effectiveFocusNewWindows(screenId));
+    // Lazy on purpose: value_or would evaluate the settings read even when the
+    // rule already decided, and that read walks the override map and does a
+    // qobject_cast on the settings object.
+    const bool focusNew = openParams.focused ? *openParams.focused : effectiveFocusNewWindows(screenId);
     const bool arrivalTookFocus = focusNew && state->strip().activeWindowId() == windowId;
     if (!focusNew && !priorActive.isEmpty() && state->strip().activeWindowId() == windowId
         && state->strip().containsWindow(priorActive)) {

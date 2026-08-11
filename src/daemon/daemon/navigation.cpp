@@ -679,7 +679,13 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     const bool ok = (result == PhosphorScreens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << static_cast<int>(result);
 
-    if (navigationOsdAllowed(physId)) {
+    // GATE on the focused EFFECTIVE screen, RENDER on the physical monitor.
+    // The two ids answer different questions: navigationOsdAllowed resolves the
+    // per-context SetOsdEnabled rule, whose contexts are keyed by effective id,
+    // and a subdivided output's physical id matches no context at all — asking
+    // with it made virtual-screen rules unable to match. The card's target
+    // stays physId because the ACTION is monitor-scope.
+    if (navigationOsdAllowed(screenId)) {
         // On success, surface the direction (the OSD style needs a string to
         // render the arrow). On failure, surface the structured reason.
         const QString osdReason = ok ? dirStr : PhosphorScreens::VirtualScreenSwapper::reasonString(result);
@@ -710,7 +716,9 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     const bool ok = (result == PhosphorScreens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << static_cast<int>(result);
 
-    if (navigationOsdAllowed(physId)) {
+    // Gate on the focused EFFECTIVE screen, render on the physical monitor —
+    // see handleSwapVirtualScreen for why the two ids differ here.
+    if (navigationOsdAllowed(screenId)) {
         // VS rotate is a monitor-scope action — show the OSD on the physical
         // monitor, not inside whichever VS held focus. On success surface the
         // rotation direction; on failure surface the structured reason so the

@@ -23,12 +23,17 @@
 #include "seedorderfilter.h"
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+// WindowColorKeys — the one home for the five colour-override key spellings
+// this file produces and the overlay slots consume.
+#include "dbus/windowtrackingadaptor/internal.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorPlacement/WindowTrackingService.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
+
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -205,13 +210,14 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // rides the override map above (the engine's own straddler clamp
         // reads it), so it is the one behaviour with two consumers — both
         // resolve from this same slot, so they cannot disagree.
-        if (m_settings) {
-            if (params.focusFollowsMouse.value_or(m_settings->scrollingFocusFollowsMouse())) {
-                ffmScreens.append(screenId);
-            }
-            if (params.cropStraddlers.value_or(m_settings->scrollingCropStraddlers())) {
-                cropScreens.append(screenId);
-            }
+        // m_settings is unguarded here: the function's entry check already
+        // returns on a null one, so a second test only read as though the
+        // resolve were optional.
+        if (params.focusFollowsMouse.value_or(m_settings->scrollingFocusFollowsMouse())) {
+            ffmScreens.append(screenId);
+        }
+        if (params.cropStraddlers.value_or(m_settings->scrollingCropStraddlers())) {
+            cropScreens.append(screenId);
         }
         // TEMPLATE channel: the context's resolved native ScrollingTemplate
         // (cascade entry, else the default-template setting) pushes its
@@ -342,14 +348,18 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             if (params.tabIndicatorCornerRadius) {
                 paint.insert(QStringLiteral("cornerRadius"), *params.tabIndicatorCornerRadius);
             }
+            // The three colour slots go through WindowColorKeys: the same
+            // spellings are the map keys the tab-strip enrichment layers on and
+            // the QML property names the slot exposes, so producer, layering
+            // step and property write all read them from one place.
             if (params.tabIndicatorActiveColor) {
-                paint.insert(QStringLiteral("activeColor"), *params.tabIndicatorActiveColor);
+                paint.insert(WindowColorKeys::activeColor(), *params.tabIndicatorActiveColor);
             }
             if (params.tabIndicatorInactiveColor) {
-                paint.insert(QStringLiteral("inactiveColor"), *params.tabIndicatorInactiveColor);
+                paint.insert(WindowColorKeys::inactiveColor(), *params.tabIndicatorInactiveColor);
             }
             if (params.tabIndicatorUrgentColor) {
-                paint.insert(QStringLiteral("urgentColor"), *params.tabIndicatorUrgentColor);
+                paint.insert(WindowColorKeys::urgentColor(), *params.tabIndicatorUrgentColor);
             }
             m_overlayService->setScrollTabIndicatorOverrides(screenId, paint);
 
@@ -361,11 +371,14 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             if (params.dropIndicatorEnabled) {
                 drop.insert(QStringLiteral("indicatorEnabled"), *params.dropIndicatorEnabled);
             }
+            // Its two colour slots, same shared spellings — the remaining drop
+            // keys (enabled, opacity, borderWidth, borderRadius) are not colour
+            // overrides and have no entry in WindowColorKeys.
             if (params.dropIndicatorColor) {
-                drop.insert(QStringLiteral("indicatorColor"), *params.dropIndicatorColor);
+                drop.insert(WindowColorKeys::indicatorColor(), *params.dropIndicatorColor);
             }
             if (params.dropIndicatorBorderColor) {
-                drop.insert(QStringLiteral("indicatorBorderColor"), *params.dropIndicatorBorderColor);
+                drop.insert(WindowColorKeys::indicatorBorderColor(), *params.dropIndicatorBorderColor);
             }
             if (params.dropIndicatorOpacity) {
                 drop.insert(QStringLiteral("indicatorOpacity"), *params.dropIndicatorOpacity);
@@ -379,12 +392,17 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             m_overlayService->setScrollDropIndicatorOverrides(screenId, drop);
         }
     }
-    // Publish the effect-owned pair in ONE push, after the walk. The lists are
-    // built in the loop's iteration order, which is the sorted scrolling-screen
-    // set, so the adaptor's emit-on-change compare is a value compare (see
-    // setScrollEffectBehaviour's contract). Screens that LEFT scrolling are
-    // absent by construction — the walk only visits the current set — so the
-    // departing-screen cleanup below has nothing to undo here.
+    // Publish the effect-owned pair in ONE push, after the walk. SORTED here,
+    // not by construction: the walk iterates a QSet, whose order is hash order
+    // and is not stable across insertions, so the same membership could be
+    // built in two different orders and the adaptor's emit-on-change compare —
+    // an order-sensitive list compare — would report a change that isn't one.
+    // The canonicalization itself lives in ScrollingAdaptor::setScrollEffectBehaviour,
+    // which sorts and de-duplicates on entry. That is the published-contract
+    // boundary and it covers every producer, not just this one, so sorting a
+    // second time here would be dead work claiming the same ownership. Screens
+    // that LEFT scrolling are absent by construction (the walk only visits the
+    // current set), so the departing-screen cleanup below has nothing to undo.
     if (m_scrollingAdaptor) {
         m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens);
     }

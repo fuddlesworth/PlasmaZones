@@ -295,12 +295,18 @@ void Daemon::initLayoutAndSettingsWiring()
                         return;
                     }
                     // This is a screen-specific layout different from the active one
-                    // Only recalculate for the specific screen
-                    const PhosphorScreens::PhysicalScreen screen = m_screenManager->screenByName(screenId);
-                    if (screen.isValid() && screen.qscreen) {
-                        m_layoutComputeService->requestRecalculate(
-                            layout, screenId,
-                            GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screen.qscreen));
+                    // Only recalculate for the specific screen.
+                    //
+                    // Through the screenId overload, like every other
+                    // recalculate site. screenByName matches the CONNECTOR name,
+                    // while an assignment key is the screen IDENTIFIER — an
+                    // EDID-derived string on any monitor that exposes one, or a
+                    // "physId/vs:N" child. The lookup therefore missed and this
+                    // whole block was dead on those setups. The overload resolves
+                    // virtual sub-screens too, which screenByName never could.
+                    const QRectF geom = GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screenId);
+                    if (geom.isValid()) {
+                        m_layoutComputeService->requestRecalculate(layout, screenId, geom);
                     }
                     // Note: We don't change zone detector or overlay here since
                     // they work with the active layout, not per-screen layouts
@@ -326,9 +332,13 @@ void Daemon::initLayoutAndSettingsWiring()
     // stop()'s per-sender sweep deliberately excludes it — so re-wiring here
     // would stack a second settingsChanged handler and run the whole
     // mode-transition block twice per save (double resnap, double OSD arm,
-    // second pass against already-cleared pending restores). Sever every
-    // settingsChanged connection targeting the daemon first; they are all
-    // (re)established via the handle list dropped at the top of this function.
+    // second pass against already-cleared pending restores). The duplicate is
+    // prevented by the EXACT-handle drop at the top of this function, which
+    // this connection registers itself with. Deliberately NOT a
+    // (sender, signal, receiver) sweep, per the policy stated there: other
+    // owners (the overlay service, ShortcutManager, UnifiedLayoutController)
+    // hold their own handlers on this same sender, and severing by sender and
+    // signal is one receiver argument away from taking theirs with it.
     m_layoutSettingsWiringConnections.append(connect(m_settings.get(), &Settings::settingsChanged, this, [this]() {
         m_overlayService->updateSettings(m_settings.get());
 

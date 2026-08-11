@@ -17,6 +17,10 @@
 // would break the very drag it describes.
 
 #include "internal.h"
+// Full path, because this directory has its own "internal.h" — this is the
+// WindowTracking one, for the WindowColorKeys spellings shared with the daemon
+// side that produces these overrides.
+#include "dbus/windowtrackingadaptor/internal.h"
 #include "daemon/overlayservice.h"
 #include "core/platform/logging.h"
 #include "phosphor_slot_keys.h"
@@ -225,11 +229,16 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
             }
             return fromSettings;
         };
-        writeQmlProperty(slot, QStringLiteral("indicatorColor"),
-                         layered(QStringLiteral("indicatorColor"), m_settings->scrollingDropIndicatorColor()));
+        // The two colour slots read their spelling from WindowColorKeys, which
+        // is both the override-map key the daemon writes and the QML property
+        // name this slot exposes — the same string in both argument positions,
+        // which is exactly the pair a typo used to break silently. The three
+        // non-colour properties below carry no shared key and stay literal.
+        writeQmlProperty(slot, WindowColorKeys::indicatorColor(),
+                         layered(WindowColorKeys::indicatorColor(), m_settings->scrollingDropIndicatorColor()));
         writeQmlProperty(
-            slot, QStringLiteral("indicatorBorderColor"),
-            layered(QStringLiteral("indicatorBorderColor"), m_settings->scrollingDropIndicatorBorderColor()));
+            slot, WindowColorKeys::indicatorBorderColor(),
+            layered(WindowColorKeys::indicatorBorderColor(), m_settings->scrollingDropIndicatorBorderColor()));
         writeQmlProperty(slot, QStringLiteral("indicatorOpacity"),
                          layered(QStringLiteral("indicatorOpacity"), m_settings->scrollingDropIndicatorOpacity()));
         writeQmlProperty(

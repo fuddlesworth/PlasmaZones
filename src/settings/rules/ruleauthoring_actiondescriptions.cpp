@@ -8,8 +8,9 @@
 // ActionRegistry::registeredTypes() and fails on any type this ladder misses,
 // so adding an action without a description is a red test, not a silent blank.
 //
-// Own translation unit rather than ruleauthoring_actions.cpp: the ladder is
-// ~90 entries and that file already sits at the size guideline.
+// Own translation unit rather than ruleauthoring_actions.cpp: the ladder
+// carries one entry per registered action type, and that file already sits at
+// the size guideline.
 
 #include "ruleauthoring.h"
 
@@ -56,7 +57,8 @@ QString actionDescription(const QString& type)
     }
     // ── Placement (window) ──
     if (type == ActionType::Exclude) {
-        return PhosphorI18n::tr("Keeps matching windows out of PlasmaZones entirely. No placement, no decorations.");
+        return PhosphorI18n::tr(
+            "Keeps matching windows out of PlasmaZones entirely, so they get no placement and no decorations.");
     }
     if (type == ActionType::ExcludePlacement) {
         return PhosphorI18n::tr(
@@ -130,8 +132,8 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::OpenMaximized) {
         return PhosphorI18n::tr(
-            "Opens matching windows maximized so their column fills the whole screen when they "
-            "first appear.");
+            "Opens matching windows maximized, so their column fills the full width of the work "
+            "area when they first appear.");
     }
     if (type == ActionType::OpenFocused) {
         return PhosphorI18n::tr(
@@ -145,8 +147,8 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::ScrollFactor) {
         return PhosphorI18n::tr(
-            "Multiplies mouse wheel and touchpad scrolling speed inside matching windows. Below 1 "
-            "slows it down and above 1 speeds it up. Works in Wayland sessions.");
+            "Scales mouse wheel and touchpad scrolling speed inside matching windows. Below 100% "
+            "slows it down and above 100% speeds it up.");
     }
     // ── Animation and decoration overrides (window) ──
     if (type == ActionType::OverrideAnimationShader) {
@@ -167,9 +169,10 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SetOpacity) {
         return PhosphorI18n::tr(
-            "Dims matching windows to the given opacity. Takes effect only while the opacity and "
-            "tint layer is on for the window, from the global setting or a Show opacity tint "
-            "rule, and custom decoration chains dim through their own pack parameters instead.");
+            "Dims matching windows to the given opacity. It takes effect only while the opacity and "
+            "tint layer is on for the window, either from the global setting or from a Show opacity "
+            "and tint rule. A window with its own decoration chain dims through that chain's pack "
+            "parameters instead.");
     }
     if (type == ActionType::SetOpacityTintVisible) {
         return PhosphorI18n::tr(
@@ -277,8 +280,8 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SetOverflowBehavior) {
         return PhosphorI18n::tr(
-            "Chooses what happens to windows past the cap for the matched context. Float them, or "
-            "ignore the cap.");
+            "Chooses what happens to windows past the cap for the matched context. They can float, "
+            "or the cap can be ignored.");
     }
     if (type == ActionType::SetDragBehavior) {
         return PhosphorI18n::tr(

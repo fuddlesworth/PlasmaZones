@@ -150,7 +150,11 @@ QVariantList ruleTemplates()
     out.append(entry(QLatin1String("noZoneRestoreApp"), PhosphorI18n::tr("Don't restore an app to its zone"),
                      PhosphorI18n::tr("Let one application's windows reopen wherever they like instead of returning "
                                       "to their previous zone. Every other window keeps restoring."),
-                     QLatin1String("window-restore")));
+                     // Not floatApp's window-restore: the two tiles sit next to
+                     // each other in the picker and read as one duplicated card.
+                     // Unpinning says "this window is not held to a zone", which
+                     // is what suppressing the zone restore does.
+                     QLatin1String("window-unpin")));
     out.append(entry(QLatin1String("excludeApp"), PhosphorI18n::tr("Exclude an app from placement"),
                      PhosphorI18n::tr("Keep one application's windows out of tiling, snapping, and scrolling. "
                                       "Borders, decoration packs, and animations still apply."),

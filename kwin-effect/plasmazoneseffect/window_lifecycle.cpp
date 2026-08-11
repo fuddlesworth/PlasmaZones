@@ -159,14 +159,16 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // shader — that gates on the animation filter (see the window.open block),
     // so the user's "exclude transient windows" animation setting stays
     // authoritative for which windows animate on open.
-    const bool tileableWindow = shouldHandleWindow(w) && isTileableWindow(w);
-    const bool tileableAppWindow = tileableWindow && !w->isMinimized();
+    // Not const: applyRuleOpenFullscreen below can flip the window's
+    // fullscreen state, which both predicates read — see the re-derive there.
+    bool tileableWindow = shouldHandleWindow(w) && isTileableWindow(w);
+    bool tileableAppWindow = tileableWindow && !w->isMinimized();
 
     // Whether this window is a snap-restore candidate — it may be
     // teleported into a saved zone moments after opening (instantly from
     // cache, or after an async daemon resolve). Stricter than
     // tileableAppWindow: also excludes multi-instance siblings.
-    const bool canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
+    bool canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
     // window.open shader transition. Gate on the animation filter
     // (shouldAnimateWindow, enforced inside tryBeginShaderForEvent) — NOT on
     // tiling eligibility. isTileableWindow() rejects every transient / dialog /
@@ -226,6 +228,24 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // announce blocks below so eligibility checks and the placement engines
     // see the window's final fullscreen state.
     applyRuleOpenFullscreen(windowId, w);
+    // The three predicates above were computed BEFORE that flip, and
+    // shouldHandleWindow rejects a fullscreen window structurally — so a true
+    // verdict leaves them stale-true and the routing block below arms
+    // first-frame suppression for a window the engines are about to refuse.
+    // Re-derive against the current state. Note what this does and does not
+    // reach: shouldHandleWindow reads the COMMITTED fullscreen bit, so the
+    // re-derive corrects the synchronous (XWayland) case, while on Wayland the
+    // commit lands a client round-trip later and the predicates stay true here.
+    // The announce path is not left to this: isEligibleForTilingNotify rejects
+    // on requested-OR-committed fullscreen, which is what keeps the daemon
+    // from being told about the window on either platform. Gated on rule
+    // presence so a session with no OpenFullscreen rule pays nothing (the
+    // predicates walk ~30 KWin accessors between them).
+    if (m_shaderManager.hasOpenFullscreenRules()) {
+        tileableWindow = shouldHandleWindow(w) && isTileableWindow(w);
+        tileableAppWindow = tileableWindow && !w->isMinimized();
+        canSnapRestore = tileableAppWindow && !hasOtherWindowOfClassWithDifferentPid(w);
+    }
 
     if (tileableWindow && m_tilingHandler->isScreenQueryPending()) {
         if (tileableAppWindow) {
@@ -534,6 +554,12 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     // opacity-tint layer carries no rule opacity at all.
     if (!m_shaderManager.animationRuleSet().isEmpty()) {
         m_shaderManager.animationRuleEvaluator().clearCache();
+    }
+    // IsFocused is matchable in a verdict rule too (`ScrollFactor WHEN
+    // focused`), and its cache is independent of the one above, so it takes
+    // the same focus-edge clear.
+    if (!m_shaderManager.effectVerdictRuleSet().isEmpty()) {
+        m_shaderManager.effectVerdictRuleEvaluator().clearCache();
     }
     // The exclusion verdicts are cached the same way and IsFocused is just as
     // matchable in an exclusion rule (`ExcludeDecorations WHEN focused`), so

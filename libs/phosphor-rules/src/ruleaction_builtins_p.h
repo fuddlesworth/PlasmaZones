@@ -145,6 +145,16 @@ inline constexpr double kMinColumnWidthRatio = MinColumnWidthRatio;
 inline constexpr double kMaxColumnWidthRatio = MaxColumnWidthRatio;
 inline constexpr double kMinColumnWidthPercent = kMinColumnWidthRatio * 100.0;
 inline constexpr double kMaxColumnWidthPercent = kMaxColumnWidthRatio * 100.0;
+// ScrollFactor multiplier bounds. Aliased from the installed RuleAction.h
+// constants (the kMinColumnWidthRatio pattern) so the descriptor validator and
+// the KWin-effect consumer re-validation check the same numbers. The wire
+// value is the multiplier itself — a fraction below 1 slows scrolling — so the
+// editor shows it as a PERCENT and the display pair derives from the wire pair
+// exactly as the split-ratio and column-width pairs do.
+inline constexpr double kMinScrollFactor = MinScrollFactor;
+inline constexpr double kMaxScrollFactor = MaxScrollFactor;
+inline constexpr double kMinScrollFactorPercent = kMinScrollFactor * 100.0;
+inline constexpr double kMaxScrollFactorPercent = kMaxScrollFactor * 100.0;
 // Tab-indicator bounds, mirroring the ConfigDefaults ranges the settings
 // schema clamps to. As with every other bound here these only reject grossly
 // malformed hand-edited payloads; the consumer re-clamps.
@@ -211,11 +221,19 @@ inline ActionDescriptor::SlotResolver constantSlot(QLatin1StringView slot)
 inline const QStringList& engineModeOptions()
 {
     // NOTE: this is the engine-mode ACTION vocabulary (SetEngineMode param) and
-    // is DELIBERATELY distinct from the Mode MATCH-field vocabulary in
-    // MatchTypes.h, which uses "snapping" / "tiling" / "scrolling" (no "autotile"). The action
-    // names the engine ("autotile"); the match field names the placement mode a
-    // window is in ("tiling"). Do not unify them — a Mode match rule authored
-    // with "autotile" would silently never match.
+    // is DELIBERATELY distinct from the Mode MATCH-field vocabulary, which is
+    // `PhosphorRules::ModeToken` in MatchTypes.h and has no "autotile" — its
+    // middle value is ModeToken::Tiling. The action names the ENGINE; the match
+    // field names the placement mode a window is IN. Do not unify them, and do
+    // not build this list out of the ModeToken constants either: the two
+    // vocabularies agree on two of three spellings by coincidence, and sharing
+    // the constants would make a rename of one silently move the other. A Mode
+    // match rule authored with "autotile" silently never matches, which is the
+    // trap the separation exists to prevent.
+    //
+    // The literals below are therefore the CANONICAL definition of the action
+    // vocabulary — this function is its single source of truth, so spelling
+    // them here is the definition, not a duplicate.
     static const QStringList s_options{
         QStringLiteral("snapping"),
         QStringLiteral("autotile"),

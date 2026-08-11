@@ -73,12 +73,17 @@ bool PlasmaZonesEffect::blocksDirectScanout() const
     // accepted rather than engineered away.
     // Either the daemon has resolved at least one screen to cropping (the
     // per-context SetScrollCropStraddlers rule folded with the setting), or
-    // the global setting says crop and we have not received the resolved map
-    // yet. The OR keeps the bring-up window no worse than it was before the
-    // rule existed: an empty map during bring-up falls back to exactly the
-    // old global-flag test rather than silently permitting scanout.
+    // the map has not arrived yet and the global setting says crop. The
+    // fallback is SEEDED-GATED, not a plain OR: an empty resolved map is
+    // ambiguous on its own — "no screen crops" and "no reply yet" look
+    // identical — and while the fallback applied to both, a rule resolving
+    // every screen to false could never hand direct scanout back while the
+    // global setting stayed on. Gating on the seeded flag keeps the bring-up
+    // window no worse than the old global-flag test while making the resolved
+    // map authoritative the moment it exists.
     if (m_tilingHandler && m_tilingHandler->hasScrollingScreens()
-        && (m_tilingHandler->anyScreenCropsStraddlers() || m_cachedScrollCropStraddlers)) {
+        && (m_tilingHandler->anyScreenCropsStraddlers()
+            || (!m_tilingHandler->scrollEffectBehaviourSeeded() && m_cachedScrollCropStraddlers))) {
         return true;
     }
     // A live view spring translates every strip column in the COMPOSITE

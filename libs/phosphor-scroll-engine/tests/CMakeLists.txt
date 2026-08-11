@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 # PhosphorScrollEngine unit tests. Headless throughout: two files exercise
-# the pure strip model, seven drive the engine through null daemon
-# dependencies and the geometry-provider seam. None needs a QPA platform, so
+# the pure strip model, eight drive the engine through null (or stubbed)
+# daemon dependencies and the geometry-provider seam. None needs a QPA platform, so
 # by convention the strip tests run APPLESS and the engine tests GUILESS
 # (they need an event dispatcher for the coalesced retile and the prunes'
 # deleteLater) — the convention lives in each file's *_MAIN macro; nothing
@@ -48,7 +48,11 @@ pse_add_test(test_scrollstrip_ops test_scrollstrip_ops.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
-pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp)
+pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrollstubsettings.h)
+# The behaviour suite is the only one that needs a window-tracking stub: the
+# sticky gate and the client-decides width both short-circuit on a null
+# tracker, so their per-screen resolution is unobservable without one.
+pse_add_test(test_scrollengine_behaviour test_scrollengine_behaviour.cpp scrollstubsettings.h scrollstubtracking.h)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)

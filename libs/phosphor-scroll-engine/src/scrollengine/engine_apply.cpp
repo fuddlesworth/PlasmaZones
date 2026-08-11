@@ -519,6 +519,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // Consumed at the strip loop.
     QHash<int, bool> columnAllParked;
     QSet<int> columnHadSkippedTile;
+    // Resolved ONCE for the whole batch, not per tile: crop mode is a
+    // per-SCREEN verdict, and the screenId accessor rebuilds this screen's
+    // override map on every call — which, inside the emit loop, is once per
+    // window per relayout. Same doctrine as layoutParamsForScreen's single
+    // fetch at the top of this file.
+    const bool cropStraddlers = effectiveCropStraddlers(screenId);
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
@@ -665,7 +671,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // not qualify — the asymmetry is QRect's: setLeft moves x1 and
             // holds x2, setRight holds x1 and moves x2.
             bool clampPinnedX = false;
-            if (!effectiveCropStraddlers(screenId) && !parkedNow) {
+            if (!cropStraddlers && !parkedNow) {
                 const bool straddleRight = rect.right() > screenRect.right() && rect.left() <= screenRect.right();
                 // Both predicates read the PRE-mutation rect, and the left one
                 // is consumed after the right branch may have called setRight.

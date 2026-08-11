@@ -217,17 +217,26 @@ private:
     /**
      * @brief Show layout OSD for an autotile algorithm (visual zone preview)
      *
-     * Renders the OSD unconditionally — gating on user OSD toggles
-     * (showOsdOnLayoutSwitch / showOsdOnDesktopSwitch) is the caller's
-     * responsibility. The osdStyle setting controls visual style.
+     * Carries the shouldSuppressOsd gate (shutdown, phantom session,
+     * screen-settling cooldown, per-context SetOsdEnabled rule) and the
+     * osdStyle switch itself. The per-trigger user toggles
+     * (showOsdOnLayoutSwitch / showOsdOnDesktopSwitch) remain the caller's
+     * responsibility, via isOsdTriggerEnabled.
      */
     void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId);
     /// The scrolling strip preview card itself: live visible-tile rects, or
     /// the representative endless-strip sketch when the strip is empty.
     /// Carries NO gates of its own, so it stays private and reachable only
     /// through showScrollingModeOsd, which applies them (and re-applies them
-    /// on the settle dispatch that calls back in here).
+    /// on the settle dispatch that calls back in here). Advances the
+    /// template-announce ledger, because reaching here means a card renders.
     void showScrollingStripPreviewOsd(const QString& screenId);
+    /// Record the template currently in force for @p screenId as the one the
+    /// user has now been shown, for the template-only OSD gate. Called from
+    /// the points that actually RENDER a scrolling card, never at request
+    /// time: showScrollingModeOsd's settle arm can lapse without rendering,
+    /// and recording there claimed a card the user never saw.
+    void recordAnnouncedScrollingTemplate(const QString& screenId);
     /// True when the setting @p trigger names is on, or when a SetOsdEnabled
     /// rule's true verdict for @p screenId's context forces the trigger past
     /// an off toggle (the rule's force-ON half; its suppress half lives in
@@ -383,8 +392,10 @@ private:
 
     /**
      * @brief Failure OSD for a layout-selection shortcut pressed on a screen
-     * whose engine does not provide layouts. Honours the showNavigationOsd
-     * setting like the navigationFeedback relay in signals.cpp.
+     * whose engine does not provide layouts. Gated by navigationOsdAllowed
+     * like the navigationFeedback relay in signals.cpp, so the per-context
+     * SetOsdEnabled rule decides first and the showNavigationOsd setting is
+     * the fallback when no rule matches.
      */
     void showLayoutsUnavailableOsd(const QString& screenId);
 
@@ -600,9 +611,15 @@ private:
     /**
      * @brief Per-screen desktop-switch OSD (Plasma 6.7 per-output virtual desktops)
      *
-     * Shows the desktop-switch OSD only on @p screenId, using that screen's own
-     * current virtual desktop. Driven by the per-screen screenDesktopChanged
-     * handler so a single screen's switch doesn't flash every monitor (#648).
+     * Shows the desktop-switch OSD only on the output @p screenId names, using
+     * that screen's own current virtual desktop. Driven by the per-screen
+     * screenDesktopChanged handler so a single screen's switch doesn't flash
+     * every monitor (#648).
+     *
+     * @p screenId is the PHYSICAL output id the effect reports; it expands to
+     * that output's effective screen ids (its vs:N children when subdivided,
+     * itself otherwise) and gates each on its own context, because a
+     * subdivided output has no context of its own.
      */
     void showDesktopSwitchOsdForScreen(const QString& screenId, const QString& activity);
 
@@ -971,7 +988,12 @@ private:
     /// Scrolling twin of the list above, cleared and refilled on the same
     /// schedule and kept separate for the same reason.
     QList<QMetaObject::Connection> m_scrollingShortcutConnections;
-    /// Handles for every connection installed by initLayoutAndSettingsWiring().
+    /// Handles for every connection installed by initLayoutAndSettingsWiring(),
+    /// plus the settings-driven wiring initEnginesAndWiring() installs later in
+    /// the SAME init() pass (the system colour-scheme re-resolve). One list is
+    /// correct for both because the drop happens at the top of
+    /// initLayoutAndSettingsWiring, which runs first — every handle in here is
+    /// therefore from the previous cycle by the time it is severed.
     /// The senders (m_settings, m_layoutManager, the three value-member
     /// timers) all survive stop(), and init() CAN re-run (stop() -> init() ->
     /// start()), so a bare re-wire would stack duplicate handlers — double
@@ -1240,6 +1262,12 @@ private:
     /// D-Bus object path for `plasma-workspace.target`, resolved by GetUnit.
     QString m_plasmaWorkspaceTargetPath;
 
+    /// The screen-independent OSD suppressors alone: shutdown, phantom
+    /// session, screen-settling cooldown. Split out of shouldSuppressOsd so
+    /// navigationOsdAllowed can apply them without paying a second
+    /// contextOsdRuleVerdict resolve for the rule half it reads itself.
+    bool globalOsdSuppressed() const;
+
     /// Global OSD suppression (shutdown, phantom session, screen-settling
     /// cooldown), plus — when @p screenId is given — the per-context
     /// SetOsdEnabled rule: an explicit false verdict for the screen's
@@ -1254,10 +1282,12 @@ private:
     /// the screen name to the canonical id form itself.
     std::optional<bool> contextOsdRuleVerdict(const QString& screenId) const;
 
-    /// The navigation-OSD gate: `(rule ?? showNavigationOsd()) &&
-    /// overlay service && !shouldSuppressOsd(screenId)`. A SetOsdEnabled
+    /// The navigation-OSD gate: `overlay service && !globalOsdSuppressed() &&
+    /// osdStyle() != None && (rule ?? showNavigationOsd())`. A SetOsdEnabled
     /// rule's true verdict forces navigation feedback past a global
-    /// showNavigationOsd() off; false suppresses via shouldSuppressOsd.
+    /// showNavigationOsd() off, and
+    /// a false verdict suppresses it — both halves off the ONE verdict read,
+    /// which is why this does not route through shouldSuppressOsd.
     bool navigationOsdAllowed(const QString& screenId) const;
 
     /// Async query of systemd's user bus for `plasma-workspace.target` state.
@@ -1359,6 +1389,15 @@ private:
     // own layoutAssigned tail re-prime the snapshot first, so self-inflicted
     // edits diff empty and only external rule edits actually apply.
     bool m_reconcileAssignmentsPending = false;
+
+    // Compression latch for the deferred colour-scheme overlay refresh
+    // (init_engines.cpp). Separate from m_reconcileAssignmentsPending on
+    // purpose: the two coalesce independent work off different signals, and
+    // sharing one flag let whichever fired first in an event-loop turn swallow
+    // the other's pass. The refresh is deferred rather than run inline because
+    // it can recreate QQuickWindows while the palette-change event that
+    // triggered it is still being delivered.
+    bool m_colorSchemeRefreshPending = false;
 
     // Last observed tiled-window count per screen, tracked so the engine's
     // placementChanged stream only re-resolves the per-screen tiling algorithm
