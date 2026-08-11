@@ -221,8 +221,8 @@ namespace JsonKeys {
 // directly — no using-aliases here.
 //
 // PlasmaZones-side JSON keys below aren't part of the zone/layout file
-// format proper — assignment runtime state, screen-info enumeration,
-// virtual-screen configuration, pywal colour ingestion.
+// format proper — assignment runtime state, screen-info enumeration, and
+// virtual-screen configuration.
 
 // Assignment keys
 inline constexpr QLatin1String Assignments{"assignments"};
@@ -241,9 +241,6 @@ inline constexpr QLatin1String PhysicalSize{"physicalSize"};
 inline constexpr QLatin1String Depth{"depth"};
 inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
 inline constexpr QLatin1String RefreshRate{"refreshRate"};
-
-// Pywal color file keys
-inline constexpr QLatin1String Colors{"colors"};
 
 // PhosphorZones::Zone assignment serialization keys — authoritative definitions
 // live in PhosphorEngine::JsonKeys (LGPL); imported here for daemon callers.

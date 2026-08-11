@@ -1865,9 +1865,6 @@ public:
     /// — in that case nothing was staged and no signal fired.
     bool applyConfigOverlayStaged(const QJsonObject& fullConfigBlob);
 
-    // Additional methods
-    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath) override;
-
     /// The system colour scheme as a "light" / "dark" token, derived from
     /// the live application palette's window-background lightness. Empty
     /// with no GUI application (headless tools) and off the GUI thread

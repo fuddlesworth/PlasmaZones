@@ -18,7 +18,7 @@ namespace PhosphorZones {
  *
  * Keys that aren't part of the zone/layout file format proper (window-
  * assignment runtime state, screen-info enumeration, virtual-screen
- * configuration, pywal colour ingestion, autotile JSON) live in their
+ * configuration, autotile JSON) live in their
  * respective owners — see the application's config layer for host-specific
  * keys, and PhosphorTiles::AutotileJsonKeys for autotile overrides.
  */

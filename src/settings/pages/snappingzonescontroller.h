@@ -5,27 +5,14 @@
 
 #include <PhosphorControl/PageController.h>
 #include <QObject>
-#include <QString>
 
 namespace PlasmaZones {
-
-class ISettings;
 
 /// Q_PROPERTY surface for the "Snapping → Zones" settings page (the
 /// drag-time zone overlay).
 ///
-/// Exposed as a child Q_PROPERTY on SettingsController. Two responsibilities:
-///   1. Expose the zone-overlay border-width / border-radius slider bounds as
-///      CONSTANTs, delegating directly to ConfigDefaults::borderWidthMin/Max and
-///      borderRadiusMin/Max.
-///   2. Own the color-import action surface: `loadColorsFromPywal()` and
-///      `loadColorsFromFile(path)`, plus their `colorImportError(msg)` /
-///      `colorImportSuccess()` signals. Each successful import emits
-///      `changed()` so SettingsController's dirty tracking flips to the
-///      appropriate page — the live color properties themselves are
-///      Q_PROPERTY on Settings and mark dirty through the meta-loop, but
-///      the top-level load path needs the explicit signal to cover any
-///      batched writes that don't individually trip a NOTIFY.
+/// Exposed as a child Q_PROPERTY on SettingsController. Provides the
+/// zone-overlay border and label slider bounds from ConfigDefaults.
 class SnappingZonesController : public PhosphorControl::PageController
 {
     Q_OBJECT
@@ -40,7 +27,7 @@ class SnappingZonesController : public PhosphorControl::PageController
     Q_PROPERTY(double labelFontScaleMax READ labelFontScaleMax CONSTANT)
 
 public:
-    explicit SnappingZonesController(ISettings& settings, QObject* parent = nullptr);
+    explicit SnappingZonesController(QObject* parent = nullptr);
 
     bool isDirty() const override
     {
@@ -59,29 +46,6 @@ public:
     int borderRadiusMax() const;
     double labelFontScaleMin() const;
     double labelFontScaleMax() const;
-
-    /// Import colors from the user's pywal output
-    /// (`~/.cache/wal/colors.json`). Emits `colorImportSuccess()` on
-    /// success or `colorImportError(msg)` if the file is missing or
-    /// unparseable.
-    Q_INVOKABLE void loadColorsFromPywal();
-
-    /// Import colors from an arbitrary colors.json file. See
-    /// `loadColorsFromPywal` for signal semantics.
-    Q_INVOKABLE void loadColorsFromFile(const QString& filePath);
-
-Q_SIGNALS:
-    void colorImportError(const QString& error);
-    void colorImportSuccess();
-
-    /// Generic "something changed" — SettingsController hooks this to
-    /// `onSettingsPropertyChanged()` so successful imports mark the page
-    /// dirty even if the underlying Settings property fan-out didn't
-    /// individually trip a NOTIFY.
-    void changed();
-
-private:
-    ISettings* m_settings = nullptr;
 };
 
 } // namespace PlasmaZones

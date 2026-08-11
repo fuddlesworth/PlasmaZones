@@ -1976,15 +1976,6 @@ public:
         Q_EMIT autotilePerAlgorithmSettingsChanged();
         Q_EMIT settingsChanged();
     }
-    QString loadColorsFromFile(const QString&) override
-    {
-        // Stub returns "not supported" so a test that exercised this
-        // path could distinguish a real failure from a missing impl,
-        // but the controllers under test don't reach this in their
-        // unit-test paths today.
-        return QStringLiteral("loadColorsFromFile: stub not supported");
-    }
-
     // Editor settings — round-trip the stub members so a test can
     // exercise the EditorPageController setter/getter contract.
     //

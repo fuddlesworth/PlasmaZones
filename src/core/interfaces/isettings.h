@@ -171,12 +171,6 @@ public:
     virtual int decorationIdleTimeoutSec() const = 0;
     virtual void setDecorationIdleTimeoutSec(int value) = 0;
 
-    // Color-import helper used by SnappingZonesController. Returns
-    // an empty string on success, a user-readable error message
-    // otherwise. The signature mirrors Settings::loadColorsFromFile
-    // exactly so its existing Q_INVOKABLE annotation overrides this.
-    virtual QString loadColorsFromFile(const QString& filePath) = 0;
-
     /// The system colour scheme as a "light" / "dark" token, or empty when the
     /// process cannot observe a palette (no GUI application, or an off-GUI-thread
     /// caller). Pairs with the systemColorSchemeChanged signal below: the signal

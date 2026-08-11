@@ -597,12 +597,9 @@ SettingsController::SettingsController(QObject* parent)
     // facade over ConfigDefaults — no Settings wiring required.
     m_snappingZoneSelectorPage = new SnappingZoneSelectorController(this);
 
-    // Snapping→Zones page sub-controller (the drag-time zone overlay). Owns
-    // border bounds plus the color-import action surface; its changed() signal
-    // drives dirty tracking on successful imports.
-    m_snappingZonesPage = new SnappingZonesController(m_settings, this);
-    connect(m_snappingZonesPage, &SnappingZonesController::changed, this,
-            &SettingsController::onSettingsPropertyChanged);
+    // Snapping→Zones page sub-controller (the drag-time zone overlay). Pure
+    // CONSTANT bounds facade over ConfigDefaults — no Settings wiring required.
+    m_snappingZonesPage = new SnappingZonesController(this);
 
     // Snapping→Effects page — CONSTANT-only bounds facade. The Window Appearance
     // page is ISettings-backed: it forwards its window border / title bar and the
