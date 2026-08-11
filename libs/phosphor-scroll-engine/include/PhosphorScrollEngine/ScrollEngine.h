@@ -900,6 +900,28 @@ private:
     void queueSelfActivation(const QString& windowId);
     /// Cap for m_pendingSelfActivations (enforced in queueSelfActivation).
     static constexpr int kMaxPendingSelfActivations = 16;
+    /// The one arrival whose focus an `openFocused = false` rule declined, held
+    /// until its compositor focus report arrives and is consumed exactly once.
+    ///
+    /// Why this exists: declining focus rewinds the STRIP's active column, but
+    /// the compositor has already focused the arriving window on its own and
+    /// reports that focus independently. Without this mark the report reaches
+    /// the strip adopt below and re-takes the column the rewind just left, so
+    /// the rule reads as a no-op. Confirmed live in a nested session before it
+    /// was added.
+    ///
+    /// Consumed ONCE, deliberately: the rewind also asks the compositor to
+    /// re-activate the prior window, so swallowing this single report is what
+    /// keeps the strip and the compositor agreeing rather than hiding a
+    /// disagreement. A LATER report for the same window is a real user click
+    /// and must adopt normally, which is why this is a one-shot rather than a
+    /// standing veto.
+    ///
+    /// A single slot rather than a FIFO: only one window opens per rewind, and
+    /// a second declined open before the first report lands simply overwrites,
+    /// which degrades to the pre-fix behaviour for the older arrival instead of
+    /// growing without bound.
+    QString m_declinedOpenFocus;
     /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
     /// While positive, windowOpened defers its per-arrival applyLayout into
     /// m_burstPendingApplies (context key → whether any deferred arrival took

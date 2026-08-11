@@ -426,14 +426,22 @@ public Q_SLOTS:
      * handlers (float toggle, etc.) so they can compose pre-tile geometry
      * without a round-trip back to the effect.
      *
-     * ABSENCE IS NOT LATENCY. The shadow has exactly two writers: this
-     * motion-driven flush, and the bulk seed on daemon (re)registration
-     * (kwin-effect daemon_bringup.cpp, which states the consequence). A
-     * window that has never MOVED therefore has no entry at all — not one
-     * that arrives 50 ms later — so a freshly opened session window reads
-     * back invalid indefinitely, while a daemon-restart re-announce of an
-     * already-open window reads back populated. Callers deciding policy on
-     * an invalid read must not assume a retry would populate it.
+     * ABSENCE IS NOT LATENCY. The shadow has exactly three writers: this
+     * motion-driven flush, the bulk seed on daemon (re)registration
+     * (kwin-effect daemon_bringup.cpp, which states the consequence), and
+     * the open-path seed the snap handler pushes immediately before
+     * resolveWindowRestore. A window that has never MOVED and is not being
+     * opened therefore has no entry at all — not one that arrives 50 ms
+     * later — so callers deciding policy on an invalid read must not assume
+     * a retry would populate it.
+     *
+     * The open-path seed exists because that assumption was made and was
+     * wrong: applyOpenScreenRouting translates a bare RouteToScreen from
+     * this shadow, and with only the first two writers a freshly opened
+     * window read back invalid, so the route silently never moved it while
+     * still suppressing the remembered-placement fallback. The same rule
+     * worked on an already-open window purely because a daemon restart had
+     * bulk-seeded it.
      *
      * @param windowId Window identifier
      * @param x/y/width/height Current frame geometry in compositor coordinates

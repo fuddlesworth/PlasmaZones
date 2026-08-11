@@ -79,6 +79,7 @@ private Q_SLOTS:
     void openMaximizedRuleOutranksWidthRuleAndBlueprint();
     void openFocusedRuleOverridesFocusNewWindows();
     void openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival();
+    void openFocusedFalseSurvivesTheCompositorsOwnFocusReport();
     void openMaximizedFalseLeavesTheDefaultWidth();
     void openMaximizedIsDroppedByAConsumeOpen();
     void templateBlueprintNeverResizesExistingColumns();
@@ -914,6 +915,44 @@ void TestScrollEnginePerScreen::openFocusedRuleOverridesFocusNewWindows()
     engine->setOpenParamsResolver({});
     engine->windowOpened(QStringLiteral("app|d"), kS1, 0, 0);
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
+}
+
+void TestScrollEnginePerScreen::openFocusedFalseSurvivesTheCompositorsOwnFocusReport()
+{
+    // The regression this pins was observed live, not theorised: declining
+    // focus rewound the STRIP, but the compositor had already focused the
+    // arriving window on its own and reported that focus back independently.
+    // The report adopted the arrival and undid the rewind, so the rule read as
+    // a no-op to the user. Driving windowOpened alone cannot catch that — the
+    // report has to be delivered, which is what this test adds over its
+    // sibling above.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.focused = false;
+        return params;
+    });
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+
+    // The compositor's own report for the declined arrival. Consumed once, so
+    // the rewind stands.
+    engine->windowFocused(QStringLiteral("app|b"), kS1);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+
+    // Consumed ONCE and no more: a later report for the same window is a real
+    // user click and must adopt normally. A standing veto would make the
+    // window unfocusable, which is why the mark is one-shot.
+    engine->windowFocused(QStringLiteral("app|b"), kS1);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|b"));
 }
 
 void TestScrollEnginePerScreen::openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival()

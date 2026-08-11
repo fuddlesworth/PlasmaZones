@@ -727,6 +727,29 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         && state->strip().containsWindow(priorActive)) {
         const ScrollLayoutParams params = layoutParamsForScreen(screenId);
         state->strip().focusWindow(priorActive, params);
+        // Rewinding the strip is only half of declining focus. The compositor
+        // focuses the arriving window on its own, and reports that focus back
+        // independently of anything this engine asked for — so without the two
+        // steps below the report lands in windowFocused, adopts the arrival,
+        // and undoes the rewind. That was confirmed live before this was
+        // added: the arrival came up active with the rule in force.
+        //
+        // So ALSO put the compositor's focus back where the strip now points,
+        // and mark the arrival's own report for a single consume. The mark
+        // alone would leave the strip disagreeing with real focus (the window
+        // would be focused while the strip highlighted its neighbour); the
+        // activation alone would race the arrival's report. Together they
+        // agree.
+        //
+        // Skipped inside an arrival burst (daemon-restart re-announce, mode
+        // flip): those re-announce EXISTING windows, the user is not opening
+        // anything, and firing an activation per arrival would fight the
+        // burst's own deferred focus restore.
+        if (m_arrivalBurstDepth == 0) {
+            m_declinedOpenFocus = windowId;
+            queueSelfActivation(priorActive);
+            Q_EMIT activateWindowRequested(priorActive);
+        }
     }
     // Only an arrival that actually TAKES focus re-targets the screen-hintless
     // shortcut paths. Writing this on ANY arrival pointed them at whatever
@@ -800,6 +823,12 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // lands can never be answered; without this a later genuine focus of a
     // reused id would be eaten as that echo.
     m_pendingSelfActivations.removeAll(windowId);
+    // Same reasoning for the declined-open mark: the arrival that was denied
+    // focus can close before its one report arrives, and a stale mark would
+    // then eat the first genuine focus of a reused id.
+    if (m_declinedOpenFocus == windowId) {
+        m_declinedOpenFocus.clear();
+    }
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
@@ -866,6 +895,20 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     if (const int selfIdx = m_pendingSelfActivations.indexOf(windowId); selfIdx >= 0) {
         m_pendingSelfActivations.erase(m_pendingSelfActivations.begin(),
                                        m_pendingSelfActivations.begin() + selfIdx + 1);
+        return;
+    }
+    // Declined-open consume, m_declinedOpenFocus' read side. An
+    // `openFocused = false` arrival was focused by the compositor anyway, and
+    // the rewind that declined it has already asked for the prior window back;
+    // adopting this report would undo that. Consumed exactly once, so the next
+    // report naming the same window is a real user click and adopts below.
+    //
+    // Placed ahead of the reclaim on the next line ON PURPOSE: this report is
+    // not the "genuine focus" the reclaim reasons about, and clearing the queue
+    // here would drop the prior window's activation echo that the rewind just
+    // queued, letting that echo rewind the strip a second time when it lands.
+    if (!m_declinedOpenFocus.isEmpty() && m_declinedOpenFocus == windowId) {
+        m_declinedOpenFocus.clear();
         return;
     }
     // A genuine focus report implies every previously-sent echo already
