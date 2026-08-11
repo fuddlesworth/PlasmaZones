@@ -34,7 +34,12 @@ struct DmabufThumbnailDesc
     int width = 0; ///< Image width in pixels.
     int height = 0; ///< Image height in pixels.
     uint32_t fourcc = 0; ///< DRM FourCC pixel format (e.g. DRM_FORMAT_ABGR8888).
-    uint64_t modifier = 0; ///< DRM format modifier (DRM_FORMAT_MOD_* / vendor-specific).
+    /// DRM format modifier (DRM_FORMAT_MOD_* / vendor-specific). Defaults to
+    /// the INVALID sentinel, not 0: 0 is DRM_FORMAT_MOD_LINEAR, a *valid*
+    /// modifier, and a direct C++ caller leaving the field default must land
+    /// on the importer's "no modifier supplied" branch rather than silently
+    /// asserting an explicit linear layout it never chose.
+    uint64_t modifier = DrmFormatModInvalid;
     uint32_t stride = 0; ///< Plane 0 row stride in bytes.
     uint32_t offset = 0; ///< Plane 0 byte offset.
     /// Borrowed sync_file fence fd that signals when the producer's GPU render

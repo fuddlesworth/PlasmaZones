@@ -272,6 +272,21 @@ Q_SIGNALS:
     void snapAssistDismissed();
 
     /**
+     * @brief Emitted when the idle-grace trim fires, after clearing every
+     * live snap-assist thumbnail store (the pixel LRU and, when its
+     * provider is live, the dma-buf descriptor store).
+     *
+     * Load-bearing for cache coherence with the kwin-effect: the producer
+     * keeps a recently-posted dedup set mirroring the daemon's cache
+     * residency, and its skip path re-promotes entries — so without an
+     * explicit invalidation edge, a trim left the two sides permanently
+     * desynchronised (the effect skipped re-capture forever and snap-assist
+     * fell back to icons until a daemon restart). OverlayAdaptor relays this
+     * onto the bus; the effect drops its dedup set in response.
+     */
+    void snapAssistThumbnailCacheTrimmed();
+
+    /**
      * @brief Emitted when a layout is selected from the layout picker overlay
      * @param layoutId The UUID of the selected layout
      */

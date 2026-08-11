@@ -132,7 +132,7 @@ public:
     /**
      * Register / unregister the cancel-overlay Escape shortcut on demand.
      *
-     * The snap-assist phase (start.cpp's snapAssistShown handler) and the
+     * The snap-assist phase (shortcuts_wiring.cpp's snapAssistShown handler) and the
      * layout picker register / unregister this on demand. The drag itself
      * needs no binding: on the SNAP path the kwin-effect grabs the keyboard
      * (lifecycle_wiring.cpp's dragStarted) and routes Escape to cancelSnap()
@@ -157,8 +157,8 @@ public:
 
     /// Release the shared cancel-overlay Escape grab, but ONLY when no other
     /// consumer still needs it. kCancelOverlayId is bound on behalf of the
-    /// layout picker (start.cpp, layoutPickerRequested) and the snap-assist
-    /// phase (start.cpp, snapAssistShown); the drag itself never binds it (the
+    /// layout picker (shortcuts_wiring.cpp, layoutPickerRequested) and the snap-assist
+    /// phase (shortcuts_wiring.cpp, snapAssistShown); the drag itself never binds it (the
     /// kwin-effect's keyboard grab handles Escape during a drag). Every normal
     /// release site routes through here so one consumer's teardown cannot tear
     /// the grab out from under another consumer that is still showing. Two
@@ -174,7 +174,7 @@ public:
     /// dismiss.
     ///
     /// Callbacks are owned by the caller and must outlive the
-    /// registration. start.cpp passes lambdas that capture the
+    /// registration. shortcuts_wiring.cpp passes lambdas that capture the
     /// long-lived OverlayService pointer.
     void ensureLayoutPickerNavShortcutsRegistered(std::function<void(int dx, int dy)> moveCb,
                                                   std::function<void()> confirmCb);
@@ -827,8 +827,8 @@ private Q_SLOTS:
 
     /**
      * Called when snap assist is dismissed (selection, timeout, click-away, etc.)
-     * Unregisters the Escape shortcut that start.cpp's snapAssistShown handler
-     * bound for snap assist
+     * Unregisters the Escape shortcut that shortcuts_wiring.cpp's snapAssistShown
+     * handler bound for snap assist
      */
     void onSnapAssistDismissed();
 };

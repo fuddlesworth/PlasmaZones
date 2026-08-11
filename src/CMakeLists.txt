@@ -542,6 +542,9 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/internal.h
     daemon/rendering/snapassistthumbnailprovider.cpp
     daemon/rendering/snapassistthumbnailprovider.h
+    # Handle-normalisation + image:// URL composition shared by both thumbnail
+    # providers (pixel and dma-buf) so their key/URL discipline cannot drift.
+    daemon/rendering/thumbnailurlutil.h
     # Zero-copy GPU thumbnail path (PLASMAZONES_DMABUF_THUMBNAILS): imports
     # dma-bufs handed from the kwin-effect as Vulkan-backed QSGTextures.
     daemon/rendering/dmabuftextureprovider.cpp

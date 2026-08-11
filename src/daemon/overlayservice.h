@@ -244,7 +244,10 @@ public:
     }
     /// Int codes of the resolver's answer — hand-mirrored values of
     /// IPlacementEngine::LayoutSupport (this header does not include the
-    /// engine interface).
+    /// engine interface). Placement currently has no in-file reader; it is
+    /// kept so the mirror stays a complete transcription of the enum rather
+    /// than a two-of-three subset a future reader would mistake for the
+    /// whole vocabulary.
     static constexpr int LayoutSupportNone = 0;
     static constexpr int LayoutSupportPlacement = 1;
     static constexpr int LayoutSupportTemplates = 2;
@@ -253,6 +256,14 @@ public:
         return m_screenManager;
     }
     void setCurrentVirtualDesktop(int desktop);
+    /// Hide overlay/selector windows on screens where the current context is
+    /// disabled (or engine-inactive), then update the remaining visible
+    /// windows. Public because per-output desktop switches (Plasma 6.7)
+    /// bypass setCurrentVirtualDesktop's global change gate entirely — the
+    /// daemon's screenDesktopChanged handler must re-evaluate the context
+    /// gates itself, or a switch onto a context-disabled desktop leaves an
+    /// already-visible overlay/selector up.
+    void hideDisabledAndRefresh();
     /// This screen's current virtual desktop under Plasma 6.7 per-output virtual
     /// desktops (#648). Delegates to the layout registry — the single source of
     /// truth for the per-output desktop map — so overlay resolution matches
@@ -382,12 +393,18 @@ private:
      * NOT a caller: it stays on -1 because it shows the snap zone overlay,
      * whose lock is the snapping one.
      */
+    /// Values of the mode-lens axis consumed by isAnyModeLocked — a
+    /// DIFFERENT vocabulary from the LayoutSupport* constants above, whose
+    /// Templates value happens to also be 2. Named to keep the two from
+    /// being read as one enum.
+    static constexpr int LockModeScrolling = 2;
+    static constexpr int LockModeBothModes = -1;
     int pickerLockModeFor(const QString& screenId) const
     {
         if (m_layoutSupportResolver && m_layoutSupportResolver(screenId) == LayoutSupportTemplates) {
-            return 2;
+            return LockModeScrolling;
         }
-        return -1;
+        return LockModeBothModes;
     }
 
     /**
@@ -700,10 +717,6 @@ private:
     // is a no-op.
     void stopObservingLayout(PhosphorZones::Layout* layout);
 
-    // Hide overlay/selector windows on screens where the current context is disabled,
-    // then update remaining visible windows. Used by setCurrentVirtualDesktop/Activity.
-    void hideDisabledAndRefresh();
-
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);
     void dismissOverlayWindow(QScreen* screen);
@@ -906,7 +919,13 @@ private:
     /// engine's tabStripsChanged is change-latched and stays silent).
     QHash<QString, QVariantList> m_lastScrollTabStrips;
     /// Per-screen drop-indicator paint overrides (see
-    /// setScrollDropIndicatorOverrides).
+    /// setScrollDropIndicatorOverrides). An empty map clears the screen's
+    /// overrides. Lifecycle note shared with m_scrollTabIndicatorOverrides:
+    /// shell TEARDOWN erases the screen's entry (unwirePassiveShellSlots),
+    /// while a shell REKEY deliberately carries it across (rekey.cpp) — the
+    /// writer is Daemon's context-rule resolve pass, so a destroy+recreate
+    /// under the same key runs without the rule-resolved colours until that
+    /// pass next runs (rule edit / scrolling-screen-set change).
     QHash<QString, QVariantMap> m_scrollDropIndicatorOverrides;
     /// Per-DRAG drop-indicator colour overrides from the dragged window's
     /// rules (see setScrollDropIndicatorWindowOverrides). Not per screen: one
@@ -914,7 +933,9 @@ private:
     QVariantMap m_scrollDropIndicatorWindowOverrides;
     /// Per-screen tab-indicator paint overrides (see
     /// setScrollTabIndicatorOverrides). Screens with no context rule carry no
-    /// entry, so the common case costs one empty-hash lookup.
+    /// entry, so the common case costs one empty-hash lookup. Same
+    /// teardown-erases / rekey-carries lifecycle note as
+    /// m_scrollDropIndicatorOverrides above.
     QHash<QString, QVariantMap> m_scrollTabIndicatorOverrides;
     /// Window-local rects of the live tab indicators per screen, handed to the
     /// tab shell as its input region so clicks land on a tab but fall through
@@ -1005,15 +1026,24 @@ private:
     // across all screens) and whether it's logically visible.
     QString m_snapAssistScreenId;
     bool m_snapAssistVisible = false;
-    QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
+    // Static-per-show candidate model (never mutated while shown, so the QML
+    // Repeater's delegates are built exactly once per show).
+    QVariantList m_snapAssistCandidates;
+    // Per-show thumbnail overlay: compositorHandle → provider URL. Pushed as
+    // its own QML property so each arriving thumbnail re-evaluates only the
+    // Image bindings that read the map — re-pushing the whole candidates
+    // list per thumbnail rebuilt every zone's full delegate tree (O(N²)
+    // churn), reset hover state and dropped in-flight presses.
+    QVariantMap m_snapAssistThumbnails;
     // Bounded LRU cache + QML image provider. Constructed eagerly in the
     // OverlayService ctor (before the SurfaceManager) so @ref m_thumbnailProvider
     // is non-null for the daemon's entire lifetime - the previous lazy
     // pattern left a window between OverlayService construction and first
     // surface creation where setSnapAssistThumbnail silently dropped. The
     // owned unique_ptr releases ownership to the QQmlEngine the moment the
-    // engine is created (engineConfigurator below); after that the engine
-    // owns the provider and outlives every QML reference into it.
+    // engine is created (the engineConfigurator lambda in the OverlayService
+    // constructor, overlayservice.cpp); after that the engine owns the
+    // provider and outlives every QML reference into it.
     //
     // Lifetime invariant - single-threaded teardown with no event-loop
     // pumping during the destructor window. Concretely:
@@ -1054,12 +1084,26 @@ private:
     // during ~QQmlEngine + std::atomic null-out) applies identically here.
     std::unique_ptr<DmabufTextureProvider> m_dmabufTextureProviderOwned;
     std::atomic<DmabufTextureProvider*> m_dmabufTextureProvider{nullptr};
-    // Single-shot idle-grace timer: started on every hideSnapAssist and
+    /// Connection of the engine-destroyed lambda that nulls the two provider
+    /// atomics. Stored so ~OverlayService can disconnect it in its BODY:
+    /// m_surfaceManager is declared before the atomics, so reverse member
+    /// destruction destroys the atomics first and the engine teardown inside
+    /// ~m_surfaceManager would otherwise fire the lambda into
+    /// already-destructed storage (benign for trivially destructible
+    /// atomics, but formally UB — and a sanitizer finding waiting to
+    /// happen).
+    QMetaObject::Connection m_engineProviderDestroyConnection;
+    // Single-shot idle-grace timer, armed by scheduleSnapAssistCacheTrim
+    // whenever snap-assist transitions to hidden (hideSnapAssist and the
+    // screen-teardown reset in resetModalSingletonsForDestroyedId) and
     // stopped on showSnapAssist. If snap-assist stays dismissed long enough
-    // for it to fire, it clears the thumbnail cache so its bounded (~6 MB
-    // worst-case) pixel buffers don't sit resident for the rest of the
-    // session. Rapid dismiss/re-show continuations restart it before it
-    // fires, keeping the warm cache. Lazily created (parented to this).
+    // for it to fire, it clears BOTH thumbnail stores — the pixel LRU
+    // (bounded ~6 MB) and the dma-buf descriptor store (whose entries pin a
+    // dup'd fd and the producer's GPU buffer each) — and emits
+    // snapAssistThumbnailCacheTrimmed so the kwin-effect drops its
+    // recently-posted dedup set in the same breath. Rapid dismiss/re-show
+    // continuations restart it before it fires, keeping the warm caches.
+    // Lazily created (parented to this).
     QTimer* m_snapAssistCacheTrimTimer = nullptr;
     // Layout Picker (interactive layout browser). Post-shell-migration
     // the picker is an Item slot inside the per-screen passive shell;
@@ -1116,6 +1160,12 @@ private:
     QString m_lastNavigationScreenId;
     QElapsedTimer m_lastNavigationTime;
 
+    // NOTE on ordering: method declarations (here and below) interleave with
+    // the data-member runs, and that is harmless to the teardown-order
+    // contract the file-size exception cites — C++ destruction order is
+    // defined by NON-STATIC DATA MEMBER order alone, which interspersed
+    // function declarations do not participate in. Only the relative order
+    // of the data members themselves is load-bearing.
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
     void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
@@ -1334,8 +1384,15 @@ private:
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML.
      *  @return true iff the image was inserted into the bounded LRU cache.
      *          False if the provider was torn down (engine destroyed) or the
-     *          image was null after format conversion. */
+     *          image was null. */
     bool updateSnapAssistCandidateThumbnail(const QString& compositorHandle, QImage image);
+
+    /// Arm (creating lazily on first use) the idle-grace thumbnail-cache trim
+    /// timer. Shared by hideSnapAssist and the screen-teardown dismissal in
+    /// resetModalSingletonsForDestroyedId so every hidden-transition schedules
+    /// the reclaim; the timer's lambda clears both providers and emits
+    /// snapAssistThumbnailCacheTrimmed for the kwin-effect's dedup reset.
+    void scheduleSnapAssistCacheTrim();
 
     /** Push a resolved thumbnail image:// URL into the live snap-assist
      *  candidate list (and QML) for @p compositorHandle. Shared tail of the
@@ -1352,21 +1409,15 @@ private:
     static void assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry = QRect());
 
     /**
-     * @brief Prepare layout OSD window for display
-     * @param window Output: the prepared window (nullptr on failure)
-     * @param outSurface Output: the backing PhosphorLayer::Surface (nullptr on failure)
-     * @param screenGeom Output: screen geometry
-     * @param aspectRatio Output: calculated aspect ratio
-     * @param outEffectiveScreenId Output: resolved screen id (caller's
-     *        @p screenId, or the target physical screen's identity when the
-     *        caller passed an empty id) — feed this to per-screen context
-     *        lookups such as overlayOverrideForScreen
+     * @brief Prepare the layout OSD window for display.
      * @param screenId Target screen (empty = primary)
-     * @return true if window is ready, false on failure
+     * @return the prepared window/surface/slot bundle, or std::nullopt on
+     *         failure. The bundle's effectiveScreenId is the caller's
+     *         @p screenId, or the target physical screen's identity when the
+     *         caller passed an empty id — feed it to per-screen context
+     *         lookups such as overlayOverrideForScreen.
      */
-    bool prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer::Surface*& outSurface, QQuickItem*& outOsdSlot,
-                                QScreen*& outPhysScreen, QRect& screenGeom, qreal& aspectRatio,
-                                QString& outEffectiveScreenId, const QString& screenId = QString());
+    std::optional<PreparedLayoutOsdWindow> prepareLayoutOsdWindow(const QString& screenId = QString());
 
     /**
      * @brief Shared show tail for every OSD path (layout, template, disabled,
