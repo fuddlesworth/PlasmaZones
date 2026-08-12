@@ -530,7 +530,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("spanModifier"),
                PhosphorI18n::tr("Span modifier"), {PhosphorI18n::tr("zone span"), PhosphorI18n::tr("paint")});
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("zoneSpanToggleMode"),
-               PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("span"), PhosphorI18n::tr("tap")});
+               PhosphorI18n::tr("Zone span toggle mode"), {PhosphorI18n::tr("span"), PhosphorI18n::tr("tap")});
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("edgeThreshold"),
                PhosphorI18n::tr("Edge threshold"), {PhosphorI18n::tr("distance"), PhosphorI18n::tr("multi-zone")});
     addSetting(search, QStringLiteral("snapping-overlay-behavior"), QStringLiteral("showZonesOnAllMonitors"),
@@ -951,7 +951,7 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("spanModifier"),
                PhosphorI18n::tr("Span modifier"), {PhosphorI18n::tr("modifier"), PhosphorI18n::tr("multi-zone")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("zoneSpanToggleMode"),
-               PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("zone span")});
+               PhosphorI18n::tr("Zone span toggle mode"), {PhosphorI18n::tr("zone span")});
     addSetting(search, QStringLiteral("snapping-simple"), QStringLiteral("edgeThreshold"),
                PhosphorI18n::tr("Edge threshold"), {PhosphorI18n::tr("distance"), PhosphorI18n::tr("multi-zone")});
     addSection(search, QStringLiteral("snapping-simple"), QStringLiteral("windowHandling"),

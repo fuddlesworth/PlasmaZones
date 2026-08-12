@@ -1726,8 +1726,8 @@
         <translation>Панель задач &amp; переключатель</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="171"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="260"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="262"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="290"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="357"/>
@@ -1947,7 +1947,7 @@
         <translation>Зазоры</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="206"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="208"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="147"/>
         <source>Overlay</source>
         <translation>Наложение</translation>
@@ -1960,16 +1960,16 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="114"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="215"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="217"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="153"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="815"/>
         <source>Appearance</source>
         <translation>Внешний вид</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="230"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="269"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="317"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="232"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="271"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="319"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="101"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="126"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="140"/>
@@ -2138,7 +2138,7 @@
         <translation>Экран</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="368"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="370"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="266"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="333"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="989"/>
@@ -2173,8 +2173,8 @@
         <translation>Номера зон, например «1, 2», или диапазон, например «1-3». Несколько зон прилепляют окно к их общей области.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="169"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="203"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="171"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="205"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="289"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="351"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="66"/>
@@ -2950,7 +2950,7 @@
     <message>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="431"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="543"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="390"/>
         <source>Show zone numbers</source>
         <translation>Показывать номера зон</translation>
     </message>
@@ -3918,7 +3918,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="442"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="354"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="359"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="147"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="146"/>
         <source>Opacity</source>
         <translation>Непрозрачность</translation>
     </message>
@@ -4622,8 +4622,8 @@
         <translation>Комнаты</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="142"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="331"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="144"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="333"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="950"/>
         <source>Animations</source>
         <translation>Анимации</translation>
@@ -4815,7 +4815,7 @@
         <translation>Размещённое мозаикой</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="446"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="447"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="50"/>
         <source>Popups</source>
         <translation>Всплывающие окна</translation>
@@ -6021,20 +6021,20 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="368"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="201"/>
         <source>Border</source>
         <translation>Рамка</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="370"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="281"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="280"/>
         <source>Zone labels</source>
         <oldsource>Zone Labels</oldsource>
         <translation type="unfinished">Подписи зон</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="372"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="377"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="376"/>
         <source>Effects</source>
         <translation>Эффекты</translation>
     </message>
@@ -6107,8 +6107,8 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="886"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="389"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="155"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="160"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="154"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="159"/>
         <source>Active opacity</source>
         <translation>Непрозрачность активной зоны</translation>
     </message>
@@ -6121,8 +6121,8 @@
     <message>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="886"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="391"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="173"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="178"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="172"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="177"/>
         <source>Inactive opacity</source>
         <translation>Непрозрачность неактивной зоны</translation>
     </message>
@@ -6134,8 +6134,8 @@
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="198"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="139"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="147"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="210"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="217"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="209"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="216"/>
         <source>Border width</source>
         <translation>Ширина рамки</translation>
     </message>
@@ -6179,7 +6179,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="397"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="289"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="288"/>
         <source>Label color</source>
         <translation>Цвет надписи</translation>
     </message>
@@ -6196,7 +6196,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="400"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="304"/>
         <source>Font</source>
         <translation>Шрифт</translation>
     </message>
@@ -6217,8 +6217,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="403"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="347"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="352"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="346"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="351"/>
         <source>Label scale</source>
         <translation>Масштаб надписи</translation>
     </message>
@@ -6229,7 +6229,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="406"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="384"/>
         <source>Zone numbers</source>
         <translation>Номера зон</translation>
     </message>
@@ -6253,7 +6253,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="409"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="401"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="400"/>
         <source>Flash on layout switch</source>
         <translation>Мигать при переключении раскладки</translation>
     </message>
@@ -6761,7 +6761,7 @@
         <translation>Рамки</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="128"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="130"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="414"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="424"/>
         <source>Decorations</source>
@@ -6777,8 +6777,8 @@
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="171"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="179"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="304"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="243"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="250"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="242"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="249"/>
         <source>Corner radius</source>
         <translation>Радиус скругления углов</translation>
     </message>
@@ -7063,10 +7063,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="529"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="533"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="709"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="801"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="954"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDragInsertCard.qml.cpp" line="79"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="74"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayBehaviorPage.qml.cpp" line="80"/>
@@ -8004,7 +8002,7 @@
         <translation>указатель</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="276"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="278"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="52"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="69"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="577"/>
@@ -8381,8 +8379,8 @@
         <translation>низкое</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="235"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="280"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="237"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="282"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1046"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="559"/>
         <source>Configuration</source>
@@ -8918,8 +8916,8 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="130"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="137"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="334"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="428"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="336"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="429"/>
         <source>General</source>
         <translation>Общие</translation>
     </message>
@@ -8950,24 +8948,24 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="215"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="222"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="224"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="357"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="439"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="359"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="440"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
         <source>Windows</source>
         <translation>Окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="151"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="153"/>
         <source>Rules</source>
         <translation>Правила</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="158"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="160"/>
         <source>Editor</source>
         <translation>Редактор</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="160"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="162"/>
         <source>About</source>
         <translation>О программе</translation>
     </message>
@@ -8978,7 +8976,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="232"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="234"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="236"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="179"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="181"/>
         <source>Virtual Screens</source>
         <translation>Виртуальные экраны</translation>
     </message>
@@ -8990,26 +8988,26 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="161"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="165"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="374"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="183"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="185"/>
         <source>Layouts</source>
         <translation>Раскладки</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="211"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="213"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="74"/>
         <source>Behavior</source>
         <translation>Поведение</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="222"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="224"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="30"/>
         <source>Zone Selector</source>
         <translation>Выбор зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="237"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="282"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="239"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="284"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="83"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="84"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="152"/>
@@ -9017,106 +9015,106 @@
         <translation>Приоритет</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="242"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="287"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="321"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="244"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="289"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="323"/>
         <source>Quick Shortcuts</source>
         <translation>Быстрые комбинации клавиш</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="244"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="411"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="455"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="246"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="413"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="456"/>
         <source>Shaders</source>
         <translation>Шейдеры</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="313"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="315"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="872"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="231"/>
         <source>Tabs</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="342"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="344"/>
         <source>Transitions</source>
         <translation>Переходы</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="351"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="353"/>
         <source>Motion</source>
         <translation>Движение</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="384"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="386"/>
         <source>Window Motion</source>
         <translation>Движение окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="391"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="393"/>
         <source>Window Dragging</source>
         <translation>Перетаскивание окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="433"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="434"/>
         <source>Surfaces</source>
         <translation>Поверхности</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="452"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="453"/>
         <source>Decoration Sets</source>
         <translation>Наборы оформления</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="353"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="435"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="355"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="436"/>
         <source>Library</source>
         <translation>Библиотека</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="175"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="295"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="380"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="177"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="297"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="382"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="108"/>
         <source>Scrolling</source>
         <translation>Прокрутка</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="360"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="442"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="362"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="443"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="48"/>
         <source>OSDs</source>
         <translation>OSD</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="365"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="367"/>
         <source>Overlays</source>
         <translation>Наложения</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="394"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="396"/>
         <source>Side Panels</source>
         <translation>Боковые панели</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="396"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="398"/>
         <source>Widgets</source>
         <translation>Виджеты</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="401"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="403"/>
         <source>Layout Editor</source>
         <translation>Редактор раскладок</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="404"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="406"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="625"/>
         <source>Presets</source>
         <translation>Предустановки</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="409"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="411"/>
         <source>Motion Sets</source>
         <translation>Наборы движения</translation>
     </message>
@@ -12097,7 +12095,7 @@
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="119"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="258"/>
         <location filename=".qml-stubs/src/settings/qml/components/ModifierAndMouseCheckBoxes.qml.cpp" line="270"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="331"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="330"/>
         <source>Reset to defaults</source>
         <translation>Сбросить к значениям по умолчанию</translation>
     </message>
@@ -15275,7 +15273,7 @@
         <translation>Начать с нуля в редакторе</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="306"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="308"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="59"/>
         <source>Columns</source>
         <translation>Столбцы</translation>
@@ -17721,68 +17719,68 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="157"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="156"/>
         <source>Opacity of the zone under the cursor</source>
         <translation>Непрозрачность зоны под курсором</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="174"/>
         <source>Opacity of zones not under the cursor</source>
         <translation>Непрозрачность зон не под курсором</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="212"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="211"/>
         <source>Thickness of zone borders in pixels</source>
         <translation>Толщина рамок зон в пикселях</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="245"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="244"/>
         <source>Corner rounding of zones in pixels</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="428"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="427"/>
         <source>Choose Zone Color</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="290"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="289"/>
         <source>Zone label text color</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="292"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="291"/>
         <source>Text color for zone labels. Follows the color scheme unless you pick one.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="307"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="306"/>
         <source>Typeface and style for zone labels</source>
         <translation>Шрифт и начертание меток зон</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="313"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="312"/>
         <source>System default</source>
         <translation>Системный по умолчанию</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="349"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="348"/>
         <source>Size multiplier for zone label text</source>
         <translation>Множитель размера текста меток зон</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="387"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="386"/>
         <source>Display a number label inside each zone</source>
         <translation>Показывать числовую метку внутри каждой зоны</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="403"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="402"/>
         <source>Briefly flash zones when switching between layouts</source>
         <translation>Кратко подсвечивать зоны при переключении раскладок</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="407"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="406"/>
         <source>Flash zones on layout switch</source>
         <translation>Подсвечивать зоны при смене раскладки</translation>
     </message>
@@ -17949,6 +17947,8 @@
         <translation>Нажмите модификатор растягивания один раз, чтобы начать растягивание, и ещё раз, чтобы остановить, вместо удержания</translation>
     </message>
     <message>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="533"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="954"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingZoneSpanCard.qml.cpp" line="60"/>
         <source>Zone span toggle mode</source>
         <translation>Режим переключения растягивания зон</translation>
