@@ -583,7 +583,27 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                         const QRectF frame = safeW->frameGeometry();
                         const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
                         // Snap-out: the window is leaving tile-managed sizing.
-                        m_effect->applyWindowGeometry(safeW, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
+                        //
+                        // The COMMIT is wanted for a minimized window — that is
+                        // the whole point of this arm, so the window comes back at
+                        // its pre-tile size rather than stuck at the tile rect.
+                        // The ANIMATION is not. This arm is drag-shaped (it exists
+                        // to restore size "after the drag ends", branches on
+                        // isUserMove, and defers to windowFinishUserMovedResized),
+                        // and a minimized window can never be in a user move, so it
+                        // always lands here and was being animated while invisible.
+                        //
+                        // That is not merely wasted work. An animation left running
+                        // makes hasAnimation() true, and applyWindowGeometry's
+                        // already-at-target no-op skip requires it false, so the
+                        // next apply for this window pays a redundant moveResize
+                        // and retarget. Worse, a WindowSnapOut transition installing
+                        // makes m_shaderManager non-empty, which flips vertex
+                        // snapping to None DESKTOP-WIDE for its duration — a global
+                        // rendering side effect sourced from a window nobody can
+                        // see.
+                        m_effect->applyWindowGeometry(safeW, geo, /*allowDuringDrag=*/false,
+                                                      /*skipAnimation=*/safeW->isMinimized(),
                                                       PhosphorAnimation::ProfilePaths::WindowSnapOut);
                         return;
                     }
