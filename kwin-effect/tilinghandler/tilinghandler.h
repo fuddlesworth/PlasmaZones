@@ -617,6 +617,20 @@ public Q_SLOTS:
     void slotFocusWindowRequested(const QString& windowId);
     void slotEnabledChanged(bool enabled);
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
+    /// The two halves of slotScreensChanged's removed-screens pass, split out
+    /// because they reach opposite conclusions about the same event and were
+    /// the reason the slot ran to 775 lines. A screen leaves the managed set
+    /// either because the DESKTOP changed (the windows stay owned by that
+    /// desktop's live session, so demote and remember) or because autotile was
+    /// genuinely turned off for it (nothing owns them now, so untrack and
+    /// restore). Both take the caller's `windows` snapshot and append to its
+    /// deferred windowed-fullscreen release list rather than releasing inline,
+    /// because that release must land AFTER the managed-set write.
+    void demoteWindowsForDesktopSwitch(const QSet<QString>& removed, const QList<KWin::EffectWindow*>& windows,
+                                       QStringList& windowedFsToRelease,
+                                       QHash<QString, QRectF>& windowedFsPreTileRestore);
+    void untrackWindowsForDisabledScreens(const QSet<QString>& removed, const QSet<QString>& newScreens,
+                                          const QList<KWin::EffectWindow*>& windows, QStringList& windowedFsToRelease);
     void slotScrollingScreensChanged(const QStringList& screenIds);
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
     void slotActiveLayoutsChanged(const QVariantMap& activeLayouts);
