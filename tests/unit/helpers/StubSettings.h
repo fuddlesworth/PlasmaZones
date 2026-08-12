@@ -421,7 +421,7 @@ public:
     }
     void setActiveOpacity(qreal value) override
     {
-        if (m_activeOpacity == value) {
+        if (qFuzzyCompare(1.0 + m_activeOpacity, 1.0 + value)) {
             return;
         }
         m_activeOpacity = value;
@@ -434,7 +434,7 @@ public:
     }
     void setInactiveOpacity(qreal value) override
     {
-        if (m_inactiveOpacity == value) {
+        if (qFuzzyCompare(1.0 + m_inactiveOpacity, 1.0 + value)) {
             return;
         }
         m_inactiveOpacity = value;
@@ -486,7 +486,7 @@ public:
     }
     void setLabelFontSizeScale(qreal value) override
     {
-        if (m_labelFontSizeScale == value) {
+        if (qFuzzyCompare(1.0 + m_labelFontSizeScale, 1.0 + value)) {
             return;
         }
         m_labelFontSizeScale = value;
@@ -962,7 +962,7 @@ public:
     }
     void setWindowOpacity(double v) override
     {
-        if (qFuzzyCompare(m_windowOpacity, v)) {
+        if (qFuzzyCompare(1.0 + m_windowOpacity, 1.0 + v)) {
             return;
         }
         m_windowOpacity = v;
@@ -975,7 +975,7 @@ public:
     }
     void setWindowTintStrength(double v) override
     {
-        if (qFuzzyCompare(m_windowTintStrength, v)) {
+        if (qFuzzyCompare(1.0 + m_windowTintStrength, 1.0 + v)) {
             return;
         }
         m_windowTintStrength = v;
@@ -2062,7 +2062,7 @@ public:
     }
     void setEditorSnapIntervalX(qreal v) override
     {
-        if (qFuzzyCompare(m_editorSnapIntervalX, v))
+        if (qFuzzyCompare(1.0 + m_editorSnapIntervalX, 1.0 + v))
             return;
         m_editorSnapIntervalX = v;
         Q_EMIT editorSnapIntervalXChanged();
@@ -2074,7 +2074,7 @@ public:
     }
     void setEditorSnapIntervalY(qreal v) override
     {
-        if (qFuzzyCompare(m_editorSnapIntervalY, v))
+        if (qFuzzyCompare(1.0 + m_editorSnapIntervalY, 1.0 + v))
             return;
         m_editorSnapIntervalY = v;
         Q_EMIT editorSnapIntervalYChanged();
