@@ -800,6 +800,7 @@ void PlasmaZonesEffect::loadCachedSettings()
             qCWarning(lcEffect) << "Decoration pack cache cleared without a current GL context (compositor teardown?)";
         }
         m_compiledPacks.clear();
+        m_packBufferScaleCache.clear(); // metadata cache rides the compile cache's lifetime
         m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         // Recompiling the packs invalidates every CACHED FOLD, and updateAllDecorations
         // is not a sufficient net for that: it skips windows with a live shader

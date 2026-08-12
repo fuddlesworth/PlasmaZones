@@ -411,6 +411,18 @@ OverlayService::~OverlayService()
         disconnect(qGuiApp, nullptr, this, nullptr);
     }
 
+    // Disarm the idle quiesce before any teardown below: drainDeferredDeletes
+    // runs a nested event loop that dispatches timers, so an armed quiesce
+    // whose deadline elapses mid-destruction would fire its lambda re-entrantly
+    // against half-destroyed members. disconnect() (not just stop()) so that a
+    // future teardown path reaching scheduleIdleQuiesce can restart the timer
+    // but never re-establish the timeout connection - it only connects when the
+    // pointer is still null.
+    if (m_idleQuiesceTimer) {
+        m_idleQuiesceTimer->stop();
+        m_idleQuiesceTimer->disconnect();
+    }
+
     if (m_prepareForSleepConnected) {
         QDBusConnection::systemBus().disconnect(QStringLiteral("org.freedesktop.login1"),
                                                 QStringLiteral("/org/freedesktop/login1"),

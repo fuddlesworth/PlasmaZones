@@ -148,6 +148,18 @@ public:
         return m_hasWindowLayerRules;
     }
 
+    /// True when at least one enabled rule carries an `OverrideAnimationShader`
+    /// action — the sole rule action that can assign a shader effectId
+    /// per-window (timing/curve overrides cannot). Gates the empty-resolve
+    /// warning in tryBeginShader: without it, any Tag::Effect rule (border,
+    /// opacity, layer) restored the per-focus warning the demotion exists to
+    /// silence. Recomputed by `rebuildAnimationRuleSet()` on every rule-set
+    /// change.
+    bool hasAnimationShaderRules() const
+    {
+        return m_hasAnimationShaderRules;
+    }
+
     /// Rebuild the effect-VERDICT `RuleSet` from `m_effectVerdictRules` — the
     /// rules carrying any `Tag::EffectVerdict` action (OpenFullscreen /
     /// ScrollFactor). Separate from the animation/appearance set above because
@@ -416,6 +428,8 @@ private:
     bool m_hasOpacityRules = false;
     // Same shape for SetWindowLayer. See hasWindowLayerRules().
     bool m_hasWindowLayerRules = false;
+    // Same shape for OverrideAnimationShader. See hasAnimationShaderRules().
+    bool m_hasAnimationShaderRules = false;
     // Same shape for OpenFullscreen, recomputed over the VERDICT list. See
     // hasOpenFullscreenRules().
     bool m_hasOpenFullscreenRules = false;

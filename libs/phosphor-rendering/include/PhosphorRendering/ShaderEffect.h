@@ -22,6 +22,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <mutex>
 
 QT_BEGIN_NAMESPACE
 class QSGNode;
@@ -301,8 +302,10 @@ public:
     /// thread-safe per Qt docs: each call constructs its own
     /// QSvgRenderer / QImage instance with no shared mutable state)
     /// and call `setUserTexture(slot, image)` on the GUI thread to
-    /// install the result. Bitmap formats are loaded via `QImage` and
-    /// carry the same synchronous-IO caveat but no rasterisation cost.
+    /// install the result. Bitmap formats are decoded via `QImageReader`
+    /// under the same `kMaxSvgPixelBytes` budget — an oversized file is
+    /// downscaled during decode with a warning, never materialised at
+    /// full resolution — and carry the same synchronous-IO caveat.
     ///
     /// **Subclass contract.** Overrides MUST chain to
     /// `ShaderEffect::setShaderParams(params)` (or replicate the full
@@ -313,8 +316,10 @@ public:
     virtual void setShaderParams(const QVariantMap& params);
 
     /// Static helper that loads a user-texture file (PNG/JPG/etc. via
-    /// QImage; SVG/SVGZ via QSvgRenderer rasterised at @p svgMaxDim
-    /// max-axis with the same byte-budget guard as `setShaderParams`).
+    /// QImageReader, downscaled during decode when the file exceeds the
+    /// `kMaxSvgPixelBytes` budget; SVG/SVGZ via QSvgRenderer rasterised
+    /// at @p svgMaxDim max-axis with the same byte-budget guard as
+    /// `setShaderParams`).
     /// Thread-safe: each invocation constructs its own QSvgRenderer /
     /// QImage instance — callers may invoke from a worker thread (e.g.
     /// `QtConcurrent::run`) to off-load the cost from the GUI thread.
@@ -659,6 +664,10 @@ public:
      * through the ensure* paths on the next painted frame (the same recovery
      * the device-loss path exercises), so the cost of calling this on a
      * window that immediately resumes is one warm-up frame, not a teardown.
+     * Note the call itself always requests one composited frame of the
+     * window (QQuickWindow::update()): that frame is what dispatches the
+     * release on an otherwise idle window and what flushes any park state
+     * the caller latched alongside.
      *
      * Intended for long-lived, kept-alive windows whose content goes
      * invisible for long stretches (the daemon's idle-quiesced overlays):
@@ -696,17 +705,23 @@ Q_SIGNALS:
     void wallpaperTextureChanged();
     void useWallpaperChanged();
     void useDepthBufferChanged();
-    /// Emitted when status() transitions. May be raised on the render
-    /// thread under Qt's threaded render loop (setStatus is called from
-    /// updatePaintNode). Connect with Qt::AutoConnection or
-    /// Qt::QueuedConnection only — Qt::DirectConnection from a slot on
-    /// another thread will run that slot on the render thread, which is
-    /// almost always wrong (V4 / QML JS / most app code is GUI-thread-
-    /// only).
+    /// Emitted when status() transitions. Always delivered on the object's
+    /// (GUI) thread: setStatus is called from updatePaintNode on the render
+    /// thread under Qt's threaded loop, and notifyOnGuiThread marshals the
+    /// emission there via a queued call — so any connection type is safe,
+    /// including DirectConnection. Consequence of the marshalling: when a
+    /// transition originates in the sync phase, delivery is asynchronous
+    /// relative to the m_status write, and two rapid transitions can
+    /// coalesce from a handler's point of view (both handlers run with the
+    /// final status). Handlers MUST gate on the current status() value and
+    /// must not assume one delivery per transition.
     void statusChanged();
-    /// Emitted from setError(), which runs on the RENDER thread (from
-    /// updatePaintNode) — the same hazard statusChanged() documents above. A
-    /// DirectConnection here would run QML JS off the GUI thread.
+    /// Emitted from setError(). Same delivery contract as statusChanged():
+    /// marshalled to the object's thread by notifyOnGuiThread, so any
+    /// connection type is safe, and a handler should read errorLog() rather
+    /// than assume one delivery per write (the log itself is written
+    /// synchronously under its mutex before the notify is posted, so the
+    /// handler always observes the updated value).
     void errorLogChanged();
 
 protected:
@@ -986,12 +1001,25 @@ private:
     /// A QPointer is not documented thread-safe against concurrent destruction
     /// (a NoStage job can sit queued for an unbounded interval and pass a
     /// QPointer null-check just as ~QObject begins on the GUI thread). The
-    /// job captures this shared_ptr by value and bails when the atomic loads
-    /// null; the destructor stores null as its FIRST statement, before any
-    /// member teardown. This NARROWS the destruction race to the destructor
-    /// body (versus QPointer's clear inside ~QObject, last) — it does not
-    /// close it; closing it needs real synchronisation and a design pass.
-    std::shared_ptr<std::atomic<ShaderEffect*>> m_selfToken = std::make_shared<std::atomic<ShaderEffect*>>(nullptr);
+    /// job captures this shared_ptr by value, takes the mutex, and bails when
+    /// the pointer is null; the destructor takes the same mutex and nulls the
+    /// pointer as its FIRST statement, before any member teardown. Because
+    /// the job holds the lock across its node access, a destructor that
+    /// begins mid-job blocks until the job finishes — this CLOSES the
+    /// destruction race (an earlier atomic-only token merely narrowed it to
+    /// the destructor body). Contention is one uncontended lock per idle
+    /// grace.
+    struct SelfToken
+    {
+        std::mutex mutex;
+        ShaderEffect* effect = nullptr;
+    };
+    std::shared_ptr<SelfToken> m_selfToken = std::make_shared<SelfToken>();
+
+    /// Emit @p signal on the GUI thread regardless of the calling thread.
+    /// setStatus/setError run in the sync phase on the render thread; a
+    /// direct emit there hands DirectConnection consumers the wrong thread.
+    void notifyOnGuiThread(void (ShaderEffect::*signal)());
 
     // ── Thread-safe dirty flags for main -> render thread sync ───────
     std::atomic<bool> m_shaderDirty{false};

@@ -78,7 +78,10 @@ Window {
     // Mirror-contract completion: nothing writes _idled on a preview window
     // today (the daemon's idle paths target mainOverlaySlot only), but the
     // header contract above promises a 1:1 surface, and a missing name turns
-    // a future C++ write into a dead dynamic property with no warning.
+    // a future C++ write into a dead dynamic property with no warning. The
+    // hosted content's _idled binding below folds Window visibility into it,
+    // which is the preview's only reliable wake edge for the idle park
+    // (Item.visible inside a hidden Window is not guaranteed to flip).
     property bool _idled: false
 
     /// Forward to the hosted content's reloadShader() — invoked by the
@@ -120,7 +123,10 @@ Window {
         highlightedZoneIds: root.highlightedZoneIds
         shaderParams: root.shaderParams
         zoneDataVersion: root.zoneDataVersion
-        _idled: root._idled
+        // Fold Window visibility in: a hidden preview is idled, so the idle
+        // park latched while it was hidden is guaranteed a true->false edge
+        // (and an on_IdledChanged wake) when the window is shown again.
+        _idled: root._idled || !root.visible
         iTime: root.iTime
         iTimeDelta: root.iTimeDelta
         iFrame: root.iFrame

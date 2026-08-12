@@ -9,6 +9,7 @@
 
 #include "plasmazoneseffect.h"
 
+#include "compositor/stripviewanimator.h"
 #include "handlers/navigationhandler.h"
 #include "tilinghandler/tilinghandler.h"
 
@@ -32,11 +33,14 @@ KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindo
     }
     // Memoised per pass, and ONLY within a pass: prePaintWindow and
     // paintWindow both ask, for every window, on every output pass, and one
-    // pass guarantees the strip state cannot change under the answer. The
-    // INPUT filter also routes through here (via scrollClipGeometryFor) but
-    // runs outside any pass — a tile batch can land between passes and is
-    // exactly what moves a column across the boundary — so outside a pass
-    // the predicate is always computed fresh and never cached. Stale keys
+    // pass guarantees the strip state cannot change under the answer. TWO
+    // caller classes run outside any pass and always compute fresh: the
+    // INPUT filter (via scrollClipGeometryFor — a tile batch can land
+    // between passes and is exactly what moves a column across the
+    // boundary), and postPaintScreen's park-reap driver (m_currentPassOutput
+    // is deliberately cleared at its top, so its per-parked-window resolve
+    // is uncached by design — bounded by the parked population, and the
+    // per-pass validity argument would not hold there either). Stale keys
     // for windows that died between passes CAN sit in the map until the
     // next prePaintScreen's clear, but they are never read before that
     // clear (every read is behind the same in-pass gate) and keys are only
@@ -80,6 +84,58 @@ QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
     }
     const KWin::Rect g = managedOutput->geometry();
     return QRect(g.x(), g.y(), g.width(), g.height());
+}
+
+bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const
+{
+    // Ordered cheapest-first: the empty-map probe is the common-case exit on a
+    // desktop with nothing parked, and the visual-pos probe answers before the
+    // predicate walk for every never-parked column.
+    if (!w || m_scrollVisualDelta.isEmpty()) {
+        return false;
+    }
+    const auto vit = m_scrollVisualDelta.constFind(windowId);
+    if (vit == m_scrollVisualDelta.constEnd()) {
+        return false;
+    }
+    KWin::LogicalOutput* const managed = scrollManagedOutputFor(w);
+    if (!managed) {
+        return false;
+    }
+    // The rect paintWindow actually draws: the window's expanded band
+    // relocated by the stored strip-minus-park delta — the same additive
+    // translate the draw applies — slid by the live view offset. Expanded
+    // geometry (not the frame) so a decoration shadow reaching into the
+    // viewport from a just-offscreen column keeps painting; the chain's outer
+    // padding is added below for the same reason.
+    //
+    // The delta rides on the COMMITTED position rather than replacing it,
+    // which is what keeps this predicate honest for a size-constrained X11
+    // frame: such a window is committed centred inside its column, so
+    // differencing an absolute strip position against the committed rect
+    // would test a band at the column's corner instead of where the window
+    // is drawn, and cull against the wrong rect.
+    const KWin::RectF committed = w->frameGeometry();
+    QRectF visual = w->expandedGeometry();
+    if (visual.isEmpty()) {
+        visual = QRectF(committed.x(), committed.y(), committed.width(), committed.height());
+    }
+    if (visual.isEmpty()) {
+        // Degenerate geometry (mid-unmap, zero-size commit): an empty rect
+        // never intersects anything, so falling through would answer PARKED
+        // for a window we cannot actually locate — and the reap consumer
+        // would release its surface state on that answer. Fail open like
+        // every other unknown in this predicate.
+        return false;
+    }
+    visual.translate(vit->x(), vit->y());
+    visual.translate(m_stripViewAnimator->offsetFor(managed), 0.0);
+    if (const auto decoIt = m_windowDecorations.constFind(windowId); decoIt != m_windowDecorations.constEnd()) {
+        const qreal pad = decoIt->outerPadding;
+        visual.adjust(-pad, -pad, pad, pad);
+    }
+    const KWin::Rect g = managed->geometry();
+    return !visual.intersects(QRectF(g.x(), g.y(), g.width(), g.height()));
 }
 
 } // namespace PlasmaZones
