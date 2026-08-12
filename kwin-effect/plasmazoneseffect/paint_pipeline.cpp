@@ -654,10 +654,11 @@ void PlasmaZonesEffect::postPaintScreen()
         // The skipped entry is not erased here, only unpumped: it stays in the
         // map until the window closes, or until it returns to the current
         // desktop and paintWindow's release branch takes it. Deliberate — the
-        // window is the one thing that can tell us it is visible again. The one
-        // reader that is not itself deadline-gated is prePaintWindow's
-        // transformDriven probe, and it self-clears on the first paint that
-        // reaches the window — which is the same frame the window becomes
+        // window is the one thing that can tell us it is visible again. The
+        // readers that are not themselves deadline-gated either clear the
+        // residual or are startup one-shots; the paint-path one is
+        // prePaintWindow's transformDriven probe, which self-clears on the
+        // first paint that reaches the window — the same frame it becomes
         // visible again. So the residual entry costs a hash slot and nothing
         // else.
         if (frameClockMs >= it->deadlineMs) {
