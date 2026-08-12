@@ -333,10 +333,10 @@ QStringList LayoutAdaptor::getLayoutList()
         if (uuidOpt) {
             PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
             if (layout) {
-                json[QStringLiteral("hasSystemOrigin")] = layout->hasSystemOrigin();
-                json[QStringLiteral("hiddenFromSelector")] = layout->hiddenFromSelector();
+                json[PhosphorZones::ZoneJsonKeys::HasSystemOrigin] = layout->hasSystemOrigin();
+                json[PhosphorZones::ZoneJsonKeys::HiddenFromSelector] = layout->hiddenFromSelector();
                 if (layout->defaultOrder() != PhosphorZones::Layout::DefaultOrderUnset) {
-                    json[QStringLiteral("defaultOrder")] = layout->defaultOrder();
+                    json[PhosphorZones::ZoneJsonKeys::DefaultOrder] = layout->defaultOrder();
                 }
 
                 // Include allow-lists so KCM can show the filter badge
@@ -351,7 +351,7 @@ QStringList LayoutAdaptor::getLayoutList()
             const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(entry.id);
             if (!algoId.isEmpty()) {
                 const QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
-                json[QStringLiteral("hiddenFromSelector")] =
+                json[PhosphorZones::ZoneJsonKeys::HiddenFromSelector] =
                     overrides.value(PhosphorZones::ZoneJsonKeys::HiddenFromSelector).toBool(false);
             }
         }

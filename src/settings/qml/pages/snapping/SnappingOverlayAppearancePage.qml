@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
 // Snapping → Overlay → Appearance. How the drag-time zone overlay LOOKS: zone
 // colours, opacity, borders and labels (the former "Zones" page) merged with
 // the overlay effects (numbers, flash — the former "Effects" page). Binds
-// snappingZonesPage (colour import + border/label bounds). The shader frame rate
+// snappingZonesPage for border and label bounds. The shader frame rate
 // + audio spectrum controls moved to General, since they drive every shader
 // category (overlay, animation, surface decoration), not just this overlay.
 SettingsFlickable {
@@ -127,48 +127,6 @@ SettingsFlickable {
                         onColorChosen: function (hex) {
                             appSettings.borderColorRaw = hex;
                         }
-                    }
-
-                    SettingsSeparator {}
-
-                    SettingsRow {
-                        title: i18n("Import colors")
-                        searchAnchor: "importColors"
-                        description: i18n("Load a color scheme from pywal or a JSON file")
-
-                        RowLayout {
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Button {
-                                text: i18n("From pywal")
-                                icon.name: "color-management"
-                                onClicked: root.zonesBridge.loadColorsFromPywal()
-                            }
-
-                            Button {
-                                text: i18n("From file…")
-                                icon.name: "document-open"
-                                onClicked: colorFileDialog.open()
-                            }
-                        }
-                    }
-
-                    Kirigami.InlineMessage {
-                        id: colorImportMessage
-
-                        Layout.fillWidth: true
-                        Layout.leftMargin: Kirigami.Units.largeSpacing
-                        Layout.rightMargin: Kirigami.Units.largeSpacing
-                        visible: false
-                        type: Kirigami.MessageType.Positive
-                        Accessible.name: text
-                    }
-
-                    Timer {
-                        id: colorImportHideTimer
-
-                        interval: 3000
-                        onTriggered: colorImportMessage.visible = false
                     }
                 }
             }
@@ -472,7 +430,7 @@ SettingsFlickable {
     // Publish the open state so page-stepping cannot swap the page out from
     // under an open page-level dialog — same pattern (and standalone-host
     // guard) as RulesPage, covering every dialog this page hosts.
-    readonly property bool anyModalOpen: zoneColorDialog.visible || fontPickerDialog.visible || colorFileDialog.visible || colorImportErrorDialog.visible
+    readonly property bool anyModalOpen: zoneColorDialog.visible || fontPickerDialog.visible
     onAnyModalOpenChanged: {
         if (typeof window !== "undefined" && window && window._pageOwnedModalOpen !== undefined)
             window._pageOwnedModalOpen = anyModalOpen;
@@ -499,41 +457,6 @@ SettingsFlickable {
             root.appSettingsObj.labelFontItalic = selectedItalic;
             root.appSettingsObj.labelFontUnderline = selectedUnderline;
             root.appSettingsObj.labelFontStrikeout = selectedStrikeout;
-        }
-    }
-
-    FileDialog {
-        id: colorFileDialog
-
-        title: i18n("Import Colors from File")
-        nameFilters: [i18n("JSON files (*.json)"), i18n("All files (*)")]
-        fileMode: FileDialog.OpenFile
-        onAccepted: root.zonesBridge.loadColorsFromFile(settingsController.urlToLocalFile(selectedFile))
-    }
-
-    Kirigami.PromptDialog {
-        id: colorImportErrorDialog
-
-        title: i18n("Color Import Failed")
-        standardButtons: Kirigami.Dialog.Ok
-        preferredWidth: Math.min(Kirigami.Units.gridUnit * 30, parent.width * 0.8)
-    }
-
-    Connections {
-        // `target` before the handlers, matching the convention ActionRow
-        // documents (a readability rule — declaration order inside a
-        // Connections block does not change resolution at runtime).
-        target: root.zonesBridge
-
-        function onColorImportError(message) {
-            colorImportErrorDialog.subtitle = message;
-            colorImportErrorDialog.open();
-        }
-
-        function onColorImportSuccess() {
-            colorImportMessage.text = i18n("Colors imported successfully");
-            colorImportMessage.visible = true;
-            colorImportHideTimer.restart();
         }
     }
 }

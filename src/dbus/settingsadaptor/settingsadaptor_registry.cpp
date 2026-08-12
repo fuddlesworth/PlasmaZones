@@ -218,6 +218,13 @@ void SettingsAdaptor::initializeRegistry()
     // an `if (concrete)` block, so test backends that don't supply a
     // concrete Settings simply don't register those keys — setSetting
     // returns "key not found" instead of dereferencing a null pointer.
+    //
+    // That key loss is a known cost of the backlog, NOT a sanctioned pattern
+    // for new keys. The house rule is the one isettings.h states above
+    // setScrollingTabIndicatorEnabled: give the key a virtual with a no-op
+    // default so it registers through the interface and survives a
+    // non-Settings backend. Prefer that for anything added from here on;
+    // REGISTER_CONCRETE_* is for the keys not yet hoisted.
     auto* concrete = qobject_cast<Settings*>(m_settings);
 
 // Macro for concrete Settings entries (same pattern as REGISTER_* but captures

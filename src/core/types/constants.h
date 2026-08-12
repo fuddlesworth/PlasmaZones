@@ -3,20 +3,16 @@
 
 #pragma once
 
-#include <PhosphorEngine/JsonKeys.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorEngine/EngineTypes.h>
 
-#include <QColor>
 #include <QLatin1String>
-#include <QMetaType>
 #include <QString>
-#include <limits>
 
 // Shared shapes (per-side gap struct + aspect-ratio classification) live in
 // libs/phosphor-layout-api so every layout/tile provider can consume them
-// without forcing them to depend on PlasmaZones internals.  Re-aliased into
-// namespace PlasmaZones below.
+// without forcing them to depend on PlasmaZones internals.  Referenced
+// qualified below — no aliases here.
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorLayoutApi/LayoutId.h>
@@ -220,47 +216,22 @@ namespace JsonKeys {
 // (libs/phosphor-zones).  All in-tree callers reference them qualified
 // directly — no using-aliases here.
 //
-// PlasmaZones-side JSON keys below aren't part of the zone/layout file
-// format proper — assignment runtime state, screen-info enumeration,
-// virtual-screen configuration, pywal colour ingestion.
-
-// Assignment keys
-inline constexpr QLatin1String Assignments{"assignments"};
+// What remains below is the part of the screen-info D-Bus reply that this
+// namespace owns: fields `fetchScreens()` (src/settings/utils/screenprovider.cpp)
+// parses out of getScreenInfo.  It does not cover the whole reply — the
+// connector name and the geometry sub-keys come from ZoneJsonKeys.
+//
+// Only the fields with a caller are kept. Dropping the unread ones is safe
+// because the producer does not consume these: PhosphorScreens deliberately
+// keeps its own private copy of the key strings
+// (libs/phosphor-screens/src/dbusscreenadaptor.cpp) so the library stays
+// self-contained.
 inline constexpr QLatin1String ScreenId{"screenId"};
-inline constexpr QLatin1String Screen{"screen"};
-inline constexpr QLatin1String Desktop{"desktop"};
-inline constexpr QLatin1String Activity{"activity"};
-inline constexpr QLatin1String LayoutId{"layoutId"};
-inline constexpr QLatin1String QuickShortcuts{"quickShortcuts"};
-
-// Screen info keys
 inline constexpr QLatin1String Geometry{"geometry"};
 inline constexpr QLatin1String Manufacturer{"manufacturer"};
 inline constexpr QLatin1String Model{"model"};
-inline constexpr QLatin1String PhysicalSize{"physicalSize"};
-inline constexpr QLatin1String Depth{"depth"};
-inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
-inline constexpr QLatin1String RefreshRate{"refreshRate"};
-
-// Pywal color file keys
-inline constexpr QLatin1String Colors{"colors"};
-
-// PhosphorZones::Zone assignment serialization keys — authoritative definitions
-// live in PhosphorEngine::JsonKeys (LGPL); imported here for daemon callers.
-using PhosphorEngine::JsonKeys::SourceZoneId;
-using PhosphorEngine::JsonKeys::TargetZoneId;
-using PhosphorEngine::JsonKeys::TargetZoneIds;
-using PhosphorEngine::JsonKeys::WindowId;
-
-// Virtual screen keys
 inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
 inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
-inline constexpr QLatin1String PhysicalScreenId{"physicalScreenId"};
-inline constexpr QLatin1String SerialNumber{"serialNumber"};
-inline constexpr QLatin1String Index{"index"};
-inline constexpr QLatin1String DisplayName{"displayName"};
-inline constexpr QLatin1String Region{"region"};
-inline constexpr QLatin1String Screens{"screens"};
 }
 
 namespace PerScreenKeys = PhosphorEngine::PerScreenKeys;

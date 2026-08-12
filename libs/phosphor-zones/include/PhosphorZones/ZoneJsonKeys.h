@@ -18,9 +18,16 @@ namespace PhosphorZones {
  *
  * Keys that aren't part of the zone/layout file format proper (window-
  * assignment runtime state, screen-info enumeration, virtual-screen
- * configuration, pywal colour ingestion, autotile JSON) live in their
- * respective owners — see the application's config layer for host-specific
- * keys, and PhosphorTiles::AutotileJsonKeys for autotile overrides.
+ * configuration, autotile JSON) live in their respective owners — see the
+ * application's config layer for host-specific keys, and
+ * PhosphorTiles::AutotileJsonKeys for autotile overrides. A payload that
+ * merely shares a spelling with one of these keys, such as the zoneId in a
+ * window-state or tile-request message, is a separate protocol and should
+ * keep its own literal so a rename here cannot silently change it.
+ *
+ * These are published API: this header installs, so a constant with no
+ * in-tree caller is still part of the format a third-party reader needs.
+ * Absence of in-tree users is not grounds for removing one.
  */
 namespace ZoneJsonKeys {
 

@@ -103,7 +103,7 @@ public:
     //   - IZoneActivationSettings: drag modifiers, activation triggers
     //   - IZoneVisualizationSettings: colors, opacity, shader effects
     //   - IZoneGeometrySettings: padding, gaps, thresholds, performance
-    //   - IWindowExclusionSettings: excluded apps/classes, size filters
+    //   - IWindowExclusionSettings: transient windows, size filters
     //   - IZoneSelectorSettings: zone selector UI configuration
     //   - IWindowBehaviorSettings: snap restore, sticky handling
     //   - IDefaultLayoutSettings: default layout ID
@@ -187,12 +187,6 @@ public:
     virtual void setDecorationPauseWhenIdle(bool value) = 0;
     virtual int decorationIdleTimeoutSec() const = 0;
     virtual void setDecorationIdleTimeoutSec(int value) = 0;
-
-    // Color-import helper used by SnappingZonesController. Returns
-    // an empty string on success, a user-readable error message
-    // otherwise. The signature mirrors Settings::loadColorsFromFile
-    // exactly so its existing Q_INVOKABLE annotation overrides this.
-    virtual QString loadColorsFromFile(const QString& filePath) = 0;
 
     /// The system colour scheme as a "light" / "dark" token, or empty when the
     /// process cannot observe a palette (no GUI application, or an off-GUI-thread
@@ -334,15 +328,15 @@ public:
         return false;
     }
 
-    // The two defaults below are spelled `true` rather than calling their
+    // The three defaults below are spelled `true` rather than calling their
     // ConfigDefaults twins, because this interface header deliberately does
     // not depend on the config layer. A stub answering the opposite of what
-    // the real Settings would is a silent behaviour split, so the pair is
-    // pinned from the other side: settings/scrolling.cpp — a TU that sees both
-    // — static_asserts the tab-indicator defaults and
-    // ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() against the
-    // literals here, and names this comment. Change either default and fix
-    // both places.
+    // the real Settings would is a silent behaviour split, so each is pinned
+    // from the other side: settings/scrolling.cpp — a TU that sees both —
+    // static_asserts the tab-indicator default, the drop-indicator default
+    // and ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin() against the
+    // literals here, and names this comment. Change any of them and fix both
+    // places.
 
     /// Tab indicator alongside tabbed scrolling columns. Virtual with an
     /// always-on default so the overlay service can gate through the
@@ -356,6 +350,12 @@ public:
     /// per-screen-accessor pattern) so the D-Bus settings registry can register
     /// the key through the interface rather than only on the concrete Settings
     /// — otherwise a non-Settings backend silently loses the key entirely.
+    ///
+    /// This is the preferred shape for new keys, but it is not yet the norm:
+    /// most global keys are still registered behind a qobject_cast to the
+    /// concrete Settings (the REGISTER_CONCRETE_* sites), which accepts exactly
+    /// the loss described above. Those are a backlog to hoist, not a second
+    /// sanctioned pattern — see the note in settingsadaptor_registry.cpp.
     virtual void setScrollingTabIndicatorEnabled(bool /*enabled*/)
     {
     }
@@ -505,7 +505,7 @@ public:
 
     /// Writer for the toggle above, same no-op-default rationale as
     /// setScrollingTabIndicatorEnabled. The snap/autotile twins are pure virtuals
-    /// on ISnappingSettings; this pair carries defaults because its getters do.
+    /// on IWindowBehaviorSettings; this pair carries defaults because its getters do.
     virtual void setScrollingRestoreFloatedWindowsOnLogin(bool /*restore*/)
     {
     }
@@ -549,7 +549,8 @@ public:
     // unification the per-monitor gap dimensions are config-backed and live in
     // the per-screen AUTOTILE map (one value per monitor drives both snap and
     // tile), and this getter surfaces that map's gap subset. Hence no
-    // set/clear/has triplet, unlike the autotile + zone-selector blocks above:
+    // set/clear/has triplet, unlike the autotile, scrolling and zone-selector
+    // blocks above:
     // writes go through setPerScreenAutotileSetting and the perScreenGap*
     // accessors, and a snapping-side writer would just be a second door onto
     // the same keys.

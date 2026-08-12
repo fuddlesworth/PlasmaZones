@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "config/settings.h"
-#include "config/colorimporter.h"
 #include "config/configdefaults.h"
-#include "core/types/constants.h"
 #include "core/platform/logging.h"
+
+#include <PhosphorZones/ZoneDefaults.h>
 
 #include <QEvent>
 #include <QGuiApplication>
@@ -22,23 +22,6 @@ namespace PlasmaZones {
 // so a palette change needs no writes, no baseline bookkeeping, and no
 // squelch flags — the old useSystemColors machinery that WROTE derived
 // colours into config is gone with the bool itself.
-
-// ── Color helpers ────────────────────────────────────────────────────────────
-
-QString Settings::loadColorsFromFile(const QString& filePath)
-{
-    ColorImportResult result = ColorImporter::importFromFile(filePath);
-    if (!result.success) {
-        return result.errorMessage;
-    }
-    // The QColor setters store concrete #AARRGGBB strings, which is exactly
-    // what "stop following the palette" means now — no mode bool to flip.
-    setHighlightColor(result.highlightColor);
-    setInactiveColor(result.inactiveColor);
-    setBorderColor(result.borderColor);
-    setLabelFontColor(result.labelFontColor);
-    return QString(); // Success - no error
-}
 
 void Settings::trackSystemPaletteChanges()
 {
