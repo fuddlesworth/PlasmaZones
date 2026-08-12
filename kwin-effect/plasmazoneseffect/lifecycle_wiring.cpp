@@ -520,12 +520,21 @@ void PlasmaZonesEffect::connectDragTracker()
                     // arm nothing ever released on a false answer, so the
                     // policy field only ever added grabs.
                     //
-                    // Placed AFTER the branch cascade and gated on the stored
-                    // policy so it reads the daemon's final answer: the
-                    // bypass-cleared arm above re-grabs for the canonical snap
-                    // path, whose policy always carries grabKeyboard = true, so
-                    // this cannot undo it.
-                    if (!m_currentDragPolicy.grabKeyboard && m_keyboardGrabbed && KWin::effects) {
+                    // Placed AFTER the branch cascade, and gated on THIS reply's
+                    // own `policy` rather than the stored member. The two agree
+                    // in the normal case, but the member is overwritten
+                    // unconditionally above and the generation guard only rejects
+                    // a reply from a DIFFERENT drag — so a dragPolicyChanged that
+                    // lands for the same drag before this reply is dispatched
+                    // would have its newer answer clobbered, and reading the
+                    // member here would then release a grab the newer policy
+                    // asked for. Reading the reply's own answer cannot be
+                    // clobbered by anything.
+                    //
+                    // The bypass-cleared arm above re-grabs for the canonical
+                    // snap path, whose policy always carries grabKeyboard = true,
+                    // so this cannot undo it.
+                    if (!policy.grabKeyboard && m_keyboardGrabbed && KWin::effects) {
                         KWin::effects->ungrabKeyboard();
                         m_keyboardGrabbed = false;
                         qCInfo(lcEffect) << "beginDrag: daemon declined the keyboard grab for" << capturedWindowId

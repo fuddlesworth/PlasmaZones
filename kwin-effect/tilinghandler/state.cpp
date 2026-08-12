@@ -37,7 +37,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
 {
-    if (!m_monocleMaximizedWindows.remove(windowId)) {
+    if (!m_monocleMaximizedWindows.contains(windowId)) {
         return;
     }
     // EXACT resolve: a stale monocle entry whose window is gone must restore
@@ -45,31 +45,37 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     // same-app sibling under suppression, invisibly.
     KWin::EffectWindow* w = m_effect->findWindowByIdExact(windowId);
     if (!w) {
+        m_monocleMaximizedWindows.remove(windowId);
         return;
     }
     KWin::Window* kw = w->window();
     if (!kw) {
+        m_monocleMaximizedWindows.remove(windowId);
         return;
     }
     // KWin's maximize() has NO fullscreen conditional: called on a
     // still-fullscreen window it takes both "no longer maximized" branches
     // and moveResizes to geometryRestore, shrinking a fullscreen game or
-    // video out of its presentation. Skip the compositor call while the
-    // window holds (or has requested) fullscreen — requested included for the
-    // same committed-lag reason releaseWindowedFullscreenState and
-    // isEligibleForTilingNotify take the union: on Wayland the committed bit
-    // trails a client round-trip, and a restore landing inside our own enter
-    // gap would still shrink the surface out from under the pending commit.
+    // video out of its presentation. Skip while the window holds (or has
+    // requested) fullscreen — requested included for the same committed-lag
+    // reason releaseWindowedFullscreenState and isEligibleForTilingNotify take
+    // the union: on Wayland the committed bit trails a client round-trip, and a
+    // restore landing inside our own enter gap would still shrink the surface
+    // out from under the pending commit.
     //
-    // The guard sits on the compositor call, NOT on the membership removal
-    // above: retaining membership here would need a fullscreen-exit re-drive
-    // that does not exist. Losing it is the right trade — KWin never changes
-    // maximize mode across a fullscreen round trip, so the window genuinely
-    // stays MaximizeFull at the monocle geometry, and the next monocle batch
-    // re-establishes membership.
+    // MEMBERSHIP IS RETAINED ON THIS ARM, deliberately, and it is why the
+    // remove above became a contains. Shedding it here while the window is
+    // still KWin-MaximizeFull would strand it with nothing left owning the
+    // flag — byte for byte the defect that removing the fullscreen-enter drop
+    // was meant to end. And nothing would take it back: the sole insert site
+    // (the monocle tile batch) is gated on the window NOT already being
+    // maximized, so "the next batch re-establishes membership" is false.
+    // Holding the entry means the next call on a non-fullscreen window does
+    // the real restore.
     if (kw->isFullScreen() || kw->isRequestedFullScreen()) {
         return;
     }
+    m_monocleMaximizedWindows.remove(windowId);
     // maximize() emits windowFrameGeometryChanged SYNCHRONOUSLY, and the
     // restore rect can sit in a different virtual-screen region of the same
     // monitor. Without the geometry-apply gate that edge takes the
@@ -295,20 +301,26 @@ void TilingHandler::restoreAllWindowedFullscreen()
     // orphan case is precisely the one where the membership hash can already
     // be empty, so a sweep gated behind that early return would never see it.
     //
-    // Keys snapshotted first: restoreWindowedFullscreenLayerDemotion erases
-    // from this very hash and then emits KWin signals through the keep-flag
-    // setters, so iterating it live is the same re-entrancy hazard the drain
-    // above documents. Its own miss-arm makes a key the drain already consumed
-    // a no-op, and its null-kw arm treats a vanished window as
+    // Keys snapshotted first: the release erases from this very hash and then
+    // emits KWin signals through the keep-flag setters, so iterating it live is
+    // the same re-entrancy hazard the drain above documents. A key the drain
+    // already consumed is a no-op, and a vanished window resolves to
     // drop-the-snapshot, which is the whole cleanup for a dead client.
+    //
+    // releaseWindowedFullscreenState, NOT restoreWindowedFullscreenLayerDemotion:
+    // the demotion restores only the keep flags. An orphan is by definition a
+    // snapshot whose membership was dropped without a release, so KWin fullscreen
+    // may still be held — and leaving it held is exactly the "stranded in
+    // fullscreen with nothing owning the flag" state the destructor calls this
+    // function to prevent. The release is a strict superset: it calls the
+    // demotion itself, resolves the window on its own, and does not consult
+    // membership, so it is correct for a key that has none.
     if (m_effect->m_windowedFsLayerSnapshots.isEmpty()) {
         return;
     }
     const QStringList orphanIds = m_effect->m_windowedFsLayerSnapshots.keys();
     for (const QString& wid : orphanIds) {
-        KWin::EffectWindow* w = m_effect->findWindowByIdExact(wid);
-        KWin::Window* kw = (w && !w->isDeleted()) ? w->window() : nullptr;
-        restoreWindowedFullscreenLayerDemotion(wid, kw);
+        releaseWindowedFullscreenState(wid);
     }
 }
 

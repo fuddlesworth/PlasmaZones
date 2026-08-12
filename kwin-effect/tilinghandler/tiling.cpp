@@ -1404,7 +1404,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // intentionally absorbed by the m_daemonGate.inGeometryApply guard
                 // set at the top of this lambda — a refactor that moves or
                 // narrows that guard reintroduces the ballooning re-entry.
-                if (KWin::Window* kw = snap.window->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore) {
+                // The fullscreen terms match unmaximizeMonocleWindow's guard for
+                // the same reason: maximize() has no fullscreen conditional, so
+                // on a still-fullscreen window it moveResizes to geometryRestore
+                // and shrinks the presentation. A window that went fullscreen
+                // while monocle now keeps its membership, so it can reach this
+                // arm still fullscreen once the batch demotes it to a plain tile.
+                if (KWin::Window* kw = snap.window->window(); kw && kw->maximizeMode() != KWin::MaximizeRestore
+                    && !kw->isFullScreen() && !kw->isRequestedFullScreen()) {
                     ++m_suppressMaximizeChanged;
                     kw->maximize(KWin::MaximizeRestore);
                     --m_suppressMaximizeChanged;

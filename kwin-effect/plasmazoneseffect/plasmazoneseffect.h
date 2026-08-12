@@ -964,12 +964,13 @@ private:
     ///
     /// Idempotent, and that rests on two properties of the implementation:
     /// KWin's own constrainFrameSize is a fixed point, and the constrained
-    /// size is rounded onto the size grid in the direction that stays legal
-    /// (up), so a second pass takes no branch. Rounding to nearest instead
-    /// would let a re-constrain land below the grid, re-round, and shift the
-    /// rect again — the deferred user-move replay re-enters
-    /// applyWindowGeometry with a rect this function already produced, so it
-    /// depends on the round trip being a no-op.
+    /// size is rounded UP to the enclosing integer, never below the grid point
+    /// it sits on, so a second pass floors back to the same point and takes no
+    /// branch. Rounding to nearest instead would let a re-constrain land below
+    /// the grid, floor into the previous bucket, and shift the rect again —
+    /// the deferred user-move replay re-enters applyWindowGeometry with a rect
+    /// this function already produced, so it depends on the round trip being a
+    /// no-op.
     QRect constrainTileGeometry(KWin::EffectWindow* window, const QRect& geometry) const;
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 

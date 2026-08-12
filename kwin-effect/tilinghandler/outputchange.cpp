@@ -225,7 +225,21 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // Either way, drop the one-shot rather than let it swallow a later
         // genuine move's notification.
         if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
-            if (expIt.value().targetScreenId == newScreenId || !inScrollStrip()) {
+            // The scroll exemption must not outlive the output it names. This
+            // drain used to run scrollTrackedScreenFor, whose connected-output
+            // gate answered empty for a window whose tracked screen had been
+            // unplugged, so the marker was dropped. inScrollStrip() reads the
+            // membership buckets, which still name the dead screen until the
+            // daemon's set update lands on its own independent signal — so
+            // without this term a marker survives that window forever and
+            // swallows its next genuine hop. Same gate, spelled locally, and
+            // without the warning and dedupe-set mutation that made calling the
+            // real predicate wrong on a bookkeeping path.
+            const QString recordedScreen = m_notifiedWindowScreens.value(windowId);
+            const bool trackedOutputGone = !recordedScreen.isEmpty()
+                && !m_effect->connectedPhysicalIds().contains(
+                    PhosphorIdentity::VirtualScreenId::extractPhysicalId(recordedScreen));
+            if (expIt.value().targetScreenId == newScreenId || !inScrollStrip() || trackedOutputGone) {
                 m_expectedOutputMove.erase(expIt);
             }
         }

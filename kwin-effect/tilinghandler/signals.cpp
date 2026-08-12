@@ -444,8 +444,16 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // requested maximize mode, so on fullscreen EXIT the window still reads
     // MaximizeFull, the sole insert site (tiling.cpp's monocle apply) is gated on
     // the window not being already maximized and so never re-inserts, and nothing
-    // else inserts. The window was then stranded: float-out, autotile-disable and
-    // daemon-loss all left it KWin-maximized with no owner able to restore it.
+    // else inserts. The window was then stranded KWin-maximized with no owner
+    // able to restore it. Retaining the entry fixes the paths that CAN restore:
+    // an ordinary fullscreen exit, and a later float-out or tile demotion, both
+    // of which now find the membership still there and do the real restore once
+    // the window is out of fullscreen. It does NOT fix a teardown that happens
+    // while the window is still fullscreen (autotile-disable, daemon-loss):
+    // restoreAllMonocleMaximized sheds membership for the whole set and skips the
+    // compositor call for a fullscreen member, so that window stays maximized.
+    // That is unchanged from before rather than a new loss, and there is nothing
+    // left to own the flag at teardown by definition.
     // The drop also ignored the daemon gate that the manual-unmaximize slot above
     // states as the rule for shedding this membership.
     // Drop any unconsumed zone-centering entries: a window that fullscreens

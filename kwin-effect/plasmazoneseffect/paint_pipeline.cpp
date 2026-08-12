@@ -651,6 +651,12 @@ void PlasmaZonesEffect::postPaintScreen()
         // A LIVE suppression is unaffected — it is still inside its deadline,
         // still driven here, and still erased by paintWindow's release branch
         // on the frame the deadline passes (or by the settle hook before it).
+        // The skipped entry is not erased here, only unpumped: it stays in the
+        // map until the window closes, or until it returns to the current
+        // desktop and paintWindow's release branch takes it. Deliberate — the
+        // window is the one thing that can tell us it is visible again, and
+        // every reader is already deadline-gated, so the residual entry costs a
+        // hash slot and nothing else.
         if (frameClockMs >= it->deadlineMs) {
             continue;
         }
@@ -1291,21 +1297,28 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // window returns here before any snapshot is driven for it — but the
     // symmetry keeps it latent).
     //
-    // The record is deduplicated by MEMBERSHIP, not by comparing against the
-    // tail. A tail check only catches back-to-back repeats, and an in-tree
-    // path already defeats it: a tab indicator above the strip is driven
-    // through this function once by injectScrollTabIndicators (at the anchor's
-    // stacking slot) and again at its own natural slot, with every window
-    // stacked between the two recorded in between. The composite then drew it
-    // twice — alpha-blended twice, and the first copy UNDER the intervening
-    // window instead of over it. Suppressing the injection would be the wrong
-    // repair: the injection is what puts the indicator above the columns in
-    // the first place. The list is bounded by the above-strip population, so
-    // the linear scan costs nothing worth measuring.
+    // The record is deduplicated LAST-WINS, not by comparing against the tail.
+    // A tail check only catches back-to-back repeats, and an in-tree path
+    // already defeats it: a tab indicator above the strip is driven through
+    // this function once by injectScrollTabIndicators (at the anchor's stacking
+    // slot) and again at its own natural slot, with every window stacked
+    // between the two recorded in between. The composite drew it twice, alpha
+    // blended twice, and the earlier copy sat UNDER the intervening window.
+    //
+    // Last-wins rather than first-wins because POSITION IN THIS LIST IS THE
+    // COMPOSITE'S STACKING ORDER (StripTransitionManager replays it bottom to
+    // top). Keeping the first record would fix the double blend and permanently
+    // strand the indicator below every above-strip window — trading a visible
+    // fault for a quieter one. Re-appending keeps the natural slot, which is
+    // the correct stacking for every window that reaches here twice.
+    //
+    // Suppressing the injection would be the wrong repair either way: the
+    // injection is what puts the indicator above the columns in the first
+    // place. The list is bounded by the above-strip population, so both the
+    // scan and the removal cost nothing worth measuring.
     if (!m_capturingSnapshot && m_stripCaptureExclusionOutput && m_stripCaptureAboveStrip.contains(w)) {
-        if (!m_stripCaptureSkippedWindows.contains(w)) {
-            m_stripCaptureSkippedWindows.append(w);
-        }
+        m_stripCaptureSkippedWindows.removeOne(w);
+        m_stripCaptureSkippedWindows.append(w);
         return;
     }
 

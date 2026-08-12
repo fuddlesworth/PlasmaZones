@@ -405,14 +405,23 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     pruneRemovedScreenEntries(m_centeredWaylandZones);
 
     // Expected-output-move markers, pruned BY VALUE rather than by key: the key
-    // is a window id, but what a screen removal invalidates is the pair of
-    // screen ids the marker names. A marker whose target output was unplugged
-    // mid-handoff can never be matched by the destination outputChanged it was
-    // armed for, and the per-window clear sites only fire on an outputChanged
-    // that now cannot arrive — so without this it stays armed for the session
-    // and swallows the next genuine hop for that window as bookkeeping-only.
+    // is a window id, but what leaves the managed set is a SCREEN, and the
+    // marker names two of them.
+    //
+    // `removed` here is screens that left the MANAGED set (this function's own
+    // contract above), not physically unplugged outputs — a mode toggle or a
+    // per-screen disable reaches it too. So the prune is deliberately on the
+    // TARGET only. A marker whose destination is no longer managed can never be
+    // matched by the outputChanged it was armed for, and since the per-window
+    // clear sites only fire on that same event it would stay armed for the
+    // session and swallow the window's next genuine hop as bookkeeping-only.
+    //
+    // The SOURCE is deliberately NOT a prune trigger: a cross-mode handoff off a
+    // screen that just left autotile is exactly the case the marker exists to
+    // describe, and its destination is still managed and still expecting the
+    // echo. Pruning on source would drop the marker the trueSource arm consumes.
     for (auto it = m_expectedOutputMove.begin(); it != m_expectedOutputMove.end();) {
-        if (removed.contains(it.value().targetScreenId) || removed.contains(it.value().sourceScreenId)) {
+        if (removed.contains(it.value().targetScreenId)) {
             it = m_expectedOutputMove.erase(it);
         } else {
             ++it;
