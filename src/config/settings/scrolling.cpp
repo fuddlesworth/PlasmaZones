@@ -49,15 +49,15 @@ static_assert(ConfigDefaults::scrollingTabIndicatorCornerRadius() == 0,
               "ISettings::scrollingTabIndicatorCornerRadius defaults to 0 (square) — update it with this default");
 // The drop indicator's paint keys, same story: the overlay service reads them
 // through ISettings, so a stub answering from the interface body must agree.
-// The two COLOUR defaults have no assert here and cannot get one: they return
-// a default-constructed QString, which is not a constant expression, and their
-// agreement rests on the doc comment in isettings.h. That is the whole
-// unasserted set in THIS indicator's family — the opacity joined the checked
-// ones when it became constexpr. The three tab-indicator colours are equally
-// unasserted for the same non-constexpr reason; test_scrolling_settings.cpp
-// pins their SCHEMA defaults (via ConfigDefaults) at runtime, while their
-// ISettings-body agreement, like the drop indicator's, rests on the doc
-// comment in isettings.h.
+// The two COLOUR defaults have no assert here and cannot get one: QColor is not
+// a literal type, so neither ConfigDefaults::scrollingDropIndicatorFallbackColor()
+// nor the isettings_detail twin it must agree with is a constant expression.
+// That agreement is pinned at runtime instead, by
+// dropIndicatorFallbackMatchesInterfaceDefault in test_settings_core.cpp.
+// The three tab-indicator colours are unasserted here for the same
+// non-constexpr reason, and test_scrolling_settings.cpp pins their SCHEMA
+// defaults (via ConfigDefaults) at runtime. Their ISettings-body agreement
+// still rests on the doc comment in isettings.h.
 static_assert(ConfigDefaults::scrollingDropIndicatorEnabled(),
               "ISettings::scrollingDropIndicatorEnabled defaults to true — update it with this default");
 static_assert(ConfigDefaults::scrollingDropIndicatorOpacity() == 0.25,

@@ -37,14 +37,11 @@ SettingsCard {
     /// Page-level for the same reason the Tabs page shares one: a page rebuild
     /// while a row-scoped dialog is open would tear the popup down under the
     /// user.
-    property var picker: null
+    required property var picker
 
     /// Bounds, read through the controller so C++ stays the single home for
     /// these numbers (the same accessor the Columns and Tabs pages use).
     readonly property var _scrollConsts: settingsController.scrollingConstants()
-    /// Every row below the master switch is dead while the indicator is off.
-    /// Named once so the gate cannot drift, matching the Tabs page.
-    readonly property bool indicatorOn: appSettings.scrollingDropIndicatorEnabled
     /// The opacity slider is integral, so the stored 0..1 fraction rides it as
     /// whole percent. Matches the snapping Appearance page's opacity rows.
     readonly property int opacitySliderMax: 100
@@ -73,7 +70,6 @@ SettingsCard {
             swatchAccessibleName: i18nc("@action:button", "Drop indicator fill color")
             searchAnchor: "scrollingDropIndicatorColor"
             description: i18n("Color filling the space the window will land in. Follows the color scheme unless you pick one.")
-            enabled: root.indicatorOn
 
             storedColor: appSettings.scrollingDropIndicatorColorRaw
             // The RESOLVED colour, not Kirigami.Theme's own highlight: Settings
@@ -95,15 +91,12 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: root.indicatorOn
-        }
+        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Fill opacity")
             searchAnchor: "scrollingDropIndicatorOpacity"
             description: i18n("How solid the fill is. This replaces any transparency carried by the fill color.")
-            enabled: root.indicatorOn
 
             SettingsSlider {
                 accessibleName: i18n("Fill opacity")
@@ -116,9 +109,7 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: root.indicatorOn
-        }
+        SettingsSeparator {}
 
         ThemeFallbackColorRow {
             title: i18n("Border color")
@@ -126,7 +117,6 @@ SettingsCard {
             swatchAccessibleName: i18nc("@action:button", "Drop indicator border color")
             searchAnchor: "scrollingDropIndicatorBorderColor"
             description: i18n("Color of the indicator's edge. Follows the color scheme unless you pick one.")
-            enabled: root.indicatorOn
 
             storedColor: appSettings.scrollingDropIndicatorBorderColorRaw
             // See the fill row: the resolved colour, which is opaque so an
@@ -138,15 +128,12 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: root.indicatorOn
-        }
+        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Border width")
             searchAnchor: "scrollingDropIndicatorBorderWidth"
             description: i18n("Thickness of the indicator's edge in pixels. Zero draws the fill with no edge.")
-            enabled: root.indicatorOn
 
             SettingsSpinBox {
                 id: dropBorderWidthSpin
@@ -170,15 +157,12 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: root.indicatorOn
-        }
+        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Corner radius")
             searchAnchor: "scrollingDropIndicatorBorderRadius"
             description: i18n("Corner rounding of the indicator in pixels.")
-            enabled: root.indicatorOn
 
             SettingsSpinBox {
                 id: dropBorderRadiusSpin

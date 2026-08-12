@@ -1947,13 +1947,14 @@ Q_SIGNALS:
     // here — see src/core/interfaces/isettings.h.
 
 protected:
-    /// Re-announces the zone colours whose stored value is the empty
-    /// theme-fallback sentinel when the application palette changes at
-    /// runtime (theme switch). Resolution happens in the getters, so nothing
-    /// is written and no dirty tracking is involved; without the re-announce,
-    /// every long-running process (daemon, settings app) would keep serving
-    /// the palette SNAPSHOT its bindings read last and show stale zone colors
-    /// until something else re-read them.
+    /// Re-announces the palette-following colours whose stored value is the
+    /// empty theme-fallback sentinel when the application palette changes at
+    /// runtime (theme switch). That is the zone quartet plus the scrolling
+    /// drop indicator's fill and border. Resolution happens in the getters, so
+    /// nothing is written and no dirty tracking is involved; without the
+    /// re-announce, every long-running process (daemon, settings app) would
+    /// keep serving the palette SNAPSHOT its bindings read last and show stale
+    /// colors until something else re-read them.
     ///
     /// Protected, matching QObject's own access: nothing calls this directly —
     /// Qt dispatches it through the filter installed by
@@ -2022,7 +2023,7 @@ private:
     // NOTIFY-able Q_PROPERTY value (index-aligned to the metaobject) BEFORE the
     // mutation; emitChangedNotifyProperties() fires the NOTIFY of each property
     // whose value changed and returns whether any fired. One added
-    // precondition since the theme-fallback colours: the four resolved
+    // precondition since the theme-fallback colours: the six resolved
     // QColor properties are palette-derived, so the snapshot/compare span
     // must stay synchronous — an event-loop spin between the two calls could
     // let a palette change masquerade as (or mask) a store mutation.
@@ -2052,7 +2053,7 @@ private:
     };
     static QColor resolvedSystemColor(SystemColorRole role);
 
-    // Shared body of the four resolved QColor getters: the stored raw string
+    // Shared body of the six resolved QColor getters: the stored raw string
     // when it names a colour Qt can parse, otherwise the palette-derived role.
     // Unparseable counts as the empty "follow the palette" sentinel — see the
     // definition in settings/storescalars.cpp for why.

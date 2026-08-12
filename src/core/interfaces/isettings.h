@@ -368,10 +368,12 @@ public:
     // Each NUMERIC default below is pinned against its ConfigDefaults twin by a
     // static_assert in settings/scrolling.cpp, the way the toggle above is
     // (that covers the drop-indicator opacity/border-width literals further
-    // down too). The five colour defaults cannot be — ConfigDefaults returns
-    // a non-constexpr QString for them (the tab trio here plus the
-    // drop-indicator fill/border pair below). They are pinned at runtime
-    // instead, by the schema assertions in test_scrolling_settings.cpp.
+    // down too). The five colour defaults cannot be, for two different reasons.
+    // The tab trio returns a non-constexpr QString from ConfigDefaults, and
+    // test_scrolling_settings.cpp pins their SCHEMA defaults at runtime. The
+    // drop-indicator pair below returns a QColor, which is not a literal type
+    // either; its agreement with ConfigDefaults is pinned at runtime by
+    // dropIndicatorFallbackMatchesInterfaceDefault in test_settings_core.cpp.
 
     /// 0 = title chips, 1 = segment bar (ConfigDefaults' TabIndicatorStyle).
     /// The bar is the default: it is niri's own indicator, and the only one it
@@ -463,7 +465,8 @@ public:
     virtual void setScrollingDropIndicatorBorderColor(const QColor& /*color*/)
     {
     }
-    /// Fill opacity; the border always draws opaque.
+    /// Fill opacity. Applies to the fill only: the border's transparency comes
+    /// from its own colour's alpha channel, which nothing downstream replaces.
     virtual double scrollingDropIndicatorOpacity() const
     {
         return 0.25;
@@ -619,7 +622,8 @@ Q_SIGNALS:
     // palette change while the colour follows the theme (the resolved value
     // moved with no write). An ISettings-holding consumer cannot tell the
     // two apart; the concrete Settings exposes isAnnouncingPaletteChange()
-    // for the one consumer that needs to.
+    // for the one consumer that needs to. The drop indicator's fill and
+    // border NOTIFYs further down share this dual-source behaviour.
     void highlightColorChanged();
     void inactiveColorChanged();
     void borderColorChanged();
@@ -910,6 +914,9 @@ Q_SIGNALS:
 
     // Scrolling drop indicator (Scrolling.DropIndicator)
     void scrollingDropIndicatorEnabledChanged();
+    // These two are dual-source in exactly the way the zone-colour block
+    // above describes: a user edit, or a palette change while the colour
+    // follows the theme.
     void scrollingDropIndicatorColorChanged();
     void scrollingDropIndicatorBorderColorChanged();
     void scrollingDropIndicatorOpacityChanged();

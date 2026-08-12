@@ -76,8 +76,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
 // the boundary so it never reaches a QML `color` property, and the false
 // return surfaces the rejection to the D-Bus caller instead of silently
 // dropping the write. Schema token "themeColor" (shared with the *Raw
-// companion keys in the core TU) tells a schema-aware client the empty
-// value is the follow-the-scheme sentinel, not a missing string.
+// companion keys) tells a schema-aware client the empty value is the
+// follow-the-scheme sentinel, not a missing string.
 #define REGISTER_THEME_FALLBACK_COLOR_SETTING(name, getter, setter)                                                    \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
@@ -248,7 +248,10 @@ void SettingsAdaptor::initializeRegistryScrolling()
     // the plain key carries the RESOLVED colour and the "Raw" companion carries
     // the stored sentinel. A round-trip through a QVariantMap stays lossless
     // because keys are applied in sorted order, so "<key>Raw" lands after
-    // "<key>" and the sentinel wins.
+    // "<key>" and the sentinel wins. (That holds ON A CONCRETE Settings
+    // backend: the two Raw keys register inside the `concrete` guard below, so
+    // a bare-ISettings backend still pins both colours on a round-trip — every
+    // production composition root passes the concrete Settings.)
     REGISTER_COLOR_SETTING("scrollingDropIndicatorColor", scrollingDropIndicatorColor, setScrollingDropIndicatorColor)
     REGISTER_COLOR_SETTING("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
                            setScrollingDropIndicatorBorderColor)

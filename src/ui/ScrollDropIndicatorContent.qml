@@ -31,10 +31,11 @@ Item {
 
     /// Drop-target rect in shell-window coordinates.
     required property rect indicatorRect
-    /// Configured fill and border colours, always CONCRETE. The
-    /// follow-the-theme sentinel is resolved before it gets here, in Settings
-    /// (resolvedSystemColor), so this component holds no fallback rule of its
-    /// own and cannot disagree with the swatch the settings page previews.
+    /// Configured fill and border colours, always CONCRETE. The bottom tier
+    /// resolves the follow-the-theme sentinel in Settings (resolvedSystemColor)
+    /// before it gets here; the window-rule and screen-context tiers above it
+    /// supply shape-checked hex. So this component holds no fallback rule of
+    /// its own and cannot disagree with the swatch the settings page previews.
     required property color indicatorColor
     required property color indicatorBorderColor
     /// Fill opacity. Applies to the fill only; the border's transparency
