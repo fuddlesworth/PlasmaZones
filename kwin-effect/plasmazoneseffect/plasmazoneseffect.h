@@ -806,6 +806,35 @@ private:
      * overhang is drawn and remains interactive either way.
      */
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
+    /**
+     * @brief Is this strip column parked entirely off its output's viewport
+     *        right now — drawn (if at all) where nobody can see it?
+     *
+     * True only for a scroll-managed window with a strip position entry
+     * (m_scrollVisualPos) whose VISUAL rect — the padded band relocated to
+     * its strip position, plus the live view offset — intersects no part of
+     * its managed output. The visual rect is where paintWindow actually
+     * draws the quad, so this is the one honest visibility test for a
+     * parked column; the committed rect is always off every output (that is
+     * what parking IS) and answers nothing.
+     *
+     * THREE consumers, and they must stay in lockstep or a column blinks or
+     * burns: prePaintWindow withholds the TRANSFORMED flag (so KWin's own
+     * culling is free to skip the window instead of being forced to paint
+     * it), paintWindow skips the backdrop capture / decoration fold / draw,
+     * and the postPaintScreen repaint driver stops driving the window's
+     * decoration (the ~30fps backdrop refold and the animated-pack pump).
+     * A column that scrolls back toward the viewport starts intersecting —
+     * the view offset is part of the rect, re-read every pass — and all
+     * three sites wake in the same frame.
+     *
+     * Snapshot captures must NOT consult this: a parked column's offscreen
+     * capture (close snapshot, decoration capture) is legitimate work on an
+     * invisible window. Both paint-path callers sit behind the
+     * m_capturingSnapshot exemption already, matching the foreign-output
+     * cull's treatment.
+     */
+    bool scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const;
 
     /**
      * @brief Draw this pass's deferred tab-indicator surfaces into the scene
@@ -1434,9 +1463,20 @@ private:
     /// follows it (scaled into the rest-rect-sized canvas) so a frost/glass
     /// pane shows the scene behind the moving quad instead of behind the
     /// resting rect. Invalid = capture at the live geometry.
+    /// backdropScale: the capture RESOLUTION relative to the composite
+    /// canvas, from chainBackdropScale in paintWindow. 1.0 when some pack's
+    /// main pass samples the backdrop sharp; the largest linked bufferScale
+    /// when only buffer passes read it — a blur pyramid samples the capture
+    /// at bufferScale resolution through normalized uvs, so texels past that
+    /// density were captured, held (a full-canvas RGBA8 per window) and
+    /// blitted every frame only to be skipped over by the sampler. The
+    /// texture stays canvas-ALIGNED (same padded rect, same normalized
+    /// backdropRect space) at reduced density; only the blit's destination
+    /// arithmetic scales.
     void captureWindowBackdrop(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                KWin::EffectWindow* w, const WindowDecoration& wb,
-                               const KWin::Region& paintedDeviceRegion, const QRectF& animatedFrame = QRectF());
+                               const KWin::Region& paintedDeviceRegion, const QRectF& animatedFrame = QRectF(),
+                               qreal backdropScale = 1.0);
 
     /// Fold @p w's decoration chain into a per-window ping-pong composite, and return the
     /// texture holding the result (null on no decoration / allocation failure). drawWindow

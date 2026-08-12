@@ -32,7 +32,7 @@ namespace PlasmaZones {
 void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTarget,
                                               const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
                                               const WindowDecoration& wb, const KWin::Region& paintedDeviceRegion,
-                                              const QRectF& animatedFrame)
+                                              const QRectF& animatedFrame, qreal backdropScale)
 {
     // Mirror renderSurfaceChainComposite's canvas math EXACTLY (padded
     // logical rect, capped capture scale, derived texture size) so uBackdrop
@@ -56,8 +56,18 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // through the live `viewport`; only the destination canvas is pinned.
     const SurfaceCanvas canvas = surfaceCanvasFor(windowRect, pad, windowSurfaceScale(w));
     const QRectF logicalGeometry = canvas.logicalGeometry;
-    const QSize textureSize = canvas.textureSize;
-    if (textureSize.isEmpty()) {
+    // The capture texture's density, decoupled from the canvas rect it maps.
+    // A blur-only chain samples the backdrop exclusively at its packs'
+    // bufferScale resolution (through normalized uvs), so holding it at full
+    // canvas density stored and re-blitted texels the samplers stride
+    // straight over — a fifth of a decorated 4K window's VRAM for nothing.
+    // The RECT stays the full padded canvas either way: backdropRect,
+    // backdropTexel's clamp and the alignment contract with the composite
+    // are all normalized, so density is the only thing that moves.
+    const qreal texScale = qBound(0.05, backdropScale, 1.0);
+    const QSize textureSize(qMax(1, qRound(canvas.textureSize.width() * texScale)),
+                            qMax(1, qRound(canvas.textureSize.height() * texScale)));
+    if (canvas.textureSize.isEmpty()) {
         return;
     }
     const QString windowId = getWindowId(w);

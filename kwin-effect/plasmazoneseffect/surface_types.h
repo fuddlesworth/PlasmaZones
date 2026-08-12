@@ -532,6 +532,20 @@ struct SurfaceMultipassState
     /// a fold every ~33ms instead of every vsync. Damage to the window
     /// itself still refolds immediately (its paint runs regardless).
     qint64 lastFoldMs = -1;
+
+    /// When this window's column was first seen parked off the viewport
+    /// (shader clock, ms); negative while visible. Stamped and read only by
+    /// the postPaintScreen repaint driver: a column parked past the reap
+    /// threshold has its whole surface state released (releaseSurfaceState),
+    /// reclaiming the full-canvas GL targets a window nobody can see was
+    /// holding. The timestamp lives HERE, not in a side map, precisely so
+    /// the reap erases it with everything else — after the reap there is no
+    /// state to re-reap and nothing stale to clean up. The threshold exists
+    /// so ping-pong scrolling between neighbour columns never pays the cold
+    /// re-capture + re-fold on return; only a column parked for a while
+    /// pays it, once, on a frame where scrolling is repainting everything
+    /// anyway.
+    qint64 parkedSinceMs = -1;
 };
 
 /// Per-window border + rounded corners, rendered by sampling the redirected
