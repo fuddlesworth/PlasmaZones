@@ -10,6 +10,7 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/snaphandler.h"
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 
@@ -232,13 +233,27 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             // membership buckets, which still name the dead screen until the
             // daemon's set update lands on its own independent signal — so
             // without this term a marker survives that window forever and
-            // swallows its next genuine hop. Same gate, spelled locally, and
-            // without the warning and dedupe-set mutation that made calling the
-            // real predicate wrong on a bookkeeping path.
-            const QString recordedScreen = m_notifiedWindowScreens.value(windowId);
-            const bool trackedOutputGone = !recordedScreen.isEmpty()
+            // swallows its next genuine hop.
+            //
+            // Resolved BUCKET-FIRST, exactly as scrollTrackedScreenFor does,
+            // and that ordering is the whole point: reading only
+            // m_notifiedWindowScreens answers a different question, because
+            // that map is the same one oldScreenId comes from and this block
+            // only runs when oldScreenId equals newScreenId, which is by
+            // construction a live output. Spelled locally rather than calling
+            // the real predicate because that one warns and mutates its dedupe
+            // set, neither of which belongs on a bookkeeping path.
+            const QString trackedScreen = [&]() -> QString {
+                const QString bucket = TilingStateHelpers::screenForTiledWindow(m_border, windowId);
+                if (m_scrollingScreens.contains(bucket)) {
+                    return bucket;
+                }
+                const QString recorded = m_notifiedWindowScreens.value(windowId);
+                return m_scrollingScreens.contains(recorded) ? recorded : QString();
+            }();
+            const bool trackedOutputGone = !trackedScreen.isEmpty()
                 && !m_effect->connectedPhysicalIds().contains(
-                    PhosphorIdentity::VirtualScreenId::extractPhysicalId(recordedScreen));
+                    PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen));
             if (expIt.value().targetScreenId == newScreenId || !inScrollStrip() || trackedOutputGone) {
                 m_expectedOutputMove.erase(expIt);
             }

@@ -654,9 +654,12 @@ void PlasmaZonesEffect::postPaintScreen()
         // The skipped entry is not erased here, only unpumped: it stays in the
         // map until the window closes, or until it returns to the current
         // desktop and paintWindow's release branch takes it. Deliberate — the
-        // window is the one thing that can tell us it is visible again, and
-        // every reader is already deadline-gated, so the residual entry costs a
-        // hash slot and nothing else.
+        // window is the one thing that can tell us it is visible again. The one
+        // reader that is not itself deadline-gated is prePaintWindow's
+        // transformDriven probe, and it self-clears on the first paint that
+        // reaches the window — which is the same frame the window becomes
+        // visible again. So the residual entry costs a hash slot and nothing
+        // else.
         if (frameClockMs >= it->deadlineMs) {
             continue;
         }
@@ -1297,28 +1300,30 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // window returns here before any snapshot is driven for it — but the
     // symmetry keeps it latent).
     //
-    // The record is deduplicated LAST-WINS, not by comparing against the tail.
-    // A tail check only catches back-to-back repeats, and an in-tree path
-    // already defeats it: a tab indicator above the strip is driven through
-    // this function once by injectScrollTabIndicators (at the anchor's stacking
-    // slot) and again at its own natural slot, with every window stacked
-    // between the two recorded in between. The composite drew it twice, alpha
-    // blended twice, and the earlier copy sat UNDER the intervening window.
+    // The record is deduplicated by MEMBERSHIP (first-wins), not by comparing
+    // against the tail. A tail check only catches back-to-back repeats, and the
+    // shape that would defeat it is a window driven through this function twice
+    // in one capture walk with other records in between — the deferred tab
+    // indicator, which injectScrollTabIndicators drives at the ANCHOR's slot
+    // before its own natural slot arrives. Recorded twice, the composite would
+    // alpha-blend it twice and draw it at two different depths.
     //
-    // Last-wins rather than first-wins because POSITION IN THIS LIST IS THE
-    // COMPOSITE'S STACKING ORDER (StripTransitionManager replays it bottom to
-    // top). Keeping the first record would fix the double blend and permanently
-    // strand the indicator below every above-strip window — trading a visible
-    // fault for a quieter one. Re-appending keeps the natural slot, which is
-    // the correct stacking for every window that reaches here twice.
+    // POSITION IN THIS LIST IS THE COMPOSITE'S STACKING ORDER — StripTransition
+    // Manager replays it bottom to top — so which record survives decides the
+    // indicator's depth, and first-wins is the one that matches the injection's
+    // stated contract below: above all columns, below whatever the stacking
+    // puts over the strip. That IS the anchor's slot. The natural layer slot is
+    // precisely the mis-stacking the re-slotting exists to override, so keeping
+    // the later record would re-introduce it.
     //
-    // Suppressing the injection would be the wrong repair either way: the
-    // injection is what puts the indicator above the columns in the first
-    // place. The list is bounded by the above-strip population, so both the
-    // scan and the removal cost nothing worth measuring.
+    // Insurance rather than an observed fault: the above-strip election counts
+    // a same-screen indicator as a strip member when it picks the boundary, and
+    // excludes anything not intersecting the output, so the deferred set and
+    // the above-strip set look disjoint today. Cheap to keep correct either way.
     if (!m_capturingSnapshot && m_stripCaptureExclusionOutput && m_stripCaptureAboveStrip.contains(w)) {
-        m_stripCaptureSkippedWindows.removeOne(w);
-        m_stripCaptureSkippedWindows.append(w);
+        if (!m_stripCaptureSkippedWindows.contains(w)) {
+            m_stripCaptureSkippedWindows.append(w);
+        }
         return;
     }
 

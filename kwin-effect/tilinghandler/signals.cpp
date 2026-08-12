@@ -408,6 +408,17 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // (manual toggle, minimize-float, overflow batch-float — all keep
         // m_notifiedWindows intact) is free-floating on exit.
         if (m_effect->isWindowFloating(windowId)) {
+            // This is the fullscreen-exit re-drive for a monocle window that
+            // was floated WHILE fullscreen. unmaximizeMonocleWindow skips the
+            // compositor call for a fullscreen member and keeps the membership,
+            // so a float taken during the hold left the window KWin-maximized
+            // with the ledger still held and no reader: the batch demotion that
+            // normally consumes it never arrives for a window that stays
+            // floating. Here the window is confirmed out of fullscreen (this
+            // whole branch is under !isFullScreen()) and confirmed floating, so
+            // the call cannot un-maximize a legitimate monocle tile, and it is
+            // a no-op for any window that is not a member.
+            unmaximizeMonocleWindow(windowId);
             m_effect->updateAllDecorations();
             return;
         }
@@ -445,10 +456,13 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // MaximizeFull, the sole insert site (tiling.cpp's monocle apply) is gated on
     // the window not being already maximized and so never re-inserts, and nothing
     // else inserts. The window was then stranded KWin-maximized with no owner
-    // able to restore it. Retaining the entry fixes the paths that CAN restore:
-    // an ordinary fullscreen exit, and a later float-out or tile demotion, both
-    // of which now find the membership still there and do the real restore once
-    // the window is out of fullscreen. It does NOT fix a teardown that happens
+    // able to restore it. Retaining the entry fixes the two paths that CAN
+    // restore, both of which now find the membership still there: a later tile
+    // demotion (the batch's non-monocle arm), and a float-out taken once the
+    // window is no longer fullscreen. A float taken DURING the hold is covered
+    // by the re-drive on this file's fullscreen-exit floating arm — note that
+    // the exit branch itself restores nothing on its own, so retention buys
+    // accuracy there rather than a restore. It does NOT fix a teardown that happens
     // while the window is still fullscreen (autotile-disable, daemon-loss):
     // restoreAllMonocleMaximized sheds membership for the whole set and skips the
     // compositor call for a fullscreen member, so that window stays maximized.

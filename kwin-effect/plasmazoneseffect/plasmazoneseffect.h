@@ -965,8 +965,9 @@ private:
     /// Idempotent, and that rests on two properties of the implementation:
     /// KWin's own constrainFrameSize is a fixed point, and the constrained
     /// size is rounded UP to the enclosing integer, never below the grid point
-    /// it sits on, so a second pass floors back to the same point and takes no
-    /// branch. Rounding to nearest instead would let a re-constrain land below
+    /// it sits on, so a second pass floors back onto the grid within that same
+    /// integer and the re-ceil returns the same size, taking no branch.
+    /// Rounding to nearest instead would let a re-constrain land below
     /// the grid, floor into the previous bucket, and shift the rect again —
     /// the deferred user-move replay re-enters applyWindowGeometry with a rect
     /// this function already produced, so it depends on the round trip being a

@@ -409,19 +409,29 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     // marker names two of them.
     //
     // `removed` here is screens that left the MANAGED set (this function's own
-    // contract above), not physically unplugged outputs — a mode toggle or a
-    // per-screen disable reaches it too. So the prune is deliberately on the
-    // TARGET only. A marker whose destination is no longer managed can never be
-    // matched by the outputChanged it was armed for, and since the per-window
-    // clear sites only fire on that same event it would stay armed for the
-    // session and swallow the window's next genuine hop as bookkeeping-only.
+    // contract above), which a mode toggle or a per-screen disable reaches as
+    // well as a physical unplug.
     //
-    // The SOURCE is deliberately NOT a prune trigger: a cross-mode handoff off a
-    // screen that just left autotile is exactly the case the marker exists to
-    // describe, and its destination is still managed and still expecting the
-    // echo. Pruning on source would drop the marker the trueSource arm consumes.
+    // BOTH ends are prune triggers, because a marker is a one-shot that only
+    // the expected outputChanged can consume:
+    //   - target gone: the event it was armed for can never arrive.
+    //   - source gone: the handoff it describes is not happening either, since
+    //     the engine that would have driven it no longer manages that screen.
+    // Either way the marker outlives its errand, and the general drain does not
+    // reach it: that drain (in handleWindowOutputChanged) fires on the window's
+    // NEXT outputChanged, and this function deliberately skips off-desktop,
+    // off-activity and sticky windows, so exactly those keep their tracking and
+    // their stale marker. When such a window later hops to the marked target,
+    // the hop is consumed as bookkeeping-only and its real transfer never runs.
+    //
+    // The cost of pruning on source is that an echo still in flight for a
+    // genuine handoff falls through to the positional transfer instead of the
+    // marker's early return. That is the right trade here: with the source no
+    // longer managed there is no engine left on that side for the marker to
+    // hand off from, whereas a surviving stale marker silently eats a later
+    // real move.
     for (auto it = m_expectedOutputMove.begin(); it != m_expectedOutputMove.end();) {
-        if (removed.contains(it.value().targetScreenId)) {
+        if (removed.contains(it.value().targetScreenId) || removed.contains(it.value().sourceScreenId)) {
             it = m_expectedOutputMove.erase(it);
         } else {
             ++it;

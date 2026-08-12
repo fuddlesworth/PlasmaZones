@@ -521,15 +521,14 @@ void PlasmaZonesEffect::connectDragTracker()
                     // policy field only ever added grabs.
                     //
                     // Placed AFTER the branch cascade, and gated on THIS reply's
-                    // own `policy` rather than the stored member. The two agree
-                    // in the normal case, but the member is overwritten
-                    // unconditionally above and the generation guard only rejects
-                    // a reply from a DIFFERENT drag — so a dragPolicyChanged that
-                    // lands for the same drag before this reply is dispatched
-                    // would have its newer answer clobbered, and reading the
-                    // member here would then release a grab the newer policy
-                    // asked for. Reading the reply's own answer cannot be
-                    // clobbered by anything.
+                    // own `policy` rather than the stored member. The two are
+                    // bit-identical here today — the member is assigned from
+                    // `policy` above and nothing between can mutate it, since
+                    // slotDragPolicyChanged arrives on a queued D-Bus signal and
+                    // cannot re-enter. Reading the local is defensive locality,
+                    // not a fix for a live race: it keeps this arm answering the
+                    // question the reply asked regardless of what the member
+                    // assignment above ever grows into.
                     //
                     // The bypass-cleared arm above re-grabs for the canonical
                     // snap path, whose policy always carries grabKeyboard = true,
