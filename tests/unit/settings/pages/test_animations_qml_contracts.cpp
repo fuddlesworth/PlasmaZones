@@ -375,7 +375,8 @@ private Q_SLOTS:
         // "universal" is deliberately absent: it is the synthetic order-0
         // bucket the helpers resolve, not a declared class.
         const QStringList classTokens{QStringLiteral("geometry"), QStringLiteral("appearance"),
-                                      QStringLiteral("desktop"), QStringLiteral("move"), QStringLiteral("strip")};
+                                      QStringLiteral("desktop"),  QStringLiteral("move"),
+                                      QStringLiteral("strip"),    QStringLiteral("tab")};
         QStringList missing;
         for (const QString& token : classTokens) {
             if (!block.contains(QStringLiteral("\"key\": \"") + token + QLatin1Char('"'))) {

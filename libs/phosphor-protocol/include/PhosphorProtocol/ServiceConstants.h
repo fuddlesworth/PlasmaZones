@@ -203,8 +203,15 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       on the client while committing the column rect. Mid-struct insertion,
 //       so BOTH the signature and the field order change — same
 //       signature-matched failure mode as v6 through v9.
-inline constexpr int ApiVersion = 10;
-inline constexpr int MinPeerApiVersion = 10;
+//   v11: TileRequestEntry gained a trailing tabFrom field, widening
+//       windowsTileRequested from a(siiiissbbbssiiib) to a(siiiissbbbssiiibs).
+//       It names the tab an arriving tab is replacing in a tabbed column, so
+//       the effect can cross-fade the two rather than hard-cut between two
+//       different windows in one rect. The pair is not recoverable from the
+//       rects, which is why it has to ride the wire. Same signature-matched
+//       failure mode as v6 through v10.
+inline constexpr int ApiVersion = 11;
+inline constexpr int MinPeerApiVersion = 11;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

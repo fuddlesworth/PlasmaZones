@@ -181,9 +181,19 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         if (!visualPosValid && (!visualXVal.isUndefined() || !visualYVal.isUndefined())) {
             qCDebug(lcDbusTiling) << "relayTileRequestsJson: ignoring malformed visual position for" << entry.windowId;
         }
+        // The tab this entry is replacing, present only on a tab being
+        // activated in a tabbed column. Never on a floating entry: a floating
+        // window is not a tab of anything, and its committed rect is
+        // (0,0,0,0), so the cross-fade the field asks for would have no rect
+        // to run in. Dropped rather than failing the entry — this is a paint
+        // hint, and losing it costs only the cross-fade, exactly like the
+        // visual position above.
+        if (!entry.floating) {
+            entry.tabFrom = obj.value(QLatin1String("tabFrom")).toString();
+        }
         // The protocol type ships its own validator (empty windowId /
-        // screenId, degenerate rect) — run it rather than re-deriving a
-        // subset of its checks here.
+        // screenId, degenerate rect, a tabFrom naming its own window) — run
+        // it rather than re-deriving a subset of its checks here.
         if (const QString validationError = entry.validationError(); !validationError.isEmpty()) {
             sawValidatorDrop = true;
             // Warning, not debug: every documented cause of a validator

@@ -356,7 +356,7 @@ private Q_SLOTS:
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
         const QStringList expected{QStringLiteral("geometry"), QStringLiteral("appearance"), QStringLiteral("desktop"),
-                                   QStringLiteral("move"), QStringLiteral("strip")};
+                                   QStringLiteral("move"),     QStringLiteral("strip"),      QStringLiteral("tab")};
         QCOMPARE(PP::allEventClassTokens(), expected);
 
         // Every one of them survives a fromJson round trip. The vocabulary

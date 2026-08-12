@@ -85,8 +85,12 @@ PHOSPHORANIMATION_EXPORT extern const QString EditorSnapResize;
 // rides that offset, rather than each column springing itself. It is its own
 // root rather than a window.movement.* leaf because its subject is the view
 // and not any window.
+// `scrolling.tabSwitch` shares the root for grouping only: its subject IS a
+// window (the tab arriving in the rect the outgoing one vacated), so it
+// carries the APPEARANCE class, not the strip class its siblings do.
 PHOSPHORANIMATION_EXPORT extern const QString Scrolling;
 PHOSPHORANIMATION_EXPORT extern const QString ScrollingView;
+PHOSPHORANIMATION_EXPORT extern const QString ScrollingTabSwitch;
 
 // osd.*
 PHOSPHORANIMATION_EXPORT extern const QString Osd;
@@ -241,6 +245,27 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassMove;
 /// property of the pack, not of the class: a hybrid `["strip", "appearance"]`
 /// pack is still daemon-routable through its appearance leg.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassStrip;
+
+/// Tab transitions: the swap inside a tabbed scrolling column
+/// (`scrolling.tabSwitch`). TWO textures like `desktop`, but on a window quad
+/// rather than a screen: the outgoing tab's captured content is bound as
+/// `uOldWindow` (the same shared old-content sampler the geometry crossfades
+/// use) and the pack blends it into the arriving tab's live surface over a
+/// discrete forward leg.
+///
+/// Opt-in rather than universal-permissive, for a reason of its own. A
+/// universal single-surface pack would not fail here the way it does on a
+/// desktop path — its sampler IS bound — it would simply fade the arriving tab
+/// in over whatever lies behind the column, which is the wallpaper. That reads
+/// as a flash of desktop between two windows that never moved, so a pack must
+/// declare `appliesTo: ["tab"]` to be offered.
+///
+/// A tab-ONLY pack is compositor-only by `shaderEffectIsCompositorOnly`'s
+/// appearance rule, which is what lets it include `old_content.glsl`
+/// unguarded: that sampler is binding-less and the daemon's strict SPIR-V bake
+/// rejects it, so a pack reaching for the outgoing tab must never be
+/// daemon-routable.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassTab;
 
 /// Every event-class token, in the order the classes are declared above.
 /// This is the vocabulary `AnimationShaderEffect::appliesTo` is validated

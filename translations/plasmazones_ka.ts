@@ -6317,6 +6317,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="180"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="631"/>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="74"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="79"/>
         <source>scrolling</source>
         <translation>გადახვევა</translation>
     </message>
@@ -6381,6 +6382,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="875"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="878"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="881"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="79"/>
         <source>tab</source>
         <translation>ჩანართი</translation>
     </message>
@@ -6902,6 +6904,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="460"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="79"/>
         <source>cross-fade</source>
         <translation>გადაფენა</translation>
     </message>
@@ -8544,7 +8547,7 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="1091"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1093"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1095"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="459"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="464"/>
         <source>User shaders</source>
         <translation>მომხმარებლის შეიდერები</translation>
     </message>
@@ -8584,33 +8587,39 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="73"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="34"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="46"/>
         <source>Strip Scrolled</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="112"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="78"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="51"/>
+        <source>Tab Switched</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="117"/>
         <source>Zone Highlight Pop</source>
         <translation>ზონის გამოკვეთის ამოხტომა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="114"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="119"/>
         <source>Zone Highlight Border</source>
         <translation>ზონის გამოკვეთის საზღვარი</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="116"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="121"/>
         <source>Zone Overlay Layout-Switch Flash</source>
         <translation>ზონის გადადების ციმციმი განლაგების გადართვისას</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="124"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="129"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="27"/>
         <source>Snap Out of Zone</source>
         <translation>ზონიდან მოხსნა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="76"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="81"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="25"/>
         <source>Slide In</source>
         <translation>შემოცურება</translation>
@@ -8634,131 +8643,131 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="78"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="83"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="30"/>
         <source>Slide Out</source>
         <translation>გამოსრიალება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="80"/>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="98"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="85"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="103"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="35"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="63"/>
         <source>Fade In</source>
         <translation>თანდათანობითი გამოჩენა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="82"/>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="100"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="87"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="105"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsSidePanelsPage.qml.cpp" line="40"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="68"/>
         <source>Fade Out</source>
         <translation>თანდათანობითი გაქრობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="83"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="88"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="18"/>
         <source>Hover</source>
         <translation>თავზე დაცურება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="84"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="89"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="23"/>
         <source>Press</source>
         <translation>დაჭერა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="86"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="91"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="28"/>
         <source>Toggle On</source>
         <translation>ჩართვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="88"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="93"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="33"/>
         <source>Toggle Off</source>
         <translation>გამორთვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="90"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="95"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="38"/>
         <source>Show (badge)</source>
         <translation>ჩვენება (სამკერდე ნიშანი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="92"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="97"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="43"/>
         <source>Hide (badge)</source>
         <translation>დამალვა (სამკერდე ნიშანი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="94"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="99"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="48"/>
         <source>Pulse (badge)</source>
         <translation>პულსაცია (სამკერდე ნიშანი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="95"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="100"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="53"/>
         <source>Tint</source>
         <translation>ტონირება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="96"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="101"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="58"/>
         <source>Dim</source>
         <translation>დაბინდვა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="102"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="107"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="73"/>
         <source>Reorder</source>
         <translation>თანმიმდევრობის შეცვლა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="104"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="109"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="78"/>
         <source>Expand (accordion)</source>
         <translation>გაშლა (აკორდეონი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="106"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="111"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="83"/>
         <source>Collapse (accordion)</source>
         <translation>აკეცვა (აკორდეონი)</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="108"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="113"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="88"/>
         <source>Progress</source>
         <translation>მიმდინარეობა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="110"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="115"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="97"/>
         <source>Zone Highlight</source>
         <translation>ზონის გამოკვეთა</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="118"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="123"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="119"/>
         <source>Cursor Hover</source>
         <translation>კურსორის დაცურება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="120"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="125"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsWidgetsPage.qml.cpp" line="124"/>
         <source>Cursor Click</source>
         <translation>კურსორის დაწკაპუნება</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="122"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="127"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="22"/>
         <source>Snap Into Zone (Fill Preview)</source>
         <translation>ზონაში მიმაგრება (შევსების გადახედვა)</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="126"/>
+        <location filename="../src/settings/search/searchcatalog_animations.cpp" line="131"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsEditorPage.qml.cpp" line="32"/>
         <source>Snap Resize (Drag Preview)</source>
         <translation>მიმაგრებით ზომის შეცვლა (გადათრევის გადახედვა)</translation>
@@ -16638,7 +16647,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="584"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="599"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="604"/>
         <source>Try a different filter or search term.</source>
         <translation>სცადეთ სხვა ფილტრი ან საძიებო სიტყვა.</translation>
     </message>
@@ -17297,124 +17306,130 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="158"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="125"/>
+        <source>Tab switch</source>
+        <comment>@item shader capability (switching tabs in a scrolling column)</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="163"/>
         <source>Category</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>კატეგორია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="164"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="169"/>
         <source>Type</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>ტიპი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="169"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="174"/>
         <source>Source</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>წყარო</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="173"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="178"/>
         <source>None</source>
         <comment>@item:inlistbox group shaders by</comment>
         <translation>არცერთი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="181"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="186"/>
         <source>Name</source>
         <comment>@item:inlistbox sort shaders by</comment>
         <translation>სახელი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="185"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="190"/>
         <source>Category</source>
         <comment>@item:inlistbox sort shaders by</comment>
         <translation>კატეგორია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="191"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="196"/>
         <source>Type</source>
         <comment>@item:inlistbox sort shaders by</comment>
         <translation>ტიპი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="317"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="322"/>
         <source>Universal</source>
         <comment>@item shader capability (applies to every event)</comment>
         <translation>უნივერსალური</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="356"/>
         <source>Built-in</source>
         <comment>@title:group built-in shaders</comment>
         <translation>ჩაშენებული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="356"/>
         <source>User</source>
         <comment>@title:group user-installed shaders</comment>
         <translation>მომხმარებელი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="365"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="370"/>
         <source>Uncategorised</source>
         <comment>@title:group fallback for shaders without a category</comment>
         <translation>კატეგორიის გარეშე</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="471"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="476"/>
         <source>Open user shader directory</source>
         <translation>მომხმარებლის შეიდერის საქაღალდის გახსნა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="472"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="477"/>
         <source>Installed shader pack “%1”.</source>
         <comment>@info shader install success</comment>
         <translation>შეიდერის პაკეტი „%1“ დაინსტალირდა.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="478"/>
         <source>Could not install “%1”. The folder must contain a metadata.json and not collide with an existing pack.</source>
         <comment>@info shader install failure</comment>
         <translation>„%1“-ის დაინსტალირება ვერ მოხერხდა. საქაღალდე უნდა შეიცავდეს metadata.json ფაილს და არ უნდა ემთხვეოდეს არსებულ პაკეტს.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="487"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="492"/>
         <source>Search shaders…</source>
         <comment>@info:placeholder shader search</comment>
         <translation>შეიდერების ძებნა…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="488"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="493"/>
         <source>Search shaders</source>
         <translation>შეიდერების ძებნა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="500"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="505"/>
         <source>Filter Shaders</source>
         <comment>@title:menu</comment>
         <translation>შეიდერების გაფილტვრა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="508"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="513"/>
         <source>Built-in</source>
         <comment>@option:check</comment>
         <translation>ჩაშენებული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="512"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="517"/>
         <source>User-installed</source>
         <comment>@option:check</comment>
         <translation>მომხმარებლის დაინსტალირებული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="598"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="603"/>
         <source>No shaders match the current filter</source>
         <translation>ამჟამინდელ ფილტრს არცერთი შეიდერი არ ემთხვევა</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="618"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="623"/>
         <source>%n shader</source>
         <translation>
             <numerusform>%n შეიდერი</numerusform>
@@ -19285,17 +19300,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/RenderNodeOverlayContent.qml.cpp" line="151"/>
+        <location filename=".qml-stubs/src/ui/RenderNodeOverlayContent.qml.cpp" line="170"/>
         <source>Zone overlay</source>
         <translation>ზონის გადადება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/RenderNodeOverlayContent.qml.cpp" line="275"/>
+        <location filename=".qml-stubs/src/ui/RenderNodeOverlayContent.qml.cpp" line="308"/>
         <source>Shader error details</source>
         <translation>შეიდერის შეცდომის დეტალები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/RenderNodeOverlayContent.qml.cpp" line="277"/>
+        <location filename=".qml-stubs/src/ui/RenderNodeOverlayContent.qml.cpp" line="310"/>
         <source>Shader error</source>
         <translation>შეიდერის შეცდომა</translation>
     </message>
@@ -19704,16 +19719,6 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingQuickShortcutsPage.qml.cpp" line="33"/>
         <source>Assign scrolling templates to keyboard shortcuts for quick switching.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="29"/>
-        <source>Scrolling animation event</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="30"/>
-        <source>Animation for the scrolling strip. The whole strip moves together, so this is one setting for every column. Strip shaders decorate that motion as it happens, so only those shaders are offered here.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -20255,6 +20260,16 @@
         <source>%1: %2</source>
         <comment>virtual desktop number, then its name</comment>
         <translation type="unfinished">%1: %2</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="41"/>
+        <source>Scrolling animation events</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsScrollingPage.qml.cpp" line="42"/>
+        <source>Animations for scrolling. The whole strip moves together, so scrolling is one setting for every column. Each event offers only the shaders that can drive it.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

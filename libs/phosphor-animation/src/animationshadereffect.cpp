@@ -548,6 +548,16 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // scroll.
     if (cls == PP::EventClassStrip)
         return effect.appliesTo.contains(cls);
+    // The tab class (a tab swap inside a tabbed scrolling column) is opt-in
+    // for a softer reason than the three above: a universal single-surface
+    // pack CAN run there, its sampler is bound, but the leg exists to blend
+    // the outgoing tab into the incoming one and a pack that ignores
+    // uOldWindow just fades the arriving tab in over the wallpaper — a flash
+    // of desktop between two windows that never moved. Declaring
+    // `appliesTo: ["tab"]` is the statement that the pack reads the tab it is
+    // replacing.
+    if (cls == PP::EventClassTab)
+        return effect.appliesTo.contains(cls);
     // Universal effect (no declared constraint) runs on every single-surface path.
     if (effect.appliesTo.isEmpty())
         return true;
@@ -556,18 +566,18 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // (mixed ancestor / non-window path → empty class) is left compatible
     // so the picker never dims an effect on a row it can't classify — EXCEPT
     // an effect that declares NEITHER geometry NOR appearance, which is to
-    // say a pack that is exclusively one of the three opt-in classes
-    // (desktop / move / strip).
+    // say a pack that is exclusively one of the four opt-in classes
+    // (desktop / move / strip / tab).
     //
     // What an ambiguous row can actually feed is only the geometry and
     // appearance legs beneath it. The move leaf takes no inherited shader at
-    // all (ShaderProfileTree::resolve leaf isolation), and while the desktop
-    // and strip leaves DO inherit — so a screen-level-only pack assigned at
-    // `global` would in fact be picked up and run — offering it on a row that
-    // spans mostly single-surface events advertises a behaviour it does not
-    // have there. So for those two this is picker POLICY (assign it on the
-    // leaf that runs it) rather than a deadness proof, while for move-only it
-    // is a genuine proof.
+    // all (ShaderProfileTree::resolve leaf isolation), and while the desktop,
+    // strip and tab leaves DO inherit — so a screen-level-only pack assigned
+    // at `global` would in fact be picked up and run — offering it on a row
+    // that spans mostly single-surface events advertises a behaviour it does
+    // not have there. So for those three this is picker POLICY (assign it on
+    // the leaf that runs it) rather than a deadness proof, while for move-only
+    // it is a genuine proof.
     //
     // The test is on the single-surface classes rather than on the opt-in
     // ones so a HYBRID keeps working: a pack declaring ["strip",

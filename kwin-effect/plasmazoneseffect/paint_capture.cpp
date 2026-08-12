@@ -43,8 +43,43 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     // via effects->drawWindow. We temporarily bypass our morph shader so the
     // captured texture is the RAW old window content (the cross-fade source) —
     // drawing with the morph shader here would sample an unbound uOldWindow.
-    const KWin::LogicalOutput* const screen = window->screen();
-    const QRectF logicalGeometry = window->expandedGeometry();
+    //
+    // FOREIGN SOURCE (the scrolling tab swap): the pixels come from the
+    // outgoing tab rather than from @p window's own past. Everything below
+    // reads through `src`, and the two cases differ only in the rect the
+    // capture spans — see the logicalGeometry derivation.
+    KWin::EffectWindow* const src = transition.snapshotSource ? transition.snapshotSource.data() : window;
+    if (src->isDeleted()) {
+        // The source closed between the install and this first paint frame.
+        // Only reachable for a foreign source (the transition's own window is
+        // alive by construction, it is being painted). The shader falls back
+        // to iHasOldWindow == 0, which collapses the old side to the live
+        // content — a plain appear-in-place, which is what a tab switch
+        // degrades to anyway.
+        transition.needsSnapshot = false;
+        return;
+    }
+    const KWin::LogicalOutput* const screen = src->screen();
+    // The rect the capture spans. For the ordinary case it is the window's own
+    // expanded geometry.
+    //
+    // For a foreign source it is @p window's expanded rect TRANSLATED to where
+    // the source currently sits, rather than the source's own expanded rect.
+    // That keeps the snapshot in the arriving window's frame-relative
+    // coordinate system, which is the one the shader samples it in:
+    // iAnchorRectInTexture describes @p window's frame within @p window's
+    // expanded rect, and oldColor() folds through it. Taking the source's own
+    // rect instead would misalign the old side by the difference in the two
+    // clients' decoration padding. The translation is a pure offset because a
+    // park moves a window without resizing it, and the two tabs share a column
+    // rect — so the frames are the same size and the sub-rect is the same
+    // sub-rect.
+    QRectF logicalGeometry = window->expandedGeometry();
+    if (src != window) {
+        const KWin::RectF srcFrame = src->frameGeometry();
+        const KWin::RectF ownFrame = window->frameGeometry();
+        logicalGeometry.translate(srcFrame.x() - ownFrame.x(), srcFrame.y() - ownFrame.y());
+    }
     qreal scale = screen ? screen->scale() : 1.0;
     // Defensive size cap. The snapshot is sampled by normalised uv, so
     // downscaling via a reduced capture scale costs only resolution (no
@@ -108,11 +143,19 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     // rects, flipping both sides against their own heights internally.
     // Falls back to the raw capture when no composite exists (undecorated
     // windows, or the entry was flushed before the transition began).
-    if (const auto mpIt = m_surfaceMultipass.find(getWindowId(window)); mpIt != m_surfaceMultipass.end()) {
+    //
+    // Both frames come from the SOURCE window, which is what makes the same
+    // map serve the foreign case. There the composite entry was folded while
+    // the outgoing tab still sat in the column, so its "old" frame is the rect
+    // the arriving window now holds (the tabs share it), and its "new" frame
+    // is the park. Equal sizes, so the scale factors are 1 and the map reduces
+    // to the park translation — exactly undoing the one applied to
+    // logicalGeometry above.
+    if (const auto mpIt = m_surfaceMultipass.find(getWindowId(src)); mpIt != m_surfaceMultipass.end()) {
         const SurfaceMultipassState& mp = mpIt->second;
         KWin::GLTexture* const comp = mp.compositeTex[mp.finalSlot].get();
-        const QRectF oldFrame = transition.fromGeometry;
-        const QRectF newFrame = window->frameGeometry();
+        const QRectF oldFrame = src == window ? transition.fromGeometry : QRectF(window->frameGeometry());
+        const QRectF newFrame = src->frameGeometry();
         if (comp && mp.canvasGeo.isValid() && !mp.canvasGeo.isEmpty() && oldFrame.width() > 0.0
             && oldFrame.height() > 0.0 && newFrame.width() > 0.0 && newFrame.height() > 0.0) {
             // T maps snapshot-space logical points into composite space:
@@ -161,9 +204,15 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         }
     }
 
-    // Bypass the morph shader for the raw capture, restore it afterwards.
-    KWin::GLShader* const morphShader = transition.cached ? transition.cached->shader.get() : nullptr;
-    setShader(window, nullptr);
+    // Bypass the source's own shader for the raw capture, restore it
+    // afterwards. Resolved from the SOURCE's live transition rather than from
+    // `transition.cached`: the two are the same object in the ordinary case,
+    // but for a foreign source `transition` belongs to a different window and
+    // installing its shader on the source would leave a foreign leg's program
+    // attached to a window that is not running it.
+    const ShaderTransition* const srcSt = m_shaderManager.findTransition(src);
+    KWin::GLShader* const srcShader = srcSt && srcSt->cached ? srcSt->cached->shader.get() : nullptr;
+    setShader(src, nullptr);
 
     m_capturingSnapshot = true;
     // Guard the re-entrancy flag against a throw from the draw chain — a leaked
@@ -179,7 +228,10 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         // Keep the window item renderable for the duration of the capture draw.
-        KWin::ItemEffect keepRenderable(window->windowItem());
+        // Load-bearing for a foreign source beyond the ordinary case: the
+        // outgoing tab is parked off every output by now, so nothing else in
+        // the frame is asking for it to be renderable.
+        KWin::ItemEffect keepRenderable(src->windowItem());
         KWin::WindowPaintData captureData;
         captureData.setOpacity(1.0);
         const int captureMask = PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT;
@@ -187,13 +239,13 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         // KWin's draw-chain iterator is advanced correctly — same rationale as
         // the on-screen draw paths. The re-entrant paintWindow short-circuits on
         // m_capturingSnapshot and draws the window plainly into this FBO.
-        KWin::effects->drawWindow(renderTarget, viewport, window, captureMask, KWin::Region::infinite(), captureData);
+        KWin::effects->drawWindow(renderTarget, viewport, src, captureMask, KWin::Region::infinite(), captureData);
         KWin::GLFramebuffer::popFramebuffer();
     }
     resetCapture.dismiss();
     m_capturingSnapshot = false;
 
-    setShader(window, morphShader);
+    setShader(src, srcShader);
 
     transition.oldSnapshot = std::move(tex);
     transition.needsSnapshot = false;

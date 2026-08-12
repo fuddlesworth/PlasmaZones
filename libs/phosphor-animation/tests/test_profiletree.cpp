@@ -94,6 +94,26 @@ private Q_SLOTS:
         QVERIFY(PP::eventClassForPath(QStringLiteral("scrollingx.view")).isEmpty());
     }
 
+    // The tab leaf is the exception inside the scrolling family: it lives
+    // under the same root but carries its OWN class, because it is a
+    // two-texture window-quad cross-fade rather than the strip's one-scene
+    // pass. The leaf check has to be ordered BEFORE the sub-tree match in
+    // eventClassForPath, and this is what catches it being reordered — the
+    // leaf would silently classify as strip and offer exactly the packs that
+    // cannot drive it.
+    void testEventClassForTabSwitchPath()
+    {
+        QCOMPARE(PP::eventClassForPath(PP::ScrollingTabSwitch), PP::EventClassTab);
+        QVERIFY(PP::eventClassForPath(PP::ScrollingTabSwitch) != PP::EventClassStrip);
+        // Its ancestor keeps the strip class, which is exactly why the page
+        // hosting both offers no cascade parent row.
+        QCOMPARE(PP::eventClassForPath(PP::Scrolling), PP::EventClassStrip);
+        QCOMPARE(PP::parentPath(PP::ScrollingTabSwitch), PP::Scrolling);
+        // Unlike its strip sibling, this leaf DOES carry a built-in default:
+        // with no pack the swap is a hard cut between two windows.
+        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::ScrollingTabSwitch), QStringLiteral("tab-fade"));
+    }
+
     void testAllBuiltInPathsNonEmpty()
     {
         const QStringList paths = PP::allBuiltInPaths();
@@ -137,6 +157,7 @@ private Q_SLOTS:
         // reach.
         QVERIFY(paths.contains(PP::Scrolling));
         QVERIFY(paths.contains(PP::ScrollingView));
+        QVERIFY(paths.contains(PP::ScrollingTabSwitch));
         // No regression: legacy zone.* strings must not reappear.
         for (const QString& path : paths) {
             QVERIFY2(!path.startsWith(QLatin1String("zone.")) && path != QLatin1String("zone"),

@@ -164,6 +164,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         int viewDeltaX = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
         QPoint visualPos; ///< scrolling strip: where a PARKED column really sits, to paint at instead of the commit
         bool hasVisualPos = false;
+        QString tabFrom; ///< scrolling strip: the tab this entry replaces in a tabbed column, else empty
     };
     QVector<Entry> entries;
 
@@ -273,6 +274,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             qBound(-StripViewAnimator::kMaxViewDeltaPx, req.viewDeltaX, StripViewAnimator::kMaxViewDeltaPx);
         entry.visualPos = req.hasVisualPos ? QPoint(req.visualX, req.visualY) : QPoint();
         entry.hasVisualPos = req.hasVisualPos;
+        entry.tabFrom = req.tabFrom;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -371,6 +373,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         int viewDeltaX = 0;
         QPoint visualPos;
         bool hasVisualPos = false;
+        QString tabFrom;
     };
     QVector<TileSnap> toApply;
     QSet<KWin::EffectWindow*> applied;
@@ -407,7 +410,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
-                        e.isWindowedFullscreen, e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos});
+                        e.isWindowedFullscreen, e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos,
+                        e.tabFrom});
     }
 
     // Start this batch's view legs, ONCE per output. The delta is a property
@@ -1515,6 +1519,59 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
                                                   visualTargetOverride);
+
+                    // Tab swap: cross-fade the outgoing tab into this one.
+                    //
+                    // A SEPARATE leg from the geometry apply above, not a
+                    // shader hung off it, because the two say opposite things.
+                    // The apply's leg is deliberately degenerate (the tab
+                    // appears in place, see the arrival branch), and a
+                    // degenerate leg starts no animation, which means
+                    // applyWindowGeometry installs no shader at all. The
+                    // cross-fade is not describing motion anyway: it is a
+                    // discrete, time-driven content change over a rect that
+                    // does not move, which is exactly what
+                    // tryBeginShaderForEvent drives.
+                    //
+                    // Installed on the ARRIVING tab. The outgoing one is
+                    // parked off-canvas by the end of this batch and painted
+                    // by nothing, so it could not host a leg even if it wanted
+                    // one; it appears here only as the pixels to fade FROM.
+                    if (!snap.tabFrom.isEmpty()) {
+                        // Exact lookup, never the fuzzy appId fallback: this
+                        // is a paint hint, and a fuzzy match on a stale id
+                        // would cross-fade a same-app window that has nothing
+                        // to do with the swap. Unresolvable (closed between
+                        // the emit and here) simply means no cross-fade.
+                        KWin::EffectWindow* const outgoing = m_effect->findWindowByIdExact(snap.tabFrom);
+                        if (outgoing && outgoing != snap.window && !outgoing->isDeleted()) {
+                            bool ownsLeg = false;
+                            m_effect->tryBeginShaderForEvent(
+                                snap.window, PhosphorAnimation::ProfilePaths::ScrollingTabSwitch,
+                                m_effect->animationDurationMs(), /*reverse=*/false, /*holdCloseGrab=*/false,
+                                /*holdAddedGrab=*/false, /*animateMinimized=*/false, &ownsLeg);
+                            // ownsLeg, not liveness: the resolve installs
+                            // nothing when the user picked "None", and
+                            // findTransition would then hand back whatever
+                            // unrelated leg is live (a focus leg from the
+                            // click that switched the tab is the reachable
+                            // one) and re-point ITS snapshot at a foreign
+                            // window.
+                            if (ownsLeg) {
+                                if (auto* st = m_effect->m_shaderManager.findTransition(snap.window);
+                                    st && st->cached && st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
+                                    // Gated on the compiled pack actually
+                                    // LINKING uOldWindow, like the drag-snap
+                                    // and held-move capture requests: a pack
+                                    // that never samples the outgoing tab
+                                    // should not pay for a window-sized FBO
+                                    // and a skipped first frame.
+                                    st->snapshotSource = outgoing;
+                                    st->needsSnapshot = true;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

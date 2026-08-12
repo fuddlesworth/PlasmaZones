@@ -98,6 +98,13 @@ inline QStringList shaderConsumedLeafEventPaths()
         // scene capture while the view spring is in flight. Its shaders are
         // the one-scene strip class (appliesTo ["strip"]).
         PP::ScrollingView,
+        // Tab swap inside a tabbed column — a per-window leg, unlike its
+        // scrolling sibling above: the tiling batch path installs it through
+        // tryBeginShaderForEvent on the ARRIVING tab and seeds uOldWindow from
+        // a capture of the outgoing one (tilinghandler/tiling.cpp), so the two
+        // tabs cross-fade instead of hard-cutting. Its shaders are the
+        // ordinary single-surface appearance class.
+        PP::ScrollingTabSwitch,
         // Show-desktop peek — DesktopTransitionManager again (the entry two
         // above; the strip block in between has its own manager), resolved in
         // the showingDesktopChanged handler (lifecycle_wiring.cpp). One node drives both

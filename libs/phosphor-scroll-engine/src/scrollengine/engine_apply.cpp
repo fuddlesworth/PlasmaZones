@@ -525,7 +525,47 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // window per relayout. Same doctrine as layoutParamsForScreen's single
     // fetch at the top of this file.
     const bool cropStraddlers = effectiveCropStraddlers(screenId);
+    // The park's top edge, the one number that separates "was on screen last
+    // batch" from "was parked last batch" in m_lastAppliedRect. Every park
+    // this pass commits lands exactly here (the park lambda moves only the
+    // top), so a remembered rect at or below it was a park and one above it
+    // was a real placement.
+    const int parkTop = unionBottom + 1 + kParkMargin;
+    const auto wasParked = [&](const QString& windowId) {
+        const auto it = m_lastAppliedRect.constFind(windowId);
+        return it != m_lastAppliedRect.constEnd() && it->top() >= parkTop;
+    };
     for (const ResolvedColumn& column : resolved.columns) {
+        // TAB SWITCH pairing. A tabbed column shows one tile and parks the
+        // rest, so activating a tab is two commits that share one rect: the
+        // outgoing tab parks and the incoming tab takes the rect it vacated.
+        // The compositor cannot pair those on its own — both entries are
+        // ordinary rects, and inferring the pair from rect coincidence would
+        // also fire on a column that merely re-laid out — so the engine names
+        // the outgoing tab and the effect cross-fades one into the other.
+        //
+        // Derived from m_lastAppliedRect rather than a remembered hidden-set:
+        // that map is already swept by every path that drops a window
+        // (close, float, handoff, drag), so this cannot strand a pairing
+        // against a window that is no longer a tile.
+        //
+        // The pairing needs BOTH halves to be genuine, which is what keeps it
+        // to real switches: a tile that is hidden now but was on screen last
+        // batch, and (at the emit below) a tile that is shown now but was
+        // parked last batch. Tabbing a column for the FIRST time hides tiles
+        // that were all on screen, but the tile it leaves showing was on
+        // screen too, so no pairing is emitted — correctly, since nothing was
+        // swapped. A column scrolling back into view has parked hidden tiles,
+        // which fails the outgoing half for the same kind of reason.
+        QString tabFrom;
+        if (column.tabbed) {
+            for (const ResolvedTile& t : column.tiles) {
+                if (t.hidden && !wasParked(t.windowId)) {
+                    tabFrom = t.windowId;
+                    break;
+                }
+            }
+        }
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
                 columnHadSkippedTile.insert(column.columnIndex);
@@ -797,6 +837,14 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             }
             if (!scrollEdge.isEmpty()) {
                 obj[QLatin1String("scrollEdge")] = scrollEdge;
+            }
+            // The incoming half of the tab-switch pairing resolved above: this
+            // tile is shown now and was parked last batch, and a sibling made
+            // the opposite trip. Named on the ARRIVING entry because that is
+            // the window the compositor animates — the outgoing one is already
+            // gone by the time anything paints.
+            if (!tabFrom.isEmpty() && !tile.hidden && wasParked(tile.windowId)) {
+                obj[QLatin1String("tabFrom")] = tabFrom;
             }
             // A PARKED tile is not carried by the view. Its committed rect is
             // the park (below the union of all outputs), which no translation

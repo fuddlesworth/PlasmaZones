@@ -362,6 +362,18 @@ struct ShaderTransition
     /// `oldSnapshot` and clears this. The window content is captured before
     /// the moveResize configure round-trips, so it holds the OLD frame.
     bool needsSnapshot = false;
+    /// Capture the old-content snapshot from a DIFFERENT window than the one
+    /// this transition runs on. Null for every ordinary leg, where the old
+    /// content is the transition window's own earlier frame.
+    ///
+    /// Set only by the scrolling tab swap, whose "before" image belongs to the
+    /// outgoing tab: the two windows share one rect, so a cross-fade between
+    /// them is a cross-fade in place, but the pixels have to come from the
+    /// window that is leaving. A QPointer because the source is parked
+    /// off-canvas by the time the first paint frame runs the capture, and a
+    /// window that closes in that gap must degrade to no cross-fade rather
+    /// than to a dangling read.
+    QPointer<KWin::EffectWindow> snapshotSource;
     /// ── Held interactive-move state (window.movement.move) ──
     /// True while the user is still dragging: the transition stays active
     /// past durationMs (progress clamps at 1) and the duration-timer

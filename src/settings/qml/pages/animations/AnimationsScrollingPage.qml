@@ -20,18 +20,35 @@ import QtQuick
 // anything stacked above the strip is composited sharp on top afterwards.
 // With no pack assigned the strip scrolls exactly as before.
 //
-// No "All Scrolling Events" parent row: a cascade over a single child is
-// noise, the same reason the Desktop page left its parent off while `switch`
-// was its only leaf. Add one if a second leg ever lands.
+// The tab-switch leg is the second event here, and it is a different animal
+// from the first despite sharing the root. Its subject IS a window: activating
+// a tab parks the one that was showing and puts the new one in the rect it
+// vacated, so the compositor cross-fades a capture of the outgoing tab into
+// the arriving one's live content. Two textures on a window quad, which is the
+// `tab` class (appliesTo ["tab"], e.g. Tab Fade), and its picker filters to
+// those packs the same way the view row filters to strip packs.
+//
+// Still NO "All Scrolling Events" parent row, and now for a stronger reason
+// than the old one. The Desktop page grew its parent when it gained a second
+// leg because both of its legs share the desktop class, so a pack on the root
+// validates and cascades to both. These two do not: the root carries the strip
+// class and the tab leaf carries its own, so a pack assigned at `scrolling`
+// could never be valid for both children. A parent row would offer a choice
+// that cannot mean anything for half the page.
 //
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
-    Accessible.name: i18n("Scrolling animation event")
-    headerText: i18n("Animation for the scrolling strip. The whole strip moves together, so this is one setting for every column. Strip shaders decorate that motion as it happens, so only those shaders are offered here.")
+    Accessible.name: i18n("Scrolling animation events")
+    headerText: i18n("Animations for scrolling. The whole strip moves together, so scrolling is one setting for every column. Each event offers only the shaders that can drive it.")
     eventModel: [
         {
             "eventPath": "scrolling.view",
             "eventLabel": i18n("Strip Scrolled"),
+            "isParentNode": false
+        },
+        {
+            "eventPath": "scrolling.tabSwitch",
+            "eventLabel": i18n("Tab Switched"),
             "isParentNode": false
         }
     ]

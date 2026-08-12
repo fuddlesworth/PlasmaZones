@@ -72,6 +72,11 @@ void seedAnimationEventAnchors(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("animations-scrolling"), QStringLiteral("scrolling.view"),
                PhosphorI18n::tr("Strip Scrolled"),
                {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("column")});
+    // Same reasoning for the tab row, plus "cross-fade", which is what the
+    // effect is rather than what it is called.
+    addSetting(search, QStringLiteral("animations-scrolling"), QStringLiteral("scrolling.tabSwitch"),
+               PhosphorI18n::tr("Tab Switched"),
+               {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("tab"), PhosphorI18n::tr("cross-fade")});
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideIn"),
                PhosphorI18n::tr("Slide In"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideOut"),

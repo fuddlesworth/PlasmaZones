@@ -13,7 +13,7 @@
 namespace PhosphorProtocol {
 
 /// D-Bus struct for the shared tiling-family tile requests (autotile +
-/// scrolling ride the same windowsTileRequested pipeline): (siiiissbbbssiiib)
+/// scrolling ride the same windowsTileRequested pipeline): (siiiissbbbssiiibs)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -87,6 +87,22 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     int visualX = 0;
     int visualY = 0;
     bool hasVisualPos = false;
+    /// Scrolling mode: the window id of the tab this one is REPLACING in a
+    /// tabbed column, when this entry is a tab being activated. Empty for
+    /// every other placement.
+    ///
+    /// A tab switch is two commits sharing one rect — the outgoing tab parks,
+    /// the incoming tab takes the rect it just vacated — and the pair is not
+    /// recoverable from the rects alone: both are ordinary placements, and
+    /// matching them by coincident geometry would also fire on a column that
+    /// merely re-laid out. Only the engine knows the two entries are the same
+    /// swap, so it says so, and the compositor cross-fades the outgoing tab's
+    /// content into the incoming one instead of hard-cutting between two
+    /// different windows in the same rectangle.
+    ///
+    /// Named on the ARRIVING entry: that is the window still on screen when
+    /// the animation runs, and the one the transition is installed on.
+    QString tabFrom;
 
     QRect toRect() const
     {
