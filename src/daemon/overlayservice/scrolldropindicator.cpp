@@ -30,6 +30,7 @@
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorScreens/Manager.h>
 
+#include <QColor>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
@@ -212,12 +213,13 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     // a mid-drag settings edit lands on the next target change rather than
     // immediately — deliberate, per the no-replay note at the top). A drag is short enough that a settings change
     // almost never lands mid-drag, but writing an unchanged QML property emits no change notification, so the cost of
-    // being correct here is five compares. EMPTY colours mean "follow the theme" and the content item resolves that.
+    // being correct here is five compares. Every colour that reaches the content item is CONCRETE: the
+    // follow-the-theme sentinel is resolved in Settings, and both override tiers are shape-checked hex.
     if (m_settings) {
         // Three layers, narrowest first: the DRAGGED WINDOW's rule beats the
-        // screen's CONTEXT rule, which beats the setting, which the content
-        // item resolves against the theme when it is the empty sentinel. That
-        // is the tab colours' order, and niri's.
+        // screen's CONTEXT rule, which beats the setting, which Settings has
+        // already resolved against the palette when it holds the empty
+        // sentinel. That is the tab colours' order, and niri's.
         const QVariantMap& ctx = screenOverrides;
         const QVariantMap& win = m_scrollDropIndicatorWindowOverrides;
         const auto layered = [&ctx, &win](const QString& key, const QVariant& fromSettings) {
@@ -234,11 +236,17 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
         // name this slot exposes — the same string in both argument positions,
         // which is exactly the pair a typo used to break silently. The three
         // non-colour properties below carry no shared key and stay literal.
+        //
+        // The settings values arrive RESOLVED (Settings owns the theme
+        // fallback), so they are spelled back as #AARRGGBB to keep every tier
+        // of `layered` the same type — the two override tiers carry hex
+        // strings, checked for that shape before they are admitted.
         writeQmlProperty(slot, WindowColorKeys::indicatorColor(),
-                         layered(WindowColorKeys::indicatorColor(), m_settings->scrollingDropIndicatorColor()));
-        writeQmlProperty(
-            slot, WindowColorKeys::indicatorBorderColor(),
-            layered(WindowColorKeys::indicatorBorderColor(), m_settings->scrollingDropIndicatorBorderColor()));
+                         layered(WindowColorKeys::indicatorColor(),
+                                 m_settings->scrollingDropIndicatorColor().name(QColor::HexArgb)));
+        writeQmlProperty(slot, WindowColorKeys::indicatorBorderColor(),
+                         layered(WindowColorKeys::indicatorBorderColor(),
+                                 m_settings->scrollingDropIndicatorBorderColor().name(QColor::HexArgb)));
         writeQmlProperty(slot, QStringLiteral("indicatorOpacity"),
                          layered(QStringLiteral("indicatorOpacity"), m_settings->scrollingDropIndicatorOpacity()));
         writeQmlProperty(

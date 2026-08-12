@@ -22,6 +22,8 @@
 #include <QSet>
 #include <QTest>
 #include <QColor>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QSignalSpy>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -380,22 +382,103 @@ private Q_SLOTS:
     }
 
     /**
-     * reset() must return the four colour keys to the empty theme-fallback
-     * sentinel (the schema default), after which the resolved getters follow
-     * the palette again.
+     * The scrolling drop indicator's two colours are the same theme-fallback
+     * pair as the zone quartet, so they owe the same four guarantees: the raw
+     * accessor owns the stored sentinel, the resolved getter never serves an
+     * invalid colour, the QColor setter pins through the raw key, and an
+     * INVALID QColor un-pins rather than storing opaque black.
      */
-    void testReset_returnsZoneColorsToSentinel()
+    void testDropIndicatorColorsResolveAndPin()
+    {
+        IsolatedConfigGuard guard;
+
+        Settings settings;
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        // Following the palette: the resolved value is the live Highlight
+        // forced opaque. Read from qGuiApp rather than compared against a
+        // literal — a hardcoded colour here would be a second source of truth
+        // for the resolution rule. The alpha is forced on the EXPECTATION too,
+        // because this file does not control the process palette: a platform
+        // theme shipping a translucent Highlight is exactly what the forcing
+        // exists for, so comparing against the raw palette colour would fail
+        // this test in the one environment the production code handles. The
+        // forcing itself is pinned against a deliberately translucent palette
+        // by dropIndicatorFollowsPaletteOpaquely in
+        // test_settings_system_palette_tracking.cpp, which owns palette state.
+        QColor expected = qGuiApp->palette().color(QPalette::Active, QPalette::Highlight);
+        expected.setAlpha(255);
+        QCOMPARE(settings.scrollingDropIndicatorColor(), expected);
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), expected);
+        const QColor livePaletteHighlight = expected;
+
+        settings.setScrollingDropIndicatorColor(QColor(QStringLiteral("#80112233")));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QStringLiteral("#80112233"));
+        QCOMPARE(settings.scrollingDropIndicatorColor(), QColor(QStringLiteral("#80112233")));
+
+        settings.setScrollingDropIndicatorColor(QColor());
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorColor(), livePaletteHighlight);
+
+        // The border's own pin and un-pin, not just the fill's: the two go
+        // through separate macro invocations, so a setter wired to the wrong
+        // raw key would survive a fill-only check.
+        settings.setScrollingDropIndicatorBorderColor(QColor(QStringLiteral("#ff445566")));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QStringLiteral("#ff445566"));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        settings.setScrollingDropIndicatorBorderColor(QColor());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
+
+        // Junk in a hand-edited config. The load-bearing assertion is that the
+        // SCHEMA VALIDATOR snapped it to the sentinel on the way in: asserting
+        // only that the getter still returns something valid proves nothing,
+        // because resolveThemeColor's unparseable branch would answer the same
+        // way even with the validator gone.
+        settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("not-a-colour"));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
+    }
+
+    /**
+     * The no-palette fallback colour is spelled twice — ConfigDefaults for the
+     * config layer, isettings_detail for the interface's own default bodies —
+     * because the dependency runs config→core and neither is constexpr, so no
+     * static_assert can pin them. This is that pin, and both spellings' doc
+     * comments name it.
+     */
+    void dropIndicatorFallbackMatchesInterfaceDefault()
+    {
+        QCOMPARE(ConfigDefaults::scrollingDropIndicatorFallbackColor(),
+                 isettings_detail::opaqueDropIndicatorFallback());
+        QCOMPARE(ConfigDefaults::scrollingDropIndicatorFallbackColor().alpha(), 255);
+    }
+
+    /**
+     * reset() must return the theme-fallback colour keys to the empty sentinel
+     * (the schema default), after which the resolved getters follow the palette
+     * again. The drop indicator's pair is included because reset() only reaches
+     * a group listed in managedGroupNames(), and a group left off that list
+     * fails exactly here and nowhere else.
+     */
+    void testReset_returnsThemeFallbackColorsToSentinel()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
         settings.setHighlightColorRaw(QStringLiteral("#80112233"));
         settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+        settings.setScrollingDropIndicatorColorRaw(QStringLiteral("#ff778899"));
+        settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("#ffaabbcc"));
         settings.reset();
         QCOMPARE(settings.highlightColorRaw(), QString());
         QCOMPARE(settings.labelFontColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
         QVERIFY(settings.highlightColor().isValid());
         QVERIFY(settings.labelFontColor().isValid());
+        QVERIFY(settings.scrollingDropIndicatorColor().isValid());
+        QVERIFY(settings.scrollingDropIndicatorBorderColor().isValid());
     }
 
     /**

@@ -76,8 +76,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
 // the boundary so it never reaches a QML `color` property, and the false
 // return surfaces the rejection to the D-Bus caller instead of silently
 // dropping the write. Schema token "themeColor" (shared with the *Raw
-// companion keys in the core TU) tells a schema-aware client the empty
-// value is the follow-the-scheme sentinel, not a missing string.
+// companion keys) tells a schema-aware client the empty value is the
+// follow-the-scheme sentinel, not a missing string.
 #define REGISTER_THEME_FALLBACK_COLOR_SETTING(name, getter, setter)                                                    \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
@@ -94,6 +94,55 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return true;                                                                                                   \
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("themeColor");
+
+// The resolved half of a theme-fallback pair whose sentinel is resolved in the
+// config layer: the getter serves a concrete #AARRGGBB and the setter pins one,
+// with empty (or the legacy accent token) storing the sentinel through the
+// QColor setter's invalid-means-unset guard. The resolution chain cannot
+// produce an invalid QColor, so no isValid() guard is needed before name().
+// Copied from the core TU's REGISTER_COLOR_SETTING per the sync rule above,
+// with the accent token spelled inline: kAccentToken is that TU's file-local
+// constant and a second definition here would collide in a unity batch.
+#define REGISTER_COLOR_SETTING(keyName, getter, setter)                                                                \
+    m_getters[QStringLiteral(keyName)] = [this]() {                                                                    \
+        QColor color = m_settings->getter();                                                                           \
+        return color.name(QColor::HexArgb);                                                                            \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(keyName)] = [this](const QVariant& v) {                                                   \
+        const QString s = v.toString();                                                                                \
+        if (s.isEmpty() || s == QLatin1String("accent")) {                                                             \
+            m_settings->setter(QColor());                                                                              \
+            return true;                                                                                               \
+        }                                                                                                              \
+        const QColor parsed(s);                                                                                        \
+        if (!parsed.isValid()) {                                                                                       \
+            return false;                                                                                              \
+        }                                                                                                              \
+        m_settings->setter(parsed);                                                                                    \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(keyName)] = QStringLiteral("color");
+
+// The stored half of that pair, on the concrete Settings: the sentinel itself,
+// readable and writable so a round-trip can restore "follow the theme". Same
+// body as the core TU's REGISTER_RAW_THEME_COLOR, accent token inlined for the
+// reason above.
+#define REGISTER_RAW_THEME_COLOR(keyName, capture, obj, getter, setter)                                                \
+    m_getters[QStringLiteral(keyName)] = [capture]() {                                                                 \
+        return obj->getter();                                                                                          \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(keyName)] = [capture](const QVariant& v) {                                                \
+        QString s = v.toString();                                                                                      \
+        if (s == QLatin1String("accent")) {                                                                            \
+            s = QString();                                                                                             \
+        }                                                                                                              \
+        if (!s.isEmpty() && !QColor(s).isValid()) {                                                                    \
+            return false;                                                                                              \
+        }                                                                                                              \
+        obj->setter(s);                                                                                                \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(keyName)] = QStringLiteral("themeColor");
 
 #define REGISTER_CONCRETE_BOOL(name, getter, setter)                                                                   \
     m_getters[QStringLiteral(name)] = [concrete]() {                                                                   \
@@ -194,10 +243,26 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                           setScrollingTabIndicatorInactiveColor)
     REGISTER_THEME_FALLBACK_COLOR_SETTING("scrollingTabIndicatorUrgentColor", scrollingTabIndicatorUrgentColor,
                                           setScrollingTabIndicatorUrgentColor)
-    REGISTER_THEME_FALLBACK_COLOR_SETTING("scrollingDropIndicatorColor", scrollingDropIndicatorColor,
-                                          setScrollingDropIndicatorColor)
-    REGISTER_THEME_FALLBACK_COLOR_SETTING("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
-                                          setScrollingDropIndicatorBorderColor)
+    // The drop indicator's two colours resolve in the config layer instead
+    // (Settings::resolvedSystemColor), so they take the zone quartet's shape:
+    // the plain key carries the RESOLVED colour and the "Raw" companion carries
+    // the stored sentinel. A round-trip through a QVariantMap stays lossless
+    // because keys are applied in sorted order, so "<key>Raw" lands after
+    // "<key>" and the sentinel wins. (That holds ON A CONCRETE Settings
+    // backend: the two Raw keys register inside the `concrete` guard below, so
+    // on anything else the sentinel does not survive a round-trip — the
+    // interface's own setter bodies are empty, so a literally-bare ISettings
+    // drops the write rather than storing it. Every production composition
+    // root passes the concrete Settings.)
+    REGISTER_COLOR_SETTING("scrollingDropIndicatorColor", scrollingDropIndicatorColor, setScrollingDropIndicatorColor)
+    REGISTER_COLOR_SETTING("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
+                           setScrollingDropIndicatorBorderColor)
+    if (concrete) {
+        REGISTER_RAW_THEME_COLOR("scrollingDropIndicatorColorRaw", concrete, concrete, scrollingDropIndicatorColorRaw,
+                                 setScrollingDropIndicatorColorRaw)
+        REGISTER_RAW_THEME_COLOR("scrollingDropIndicatorBorderColorRaw", concrete, concrete,
+                                 scrollingDropIndicatorBorderColorRaw, setScrollingDropIndicatorBorderColorRaw)
+    }
     REGISTER_DOUBLE_SETTING("scrollingDropIndicatorOpacity", scrollingDropIndicatorOpacity,
                             setScrollingDropIndicatorOpacity)
     REGISTER_INT_SETTING("scrollingDropIndicatorBorderWidth", scrollingDropIndicatorBorderWidth,
@@ -457,6 +522,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
 #undef REGISTER_INT_SETTING
 #undef REGISTER_DOUBLE_SETTING
 #undef REGISTER_THEME_FALLBACK_COLOR_SETTING
+#undef REGISTER_COLOR_SETTING
+#undef REGISTER_RAW_THEME_COLOR
 #undef REGISTER_CONCRETE_BOOL
 #undef REGISTER_CONCRETE_INT
 #undef REGISTER_CONCRETE_DOUBLE
