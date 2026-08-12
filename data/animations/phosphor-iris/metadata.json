@@ -1,0 +1,130 @@
+{
+    "id": "phosphor-iris",
+    "name": "Phosphor Iris",
+    "description": "A ring of plasma opens from the centre of a scrolling column and swaps its tabs, in the Phosphor style. Inside the ring the tab you picked has already formed, while outside it the tab you left drains toward a dark navy silhouette as the ring closes on it. The rim is turbulent and carries the brand gradient from cyan at the centre to rose at the corners, with soft tendrils reaching ahead of it and ember sparks shed in its wake. Once the ring clears the corners the swap is done and nothing glows.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Reveal",
+    "appliesTo": ["tab"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "softness",
+            "name": "Rim Softness",
+            "type": "float",
+            "default": 0.12,
+            "min": 0.04,
+            "max": 0.3,
+            "step": 0.01,
+            "description": "How gradually the ring hands one tab over to the other. This also sets how far ahead of the ring the old tab starts to drain.",
+            "group": "Rim"
+        },
+        {
+            "id": "turbulence",
+            "name": "Rim Turbulence",
+            "type": "float",
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How raggedly the ring is eaten away as it opens. Zero gives a clean circle.",
+            "group": "Rim"
+        },
+        {
+            "id": "grain",
+            "name": "Rim Grain",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.2,
+            "max": 3.0,
+            "step": 0.1,
+            "description": "Scale of the turbulence along the rim. Higher values break it into finer detail.",
+            "group": "Rim"
+        },
+        {
+            "id": "arms",
+            "name": "Tendril Count",
+            "type": "float",
+            "default": 5.0,
+            "min": 0.0,
+            "max": 9.0,
+            "step": 1.0,
+            "description": "How many tendrils reach ahead of the ring into the part of the column that has not changed yet. Zero gives a plain ring.",
+            "group": "Rim"
+        },
+        {
+            "id": "glow",
+            "name": "Rim Glow",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0,
+            "step": 0.05,
+            "description": "Brightness of the plasma light along the ring.",
+            "group": "Rim"
+        },
+        {
+            "id": "shimmer",
+            "name": "Heat Shimmer",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How much the picture bends as the ring passes over it.",
+            "group": "Rim"
+        },
+        {
+            "id": "unlitDim",
+            "name": "Unlit Dim",
+            "type": "float",
+            "default": 0.7,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How far the tab you left sinks into the navy silhouette before the ring reaches it. Zero keeps it at full colour right up to the rim.",
+            "group": "Drain"
+        },
+        {
+            "id": "sparks",
+            "name": "Ember Sparks",
+            "type": "float",
+            "default": 0.4,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "Strength of the small embers shed behind the ring, over the tab that has just arrived.",
+            "group": "Embers"
+        },
+        {
+            "id": "colorCyan",
+            "name": "Gradient Cyan",
+            "type": "color",
+            "default": "#22D3EE"
+        },
+        {
+            "id": "colorBlue",
+            "name": "Gradient Blue",
+            "type": "color",
+            "default": "#3B82F6"
+        },
+        {
+            "id": "colorPurple",
+            "name": "Gradient Purple",
+            "type": "color",
+            "default": "#A855F7"
+        },
+        {
+            "id": "colorRose",
+            "name": "Gradient Rose",
+            "type": "color",
+            "default": "#F43F5E"
+        },
+        {
+            "id": "colorTint",
+            "name": "Unlit Tint",
+            "type": "color",
+            "default": "#0B1730"
+        }
+    ]
+}

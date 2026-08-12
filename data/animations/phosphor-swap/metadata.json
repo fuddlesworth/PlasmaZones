@@ -1,0 +1,138 @@
+{
+    "id": "phosphor-swap",
+    "name": "Phosphor Swap",
+    "description": "A tab swap in the official Phosphor style. One lit boundary travels across the column, the tab you left drains to a dark navy silhouette just ahead of it, and the tab you picked comes back up to full colour just behind it. A rim of brand light rides the boundary with ember sparks drifting into it, and a rose afterglow follows in its wake. Neither window moves, so the column stays exactly where it is.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Reveal",
+    "appliesTo": ["tab"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "dirX",
+            "name": "Direction X",
+            "type": "float",
+            "default": 1.0,
+            "min": -1.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "Horizontal part of the direction the boundary travels in. Positive sweeps to the right.",
+            "group": "Sweep"
+        },
+        {
+            "id": "dirY",
+            "name": "Direction Y",
+            "type": "float",
+            "default": 0.0,
+            "min": -1.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "Vertical part of the direction the boundary travels in. Set both parts to get a diagonal sweep. If both are zero the boundary sweeps to the right.",
+            "group": "Sweep"
+        },
+        {
+            "id": "softness",
+            "name": "Boundary Softness",
+            "type": "float",
+            "default": 0.1,
+            "min": 0.01,
+            "max": 0.4,
+            "step": 0.01,
+            "description": "How wide the changeover is at the boundary. Small values give a crisp line, large values blend the two tabs over a broad front.",
+            "group": "Sweep"
+        },
+        {
+            "id": "depth",
+            "name": "Gate Depth",
+            "type": "float",
+            "default": 0.25,
+            "min": 0.05,
+            "max": 0.6,
+            "step": 0.01,
+            "description": "How far the unlit band reaches on either side of the boundary, as a fraction of the sweep. This is the stretch where the outgoing tab is draining and the incoming one is still coming back up.",
+            "group": "Sweep"
+        },
+        {
+            "id": "unlitDim",
+            "name": "Unlit Dim",
+            "type": "float",
+            "default": 0.75,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How dark the band goes. At full strength the content sinks all the way to a navy silhouette, and at zero it keeps its own colour and only the light on the boundary shows.",
+            "group": "Sweep"
+        },
+        {
+            "id": "glow",
+            "name": "Glow Intensity",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0,
+            "step": 0.05,
+            "description": "Brightness of the gradient rim on the boundary, the afterglow behind it, and the sparks.",
+            "group": "Glow"
+        },
+        {
+            "id": "afterglow",
+            "name": "Afterglow",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "Length of the rose glow trailing in the boundary's wake, over the part of the column that has already changed over.",
+            "group": "Glow"
+        },
+        {
+            "id": "embers",
+            "name": "Ember Sparks",
+            "type": "float",
+            "default": 0.35,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "Strength of the small sparks drifting through the unlit band into the boundary.",
+            "group": "Embers"
+        },
+        {
+            "id": "density",
+            "name": "Ember Density",
+            "type": "float",
+            "default": 24,
+            "min": 8,
+            "max": 60,
+            "step": 1,
+            "description": "How many lanes of ember sparks feed the boundary. More lanes also means smaller sparks, since each one is sized to its lane.",
+            "group": "Embers"
+        },
+        {
+            "id": "meander",
+            "name": "Boundary Meander",
+            "type": "float",
+            "default": 0.45,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.05,
+            "description": "How raggedly the boundary wavers as it travels. Zero gives a straight edge.",
+            "group": "Boundary"
+        },
+        {
+            "id": "grain",
+            "name": "Meander Grain",
+            "type": "float",
+            "default": 1.0,
+            "min": 0.2,
+            "max": 3.0,
+            "step": 0.1,
+            "description": "Scale of the waver along the boundary. Higher values give finer ripples.",
+            "group": "Boundary"
+        },
+        { "id": "colorCyan", "name": "Gradient Cyan", "type": "color", "default": "#22D3EE" },
+        { "id": "colorBlue", "name": "Gradient Blue", "type": "color", "default": "#3B82F6" },
+        { "id": "colorPurple", "name": "Gradient Purple", "type": "color", "default": "#A855F7" },
+        { "id": "colorRose", "name": "Gradient Rose", "type": "color", "default": "#F43F5E" },
+        { "id": "colorTint", "name": "Unlit Tint", "type": "color", "default": "#0B1730" }
+    ]
+}
