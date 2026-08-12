@@ -158,9 +158,10 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
                 // windowTintColor ISettings property); alias each to its
                 // twin's NOTIFY so a batch that changes only the stored
                 // follow/pin state (e.g. pinning a colour to the value it
-                // already resolved to) still announces per-key. The four
-                // zone raws need no row here — they have real Q_PROPERTYs
-                // with their own *RawChanged NOTIFYs.
+                // already resolved to) still announces per-key. The other
+                // six raws need no row here (the zone quartet and the
+                // drop-indicator pair) — they have real Q_PROPERTYs with
+                // their own *RawChanged NOTIFYs.
                 {QStringLiteral("windowBorderColorActiveRaw"), QByteArrayLiteral("windowBorderColorActive")},
                 {QStringLiteral("windowBorderColorInactiveRaw"), QByteArrayLiteral("windowBorderColorInactive")},
                 {QStringLiteral("windowTintColorRaw"), QByteArrayLiteral("windowTintColor")},

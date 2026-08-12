@@ -262,8 +262,8 @@ Window {
         // above the passive content types (main overlay z=0, zone
         // selector z=1) so a layout-OSD or nav-OSD reads cleanly over an
         // active zone overlay or drag-time selector. While a MODAL slot
-        // (snap-assist, layout picker, or the shortcut cheatsheet, all
-        // z=2) is visible the OSD
+        // (snap-assist, layout picker, or the shortcut cheatsheet, hosted in
+        // the z=2 modal container) is visible the OSD
         // drops to 1.5 — still above the passive tiers, but below the
         // modal — so a concurrently-fired OSD card neither occludes
         // modal content for its ~1.5s display nor lets its
@@ -408,13 +408,15 @@ Window {
         // arrives here: the daemon hides the slot instead.
         property rect indicatorRect: Qt.rect(0, 0, 0, 0)
         // Indicator colour (Scrolling.DropIndicator/Color), pushed by C++ on
-        // every rect update. EMPTY means "follow the theme" and the content
-        // item resolves that. Must be declared here AND forwarded below:
-        // setProperty on an undeclared name silently creates a dynamic
-        // property that no binding ever sees (see the zoneSelectorSlot
-        // contract note).
-        property string indicatorColor: ""
-        property string indicatorBorderColor: ""
+        // every rect update, always CONCRETE — the follow-the-theme sentinel is
+        // resolved in Settings before it reaches the overlay. Must be declared
+        // here AND forwarded below: setProperty on an undeclared name silently
+        // creates a dynamic property that no binding ever sees (see the
+        // zoneSelectorSlot contract note). The initialisers are placeholders
+        // that are never painted: C++ writes both colours before it writes
+        // `loaded`, so the content item is instantiated with the real values.
+        property color indicatorColor: Kirigami.Theme.highlightColor
+        property color indicatorBorderColor: Kirigami.Theme.highlightColor
         property real indicatorOpacity: 0.25
         property int indicatorBorderWidth: 2
         property int indicatorBorderRadius: 8
@@ -430,9 +432,11 @@ Window {
         property bool loaded: false
 
         anchors.fill: parent
-        // Indicator tier: directly above the tab strips, so a drop target that
-        // lands on a tabbed column is not hidden by that column's own
-        // indicator. Still below the zone selector, the OSDs and the modals.
+        // Indicator tier: above the main overlay (z=0) and below the zone
+        // selector (z=1), the OSDs and the modals. Ordering against the
+        // scrolling tab strips is NOT decided here — they live on their own
+        // layer-shell surface (ScrollTabShell.qml), and z only orders siblings
+        // inside this window's scene graph.
         z: 0.6
         opacity: 0
         visible: false
