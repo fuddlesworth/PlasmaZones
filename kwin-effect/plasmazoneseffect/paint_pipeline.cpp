@@ -490,10 +490,13 @@ void PlasmaZonesEffect::postPaintScreen()
                 continue;
             }
             // Skip windows KWin is not painting. An off-desktop window never reaches
-            // paintWindow, and paintWindow is the ONLY teardown for a durationMs == 0
-            // (animator-driven) leg — it has no timer. Without this, snapping a window
-            // and then switching virtual desktop mid-morph leaves the arm below
-            // requesting a FULL-OUTPUT repaint every vsync, indefinitely.
+            // paintWindow, and paintWindow is the only teardown for a durationMs == 0
+            // (animator-driven) leg reachable from the PAINT path — it has no timer.
+            // (The animator's own completion callback tears the same leg down
+            // independently of painting, so the runaway below needs the animator to
+            // never complete, not merely paintWindow to be skipped.) Without this,
+            // snapping a window and then switching virtual desktop mid-morph leaves
+            // the arm below requesting a FULL-OUTPUT repaint every vsync.
             //
             // EXCEPT a leg we hold the close grab on. A closing window is isDeleted()
             // for its ENTIRE close animation (we keep the corpse alive with that very
@@ -661,9 +664,9 @@ void PlasmaZonesEffect::postPaintScreen()
                 // the window, releaseSurfaceState early-returns WITHOUT
                 // erasing, and the stamp survives inside the kept state — that
                 // case re-arms the timer on a short retry, see below.) The
-                // pinned clock, like every other
-                // consumer in this loop; the parked stamp is inside the
-                // state so the erase disposes of it with everything else.
+                // pinned clock, like every other consumer in this loop; the
+                // parked stamp is inside the state so the erase disposes of it
+                // with everything else.
                 constexpr qint64 kParkReapMs = 10000;
                 if (const auto sit = m_surfaceMultipass.find(it.key()); sit != m_surfaceMultipass.end()) {
                     qint64 remainingMs = -1;
@@ -1130,7 +1133,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // On the column's own output the render target already scissors at the
     // edge; the only place the overhang becomes visible is the ADJACENT
     // output's paint pass, so skip the window entirely in passes whose output
-    // is not its managed screen. The predicate lives in scrollClipGeometryFor
+    // is not its managed screen. The predicate lives in scrollManagedOutputFor
     // and is shared with the overhang input filter, which keeps the same
     // invisible region from receiving pointer/touch input.
     //

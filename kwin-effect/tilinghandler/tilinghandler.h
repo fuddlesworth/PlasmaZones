@@ -1011,14 +1011,20 @@ private:
     bool m_inOutputChanged = false; ///< re-entrancy guard for handleWindowOutputChanged
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
-    /// Generation for the cross-screen size-restore continuation, bumped every
+    /// Monotonic stamp source for the cross-screen size-restore continuation.
+    /// Session-global rather than per-window so a stamp is never reused, which
+    /// is what lets the map below be ERASED on teardown: a removed entry reads
+    /// back as 0 and the first stamp is 1, so no captured generation can ever
+    /// match a dropped one.
+    quint64 m_crossScreenRestoreSeq = 0;
+    /// Generation for the cross-screen size-restore continuation, stamped every
     /// time that path arms a new D-Bus watcher for a window. The in-flight
     /// watcher is not cancellable (every cancel site disconnects the STORED
     /// connection, and a watcher that has not yet replied has not stored one),
     /// so a second hop arming while the first is still in flight leaves both
-    /// live. Both continuations capture their generation and bail on a
-    /// mismatch, which keeps an older hop's pre-tile size from winning and
-    /// stops its lambda consuming the newer hop's map entry.
+    /// live. Both continuations capture their stamp and bail on a mismatch,
+    /// which keeps an older hop's pre-tile size from winning and stops its
+    /// lambda consuming the newer hop's map entry.
     QHash<QString, quint64> m_crossScreenRestoreGen;
     QSet<QString> m_minimizeFloatedWindows;
     /// Ownership after an unfloat dispatch and before its authoritative echo.

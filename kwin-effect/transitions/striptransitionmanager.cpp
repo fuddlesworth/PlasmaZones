@@ -266,27 +266,42 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         {
             const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
             int topStrip = -1;
+            int topStripParked = -1;
             for (int i = 0; i < stack.size(); ++i) {
                 KWin::EffectWindow* sw = stack.at(i);
                 if (!sw) {
                     continue;
                 }
-                // Parked columns are skipped, the same way the tab-anchor
-                // election in prePaintScreen skips them and for the same
-                // reason: paintWindow culls a parked column outright, so one
-                // elected here would be a boundary drawn from a window that
-                // never paints in this capture. Everything stacked below it
-                // but above the topmost PAINTING column would then fall
-                // outside m_stripCaptureAboveStrip and be captured into the
-                // strip pass, moving with the columns instead of staying
-                // composited sharp on top.
-                if (m_effect->scrollParkedOffscreen(sw, m_effect->getWindowId(sw))) {
+                if (m_effect->scrollManagedOutputFor(sw) != screen
+                    && !(m_effect->isScrollTabIndicatorSurface(sw) && sw->screen() == screen)) {
                     continue;
                 }
-                if (m_effect->scrollManagedOutputFor(sw) == screen
-                    || (m_effect->isScrollTabIndicatorSurface(sw) && sw->screen() == screen)) {
-                    topStrip = i;
+                // Parked columns do not win the election, the same way the
+                // tab-anchor election in prePaintScreen skips them and for the
+                // same reason: paintWindow culls a parked column outright, so
+                // one elected here would be a boundary drawn from a window that
+                // never paints in this capture. Everything stacked below it but
+                // above the topmost PAINTING column would then fall outside
+                // m_stripCaptureAboveStrip and be captured into the strip pass,
+                // moving with the columns instead of staying composited sharp
+                // on top.
+                //
+                // They are still REMEMBERED, because "no unparked member" is
+                // not the same as "no strip". With every column on this output
+                // parked, an unconditional skip leaves topStrip at -1 and the
+                // whole scene — panels, OSDs, daemon overlays — gets captured
+                // and post-processed by the pack, which is strictly worse than
+                // the boundary this election used to find. Falling back to the
+                // topmost parked member reverts that case to the pre-skip
+                // behaviour instead.
+                if (m_effect->scrollParkedOffscreen(sw, m_effect->getWindowId(sw))) {
+                    topStripParked = i;
+                    continue;
                 }
+                topStrip = i;
+            }
+            if (topStrip < 0) {
+                topStrip = topStripParked;
             }
             if (topStrip >= 0) {
                 const QRectF outputGeoF = screen->geometryF();

@@ -654,11 +654,11 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId)
         QObject::disconnect(pendingConn.value());
         m_pendingCrossScreenRestore.erase(pendingConn);
     }
-    // Bumping rather than removing: a continuation still in flight for this
-    // window holds the old value and must stay superseded. Removing would let
-    // it match again on the default-constructed 0 if the window were re-armed
-    // from scratch.
-    ++m_crossScreenRestoreGen[windowId];
+    // Safe to erase because the stamps come from a session-global monotonic
+    // counter: a continuation still in flight holds a non-zero stamp, and a
+    // removed entry reads back as 0, so it stays superseded without the map
+    // having to retain a row per window forever.
+    m_crossScreenRestoreGen.remove(windowId);
     // Every screen, not just the one passed. On a cross-output transfer the
     // caller passes the OLD screen, so the destination's saved order kept the
     // id, and other screens' orders can hold it from an earlier session. The
@@ -1064,13 +1064,10 @@ void TilingHandler::onDaemonReady()
         QObject::disconnect(connIt.value());
     }
     m_pendingCrossScreenRestore.clear();
-    // Bump every generation rather than clearing the map: a watcher whose
-    // D-Bus call is still in flight across the daemon restart is unreachable
-    // by the disconnect loop above, and clearing would let it match the
-    // default 0 and apply a dead session's pre-tile size.
-    for (auto genIt = m_crossScreenRestoreGen.begin(); genIt != m_crossScreenRestoreGen.end(); ++genIt) {
-        ++genIt.value();
-    }
+    // Clearing is enough: the stamps are globally monotonic, so a watcher still
+    // in flight across the daemon restart holds a non-zero stamp that a cleared
+    // map (reading back 0) can never match.
+    m_crossScreenRestoreGen.clear();
     // A stacking order saved before the restart describes a dead session's
     // z-order — the first post-restart retile's onComplete would replay it
     // and re-raise windows in stale order; same for a stale pending focus id.

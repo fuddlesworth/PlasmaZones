@@ -447,7 +447,8 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // pre-tile size, and its inner lambda's map removal consumes the newer
         // hop's entry, so the newer connection then survives every later cancel
         // and resizes the window after an unrelated user move.
-        const quint64 restoreGen = ++m_crossScreenRestoreGen[windowId];
+        const quint64 restoreGen = ++m_crossScreenRestoreSeq;
+        m_crossScreenRestoreGen[windowId] = restoreGen;
 
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,

@@ -1231,8 +1231,10 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // the first call, and every arm of releaseWindowedFullscreenState (the
     // no-window miss included) erases the snapshot — so a SURVIVING snapshot
     // means membership was dropped by a path that never called the release
-    // at all (e.g. cleanupAutotileTracking's bare forget) and the release is
-    // still owed. releaseWindowedFullscreenState is idempotent and
+    // at all and the release is still owed. (cleanupAutotileTracking used to
+    // be such a path; it now forgets and releases together, so no CURRENT
+    // caller leaves a lone snapshot — the guard stays because the invariant
+    // it protects is cheap and the next such path would be silent.) releaseWindowedFullscreenState is idempotent and
     // deliberately does not consult the membership hash, so re-driving it
     // off the snapshot is safe.
     const bool hadMembership = m_effect->m_windowedFullscreenWindows.remove(windowId);
