@@ -1690,6 +1690,13 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // to do with the swap. Unresolvable (closed between
                         // the emit and here) simply means no cross-fade.
                         KWin::EffectWindow* const outgoing = m_effect->findWindowByIdExact(snap.tabFrom);
+                        // Standing record for the whole install chain. Every
+                        // link here fails SILENTLY on screen (the pack still
+                        // runs, it just cross-fades the arriving tab against
+                        // itself and reads as the outgoing one never existing),
+                        // so the log is the only way to tell which link broke.
+                        qCDebug(lcEffect) << "tabSwap install:" << snap.windowId << "replacing" << snap.tabFrom
+                                          << "resolved" << (outgoing ? "yes" : "NO");
                         if (outgoing && outgoing != snap.window && !outgoing->isDeleted()) {
                             bool ownsLeg = false;
                             m_effect->tryBeginShaderForEvent(
@@ -1714,16 +1721,30 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                     // the outgoing tab still owns the swap's
                                     // slot and still must not be displaced.
                                     st->tabSwap = true;
-                                    // The capture request itself IS gated on
-                                    // the compiled pack linking uOldWindow,
-                                    // like the drag-snap and held-move
-                                    // requests: a pack that never samples the
-                                    // outgoing tab should not pay for a
-                                    // window-sized FBO and a skipped first
-                                    // frame.
+                                    // The capture itself IS gated on the
+                                    // compiled pack linking uOldWindow, like
+                                    // the drag-snap and held-move requests: a
+                                    // pack that never samples the outgoing tab
+                                    // should not pay for a window-sized FBO.
+                                    //
+                                    // Seeded NOW, synchronously, not deferred
+                                    // to the leg's first paint frame. By that
+                                    // frame the outgoing tab has been
+                                    // re-folded at its park, and the re-fold
+                                    // bakes the park's unwritten backdrop into
+                                    // any frost or blur pane — the "goes
+                                    // opaque, then animates" artifact seen
+                                    // live. Inside this batch slot the
+                                    // composite still holds the fold taken at
+                                    // the column, whose baked backdrop is the
+                                    // one the arriving tab will actually sit
+                                    // over. See seedTabSwapSnapshot.
+                                    qCDebug(lcEffect)
+                                        << "tabSwap leg installed, cached" << (st->cached ? "yes" : "NO")
+                                        << "uOldWindow linked" << (st->cached ? st->cached->iOldWindowLoc : -99)
+                                        << "existing snapshot" << (st->oldSnapshot ? "yes" : "no");
                                     if (st->cached && st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
-                                        st->snapshotSource = outgoing;
-                                        st->needsSnapshot = true;
+                                        m_effect->seedTabSwapSnapshot(*st, outgoing, snap.window);
                                     }
                                 }
                             }

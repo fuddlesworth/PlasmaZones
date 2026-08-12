@@ -49,7 +49,21 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     // reads through `src`, and the two cases differ only in the rect the
     // capture spans — see the logicalGeometry derivation.
     KWin::EffectWindow* const src = transition.snapshotSource ? transition.snapshotSource.data() : window;
+    // Foreign-source diagnostics. INFO because a failed capture is silent by
+    // design (the shader falls back to iHasOldWindow == 0, which collapses the
+    // old side to the live content and reads on screen as the outgoing tab
+    // never having been there), so without a standing record the difference
+    // between "captured" and "fell back" is invisible from the outside.
+    const bool foreignSrc = transition.snapshotSource && src != window;
+    if (foreignSrc) {
+        qCDebug(lcEffect) << "tabSwap capture: src" << getWindowId(src) << "frame" << src->frameGeometry() << "expanded"
+                          << src->expandedGeometry() << "-> into" << getWindowId(window) << "frame"
+                          << window->frameGeometry();
+    }
     if (src->isDeleted()) {
+        if (foreignSrc) {
+            qCWarning(lcEffect) << "tabSwap capture ABORTED: source window is deleted";
+        }
         // The source closed between the install and this first paint frame.
         // Only reachable for a foreign source (the transition's own window is
         // alive by construction, it is being painted). The shader falls back
@@ -63,23 +77,20 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     // The rect the capture spans. For the ordinary case it is the window's own
     // expanded geometry.
     //
-    // For a foreign source it is @p window's expanded rect TRANSLATED to where
-    // the source currently sits, rather than the source's own expanded rect.
-    // That keeps the snapshot in the arriving window's frame-relative
-    // coordinate system, which is the one the shader samples it in:
-    // iAnchorRectInTexture describes @p window's frame within @p window's
-    // expanded rect, and oldColor() folds through it. Taking the source's own
-    // rect instead would misalign the old side by the difference in the two
-    // clients' decoration padding. The translation is a pure offset because a
-    // park moves a window without resizing it, and the two tabs share a column
-    // rect — so the frames are the same size and the sub-rect is the same
-    // sub-rect.
-    QRectF logicalGeometry = window->expandedGeometry();
-    if (src != window) {
-        const KWin::RectF srcFrame = src->frameGeometry();
-        const KWin::RectF ownFrame = window->frameGeometry();
-        logicalGeometry.translate(srcFrame.x() - ownFrame.x(), srcFrame.y() - ownFrame.y());
-    }
+    // For a foreign source it is the SOURCE's own expanded rect, wherever the
+    // source currently sits. Deriving it from the arriving window instead (its
+    // expanded rect translated onto the source) was the first version, and it
+    // only holds while the two agree about where the source is — which the
+    // logs disproved: the arriving tab can still be at ITS park when this
+    // runs, so the translation was computed between two park positions and
+    // landed the capture rect nowhere near the source's composite.
+    //
+    // The residual cost of using the source's own rect is that the two clients
+    // can pad their shadows differently (2020 vs 2038 logical px wide on the
+    // pair this was debugged against), so the old side is sampled across the
+    // arriving card with under a percent of horizontal stretch. That is
+    // invisible, and it is the honest trade for a capture that always lands.
+    const QRectF logicalGeometry = src == window ? window->expandedGeometry() : src->expandedGeometry();
     qreal scale = screen ? screen->scale() : 1.0;
     // Defensive size cap. The snapshot is sampled by normalised uv, so
     // downscaling via a reduced capture scale costs only resolution (no
@@ -93,6 +104,10 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     }
     const QSize textureSize = (logicalGeometry.size() * scale).toSize();
     if (textureSize.isEmpty()) {
+        if (foreignSrc) {
+            qCWarning(lcEffect) << "tabSwap capture ABORTED: empty texture size from" << logicalGeometry << "scale"
+                                << scale;
+        }
         transition.needsSnapshot = false;
         return;
     }
@@ -144,18 +159,33 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
     // Falls back to the raw capture when no composite exists (undecorated
     // windows, or the entry was flushed before the transition began).
     //
-    // Both frames come from the SOURCE window, which is what makes the same
-    // map serve the foreign case. There the composite entry was folded while
-    // the outgoing tab still sat in the column, so its "old" frame is the rect
-    // the arriving window now holds (the tabs share it), and its "new" frame
-    // is the park. Equal sizes, so the scale factors are 1 and the map reduces
-    // to the park translation — exactly undoing the one applied to
-    // logicalGeometry above.
-    if (const auto mpIt = m_surfaceMultipass.find(getWindowId(src)); mpIt != m_surfaceMultipass.end()) {
+    // A FOREIGN source (the tab swap) SKIPS the seed entirely and takes the raw
+    // capture below. The seed is the wrong source for it on the one axis that
+    // matters most, ALPHA: a chain carrying a frost or blur pane samples the
+    // backdrop and folds it INTO the window's pixels, so the composite is
+    // opaque by construction. That is right for a morph, where the same window
+    // is opaque on both sides of the leg and the alternative is watching its
+    // pane blink out. It is wrong here — live-confirmed on a translucent
+    // Kirigami pair — because the arriving tab is drawn live and translucent
+    // while the captured outgoing one is not, so the swap starts opaque and
+    // resolves to transparent, and the whole leg announces itself.
+    //
+    // The raw path draws the window item WITHOUT the chain fold, which
+    // preserves the client's own alpha exactly. The cost is that the outgoing
+    // side loses PlasmaZones' own decoration for the leg's duration, and that
+    // cost is far smaller here than on a morph: both tabs sit in one column
+    // rect wearing the same resolved decoration, so the arriving side's live
+    // fold already draws the pane the outgoing side is missing, in the same
+    // place, at the same size.
+    if (const auto mpIt = src == window ? m_surfaceMultipass.find(getWindowId(src)) : m_surfaceMultipass.end();
+        mpIt != m_surfaceMultipass.end()) {
         const SurfaceMultipassState& mp = mpIt->second;
         KWin::GLTexture* const comp = mp.compositeTex[mp.finalSlot].get();
-        const QRectF oldFrame = src == window ? transition.fromGeometry : QRectF(window->frameGeometry());
+        // Unconditionally the transition's own window here: the guard above
+        // admits only src == window, so the foreign case never reaches this
+        // map and no longer needs a term in it.
         const QRectF newFrame = src->frameGeometry();
+        const QRectF oldFrame = transition.fromGeometry;
         if (comp && mp.canvasGeo.isValid() && !mp.canvasGeo.isEmpty() && oldFrame.width() > 0.0
             && oldFrame.height() > 0.0 && newFrame.width() > 0.0 && newFrame.height() > 0.0) {
             // T maps snapshot-space logical points into composite space:
@@ -204,6 +234,13 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
         }
     }
 
+    // FOREIGN-SOURCE fallback note: reaching the raw capture below for a tab
+    // swap means seedTabSwapSnapshot found no composite at install time (an
+    // undecorated source, or its entry was reaped at the park). The raw draw
+    // is position-independent and preserves the client's own alpha, so it is
+    // the right fallback — it merely lacks the decoration chain, which for an
+    // undecorated source is nothing to lack.
+    //
     // Bypass the source's own shader for the raw capture, restore it
     // afterwards. Resolved from the SOURCE's live transition rather than from
     // `transition.cached`: the two are the same object in the ordinary case,
@@ -247,8 +284,149 @@ void PlasmaZonesEffect::captureOldWindowSnapshot(ShaderTransition& transition, K
 
     setShader(src, srcShader);
 
+    if (foreignSrc) {
+        qCDebug(lcEffect) << "tabSwap capture OK, rect" << logicalGeometry << "tex" << textureSize << "scale" << scale;
+    }
     transition.oldSnapshot = std::move(tex);
     transition.needsSnapshot = false;
+}
+
+void PlasmaZonesEffect::seedTabSwapSnapshot(ShaderTransition& transition, KWin::EffectWindow* src,
+                                            KWin::EffectWindow* window)
+{
+    // Capture the outgoing tab AT INSTALL TIME, from the decorated composite,
+    // while that composite is still the PRE-SWITCH fold.
+    //
+    // Timing is the entire point of this function existing separately from
+    // captureOldWindowSnapshot. The ordinary snapshot is taken lazily on the
+    // leg's first paint frame, and by then the outgoing tab has been committed
+    // to its park and re-folded there — so the composite the paint-time
+    // capture reads carries the PARK's backdrop baked into any frost or blur
+    // pane. Below the union of all outputs that backdrop is unwritten
+    // garbage, and an old side wearing it flashes visibly before the
+    // cross-fade resolves to the arriving tab's live, correctly-lit pane
+    // (live-diagnosed on a translucent Kirigami pair). Here, inside the batch
+    // slot, no paint has run since the switch: the entry still holds the fold
+    // taken at the COLUMN, whose baked backdrop is the very backdrop the
+    // arriving tab is about to be composited over. An opaque pane carrying
+    // the right backdrop is visually identical to the live translucent one —
+    // which is the same argument the morph seed rests on — so keeping the
+    // decoration costs nothing.
+    //
+    // The map is the identity, and it is exact rather than convenient: the two
+    // tabs of a tabbed column share ONE rect, the apply that just ran
+    // committed the arriving window to it (moveResize updates frameGeometry
+    // synchronously; the no-op-skip bail in applyWindowGeometry relies on the
+    // same fact), and the composite was folded at that same rect. The capture
+    // spans the ARRIVING window's expanded rect so the snapshot lives in the
+    // coordinate system iAnchorRectInTexture describes; the clip against the
+    // source's canvas trims the sliver where the two clients' shadow padding
+    // disagrees, which stays cleared like every out-of-canvas band.
+    //
+    // Falls back to the lazy path (needsSnapshot, raw drawWindow at first
+    // paint) when there is no usable composite: an undecorated source has no
+    // entry, and a reaped one is already park-poisoned. The raw draw
+    // preserves the client's own alpha and merely lacks the decoration chain,
+    // which for an undecorated source is nothing to lack.
+    const auto arm_fallback = [&] {
+        transition.snapshotSource = src;
+        transition.needsSnapshot = true;
+    };
+    if (!src || !window || src->isDeleted()) {
+        return; // no snapshot possible at all; the shader's iHasOldWindow==0 fallback covers it
+    }
+    const auto mpIt = m_surfaceMultipass.find(getWindowId(src));
+    if (mpIt == m_surfaceMultipass.end()) {
+        arm_fallback();
+        return;
+    }
+    const SurfaceMultipassState& mp = mpIt->second;
+    KWin::GLTexture* const comp = mp.compositeTex[mp.finalSlot].get();
+    if (!comp || !mp.canvasGeo.isValid() || mp.canvasGeo.isEmpty()) {
+        arm_fallback();
+        return;
+    }
+    // Outside any paint pass, so the context must be made current explicitly —
+    // the decoration prewarm and the thumbnail capture set the precedent. A
+    // blit is the only GL this path issues; the scene-walk hazards the lazy
+    // capture's drawWindow carries do not arise.
+    if (!KWin::effects || !KWin::effects->makeOpenGLContextCurrent()) {
+        arm_fallback();
+        return;
+    }
+    const QRectF logicalGeometry = window->expandedGeometry();
+    const KWin::LogicalOutput* const screen = window->screen();
+    qreal scale = screen ? screen->scale() : 1.0;
+    constexpr qreal kMaxSnapshotDim = 8192.0;
+    const qreal longestPx = qMax(logicalGeometry.width(), logicalGeometry.height()) * scale;
+    if (longestPx > kMaxSnapshotDim) {
+        scale *= kMaxSnapshotDim / longestPx;
+    }
+    const QSize textureSize = (logicalGeometry.size() * scale).toSize();
+    if (textureSize.isEmpty()) {
+        arm_fallback();
+        return;
+    }
+    const ShaderInternal::ScopedGlState glStateGuard;
+    std::unique_ptr<KWin::GLTexture> tex = KWin::GLTexture::allocate(GL_RGBA8, textureSize);
+    if (!tex) {
+        arm_fallback();
+        return;
+    }
+    tex->setFilter(GL_LINEAR);
+    tex->setWrapMode(GL_CLAMP_TO_EDGE);
+    KWin::GLFramebuffer fbo(tex.get());
+    KWin::GLFramebuffer srcFbo(comp);
+    if (!fbo.valid() || !srcFbo.valid()) {
+        arm_fallback();
+        return;
+    }
+    // Identity map: snapshot space IS canvas space up to the two canvases'
+    // origins, so source and dest are the same logical rect expressed in each
+    // texture's own pixels.
+    const QRectF srcClipped = logicalGeometry & mp.canvasGeo;
+    if (srcClipped.isEmpty()) {
+        // The composite is NOT at the column after all (a stale entry from a
+        // position this code did not predict). Trust the disagreement over
+        // the theory and let the raw capture handle it.
+        qCWarning(lcEffect) << "tabSwap seed: composite canvas" << mp.canvasGeo << "does not cover the column rect"
+                            << logicalGeometry << "- falling back to the raw capture";
+        arm_fallback();
+        return;
+    }
+    const qreal srcPxPerX = comp->width() / mp.canvasGeo.width();
+    const qreal srcPxPerY = comp->height() / mp.canvasGeo.height();
+    const qreal dstPxPerX = textureSize.width() / logicalGeometry.width();
+    const qreal dstPxPerY = textureSize.height() / logicalGeometry.height();
+    const QRect srcPx =
+        QRectF((srcClipped.x() - mp.canvasGeo.x()) * srcPxPerX, (srcClipped.y() - mp.canvasGeo.y()) * srcPxPerY,
+               srcClipped.width() * srcPxPerX, srcClipped.height() * srcPxPerY)
+            .toRect();
+    const QRect dstPx =
+        QRectF((srcClipped.x() - logicalGeometry.x()) * dstPxPerX, (srcClipped.y() - logicalGeometry.y()) * dstPxPerY,
+               srcClipped.width() * dstPxPerX, srcClipped.height() * dstPxPerY)
+            .toRect();
+    if (srcPx.isEmpty() || dstPx.isEmpty()) {
+        arm_fallback();
+        return;
+    }
+    glDisable(GL_SCISSOR_TEST);
+    KWin::GLFramebuffer::pushFramebuffer(&fbo);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    KWin::GLFramebuffer::popFramebuffer();
+    KWin::GLFramebuffer::pushFramebuffer(&srcFbo);
+    fbo.blitFromFramebuffer(KWin::Rect(srcPx.x(), srcPx.y(), srcPx.width(), srcPx.height()),
+                            KWin::Rect(dstPx.x(), dstPx.y(), dstPx.width(), dstPx.height()), GL_LINEAR);
+    KWin::GLFramebuffer::popFramebuffer();
+    qCDebug(lcEffect) << "tabSwap seed OK from pre-park composite, canvas" << mp.canvasGeo << "src px" << srcPx
+                      << "dst px" << dstPx;
+    transition.oldSnapshot = std::move(tex);
+    transition.needsSnapshot = false;
+    // The source is recorded even on the seeded path: teardown and diagnostics
+    // key off it, and a later re-capture (never expected, but the field is a
+    // contract) must not silently flip back to the transition's own window.
+    transition.snapshotSource = src;
 }
 
 void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data,

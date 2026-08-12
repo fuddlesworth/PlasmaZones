@@ -66,9 +66,30 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
     // One skipped frame at the very start of a snap is imperceptible. If
     // capture fails, needsSnapshot is cleared inside the helper and the
     // morph shader falls back to no cross-fade.
+    //
+    // EXCEPT for the scrolling tab swap, where the skipped frame is the most
+    // visible thing on screen. A snap morph hides it because the window is
+    // mid-move and its old pixels are still under the cursor; a tab swap has
+    // already parked the outgoing tab off-canvas, so the one frame that draws
+    // nothing shows the WALLPAPER through the column — a flash, then the
+    // animation. Falling through instead draws this frame through the shader
+    // at progress ~0, which is oldColor, which is the outgoing tab: exactly
+    // the frame the user was already looking at, so the leg begins invisibly.
+    //
+    // The cost is the second effects->drawWindow this comment warns about: the
+    // capture's (into its FBO) and the on-screen one below now both run in
+    // this outer paintWindow, advancing KWin's shared chain iterator twice.
+    // That is what ghost-trails the SURFACE-EXTENT path, and it is why this is
+    // gated on the tab leg rather than taken for every capture — a tab pack is
+    // anchor-extent (it lays no output-spanning quad), so the iterator's
+    // second pass has no oversized region to smear. Widen this gate only with
+    // a surface-extent pack in hand to watch it on.
     if (transition.needsSnapshot && !transition.oldSnapshot) {
+        const bool tabLeg = transition.tabSwap;
         captureOldWindowSnapshot(transition, w);
-        return ShaderBranchOutcome::Handled;
+        if (!tabLeg) {
+            return ShaderBranchOutcome::Handled;
+        }
     }
     // Two progress sources, picked by the transition's mode (see
     // ShaderTransition's docstring). Lifecycle events started via

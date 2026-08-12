@@ -221,6 +221,12 @@ protected:
     // morph paint, while the content is still old (the moveResize configure
     // hasn't round-tripped).
     void captureOldWindowSnapshot(ShaderTransition& transition, KWin::EffectWindow* window);
+    /// Install-time snapshot for the scrolling tab swap: blits the outgoing
+    /// tab's decorated composite while it is still the PRE-SWITCH fold (the
+    /// lazy first-paint capture reads a park-poisoned re-fold instead — see
+    /// the definition). Arms the lazy raw-capture fallback when no usable
+    /// composite exists.
+    void seedTabSwapSnapshot(ShaderTransition& transition, KWin::EffectWindow* src, KWin::EffectWindow* window);
 
     /// Outcome of the shader-transition branch extracted from paintWindow.
     /// Handled: the branch painted (or captured / suppressed / queued its own
