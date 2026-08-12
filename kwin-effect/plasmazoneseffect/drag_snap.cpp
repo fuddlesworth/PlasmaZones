@@ -26,6 +26,7 @@
 #include <QDBusPendingReply>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QtMath>
 
 #include <memory>
 
@@ -177,16 +178,36 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     // here untouched and negotiates its own size asynchronously (a min size
     // larger than the column lands elsewhere), and on a scaled XWayland output
     // KWin round-trips the request through device pixels, so the committed
-    // frame is this rect rounded. Every consumer is an intersects() test or an
-    // animation endpoint, none an exact equality, so neither divergence bites
-    // — but do not add an equality comparand without revisiting this.
+    // frame is this rect rounded. The scroll consumers are all intersects()
+    // tests or animation endpoints, so neither divergence bites there — do not
+    // add an equality comparand among THOSE without revisiting this.
     //
-    // Idempotent: the shift below is gated on the size actually changing, and
-    // KWin's own constrainFrameSize is a fixed point (clamp to [min,max], then
-    // floor to base + n*increment), so re-constraining an already constrained
-    // rect takes no branch and returns it unchanged. The deferred user-move
-    // replay depends on that — it re-enters applyWindowGeometry with a rect
-    // this function already produced.
+    // One equality against this rect is sanctioned and lives in
+    // applyWindowGeometry: the already-at-target no-op skip compares `geo`
+    // to `frameGeometry().toRect()`. It is safe because a miss costs only a
+    // redundant moveResize (KWin's own moveResize is internally a no-op at
+    // matching geometry), never a wrong rect — the divergences can defeat the
+    // skip, they cannot make it fire on the wrong window position.
+    //
+    // Idempotent — and the rounding direction below is what makes it so.
+    // KWin's own constrainFrameSize is already a fixed point (clamp to
+    // [min,max], then floor to base + n*increment); it is not the source of
+    // any non-idempotence. The rounding to integers HERE was. On a
+    // fractional-scale XWayland output KWin runs that arithmetic in
+    // fractional logical units (it divides the increment and the base by the
+    // xwayland scale), so the returned size can sit exactly ON a grid point
+    // with a fractional part. qRound moved it BELOW that point, and the next
+    // pass floored into the previous bucket — a whole increment lost, plus a
+    // second centring shift, every time the rect was re-constrained. The
+    // deferred user-move replay is exactly such a second caller: it re-enters
+    // applyWindowGeometry with a rect this function already produced.
+    //
+    // qCeil is a fixed point in every case (increments below 1, a zero base,
+    // an already-integral size), which is why it must not be changed back to
+    // qRound. It can overshoot a fractional max size by up to a pixel, which
+    // KWin's programmatic moveResize does commit without re-enforcing the
+    // size hints — bounded, non-compounding, and the right direction: the
+    // undershoot qRound produced clipped client content instead.
     if (!window || !window->isX11Client()) {
         return geometry;
     }
@@ -203,8 +224,8 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     }
     QRect geo = geometry;
     const QSizeF constrained = kw->constrainFrameSize(QSizeF(geo.size()));
-    const int cw = qRound(constrained.width());
-    const int ch = qRound(constrained.height());
+    const int cw = qCeil(constrained.width());
+    const int ch = qCeil(constrained.height());
     if (cw != geo.width() || ch != geo.height()) {
         // BOTH directions, not shrink-only: a min size larger than
         // the zone previously skipped this branch entirely, so KWin
@@ -349,12 +370,29 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // window back to the old screen's rect.
         const QString deferScreen = getWindowScreenId(window);
         const uint64_t deferGen = m_daemonGate.batchGenByScreen.value(deferScreen);
+        // Retire any replay this window already has pending. Two applies inside
+        // one batch generation on one screen both pass the supersession guard
+        // below, so without this both replays fire at drag end and the window
+        // pays two moveResizes, two animator retargets and two rule resolves for
+        // one reposition. The newer rect is the one the caller means.
+        if (auto prior = m_deferredGeometryReplay.find(window); prior != m_deferredGeometryReplay.end()) {
+            disconnect(*prior);
+            m_deferredGeometryReplay.erase(prior);
+        }
         auto conn = std::make_shared<QMetaObject::Connection>();
         *conn =
             connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
                     [this, safeWindow, geo, skipAnimation, profilePath, conn, deferScreen, deferGen, originOverride,
                      visualTargetOverride](KWin::EffectWindow*) {
                         disconnect(*conn);
+                        // Drop the handle on every exit, not just the applying
+                        // one: a stale entry would make the next defer for this
+                        // window disconnect an already-dead connection and, once
+                        // the pointer is recycled, retire a live replay that
+                        // belongs to a different window.
+                        if (safeWindow) {
+                            m_deferredGeometryReplay.remove(safeWindow.data());
+                        }
                         if (!safeWindow || safeWindow->isDeleted()) {
                             return;
                         }
@@ -403,6 +441,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                         applyWindowGeometry(safeWindow, geo, false, skipAnimation, profilePath, originOverride,
                                             visualTargetOverride);
                     });
+        m_deferredGeometryReplay.insert(window, *conn);
         return;
     }
 
@@ -466,6 +505,14 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // animation on every rapid identical retarget.
         if (m_windowAnimator->hasAnimation(window) && m_windowAnimator->isAnimatingToTarget(window, animTarget)
             && (!visualTargetOverride.isValid() || window->frameGeometry().toRect() == geo)) {
+            // Release the open-restore suppression on the way out, like every
+            // other early return in this function. Reaching here means an
+            // EARLIER apply already committed this geometry and started the
+            // animation, so the reposition the suppression was waiting to mask
+            // has happened — the settle hook has nothing further to wait for,
+            // and holding on would withhold the window from compositing until
+            // the hard deadline for a configure that will never come.
+            endRestoreSuppression(window);
             return; // Already animating to this target (with the frame committed, when split)
         }
 
@@ -474,9 +521,19 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // downstream bounds / padding queries see the updated
         // expandedGeometry for this frame.
         KWin::Window* kw = window->window();
-        if (kw) {
-            kw->moveResize(targetFrame);
+        if (!kw) {
+            // Same bail as the non-animated sibling at the tail of this
+            // function, and for the same reason: with no KWin::Window there is
+            // no way to commit the geometry, and animating anyway would morph
+            // the window toward a target it will never actually reach — it
+            // would snap back the moment the animation expired. window() is
+            // never null in modern KWin, so this is defensive; log it like the
+            // sibling does rather than proceeding silently.
+            qCWarning(lcEffect) << "Cannot get underlying Window from EffectWindow";
+            endRestoreSuppression(window);
+            return;
         }
+        kw->moveResize(targetFrame);
 
         // Per-window animation motion-cascade: rule → per-event motion node
         // (incl. the `window.movement` "All") → global animator profile. A
@@ -487,11 +544,27 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         // stays on the curve that started it for visual continuity.
         //
         // Reuse the gate's query when it built one (rules present); build
-        // only when the gate's fast paths never needed it — matches the shape
-        // `shouldAnimateWindow` uses for its rule-override gate, so a rule
-        // that gates the animation also resolves its curve / timing / shader
-        // slots.
-        const PhosphorRules::WindowQuery query = sharedQuery ? *sharedQuery : ruleQuery(window);
+        // only when a consumer below actually asks — matches the shape
+        // `shouldAnimateWindow` uses for its own rule-override gate (the lazy
+        // accessor in window_filtering.cpp), so a rule that gates the
+        // animation also resolves its curve / timing / shader slots without
+        // either side paying a second `ruleQuery` walk (~30 KWin accessors
+        // plus the QString copies).
+        //
+        // Memoises straight back into the caller-owned slot, so the build
+        // survives for whichever consumer asks next. Returning a const& also
+        // drops the by-value WindowQuery copy the old form made on EVERY
+        // animated apply. The build itself is skipped only on the legs that
+        // never reach a consumer — the motion cascade is gated on a non-empty
+        // tree / rule set, and the shader resolve sits behind the animator
+        // actually having taken the leg (and behind this block's own early
+        // returns).
+        const auto query = [this, window, &sharedQuery]() -> const PhosphorRules::WindowQuery& {
+            if (!sharedQuery) {
+                sharedQuery = ruleQuery(window);
+            }
+            return *sharedQuery;
+        };
         const QString windowId = getWindowId(window);
         const auto& baseProfile = m_windowAnimator->profile();
         // Resolve the fully-cascaded motion profile for this event (curve +
@@ -515,7 +588,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         const PhosphorAnimation::Profile* motionOverridePtr = nullptr;
         PhosphorAnimation::Profile motionProfile;
         if (hasMotionOverrides || hasAnimationRules) {
-            motionProfile = resolveEventMotionProfile(profilePath, query, windowId);
+            motionProfile = resolveEventMotionProfile(profilePath, query(), windowId);
             if (motionProfile != baseProfile)
                 motionOverridePtr = &motionProfile;
         }
@@ -569,8 +642,9 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         if (m_windowAnimator->hasAnimation(window)) {
             // Same cascade as tryBeginShaderForEvent: rule layer wins
             // for matching windows; engaged-empty rule effectId blocks
-            // the tree fallthrough. Reuse the `query` local from the
-            // motion-cascade above instead of rebuilding the WindowQuery.
+            // the tree fallthrough. Goes through the same memoised `query`
+            // accessor as the motion cascade above, so the WindowQuery is
+            // built at most once for this apply however many consumers run.
             //
             // Route through `resolveAnimationShaderProfile` (which
             // uses `evaluator.resolveCached(windowId, query)`). When a rule
@@ -592,8 +666,9 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
             // via `motionProfile` above (driving the animator's
             // duration), so the shader still terminates with the
             // rule-overridden snap motion.
-            const auto resolved = PlasmaZones::resolveAnimationShaderProfile(
-                m_shaderManager.animationRuleEvaluator(), m_shaderManager.profileTree(), windowId, query, profilePath);
+            const auto resolved = PlasmaZones::resolveAnimationShaderProfile(m_shaderManager.animationRuleEvaluator(),
+                                                                             m_shaderManager.profileTree(), windowId,
+                                                                             query(), profilePath);
             auto shaderProfile = resolved.profile;
             if (!resolved.shaderSlotFromRule && shaderProfile.effectiveEffectId().isEmpty()) {
                 // No rule matched and no tree override resolved a shader for
@@ -793,16 +868,37 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
         return;
     }
 
+    // Upper bound as well as a lower one. This is an unvalidated D-Bus wire
+    // value (the daemon's recorded pre-snap size), and the pair goes straight
+    // into a moveResize — the same discipline the scrolling visual-delta pair
+    // gets on the way in (tiling.cpp bounds it before it can reach the paint
+    // path). The full virtual screen, not this window's output: a window
+    // manually resized to span two monitors before it was snapped has a
+    // legitimate pre-snap size larger than either one, and clamping to a
+    // single output would shrink it on every drag-out. Anything past the whole
+    // desktop is garbage by construction, so bound rather than reject: a
+    // clamped restore still returns the window to a usable size, where a
+    // rejected one leaves it stuck at the zone's.
+    const QSize virtualSize = KWin::effects ? KWin::effects->virtualScreenSize() : QSize();
+    if (virtualSize.isValid()) {
+        width = qMin(width, virtualSize.width());
+        height = qMin(height, virtualSize.height());
+    }
+
     // Restore-size-only: keep current position, apply pre-snap width/height
     QRectF frame = window->frameGeometry();
     // qRound, not truncation — fractional-scale sub-pixel residue (see above).
     QRect geometry(qRound(frame.x()), qRound(frame.y()), width, height);
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
-    // Live drag-out unsnap: restoring pre-snap dimensions while the user is still dragging.
-    // Logically a snap-out (the window is leaving zone-managed sizing).
-    applyWindowGeometry(window, geometry, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
-                        PhosphorAnimation::ProfilePaths::WindowSnapOut);
+    // Live drag-out unsnap: restoring pre-snap dimensions while the user is
+    // still dragging. No animation profile is passed, and that is deliberate
+    // rather than an omission: allowDuringDrag skips the whole animated branch
+    // in applyWindowGeometry, so a during-drag restore is instant by
+    // construction and any profile handed in here would be dead argument. The
+    // window is following the pointer — it has to resize under the cursor now,
+    // not ease toward the size over the next few frames.
+    applyWindowGeometry(window, geometry, /*allowDuringDrag=*/true, /*skipAnimation=*/false);
 }
 
 void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const PhosphorProtocol::DragPolicy& newPolicy)
@@ -923,8 +1019,16 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
         // teardown when the global is already gone — same rule and reason
         // repaintSnapRegions documents above.
         if (!m_keyboardGrabbed && KWin::effects) {
-            KWin::effects->grabKeyboard(this);
-            m_keyboardGrabbed = true;
+            // The return value is the grab: KWin refuses when another effect
+            // already holds the keyboard. Latching m_keyboardGrabbed true
+            // without having earned it made the unconditional ungrabKeyboard at
+            // drag end release the OTHER effect's grab, silently cutting it off
+            // from keys for the rest of its session.
+            m_keyboardGrabbed = KWin::effects->grabKeyboard(this);
+            if (!m_keyboardGrabbed) {
+                qCWarning(lcEffect) << "dragPolicyChanged: keyboard grab refused (another effect holds it) for"
+                                    << windowId << "- Escape will reach KWin's move filter";
+            }
         }
         return;
     }

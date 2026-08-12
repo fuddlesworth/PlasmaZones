@@ -762,6 +762,32 @@ void PlasmaZonesEffect::updateAllDecorations()
     }
 }
 
+bool PlasmaZonesEffect::hasDecorationTreeContent() const
+{
+    // enabledChain(), the SAME accessor updateWindowDecoration renders from, not
+    // effectiveChain(): the latter keeps packs the user toggled off, so a tree
+    // whose baseline chain exists but has every pack disabled would report
+    // "content" and make every snap / float / zone change do full per-window
+    // reconcile work for a configuration that can decorate nothing.
+    if (!m_decorationTree.resolve(QString()).enabledChain().isEmpty()) {
+        return true;
+    }
+    // The override half asks the same question per registered path, rather than
+    // taking overriddenPaths().isEmpty() as the answer: that accessor reports
+    // every path that carries an override with no inspection of its chain at
+    // all, so an override with every pack disabled kept exactly the cost the
+    // baseline half above was changed to remove. resolve() rather than
+    // directOverride() so a path whose own profile only retunes parameters
+    // still sees the chain it inherits from its ancestors.
+    const QStringList paths = m_decorationTree.overriddenPaths();
+    for (const QString& path : paths) {
+        if (!m_decorationTree.resolve(path).enabledChain().isEmpty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 {
     return m_snapHandler->isTiledWindow(windowId);

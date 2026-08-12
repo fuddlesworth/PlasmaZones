@@ -33,17 +33,25 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 {
-    if (!w || w->isDeleted() || m_inOutputChanged) {
+    if (!w || w->isDeleted()) {
         return;
     }
-    // Re-entrancy guard: geometry changes from onWindowClosed/notifyWindowAdded
-    // could trigger outputChanged again if tiling moves the window across screens.
-    m_inOutputChanged = true;
-    const auto guard = qScopeGuard([this] {
-        m_inOutputChanged = false;
-    });
 
     const QString windowId = m_effect->getWindowId(w);
+    // Re-entrancy guard, PER WINDOW: geometry changes from
+    // releaseWindowTracking/notifyWindowAdded below can trigger outputChanged
+    // again if tiling moves the window across screens, and re-entering for THAT
+    // window mid-transfer is what must be refused. A nested call for a different
+    // window is a genuine hop and is let through — refusing it dropped the hop
+    // permanently, since the caller has already pre-written the tracked-screen
+    // record and the detector never re-fires for the same physical move.
+    if (m_outputChangeInFlight.contains(windowId)) {
+        return;
+    }
+    m_outputChangeInFlight.insert(windowId);
+    const auto guard = qScopeGuard([this, windowId] {
+        m_outputChangeInFlight.remove(windowId);
+    });
     const QString newScreenId = m_effect->getWindowScreenId(w);
 
     if (!m_notifiedWindows.contains(windowId)) {
@@ -99,8 +107,11 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         const QString positional =
             m_effect->resolveEffectiveScreenId(QPoint(qRound(cf.x()), qRound(cf.y())), m_effect->windowOutput(w));
         const QString sourceScreenId = expIt.value().sourceScreenId;
+        // constFind, not value(): value() materialises a copy of the whole
+        // per-screen QSet just to probe one id.
+        const auto srcBucket = m_border.tiledWindowsByScreen.constFind(sourceScreenId);
         const bool stillTiledOnSource = m_scrollingScreens.contains(sourceScreenId)
-            && m_border.tiledWindowsByScreen.value(sourceScreenId).contains(windowId);
+            && srcBucket != m_border.tiledWindowsByScreen.constEnd() && srcBucket.value().contains(windowId);
         if (expIt.value().targetScreenId == positional && !stillTiledOnSource) {
             m_expectedOutputMove.erase(expIt);
             // The cross-mode test reads the MARKER's source, not oldScreenId,
@@ -173,6 +184,36 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         }
     }
 
+    // "Is this window a live member of some scrolling strip?" — membership
+    // tested DIRECTLY, in the two places below that need the answer.
+    //
+    // Deliberately not scrollTrackedScreenFor: that function is not a pure
+    // predicate. It emits the scrollClip LOST warning and mutates its mutable
+    // dedupe set, neither of which belongs on a bookkeeping path — a probe from
+    // here would either raise a paint-path diagnostic about a window nobody was
+    // clipping, or consume the dedupe slot and swallow the genuine report that
+    // follows. It also derives from the same computation oldScreenId does, which
+    // is the circularity the bail below rejects.
+    //
+    // The RAW m_scrollingScreens set, deliberately (not isScrollingScreen's
+    // managed intersection): both callers want the wide, fail-safe answer — the
+    // union and the scrolling set arrive on independent signals. The connected-
+    // output gate scrollTrackedScreenFor applies is deliberately absent for the
+    // same reason: this asks who OWNS the window, not whether its clip can be
+    // computed, and a window whose output vanished is still the strip's.
+    const auto inScrollStrip = [this, &windowId]() {
+        for (const QString& scrollScreen : std::as_const(m_scrollingScreens)) {
+            const auto bucket = m_border.tiledWindowsByScreen.constFind(scrollScreen);
+            if (bucket != m_border.tiledWindowsByScreen.constEnd() && bucket.value().contains(windowId)) {
+                return true;
+            }
+        }
+        // Recorded-screen fallback: screenForTiledWindow alone returns the FIRST
+        // bucket in hash order and has no such fallback, so it misses exactly the
+        // stale-bucket case this predicate was built for.
+        return isTiledWindow(windowId) && m_scrollingScreens.contains(m_notifiedWindowScreens.value(windowId));
+    };
+
     if (oldScreenId.isEmpty() || oldScreenId == newScreenId) {
         // Belt-and-braces drains for a marker whose move never
         // materialised (refused receive, window closed mid-move):
@@ -184,7 +225,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // Either way, drop the one-shot rather than let it swallow a later
         // genuine move's notification.
         if (const auto expIt = m_expectedOutputMove.constFind(windowId); expIt != m_expectedOutputMove.constEnd()) {
-            if (expIt.value().targetScreenId == newScreenId || scrollTrackedScreenFor(windowId).isEmpty()) {
+            if (expIt.value().targetScreenId == newScreenId || !inScrollStrip()) {
                 m_expectedOutputMove.erase(expIt);
             }
         }
@@ -202,7 +243,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // transfer, and it cannot be relied on: both oldScreenId and newScreenId
     // derive from scrollTrackedScreenFor, so the moment that answers empty for
     // any reason the two diverge and the guard opens exactly when it is
-    // needed. The transfer then calls onWindowClosed, which wipes the
+    // needed. The transfer then calls releaseWindowTracking, which wipes the
     // membership that scrollTrackedScreenFor reads, so it can never answer
     // again — and because the tile batch is emit-on-change, a focus-only
     // relayout resolving to identical rects sends nothing that would restore
@@ -215,35 +256,18 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // windows and can never route a scroll handoff".
     //
     // The test must answer the same question scrollTrackedScreenFor answers
-    // (without CALLING it — oldScreenId derives from it, which is the
-    // circularity the paragraph above rejects): "is this window in ANY
-    // scrolling bucket, or recorded on a scrolling screen while tiled".
-    // screenForTiledWindow alone returns the FIRST bucket in hash order and
-    // has no recorded-screen fallback, so it can miss exactly the stale-
-    // bucket rescue case the predicate was built for — and a miss here runs
-    // the transfer, whose onWindowClosed wipes the bucket permanently.
+    // without CALLING it — oldScreenId derives from it, which is the
+    // circularity the paragraph above rejects. That is the inScrollStrip
+    // predicate defined above: "in ANY scrolling bucket, or recorded on a
+    // scrolling screen while tiled". A miss here runs the transfer, whose
+    // releaseWindowTracking wipes the bucket permanently, which is why the
+    // predicate is deliberately wide.
     //
     // A scroll window returning here deliberately keeps any armed
     // m_expectedOutputMove marker: the marker path is the only reliable
     // scroll transfer signal, and the same-screen drain above already
     // handles its disposal for scroll windows.
-    //
-    // The RAW m_scrollingScreens set, deliberately (not isScrollingScreen's
-    // managed intersection): this is a BAIL, and wide is its fail-safe
-    // direction — the union and the scrolling set arrive on independent
-    // signals, and skipping a transfer for a frame is recoverable while a
-    // wrongly-run transfer wipes the bucket for good.
-    bool inScrollBucket = false;
-    for (const QString& scrollScreen : std::as_const(m_scrollingScreens)) {
-        if (m_border.tiledWindowsByScreen.value(scrollScreen).contains(windowId)) {
-            inScrollBucket = true;
-            break;
-        }
-    }
-    if (inScrollBucket) {
-        return;
-    }
-    if (isTiledWindow(windowId) && m_scrollingScreens.contains(m_notifiedWindowScreens.value(windowId))) {
+    if (inScrollStrip()) {
         return;
     }
 
@@ -284,8 +308,8 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 
     qCInfo(lcEffect) << "Window moved between monitors:" << windowId << oldScreenId << "->" << newScreenId;
 
-    // Snapshot the pre-autotile geometry BEFORE onWindowClosed clears it
-    // (the close-cleanup sweeps the geometry out of EVERY screen bucket).
+    // Snapshot the pre-autotile geometry BEFORE releaseWindowTracking clears it
+    // (its cleanup funnel sweeps the geometry out of EVERY screen bucket).
     QRectF savedPreAutotileGeo;
     QString savedPreAutotileBucket;
     if (oldIsAutotile) {
@@ -295,7 +319,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
     // The predicate mirrors the re-add condition below.
     const bool willReAdd = newIsAutotile && !w->isMinimized() && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
 
-    // Minimize-float ownership must SURVIVE the transfer: onWindowClosed's
+    // Minimize-float ownership must SURVIVE the transfer: releaseWindowTracking's
     // cleanup wipes it wholesale, the window is alive and still floated
     // daemon-side, and willReAdd is false for a minimized window — without
     // re-establishing the claim (or handing it to the snap handler for a
@@ -348,9 +372,20 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             } else if (wasInUnminimizeGrace) {
                 // The grace timer died with the old screen's cleanup and the
                 // unminimize edge will not repeat. The retry path re-validates
-                // against the window's CURRENT screen and dispatches — the
-                // budget seeded above keeps a bouncing window bounded.
+                // against the window's CURRENT screen and dispatches, so it is
+                // the re-arm — but a HOP is not a refusal, and it must not spend
+                // the budget: a window bounced across screens three times during
+                // its grace exhausted the whole allowance without one unfloat
+                // ever having been declined, and then stayed floating with the
+                // marker held. Restore the budget the hop carried in, so only
+                // genuine refusals (the retry timer's own re-arms, and the
+                // dispatch error arms) count against it.
                 scheduleUnminimizeUnfloatRetry(windowId);
+                if (savedUnfloatBudget > 0) {
+                    m_unfloatRetryAttempts[windowId] = savedUnfloatBudget;
+                } else {
+                    m_unfloatRetryAttempts.remove(windowId);
+                }
             }
             qCInfo(lcEffect) << "Autotile: minimize-float ownership carried across screens:" << windowId << "->"
                              << newScreenId;
@@ -388,25 +423,38 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             qCWarning(lcEffect) << "Autotile: minimize-float ownership dropped, no snap handler for" << windowId << "->"
                                 << newScreenId;
         }
+    } else if (ownedMinimizeFloat) {
+        // Owned, but none of the three carry terms hold: the window is neither
+        // minimized, nor mid-unfloat, nor inside the unminimize grace. In
+        // practice that is a window whose retry budget ran out — the grace and
+        // the retry timer are both gone, so nothing re-arms — and the cleanup
+        // above has just dropped the marker. The predicate is deliberately NOT
+        // relaxed: carrying a dead budget onto the new screen re-establishes an
+        // ownership that can never act. Log it so the loss is legible instead of
+        // silent, which is the only thing the sibling arms guarantee.
+        qCWarning(lcEffect) << "Autotile: minimize-float ownership dropped on screen change for" << windowId << "->"
+                            << newScreenId << "- window is not minimized, in flight or in the unminimize grace"
+                            << "(retry budget used:" << savedUnfloatBudget << ')';
+    }
+
+    // Re-file the snapshot on EVERY exit, not just the re-add one. The capture
+    // above is unconditional, and the cleanup that motivated it has already run,
+    // so filing it only under willReAdd discarded it permanently on the two
+    // other exits: the minimized / off-desktop hop onto another autotile screen,
+    // and the autotile→snapping arm. handleDragToFloat then found no pre-tile
+    // rect and silently skipped the size restore for the rest of the session.
+    //
+    // Re-filed under the CAPTURE screen's key, not the destination's. The bucket
+    // key names the rect's coordinate space (see savePreTileForDesktopMove), and
+    // this rect was measured on the old monitor — keying it to the new one would
+    // make a later cross-screen desktop move accept a rect it exists to decline.
+    // findPreTileGeometry scans every bucket, so the restore path finds it
+    // either way.
+    if (savedPreAutotileGeo.isValid()) {
+        m_preTileGeometries[savedPreAutotileBucket][windowId] = savedPreAutotileGeo;
     }
 
     if (willReAdd) {
-        // Re-add on new autotile screen, carrying over pre-autotile geometry.
-        // Cancel any pending cross-screen restore — the window is back in autotile.
-        auto pendingIt = m_pendingCrossScreenRestore.find(windowId);
-        if (pendingIt != m_pendingCrossScreenRestore.end()) {
-            QObject::disconnect(pendingIt.value());
-            m_pendingCrossScreenRestore.erase(pendingIt);
-        }
-        if (savedPreAutotileGeo.isValid()) {
-            // Re-filed under the CAPTURE screen's key, not the destination's.
-            // The bucket key names the rect's coordinate space (see
-            // savePreTileForDesktopMove), and this rect was measured on the old
-            // monitor — keying it to the new one would make a later cross-screen
-            // desktop move accept a rect it exists to decline. findPreTileGeometry
-            // scans every bucket, so the restore path finds it either way.
-            m_preTileGeometries[savedPreAutotileBucket][windowId] = savedPreAutotileGeo;
-        }
         // RE-ADD: a tiled window's current frame is its zone rect on the old
         // screen — knownFreeFloating=false lets the floating guard reject it
         // (a genuinely floating window passes the guard and keeps its float
@@ -426,12 +474,13 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         QPointer<KWin::EffectWindow> safeW = w;
         const QString wid = windowId;
 
-        // Cancel any prior pending restore for this window (rapid back-and-forth)
-        auto oldIt = m_pendingCrossScreenRestore.find(windowId);
-        if (oldIt != m_pendingCrossScreenRestore.end()) {
-            QObject::disconnect(oldIt.value());
-            m_pendingCrossScreenRestore.erase(oldIt);
-        }
+        // No "cancel any prior pending restore" block here (nor in the re-add
+        // arm above). releaseWindowTracking already disconnected and erased this
+        // window's entry through cleanupAutotileTracking, and nothing between
+        // there and here spins the event loop, so the map cannot have re-acquired
+        // one — the continuation that writes it only runs on a later D-Bus
+        // dispatch. The generation stamp below is what supersedes a watcher whose
+        // call has not come back yet, which is the case no cancel site can reach.
 
         // Fetch the daemon's pre-tile geometry (original size before any snapping).
         // The effect-side savedPreAutotileGeo is kept as fallback.
@@ -562,7 +611,15 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
 
         // Raise above existing windows so it doesn't end up buried behind
         // snapped windows on the target screen.
-        KWin::Window* kw = w->window();
+        //
+        // Not for a MINIMIZED window. This whole arm was written for a drag that
+        // ended on a snapping screen (its continuation branches on isUserMove /
+        // isUserResize, which a minimized window can never be in), and a
+        // minimized window reaches it only incidentally — willReAdd is false for
+        // it. There is no drop to keep visible, so the raise has no target
+        // ordering to establish, and KWin raises the window itself when the user
+        // eventually restores it.
+        KWin::Window* kw = w->isMinimized() ? nullptr : w->window();
         if (kw) {
             auto* ws = KWin::Workspace::self();
             if (ws) {

@@ -27,6 +27,7 @@
 #include <QPoint>
 #include <QRectF>
 #include <QScopeGuard>
+#include <QSet>
 #include <QSize>
 #include <QVector2D>
 
@@ -330,6 +331,19 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         });
         auto skippedUnwindGuard = qScopeGuard([this] {
             m_effect->m_stripCaptureSkippedWindows.clear();
+        });
+        // The tab-indicator drawn set gets the same per-WALK scoping the
+        // skipped list has, and for the same reason: it records what has
+        // already been painted in ONE scene walk (the natural layer slot is
+        // skipped once the anchor injection drew the indicator), and this
+        // capture is a second walk nested inside the bracket prePaintScreen
+        // opened. Sharing it across walks let one walk's marks silence the
+        // other's, so an indicator could end up drawn zero times. Swap out an
+        // empty set for the capture and hand the outer walk's back after it.
+        QSet<KWin::EffectWindow*> outerTabDrawn;
+        outerTabDrawn.swap(m_effect->m_scrollTabDrawn);
+        const auto tabDrawnGuard = qScopeGuard([this, &outerTabDrawn] {
+            m_effect->m_scrollTabDrawn.swap(outerTabDrawn);
         });
         // Device-space region rooted at (0, 0) — the FBO's own space, not the
         // output-positioned logical geometry; see captureLiveScene's note.

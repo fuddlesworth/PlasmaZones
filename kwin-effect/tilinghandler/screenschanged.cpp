@@ -404,6 +404,21 @@ void TilingHandler::untrackWindowsForDisabledScreens(const QSet<QString>& remove
     pruneRemovedScreenEntries(m_tileTargetZones);
     pruneRemovedScreenEntries(m_centeredWaylandZones);
 
+    // Expected-output-move markers, pruned BY VALUE rather than by key: the key
+    // is a window id, but what a screen removal invalidates is the pair of
+    // screen ids the marker names. A marker whose target output was unplugged
+    // mid-handoff can never be matched by the destination outputChanged it was
+    // armed for, and the per-window clear sites only fire on an outputChanged
+    // that now cannot arrive — so without this it stays armed for the session
+    // and swallows the next genuine hop for that window as bookkeeping-only.
+    for (auto it = m_expectedOutputMove.begin(); it != m_expectedOutputMove.end();) {
+        if (removed.contains(it.value().targetScreenId) || removed.contains(it.value().sourceScreenId)) {
+            it = m_expectedOutputMove.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     // Clear pre-autotile geometries captured for removed screens —
     // per ENTRY, not per bucket: the bucket key names the rect's
     // capture-time coordinate space, and a window transferred to a

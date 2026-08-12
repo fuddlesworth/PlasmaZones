@@ -51,6 +51,25 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     if (!kw) {
         return;
     }
+    // KWin's maximize() has NO fullscreen conditional: called on a
+    // still-fullscreen window it takes both "no longer maximized" branches
+    // and moveResizes to geometryRestore, shrinking a fullscreen game or
+    // video out of its presentation. Skip the compositor call while the
+    // window holds (or has requested) fullscreen — requested included for the
+    // same committed-lag reason releaseWindowedFullscreenState and
+    // isEligibleForTilingNotify take the union: on Wayland the committed bit
+    // trails a client round-trip, and a restore landing inside our own enter
+    // gap would still shrink the surface out from under the pending commit.
+    //
+    // The guard sits on the compositor call, NOT on the membership removal
+    // above: retaining membership here would need a fullscreen-exit re-drive
+    // that does not exist. Losing it is the right trade — KWin never changes
+    // maximize mode across a fullscreen round trip, so the window genuinely
+    // stays MaximizeFull at the monocle geometry, and the next monocle batch
+    // re-establishes membership.
+    if (kw->isFullScreen() || kw->isRequestedFullScreen()) {
+        return;
+    }
     // maximize() emits windowFrameGeometryChanged SYNCHRONOUSLY, and the
     // restore rect can sit in a different virtual-screen region of the same
     // monitor. Without the geometry-apply gate that edge takes the
@@ -60,6 +79,9 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     // guard nests inside already-guarded callers.
     const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
     m_effect->m_daemonGate.inGeometryApply = true;
+    const auto geomGuard = qScopeGuard([this, prevInApply] {
+        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+    });
     ++m_suppressMaximizeChanged;
     kw->maximize(KWin::MaximizeRestore);
     --m_suppressMaximizeChanged;
@@ -70,7 +92,6 @@ void TilingHandler::unmaximizeMonocleWindow(const QString& windowId)
     // authoritative on this path: no daemon rotation is in flight, so the
     // restore rect's position is the answer.
     m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
-    m_effect->m_daemonGate.inGeometryApply = prevInApply;
 }
 
 void TilingHandler::restoreAllMonocleMaximized()
@@ -86,13 +107,22 @@ void TilingHandler::restoreAllMonocleMaximized()
     m_monocleMaximizedWindows.clear();
     const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
     m_effect->m_daemonGate.inGeometryApply = true;
+    const auto geomGuard = qScopeGuard([this, prevInApply] {
+        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+    });
     ++m_suppressMaximizeChanged;
     for (const QString& wid : ids) {
         // EXACT resolve — same sibling hazard as unmaximizeMonocleWindow.
         KWin::EffectWindow* w = m_effect->findWindowByIdExact(wid);
         if (w) {
             KWin::Window* kw = w->window();
-            if (kw) {
+            // Fullscreen members are skipped for the reason spelled out in
+            // unmaximizeMonocleWindow: maximize() has no fullscreen
+            // conditional and would moveResize a presenting surface down to
+            // its restore rect. Membership was cleared before the loop, so a
+            // skipped member loses it here — which is right, because this IS
+            // the effect giving up ownership.
+            if (kw && !kw->isFullScreen() && !kw->isRequestedFullScreen()) {
                 kw->maximize(KWin::MaximizeRestore);
                 // Same tracker re-seed as unmaximizeMonocleWindow, and more
                 // load-bearing here: the daemon-loss caller has no apply
@@ -103,7 +133,6 @@ void TilingHandler::restoreAllMonocleMaximized()
         }
     }
     --m_suppressMaximizeChanged;
-    m_effect->m_daemonGate.inGeometryApply = prevInApply;
 }
 
 void TilingHandler::forgetWindowedFullscreen(const QString& windowId)
@@ -198,10 +227,12 @@ void TilingHandler::releaseWindowedFullscreenState(const QString& windowId)
     // demote and funnel callers can nest inside an outer apply.
     const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
     m_effect->m_daemonGate.inGeometryApply = true;
+    const auto geomGuard = qScopeGuard([this, prevInApply] {
+        m_effect->m_daemonGate.inGeometryApply = prevInApply;
+    });
     ++m_suppressFullScreenChanged;
     kw->setFullScreen(false);
     --m_suppressFullScreenChanged;
-    m_effect->m_daemonGate.inGeometryApply = prevInApply;
 }
 
 void TilingHandler::dispatchWindowedFullscreenClear(const QString& windowId)
@@ -243,19 +274,41 @@ void TilingHandler::restoreAllWindowedFullscreen()
     // marker, so the last-member case arrives here with the hash EMPTY and
     // the marker set — a drain gated behind the early return would miss it.
     m_windowedFsClearInFlight.clear();
-    if (m_effect->m_windowedFullscreenWindows.isEmpty()) {
+    if (!m_effect->m_windowedFullscreenWindows.isEmpty()) {
+        // Snapshot and clear FIRST, the restoreAllMonocleMaximized shape and
+        // for a sharper reason here: setFullScreen can synchronously re-enter
+        // handleWindowOutputChanged → cleanupAutotileTracking, which now
+        // forgets hash entries — iterating the live hash is iterator
+        // invalidation in a compositor loop, and the funnel's re-entrant
+        // forget must find the entry already gone.
+        const QStringList ids = m_effect->m_windowedFullscreenWindows.keys();
+        m_effect->m_windowedFullscreenWindows.clear();
+        for (const QString& wid : ids) {
+            releaseWindowedFullscreenState(wid);
+        }
+    }
+    // Keep-flag sweep for snapshots with no membership behind them. The drain
+    // above is membership-keyed, so an entry whose membership was dropped by
+    // a path that did not also release would survive every teardown — and the
+    // flag it owns is a real client state (setKeepBelow(true)) with nothing
+    // left to hand it back. Runs OUTSIDE the membership guard on purpose: the
+    // orphan case is precisely the one where the membership hash can already
+    // be empty, so a sweep gated behind that early return would never see it.
+    //
+    // Keys snapshotted first: restoreWindowedFullscreenLayerDemotion erases
+    // from this very hash and then emits KWin signals through the keep-flag
+    // setters, so iterating it live is the same re-entrancy hazard the drain
+    // above documents. Its own miss-arm makes a key the drain already consumed
+    // a no-op, and its null-kw arm treats a vanished window as
+    // drop-the-snapshot, which is the whole cleanup for a dead client.
+    if (m_effect->m_windowedFsLayerSnapshots.isEmpty()) {
         return;
     }
-    // Snapshot and clear FIRST, the restoreAllMonocleMaximized shape and for
-    // a sharper reason here: setFullScreen can synchronously re-enter
-    // handleWindowOutputChanged → cleanupAutotileTracking, which now forgets
-    // hash entries — iterating the live hash is iterator invalidation in a
-    // compositor loop, and the funnel's re-entrant forget must find the
-    // entry already gone.
-    const QStringList ids = m_effect->m_windowedFullscreenWindows.keys();
-    m_effect->m_windowedFullscreenWindows.clear();
-    for (const QString& wid : ids) {
-        releaseWindowedFullscreenState(wid);
+    const QStringList orphanIds = m_effect->m_windowedFsLayerSnapshots.keys();
+    for (const QString& wid : orphanIds) {
+        KWin::EffectWindow* w = m_effect->findWindowByIdExact(wid);
+        KWin::Window* kw = (w && !w->isDeleted()) ? w->window() : nullptr;
+        restoreWindowedFullscreenLayerDemotion(wid, kw);
     }
 }
 
@@ -723,6 +776,19 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // columns on the wrong output (the announceScreens comment above).
     // Membership keyed iteration: the hash value is a rect, so the window's
     // screen comes from the capture, never from the hash.
+    //
+    // DEPENDENCY, stated rather than removed: announceScreens is populated
+    // only when `announcing` is true, so this release rides the RE-ANNOUNCE
+    // and not the set shrinking on its own. An announceFlipped=false call, or
+    // one whose flipped screens fall outside m_managedScreens, leaves the
+    // enumeration empty and releases nothing. Both such callers compensate
+    // deliberately and say so at their own site — the bring-up fetch
+    // (wiring.cpp) runs before any batch has populated the membership hash,
+    // and the daemon-handover path (tilinghandler.cpp) calls
+    // restoreAllWindowedFullscreen immediately BEFORE its
+    // setScrollingScreens({}, false). A future announceFlipped=false caller
+    // that can reach here with live membership must do the same, or resolve
+    // the leaving screens independently of the announce.
     QStringList windowedFsLeavingScrolling;
     if (!m_effect->m_windowedFullscreenWindows.isEmpty()) {
         const QSet<QString> leavingScrolling = oldSet - newSet;
@@ -884,7 +950,10 @@ void TilingHandler::setActiveLayouts(const QHash<QString, QString>& activeLayout
     // and undamaged — those never reach a paint pass to pick the new alpha
     // up. Same bookend loadRuleAnimationsFromDbus takes on a rule edit,
     // gated on rule PRESENCE so a session with no opacity rule pays nothing.
-    if (m_effect->m_shaderManager.hasOpacityRules()) {
+    // The KWin::effects term matches every sibling bookend in this file: the
+    // teardown orderings that leave the handle null all reach a setter of one
+    // kind or another, and this one is no less reachable than setScrollingScreens'.
+    if (m_effect->m_shaderManager.hasOpacityRules() && KWin::effects) {
         KWin::effects->addRepaintFull();
     }
 }
@@ -1223,9 +1292,15 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     // TilingHandler::slotWindowFloatingChanged (the scroll passive channel's
     // windowFloatingStateSynced among them), so applyFloatCleanup never runs
     // for them and every one of these sheds was silently bypassed.
-    // Deliberately EXCLUDES applyFloatCleanup's setWindowFloating /
-    // clearWindowTiledAllScreens / unmaximizeMonocleWindow — the passive
-    // slot's surrounding code already covers those or they would double-fire.
+    // Deliberately EXCLUDES applyFloatCleanup's setWindowFloating: the passive
+    // slot performs that write itself (daemon_apply.cpp, immediately before
+    // this call), so repeating it here would only re-drive an idempotent
+    // setter. unmaximizeMonocleWindow is excluded too, but on different
+    // grounds — nothing on this channel covers it, and re-driving a maximize
+    // restore from a passive float signal has not been shown safe against the
+    // monocle batch that owns that membership. The tiled-membership clear IS
+    // performed below: no caller on this channel does it, and a floating
+    // window left recorded as tiled keeps the tiled appearance scope.
     //
     // Membership-OR-snapshot guard: the membership remove() is consumed by
     // the first call, and every arm of releaseWindowedFullscreenState (the
@@ -1248,6 +1323,16 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     m_windowedFsClearInFlight.remove(windowId);
     // A floating window is free to move itself — stop countering.
     m_effect->m_scrollCommandedRects.remove(windowId);
+    // A floating window is no longer tile-managed on any screen, and this
+    // channel has no other writer of that fact (the passive slot's own
+    // clearWindowSnapped covers the SNAP facts only). Left standing, IsTiled
+    // stays true for a floated window and a tiled-scoped border / title-bar
+    // rule keeps drawing or hiding. The helper is change-gated and
+    // re-resolves the window's rules itself on the flip, so it costs nothing
+    // for a window that was not tiled. Placed before the decoration re-drive
+    // below, per reconcileDecorationOnPlacementFlip's flip-facts-first
+    // contract.
+    clearWindowTiledAllScreens(windowId);
     // Same rationale as applyFloatCleanup for all three: a stale target
     // re-triggers centering on the next frameGeometryChanged, and a stale
     // relocation-delta entry makes a later snap on another screen paint the window

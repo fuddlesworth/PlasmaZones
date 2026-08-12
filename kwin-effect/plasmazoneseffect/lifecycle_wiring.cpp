@@ -3,10 +3,8 @@
 
 #include "plasmazoneseffect.h"
 
-#include <PhosphorAnimation/AnimationShaderEffect.h> // shaderEffectAppliesToEventPath (peek suppression gate)
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ShaderProfileTree.h>
-#include <PhosphorAudio/IAudioSpectrumProvider.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/DragMarshalling.h>
@@ -17,13 +15,9 @@
 #include <virtualdesktops.h>
 #include <workspace.h>
 
-#include <QCoreApplication>
 #include <QDBusConnection>
-#include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
-#include <QDBusServiceWatcher>
-#include <QEvent>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QTimer>
@@ -186,13 +180,16 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
                     endShaderTransition(w);
                 // Release-build pair for the contract: every transition entry
                 // MUST drain through endShaderTransition before we clear the
-                // shader cache. A residual entry holds a cached shader
-                // pointer; clearing the cache while it survives would let
-                // the next paintWindow on that window deref a freed shader.
-                // Self-heal in production by re-running endShaderTransition
-                // for the residual entries — same handler the loop above
-                // uses — so a future refactor that adds an early-return to
-                // endShaderTransition can't crash the compositor.
+                // shader and texture caches. A residual entry holds raw
+                // non-owning pointers into BOTH — `ShaderTransition::cached`
+                // into m_shaderCache and `ShaderTransition::userTextures` into
+                // m_textureCache — so clearing either while an entry survives
+                // would let the next paintWindow on that window deref freed GL
+                // objects. Self-heal in production by re-running
+                // endShaderTransition for the residual entries — same handler
+                // the loop above uses — so a future refactor that adds an
+                // early-return to endShaderTransition can't crash the
+                // compositor.
                 if (!m_shaderManager.empty()) {
                     qCCritical(lcEffect) << "shader manager not drained before cache clear; re-draining"
                                          << m_shaderManager.shaderTransitions().size() << "residual transitions";
@@ -202,8 +199,20 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
                     for (auto* w : residual)
                         endShaderTransition(w);
                 }
-                Q_ASSERT(m_shaderManager.empty());
-                m_shaderManager.m_shaderCache.clear();
+                // And if the re-drain ALSO failed to empty the map, hold both
+                // caches. Detecting the residue and then freeing under it is
+                // strictly worse than the stale render it was trying to
+                // prevent: a use-after-free in paintWindow is a compositor
+                // crash, while retained caches only mean the surviving
+                // transitions keep rendering from their pre-reload programs
+                // and textures. The next effectsChanged with a drained manager
+                // clears both, so the staleness is bounded by the following
+                // reload rather than the session.
+                const bool drained = m_shaderManager.empty();
+                Q_ASSERT(drained);
+                if (drained) {
+                    m_shaderManager.m_shaderCache.clear();
+                }
                 // Drop the texture cache too — a hot-reload that swaps a
                 // texture file behind the same metadata.json path needs
                 // a fresh upload to pick up the new contents. The cache
@@ -224,9 +233,18 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
                 // cleared cache. Clear immediately so the next
                 // `beginShaderTransition` hits the synchronous fallback
                 // path and uploads fresh content.
+                //
+                // The generation bump and the in-flight set are unconditional:
+                // neither frees anything a residual transition points at, and
+                // retiring the in-flight loads is what keeps pre-reload bytes
+                // out of the cache whether or not the cache itself is cleared.
+                // The cache clear rides the same `drained` gate as the shader
+                // cache above, for the userTextures pointers.
                 ++m_shaderManager.m_textureCacheGeneration;
                 m_shaderManager.m_textureLoadsInFlight.clear();
-                m_shaderManager.m_textureCache.clear();
+                if (drained) {
+                    m_shaderManager.m_textureCache.clear();
+                }
                 // Desktop-switch packs are served by the SAME AnimationShaderRegistry
                 // as the per-window effects, so a reloaded `desktop.switch` pack must
                 // invalidate the DesktopTransitionManager's parallel compiled-shader
@@ -474,11 +492,44 @@ void PlasmaZonesEffect::connectDragTracker()
                         // already gone (repaintSnapRegions documents the
                         // same rule for the same reason).
                         if (!m_keyboardGrabbed && KWin::effects) {
-                            KWin::effects->grabKeyboard(this);
-                            m_keyboardGrabbed = true;
+                            // grabKeyboard ANSWERS: it returns false when
+                            // another effect already holds the grab. Record
+                            // what we actually got, or the drag-end
+                            // ungrabKeyboard would release the OTHER effect's
+                            // grab on a flag we never earned.
+                            m_keyboardGrabbed = KWin::effects->grabKeyboard(this);
+                            if (!m_keyboardGrabbed) {
+                                qCWarning(lcEffect) << "beginDrag: keyboard grab refused (another effect holds it) for"
+                                                    << capturedWindowId << "- Escape will reach KWin's move filter";
+                            }
                         }
                         qCInfo(lcEffect) << "beginDrag: daemon rejected engine bypass for" << capturedWindowId
                                          << "- reverting to the snap path";
+                    }
+                    // Symmetric release for the daemon's NEGATIVE grab answer.
+                    // The fast path below grabs optimistically on every engine
+                    // drag (the pre-reply policy defaults to grabKeyboard =
+                    // true), but the daemon deliberately answers false for an
+                    // engine drag that is NOT in always-on re-insert: there is
+                    // a cheaper exit than Escape there, and "a grab swallows
+                    // every key for the drag's duration" (drag_protocol.cpp's
+                    // computeDragPolicy states this as the rule). The dead-drag
+                    // policies (SnappingDisabled / LayoutSuppressed /
+                    // ContextDisabled) answer false for the same reason: there
+                    // is no overlay and nothing Escape can cancel. Without this
+                    // arm nothing ever released on a false answer, so the
+                    // policy field only ever added grabs.
+                    //
+                    // Placed AFTER the branch cascade and gated on the stored
+                    // policy so it reads the daemon's final answer: the
+                    // bypass-cleared arm above re-grabs for the canonical snap
+                    // path, whose policy always carries grabKeyboard = true, so
+                    // this cannot undo it.
+                    if (!m_currentDragPolicy.grabKeyboard && m_keyboardGrabbed && KWin::effects) {
+                        KWin::effects->ungrabKeyboard();
+                        m_keyboardGrabbed = false;
+                        qCInfo(lcEffect) << "beginDrag: daemon declined the keyboard grab for" << capturedWindowId
+                                         << "- releasing";
                     }
                 });
 
@@ -526,22 +577,32 @@ void PlasmaZonesEffect::connectDragTracker()
                     // where the user drops it, not snap back to a stored rect.
                     m_dragActivation.floatedWindowIds.insert(windowId);
                 }
-                // Honour the DAEMON's grab decision before leaving. This early
-                // return used to skip the grab unconditionally, which was
-                // right when an engine drag had no overlay and nothing Escape
-                // could cancel — the comment that introduced it said exactly
-                // that ("the drag proceeds freely", Feb 2026). Drag-insert
-                // previews and the drop indicator gave it both, so the policy
-                // now asks for a grab under always-on re-insert and this is
-                // where that has to be obeyed.
+                // Grab OPTIMISTICALLY before leaving. This early return used to
+                // skip the grab unconditionally, which was right when an engine
+                // drag had no overlay and nothing Escape could cancel — the
+                // comment that introduced it said exactly that ("the drag
+                // proceeds freely", Feb 2026). Drag-insert previews and the drop
+                // indicator gave it both, so under always-on re-insert Escape
+                // has to reach the daemon from the drag's very first tick, and
+                // the daemon's answer is still in flight here.
                 //
-                // The cached fast path can be stale, so it reads the policy
-                // rather than re-deriving: the async beginDrag reply below
-                // corrects the flag, and the correction arm takes the grab
-                // itself if the drag turns out to be a snap one after all.
-                if (m_currentDragPolicy.grabKeyboard && !m_keyboardGrabbed) {
-                    KWin::effects->grabKeyboard(this);
-                    m_keyboardGrabbed = true;
+                // Unconditional on purpose, with no policy test: the only thing
+                // between m_currentDragPolicy's reset above and this line is an
+                // async connect, so the field is whatever the block above wrote
+                // (grabKeyboard = true) on every path through here. Reading it
+                // would be a tautology dressed as a decision. The daemon's real
+                // answer is honoured in the reply lambda above, which releases
+                // the grab when the policy comes back false — an engine drag
+                // outside always-on re-insert holds it only for the round trip.
+                if (!m_keyboardGrabbed && KWin::effects) {
+                    // See the reply lambda: grabKeyboard returns false when
+                    // another effect owns the grab, and claiming it anyway
+                    // makes drag-end release someone else's.
+                    m_keyboardGrabbed = KWin::effects->grabKeyboard(this);
+                    if (!m_keyboardGrabbed) {
+                        qCWarning(lcEffect) << "dragStarted: keyboard grab refused (another effect holds it) for"
+                                            << windowId << "- Escape will reach KWin's move filter";
+                    }
                 }
                 return;
             }
@@ -558,9 +619,13 @@ void PlasmaZonesEffect::connectDragTracker()
             // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
             // Without this, Escape cancels the interactive move AND the overlay.
             // With the grab, Escape only dismisses the overlay while the drag continues.
-            if (!m_keyboardGrabbed) {
-                KWin::effects->grabKeyboard(this);
-                m_keyboardGrabbed = true;
+            if (!m_keyboardGrabbed && KWin::effects) {
+                // Same answer-respecting capture as the two sites above.
+                m_keyboardGrabbed = KWin::effects->grabKeyboard(this);
+                if (!m_keyboardGrabbed) {
+                    qCWarning(lcEffect) << "dragStarted: keyboard grab refused (another effect holds it) for"
+                                        << windowId << "- Escape will cancel the interactive move";
+                }
             }
         });
     connect(m_dragTracker.get(), &DragTracker::dragMoved, this,
@@ -727,8 +792,12 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // The strip view spring is per-OUTPUT while scroll state is
     // per-(screen, desktop, activity), so a desktop switch orphans any
     // residual offset: it belongs to the desktop being LEFT, and carrying
-    // it across paints the incoming desktop's columns (and freezes a
-    // shifted outgoing capture into the switch blend). Drop the spring and
+    // it across paints the incoming desktop's columns at it. Dropping is
+    // also what decides the switch blend's outgoing capture, though not in
+    // the direction an earlier note claimed: that capture is deferred to the
+    // next paintScreen, by which time forgetOutput has already run, so the
+    // drop guarantees an UNSHIFTED outgoing capture rather than avoiding a
+    // frozen shifted one. Drop the spring and
     // the strip shader pass for the switched output(s); the incoming
     // desktop's own scroll state re-seeds a fresh accumulation on its next
     // batch. forgetOutput fires no repaint of its own, so damage each
@@ -926,6 +995,12 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
         }
         m_trackedScreenPerWindow.remove(w);
         m_restoreSuppress.remove(w);
+        // Pending deferred geometry replay. The connection itself dies with the
+        // window, so this is not a dangling-connection guard — it is the same
+        // address-reuse safety as the stamps below: a stale handle here would
+        // make the next defer for a recycled address disconnect a replay that
+        // belongs to the new window.
+        m_deferredGeometryReplay.remove(w);
         // Spurious-minimize-pair stamp — raw-pointer-keyed like its
         // siblings below, so erase here both to stay bounded and so a
         // reused address can't inherit a stale stamp that would swallow
@@ -997,7 +1072,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // screenRemoved BEFORE the per-window outputChanged signals it emits for
     // windows it reassigns as part of the layout change, so this beats the
     // race where outputChanged would reach the autotile-delegation guard in
-    // window_lifecycle.cpp without isScreenChangeInProgress() set — and
+    // window_connections.cpp without isScreenChangeInProgress() set — and
     // when KWin shifts a remaining monitor's x-offset on the second add
     // (DPMS wake of a dual-monitor setup), oldScreenStillConnected returns
     // true and is no help on its own. slotScreenLayoutChanged sets the same

@@ -5,7 +5,6 @@
 #include "shader_internal.h"
 
 #include <PhosphorAnimation/ProfilePaths.h>
-#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -16,7 +15,6 @@
 
 #include <QLoggingCategory>
 #include <QPointer>
-#include <QScopeGuard>
 
 #include "tilinghandler/tilinghandler.h"
 #include "handlers/snaphandler.h"
@@ -135,12 +133,24 @@ void PlasmaZonesEffect::refreshRestoreSuppressionDeadline(KWin::EffectWindow* wi
 
 void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 {
+    if (!w) {
+        // Null-guard symmetry with every helper in this file. The slot derefs
+        // `w` unguarded from here on (isMinimized, isOnCurrentDesktop), so the
+        // guard belongs at the entry rather than at each use.
+        return;
+    }
+
     // Full property + filter-verdict dump for every window as it opens. Silent
     // unless the opt-in plasmazones.effect.diag category is enabled (see
     // logWindowDiagnostics) — gives the data needed to fix apps KWin
     // mis-classifies (Steam / CEF child surfaces) without journal noise.
     logWindowDiagnostics(w, "windowAdded");
 
+    // Wired exactly once per window: setupWindowConnections carries no
+    // idempotency guard, and this slot is the only caller that sees windows
+    // opened after the effect loaded. See the ordering invariant on the
+    // constructor's existing-window sweep (lifecycle_wiring_daemon.cpp) for
+    // why that sweep and this slot can never both wire the same window.
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
@@ -378,6 +388,12 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 {
+    if (!w) {
+        // Same entry-guard rule as slotWindowAdded: getWindowId, frameGeometry
+        // and w->window() below all deref unguarded.
+        return;
+    }
+
     // Release keyboard grab if the dragged window was closed
     if (m_keyboardGrabbed && m_dragTracker->draggedWindow() == w) {
         KWin::effects->ungrabKeyboard();
@@ -422,8 +438,16 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // relocation that normally draws a parked column where it really sits is
     // dropped just below (and again in the untrack funnel), so nothing would
     // move this back on screen.
-    const bool parkedOffAllOutputs = m_scrollVisualDelta.contains(closingWindowId) && !w->frameGeometry().isEmpty()
-        && !KWin::effects->screenAt(w->frameGeometry().center().toPoint());
+    //
+    // An EMPTY frame counts as parked, not as on-screen. It has no centre worth
+    // hit-testing, so the screenAt probe below cannot classify it, and the arm
+    // that treats it as unparked is the worst of the three outcomes: the close
+    // shader installs, then the m_scrollVisualDelta removal a few lines down
+    // pulls the relocation out from under it, and the corpse plays its whole
+    // transition at the park rect, off every output.
+    const QRectF closingFrame = w->frameGeometry();
+    const bool parkedOffAllOutputs = m_scrollVisualDelta.contains(closingWindowId)
+        && (closingFrame.isEmpty() || !KWin::effects->screenAt(closingFrame.center().toPoint()));
     if (!parkedOffAllOutputs) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
                                /*reverse=*/true, /*holdCloseGrab=*/true);
@@ -554,7 +578,22 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 {
-    // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated
+    // No entry null-guard here, unlike slotWindowAdded / slotWindowClosed, and
+    // that asymmetry is deliberate: `w == nullptr` is KWin telling us NOTHING is
+    // focused any more, which is a real focus edge. isFocused is resolved as
+    // `w == KWin::effects->activeWindow()` (window_query.cpp), so every window's
+    // verdict changes on that edge and the invalidation + re-resolve below MUST
+    // run. The slot derefs `w` nowhere itself; notifyWindowActivated carries the
+    // null check for the only path that needs one.
+    //
+    // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated.
+    // Its bool return is deliberately discarded for the same reason: a false
+    // verdict means the ACTIVATED surface is not a daemon-reportable window (own
+    // overlay, plasmashell popup, portal dialog), not that focus stayed put — the
+    // window that was focused a moment ago has still lost it, and its
+    // focus-scoped border has to revert. Skipping the block below on a rejection
+    // would strand the focused appearance on the previous window for as long as
+    // the popup owns the focus.
     notifyWindowActivated(w);
 
     // Focus is a window-rule match input (Field::IsFocused), and both the
@@ -720,6 +759,17 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // activity switch. m_shaderManager.m_lastFocusShaderWindow is a QPointer that auto-nulls
     // on window destroy, so a fresh window reusing the address can't
     // false-match.
+    //
+    // The stamp is written ONLY on this accepted path, and that is the point:
+    // it survives every arm that returned above (nullptr focus loss, own
+    // overlays, plasmashell popups, portal dialogs, structurally unmanageable
+    // types) untouched. So A → popup → A replays no shader. That is the gate
+    // working, not a hole in it — those surfaces appear OVER the app window
+    // rather than replacing it in the user's attention, and a transient
+    // deactivation is exactly the "focused window didn't really change" case
+    // this exists to swallow. Our own drag overlay is the sharpest example: a
+    // focus shader firing every time a snap drag ends would be pure noise. The
+    // accepted cost is that a genuine A → nothing → A refocus is silent too.
     if (m_shaderManager.m_lastFocusShaderWindow.data() != w) {
         m_shaderManager.m_lastFocusShaderWindow = w;
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowFocus, animationDurationMs());

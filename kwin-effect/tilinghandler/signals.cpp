@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// D-Bus signal slot handlers for TilingHandler.
+// Signal slot handlers for TilingHandler, from BOTH sources: the daemon's D-Bus
+// broadcasts (enabled state, per-window floating state) and KWin's own
+// per-window compositor signals (maximized state, fullscreen state).
 // Part of TilingHandler — split from tilinghandler.cpp for SRP.
 
 #include "tilinghandler.h"
@@ -30,6 +32,7 @@
 #include <QTimer>
 
 #include <chrono> // std::chrono::milliseconds for Effect::animationTime
+#include <utility> // std::as_const over the surviving minimize-float markers
 
 namespace PlasmaZones {
 
@@ -39,7 +42,7 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 // in minimizefloat.cpp.
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// D-Bus signal slot handlers
+// Daemon D-Bus signal slot handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void TilingHandler::slotEnabledChanged(bool enabled)
@@ -73,7 +76,28 @@ void TilingHandler::slotEnabledChanged(bool enabled)
         // handler adopts them when the screen's new mode fields the
         // unminimize.
         m_unfloatInFlight.clear();
+        // Hand the per-window retry budgets to snap BEFORE dropping them. Snap
+        // adopts the surviving markers lazily, at its own unminimize edge, and
+        // that adoption reads the budget straight off this handler
+        // (snaphandler.cpp's adopt arm calls unfloatRetryBudgetUsed) — so a
+        // plain clear here handed every persistently-refused window a fresh
+        // full allowance on every autotile toggle, which is exactly what the
+        // cross-screen hop path seeds the budget to prevent. Only the surviving
+        // markers are transferred: the in-flight set cleared just above has
+        // already lost its ownership, and snap re-drives those from scratch.
+        if (SnapHandler* snap = m_effect->snapHandler()) {
+            for (const QString& floatedId : std::as_const(m_minimizeFloatedWindows)) {
+                snap->seedUnfloatRetryBudget(floatedId, m_unfloatRetryAttempts.value(floatedId));
+            }
+        }
         m_unfloatRetryAttempts.clear();
+        // The untiled markers go with the retry budgets: they qualify a
+        // minimize-float record this handler is handing away, and snap has no
+        // untiled fast path to receive them. Leaving them behind kept a stale
+        // qualifier for a record we no longer drive (the re-entry path
+        // re-inserts on its own), which is the one entry an otherwise
+        // exhaustive drain missed.
+        m_untiledMinimizeFloats.clear();
         m_effect->updateAllDecorations();
     }
 }
@@ -112,7 +136,14 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
     }
 
     if (!isFloating) {
-        m_effect->m_navigationHandler->setWindowFloating(liveId, false);
+        // Guarded: m_navigationHandler is declared AFTER m_tilingHandler on the
+        // effect and so is destroyed first during teardown, the exact hazard
+        // wiring.cpp guards m_snapHandler for. This slot runs on an arbitrary
+        // D-Bus dispatch, which can land inside that window. The float-state
+        // cache it holds dies with it, so skipping the write costs nothing.
+        if (m_effect->m_navigationHandler) {
+            m_effect->m_navigationHandler->setWindowFloating(liveId, false);
+        }
         KWin::EffectWindow* unfloatWin = resolvedWin;
         // Showing-desktop guard: this refocus is automatic (daemon float-state
         // signal), and activateWindow() would synchronously cancel a peek.
@@ -144,6 +175,10 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
         }
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KWin per-window compositor signal slot handlers
+// ═══════════════════════════════════════════════════════════════════════════════
 
 void TilingHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool horizontal, bool vertical)
 {
@@ -259,13 +294,22 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
             const auto restoreGate = qScopeGuard([this, prevInApply] {
                 m_effect->m_daemonGate.inGeometryApply = prevInApply;
             });
-            if (KWin::Window* kw = w->window()) {
-                kw->moveResize(
-                    QRectF(m_effect->constrainTileGeometry(w, m_effect->m_windowedFullscreenWindows.value(windowId))));
+            // Validity gate on the STORED rect, not on the constrained result:
+            // this is the one windowed-fullscreen apply that bypasses
+            // applyWindowGeometry (whose own guard would have caught it), and
+            // the value comes off the wire — a null or empty QRect reaching
+            // moveResize would collapse the client to nothing with no batch
+            // coming to correct it. The re-seed stays INSIDE the guard so the
+            // bracket's pairing rule still holds: with no move made there is no
+            // swallowed outputChanged to pair with.
+            const QRect columnRect = m_effect->m_windowedFullscreenWindows.value(windowId);
+            if (KWin::Window* kw = w->window(); kw && columnRect.isValid()) {
+                kw->moveResize(QRectF(m_effect->constrainTileGeometry(w, columnRect)));
                 // The bracket swallowed any outputChanged this move emitted, so
                 // the detector never ran its own tracker write. Re-seed it,
-                // the same pairing rule the two other bracketed applies in
-                // this file follow. For this branch the window is a windowed-
+                // the same pairing rule the bracketed applies in the sibling
+                // files follow (screenschanged.cpp has two, state.cpp three;
+                // this file has only this one). For this branch the window is a windowed-
                 // fullscreen member and therefore normally strip-tracked, so
                 // the value read back is the engine-authoritative screen rather
                 // than a position re-detect. Where tracking has already lapsed
@@ -393,9 +437,17 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // Clear border tracking so borders are not drawn over fullscreen content
     // (title-bar restores flow through the rule path).
     clearWindowTiledAllScreens(windowId);
-    if (m_monocleMaximizedWindows.remove(windowId)) {
-        qCInfo(lcEffect) << "Monocle window went fullscreen:" << windowId << "- removed from tracking";
-    }
+    // Monocle membership deliberately SURVIVES the fullscreen enter. The set is
+    // an ownership ledger — "PlasmaZones is the one that KWin-maximized this
+    // window" — and going fullscreen does not change that fact. Dropping it here
+    // was a permanent loss: XdgToplevelWindow::setFullScreen never touches the
+    // requested maximize mode, so on fullscreen EXIT the window still reads
+    // MaximizeFull, the sole insert site (tiling.cpp's monocle apply) is gated on
+    // the window not being already maximized and so never re-inserts, and nothing
+    // else inserts. The window was then stranded: float-out, autotile-disable and
+    // daemon-loss all left it KWin-maximized with no owner able to restore it.
+    // The drop also ignored the daemon gate that the manual-unmaximize slot above
+    // states as the rule for shedding this membership.
     // Drop any unconsumed zone-centering entries: a window that fullscreens
     // right after being tiled must not have the fullscreen frame change
     // consume a stale centering target and moveResize against the fullscreen

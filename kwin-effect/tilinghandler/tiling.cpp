@@ -93,14 +93,30 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // (see suppressFfmUntilCursorMoves) so the next pointer twitch cannot
     // steal focus onto whatever landed under it.
     // Walked in full rather than broken out of, because the same pass answers
-    // whether EVERY request is on a scrolling screen — which the stacking
+    // whether every TILE request is on a scrolling screen — which the stacking
     // snapshot below uses to skip work a scroll-only batch never reads.
+    //
+    // The two answers deliberately cover different sets. The FFM suppression
+    // reacts to any request at all, float entries included: a float restores
+    // pre-autotile geometry, which slides a window under a stationary pointer
+    // exactly like a tile does. The stacking answer counts TILE entries only,
+    // matching its sole consumer — savedGlobalStack is read under
+    // `hasApplies && !scrollOnlyBatch`, and scrollOnlyBatch is computed over
+    // toApply, which float entries never enter (they are handled inline
+    // below). Counting a float there made a scroll batch carrying one copy the
+    // whole stacking order into QPointers and haul it through the onComplete
+    // closure for a consumer that could not read it.
+    //
+    // Seeded true, not `!validatedRequests.isEmpty()`: the empty case already
+    // returned above, so the loop always sees at least one request. A
+    // floats-only batch legitimately leaves it true, which is the right
+    // answer — with no tile applies there is no z-order to repair.
     bool anyRequestOnScrollingScreen = false;
-    bool allRequestsOnScrollingScreens = !validatedRequests.isEmpty();
+    bool allRequestsOnScrollingScreens = true;
     for (const auto& req : validatedRequests) {
         if (isScrollingScreen(req.screenId)) {
             anyRequestOnScrollingScreen = true;
-        } else {
+        } else if (!req.floating) {
             allRequestsOnScrollingScreens = false;
         }
     }
@@ -180,7 +196,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
         QString scrollEdge; ///< scrolling strip: screen edge to animate from ("left"/"right"), else empty
         int viewDeltaX = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
-        QPoint visualPos; ///< scrolling strip: where a PARKED column really sits, to paint at instead of the commit
+        /// scrolling strip: where a PARKED column really sits. Converted to a
+        /// translation from this batch's rect at apply time and ADDED to the
+        /// window's committed frame by the paint path — not substituted for
+        /// it, which would erase the X11 constrain-and-centre offset.
+        QPoint visualPos;
         bool hasVisualPos = false;
     };
     QVector<Entry> entries;
@@ -387,6 +407,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString stacking;
         QString scrollEdge;
         int viewDeltaX = 0;
+        /// Carried verbatim from Entry::visualPos — see its doc for how the
+        /// paint path consumes it (a delta ADDED to the commit).
         QPoint visualPos;
         bool hasVisualPos = false;
     };
@@ -561,7 +583,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     });
     if (isScrollBatch) {
         QHash<QString, QRect> screenRectCache;
-        const auto screenRectFor = [&](const TileSnap& s) -> const QRect& {
+        // BY VALUE, not by const reference into the hash: the same lambda
+        // inserts into screenRectCache, and a reference handed out before a
+        // later insert rehashes the table is a use-after-rehash the moment a
+        // caller holds one across a second call. A QRect copy is four ints.
+        const auto screenRectFor = [&](const TileSnap& s) -> QRect {
             auto it = screenRectCache.find(s.screenId);
             if (it == screenRectCache.end()) {
                 QRect outRect;
@@ -572,17 +598,40 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             }
             return it.value();
         };
+        // The rect applyWindowGeometry will actually COMMIT for each entry,
+        // memoised per window for the duration of this sort. The animation
+        // branch below builds its origins and its degenerate-leg tests from
+        // exactly this rect (see constrainTileGeometry's own doc), and the
+        // cascade has to classify and measure against the same thing. For a
+        // size-constrained X11 column the constrained frame is inset from the
+        // column by the centring offset, so the raw column rect made
+        // `isArriving` answer differently than the apply does for a column
+        // straddling its output by less than that offset, and gave every such
+        // staying column's netDx term a spurious -centringOffset — enough to
+        // flip the batch's net sign and run the whole cascade mirrored.
+        // Falls back to the raw rect for a null window pointer, which is what
+        // constrainTileGeometry returns for a windowless entry anyway.
+        QHash<QString, QRect> constrainedCache;
+        const auto committedRectFor = [&](const TileSnap& s) -> QRect {
+            auto it = constrainedCache.find(s.windowId);
+            if (it == constrainedCache.end()) {
+                const QRect raw = s.geometry.normalized();
+                it = constrainedCache.insert(s.windowId,
+                                             s.window ? m_effect->constrainTileGeometry(s.window, raw) : raw);
+            }
+            return it.value();
+        };
         // An UNRESOLVED output does not read as arriving: the committed rect
         // of a leaving column is the park, and sorting on it would feed the
         // cascade a coordinate unrelated to what the user watches. The
         // current frame is the visible truth either way.
         const auto isArriving = [&](const TileSnap& s) {
-            const QRect& rect = screenRectFor(s);
-            return rect.isValid() && rect.intersects(s.geometry);
+            const QRect rect = screenRectFor(s);
+            return rect.isValid() && rect.intersects(committedRectFor(s));
         };
         const auto visibleX = [&](const TileSnap& s) {
             if (!s.window || isArriving(s)) {
-                return s.geometry.x();
+                return committedRectFor(s).x();
             }
             return qRound(s.window->frameGeometry().x());
         };
@@ -601,10 +650,14 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             if (!s.window || !isArriving(s)) {
                 continue;
             }
-            const QRect& rect = screenRectFor(s);
+            const QRect rect = screenRectFor(s);
             const QRect currentFrame = s.window->frameGeometry().toRect();
             if (rect.isValid() && rect.intersects(currentFrame)) {
-                netDx += qint64(s.geometry.x()) - currentFrame.x();
+                // Committed rect, matching isArriving above and the apply
+                // below — the raw column x differs from it by the centring
+                // offset for a size-constrained X11 column, and that offset
+                // is not travel.
+                netDx += qint64(committedRectFor(s).x()) - currentFrame.x();
             }
         }
         bool movingRight = netDx > 0;
@@ -1127,17 +1180,28 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // the committed rect at draw time AND folds into the
                     // backdrop capture, so a garbled pair would draw the column
                     // and its sample arbitrarily far off until the next batch.
-                    const QPoint raw = snap.visualPos - snap.geometry.topLeft();
-                    const QPoint delta(
-                        qBound(-StripViewAnimator::kMaxViewDeltaPx, raw.x(), StripViewAnimator::kMaxViewDeltaPx),
-                        qBound(-StripViewAnimator::kMaxViewDeltaPx, raw.y(), StripViewAnimator::kMaxViewDeltaPx));
+                    // The subtraction itself runs in qint64, per axis. Both
+                    // operands are unvalidated ints off the wire, so a plain
+                    // QPoint difference can overflow BEFORE the qBound the
+                    // protocol layer explicitly leans on ever sees the value —
+                    // and signed overflow is undefined, not a wrapped number
+                    // the clamp could then rescue. Widen, clamp, then narrow.
+                    const qint64 rawX = qint64(snap.visualPos.x()) - qint64(snap.geometry.x());
+                    const qint64 rawY = qint64(snap.visualPos.y()) - qint64(snap.geometry.y());
+                    constexpr qint64 kMaxDelta = StripViewAnimator::kMaxViewDeltaPx;
+                    const QPoint delta(static_cast<int>(qBound(-kMaxDelta, rawX, kMaxDelta)),
+                                       static_cast<int>(qBound(-kMaxDelta, rawY, kMaxDelta)));
                     const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
                     visualDeltaChanged = (vit == m_effect->m_scrollVisualDelta.constEnd() || vit.value() != delta);
                     m_effect->m_scrollVisualDelta.insert(snap.windowId, delta);
                 } else {
                     visualDeltaChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
                 }
-                if (visualDeltaChanged) {
+                // The KWin::effects term matches the sibling remover at the
+                // tail of this same lambda and the four others across the
+                // handler — one rule for every m_scrollVisualDelta damage
+                // pair, rather than site by site.
+                if (visualDeltaChanged && KWin::effects) {
                     KWin::effects->addRepaintFull();
                 }
             }
@@ -1252,11 +1316,18 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // VS-crossing detector must not re-enter).
                         const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
                         m_effect->m_daemonGate.inGeometryApply = true;
+                        // Scoped to THIS block, so the flag is handed back at
+                        // the closing brace exactly where the hand-balanced
+                        // restore used to sit — not at the end of the apply
+                        // lambda, which would extend the suppression over the
+                        // geometry apply below.
+                        const auto fsGuard = qScopeGuard([this, prevInApply] {
+                            m_effect->m_daemonGate.inGeometryApply = prevInApply;
+                        });
                         kwFs->moveResize(QRectF(snap.geometry));
                         ++m_suppressFullScreenChanged;
                         kwFs->setFullScreen(true);
                         --m_suppressFullScreenChanged;
-                        m_effect->m_daemonGate.inGeometryApply = prevInApply;
                     }
                     applyWindowedFullscreenLayerDemotion(snap.windowId, kwFs);
                 } else if (wfs.action == ScrollDecisions::WfsAction::DeferredReconcile) {
@@ -1483,8 +1554,24 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // exactly where this column was before the scroll.
                             originOverride = QRectF(committedGeo);
                         } else {
+                            // Rounded to integers, exactly as the sibling
+                            // leaving-column branch below does, and for a
+                            // reason that is not cosmetic. The animation
+                            // target is an integer QRect, while frameGeometry
+                            // is qreal — and AnimatedValue::start decides a
+                            // leg is degenerate with qFuzzyIsNull on a 4-D
+                            // distance, an ABSOLUTE 1e-12 with no pixel
+                            // epsilon. On a fractional-scale output the
+                            // sub-pixel residue therefore reads as a real leg:
+                            // a spring starts on every wheel tick, arms a
+                            // shader transition, and the resulting
+                            // hasAnimation defeats the next batch's
+                            // already-at-target no-op skip, forcing a
+                            // redundant moveResize per tick. Rounding makes
+                            // the pure-scroll case genuinely degenerate again.
                             const KWin::RectF cur = snap.window->frameGeometry();
-                            originOverride = QRectF(cur.x() - snap.viewDeltaX, cur.y(), cur.width(), cur.height());
+                            originOverride = QRectF(QRect(qRound(cur.x()) - snap.viewDeltaX, qRound(cur.y()),
+                                                          qRound(cur.width()), qRound(cur.height())));
                         }
                     } else if (!snap.scrollEdge.isEmpty()) {
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
@@ -1631,6 +1718,21 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     m_effect->m_scrollCommandedRects.insert(snap.windowId,
                                                             {snap.window->frameGeometry().toRect(), 0, 0});
                 }
+            } else if (snap.isMonocle) {
+                // A monocle window is never counter-asserted — neither arm
+                // above records a commanded rect for it — so a surviving
+                // entry from an earlier scrolling batch would keep the
+                // counter armed against a rect the strip no longer owns,
+                // yanking the maximized window back up to 3x/s. Mirrors the
+                // commitDeferredOrBailed remove above: dropping the entry is
+                // how this pipeline disarms the counter.
+                //
+                // Reachable despite monocle and scrolling looking disjoint:
+                // m_scrollingScreens arrives on its own D-Bus signal,
+                // independent of the batch, so during a mode flip a screen
+                // reads scrolling for a few ticks while monocle batches are
+                // still in flight.
+                m_effect->m_scrollCommandedRects.remove(snap.windowId);
             }
         },
         onComplete, startedViewLegs);
@@ -1756,6 +1858,13 @@ void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const 
         // Fall through to centering logic below for all windows (including dragged)
     }
 
+    // Everything from here down is the reactive centring pass, and it is
+    // WAYLAND-ONLY despite reading engine-general: m_tileTargetZones has
+    // exactly one writer (the batch apply in this file), and that write sits
+    // inside an `isWaylandClient()` arm. An X11 client never reaches this
+    // block — constrainTileGeometry pre-centres its frame inside the zone
+    // before the apply commits, and an external mover is dealt with by the
+    // counter-assert above, not here.
     if (m_tileTargetZones.isEmpty()) {
         return;
     }

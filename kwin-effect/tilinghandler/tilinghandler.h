@@ -213,6 +213,23 @@ public:
     }
     void deferWindowRouting(KWin::EffectWindow* window, bool canSnapRestore);
     void onDaemonReady();
+    /// Drop every map whose contents belong to ONE daemon session.
+    ///
+    /// Called by onDaemonReady, which is the only edge guaranteed to run: a
+    /// straight old→new daemon owner handover produces no serviceUnregistered
+    /// edge at all, so the teardown in lifecycle_wiring_daemon.cpp cannot be the
+    /// sole drain site. That teardown drains a DIFFERENT, deliberately smaller
+    /// set (the rule-visible inputs plus the compositor restores), because the
+    /// maps here must keep answering for the daemon-down interval — a window's
+    /// notified screen, its minimize-float ownership and its deferred routes all
+    /// still describe live windows while the daemon is merely absent.
+    ///
+    /// Paired invariant, and the reason this is one function rather than an
+    /// inline list: anything added to a per-session map must be dropped here, or
+    /// it survives a daemon restart and answers for a session that no longer
+    /// exists. Adding to the teardown list is a separate decision — see the
+    /// serviceUnregistered handler for what belongs there and why.
+    void clearPerSessionDaemonState();
 
     /**
      * @brief Handle autotile drag-to-float: restore border and pre-autotile size
@@ -912,6 +929,18 @@ private:
     quint64 m_screenQueryGeneration = 0;
     bool m_initialScreenQueryPending = false;
     QSet<QString> m_pendingFreshWindows;
+    /// Monotonic stamp source for windowOpened / windowsOpenedBatch announces,
+    /// session-global for the same reason m_crossScreenRestoreSeq is: a stamp is
+    /// never reused, so an ERASED map entry reads back as 0 and can never match a
+    /// captured stamp.
+    quint64 m_announceSeq = 0;
+    /// Per-window stamp of the newest in-flight announce. Both error arms capture
+    /// their stamp and roll back only while it still matches, so an error for
+    /// announce N-1 cannot erase the tracking announce N established, and a
+    /// corpse's error arm (the entry erased by cleanupAutotileTracking) reads
+    /// back 0, mismatches, and no-ops instead of re-inserting a spawn-provenance
+    /// marker for a dead window whose appId-derived id is reusable.
+    QHash<QString, quint64> m_announceGen;
     struct DeferredWindowRoute
     {
         QPointer<KWin::EffectWindow> window;
@@ -1022,7 +1051,19 @@ private:
     /// source screen's coordinate space and would land off-target on a
     /// different monitor).
     QHash<QString, QPair<QString, QRectF>> m_savedPreTileForDesktopMove;
-    bool m_inOutputChanged = false; ///< re-entrancy guard for handleWindowOutputChanged
+    /// Re-entrancy guard for handleWindowOutputChanged, PER WINDOW.
+    ///
+    /// A single global bool refused every nested call, including one for a
+    /// DIFFERENT window, and that refusal was permanent: window_connections.cpp
+    /// pre-writes m_trackedScreenPerWindow before calling in, so the detector
+    /// will not re-fire for the same physical hop, and the only other re-entry
+    /// path triggers solely on a virtual-screen crossing. A dropped physical hop
+    /// therefore had no re-detect path anywhere and the window kept the old
+    /// screen's tracking for the session. Keyed by windowId, re-entry is refused
+    /// only for the window already being handled, which is the case the guard was
+    /// written for (the transfer's own releaseWindowTracking / notifyWindowAdded
+    /// can move the window across screens again).
+    QSet<QString> m_outputChangeInFlight;
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
     /// Monotonic stamp source for the cross-screen size-restore continuation.

@@ -226,6 +226,16 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
                                                  QString(PhosphorProtocol::Service::Interface::Rules),
                                                  QStringLiteral("rulesChanged"), this, SLOT(slotRulesChanged()));
         m_daemonGate.rulesSubscribed = false;
+        // Stop the debounce that subscription feeds. A `rulesChanged` landing
+        // under 50ms before the daemon died leaves the timer armed, and its
+        // timeout drives loadRuleAnimationsFromDbus at a service that is gone —
+        // 1 + retryMax getAllRules calls into nothing. The retry loop inside
+        // fetchAllRulesOnce is deliberately allowed to run against a
+        // not-yet-ready daemon at bring-up, so the gate belongs here on the
+        // teardown edge and NOT inside the fetch. Nothing is lost by dropping
+        // the pending fetch: the next daemon's own rulesChanged (and the
+        // bring-up seed) re-drive it.
+        m_animationRulesRefreshDebounce.stop();
         // Release any pending first-frame open suppression. Without the
         // daemon there is no `resolveWindowRestore` reply coming and no
         // autotile reposition either, so the suppression entry would just
@@ -402,6 +412,19 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     // Connect to existing windows. Skip close-grabbed dying windows — wiring
     // per-window connections and seeding screen tracking for a window whose
     // close already happened would resurrect state nothing cleans up.
+    //
+    // ORDERING INVARIANT: setupWindowConnections has no idempotency guard —
+    // it issues raw connects with lambda slots, so a second call on the same
+    // window would double every per-window handler. What keeps that from
+    // happening is call-site exclusivity, not a check inside: this sweep runs
+    // exactly once, from the constructor, over windows that existed BEFORE
+    // the effect loaded, and slotWindowAdded (the only other caller) fires
+    // only for windows that appear AFTER `windowAdded` was connected in
+    // connectWindowAndScreenSignals. The two sets are disjoint because the
+    // whole ctor sequence in lifecycle.cpp runs without re-entering the event
+    // loop, so no windowAdded can dispatch in the gap between that connect and
+    // this sweep. Do not add a third caller, and do not make anything between
+    // those two points spin the event loop, without a wired-window guard.
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         if (!w || w->isDeleted()) {
