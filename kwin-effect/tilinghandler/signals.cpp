@@ -237,6 +237,13 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                     if (m_notifiedWindows.remove(windowId)) {
                         m_notifiedWindowScreens.remove(windowId);
                     }
+                    // Same untrack outcome as the arm below, so the per-session
+                    // scroll companions go here too rather than being left
+                    // behind by this early exit.
+                    m_effect->m_scrollCommandedRects.remove(windowId);
+                    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
+                        KWin::effects->addRepaintFull();
+                    }
                     continue;
                 }
                 // Capture tracked-ness BEFORE demoting: it is the only
@@ -259,6 +266,16 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                 // old autotile zone.
                 m_tileTargetZones.remove(windowId);
                 m_centeredWaylandZones.remove(windowId);
+                // The per-session scroll companions go with the untrack too,
+                // exactly as the genuine-toggle arm below does it. This arm
+                // reaches the same untracked outcome, so leaving them behind
+                // means the counter-assert can re-arm against a rect from the
+                // session that just ended, and a relocation from a dead strip
+                // survives into the next one.
+                m_effect->m_scrollCommandedRects.remove(windowId);
+                if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
+                    KWin::effects->addRepaintFull();
+                }
                 // Apply the pre-autotile geometry — the ONLY thing that
                 // un-tiles the window, since the daemon does not resnap on a
                 // desktop switch. m_preTileGeometries is read non-
@@ -382,15 +399,15 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             // every other exit funnel (cleanupAutotileTracking, float
             // cleanup, the snap↔snap belt): the counter-assert must not
             // re-arm against a rect from the mode that just ended, and the
-            // membership clear below this loop ends the paint relocation,
-            // so the visual-pos removal pairs with damage.
-            bool anyVisualPosDropped = false;
+            // membership clear in this loop ends the paint relocation,
+            // so the relocation-delta removal pairs with damage.
+            bool anyVisualDeltaDropped = false;
             for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
                 clearWindowTiledAllScreens(wid);
                 m_effect->m_scrollCommandedRects.remove(wid);
-                anyVisualPosDropped = (m_effect->m_scrollVisualPos.remove(wid) > 0) || anyVisualPosDropped;
+                anyVisualDeltaDropped = (m_effect->m_scrollVisualDelta.remove(wid) > 0) || anyVisualDeltaDropped;
             }
-            if (anyVisualPosDropped && KWin::effects) {
+            if (anyVisualDeltaDropped && KWin::effects) {
                 KWin::effects->addRepaintFull();
             }
 
@@ -992,13 +1009,41 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         // synchronously on X11 and this slot's caller holds no apply guard —
         // an unbracketed re-entry would reach the VS-crossing detector (and
         // the counter-assert gate) for a move the effect itself made.
+        //
+        // The rect goes through constrainTileGeometry rather than being
+        // committed raw, so that this site and applyWindowGeometry cannot
+        // disagree about what the stored column rect means. On the path that
+        // actually runs the call is a no-op: the helper returns its input
+        // unchanged for anything that is not an X11 client, and the note below
+        // records that the X11 enter signal is suppressed inside the bracketed
+        // setFullScreen, so this branch is Wayland's in practice. It is kept
+        // because the helper is idempotent and free here, and because a raw
+        // commit would be wrong the moment an X11 path did reach it — for a
+        // size-constrained client KWin clamps the size on moveResize without
+        // re-centring, which for a parked column cancels the relocation back
+        // to the pre-fix behaviour.
         {
             const bool prevInApply = m_effect->m_daemonGate.inGeometryApply;
             m_effect->m_daemonGate.inGeometryApply = true;
+            const auto restoreGate = qScopeGuard([this, prevInApply] {
+                m_effect->m_daemonGate.inGeometryApply = prevInApply;
+            });
             if (KWin::Window* kw = w->window()) {
-                kw->moveResize(QRectF(m_effect->m_windowedFullscreenWindows.value(windowId)));
+                kw->moveResize(
+                    QRectF(m_effect->constrainTileGeometry(w, m_effect->m_windowedFullscreenWindows.value(windowId))));
+                // The bracket swallowed any outputChanged this move emitted, so
+                // the detector never ran its own tracker write. Re-seed it,
+                // the same pairing rule the two other bracketed applies in
+                // this file follow. For this branch the window is a windowed-
+                // fullscreen member and therefore normally strip-tracked, so
+                // the value read back is the engine-authoritative screen rather
+                // than a position re-detect. Where tracking has already lapsed
+                // it falls through to the positional resolve, which for a
+                // windowed-fullscreen frame agrees anyway. Either way the write
+                // reasserts rather than repairs, and exists so the bracket's
+                // pairing rule holds uniformly.
+                m_effect->m_trackedScreenPerWindow[w] = m_effect->getWindowScreenId(w);
             }
-            m_effect->m_daemonGate.inGeometryApply = prevInApply;
         }
         // Shed the decoration now: shouldDecorateWindow rejects on the
         // COMMITTED fullscreen state, which was still false when the batch's
@@ -1126,6 +1171,18 @@ void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     // geometry (same cleanup applyFloatCleanup performs).
     m_tileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
+    // The per-session scroll companions go too. The membership clear above
+    // makes them inert for as long as the window stays fullscreen (the paint
+    // path resolves the scroll output through that membership), but the EXIT
+    // branch re-marks the window tiled — so a stale park relocation computed
+    // before the fullscreen would be applied to the restored frame, for at
+    // least the round trip of the reapply request the exit dispatches, and
+    // indefinitely when the daemon gate is closed. The float exits shed the
+    // same pair for the same reason.
+    m_effect->m_scrollCommandedRects.remove(windowId);
+    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
     m_effect->removeWindowDecoration(windowId);
 }
 

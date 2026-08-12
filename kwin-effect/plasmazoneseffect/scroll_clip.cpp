@@ -89,13 +89,13 @@ QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
 bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const
 {
     // Ordered cheapest-first: the empty-map probe is the common-case exit on a
-    // desktop with nothing parked, and the visual-pos probe answers before the
+    // desktop with nothing parked, and the delta probe answers before the
     // predicate walk for every never-parked column.
-    if (!w || m_scrollVisualPos.isEmpty()) {
+    if (!w || m_scrollVisualDelta.isEmpty()) {
         return false;
     }
-    const auto vit = m_scrollVisualPos.constFind(windowId);
-    if (vit == m_scrollVisualPos.constEnd()) {
+    const auto vit = m_scrollVisualDelta.constFind(windowId);
+    if (vit == m_scrollVisualDelta.constEnd()) {
         return false;
     }
     KWin::LogicalOutput* const managed = scrollManagedOutputFor(w);
@@ -103,14 +103,21 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
         return false;
     }
     // The rect paintWindow actually draws: the window's expanded band
-    // relocated by (visual - committed) — the same additive translate the
-    // draw applies — slid by the live view offset. Expanded geometry (not the
-    // frame) so a decoration shadow reaching into the viewport from a
-    // just-offscreen column keeps painting; the chain's outer padding is
-    // added below for the same reason.
-    const KWin::RectF committed = w->frameGeometry();
+    // relocated by the stored strip-minus-park delta — the same additive
+    // translate the draw applies — slid by the live view offset. Expanded
+    // geometry (not the frame) so a decoration shadow reaching into the
+    // viewport from a just-offscreen column keeps painting; the chain's outer
+    // padding is added below for the same reason.
+    //
+    // The delta rides on the COMMITTED position rather than replacing it,
+    // which is what keeps this predicate honest for a size-constrained X11
+    // frame: such a window is committed centred inside its column, so
+    // differencing an absolute strip position against the committed rect
+    // would test a band at the column's corner instead of where the window
+    // is drawn, and cull against the wrong rect.
     QRectF visual = w->expandedGeometry();
     if (visual.isEmpty()) {
+        const KWin::RectF committed = w->frameGeometry();
         visual = QRectF(committed.x(), committed.y(), committed.width(), committed.height());
     }
     if (visual.isEmpty()) {
@@ -121,7 +128,7 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
         // every other unknown in this predicate.
         return false;
     }
-    visual.translate(vit->x() - committed.x(), vit->y() - committed.y());
+    visual.translate(vit->x(), vit->y());
     visual.translate(m_stripViewAnimator->offsetFor(managed), 0.0);
     if (const auto decoIt = m_windowDecorations.constFind(windowId); decoIt != m_windowDecorations.constEnd()) {
         const qreal pad = decoIt->outerPadding;

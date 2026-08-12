@@ -1191,9 +1191,9 @@ void TilingHandler::applyFloatCleanup(const QString& windowId)
     // answers with the OLD scrolling screen. The paint pass for the window's
     // real output then skips it as belonging elsewhere, and the window is
     // simply not drawn. The removal changes where the paint path draws the
-    // window, so it pairs with damage per m_scrollVisualPos's contract (the
+    // window, so it pairs with damage per m_scrollVisualDelta's contract (the
     // float paths have no guaranteed follow-up geometry apply).
-    if (m_effect->m_scrollVisualPos.remove(windowId) > 0 && KWin::effects) {
+    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
         KWin::effects->addRepaintFull();
     }
     // Geometry first, then the decoration funnel — the order every sibling
@@ -1243,14 +1243,14 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     m_effect->m_scrollCommandedRects.remove(windowId);
     // Same rationale as applyFloatCleanup for all three: a stale target
     // re-triggers centering on the next frameGeometryChanged, and a stale
-    // visual-pos entry makes a later snap on another screen paint the window
+    // relocation-delta entry makes a later snap on another screen paint the window
     // at the dead strip position (or not at all).
     m_tileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
     // The removal changes where the paint path draws the window (relocated
     // position → nothing), and unlike the active channel this path has no
     // follow-up geometry apply guaranteed to damage — so pair it.
-    if (m_effect->m_scrollVisualPos.remove(windowId) > 0 && KWin::effects) {
+    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
         KWin::effects->addRepaintFull();
     }
     // Decoration re-drive: the sibling exit paths (the self-exit arms, the

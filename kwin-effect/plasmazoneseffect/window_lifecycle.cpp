@@ -420,15 +420,22 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // then draws is off-viewport either way, so the transition buys nothing
     // and costs a full-output repaint every frame for its duration. The
     // relocation that normally draws a parked column where it really sits is
-    // dropped one line below, so nothing would move this back on screen.
-    const bool parkedOffAllOutputs = m_scrollVisualPos.contains(closingWindowId) && !w->frameGeometry().isEmpty()
+    // dropped just below (and again in the untrack funnel), so nothing would
+    // move this back on screen.
+    const bool parkedOffAllOutputs = m_scrollVisualDelta.contains(closingWindowId) && !w->frameGeometry().isEmpty()
         && !KWin::effects->screenAt(w->frameGeometry().center().toPoint());
     if (!parkedOffAllOutputs) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
                                /*reverse=*/true, /*holdCloseGrab=*/true);
     }
     m_windowAnimator->removeAnimation(w);
-    m_scrollVisualPos.remove(closingWindowId);
+    // Pairs with damage like every other remover. Note this is not the only
+    // remover on the close path: TilingHandler::onWindowClosed further down
+    // this slot funnels into cleanupAutotileTracking, which drops the entry
+    // unconditionally, so a conditional hold here would be defeated there.
+    if (m_scrollVisualDelta.remove(closingWindowId) > 0 && KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
     // A dying window needs no setFullScreen(false) — just the membership.
     // The keep-flag snapshot is RESTORED, not discarded: with the close
     // shader's holdCloseGrab the EffectWindow keeps painting for the

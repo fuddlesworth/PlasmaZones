@@ -613,8 +613,19 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
     // first batch overwrites it. The parked paint hint goes with it for the
     // same reason (inert off a scrolling output, but a stale relocation the
     // moment the window returns to one).
+    //
+    // The relocation drop pairs with damage, like every other remover: it
+    // changes where the paint path draws the window. Not all of this funnel's
+    // callers are mid-drag (where KWin damages continuously and the gap would
+    // be invisible) — the cross-mode output handoff and the move-to-another-
+    // desktop path both reach here with a live window and nothing else
+    // scheduling a frame, so the last presented frame would keep the column at
+    // its dead strip position. Pairing here rather than at the call sites
+    // covers every caller at once.
     m_effect->m_scrollCommandedRects.remove(windowId);
-    m_effect->m_scrollVisualPos.remove(windowId);
+    if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
+        KWin::effects->addRepaintFull();
+    }
     // Windowed fullscreen dies with the tracking: this funnel serves the
     // close path (where slotWindowClosed already removed the membership,
     // making this belt) and the cross-output transfer (where nothing else
@@ -964,14 +975,14 @@ void TilingHandler::onDaemonReady()
     // arrives with the dead session's state intact. A stale commanded rect
     // re-arms the counter-assert against the dead session's position the
     // moment the new daemon's batches re-open the gates (and before they
-    // overwrite the entry); a stale visual pos paints a parked column at
+    // overwrite the entry); a stale relocation delta paints a parked column at
     // the dead session's strip position; the min-size cache says "already
     // sent" about a daemon that never heard it (mildest — the re-announce
-    // re-seeds it, cleared for symmetry with the teardown). The visual-pos
+    // re-seeds it, cleared for symmetry with the teardown). The relocation-delta
     // clear pairs with damage like its teardown twin: the removal changes
     // where the paint path draws those windows.
-    if (!m_effect->m_scrollVisualPos.isEmpty()) {
-        m_effect->m_scrollVisualPos.clear();
+    if (!m_effect->m_scrollVisualDelta.isEmpty()) {
+        m_effect->m_scrollVisualDelta.clear();
         if (KWin::effects) {
             KWin::effects->addRepaintFull();
         }

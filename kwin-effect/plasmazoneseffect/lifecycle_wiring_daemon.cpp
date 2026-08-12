@@ -294,7 +294,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // keeps marking them transformed off this map, and no re-tile can
         // arrive to clear the entry. Dropping it here is what lets the next
         // batch, or the next daemon, start from nothing.
-        m_scrollVisualPos.clear();
+        m_scrollVisualDelta.clear();
         // The commanded rects and the min-size cache are per-session scroll
         // state like everything above: the counter-assert must not re-arm
         // against a dead session's rects when a new daemon repopulates the
@@ -355,9 +355,10 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         m_tilingHandler->restoreAllWindowedFullscreen();
         clearAllDecorations();
         // Deliberately do NOT clear `m_snappingExclusionRuleSet`,
-        // `m_decorationExclusionRuleSet`, `m_animationExclusionRuleSet`, or
-        // the shader manager's animation
-        // rule set. Across a daemon restart the user's last-known rule set
+        // `m_decorationExclusionRuleSet`, `m_animationExclusionRuleSet`, the
+        // shader manager's animation rule set, or its effect-verdict rule set
+        // (the five this handler calls the effect-bound rule sets above).
+        // Across a daemon restart the user's last-known rule set
         // remains authoritative — clearing here would briefly drop every
         // exclusion / animation override during the bringup race, flashing
         // un-filtered animations and unstyled snaps until the new daemon

@@ -121,6 +121,23 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // counter-assert could fight one legitimate X11 position
                 // with the old screen's rect before the destination's first
                 // batch overwrites it. Same hazard the funnel documents.
+                //
+                // The relocation hint is deliberately NOT dropped alongside
+                // it, despite the two looking symmetric. By the ordering this
+                // function documents above, the destination's tile requests
+                // have NORMALLY already landed (that is what pre-seeded the
+                // record this arm is echoing), so the entry here is usually
+                // the DESTINATION's, freshly written. This arm only proves the
+                // source bucket emptied, so it does not guarantee that — but
+                // keeping the entry is right either way. Where the destination
+                // batch has not run yet, its per-window insert-or-remove
+                // corrects a stale source value as soon as it does. Where it
+                // has, dropping would be permanent: the engine emits on change,
+                // so with the strip at rest nothing rewrites an unchanged
+                // value, and the column would be drawn at its committed rect
+                // below the union of all outputs, i.e. invisible, until the
+                // user scrolled it. A stale commanded rect only disarms a
+                // counter-assert, which is invisible; a lost relocation is not.
                 m_effect->m_scrollCommandedRects.remove(windowId);
             } else if (m_managedScreens.contains(trueSource)) {
                 // Cross-MODE move: window left autotile. Drop effect-side
@@ -143,11 +160,11 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // cross-mode branch clears the same set via
                 // cleanupAutotileTracking, and this branch is the same "no
                 // strip left to own it" outcome by another route. The
-                // visual-pos removal changes where the paint path draws the
+                // relocation-delta removal changes where the paint path draws the
                 // window, so it pairs with damage like every other remover.
                 m_windowedFsClearInFlight.remove(windowId);
                 m_effect->m_scrollCommandedRects.remove(windowId);
-                if (m_effect->m_scrollVisualPos.remove(windowId) > 0 && KWin::effects) {
+                if (m_effect->m_scrollVisualDelta.remove(windowId) > 0 && KWin::effects) {
                     KWin::effects->addRepaintFull();
                 }
             }
@@ -241,7 +258,8 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // frameGeometryChanged re-detect a phantom VS crossing.
         //
         // An armed m_expectedOutputMove marker deliberately SURVIVES this
-        // arm (the only exit that neither consumes nor drains one): a
+        // arm (one of three exits that neither consume nor drain one; the
+        // two scroll bails above are the others, equally deliberate): a
         // marked move still in flight can see intermediate positional
         // echoes that classify snap↔snap here, and the marker is the only
         // reliable signal left for the real echo — dropping it would break

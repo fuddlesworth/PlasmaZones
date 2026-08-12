@@ -810,13 +810,13 @@ private:
      * @brief Is this strip column parked entirely off its output's viewport
      *        right now — drawn (if at all) where nobody can see it?
      *
-     * True only for a scroll-managed window with a strip position entry
-     * (m_scrollVisualPos) whose VISUAL rect — the padded band relocated to
-     * its strip position, plus the live view offset — intersects no part of
-     * its managed output. The visual rect is where paintWindow actually
-     * draws the quad, so this is the one honest visibility test for a
-     * parked column; the committed rect is always off every output (that is
-     * what parking IS) and answers nothing.
+     * True only for a scroll-managed window with a strip relocation entry
+     * (m_scrollVisualDelta) whose VISUAL rect — the padded band moved by that
+     * delta, plus the live view offset — intersects no part of its managed
+     * output. The visual rect is where paintWindow actually draws the quad,
+     * so this is the one honest visibility test for a parked column; the
+     * committed rect is always off every output (that is what parking IS)
+     * and answers nothing.
      *
      * FOUR consumers, and they must stay in lockstep or a column blinks or
      * burns: prePaintWindow withholds the TRANSFORMED flag (so KWin's own
@@ -921,6 +921,14 @@ private:
                              bool skipAnimation = false,
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF());
+    /// The rect applyWindowGeometry will actually COMMIT for a tile request:
+    /// X11/XWayland frames are constrained to the client's WM_SIZE_HINTS and
+    /// centred in the zone; everything else passes through unchanged. The
+    /// scrolling batch path calls this to build animation origins and
+    /// degenerate-leg comparisons against the committed rect rather than the
+    /// raw column rect (a fixed-size X11 game's column rect and committed
+    /// rect differ by the centring offset). Idempotent.
+    QRect constrainTileGeometry(KWin::EffectWindow* window, const QRect& geometry) const;
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
@@ -2114,20 +2122,39 @@ private:
     /// profile of its own — the caller resolves the scrolling.view motion node
     /// per batch and hands it in.
     std::unique_ptr<StripViewAnimator> m_stripViewAnimator;
-    /// Where a PARKED scrolling column should be drawn, by window id. Its
-    /// committed rect is the park below the union of all outputs — the only
-    /// rect that cannot stray onto a neighbouring monitor — so the paint path
-    /// translates it back here and then adds the view offset, which keeps it
-    /// travelling with the rest of the strip instead of vanishing the moment
-    /// it leaves the viewport. Absent for every window whose committed rect
-    /// already IS its paint position, which is almost all of them.
+    /// How far a PARKED scrolling column's drawing must be translated from
+    /// its committed rect to sit at its strip position, by window id. Stored
+    /// as the strip-minus-park DELTA of the batch's rects rather than the
+    /// strip position itself: the committed frame is not always the park rect
+    /// (applyWindowGeometry's X11 constrain-and-centre pass offsets a
+    /// fixed-size client within it), and the delta rides on top of whatever
+    /// was committed, preserving that offset — an absolute position erased it
+    /// and drew such windows at the column's top-left. The committed rect is
+    /// the park below the union of all outputs — the only rect that cannot
+    /// stray onto a neighbouring monitor — so the paint path applies this
+    /// delta and then adds the view offset, which keeps the column travelling
+    /// with the rest of the strip instead of vanishing the moment it leaves
+    /// the viewport. Absent for every window drawn at its committed rect,
+    /// which is almost all of them.
     /// DAMAGE CONTRACT: adding, changing or removing an entry moves where
     /// the paint path draws the window, so every mutation site must either
     /// pair with addRepaint(Full) or sit on a path whose follow-up geometry
     /// apply (or membership clear that already stopped the relocation)
     /// provably damages — the batch writer change-gates and damages, and
     /// the removers each document which half covers them.
-    QHash<QString, QPoint> m_scrollVisualPos;
+    /// Note the drawn position has TWO inputs under the delta form, this
+    /// entry and the committed rect, where the absolute form it replaced had
+    /// only one. The contract above covers the entry half. The committed
+    /// half is covered by whatever moved the commit: a geometry apply damages
+    /// its own regions, and for a column parked below the union of all
+    /// outputs those regions intersect no output, so a mover that changes the
+    /// commit while the entry is unchanged (the X11 counter-assert, the
+    /// deferred Wayland re-centring) does not damage the place the window is
+    /// actually drawn. At rest that place is off-viewport and nothing is
+    /// drawn there anyway; mid-leg the view spring damages every frame. Do
+    /// not narrow either of those two conditions without giving the commit
+    /// half its own pairing.
+    QHash<QString, QPoint> m_scrollVisualDelta;
     /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
     /// fullscreen state (set by the effect from the batch flag) while the
     /// committed rect stays the column slot, stored here as the value. The
@@ -2414,7 +2441,7 @@ private:
     bool m_vertexSnappingDisabled = false;
 
     /// True while a direct-drive caller runs paintWindow OUTSIDE KWin's chain
-    /// walk. FOUR setters: DesktopTransitionManager::compositeWindowsInto —
+    /// walk. THREE setters: DesktopTransitionManager::compositeWindowsInto —
     /// the shared tail of both desktop captures, captureDesktop (the switch
     /// legs) and capturePeekWindowsScene (the peek's windows layer) —
     /// StripTransitionManager's top-composite, which draws the above-strip
