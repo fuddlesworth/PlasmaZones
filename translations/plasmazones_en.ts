@@ -1720,8 +1720,8 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="173"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="262"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="172"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="261"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="81"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="290"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="357"/>
@@ -1941,7 +1941,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="208"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="207"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="147"/>
         <source>Overlay</source>
         <translation type="unfinished"></translation>
@@ -1954,16 +1954,16 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="114"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="217"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="216"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="153"/>
         <location filename=".qml-stubs/src/settings/qml/Main.qml.cpp" line="815"/>
         <source>Appearance</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="232"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="271"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="319"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="231"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="270"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="318"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="101"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="126"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="140"/>
@@ -2058,7 +2058,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="312"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="385"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="727"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="119"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="115"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="118"/>
         <source>Border color</source>
         <translation type="unfinished"></translation>
@@ -2132,7 +2132,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="370"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="369"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="266"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="333"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="989"/>
@@ -2167,8 +2167,8 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="171"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="205"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="170"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="204"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="289"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="351"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="66"/>
@@ -4613,8 +4613,8 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="144"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="333"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="143"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="332"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="950"/>
         <source>Animations</source>
         <translation type="unfinished"></translation>
@@ -4806,20 +4806,20 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="447"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="446"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="50"/>
         <source>Popups</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="56"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="36"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="38"/>
         <source>Layout Picker</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="58"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="42"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="44"/>
         <source>Shortcut Cheatsheet</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5970,7 +5970,7 @@
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="52"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="351"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="833"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="24"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="26"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="87"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingSimplePage.qml.cpp" line="95"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingWindowBehaviorPage.qml.cpp" line="32"/>
@@ -6123,8 +6123,8 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="732"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="191"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="198"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="139"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="147"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="134"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="141"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="209"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="216"/>
         <source>Border width</source>
@@ -6752,7 +6752,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="130"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="129"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="414"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="424"/>
         <source>Decorations</source>
@@ -6765,8 +6765,8 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="736"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="221"/>
         <location filename=".qml-stubs/src/settings/qml/pages/decoration/WindowAppearancePage.qml.cpp" line="228"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="171"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="179"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="163"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="170"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingTabsPage.qml.cpp" line="304"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="242"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOverlayAppearancePage.qml.cpp" line="249"/>
@@ -7553,7 +7553,7 @@
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="140"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="143"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="716"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="52"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="49"/>
         <source>Drop indicator</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7993,7 +7993,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="278"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="277"/>
         <location filename="../src/settings/rules/ruleauthoring_actionparams.cpp" line="52"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="69"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="577"/>
@@ -8370,8 +8370,8 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="237"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="282"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="236"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="281"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="1046"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="559"/>
         <source>Configuration</source>
@@ -8617,7 +8617,7 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="718"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="70"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="67"/>
         <source>Fill color</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8628,8 +8628,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="723"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="98"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="104"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="97"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="102"/>
         <source>Fill opacity</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8907,8 +8907,8 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="130"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="137"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="98"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="336"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="429"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="335"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="428"/>
         <source>General</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8939,24 +8939,24 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="215"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="222"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="224"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="359"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="440"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="358"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="439"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="40"/>
         <source>Windows</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="153"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="152"/>
         <source>Rules</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="160"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="159"/>
         <source>Editor</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="162"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="161"/>
         <source>About</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8967,7 +8967,7 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="232"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="234"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="236"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="181"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="180"/>
         <source>Virtual Screens</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8979,26 +8979,26 @@
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="161"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="165"/>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="374"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="185"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="184"/>
         <source>Layouts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="213"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="212"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="74"/>
         <source>Behavior</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="224"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="223"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="54"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="30"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="32"/>
         <source>Zone Selector</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="239"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="284"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="238"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="283"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="83"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="84"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="152"/>
@@ -9006,106 +9006,106 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="244"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="289"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="323"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="243"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="288"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="322"/>
         <source>Quick Shortcuts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="246"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="413"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="456"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="245"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="412"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="455"/>
         <source>Shaders</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="315"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="314"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="872"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="231"/>
         <source>Tabs</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="344"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="343"/>
         <source>Transitions</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="353"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="352"/>
         <source>Motion</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="386"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="385"/>
         <source>Window Motion</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="393"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="392"/>
         <source>Window Dragging</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="434"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="433"/>
         <source>Surfaces</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="453"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="452"/>
         <source>Decoration Sets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="355"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="436"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="354"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="435"/>
         <source>Library</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="177"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="297"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="382"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="176"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="296"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="381"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="108"/>
         <source>Scrolling</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="362"/>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="443"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="361"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="442"/>
         <location filename="../src/settings/pages/decorationpagecontroller_browser.cpp" line="48"/>
         <source>OSDs</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="367"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="366"/>
         <source>Overlays</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="396"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="395"/>
         <source>Side Panels</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="398"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="397"/>
         <source>Widgets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="403"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="402"/>
         <source>Layout Editor</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="406"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="405"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/VirtualScreensPage.qml.cpp" line="625"/>
         <source>Presets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="411"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="410"/>
         <source>Motion Sets</source>
         <translation type="unfinished"></translation>
     </message>
@@ -14151,17 +14151,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="13"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="15"/>
         <source>Popup decoration surfaces</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="14"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="16"/>
         <source>Decoration for the transient popups. &quot;All Popups&quot; is the default. Each popup can override it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="18"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/decoration/DecorationPopupsPage.qml.cpp" line="20"/>
         <source>All Popups</source>
         <translation type="unfinished"></translation>
     </message>
@@ -15247,7 +15247,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="308"/>
+        <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="307"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="59"/>
         <source>Columns</source>
         <translation type="unfinished"></translation>
@@ -19654,39 +19654,39 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="73"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="70"/>
         <source>Drop indicator fill color</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="75"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="72"/>
         <source>Color filling the space the window will land in. Follows the color scheme unless you pick one.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="100"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="99"/>
         <source>How solid the fill is. This replaces any transparency carried by the fill color.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="121"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="117"/>
         <source>Drop indicator border color</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="123"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="119"/>
         <source>Color of the indicator&apos;s edge. Follows the color scheme unless you pick one.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="141"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="136"/>
         <source>Thickness of the indicator&apos;s edge in pixels. Zero draws the fill with no edge.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="173"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingDropIndicatorCard.qml.cpp" line="165"/>
         <source>Corner rounding of the indicator in pixels.</source>
         <translation type="unfinished"></translation>
     </message>
