@@ -2142,6 +2142,18 @@ private:
     /// apply (or membership clear that already stopped the relocation)
     /// provably damages — the batch writer change-gates and damages, and
     /// the removers each document which half covers them.
+    /// Note the drawn position has TWO inputs under the delta form, this
+    /// entry and the committed rect, where the absolute form it replaced had
+    /// only one. The contract above covers the entry half. The committed
+    /// half is covered by whatever moved the commit: a geometry apply damages
+    /// its own regions, and for a column parked below the union of all
+    /// outputs those regions intersect no output, so a mover that changes the
+    /// commit while the entry is unchanged (the X11 counter-assert, the
+    /// deferred Wayland re-centring) does not damage the place the window is
+    /// actually drawn. At rest that place is off-viewport and nothing is
+    /// drawn there anyway; mid-leg the view spring damages every frame. Do
+    /// not narrow either of those two conditions without giving the commit
+    /// half its own pairing.
     QHash<QString, QPoint> m_scrollVisualDelta;
     /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
     /// fullscreen state (set by the effect from the batch flag) while the
@@ -2429,7 +2441,7 @@ private:
     bool m_vertexSnappingDisabled = false;
 
     /// True while a direct-drive caller runs paintWindow OUTSIDE KWin's chain
-    /// walk. FOUR setters: DesktopTransitionManager::compositeWindowsInto —
+    /// walk. THREE setters: DesktopTransitionManager::compositeWindowsInto —
     /// the shared tail of both desktop captures, captureDesktop (the switch
     /// legs) and capturePeekWindowsScene (the peek's windows layer) —
     /// StripTransitionManager's top-composite, which draws the above-strip

@@ -166,17 +166,39 @@ QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const
     // check in slotWindowFrameGeometryChanged().
     //
     // Split out of applyWindowGeometry so the scrolling batch path can predict
-    // the COMMITTED rect for a tile request: its animation origins and the
-    // degenerate-leg comparisons must be built against what will actually be
-    // committed, not the raw column rect — the mismatch drew a fixed-size X11
-    // game at its column's top-left (the top of the screen) for the length of
-    // every park and arrival. Idempotent: re-constraining an already
-    // constrained rect changes nothing.
+    // the rect a tile request will REQUEST of KWin: its animation origins and
+    // the degenerate-leg comparisons must be built against that, not the raw
+    // column rect — the mismatch drew a fixed-size X11 game at its column's
+    // top-left (the top of the screen) for the length of every park and
+    // arrival.
+    //
+    // "Predict" is the honest word, not "commit". Two known divergences, both
+    // harmless for the callers as written: a Wayland client passes through
+    // here untouched and negotiates its own size asynchronously (a min size
+    // larger than the column lands elsewhere), and on a scaled XWayland output
+    // KWin round-trips the request through device pixels, so the committed
+    // frame is this rect rounded. Every consumer is an intersects() test or an
+    // animation endpoint, none an exact equality, so neither divergence bites
+    // — but do not add an equality comparand without revisiting this.
+    //
+    // Idempotent: the shift below is gated on the size actually changing, and
+    // KWin's own constrainFrameSize is a fixed point (clamp to [min,max], then
+    // floor to base + n*increment), so re-constraining an already constrained
+    // rect takes no branch and returns it unchanged. The deferred user-move
+    // replay depends on that — it re-enters applyWindowGeometry with a rect
+    // this function already produced.
     if (!window || !window->isX11Client()) {
         return geometry;
     }
     KWin::Window* kw = window->window();
     if (!kw) {
+        // Fails open to the unconstrained rect, which for the scroll path is
+        // the pre-fix prediction (the column rect) — worth a trace, because a
+        // null KWin::Window behind a live X11 EffectWindow is anomalous rather
+        // than routine, and the symptom it produces is the very jump this
+        // function exists to prevent.
+        qCDebug(lcEffect) << "constrainTileGeometry: no KWin window behind X11 client, predicting the raw rect"
+                          << geometry;
         return geometry;
     }
     QRect geo = geometry;

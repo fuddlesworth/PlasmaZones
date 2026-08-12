@@ -637,7 +637,7 @@ void PlasmaZonesEffect::postPaintScreen()
             if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
                 continue;
             }
-            // The driver third of scrollParkedOffscreen's contract: stop
+            // The driver quarter of scrollParkedOffscreen's contract: stop
             // driving a column parked off the viewport. Without this the
             // ~30fps backdrop pump below re-armed for every parked glass
             // column forever (backdropDue takes the focus exemption, so
@@ -846,7 +846,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // (padded decoration and scroll-strip): both must withhold the flag for a
     // column parked off the viewport, or KWin keeps it in the paint set at
     // full decoration cost forever. No pre-gates here — the predicate's own
-    // cheapest-first ordering (empty map, then the visual-pos probe) already
+    // cheapest-first ordering (empty map, then the delta probe) already
     // exits early for every non-strip window.
     const bool parkedOffscreen = scrollParkedOffscreen(w, windowId);
 

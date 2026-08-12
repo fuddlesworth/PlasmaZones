@@ -748,7 +748,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // (relocated position → nothing), so pair it with damage —
                 // the batch's own applies only damage the regions they
                 // touch, not the vacated relocation.
-                if (m_effect->m_scrollVisualDelta.remove(wid) > 0) {
+                if (m_effect->m_scrollVisualDelta.remove(wid) > 0 && KWin::effects) {
                     KWin::effects->addRepaintFull();
                 }
                 if (!win || win->isMinimized()) {
@@ -1094,16 +1094,27 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // the screen, for the length of every park. For an
                 // unconstrained window the committed rect IS the park rect and
                 // the two forms are identical.
-                bool visualPosChanged = false;
+                bool visualDeltaChanged = false;
                 if (snap.hasVisualPos) {
-                    const QPoint delta = snap.visualPos - snap.geometry.topLeft();
+                    // Bounded on the way in, for the same reason viewDeltaX is
+                    // and with the same constant: the wire deliberately does
+                    // not validate visualX/visualY, on the stated grounds that
+                    // the effect clamps the delta before it reaches the paint
+                    // path. It has to actually do that — the delta is added to
+                    // the committed rect at draw time AND folds into the
+                    // backdrop capture, so a garbled pair would draw the column
+                    // and its sample arbitrarily far off until the next batch.
+                    const QPoint raw = snap.visualPos - snap.geometry.topLeft();
+                    const QPoint delta(
+                        qBound(-StripViewAnimator::kMaxViewDeltaPx, raw.x(), StripViewAnimator::kMaxViewDeltaPx),
+                        qBound(-StripViewAnimator::kMaxViewDeltaPx, raw.y(), StripViewAnimator::kMaxViewDeltaPx));
                     const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
-                    visualPosChanged = (vit == m_effect->m_scrollVisualDelta.constEnd() || vit.value() != delta);
+                    visualDeltaChanged = (vit == m_effect->m_scrollVisualDelta.constEnd() || vit.value() != delta);
                     m_effect->m_scrollVisualDelta.insert(snap.windowId, delta);
                 } else {
-                    visualPosChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
+                    visualDeltaChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
                 }
-                if (visualPosChanged) {
+                if (visualDeltaChanged) {
                     KWin::effects->addRepaintFull();
                 }
             }
@@ -1344,14 +1355,31 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     // the screen) instead of the degenerate leg these
                     // branches intend. Identical to `geo` for everything
                     // else, Wayland included.
-                    const QRect geoC = m_effect->constrainTileGeometry(snap.window, geo);
+                    //
+                    // Deliberate consequence, not an accident: the constrained
+                    // rect is inset from the column by the centring offset, so
+                    // for a size-constrained X11 column that straddles its
+                    // output by LESS than that offset the intersects() tests
+                    // below can now answer differently than they did against
+                    // the raw column rect — `arriving` can read false where it
+                    // read true, and the vertical-park test can skip an
+                    // animation it used to run. That is the point: those
+                    // predicates are asking where the window will actually be,
+                    // and the answer is the constrained frame.
+                    // Normalized first, matching what applyWindowGeometry does
+                    // before it constrains the same rect: this is a D-Bus
+                    // boundary, and an inverted wire rect would otherwise hand
+                    // KWin a negative frame size here while the apply rejected
+                    // it downstream, leaving the two disagreeing about the
+                    // predicted commit.
+                    const QRect committedGeo = m_effect->constrainTileGeometry(snap.window, geo.normalized());
                     if (snap.hasVisualPos) {
                         // Parked, but drawn at its real strip position and
                         // carried by the view like every other column. There is
                         // no per-window motion left to describe, so the leg is
                         // deliberately degenerate — the edge-anchored slide-out
                         // below would fight the view offset for the same pixels.
-                        originOverride = QRectF(geoC);
+                        originOverride = QRectF(committedGeo);
                     } else if (snap.viewDeltaX != 0 && startedViewScreens.contains(snap.screenId)) {
                         // Carried by the view: the strip's own spring moves
                         // this window, so the per-window animation must cover
@@ -1401,7 +1429,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // the paint position is origin + offset, and the
                             // offset already starts a delta out — which is
                             // exactly where this column was before the scroll.
-                            originOverride = QRectF(geoC);
+                            originOverride = QRectF(committedGeo);
                         } else {
                             const KWin::RectF cur = snap.window->frameGeometry();
                             originOverride = QRectF(cur.x() - snap.viewDeltaX, cur.y(), cur.width(), cur.height());
@@ -1410,7 +1438,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
                         const QRect screenRect = out ? QRect(out->geometry()) : QRect();
                         if (screenRect.isValid()) {
-                            const bool arriving = screenRect.intersects(geoC);
+                            const bool arriving = screenRect.intersects(committedGeo);
                             // Arriving: start from the target's own row and
                             // size — the COMMITTED row and size, so a
                             // size-constrained window slides in as the frame
@@ -1418,7 +1446,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // actually sit. Leaving: keep the rect the window
                             // occupies right now, so it slides out as itself
                             // rather than jumping to the park's row first.
-                            QRect atEdge = geoC;
+                            QRect atEdge = committedGeo;
                             if (!arriving) {
                                 const KWin::RectF cur = snap.window->frameGeometry();
                                 atEdge =
@@ -1458,7 +1486,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // and their targets are on-screen anyway.)
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
                         const QRect screenRect = out ? QRect(out->geometry()) : QRect();
-                        if (screenRect.isValid() && !screenRect.intersects(geoC)) {
+                        if (screenRect.isValid() && !screenRect.intersects(committedGeo)) {
                             skipScrollAnimation = true;
                         }
                     }
@@ -1466,6 +1494,37 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                                   PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
                                                   visualTargetOverride);
                 }
+            }
+
+            // The relocation hint is a translation FROM the batch's park rect,
+            // so it only means anything once that park rect is what the window
+            // is committed at. applyWindowGeometry's non-member fullscreen bail
+            // commits nothing at all: a window the client fullscreened itself
+            // (F11) keeps being tiled by the strip — the daemon never untiles on
+            // fullscreen, and the next batch re-marks its tiled membership — so
+            // it still receives park entries, but its committed frame is the
+            // full output. Adding a park-to-strip translation (whose y reaches
+            // below the union of every output) on top of THAT drags the
+            // fullscreen surface off the viewport. Drop the entry instead, so
+            // the window simply paints where it is committed.
+            //
+            // Deliberately NOT extended to the user-move/user-resize defer arm
+            // that commitDeferredOrBailed also covers below: the relocation is
+            // already switched off for the whole drag (scrollManagedOutputFor
+            // rejects a dragged window), and the deferred replay commits the
+            // park rect afterwards, so the entry is still correct when it is
+            // next read. Dropping it there would lose the park with nothing
+            // guaranteed to restore it.
+            KWin::Window* kwc = snap.window->window();
+            const bool fullscreenBailSkippedCommit = snap.window->isFullScreen()
+                && (!kwc || kwc->isRequestedFullScreen())
+                && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId);
+            if (fullscreenBailSkippedCommit && m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0
+                && KWin::effects) {
+                // Pairs with damage like every other remover: the entry moves
+                // where the paint path draws the window, and the bail means no
+                // commit damaged anything either.
+                KWin::effects->addRepaintFull();
             }
 
             if (!snap.isMonocle && snap.window->isWaylandClient()) {
@@ -1476,6 +1535,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // at full-output size, bypassing the fullscreen bail and
                 // reaping the animation. (The ack branch in
                 // slotWindowFullScreenChanged re-commits the column rect.)
+                //
+                // ORDER NOTE: this write lands AFTER the apply above, so the
+                // synchronous frameGeometryChanged that apply emits re-enters
+                // slotWindowFrameGeometryChanged while this map still holds the
+                // PREVIOUS batch's zone for this window, and the reactive
+                // centring block there is not behind the apply gate. In
+                // practice the previous entry has already been consumed by the
+                // previous apply's own frame change, and when it survives the
+                // window is normally already at that rect so the near-zero
+                // delta arm consumes it harmlessly. Moving the write above the
+                // apply would close the window entirely; it is left here
+                // because the reactive centring is deliberately re-entrant-
+                // driven and the reordering has not been exercised.
                 if (!snap.isWindowedFullscreen) {
                     m_tileTargetZones[snap.windowId] = snap.geometry;
                 }
@@ -1499,10 +1571,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // have the counter yank the window back to it. Dropping the
                 // entry instead disarms the counter until the next batch.
                 // A fresh command resets the counter-assert burst budget.
-                KWin::Window* kwc = snap.window->window();
-                const bool commitDeferredOrBailed = snap.window->isUserMove() || snap.window->isUserResize()
-                    || (snap.window->isFullScreen() && (!kwc || kwc->isRequestedFullScreen())
-                        && !m_effect->m_windowedFullscreenWindows.contains(snap.windowId));
+                const bool commitDeferredOrBailed =
+                    snap.window->isUserMove() || snap.window->isUserResize() || fullscreenBailSkippedCommit;
                 if (commitDeferredOrBailed) {
                     m_effect->m_scrollCommandedRects.remove(snap.windowId);
                 } else {

@@ -89,7 +89,7 @@ QRect PlasmaZonesEffect::scrollClipGeometryFor(KWin::EffectWindow* w) const
 bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const
 {
     // Ordered cheapest-first: the empty-map probe is the common-case exit on a
-    // desktop with nothing parked, and the visual-pos probe answers before the
+    // desktop with nothing parked, and the delta probe answers before the
     // predicate walk for every never-parked column.
     if (!w || m_scrollVisualDelta.isEmpty()) {
         return false;
@@ -115,9 +115,9 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // differencing an absolute strip position against the committed rect
     // would test a band at the column's corner instead of where the window
     // is drawn, and cull against the wrong rect.
-    const KWin::RectF committed = w->frameGeometry();
     QRectF visual = w->expandedGeometry();
     if (visual.isEmpty()) {
+        const KWin::RectF committed = w->frameGeometry();
         visual = QRectF(committed.x(), committed.y(), committed.width(), committed.height());
     }
     if (visual.isEmpty()) {

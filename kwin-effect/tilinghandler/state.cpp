@@ -1243,7 +1243,7 @@ void TilingHandler::applyPassiveFloatShed(const QString& windowId)
     m_effect->m_scrollCommandedRects.remove(windowId);
     // Same rationale as applyFloatCleanup for all three: a stale target
     // re-triggers centering on the next frameGeometryChanged, and a stale
-    // visual-pos entry makes a later snap on another screen paint the window
+    // relocation-delta entry makes a later snap on another screen paint the window
     // at the dead strip position (or not at all).
     m_tileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
