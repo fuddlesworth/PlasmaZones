@@ -1476,18 +1476,40 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             skipScrollAnimation = true;
                         }
                     } else if (!scrollTrackedScreenFor(snap.windowId).isEmpty()) {
-                        // Edge-less commit of a scroll-tracked window whose
-                        // target is entirely off its own output: a vertical
-                        // stack-overflow park. There is no side to slide out
-                        // by, and animating to a target below the union would
-                        // sweep the window down the whole screen. Commit
-                        // without an animation. (Autotile batches never take
-                        // this branch — their windows are not scroll-tracked
-                        // and their targets are on-screen anyway.)
+                        // Edge-less commit of a scroll-tracked window. The
+                        // engine clears the departure edge for exactly two
+                        // parks, and this branch owns both directions of them.
+                        // (Autotile batches never take it — their windows are
+                        // not scroll-tracked and their targets are on-screen
+                        // anyway.)
+                        //
+                        // LEAVING (target entirely off its own output): a
+                        // vertical stack-overflow park, or a tab going hidden.
+                        // There is no side to slide out by, and animating to a
+                        // target below the union would sweep the window down
+                        // the whole screen. Commit without an animation.
+                        //
+                        // ARRIVING (target on its output, window sitting at a
+                        // park right now): the tab of an on-screen tabbed
+                        // column being ACTIVATED, or a tile the layout pushed
+                        // past the stack floor coming back. The park is below
+                        // the union of every output and is chosen for safety,
+                        // so it says nothing about where the window should
+                        // appear to come from — animating from it flies the
+                        // window up the full height of the screen. A tab switch
+                        // has no motion to describe at all: the arriving tab
+                        // occupies the rect the outgoing one just vacated, so
+                        // it must appear IN PLACE. Degenerate leg, the same
+                        // answer (and for the same reason) as the hasVisualPos
+                        // branch above. It is also what makes the pair
+                        // symmetric: the outgoing tab teleports away, so a
+                        // travelling arrival had nothing to travel from.
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
                         const QRect screenRect = out ? QRect(out->geometry()) : QRect();
                         if (screenRect.isValid() && !screenRect.intersects(committedGeo)) {
                             skipScrollAnimation = true;
+                        } else if (screenRect.isValid() && atScrollPark(snap.window)) {
+                            originOverride = QRectF(committedGeo);
                         }
                     }
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,

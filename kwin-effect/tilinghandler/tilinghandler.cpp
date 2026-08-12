@@ -341,6 +341,43 @@ QString TilingHandler::scrollTrackedScreenFor(const QString& windowId) const
     return tracked;
 }
 
+bool TilingHandler::atScrollPark(KWin::EffectWindow* w) const
+{
+    // "Sitting at a park right now", asked of the LIVE frame, for the batch
+    // apply's arrival branch.
+    //
+    // The union of every output, deliberately, not the window's own screen
+    // rect. The strip parks below the union precisely so no park can land on
+    // any output, which makes "off the union" the exact statement of parked
+    // and nothing else. Testing one output instead would also catch a window
+    // arriving from ANOTHER MONITOR — which is on screen the whole way and
+    // owns a real cross-monitor motion the caller would then flatten to a
+    // degenerate leg.
+    //
+    // The frame, not the expanded geometry: a park sits kParkMargin past the
+    // union bottom, which a tall enough decoration shadow would bridge, and
+    // the question here is where the window IS, not what it reaches.
+    if (!w) {
+        return false;
+    }
+    const KWin::RectF f = w->frameGeometry();
+    const QRect frame(qRound(f.x()), qRound(f.y()), qRound(f.width()), qRound(f.height()));
+    if (frame.isEmpty()) {
+        // Degenerate geometry (mid-unmap, zero-size commit) never intersects
+        // anything, so falling through would answer PARKED for a window we
+        // cannot locate. Fail closed: the caller's fallback is the ordinary
+        // animated leg, which is what a non-parked window should get.
+        return false;
+    }
+    QRect unionRect;
+    for (const KWin::LogicalOutput* output : KWin::effects->screens()) {
+        unionRect = unionRect.united(QRect(output->geometry()));
+    }
+    // No resolvable outputs (disconnect race): the union is empty and every
+    // rect is trivially "off" it. Fail closed for the same reason as above.
+    return !unionRect.isEmpty() && !unionRect.intersects(frame);
+}
+
 bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloating)
 {
     // Deleted windows bail before getWindowId (cache-pollution hazard).
