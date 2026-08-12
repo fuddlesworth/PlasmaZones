@@ -113,6 +113,9 @@ set(plasmazones_effect_SRCS
     tilinghandler/signals.cpp
     tilinghandler/screenschanged.cpp
     tilinghandler/state.cpp
+    tilinghandler/windowedfullscreen.cpp
+    tilinghandler/pretilegeometry.cpp
+    tilinghandler/floatcleanup.cpp
     tilinghandler/tiling.cpp
     tilinghandler/wiring.cpp
     handlers/snaphandler.cpp

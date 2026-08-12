@@ -1936,6 +1936,16 @@ private:
     void connectDragTracker();
     void connectWindowAndScreenSignals();
     void connectDaemonSubscriptions();
+    /// Wires the windows that already existed when the effect loaded, seeds the
+    /// cursor output, and installs the overhang input filter.
+    ///
+    /// Split out of connectDaemonSubscriptions, which owned it only because the
+    /// ctor's inline sequence had it there: none of this is daemon-facing, and
+    /// keeping it under that name made the file's own "daemon subscriptions"
+    /// heading false. It must still run AFTER connectDaemonSubscriptions, because
+    /// the existing-window sweep can reach code that expects the subscriptions to
+    /// be live.
+    void initExistingWindowsAndInput();
 
     /// Coalesce a full border sweep to the end of the event-loop turn. The
     /// config-default appearance loaders (and the accent / inactive colour
@@ -2857,6 +2867,22 @@ private:
     // Per-window tracked screen ID for cross-screen move detection.
     // Replaces the per-window `new QString` heap allocation that was leaked.
     QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+
+    // Windows that already have their per-window connections. setupWindowConnections
+    // issues raw connects with lambda slots, so a second call on the same window
+    // doubles every per-window handler — and Qt::UniqueConnection is illegal with a
+    // lambda slot, so the check has to live here.
+    //
+    // Two callers exist and their window sets are disjoint today (the ctor sweep
+    // covers windows that predate the effect; slotWindowAdded covers windows that
+    // appear after `windowAdded` is connected, and nothing between the two spins
+    // the event loop). This makes that an enforced invariant rather than an
+    // argument a future edit could silently invalidate.
+    //
+    // Erased in the windowDeleted backstop beside its raw-pointer-keyed siblings,
+    // for the same address-reuse reason: a stale entry would refuse to wire a new
+    // window that reused a dead one's address.
+    QSet<KWin::EffectWindow*> m_wiredWindows;
 
     // Blocks pointer/touch input on strip straddlers' clipped-away overhangs
     // (see input_filter.h). Installed once daemon subscriptions are wired;

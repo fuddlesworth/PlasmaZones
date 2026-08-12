@@ -10,6 +10,7 @@
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "handlers/snaphandler.h" // cross-mode minimize-float adoption
 
+#include <PhosphorIdentity/WindowId.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 

@@ -1002,6 +1002,11 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             m_scrollCommandedRects.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
+        // Wired-window guard. The connections themselves die with the window, so
+        // this is address-reuse safety, not connection hygiene: a stale entry
+        // would make setupWindowConnections REFUSE to wire a new window that
+        // reused a dead one's address, which fails silent and total.
+        m_wiredWindows.remove(w);
         m_restoreSuppress.remove(w);
         // Pending deferred geometry replay. The connection itself dies with the
         // window, so this is not a dangling-connection guard — it is the same

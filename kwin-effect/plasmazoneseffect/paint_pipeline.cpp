@@ -700,15 +700,42 @@ void PlasmaZonesEffect::postPaintScreen()
         // timer armed after the loop forces one frame at the deadline so
         // the reap actually fires.
         for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
-            if (!it->shaderApplied) {
-                continue;
-            }
             KWin::EffectWindow* const sw = findWindowByIdExact(it.key());
             // Exact-id discipline (mirrors reconcileDecorationOnPlacementFlip and
             // the teardown paths): findWindowById's fuzzy appId fallback can
             // return a same-app sibling for a stale id, and repainting the
             // sibling would be wrong. Skip unless it re-derives to this exact id.
             if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+                continue;
+            }
+            // The shaderApplied gate is deliberately NOT the loop's first test,
+            // and the resolve above deliberately precedes it.
+            //
+            // shaderApplied means "we own this window's decoration slot", and
+            // reconcileDecorationShader CEDES that ownership — clears the flag —
+            // for the whole time a shader transition holds the window. Skipping a
+            // ceded window outright meant a column parked while a transition owned
+            // it never reached the park block below, so parkedSinceMs was never
+            // stamped, nextParkReapInMs never accounted for it, and the arm/stop
+            // block then STOPPED the timer. On an idle desktop nothing composites
+            // after that (the park cull removed the only driver), so the
+            // full-canvas composite, capture and backdrop stayed resident for the
+            // rest of the session — the precise cost this reap exists to avoid,
+            // closed on one entry path and wide open on the other.
+            //
+            // The chain is ordinary rather than exotic: every tile batch ends in
+            // updateAllDecorations, which walks the whole stacking order, parked
+            // columns included. A transition live on one of them at that moment
+            // cedes the flag, and on an idle desktop nothing calls reconcile again
+            // to give it back.
+            //
+            // A ceded window is therefore let through to the park/reap half. It is
+            // still held back from the backdrop driver further down, which
+            // genuinely does require ownership — releaseSurfaceState declines
+            // while the transition is live and the retry below re-arms, so the
+            // reap resumes on its own once the transition drops.
+            const bool cededToTransition = !it->shaderApplied && m_shaderManager.findTransition(sw) != nullptr;
+            if (!it->shaderApplied && !cededToTransition) {
                 continue;
             }
             // The driver quarter of scrollParkedOffscreen's contract: stop
@@ -744,6 +771,13 @@ void PlasmaZonesEffect::postPaintScreen()
                     if (sit->second.parkedSinceMs < 0) {
                         sit->second.parkedSinceMs = frameClockMs;
                         remainingMs = kParkReapMs;
+                        // The stamp is the reap's whole clock, and until it exists
+                        // nothing can reclaim the window's full-canvas targets. It
+                        // is worth a line: a column that parks and never logs this
+                        // is a column whose render targets are pinned for the
+                        // session, which is invisible from the outside.
+                        qCDebug(lcEffect) << "park reap: stamped" << it.key()
+                                          << (cededToTransition ? "(slot ceded to a live transition)" : "");
                     } else if (frameClockMs - sit->second.parkedSinceMs >= kParkReapMs) {
                         releaseSurfaceState(it.key(), sw);
                         // The refusal case needs its own wake. The note above
@@ -766,9 +800,11 @@ void PlasmaZonesEffect::postPaintScreen()
                         // transition drops. The successful erase invalidates
                         // sit, so this goes by key rather than through it.
                         constexpr qint64 kParkReapRetryMs = 1000;
-                        if (m_surfaceMultipass.find(it.key()) != m_surfaceMultipass.end()) {
+                        const bool refused = m_surfaceMultipass.find(it.key()) != m_surfaceMultipass.end();
+                        if (refused) {
                             remainingMs = kParkReapRetryMs;
                         }
+                        qCDebug(lcEffect) << "park reap:" << (refused ? "refused, retrying" : "released") << it.key();
                     } else {
                         remainingMs = kParkReapMs - (frameClockMs - sit->second.parkedSinceMs);
                     }
@@ -782,7 +818,17 @@ void PlasmaZonesEffect::postPaintScreen()
                 sit != m_surfaceMultipass.end() && sit->second.parkedSinceMs >= 0) {
                 // Back on (or near) the viewport before the reap fired:
                 // clear the stamp so a later park restarts the clock.
+                // Runs for a ceded window too — unparking is unparking whoever
+                // owns the slot, and leaving a stale stamp would make the next
+                // park reap early.
                 sit->second.parkedSinceMs = -1;
+            }
+            // Everything below drives repaints for a slot we own. A ceded window
+            // was let past the gate above only for the park/reap half; its
+            // transition is pumping its own repaints, so driving it from here
+            // would be both redundant and a claim on a slot that is not ours.
+            if (!it->shaderApplied) {
+                continue;
             }
             // needsBackdrop chains are repainted for backdrop changes that
             // land no damage on the window itself, rate-limited to ~30fps
