@@ -250,8 +250,10 @@ void SettingsAdaptor::initializeRegistryScrolling()
     // because keys are applied in sorted order, so "<key>Raw" lands after
     // "<key>" and the sentinel wins. (That holds ON A CONCRETE Settings
     // backend: the two Raw keys register inside the `concrete` guard below, so
-    // a bare-ISettings backend still pins both colours on a round-trip — every
-    // production composition root passes the concrete Settings.)
+    // on anything else the sentinel does not survive a round-trip — the
+    // interface's own setter bodies are empty, so a literally-bare ISettings
+    // drops the write rather than storing it. Every production composition
+    // root passes the concrete Settings.)
     REGISTER_COLOR_SETTING("scrollingDropIndicatorColor", scrollingDropIndicatorColor, setScrollingDropIndicatorColor)
     REGISTER_COLOR_SETTING("scrollingDropIndicatorBorderColor", scrollingDropIndicatorBorderColor,
                            setScrollingDropIndicatorBorderColor)

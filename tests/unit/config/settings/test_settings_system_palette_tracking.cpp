@@ -257,6 +257,40 @@ private Q_SLOTS:
         QCOMPARE(aggregateSpy.count(), 0);
     }
 
+    /**
+     * The drop indicator resolves QPalette::Highlight forced OPAQUE, unlike the
+     * zone highlight which carries ZoneDefaults::HighlightAlpha. A platform
+     * theme is free to ship a translucent Highlight, and the indicator's border
+     * has no opacity slider to replace the alpha, so an unset border would
+     * quietly draw half transparent. This is the only place that forcing is
+     * pinned, because it needs a palette the test controls.
+     */
+    void dropIndicatorFollowsPaletteOpaquely()
+    {
+        TestHelpers::IsolatedConfigGuard guard;
+        const QPalette saved = qGuiApp->palette();
+
+        QPalette translucent = saved;
+        translucent.setColor(QPalette::Active, QPalette::Highlight, QColor(0x33, 0x66, 0x99, 0x40));
+        qGuiApp->setPalette(translucent);
+
+        Settings settings;
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorColor(), QColor(0x33, 0x66, 0x99));
+        QCOMPARE(settings.scrollingDropIndicatorColor().alpha(), 255);
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), QColor(0x33, 0x66, 0x99));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor().alpha(), 255);
+        // The zone highlight shares the role and deliberately does NOT force
+        // opacity, so it still carries ZoneDefaults' alpha. Asserting the
+        // contrast here is what stops a future "consistency" edit from
+        // forcing both or neither.
+        QVERIFY(settings.highlightColor().alpha() != 255);
+
+        // Restore so the process-global palette this file threads through its
+        // slots is left exactly as found.
+        qGuiApp->setPalette(saved);
+    }
+
     void everyRawSetterWritesItsOwnKey()
     {
         TestHelpers::IsolatedConfigGuard guard;

@@ -395,16 +395,22 @@ private Q_SLOTS:
         Settings settings;
         QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
         QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
-        // Following the palette: the resolved value IS the live Highlight, and
-        // opaque for the border's sake. Read from qGuiApp rather than compared
-        // against a literal — a hardcoded colour here would be a second source
-        // of truth for the resolution rule, which
-        // test_settings_system_palette_tracking.cpp already owns.
-        const QColor livePaletteHighlight = qGuiApp->palette().color(QPalette::Active, QPalette::Highlight);
-        QCOMPARE(settings.scrollingDropIndicatorColor(), livePaletteHighlight);
-        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
-        QCOMPARE(settings.scrollingDropIndicatorColor().alpha(), 255);
-        QCOMPARE(settings.scrollingDropIndicatorBorderColor().alpha(), 255);
+        // Following the palette: the resolved value is the live Highlight
+        // forced opaque. Read from qGuiApp rather than compared against a
+        // literal — a hardcoded colour here would be a second source of truth
+        // for the resolution rule. The alpha is forced on the EXPECTATION too,
+        // because this file does not control the process palette: a platform
+        // theme shipping a translucent Highlight is exactly what the forcing
+        // exists for, so comparing against the raw palette colour would fail
+        // this test in the one environment the production code handles. The
+        // forcing itself is pinned against a deliberately translucent palette
+        // by dropIndicatorFollowsPaletteOpaquely in
+        // test_settings_system_palette_tracking.cpp, which owns palette state.
+        QColor expected = qGuiApp->palette().color(QPalette::Active, QPalette::Highlight);
+        expected.setAlpha(255);
+        QCOMPARE(settings.scrollingDropIndicatorColor(), expected);
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), expected);
+        const QColor livePaletteHighlight = expected;
 
         settings.setScrollingDropIndicatorColor(QColor(QStringLiteral("#80112233")));
         QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QStringLiteral("#80112233"));
