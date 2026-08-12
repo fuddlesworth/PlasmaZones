@@ -36,8 +36,11 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
 {
     // Mirror renderSurfaceChainComposite's canvas math EXACTLY (padded
     // logical rect, capped capture scale, derived texture size) so uBackdrop
-    // and the composite canvas are texel-aligned — a pack samples both with
-    // the same uv (backdropTexel / surfaceTexel).
+    // and the composite canvas are canvas-aligned in normalized uv — a pack
+    // samples both with the same uv (backdropTexel / surfaceTexel). The
+    // capture's texel DENSITY may be lower than the composite's (see the
+    // texScale note below); alignment is a property of the rects, not of
+    // the densities.
     const qreal pad = wb.outerPadding;
     QRectF windowRect = w->expandedGeometry();
     if (windowRect.isEmpty()) {
@@ -64,12 +67,16 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
     // The RECT stays the full padded canvas either way: backdropRect,
     // backdropTexel's clamp and the alignment contract with the composite
     // are all normalized, so density is the only thing that moves.
-    const qreal texScale = qBound(0.05, backdropScale, 1.0);
-    const QSize textureSize(qMax(1, qRound(canvas.textureSize.width() * texScale)),
-                            qMax(1, qRound(canvas.textureSize.height() * texScale)));
     if (canvas.textureSize.isEmpty()) {
         return;
     }
+    // Clamp with the canonical bounds: backdropScale arrives already clamped
+    // into [kMinBufferScale, kMaxBufferScale] by chainBackdropScale, so this
+    // is a contract restatement, not a second policy.
+    const qreal texScale = qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale, backdropScale,
+                                  PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
+    const QSize textureSize(qMax(1, qRound(canvas.textureSize.width() * texScale)),
+                            qMax(1, qRound(canvas.textureSize.height() * texScale)));
     const QString windowId = getWindowId(w);
     if (windowId.isEmpty()) {
         return; // no stable id — don't orphan a default-inserted entry under ""
@@ -247,13 +254,26 @@ void PlasmaZonesEffect::captureWindowBackdrop(const KWin::RenderTarget& renderTa
                            source.width() / sourceRect.width() * texW, source.height() / sourceRect.height() * texH);
         const KWin::Rect destination(qRound(destF.x()), qRound(destF.y()), qRound(destF.width()),
                                      qRound(destF.height()));
+        if (destination.isEmpty()) {
+            // A sub-texel slice — reachable at reduced capture density,
+            // where one texture px spans several device px — rounds to a
+            // zero-extent destination. The blit would be a no-op, but
+            // letting the fractional destF into the coverage / union /
+            // largest-slice tracking below could publish a sub-texel valid
+            // rect that collapses every sample to one texel. Skip it
+            // entirely so all three trackers stay consistent.
+            continue;
+        }
         if (!fbo.blitFromRenderTarget(renderTarget, viewport, source, destination)) {
             continue;
         }
         // Record what this blit actually covered, grown by 1 px: the inward
         // source rounding at fractional scale can open sub-pixel seams between
         // adjacent slices, and without the growth those seams would read as
-        // coverage gaps below and needlessly shrink the published rect.
+        // coverage gaps below and needlessly shrink the published rect. The
+        // margin is in TEXTURE px, so at reduced capture density it spans
+        // 1/texScale device px — a deliberately coarser seam tolerance, in
+        // proportion to the coarser texels themselves.
         state.backdropWritten += destination.grownBy(QMargins(1, 1, 1, 1));
         destUnion = destUnion.isEmpty() ? destF : destUnion.united(destF);
         if (destF.width() * destF.height() > largestSlice.width() * largestSlice.height()) {

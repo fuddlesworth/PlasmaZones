@@ -498,7 +498,16 @@ void OverlayService::scheduleIdleQuiesce()
             // teardown-deadlock avoidance); we only pause the 60 Hz shader
             // render loop and the CAVA capture. Mirror syncCavaState's wantRun
             // predicate: a visible audio decoration also keeps CAVA alive, so it
-            // must veto the quiesce too.
+            // must veto the quiesce too. A vetoed one-shot is NOT re-armed
+            // here: every path that shows or hides a decoration or overlay
+            // routes through syncCavaState (or calls scheduleIdleQuiesce
+            // directly), so the next show or hide re-arms it. The five slot
+            // hide-completion handlers (OSD, zone selector, snap-assist,
+            // layout picker, cheatsheet) are the exception when their slot
+            // is undecorated: they call neither. Each is covered by the arm
+            // at its own next show, via applyDecoration's unconditional
+            // syncCavaState tail. New hide paths must keep that contract or
+            // parked towers strand until the next show/hide cycle.
             if (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty()) {
                 return;
             }
@@ -519,9 +528,17 @@ void OverlayService::scheduleIdleQuiesce()
                     // A false return means the installed shell QML no longer
                     // declares the forwarder (version skew) - without the log
                     // the PR's whole memory win would vanish untraceably.
+                    // Latched once per process: the skew is permanent for the
+                    // daemon's lifetime and the quiesce re-arms every idle
+                    // cycle, so an unlatched warning would repeat per screen
+                    // per cycle forever without adding information.
                     if (!QMetaObject::invokeMethod(slot, "releaseIdleGraphicsResources")) {
-                        qCDebug(lcOverlay) << "idle quiesce: releaseIdleGraphicsResources not invokable on slot"
-                                           << "(installed shell QML out of date?)";
+                        static bool warnedSlotSkew = false;
+                        if (!warnedSlotSkew) {
+                            warnedSlotSkew = true;
+                            qCWarning(lcOverlay) << "idle quiesce: releaseIdleGraphicsResources not invokable on slot"
+                                                 << "(installed shell QML out of date?)";
+                        }
                     }
                 }
             }
@@ -531,7 +548,13 @@ void OverlayService::scheduleIdleQuiesce()
             // too rather than leaving it the one surface that pins them.
             if (m_shaderPreviewWindow) {
                 if (!QMetaObject::invokeMethod(m_shaderPreviewWindow, "releaseIdleGraphicsResources")) {
-                    qCDebug(lcOverlay) << "idle quiesce: releaseIdleGraphicsResources not invokable on preview window";
+                    // Same once-per-process latch rationale as the slot loop.
+                    static bool warnedPreviewSkew = false;
+                    if (!warnedPreviewSkew) {
+                        warnedPreviewSkew = true;
+                        qCWarning(lcOverlay)
+                            << "idle quiesce: releaseIdleGraphicsResources not invokable on preview window";
+                    }
                 }
             }
             // Parked animation-shader towers (SurfaceAnimator's pending-reuse
@@ -541,8 +564,10 @@ void OverlayService::scheduleIdleQuiesce()
             // when the parking's amortisation argument no longer applies
             // (it defends against per-toggle deleteLater floods, and there
             // is no toggling here), so drop them; the next animated leg
-            // builds a fresh tower, warm-path cost unchanged inside the
-            // grace window since a quick re-trigger cancels this timer.
+            // builds a fresh tower. Note the grace window is deliberately
+            // NOT extended by re-triggers (see the arming comment below),
+            // so an OSD-only session can reap a tower that is about to be
+            // reused - the cost is one fresh tower build on the next leg.
             if (m_surfaceAnimator) {
                 m_surfaceAnimator->releaseParkedShaders();
             }
@@ -550,7 +575,7 @@ void OverlayService::scheduleIdleQuiesce()
     }
     // Arm only when not already pending: the grace window measures from the
     // FIRST idle, not from the last settings poke or OSD hide - syncCavaState
-    // funnels ~18 settings signals plus every decoration show/hide through
+    // funnels 15 settings signals plus every decoration show/hide through
     // here, and restarting on each would postpone the release indefinitely.
     // A genuine resume (refreshFromIdle, wantRun) stops the timer, so the next
     // idle re-arms a fresh window.

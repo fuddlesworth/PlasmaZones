@@ -328,7 +328,8 @@ public:
     /// ShaderEffectSource / render-node tower per (surface, target) instead
     /// of flooding deleteLater — but a parked tower holds its FBOs and
     /// pipelines for the SURFACE's lifetime, and the keep-alive overlay
-    /// shells never die, so after the first animated show the towers are
+    /// shells outlive every animation (they are destroyed only on screen
+    /// removal), so after the first animated show the towers are effectively
     /// immortal. A consumer with an idle notion (the daemon's quiesce grace)
     /// calls this once genuine rest is established: destruction goes through
     /// the same deleteLater path a superseding non-shader leg uses, active

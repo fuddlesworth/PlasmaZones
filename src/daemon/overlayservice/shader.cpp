@@ -610,7 +610,7 @@ void OverlayService::destroyShaderPreviewWindow()
     // preview pointer was nulled above, so isOverlayDisplaying() reflects
     // only the main overlay now; a warm resume restarts the loop via
     // refreshFromIdle. Arm the idle GPU release BEFORE stopping: the quiesce
-    // guard requires an active timer, and stopping first would leave the
+    // guard needs at least one active term, and stopping first would leave the
     // warm-idled main slots' shader FBOs pinned until the next drag cycle.
     if (!isOverlayDisplaying() && m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
         scheduleIdleQuiesce();

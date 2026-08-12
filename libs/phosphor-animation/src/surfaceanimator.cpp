@@ -376,10 +376,15 @@ void SurfaceAnimator::releaseParkedShaders()
     // are never in m_pendingReuse, so active animations cannot be torn out
     // from under themselves here. destroyPendingReuseEntry disconnects the
     // anchor hookups before deleteLater, same as the superseding-leg path.
-    for (auto it = d->m_pendingReuse.begin(); it != d->m_pendingReuse.end(); ++it) {
-        d->destroyPendingReuseEntry(it->second);
-    }
+    // Move-then-iterate, mirroring the destructor's drain: the entry
+    // destroyer is deleteLater-only today, but connectSurfaceCleanup's
+    // lambda already warns that a future synchronous-delete change would
+    // re-enter this animator, and iterating the live map would then be UB.
+    auto parked = std::move(d->m_pendingReuse);
     d->m_pendingReuse.clear();
+    for (auto& [_, pending] : parked) {
+        d->destroyPendingReuseEntry(pending);
+    }
 }
 
 bool SurfaceAnimator::hasParkedShaders() const

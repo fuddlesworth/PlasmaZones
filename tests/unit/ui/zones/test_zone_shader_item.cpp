@@ -386,17 +386,21 @@ private Q_SLOTS:
         QCOMPARE(item.status(), ZoneShaderItem::Status::Loading);
     }
 
-    void testZoneShaderItem_unsupportedUrlSchemeSetsError()
+    void testZoneShaderItem_unsupportedUrlSchemeIsFullyRefused()
     {
         // http:// / ftp:// / etc. can't be loaded by the RHI pipeline; the
-        // library now rejects them at setShaderSource() (input-validation
-        // boundary) with an Error status + log, rather than silently
-        // deferring to the render thread where it would fail with a
-        // generic "Shader loading failed" message.
+        // library rejects them at setShaderSource() (input-validation
+        // boundary) as a FULL refusal: no state changes at all, only a
+        // warning. Setting Status::Error while the previous shader kept
+        // rendering made status, the property value, and the on-screen
+        // output disagree (and reloadShader() then erased the error), so
+        // the contract is now "a refused write leaves everything as it
+        // was".
         ZoneShaderItem item;
         item.setShaderSource(QUrl(QStringLiteral("http://example.com/shader.frag")));
-        QCOMPARE(item.status(), ZoneShaderItem::Status::Error);
-        QVERIFY(!item.errorLog().isEmpty());
+        QCOMPARE(item.status(), ZoneShaderItem::Status::Null);
+        QVERIFY(item.errorLog().isEmpty());
+        QVERIFY(item.shaderSource().isEmpty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

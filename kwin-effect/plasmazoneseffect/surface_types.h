@@ -260,9 +260,13 @@ struct SurfaceFoldPlan
 /// (renderSurfaceChainComposite): the raw window capture, the cached static-prefix
 /// fold, the ping-pong composite pair, the per-pack buffer-pass textures
 /// (chainBufferTex), the backdrop capture, and a framebuffer pooled beside every
-/// one of those textures. Keyed by getWindowId(w) in m_surfaceMultipass; freed by
+/// one of those textures — plus `parkedSinceMs`, which is not GL state but
+/// bookkeeping deliberately colocated with it so the reap disposes of both
+/// together. Keyed by getWindowId(w) in m_surfaceMultipass; freed by
 /// removeWindowDecoration (a decoration REFRESH keeps it — see its keepSurfaceState
-/// parameter) and by the windowDeleted backstop.
+/// parameter), by the windowDeleted backstop, and by the postPaintScreen park
+/// reap (a column parked off the viewport past its threshold surrenders the
+/// whole state via releaseSurfaceState).
 struct SurfaceMultipassState
 {
     // ── Multi-pack chain compositing path (renderSurfaceChainComposite) ──────
@@ -441,8 +445,11 @@ struct SurfaceMultipassState
 
     /// Backdrop capture for needsBackdrop chains: the scene behind the
     /// window blitted from the live render target over the SAME padded
-    /// canvas as the composite (texel-aligned — a pack samples both with one
-    /// uv). Reallocated on size change; freed with the rest of this state in
+    /// canvas as the composite — canvas-aligned in normalized uv, so a pack
+    /// samples both with one uv; the capture's texel DENSITY may be lower
+    /// than the composite's (chainBackdropScale caps it at the densest
+    /// linked reader's bufferScale). Reallocated on size change; freed with
+    /// the rest of this state in
     /// removeWindowDecoration, and NEVER sampled on the deleted/close path (the
     /// fold doesn't run there; the frozen composite carries the last-alive
     /// frost baked in).
