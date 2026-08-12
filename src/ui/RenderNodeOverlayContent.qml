@@ -95,10 +95,24 @@ Item {
         flashAnimation.start();
     }
 
+    // Set while the idle quiesce has parked the shader stack. Gates the
+    // renderer's layer FBO (screen-sized, otherwise immortal) and its
+    // visibility. Cleared on EVERY wake path: the un-idle flip covers the
+    // drag-pause resume, and effective visibility covers a plain show()
+    // after a full hide (where _idled was never set, so no change signal
+    // would fire). Both run before the next painted frame, which is the
+    // renderer's contract for re-enabling the layer.
+    property bool idleParked: false
+    on_IdledChanged: if (!_idled)
+        idleParked = false
+    onVisibleChanged: if (visible)
+        idleParked = false
+
     // Idle-quiesce hook: the daemon calls this (via the hosting slot) after
     // the idle grace window so the shader item's GPU resources are freed
     // while the overlay sits invisible. They rebuild on the next painted frame.
     function releaseIdleGraphicsResources() {
+        idleParked = true;
         zoneShaderRenderer.releaseIdleGraphicsResources();
     }
 
@@ -183,7 +197,10 @@ Item {
             id: zoneShaderRenderer
 
             anchors.fill: parent
-            visible: root.shaderSource.toString() !== "" && status !== ZoneShaderItem.Error
+            // !idleParked: a parked renderer must never paint — its layer FBO
+            // is released, and an unlayered multipass frame desyncs the batch
+            // renderer (see ZoneShaderRenderer's layer.enabled note).
+            visible: root.shaderSource.toString() !== "" && status !== ZoneShaderItem.Error && !root.idleParked
             config: shaderConfig
             onShaderError: function (log) {
                 console.error("RenderNodeOverlayContent: Shader error:", log);

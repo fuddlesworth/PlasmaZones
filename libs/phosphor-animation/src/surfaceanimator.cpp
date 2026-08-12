@@ -370,6 +370,23 @@ void SurfaceAnimator::cancel(PhosphorLayer::Surface* surface)
     d->cancelAllForSurface(surface);
 }
 
+void SurfaceAnimator::releaseParkedShaders()
+{
+    // Only the reuse stash — an in-flight leg's pieces live on its Track and
+    // are never in m_pendingReuse, so active animations cannot be torn out
+    // from under themselves here. destroyPendingReuseEntry disconnects the
+    // anchor hookups before deleteLater, same as the superseding-leg path.
+    for (auto it = d->m_pendingReuse.begin(); it != d->m_pendingReuse.end(); ++it) {
+        d->destroyPendingReuseEntry(it->second);
+    }
+    d->m_pendingReuse.clear();
+}
+
+bool SurfaceAnimator::hasParkedShaders() const
+{
+    return !d->m_pendingReuse.empty();
+}
+
 void SurfaceAnimator::beginShow(PhosphorLayer::Surface* surface, QQuickItem* rootItem,
                                 const PhosphorLayer::Role& configRole, CompletionCallback onComplete)
 {

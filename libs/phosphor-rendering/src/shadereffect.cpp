@@ -747,6 +747,16 @@ void ShaderEffect::releaseIdleGraphicsResources()
         std::shared_ptr<std::atomic<ShaderEffect*>> m_token;
     };
     win->scheduleRenderJob(new ReleaseIdleResourcesJob(m_selfToken), QQuickWindow::NoStage);
+    // Force one render-loop pass so the NoStage job actually dispatches. The
+    // field-verifiable caveat above is real: for a mapped-but-undamaged
+    // window (the keep-alive overlay shells sit exactly there while idle)
+    // the render loop has no reason to wake, and a job with no frame behind
+    // it can sit queued indefinitely — the whole reclaim silently never
+    // runs. update() requests a frame through the normal damage path; the
+    // surface is still mapped (keepMappedOnHide), so the compositor grants
+    // it, the render thread runs once, and the queued job executes. One
+    // extra composited frame of an invisible overlay, once per idle grace.
+    win->update();
 }
 
 // ============================================================================

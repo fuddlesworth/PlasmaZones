@@ -15,6 +15,14 @@ Item {
     required property var config
     // Default to empty object when config is null (callers may not always pass valid config)
     readonly property var safeConfig: config || ({})
+    // Idle-quiesce park (set by the host while the overlay sits idle): drops
+    // the private layer FBO below along with the render node's resources. A
+    // full-screen RGBA8 layer texture per screen otherwise survives every
+    // releaseIdleGraphicsResources() call, because the layer belongs to Qt's
+    // QQuickItemLayer, not to the shader node. The host MUST clear this on
+    // every wake path before the next painted frame — the layer is
+    // correctness-relevant for multipass packs (see the layer.enabled note).
+    property bool parked: false
     property alias status: zoneShaderItem.status
     property alias errorLog: zoneShaderItem.errorLog
 
@@ -42,7 +50,13 @@ Item {
         // get an isolated rendering context. Without this, the scene graph's
         // batch renderer internal pass-tracking state desynchronizes when the
         // render node manages its own passes.
-        layer.enabled: shaderSource.toString() !== ""
+        //
+        // Released while parked (idle quiesce): the FBO is screen-sized and
+        // otherwise lives for the window's whole lifetime. Safe only because
+        // a parked item never paints — the host hides the shader content
+        // while idle, and the visible binding at the call site adds !parked
+        // as a belt — so no multipass frame can render unlayered.
+        layer.enabled: shaderSource.toString() !== "" && !root.parked
         layer.textureMirroring: ShaderEffectSource.NoMirroring
         shaderSource: root.safeConfig.shaderSource || ""
         bufferShaderPath: root.safeConfig.bufferShaderPath || ""

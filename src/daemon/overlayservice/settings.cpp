@@ -475,10 +475,16 @@ void OverlayService::syncCavaState()
 
 void OverlayService::scheduleIdleQuiesce()
 {
-    // Nothing to wind down if neither the render loop nor CAVA is active.
+    // Nothing to wind down if neither the render loop nor CAVA is active —
+    // and no parked animation towers are waiting on the reap. The third term
+    // is load-bearing for the OSD-only session: navigation OSDs park a tower
+    // per show without ever starting the 60 Hz shader timer or CAVA, so
+    // without it the quiesce never armed and the towers (and their FBOs)
+    // were immortal exactly on the path that creates the most of them.
     const bool shaderTimerActive = m_shaderUpdateTimer && m_shaderUpdateTimer->isActive();
     const bool cavaActive = m_audioProvider && m_audioProvider->isRunning();
-    if (!shaderTimerActive && !cavaActive) {
+    const bool parkedTowers = m_surfaceAnimator && m_surfaceAnimator->hasParkedShaders();
+    if (!shaderTimerActive && !cavaActive && !parkedTowers) {
         return;
     }
     if (!m_idleQuiesceTimer) {
@@ -527,6 +533,18 @@ void OverlayService::scheduleIdleQuiesce()
                 if (!QMetaObject::invokeMethod(m_shaderPreviewWindow, "releaseIdleGraphicsResources")) {
                     qCDebug(lcOverlay) << "idle quiesce: releaseIdleGraphicsResources not invokable on preview window";
                 }
+            }
+            // Parked animation-shader towers (SurfaceAnimator's pending-reuse
+            // stash) hold full-window FBOs per (surface, slot) for the
+            // keep-alive shells' lifetime — i.e. forever, after the first
+            // animated OSD/popup show on each slot. Genuine rest is exactly
+            // when the parking's amortisation argument no longer applies
+            // (it defends against per-toggle deleteLater floods, and there
+            // is no toggling here), so drop them; the next animated leg
+            // builds a fresh tower, warm-path cost unchanged inside the
+            // grace window since a quick re-trigger cancels this timer.
+            if (m_surfaceAnimator) {
+                m_surfaceAnimator->releaseParkedShaders();
             }
         });
     }
