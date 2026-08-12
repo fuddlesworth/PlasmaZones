@@ -406,18 +406,28 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // stay in lockstep.
     effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(effectiveDurationMs, progressCurve.get());
     if (profile.effectiveEffectId().isEmpty()) {
-        // Default-state path: a fresh user with no shader overrides
-        // anywhere in the tree resolves every event to empty effectId,
-        // which is correct ("no shader assigned"). Logging at WARNING
-        // for that floods the journal with bogus failures every time a
-        // window opens, closes, or moves. Only WARN when the tree has
-        // overrides (so an empty resolve here is genuinely surprising —
-        // the documented prune / D-Bus-race scenarios), otherwise
-        // demote to DEBUG.
+        // An empty resolve is the NORMAL state for any event whose cascade
+        // chain carries no override — not just for an empty tree. The old
+        // demotion keyed on the whole tree being empty, so a user with nine
+        // overrides on open/close/move legs got a WARNING three times per
+        // focus change, forever, because window.appearance.focus had none.
+        // Only an override ON THIS PATH'S CASCADE (exact, or a dotted-path
+        // ancestor like "window.appearance" / "window") makes an empty
+        // resolve genuinely surprising (the documented prune / D-Bus-race
+        // scenarios) — cascade resolution would otherwise have inherited it.
+        // Rules keep their term: a rule can assign per-window on any path,
+        // which this static check cannot see.
         const int ruleCount = m_shaderManager.animationRuleSet().count();
-        if (profileTree.overriddenPaths().isEmpty() && ruleCount == 0) {
+        bool cascadeCovered = false;
+        for (const QString& overridden : profileTree.overriddenPaths()) {
+            if (profilePath == overridden || profilePath.startsWith(overridden + QLatin1Char('.'))) {
+                cascadeCovered = true;
+                break;
+            }
+        }
+        if (!cascadeCovered && ruleCount == 0) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
-                              << "]: no shader assigned (tree empty — default state)";
+                              << "]: no shader assigned (no override on this path's cascade)";
         } else {
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
                                 << "]: no shader assigned (cascade returned empty effectId, tree size="
