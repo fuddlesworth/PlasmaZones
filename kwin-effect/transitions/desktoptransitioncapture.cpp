@@ -20,6 +20,7 @@
 #include <QPoint>
 #include <QRectF>
 #include <QScopeGuard>
+#include <QSet>
 #include <QSize>
 
 #include <memory>
@@ -211,6 +212,23 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
         // our prePaintScreen sets PAINT_SCREEN_TRANSFORMED, which routes the scene
         // through the generic infinite-region path — the moment that mask bit
         // changes, the second monitor's incoming capture goes black.
+        //
+        // The tab-indicator drawn set is scoped to THIS scene walk, the same
+        // shape the strip capture uses for its skipped-window list. The set is
+        // what stops an indicator being painted twice in one walk (its natural
+        // layer slot is skipped once the anchor injection has drawn it), so it
+        // is a per-WALK fact, not a per-bracket one — and this capture is a
+        // second full walk inside the bracket prePaintScreen opened. Leaving
+        // the set shared meant this walk marked every indicator drawn and the
+        // walk that is actually PRESENTED (paint_pipeline's fall-through when
+        // the capture is abandoned) then skipped them at both the natural slot
+        // and the injection, so they drew zero times. Swapping restores an
+        // empty set for this walk and hands the outer walk's back untouched.
+        QSet<KWin::EffectWindow*> outerTabDrawn;
+        outerTabDrawn.swap(m_effect->m_scrollTabDrawn);
+        const auto tabDrawnGuard = qScopeGuard([this, &outerTabDrawn]() {
+            m_effect->m_scrollTabDrawn.swap(outerTabDrawn);
+        });
         KWin::effects->paintScreen(renderTarget, viewport, mask,
                                    KWin::Region(KWin::Rect(QPoint(), viewport.deviceSize())), screen);
         KWin::GLFramebuffer::popFramebuffer();
@@ -302,7 +320,15 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
         if (!baseCopied) {
             glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT);
-            // Same call and device-space region reasoning as captureLiveScene.
+            // Same call and device-space region reasoning as captureLiveScene,
+            // and the same per-walk scoping of the tab-indicator drawn set for
+            // the same reason — this is another full scene walk nested inside
+            // one prePaintScreen bracket.
+            QSet<KWin::EffectWindow*> outerTabDrawn;
+            outerTabDrawn.swap(m_effect->m_scrollTabDrawn);
+            const auto tabDrawnGuard = qScopeGuard([this, &outerTabDrawn]() {
+                m_effect->m_scrollTabDrawn.swap(outerTabDrawn);
+            });
             KWin::effects->paintScreen(renderTarget, viewport, mask,
                                        KWin::Region(KWin::Rect(QPoint(), viewport.deviceSize())), screen);
         }

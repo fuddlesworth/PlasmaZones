@@ -31,6 +31,12 @@
 #
 # Gotchas learned the hard way:
 #   - fish cannot source env.sh (POSIX `export VAR=...`); use bash -c.
+#   - The effect log needs QT_FORCE_STDERR_LOGGING=1 (set below and carried
+#     in env.sh). Without it Qt routes messages to journald whenever stderr
+#     is not a tty, so the nested log is empty AND `journalctl --user` shows
+#     the HOST daemon and effect, which are indistinguishable at a glance
+#     from the nested ones. Check the compositor's own output, not the
+#     journal.
 #   - Do not `pkill -f` a pattern that appears in your own command line.
 #   - The stock session bus D-Bus-activates the INSTALLED daemon the
 #     moment the effect connects; daemon.sh kills it and claims the name
@@ -139,6 +145,13 @@ export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1
 # covers the effect's screenchange/snapassist categories, which use the
 # kwin-prefixed convention and would otherwise stay at warning level.
 export QT_LOGGING_RULES="plasmazones.*=true;kwin.effect.plasmazones.*=true"
+# Without this the rules above buy you nothing. Qt's default handler sends
+# messages to JOURNALD whenever stderr is not a tty, which is exactly the case
+# here (the compositor's output is redirected), so the nested effect's log
+# vanishes from this terminal. Worse than vanishing: `journalctl --user` then
+# shows the HOST session's daemon and effect instead, which look like the
+# nested ones and are not, so a run can be read completely backwards.
+export QT_FORCE_STDERR_LOGGING=1
 
 EXTRA_FLAGS=""
 [ -n "$WIDTH" ] && EXTRA_FLAGS="$EXTRA_FLAGS --width $WIDTH"
@@ -169,6 +182,7 @@ exec dbus-run-session -- sh -c "
     echo \"export QT_PLUGIN_PATH='$QT_PLUGIN_PATH'\"
     echo \"export KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1\"
     echo \"export QT_LOGGING_RULES='$QT_LOGGING_RULES'\"
+    echo \"export QT_FORCE_STDERR_LOGGING=1\"
     echo \"export PZ_NESTED_DIR='$NEST'\"
     echo \"export PZ_NESTED_REPO='$REPO'\"
     echo \"export PZ_NESTED_BUILD='$BUILD'\"

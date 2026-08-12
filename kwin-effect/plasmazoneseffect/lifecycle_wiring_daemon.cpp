@@ -32,6 +32,11 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 // lifecycle_wiring.cpp by concern (that file keeps the rendering/timer/
 // drag/window wiring): the D-Bus subscription block and the
 // service-(un)registration lifecycle it drives.
+//
+// Plus initExistingWindowsAndInput, which is NOT daemon-facing and lives here
+// only because it must run after the subscriptions above. It is a separate
+// function rather than a tail on connectDaemonSubscriptions so the heading
+// stays true of what it names.
 
 void PlasmaZonesEffect::connectDaemonSubscriptions()
 {
@@ -226,6 +231,16 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
                                                  QString(PhosphorProtocol::Service::Interface::Rules),
                                                  QStringLiteral("rulesChanged"), this, SLOT(slotRulesChanged()));
         m_daemonGate.rulesSubscribed = false;
+        // Stop the debounce that subscription feeds. A `rulesChanged` landing
+        // under 50ms before the daemon died leaves the timer armed, and its
+        // timeout drives loadRuleAnimationsFromDbus at a service that is gone —
+        // 1 + retryMax getAllRules calls into nothing. The retry loop inside
+        // fetchAllRulesOnce is deliberately allowed to run against a
+        // not-yet-ready daemon at bring-up, so the gate belongs here on the
+        // teardown edge and NOT inside the fetch. Nothing is lost by dropping
+        // the pending fetch: the next daemon's own rulesChanged (and the
+        // bring-up seed) re-drive it.
+        m_animationRulesRefreshDebounce.stop();
         // Release any pending first-frame open suppression. Without the
         // daemon there is no `resolveWindowRestore` reply coming and no
         // autotile reposition either, so the suppression entry would just
@@ -399,9 +414,36 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
     // slotDaemonReady), so any ensureInterface() call would bail out immediately.
     // All daemon state sync is deferred to slotDaemonReady().
 
+    qCInfo(lcEffect) << "daemon subscriptions wired; existing-window and input setup follows";
+}
+
+// Runs immediately after connectDaemonSubscriptions (see lifecycle.cpp). Split
+// out of it because none of this is daemon-facing: it wires the windows that
+// were already open when the effect loaded, seeds the cursor output, and
+// installs the overhang input filter. Keeping it under "daemon subscriptions"
+// made that file's own heading false, which is the kind of drift that hides the
+// next thing filed in the wrong place.
+//
+// The ORDER still matters and is why this is a separate call rather than a move
+// into connectWindowAndScreenSignals: that function runs BEFORE the
+// subscriptions, and the existing-window sweep has to come after them.
+void PlasmaZonesEffect::initExistingWindowsAndInput()
+{
     // Connect to existing windows. Skip close-grabbed dying windows — wiring
     // per-window connections and seeding screen tracking for a window whose
     // close already happened would resurrect state nothing cleans up.
+    //
+    // This sweep and slotWindowAdded are the only two callers of
+    // setupWindowConnections, and their window sets are disjoint: this one runs
+    // once from the constructor over windows that existed BEFORE the effect
+    // loaded, and slotWindowAdded fires only for windows appearing AFTER
+    // `windowAdded` was connected in connectWindowAndScreenSignals — with no
+    // event-loop turn in the gap, so nothing can dispatch between them.
+    //
+    // That disjointness used to be the ONLY thing preventing a double-wire,
+    // which made it an argument a later edit could invalidate silently. It is
+    // now backed by the wired-window guard inside setupWindowConnections, so a
+    // third caller or an event-loop spin costs nothing worse than a no-op.
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         if (!w || w->isDeleted()) {

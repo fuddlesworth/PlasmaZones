@@ -10,8 +10,6 @@
 
 #pragma once
 
-#include <cstdint>
-
 #include <PhosphorCompositor/TilingState.h>
 #include <PhosphorCompositor/DecorationDefaults.h>
 #include <PhosphorCompositor/DecorationManager.h>
@@ -31,8 +29,23 @@
 #include <PhosphorSurface/SurfaceShaderContract.h>
 #include <PhosphorSurface/SurfaceShaderRegistry.h>
 
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorRules/RuleSet.h>
+
+// Project-local headers. The three transition managers are BY-VALUE members,
+// so their declarations must precede the class body; the rest carry the POD
+// state types the members below are declared with. Each is self-contained, so
+// this block sits with the other project includes rather than after the Qt /
+// KDE ones (own header → project → KDE → Qt).
+#include "effect_state.h"
+#include "shader_resolve.h"
+#include "types.h"
+
+#include "transitions/desktoptransitionmanager.h"
+#include "transitions/shadertransitionmanager.h"
+#include "transitions/striptransitionmanager.h"
+
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -42,6 +55,7 @@
 #include <opengl/gltexture.h>
 #include <effect/globals.h> // For ElectricBorder enum
 #include <scene/borderradius.h>
+
 #include <QObject>
 #include <QScopeGuard>
 #include <QVector>
@@ -52,22 +66,13 @@
 #include <QRect>
 
 #include <array>
+#include <cstdint> // fetchVirtualScreenConfig's generation parameter
 #include <functional>
 #include <memory>
 #include <type_traits>
 #include <optional>
 #include <unordered_map>
 #include <vector>
-
-#include "transitions/shadertransitionmanager.h"
-#include "transitions/desktoptransitionmanager.h"
-#include "transitions/striptransitionmanager.h"
-
-#include <PhosphorIdentity/VirtualScreenId.h>
-
-#include "shader_resolve.h"
-#include "types.h"
-#include "effect_state.h"
 
 namespace KWin {
 class SurfaceItem;
@@ -529,7 +534,17 @@ private:
      * daemon's overlays apart: they share a window class, carry no caption,
      * role or desktop file, sit on the same layer and cover the same rect, and
      * the layer-shell scope that WOULD name them is not reachable from an
-     * exported API. The object id is the one handle both sides can name.
+     * exported API. The object id is the only thing the two sides can both
+     * name for one surface.
+     *
+     * The id alone is NOT a handle, and the predicate is the id match AND the
+     * owning client. A Wayland object id is unique only among ONE client's live
+     * objects, and ids start low and grow, so an ordinary application's surface
+     * collides with a daemon id routinely rather than exotically. The match is
+     * therefore qualified by isOwnPassthroughOverlayClass, which is what names
+     * the announcing client. See the implementation for what a false positive
+     * would cost a real window (the strip's view offset every frame, forfeited
+     * occlusion culling, and a permanent lower to the bottom of its layer).
      */
     bool isScrollTabIndicatorSurface(KWin::EffectWindow* w) const;
 
@@ -813,25 +828,38 @@ private:
      * True only for a scroll-managed window with a strip relocation entry
      * (m_scrollVisualDelta) whose VISUAL rect — the padded band moved by that
      * delta, plus the live view offset — intersects no part of its managed
-     * output. The visual rect is where paintWindow actually draws the quad,
-     * so this is the one honest visibility test for a parked column; the
-     * committed rect is always off every output (that is what parking IS)
-     * and answers nothing.
+     * output. The visual rect is where a column is drawn AT REST, which is the
+     * one honest visibility test for a parked column; the committed rect is
+     * always off every output (that is what parking IS) and answers nothing.
      *
-     * FOUR consumers, and they must stay in lockstep or a column blinks or
+     * "At rest" is the whole precision here: the WindowAnimator can be carrying
+     * the same window through a per-window leg, and that term is deliberately
+     * NOT folded in. For a parked column the batch path makes the leg
+     * degenerate (origin == the constrained committed rect, tiling.cpp), so
+     * there is no per-window motion to miss; for an unparked one the predicate
+     * has already answered false on the delta probe. Do not "complete" this by
+     * intersecting the animator's rect — the degenerate leg is what makes the
+     * simpler test correct, and the cull would then depend on animator state
+     * that changes under it mid-frame.
+     *
+     * FIVE consumers, and they must stay in lockstep or a column blinks or
      * burns: prePaintWindow withholds the TRANSFORMED flag (so KWin's own
      * culling is free to skip the window instead of being forced to paint
      * it), paintWindow skips the backdrop capture / decoration fold / draw,
      * the postPaintScreen repaint driver stops driving the window's
      * decoration (the ~30fps backdrop refold and the animated-pack pump),
-     * and prePaintScreen's tab-anchor election skips a parked column so an
-     * anchor that will never paint cannot win. Note the anchor election
-     * runs BEFORE the strip view animator advances for the frame, so its
-     * answer is one advance behind the other three mid-leg — the failure is
-     * the benign, already-documented one (indicators fall back to their
-     * layer slot for a frame). A column that scrolls back toward the
-     * viewport starts intersecting — the view offset is part of the rect,
-     * re-read every pass — and the paint-path sites wake in the same frame.
+     * prePaintScreen's tab-anchor election skips a parked column so an
+     * anchor that will never paint cannot win, and StripTransitionManager's
+     * above-strip election skips one when picking the stacking boundary its
+     * capture composites around (falling back to the topmost PARKED member
+     * when every column on the output is parked, rather than capturing the
+     * whole scene). Note the anchor election runs BEFORE the strip view
+     * animator advances for the frame, so its answer is one advance behind
+     * the paint-path sites mid-leg — the failure is the benign,
+     * already-documented one (indicators fall back to their layer slot for a
+     * frame). A column that scrolls back toward the viewport starts
+     * intersecting — the view offset is part of the rect, re-read every pass
+     * — and the paint-path sites wake in the same frame.
      *
      * Snapshot captures must NOT consult this: a parked column's offscreen
      * capture (close snapshot, decoration capture) is legitimate work on an
@@ -921,13 +949,29 @@ private:
                              bool skipAnimation = false,
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF());
-    /// The rect applyWindowGeometry will actually COMMIT for a tile request:
+    /// The rect applyWindowGeometry will REQUEST of KWin for a tile request:
     /// X11/XWayland frames are constrained to the client's WM_SIZE_HINTS and
     /// centred in the zone; everything else passes through unchanged. The
     /// scrolling batch path calls this to build animation origins and
-    /// degenerate-leg comparisons against the committed rect rather than the
+    /// degenerate-leg comparisons against the predicted rect rather than the
     /// raw column rect (a fixed-size X11 game's column rect and committed
-    /// rect differ by the centring offset). Idempotent.
+    /// rect differ by the centring offset).
+    ///
+    /// "Predict" is the honest word, not "commit" — the implementation
+    /// (drag_snap.cpp) enumerates the two known divergences from what KWin
+    /// finally commits, and why every consumer as written tolerates them. Do
+    /// not add an equality comparand without reading that note.
+    ///
+    /// Idempotent, and that rests on two properties of the implementation:
+    /// KWin's own constrainFrameSize is a fixed point, and the constrained
+    /// size is rounded UP to the enclosing integer, never below the grid point
+    /// it sits on, so a second pass floors back onto the grid within that same
+    /// integer and the re-ceil returns the same size, taking no branch.
+    /// Rounding to nearest instead would let a re-constrain land below
+    /// the grid, floor into the previous bucket, and shift the rect again —
+    /// the deferred user-move replay re-enters applyWindowGeometry with a rect
+    /// this function already produced, so it depends on the round trip being a
+    /// no-op.
     QRect constrainTileGeometry(KWin::EffectWindow* window, const QRect& geometry) const;
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
@@ -942,9 +986,12 @@ private:
                           bool skipAnimation = false, std::function<void()> onComplete = nullptr,
                           std::function<void()> onError = nullptr);
 
-    // reserveScreenEdges() and unreserveScreenEdges() have been removed. The daemon
-    // disables KWin Quick Tile via kwriteconfig6. Reserving edges would turn on the
-    // electric edge effect, which we don't want.
+    // The effect deliberately reserves NO screen edges. Reserving one turns on
+    // KWin's electric-edge effect, whose glow and its own tile preview would
+    // fight the zone overlay for the same gesture. Quick Tile is disabled
+    // daemon-side via kwriteconfig6 instead, which leaves the edges free
+    // without the effect having to hold them. borderActivated below still
+    // exists to consume any edge activation that does reach us.
 
 public Q_SLOTS:
     // Handle electric border activation - return true to consume the event
@@ -953,22 +1000,14 @@ public Q_SLOTS:
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class access methods — consumed across the handler split
-    // (TilingHandler/SnapHandler via decorationManager(), ScreenChangeHandler
-    // via applyStaggeredOrImmediate, KWinCompositorBridge via clearScreenIdCache)
+    // (ScreenChangeHandler via applyStaggeredOrImmediate,
+    // KWinCompositorBridge via clearScreenIdCache)
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
     /// Access the compositor bridge (for shared code that needs compositor-agnostic window ops)
     ICompositorBridge* compositorBridge() const
     {
         return m_compositorBridge.get();
-    }
-
-    /// The single owner of server-side decoration (title-bar) state. Every
-    /// hide/restore goes through its owner model — handlers and the rule
-    /// layer must never call KWin::Window::setNoBorder directly.
-    DecorationManager* decorationManager() const
-    {
-        return m_decorationManager.get();
     }
 
     /// Clear the EDID-based screen ID cache (call on screen add/remove/reconfigure)
@@ -1077,12 +1116,18 @@ private:
     PhosphorAnimation::Profile resolveEventMotionProfile(const QString& profilePath,
                                                          const PhosphorRules::WindowQuery& query,
                                                          const QString& windowId) const;
-    // Cap on the per-frame ramp delta. A window at rest (value pinned at 0 or 1)
-    // stops being force-repainted by windowSurfaceAnimates, so its FocusFadeState
-    // `lastMs` goes stale; without this cap the first frame after a focus change
-    // would see a multi-second `now - lastMs` and jump the whole ramp in one step
-    // (an instant snap instead of a fade). A live window's real frame delta is
-    // always well under this, so the cap only tames the resume-after-idle case.
+    // CEILING on the per-frame ramp delta, not the cap itself. A window at rest
+    // (value pinned at 0 or 1) stops being force-repainted by
+    // windowSurfaceAnimates, so its FocusFadeState `lastMs` goes stale; without
+    // a cap the first frame after a focus change would see a multi-second
+    // `now - lastMs` and jump the whole ramp in one step (an instant snap
+    // instead of a fade). advanceFocusFade (decoration_render.cpp) resolves the
+    // live cap as qBound(1, focusFadeDurationMs / 2, this): the halving is what
+    // keeps a SHORT duration spanning at least two frames instead of completing
+    // inside one 50 ms resume step, and the floor of 1 keeps the step non-zero
+    // for a 1 ms duration. A live window's real frame delta is well under the
+    // ceiling, so at ordinary durations only the resume-after-idle case is
+    // tamed at all.
     static constexpr qint64 kFocusFadeMaxStepMs = 50;
 
     // Live system colours that a `BorderColorToken::Accent` sentinel in a
@@ -1131,21 +1176,17 @@ private:
     /// config-default border — the gate being blind to tree packs left
     /// chain-decorated windows undecorated from a drag-start unsnap until an
     /// unrelated push rebuilt them.
-    bool hasDecorationTreeContent() const
-    {
-        // NOTE: DecorationProfileTree is PhosphorSurfaceShaders', not
-        // PhosphorAnimation::ProfileTree — it has no hasAnyOverride(). Not a hot
-        // path (this runs on reconcile, not per frame), so the QStringList copy
-        // is fine here.
-        //
-        // enabledChain(), the SAME accessor updateWindowDecoration renders from, not
-        // effectiveChain(): the latter keeps packs the user toggled off, so a tree whose
-        // baseline chain exists but has every pack disabled reported "content" and made
-        // every snap / float / zone change do full per-window reconcile work for a
-        // configuration that can decorate nothing.
-        return !m_decorationTree.resolve(QString()).enabledChain().isEmpty()
-            || !m_decorationTree.overriddenPaths().isEmpty();
-    }
+    ///
+    /// Both halves ask the SAME question — does some surface path resolve to a
+    /// non-empty enabledChain() — because that is the accessor
+    /// updateWindowDecoration renders from. effectiveChain() keeps packs the
+    /// user toggled off, and overriddenPaths() alone reports every registered
+    /// path with no chain inspection at all, so either shortcut lets a tree
+    /// that can decorate nothing make every snap / float / zone change do full
+    /// per-window reconcile work. Not a hot path (reconcile, not per frame), so
+    /// the resolve per overridden path is affordable. Defined in
+    /// decorations.cpp with the rest of the chain-resolution code.
+    bool hasDecorationTreeContent() const;
 
     /// Evaluate a config-default appearance scope token against a live window.
     /// "tiled" → the window is snapped or autotile-managed; "normal" → its
@@ -1291,7 +1332,15 @@ private:
     ///        pure churn. updateAllDecorations runs on every focus change, so
     ///        without this every focus change would free and reallocate every
     ///        decorated window's whole GL working set and cold-start both caches.
-    ///        Genuine teardown (close, delete, undecorate) leaves it false.
+    ///        It ALSO suppresses the releaseDecorationGl call, so the window keeps
+    ///        its OffscreenEffect redirect and its shader slot across the removal —
+    ///        which is what the refresh wants (it re-asserts the same redirect a
+    ///        step later) and is exactly why a genuine teardown must not pass it: a
+    ///        window removed with it left true is stranded redirected, presenting
+    ///        through a shader with no decoration behind it. Genuine teardown
+    ///        (close, delete, undecorate) leaves it false. The three exits in
+    ///        updateWindowDecoration where a refresh discovers the window is no
+    ///        longer decoratable run the release themselves.
     void removeWindowDecoration(const QString& windowId, KWin::EffectWindow* windowHint = nullptr,
                                 bool keepSurfaceState = false);
 
@@ -1722,7 +1771,13 @@ private:
     /// the compositor thread; consumed (uploaded) during the next paint.
     QVector<float> m_audioSpectrum;
     bool m_audioSpectrumDirty = false; ///< a new spectrum awaits GL upload
-    int m_audioSpectrumSize = 0; ///< bar count == iAudioSpectrumSize; 0 when audio is off
+    /// Bar count of the latest delivered spectrum; 0 when audio is off. NOT the
+    /// value pushed as iAudioSpectrumSize — bindSurfaceAudio derives that from
+    /// the BOUND texture's width instead, so a re-upload that failed during a
+    /// bar-count change cannot let audioBar() index past the retained
+    /// (still-old-size) texture for a frame. The dirty flag re-uploads at the
+    /// new size on the next fold and the two converge again.
+    int m_audioSpectrumSize = 0;
     /// steady-clock ms of the last spectrum that actually CHANGED. Drives the
     /// idle gate (audioReactiveDriving): sustained silence settles to repeated
     /// frames, so after a quiet window the per-vsync recomposite stops instead of
@@ -1881,6 +1936,16 @@ private:
     void connectDragTracker();
     void connectWindowAndScreenSignals();
     void connectDaemonSubscriptions();
+    /// Wires the windows that already existed when the effect loaded, seeds the
+    /// cursor output, and installs the overhang input filter.
+    ///
+    /// Split out of connectDaemonSubscriptions, which owned it only because the
+    /// ctor's inline sequence had it there: none of this is daemon-facing, and
+    /// keeping it under that name made the file's own "daemon subscriptions"
+    /// heading false. It must still run AFTER connectDaemonSubscriptions, because
+    /// the existing-window sweep can reach code that expects the subscriptions to
+    /// be live.
+    void initExistingWindowsAndInput();
 
     /// Coalesce a full border sweep to the end of the event-loop turn. The
     /// config-default appearance loaders (and the accent / inactive colour
@@ -1931,9 +1996,11 @@ private:
     /// pairs this with its own decoration path: daemon loss tears the
     /// decorations down (clearAllDecorations), the daemon-ready re-seeds
     /// schedule a border sweep to re-fold against the fresh placement. Always
-    /// drops both exclusion evaluators' caches first (they are cleared even
-    /// when the early return below fires); the rest is a no-op when there are
-    /// no animation rules and no rule-held layer snapshots.
+    /// drops both CACHED exclusion evaluators' caches first — the placement and
+    /// decoration slices; the animation slice resolves uncached and so has none
+    /// to drop — and they are cleared even when the early return below fires;
+    /// the rest is a no-op when there are no animation rules and no rule-held
+    /// layer snapshots.
     void invalidateAllRuleCaches();
 
     /// Flush coalesced per-rule-cache invalidations queued by
@@ -1947,6 +2014,12 @@ private:
     /// Resolve the per-window-rule SetHideTitleBar override for @p windowId
     /// and forward it to the DecorationManager as a tri-state rule override
     /// (unset = mode decides, true = rule hides, false = force-show veto).
+    /// Windowed-fullscreen strip members are skipped outright, mirroring the
+    /// layer reconciler below: the manager's veto path re-asserts geometry
+    /// across a decoration flip, and mid-hold that re-assert would fight the
+    /// strip's committed column rect, which the hold's whole contract says
+    /// stays the slot. The un-flag paths drive updateAllDecorations, so a rule
+    /// change made during the hold lands at un-flag time.
     void reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w);
 
     /// Resolve the per-window-rule SetWindowLayer override for @p windowId and
@@ -1967,6 +2040,17 @@ private:
     /// layer demotion owns their keep flags for the hold (see the early
     /// return in decoration_rules.cpp), so the two flag owners never trade
     /// writes mid-hold.
+    ///
+    /// Carries a STRUCTURAL own-surface shield as well: a broad match
+    /// expression must never demote a dock, pin a notification, or strip the
+    /// daemon overlay's own keep-above, so the own-overlay / plasma-shell /
+    /// portal classes and the desktop / dock / notification / OSD types
+    /// resolve as rule-free. Transients and popups are deliberately NOT
+    /// shielded — transient exclusion is per-feature user opt-in in this
+    /// project (the IsTransient match field), never hardcoded policy. A
+    /// shielded window resolves rule-free rather than early-returning, so one
+    /// that was rule-held BEFORE its class mutated into a shielded one still
+    /// drains its snapshot through the restore branch.
     void reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w);
 
     /// One-shot fullscreen-at-open verdict for the OpenFullscreen rule:
@@ -2076,6 +2160,15 @@ private:
     /// differs from the window's own output (committed geometry cannot
     /// cross), so the cache also bounds what that mode pays for a cull that
     /// cannot fire for it.
+    ///
+    /// Deliberately NOT cleared in postPaintScreen beside the other per-pass
+    /// state, and that is safe for one reason only: the clear that matters is
+    /// prePaintScreen's, which runs BEFORE the pass's first read, and every
+    /// read is gated on being inside a pass. Entries can therefore outlive
+    /// their windows between passes — both key and value are raw pointers —
+    /// but a stale entry is never read, and keys are only hashed by pointer
+    /// value, never dereferenced. Anyone adding a read that is NOT behind the
+    /// in-pass gate must add the postPaintScreen clear first.
     mutable QHash<KWin::EffectWindow*, KWin::LogicalOutput*> m_scrollManagedCache;
 
     /// Latched by StripTransitionManager around its capture's paintScreen:
@@ -2145,15 +2238,22 @@ private:
     /// Note the drawn position has TWO inputs under the delta form, this
     /// entry and the committed rect, where the absolute form it replaced had
     /// only one. The contract above covers the entry half. The committed
-    /// half is covered by whatever moved the commit: a geometry apply damages
-    /// its own regions, and for a column parked below the union of all
-    /// outputs those regions intersect no output, so a mover that changes the
-    /// commit while the entry is unchanged (the X11 counter-assert, the
-    /// deferred Wayland re-centring) does not damage the place the window is
-    /// actually drawn. At rest that place is off-viewport and nothing is
-    /// drawn there anyway; mid-leg the view spring damages every frame. Do
-    /// not narrow either of those two conditions without giving the commit
-    /// half its own pairing.
+    /// half is NOT paired: a mover that changes the commit while the entry is
+    /// unchanged (the X11 counter-assert, the windowed-fullscreen ack
+    /// re-commit) damages the regions of the COMMIT, and for a column parked
+    /// below the union of all outputs those regions intersect no output — so
+    /// nothing damages where the window is actually drawn.
+    ///
+    /// What makes that survivable is a condition, not a property of having an
+    /// entry: it holds only while the drawn position (commit + entry + view
+    /// offset) touches no viewport, which is exactly what
+    /// scrollParkedOffscreen decides and re-decides every pass. Mid-leg the
+    /// view spring damages every frame regardless. At rest, a column whose
+    /// drawn position DOES touch a viewport would hold a stale frame until
+    /// something unrelated damaged it. Do not read "has a delta entry" as
+    /// "off-viewport" — the predicate exists because the two are not the same
+    /// question — and give any NEW commit-half mover its own repaint pairing
+    /// rather than inheriting this argument.
     QHash<QString, QPoint> m_scrollVisualDelta;
     /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
     /// fullscreen state (set by the effect from the batch flag) while the
@@ -2416,6 +2516,12 @@ private:
 
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;
+    /// The single owner of server-side decoration (title-bar) state. Every
+    /// hide/restore goes through its owner model — handlers and the rule
+    /// layer must never call KWin::Window::setNoBorder directly. Reached
+    /// through this member from inside the effect's own TUs (the handlers are
+    /// friends); there is deliberately no public accessor, so no code outside
+    /// that boundary can acquire the manager and drive it directly.
     std::unique_ptr<DecorationManager> m_decorationManager;
 
     // Keyboard modifiers from KWin's input system
@@ -2762,6 +2868,22 @@ private:
     // Replaces the per-window `new QString` heap allocation that was leaked.
     QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
 
+    // Windows that already have their per-window connections. setupWindowConnections
+    // issues raw connects with lambda slots, so a second call on the same window
+    // doubles every per-window handler — and Qt::UniqueConnection is illegal with a
+    // lambda slot, so the check has to live here.
+    //
+    // Two callers exist and their window sets are disjoint today (the ctor sweep
+    // covers windows that predate the effect; slotWindowAdded covers windows that
+    // appear after `windowAdded` is connected, and nothing between the two spins
+    // the event loop). This makes that an enforced invariant rather than an
+    // argument a future edit could silently invalidate.
+    //
+    // Erased in the windowDeleted backstop beside its raw-pointer-keyed siblings,
+    // for the same address-reuse reason: a stale entry would refuse to wire a new
+    // window that reused a dead one's address.
+    QSet<KWin::EffectWindow*> m_wiredWindows;
+
     // Blocks pointer/touch input on strip straddlers' clipped-away overhangs
     // (see input_filter.h). Installed once daemon subscriptions are wired;
     // destruction uninstalls it from InputRedirection.
@@ -2773,6 +2895,25 @@ private:
     // erased on settle, on a negative resolve, on the deadline, and on
     // window close/delete.
     QHash<KWin::EffectWindow*, RestoreSuppression> m_restoreSuppress;
+
+    // The one in-flight deferred geometry replay per window (applyWindowGeometry
+    // postponing a tile apply until the user's interactive move ends).
+    //
+    // WHY A STORE AND NOT A BARE connect(): two applies for the same window
+    // inside one batch generation on one screen both survive the supersession
+    // guard, so without this each one connected its own replay and both fired at
+    // drag end, paying a full moveResize plus an animator retarget plus a rule
+    // resolve twice. Last-write-wins made the final rect right, which is exactly
+    // why it stayed invisible.
+    //
+    // A blanket disconnect on the signal is NOT a substitute: window_connections
+    // holds a permanent connection from the same signal to the same receiver, and
+    // a blanket disconnect destroys it. Qt::UniqueConnection is illegal with a
+    // lambda slot. So the connection is held here and disconnected by handle.
+    //
+    // Erased when the replay fires, and in the windowDeleted backstop beside its
+    // raw-pointer-keyed siblings.
+    QHash<KWin::EffectWindow*, QMetaObject::Connection> m_deferredGeometryReplay;
 
     // Stamp of the last going-to-minimized shader install per window, used
     // by slotWindowMinimizedChanged to detect KWin's spurious
