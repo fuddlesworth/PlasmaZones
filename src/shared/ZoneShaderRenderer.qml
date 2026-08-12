@@ -15,6 +15,17 @@ Item {
     required property var config
     // Default to empty object when config is null (callers may not always pass valid config)
     readonly property var safeConfig: config || ({})
+    // Idle-quiesce park. Only the daemon overlay host binds this (to its
+    // idleParked latch); the settings/editor dialog consumers leave it false
+    // and reclaim by deactivating their Loader instead. While parked, the
+    // private layer FBO below is dropped along with the render node's
+    // resources — for the overlay host that layer is a screen-sized RGBA8
+    // texture which otherwise survives every releaseIdleGraphicsResources()
+    // call, because it belongs to Qt's QQuickItemLayer, not to the shader
+    // node. The host MUST clear this on every wake path before the next
+    // painted frame — the layer is correctness-relevant for multipass packs
+    // (see the layer.enabled note).
+    property bool parked: false
     property alias status: zoneShaderItem.status
     property alias errorLog: zoneShaderItem.errorLog
 
@@ -42,7 +53,16 @@ Item {
         // get an isolated rendering context. Without this, the scene graph's
         // batch renderer internal pass-tracking state desynchronizes when the
         // render node manages its own passes.
-        layer.enabled: shaderSource.toString() !== ""
+        //
+        // Released while parked (idle quiesce): the FBO is screen-sized and
+        // otherwise lives for the window's whole lifetime. Safe only because
+        // a parked item never paints — the host hides the shader content
+        // while idle and gates the renderer's visible binding on the same
+        // park state — including during the one composited frame the C++
+        // release forces (ShaderEffect::releaseIdleGraphicsResources calls
+        // win->update(); that frame is what flushes this layer drop on an
+        // otherwise idle window). So no multipass frame can render unlayered.
+        layer.enabled: shaderSource.toString() !== "" && !root.parked
         layer.textureMirroring: ShaderEffectSource.NoMirroring
         shaderSource: root.safeConfig.shaderSource || ""
         bufferShaderPath: root.safeConfig.bufferShaderPath || ""

@@ -274,6 +274,7 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // above uses the same helper.
         ensureGlContextCurrent();
         m_compiledPacks.clear();
+        m_packBufferScaleCache.clear(); // metadata cache rides the compile cache's lifetime
         m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         m_surfaceMultipass.clear();

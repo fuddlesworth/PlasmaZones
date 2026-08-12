@@ -1119,6 +1119,110 @@ private Q_SLOTS:
 
         delete surface;
     }
+
+    /// Contract of the idle-reclaim pair (hasParkedShaders /
+    /// releaseParkedShaders): a completed shader HIDE leg parks its tower in
+    /// the pending-reuse stash (hasParkedShaders flips true), a release
+    /// empties the stash (flips false), and both calls are safe no-ops on an
+    /// animator that never parked anything. The daemon's idle quiesce gates
+    /// its arming on exactly this observable, so a silent regression here
+    /// strands full-window FBOs for the shells' lifetime.
+    void released_parked_shaders_empties_the_reuse_stash()
+    {
+        // Both calls must be harmless before any leg ever ran.
+        {
+            SurfaceAnimator::Config cfg;
+            cfg.showProfile = QStringLiteral("test.show");
+            cfg.hideProfile = QStringLiteral("test.hide");
+            SurfaceAnimator idle(m_registry, cfg);
+            QVERIFY(!idle.hasParkedShaders());
+            idle.releaseParkedShaders();
+            QVERIFY(!idle.hasParkedShaders());
+        }
+
+        // Daemon-eligible pack (appliesTo includes "appearance"), so runLeg
+        // attaches a real tower instead of refusing it.
+        QTemporaryDir tmp;
+        QVERIFY(tmp.isValid());
+        const QString packDir = tmp.path() + QStringLiteral("/park-probe");
+        QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("park-probe")));
+        {
+            QFile meta(packDir + QStringLiteral("/metadata.json"));
+            QVERIFY(meta.open(QIODevice::WriteOnly));
+            meta.write(R"({"id":"park-probe","name":"Park","description":"probe",)"
+                       R"("author":"test","version":"1.0","category":"Test",)"
+                       R"("fragmentShader":"effect.frag","parameters":[],"appliesTo":["appearance"]})");
+        }
+        {
+            QFile frag(packDir + QStringLiteral("/effect.frag"));
+            QVERIFY(frag.open(QIODevice::WriteOnly));
+            frag.write("void main(){}\n");
+        }
+
+        PhosphorAnimationShaders::AnimationShaderRegistry shaderRegistry;
+        shaderRegistry.addSearchPath(tmp.path());
+        shaderRegistry.refresh();
+        QVERIFY2(shaderRegistry.effect(QStringLiteral("park-probe")).isValid(), "fixture pack must resolve");
+
+        SurfaceAnimator::Config cfg;
+        cfg.showProfile = QStringLiteral("test.show");
+        cfg.hideProfile = QStringLiteral("test.hide");
+        cfg.hideShaderEffectId = QStringLiteral("park-probe");
+        cfg.hideShaderProfile = QStringLiteral("test.hide");
+        SurfaceAnimator anim(m_registry, cfg);
+        anim.setAnimationShaderRegistry(&shaderRegistry);
+
+        PhosphorLayer::Testing::MockTransport t;
+        PhosphorLayer::Testing::MockScreenProvider s;
+        auto deps = PhosphorLayer::Testing::makeDeps(&t, &s);
+        SurfaceFactory f(deps);
+
+        PhosphorLayer::SurfaceConfig sc;
+        sc.role = PhosphorShellPatterns::Modal();
+        sc.contentItem = std::make_unique<QQuickItem>();
+        sc.screen = s.primary();
+        sc.keepMappedOnHide = true;
+        sc.debugName = QStringLiteral("park-probe-test");
+
+        auto* surface = f.create(std::move(sc));
+        QVERIFY(surface);
+        surface->warmUp();
+        QQuickItem* target = animatedItem(surface);
+        QVERIFY(target);
+
+        int shows = 0;
+        anim.beginShow(surface, target, [&shows]() {
+            ++shows;
+        });
+        QVERIFY(waitFor(
+            [&shows] {
+                return shows == 1;
+            },
+            500));
+        // Leg teardown parks unconditionally for any completed shader leg;
+        // this show leg simply carries no shader (showShaderEffectId is
+        // unset), so there is nothing to park yet.
+        QVERIFY2(!anim.hasParkedShaders(), "the shaderless show leg must leave the reuse stash empty");
+
+        int hides = 0;
+        anim.beginHide(surface, target, [&hides]() {
+            ++hides;
+        });
+        QVERIFY(waitFor(
+            [&hides] {
+                return hides == 1;
+            },
+            500));
+        QVERIFY2(anim.hasParkedShaders(), "hide-leg teardown must park the shader tower in the reuse stash");
+
+        anim.releaseParkedShaders();
+        QVERIFY2(!anim.hasParkedShaders(), "releaseParkedShaders must empty the stash");
+        // Second release on the now-empty stash stays a no-op.
+        anim.releaseParkedShaders();
+        QVERIFY(!anim.hasParkedShaders());
+
+        delete surface;
+    }
 };
 
 QTEST_MAIN(TestSurfaceAnimator)

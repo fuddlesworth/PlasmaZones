@@ -806,6 +806,40 @@ private:
      * overhang is drawn and remains interactive either way.
      */
     QRect scrollClipGeometryFor(KWin::EffectWindow* w) const;
+    /**
+     * @brief Is this strip column parked entirely off its output's viewport
+     *        right now — drawn (if at all) where nobody can see it?
+     *
+     * True only for a scroll-managed window with a strip position entry
+     * (m_scrollVisualPos) whose VISUAL rect — the padded band relocated to
+     * its strip position, plus the live view offset — intersects no part of
+     * its managed output. The visual rect is where paintWindow actually
+     * draws the quad, so this is the one honest visibility test for a
+     * parked column; the committed rect is always off every output (that is
+     * what parking IS) and answers nothing.
+     *
+     * FOUR consumers, and they must stay in lockstep or a column blinks or
+     * burns: prePaintWindow withholds the TRANSFORMED flag (so KWin's own
+     * culling is free to skip the window instead of being forced to paint
+     * it), paintWindow skips the backdrop capture / decoration fold / draw,
+     * the postPaintScreen repaint driver stops driving the window's
+     * decoration (the ~30fps backdrop refold and the animated-pack pump),
+     * and prePaintScreen's tab-anchor election skips a parked column so an
+     * anchor that will never paint cannot win. Note the anchor election
+     * runs BEFORE the strip view animator advances for the frame, so its
+     * answer is one advance behind the other three mid-leg — the failure is
+     * the benign, already-documented one (indicators fall back to their
+     * layer slot for a frame). A column that scrolls back toward the
+     * viewport starts intersecting — the view offset is part of the rect,
+     * re-read every pass — and the paint-path sites wake in the same frame.
+     *
+     * Snapshot captures must NOT consult this: a parked column's offscreen
+     * capture (close snapshot, decoration capture) is legitimate work on an
+     * invisible window. Both paint-path callers sit behind the
+     * m_capturingSnapshot exemption already, matching the foreign-output
+     * cull's treatment.
+     */
+    bool scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const;
 
     /**
      * @brief Draw this pass's deferred tab-indicator surfaces into the scene
@@ -1161,6 +1195,16 @@ private:
     QTimer* m_frameGeometryFlushTimer = nullptr;
     void flushPendingFrameGeometry();
 
+    /// One-shot wake for the parked-column GL reap (postPaintScreen). The
+    /// park cull removes the repaint driver that used to keep the desktop
+    /// compositing, so with nothing else damaging, the 10 s reap threshold
+    /// would never be re-evaluated and the parked targets would be held
+    /// indefinitely. Armed (and re-armed with the recomputed minimum) each
+    /// pass while any parked window's reap is pending; fires one
+    /// addRepaintFull so the next postPaintScreen runs the reap. Lazily
+    /// created, parented to the effect.
+    QTimer* m_parkReapTimer = nullptr;
+
     /// Debounce timer for `Rules.rulesChanged`. Single-shot, 50ms;
     /// timeout fires `loadRuleAnimationsFromDbus`. Re-armed on every
     /// `slotRulesChanged` invocation so a burst of per-rule mutations
@@ -1434,9 +1478,20 @@ private:
     /// follows it (scaled into the rest-rect-sized canvas) so a frost/glass
     /// pane shows the scene behind the moving quad instead of behind the
     /// resting rect. Invalid = capture at the live geometry.
+    /// backdropScale: the capture RESOLUTION relative to the composite
+    /// canvas, from chainBackdropScale in paintWindow. 1.0 when some pack's
+    /// main pass samples the backdrop sharp; the largest linked bufferScale
+    /// when only buffer passes read it — a blur pyramid samples the capture
+    /// at bufferScale resolution through normalized uvs, so texels past that
+    /// density were captured, held (a full-canvas RGBA8 per window) and
+    /// blitted every frame only to be skipped over by the sampler. The
+    /// texture stays canvas-ALIGNED (same padded rect, same normalized
+    /// backdropRect space) at reduced density; only the blit's destination
+    /// arithmetic scales.
     void captureWindowBackdrop(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                KWin::EffectWindow* w, const WindowDecoration& wb,
-                               const KWin::Region& paintedDeviceRegion, const QRectF& animatedFrame = QRectF());
+                               const KWin::Region& paintedDeviceRegion, const QRectF& animatedFrame = QRectF(),
+                               qreal backdropScale = 1.0);
 
     /// Fold @p w's decoration chain into a per-window ping-pong composite, and return the
     /// texture holding the result (null on no decoration / allocation failure). drawWindow
@@ -1590,6 +1645,15 @@ private:
     /// and on teardown. A window's render path looks up its resolved base pack id
     /// (WindowDecoration::basePackId) here.
     std::unordered_map<QString, CompiledSurfacePack> m_compiledPacks;
+
+    /// Per-pack CLAMPED bufferScale, cached off the registry's by-value
+    /// SurfaceShaderEffect lookup for the per-frame backdrop-density resolve
+    /// (chainBackdropScale in paint_pipeline.cpp). Metadata only — the
+    /// linked-uniform verdicts are compile state and deliberately NOT cached
+    /// here (see that lambda's comment for the two bugs a raw probe caused).
+    /// Cleared wherever m_compiledPacks clears: a registry hot-reload can
+    /// change the metadata too.
+    std::unordered_map<QString, qreal> m_packBufferScaleCache;
 
     /// Has ANY compiled pack ever declared iMouse in the current compile generation?
     ///

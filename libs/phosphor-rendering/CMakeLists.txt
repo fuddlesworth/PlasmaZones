@@ -46,6 +46,7 @@ set(phosphorrendering_SRCS
     src/shadernoderhisetters.cpp
     src/shadereffect.cpp
     src/shadereffect_params.cpp
+    src/shadereffect_setters.cpp
     src/zonelabeltexture.cpp
     src/zoneshadernoderhi.cpp
 )

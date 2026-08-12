@@ -71,9 +71,10 @@ constexpr int kRuleFetchRetryDelayMs = 1000;
 constexpr int kRuleFetchTimeoutMs = 5000;
 
 /// Hard cap on the getAllRules payload before it reaches QJsonDocument::fromJson.
-/// The reply crosses a process boundary and the parse allocates proportionally
-/// to the payload, so a malformed or hostile daemon-side string must not be
-/// able to drive an unbounded allocation inside the compositor. Sized far above
+/// The receive-side QString allocation is bounded by libdbus's own
+/// message-size limit, not by this cap — what it genuinely bounds is the
+/// JSON parse (and, via the call site's pre-check on the QString length,
+/// the UTF-8 conversion copy). Sized far above
 /// any plausible rule store (a rule serialises to a few hundred bytes, so this
 /// admits tens of thousands of them) — the cap is a safety net, not a limit
 /// users can reach by authoring rules.
@@ -406,22 +407,46 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     // stay in lockstep.
     effectiveDurationMs = ShaderInternal::resolveTransitionLifetimeMs(effectiveDurationMs, progressCurve.get());
     if (profile.effectiveEffectId().isEmpty()) {
-        // Default-state path: a fresh user with no shader overrides
-        // anywhere in the tree resolves every event to empty effectId,
-        // which is correct ("no shader assigned"). Logging at WARNING
-        // for that floods the journal with bogus failures every time a
-        // window opens, closes, or moves. Only WARN when the tree has
-        // overrides (so an empty resolve here is genuinely surprising —
-        // the documented prune / D-Bus-race scenarios), otherwise
-        // demote to DEBUG.
-        const int ruleCount = m_shaderManager.animationRuleSet().count();
-        if (profileTree.overriddenPaths().isEmpty() && ruleCount == 0) {
+        // An empty resolve is the NORMAL state for any event whose cascade
+        // chain carries no override — not just for an empty tree. The old
+        // demotion keyed on the whole tree being empty, so a user with nine
+        // overrides on open/close/move legs got a WARNING three times per
+        // focus change, forever, because window.appearance.focus had none.
+        // Only an override ON THIS PATH'S CASCADE (exact, or a dotted-path
+        // ancestor like "window.appearance" / "window") makes an empty
+        // resolve genuinely surprising (the documented prune / D-Bus-race
+        // scenarios) — cascade resolution would otherwise have inherited it.
+        // Rules keep a term, but only for the ONE action that can assign a
+        // shader per-window: OverrideAnimationShader (timing/curve overrides
+        // carry no effectId). Gating on the whole rule set restored the
+        // warning for any border/opacity/layer rule — the exact population
+        // the demotion exists to silence.
+        const bool shaderAssigningRules = m_shaderManager.hasAnimationShaderRules();
+        bool cascadeCovered = false;
+        // The by-value QStringList is built ONCE and reused by both the loop
+        // and the warn diagnostic below — the pre-change code paid it twice
+        // (once for the range-for, once for .size() in the warn branch).
+        const QStringList overriddenPaths = profileTree.overriddenPaths();
+        for (const QString& overridden : overriddenPaths) {
+            // The literal "global" root is a genuine chain member of every
+            // path (parentPath terminates every cascade at Global), so an
+            // override stored there covers this resolve too. Ancestry is a
+            // prefix-plus-dot test rather than a per-entry concatenation.
+            if (overridden == PhosphorAnimation::ProfilePaths::Global || profilePath == overridden
+                || (profilePath.size() > overridden.size() && profilePath.startsWith(overridden)
+                    && profilePath.at(overridden.size()) == QLatin1Char('.'))) {
+                cascadeCovered = true;
+                break;
+            }
+        }
+        if (!cascadeCovered && !shaderAssigningRules) {
             qCDebug(lcEffect) << "tryBeginShader[" << profilePath
-                              << "]: no shader assigned (tree empty — default state)";
+                              << "]: no shader assigned (no override on this path's cascade)";
         } else {
             qCWarning(lcEffect) << "tryBeginShader[" << profilePath
                                 << "]: no shader assigned (cascade returned empty effectId, tree size="
-                                << profileTree.overriddenPaths().size() << " rules=" << ruleCount << ")";
+                                << overriddenPaths.size() << " rules=" << m_shaderManager.animationRuleSet().count()
+                                << " shaderAssigningRules=" << shaderAssigningRules << ")";
         }
         return;
     }
@@ -650,6 +675,18 @@ void PlasmaZonesEffect::fetchAllRulesOnce()
                 // (a spare re-drive is one redundant fetch).
                 m_activeLayoutRulesWithheld = true;
             }
+            return;
+        }
+        // Pre-check on the QString length before toUtf8() allocates a second
+        // full copy: UTF-8 output is never SHORTER than the UTF-16 unit
+        // count, so a unit count over the byte cap is already over. The
+        // byte-exact check below still runs (UTF-8 can inflate up to 3x).
+        // Same marker re-arm contract as every other early return here.
+        if (reply.value().size() > kRuleFetchMaxPayloadBytes) {
+            qCWarning(lcEffect) << "loadRuleAnimationsFromDbus: getAllRules payload of" << reply.value().size()
+                                << "UTF-16 units exceeds the" << kRuleFetchMaxPayloadBytes
+                                << "byte cap — refusing to convert";
+            m_activeLayoutRulesWithheld = true;
             return;
         }
         const QByteArray payload = reply.value().toUtf8();

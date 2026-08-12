@@ -82,6 +82,21 @@ Item {
         return -1;
     }
     property bool _idled: false
+    // Set while the idle quiesce has parked the shader stack. Gates the
+    // renderer's layer FBO (screen-sized, otherwise immortal) and its
+    // visibility. Cleared on EVERY wake path, and each host has a live one:
+    // on the daemon overlay the un-idle flip covers the warm resume
+    // (lifecycle.cpp writes _idled both ways) and the slot Item's visibility
+    // toggle covers a plain show() after a full hide; on the editor preview
+    // the Window folds its own visibility into _idled (RenderNodeOverlay
+    // binds _idled to root._idled || !root.visible), so the show itself
+    // fires the un-idle flip. All of these run before the next painted
+    // frame, which is the renderer's contract for re-enabling the layer.
+    property bool idleParked: false
+    on_IdledChanged: if (!root._idled)
+        root.idleParked = false
+    onVisibleChanged: if (root.visible)
+        root.idleParked = false
 
     function reloadShader() {
         zoneShaderRenderer.reloadShader();
@@ -97,8 +112,12 @@ Item {
 
     // Idle-quiesce hook: the daemon calls this (via the hosting slot) after
     // the idle grace window so the shader item's GPU resources are freed
-    // while the overlay sits invisible. They rebuild on the next painted frame.
+    // while the overlay sits invisible. They rebuild on the next painted
+    // frame. Order matters: latch the park FIRST — the C++ call below forces
+    // one sync+render pass (win->update() in ShaderEffect), and that forced
+    // frame is what applies the layer drop on an otherwise idle window.
     function releaseIdleGraphicsResources() {
+        idleParked = true;
         zoneShaderRenderer.releaseIdleGraphicsResources();
     }
 
@@ -183,7 +202,14 @@ Item {
             id: zoneShaderRenderer
 
             anchors.fill: parent
-            visible: root.shaderSource.toString() !== "" && status !== ZoneShaderItem.Error
+            // !idleParked: a parked renderer must never paint — its layer FBO
+            // is released, and an unlayered multipass frame desyncs the batch
+            // renderer (see ZoneShaderRenderer's layer.enabled note). This
+            // term is the belt for the one composited frame the C++ release
+            // forces while the layer is down; keep it in lockstep with the
+            // parked binding below.
+            visible: root.shaderSource.toString() !== "" && status !== ZoneShaderItem.Error && !root.idleParked
+            parked: root.idleParked
             config: shaderConfig
             onShaderError: function (log) {
                 console.error("RenderNodeOverlayContent: Shader error:", log);
@@ -200,7 +226,14 @@ Item {
         // overlayDisplayModeChanged re-syncs a live overlay via
         // recreateOverlayWindowsOnTypeMismatch().
         Repeater {
-            model: root.zones
+            // Gate the model on the same condition as the delegates'
+            // visibility: a Repeater instantiates delegates regardless of
+            // their visible binding, so an ungated model rebuilds the whole
+            // ZoneItem set on every idle cycle (the idle path clears zones
+            // and refreshFromIdle re-pushes them) for a fallback that never
+            // shows while the shader is Ready. When status leaves Ready the
+            // binding re-evaluates and the delegates build on that frame.
+            model: (root.shaderSource.toString() === "" || zoneShaderRenderer.status !== ZoneShaderItem.Ready) ? root.zones : []
 
             delegate: ZoneItem {
                 required property var modelData
