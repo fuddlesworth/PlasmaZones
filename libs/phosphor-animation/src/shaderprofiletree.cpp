@@ -173,17 +173,15 @@ bool shaderPathResolvesInIsolation(const QString& path)
     // joins this predicate so resolve() and every shadowing-aware consumer
     // move in lockstep.
     //
-    // The tab leaf is here for the drag leaf's reason in a different shape: it
-    // is the only member of its class, and its ONLY ancestor is `scrolling`,
-    // which carries the strip class. So every pack it could ever inherit is
-    // provably wrong for it, and inheriting one is worse than inheriting
-    // nothing — a non-empty inherited id is not "no shader chosen", so
-    // resolveShaderWithDefault would decline to apply the built-in tab-fade
-    // and the applicability gate would then refuse the inherited pack too,
-    // leaving the swap a hard cut for a reason nothing in the UI shows. Only a
-    // direct override at the leaf applies; timing inheritance is unaffected
-    // (that lives in the motion ProfileTree, where the scrolling root's curve
-    // and duration ARE meaningful for both children).
+    // The tab leaf is here for the drag leaf's reason in a different shape: its
+    // ONLY ancestor is `scrolling`, which carries the strip class, so every
+    // pack it could ever inherit is provably wrong for it. Inheriting one is
+    // worse than inheriting nothing, because the applicability gate refuses it
+    // at install time and the leaf ends up animating nothing while the settings
+    // UI shows an inherited "current shader" that never runs. Only a direct
+    // override at the leaf applies; timing inheritance is unaffected (that
+    // lives in the motion ProfileTree, where the scrolling root's curve and
+    // duration ARE meaningful for both children).
     return path == PhosphorAnimation::ProfilePaths::WindowMove
         || path == PhosphorAnimation::ProfilePaths::ScrollingTabSwitch;
 }

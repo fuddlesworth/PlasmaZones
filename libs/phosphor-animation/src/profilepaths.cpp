@@ -344,17 +344,6 @@ QString defaultShaderEffectIdForPath(const QString& path)
     if (path == WindowSnapIn || path == WindowSnapOut || path == WindowLayoutSwitch) {
         return QStringLiteral("window-morph");
     }
-    // The tab swap DOES carry a built-in default, unlike the other three
-    // opt-in classes. Those are opt-in because their pass is intrusive or
-    // expensive and doing nothing is a perfectly good answer. Here doing
-    // nothing is the defect: without a pack the arriving tab hard-cuts over
-    // the one it replaced, two different windows exchanged in one rectangle
-    // with no frame in between, and the cross-fade is what makes the swap
-    // legible. The pass costs one window-sized capture per switch, which is a
-    // discrete user action rather than a per-frame or per-scroll event.
-    if (path == ScrollingTabSwitch) {
-        return QStringLiteral("tab-fade");
-    }
     // Overlay surface show/hide (OSD + popups) default to the fade-and-scale
     // shader so the daemon animates them via shader instead of the C++
     // opacity/scale legs in SurfaceAnimator (which stay as the fallback when a
@@ -378,6 +367,14 @@ QString defaultShaderEffectIdForPath(const QString& path)
     // would put a full-screen post-process on the most frequent interaction
     // in the mode. Scrolling stays a plain translation until the user picks a
     // strip pack on Animations → Motion → Scrolling.
+    //
+    // `scrolling.tabSwitch` joins them, and its case is the closest call of
+    // the three. Without a pack the swap is a hard cut, which IS worse than
+    // the plain behaviour the other two fall back to — but the pass costs a
+    // window-sized capture and a skipped frame per switch, and a transition
+    // that installs itself on a fresh config is the kind of thing a user
+    // should choose rather than discover. Every tab pack (Tab Fade first) is
+    // one pick away on the same page as the strip packs.
     // Every other event defaults to no shader.
     return QString();
 }

@@ -109,9 +109,11 @@ private Q_SLOTS:
         // hosting both offers no cascade parent row.
         QCOMPARE(PP::eventClassForPath(PP::Scrolling), PP::EventClassStrip);
         QCOMPARE(PP::parentPath(PP::ScrollingTabSwitch), PP::Scrolling);
-        // Unlike its strip sibling, this leaf DOES carry a built-in default:
-        // with no pack the swap is a hard cut between two windows.
-        QCOMPARE(PP::defaultShaderEffectIdForPath(PP::ScrollingTabSwitch), QStringLiteral("tab-fade"));
+        // Opt-in like its strip sibling and like the desktop legs: no built-in
+        // default, so a fresh config hard-cuts until the user picks a tab pack.
+        // Pinned because the alternative is a one-line change that silently
+        // installs a capture-and-blend pass on every tab switch for every user.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::ScrollingTabSwitch).isEmpty());
     }
 
     void testAllBuiltInPathsNonEmpty()
