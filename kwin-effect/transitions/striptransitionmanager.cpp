@@ -271,6 +271,18 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 if (!sw) {
                     continue;
                 }
+                // Parked columns are skipped, the same way the tab-anchor
+                // election in prePaintScreen skips them and for the same
+                // reason: paintWindow culls a parked column outright, so one
+                // elected here would be a boundary drawn from a window that
+                // never paints in this capture. Everything stacked below it
+                // but above the topmost PAINTING column would then fall
+                // outside m_stripCaptureAboveStrip and be captured into the
+                // strip pass, moving with the columns instead of staying
+                // composited sharp on top.
+                if (m_effect->scrollParkedOffscreen(sw, m_effect->getWindowId(sw))) {
+                    continue;
+                }
                 if (m_effect->scrollManagedOutputFor(sw) == screen
                     || (m_effect->isScrollTabIndicatorSurface(sw) && sw->screen() == screen)) {
                     topStrip = i;

@@ -797,6 +797,17 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
                                 || entryCounts.value(stableId).value(entry.screenId) != 1) {
                                 continue;
                             }
+                            // Origin validation, not just extents. These rects
+                            // are applied verbatim by the desktop-switch
+                            // restore path, so a daemon-supplied origin on no
+                            // connected output parks the window where nothing
+                            // can show it. The capture side has a chokepoint
+                            // for this; the ingest side did not.
+                            if (!KWin::effects->screenAt(geom.center().toPoint())) {
+                                qCDebug(lcEffect) << "Ignoring daemon pre-tile geometry off every output for"
+                                                  << stableId << ":" << geom;
+                                continue;
+                            }
                             // Find all windows on added screens matching this stableId.
                             // If multiple windows share the same stableId (e.g., 3 Dolphin instances),
                             // the daemon's single geometry is ambiguous — skip the override entirely.
@@ -889,14 +900,19 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
     // deliberately excludes AutotileEngine::windowFloatingChanged). The
     // pending-focus stamp uses the live id too: its consumer resolves via
     // findWindowByIdExact, which refuses the fuzzy fallback.
+    // Resolved ONCE and reused by both branches below. Re-resolving with the
+    // wire spelling would run the fuzzy same-app fallback a second time, so the
+    // branch could act on a different window than the one liveId names, and
+    // stamp the pending-focus id for one while raising another.
+    KWin::EffectWindow* const resolvedWin = m_effect->findWindowById(windowId);
     QString liveId = windowId;
-    if (KWin::EffectWindow* resolved = m_effect->findWindowById(windowId)) {
-        liveId = m_effect->getWindowId(resolved);
+    if (resolvedWin) {
+        liveId = m_effect->getWindowId(resolvedWin);
     }
 
     if (!isFloating) {
         m_effect->m_navigationHandler->setWindowFloating(liveId, false);
-        KWin::EffectWindow* unfloatWin = m_effect->findWindowById(windowId);
+        KWin::EffectWindow* unfloatWin = resolvedWin;
         // Showing-desktop guard: this refocus is automatic (daemon float-state
         // signal), and activateWindow() would synchronously cancel a peek.
         if (unfloatWin && unfloatWin == KWin::effects->activeWindow() && !PlasmaZonesEffect::isShowingDesktop()) {
@@ -907,7 +923,7 @@ void TilingHandler::slotWindowFloatingChanged(const QString& windowId, bool isFl
         applyFloatCleanup(liveId);
 
         // Raise the floated window if it's the active window (user-initiated float)
-        KWin::EffectWindow* floatWin = m_effect->findWindowById(windowId);
+        KWin::EffectWindow* floatWin = resolvedWin;
         if (!floatWin) {
             qCDebug(lcEffect) << "Autotile: window not found for float raise:" << windowId;
         } else if (floatWin == KWin::effects->activeWindow() && !PlasmaZonesEffect::isShowingDesktop()) {
@@ -941,17 +957,27 @@ void TilingHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool 
     if (horizontal || vertical) {
         return;
     }
-    m_monocleMaximizedWindows.remove(windowId);
     // Use screen ID (EDID-based) for daemon tracking D-Bus calls
     const QString screenId = m_effect->getWindowScreenId(w);
-    qCInfo(lcEffect) << "Monocle window manually unmaximized:" << windowId << "- floating";
 
-    if (m_effect->m_daemonGate.serviceRegistered) {
-        PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                                                       QStringLiteral("setWindowFloatingForScreen"),
-                                                       {windowId, screenId, true},
-                                                       QStringLiteral("setWindowFloatingForScreen"));
+    // Membership drops ONLY when the daemon can actually be told, the same rule
+    // the windowed-fullscreen exit follows. The float dispatch below is what
+    // makes the daemon agree the window is no longer monocle-maximized; with
+    // the gate closed it never goes out, and dropping the membership anyway
+    // left the effect having forgotten while the daemon still modelled the
+    // window as tiled, with nothing to re-drive it. Kept, the membership keeps
+    // the mismatch legible so a later pass can resolve it.
+    if (!m_effect->m_daemonGate.serviceRegistered) {
+        qCInfo(lcEffect) << "Monocle window manually unmaximized with no daemon:" << windowId
+                         << "- keeping membership until the float can be announced";
+        return;
     }
+
+    m_monocleMaximizedWindows.remove(windowId);
+    qCInfo(lcEffect) << "Monocle window manually unmaximized:" << windowId << "- floating";
+    PhosphorProtocol::ClientHelpers::fireAndForget(
+        m_effect, PhosphorProtocol::Service::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
+        {windowId, screenId, true}, QStringLiteral("setWindowFloatingForScreen"));
 }
 
 void TilingHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)

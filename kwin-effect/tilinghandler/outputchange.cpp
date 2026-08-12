@@ -143,7 +143,7 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                 // Cross-MODE move: window left autotile. Drop effect-side
                 // autotile tracking (daemon already relinquished via
                 // handoffRelease) — else it lingers phantom.
-                cleanupAutotileTracking(windowId, trueSource);
+                cleanupAutotileTracking(windowId);
             } else {
                 // snap↔snap (neither side managed by this handler's engines):
                 // keep the record current so later diffs measure from the
@@ -380,6 +380,13 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
             }
             qCInfo(lcEffect) << "Autotile: minimize-float ownership handed to snap on screen change:" << windowId
                              << "->" << newScreenId;
+        } else {
+            // No snap handler to hand off to: the record is dropped and the
+            // unminimize edge on the destination will find no owner. Both
+            // sibling arms log their outcome, so log this one rather than
+            // losing the ownership silently.
+            qCWarning(lcEffect) << "Autotile: minimize-float ownership dropped, no snap handler for" << windowId << "->"
+                                << newScreenId;
         }
     }
 
@@ -431,6 +438,17 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         const int fallbackW = savedPreAutotileGeo.isValid() ? std::max(0, qRound(savedPreAutotileGeo.width())) : 0;
         const int fallbackH = savedPreAutotileGeo.isValid() ? std::max(0, qRound(savedPreAutotileGeo.height())) : 0;
 
+        // Supersede any continuation still in flight for this window. The
+        // disconnect above only reaches a watcher that already STORED its
+        // connection, i.e. one that has replied and is waiting on the drop —
+        // a watcher whose D-Bus call has not come back yet is unreachable by
+        // every cancel site. Without this, two hops in quick succession leave
+        // both continuations live: the older one applies the FIRST hop's
+        // pre-tile size, and its inner lambda's map removal consumes the newer
+        // hop's entry, so the newer connection then survives every later cancel
+        // and resizes the window after an unrelated user move.
+        const quint64 restoreGen = ++m_crossScreenRestoreGen[windowId];
+
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::WindowTracking,
                                                        QStringLiteral("getValidatedPreTileGeometry"), {windowId}),
@@ -442,8 +460,13 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
         // disconnects the callback when the handler dies, matching the sibling
         // watchers above.
         connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                [this, safeW, wid, fallbackW, fallbackH](QDBusPendingCallWatcher* pw) {
+                [this, safeW, wid, fallbackW, fallbackH, restoreGen](QDBusPendingCallWatcher* pw) {
                     pw->deleteLater();
+
+                    // Superseded by a later hop while this call was in flight.
+                    if (m_crossScreenRestoreGen.value(wid) != restoreGen) {
+                        return;
+                    }
 
                     int restoreW = fallbackW;
                     int restoreH = fallbackH;
@@ -494,31 +517,39 @@ void TilingHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                     // Context is `this` (the handler), not m_effect: the lambda
                     // mutates m_pendingCrossScreenRestore, so the connection must
                     // die with the handler.
-                    *sharedConn = connect(safeW.data(), &KWin::EffectWindow::windowFinishUserMovedResized, this,
-                                          [this, safeW, wid, restoreW, restoreH, sharedConn](KWin::EffectWindow*) {
-                                              // Disconnect immediately so this only fires once (the drop),
-                                              // not on every subsequent user resize.
-                                              QObject::disconnect(*sharedConn);
-                                              m_pendingCrossScreenRestore.remove(wid);
-                                              if (!safeW || safeW->isDeleted()) {
-                                                  return;
-                                              }
-                                              // Guard: window may have bounced back to autotile during drag.
-                                              const QString dropScreen = m_effect->getWindowScreenId(safeW);
-                                              if (m_managedScreens.contains(dropScreen)) {
-                                                  return;
-                                              }
-                                              // Guard: window may have been snapped to a zone by dragStopped.
-                                              if (!m_effect->isWindowFloating(wid)) {
-                                                  return;
-                                              }
-                                              const QRectF frame = safeW->frameGeometry();
-                                              const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
-                                              // Snap-out: leaving tile-managed sizing.
-                                              m_effect->applyWindowGeometry(
-                                                  safeW, geo, /*allowDuringDrag=*/false, /*skipAnimation=*/false,
-                                                  PhosphorAnimation::ProfilePaths::WindowSnapOut);
-                                          });
+                    *sharedConn =
+                        connect(safeW.data(), &KWin::EffectWindow::windowFinishUserMovedResized, this,
+                                [this, safeW, wid, restoreW, restoreH, sharedConn, restoreGen](KWin::EffectWindow*) {
+                                    // Disconnect immediately so this only fires once (the drop),
+                                    // not on every subsequent user resize.
+                                    QObject::disconnect(*sharedConn);
+                                    // Only consume the map entry if it is still
+                                    // OURS: a superseding hop overwrote it, and
+                                    // removing it here would leave that newer
+                                    // connection unreachable by every cancel site.
+                                    if (m_crossScreenRestoreGen.value(wid) != restoreGen) {
+                                        return;
+                                    }
+                                    m_pendingCrossScreenRestore.remove(wid);
+                                    if (!safeW || safeW->isDeleted()) {
+                                        return;
+                                    }
+                                    // Guard: window may have bounced back to autotile during drag.
+                                    const QString dropScreen = m_effect->getWindowScreenId(safeW);
+                                    if (m_managedScreens.contains(dropScreen)) {
+                                        return;
+                                    }
+                                    // Guard: window may have been snapped to a zone by dragStopped.
+                                    if (!m_effect->isWindowFloating(wid)) {
+                                        return;
+                                    }
+                                    const QRectF frame = safeW->frameGeometry();
+                                    const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
+                                    // Snap-out: leaving tile-managed sizing.
+                                    m_effect->applyWindowGeometry(safeW, geo, /*allowDuringDrag=*/false,
+                                                                  /*skipAnimation=*/false,
+                                                                  PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                                });
                     m_pendingCrossScreenRestore[wid] = *sharedConn;
                 });
 

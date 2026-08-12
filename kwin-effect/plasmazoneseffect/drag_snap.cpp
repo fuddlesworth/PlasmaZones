@@ -237,6 +237,11 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
     QRect geo = geometry.normalized();
     if (!geo.isValid() || geo.width() <= 0 || geo.height() <= 0) {
         qCWarning(lcEffect) << "applyGeometry: invalid or empty geometry:" << geometry;
+        // Release the open-restore suppression on the way out, like the
+        // fullscreen bail and the already-at-target skip below. Nothing is
+        // going to reposition this window, so a suppressed one would be
+        // withheld from compositing until the hard deadline for nothing.
+        endRestoreSuppression(window);
         return;
     }
 
@@ -364,6 +369,10 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                             const bool windowedFsMember = !m_windowedFullscreenWindows.isEmpty()
                                 && m_windowedFullscreenWindows.contains(getWindowId(safeWindow.data()));
                             if (requestedFullScreen && !windowedFsMember) {
+                                // Same release the synchronous fullscreen bail
+                                // does: this replay is the reposition, and it
+                                // is not happening.
+                                endRestoreSuppression(safeWindow.data());
                                 return;
                             }
                         }
@@ -371,6 +380,7 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
                         if (nowScreen != deferScreen || m_daemonGate.batchGenByScreen.value(deferScreen) != deferGen) {
                             qCDebug(lcEffect) << "Deferred geometry superseded (screen or batch changed), dropping:"
                                               << getWindowId(safeWindow.data());
+                            endRestoreSuppression(safeWindow.data());
                             return;
                         }
                         // Re-assert the self-caused-frame-change guard the
@@ -822,7 +832,20 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Pho
 
     const PhosphorProtocol::DragBypassReason oldReason = m_currentDragPolicy.bypassReason;
     const PhosphorProtocol::DragBypassReason newReason = newPolicy.bypassReason;
-    if (oldReason == newReason) {
+    // The latch has to agree with the reason for this to be a genuine no-op,
+    // not just the two reasons matching. The un-bypass transition below gates
+    // on the effect's OWN latch precisely because the drag-start fast path can
+    // set it while m_currentDragPolicy still holds the conservative default
+    // (reason None) — and when the beginDrag reply errors, its correction arm
+    // never runs, so that mismatch persists. A later None→None emission from
+    // the daemon (which compares against its own record, not ours) then landed
+    // here and returned early, so the un-bypass never ran: tracking stayed
+    // held, the keyboard was never grabbed, and Escape went uncaught for the
+    // rest of the drag. Requiring the latch to agree lets that case fall
+    // through to the transition it was always meant to reach.
+    const bool latchAgreesWithReason =
+        m_dragBypassedForEngine == (newReason == PhosphorProtocol::DragBypassReason::EngineOwnedScreen);
+    if (oldReason == newReason && latchAgreesWithReason) {
         // Same reason but different screenId (autotile→autotile cross-VS):
         // update the captured screen so endDrag's ApplyFloat uses the right one.
         m_currentDragPolicy = newPolicy;

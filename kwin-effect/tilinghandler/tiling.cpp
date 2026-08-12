@@ -92,11 +92,20 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // stationary pointer; pause FFM until the cursor moves deliberately
     // (see suppressFfmUntilCursorMoves) so the next pointer twitch cannot
     // steal focus onto whatever landed under it.
+    // Walked in full rather than broken out of, because the same pass answers
+    // whether EVERY request is on a scrolling screen — which the stacking
+    // snapshot below uses to skip work a scroll-only batch never reads.
+    bool anyRequestOnScrollingScreen = false;
+    bool allRequestsOnScrollingScreens = !validatedRequests.isEmpty();
     for (const auto& req : validatedRequests) {
         if (isScrollingScreen(req.screenId)) {
-            suppressFfmUntilCursorMoves();
-            break;
+            anyRequestOnScrollingScreen = true;
+        } else {
+            allRequestsOnScrollingScreens = false;
         }
+    }
+    if (anyRequestOnScrollingScreen) {
+        suppressFfmUntilCursorMoves();
     }
 
     // A tile / reflow / overflow-float changes each window's placement mode
@@ -143,10 +152,19 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // windows (e.g. Settings) retain their stacking position. Overlap-layout
     // batches substitute their tiled group with a deterministic order during
     // that restore — see the onComplete raise loop below.
-    const auto allWindows = KWin::effects->stackingOrder();
+    // Skipped entirely for a scroll-only batch. onComplete reads this only
+    // under `hasApplies && !scrollOnlyBatch`, and toApply is a subset of
+    // validatedRequests, so all-scrolling requests imply a scroll-only batch
+    // and the snapshot would never be read. It is not free: a wheel tick or a
+    // drag-insert fires a batch, and each one copied the whole stacking order
+    // into QPointers and carried it by value into the onComplete closure.
     QVector<QPointer<KWin::EffectWindow>> savedGlobalStack;
-    for (KWin::EffectWindow* w : allWindows) {
-        savedGlobalStack.append(QPointer<KWin::EffectWindow>(w));
+    if (!allRequestsOnScrollingScreens) {
+        const auto allWindows = KWin::effects->stackingOrder();
+        savedGlobalStack.reserve(allWindows.size());
+        for (KWin::EffectWindow* w : allWindows) {
+            savedGlobalStack.append(QPointer<KWin::EffectWindow>(w));
+        }
     }
 
     struct Entry
@@ -928,7 +946,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     ws->raiseWindow(kw);
                 }
             }
-        } else if (ws && hasApplies) {
+        } else if (hasApplies) {
+            // No `ws &&` term: this arm only CONSUMES state, it never touches
+            // the Workspace, so gating it on a pointer it does not use meant a
+            // null Workspace::self() leaked exactly the two one-shots the
+            // comment below says must not survive the batch.
+            //
             // Scroll-only batch: the restack block above is skipped, but two
             // of its CONSUMES must still happen or state leaks across
             // batches. The pending-focus id is written on EVERY scrolling
@@ -1893,7 +1916,13 @@ void TilingHandler::slotFocusWindowRequested(const QString& windowId)
     if (isScrollingScreen(m_effect->getWindowScreenId(w))) {
         suppressFfmUntilCursorMoves();
     }
-    m_pendingAutotileFocusWindowId = windowId;
+    // Re-key to the EFFECT's id for the window we actually resolved, not the
+    // daemon's spelling. findWindowById carries a fuzzy same-app fallback, so
+    // for a stale pre-restore UUID the two can differ — and the only consumer
+    // (the restack arm of a later batch) resolves with findWindowByIdExact,
+    // which would then miss and silently skip the raise. Every other resolve
+    // site in this file re-keys for the same reason.
+    m_pendingAutotileFocusWindowId = m_effect->getWindowId(w);
     KWin::effects->activateWindow(w);
 }
 

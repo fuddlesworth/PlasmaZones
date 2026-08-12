@@ -129,7 +129,12 @@ public:
     /// WITHOUT notifying the daemon. Shared by onWindowClosed (which adds the
     /// daemon windowClosed call) and the cross-mode-move marker path (where the
     /// daemon already relinquished the window via handoffRelease).
-    void cleanupAutotileTracking(const QString& windowId, const QString& screenId);
+    /// No screenId parameter: every container this touches is either keyed by
+    /// windowId or swept across all screens. The saved stacking orders used to
+    /// be pruned only for a caller-supplied screen, which left the id behind on
+    /// every other screen's order — including the DESTINATION's on a
+    /// cross-output transfer, where the caller passes the source.
+    void cleanupAutotileTracking(const QString& windowId);
     /// Drop @p windowId from the minimize-float set and cancel EITHER
     /// deferred edge — the minimize debounce and the unminimize commit —
     /// mirroring SnapHandler::removeMinimizeFloated, plus the untiled-marker
@@ -1006,6 +1011,15 @@ private:
     bool m_inOutputChanged = false; ///< re-entrancy guard for handleWindowOutputChanged
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
+    /// Generation for the cross-screen size-restore continuation, bumped every
+    /// time that path arms a new D-Bus watcher for a window. The in-flight
+    /// watcher is not cancellable (every cancel site disconnects the STORED
+    /// connection, and a watcher that has not yet replied has not stored one),
+    /// so a second hop arming while the first is still in flight leaves both
+    /// live. Both continuations capture their generation and bail on a
+    /// mismatch, which keeps an older hop's pre-tile size from winning and
+    /// stops its lambda consuming the newer hop's map entry.
+    QHash<QString, quint64> m_crossScreenRestoreGen;
     QSet<QString> m_minimizeFloatedWindows;
     /// Ownership after an unfloat dispatch and before its authoritative echo.
     /// The generation rejects completions from a countermanded older request.

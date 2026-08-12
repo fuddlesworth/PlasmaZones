@@ -71,6 +71,9 @@ void TilingHandler::applyFullScreenSuppressed(KWin::Window* kw, bool fullScreen)
 
 void TilingHandler::suppressFfmUntilCursorMoves()
 {
+    if (!KWin::effects) {
+        return;
+    }
     m_ffmSuppressPending = true;
     m_ffmSuppressAnchor = KWin::effects->cursorPos();
 }
@@ -435,8 +438,7 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
                         // the fuzzy appId fallback could resolve a same-app sibling
                         // for a just-closed window, ending the sibling's suppression
                         // early.
-                        if (KWin::EffectWindow* effectWindow = m_effect->findWindowById(windowId);
-                            effectWindow && m_effect->getWindowId(effectWindow) == windowId) {
+                        if (KWin::EffectWindow* effectWindow = m_effect->findWindowByIdExact(windowId)) {
                             m_effect->endRestoreSuppression(effectWindow);
                         }
                     }
@@ -585,7 +587,7 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     qCInfo(lcEffect) << "Notified autotile: windowsOpenedBatch with" << batchEntries.size() << "windows";
 }
 
-void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QString& screenId)
+void TilingHandler::cleanupAutotileTracking(const QString& windowId)
 {
     // Compositor-agnostic state cleanup (shared helper).
     TilingStateHelpers::TilingWindowState windowState{
@@ -652,8 +654,20 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
         QObject::disconnect(pendingConn.value());
         m_pendingCrossScreenRestore.erase(pendingConn);
     }
-    if (m_savedAutotileStackingOrder.contains(screenId)) {
-        m_savedAutotileStackingOrder[screenId].removeAll(windowId);
+    // Bumping rather than removing: a continuation still in flight for this
+    // window holds the old value and must stay superseded. Removing would let
+    // it match again on the default-constructed 0 if the window were re-armed
+    // from scratch.
+    ++m_crossScreenRestoreGen[windowId];
+    // Every screen, not just the one passed. On a cross-output transfer the
+    // caller passes the OLD screen, so the destination's saved order kept the
+    // id, and other screens' orders can hold it from an earlier session. The
+    // replay resolves by exact id and skips misses, so a residue was inert —
+    // but it was also unbounded across a session, growing one dead id per
+    // screen per transfer.
+    for (auto orderIt = m_savedAutotileStackingOrder.begin(); orderIt != m_savedAutotileStackingOrder.end();
+         ++orderIt) {
+        orderIt.value().removeAll(windowId);
     }
 }
 
@@ -661,7 +675,7 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
 {
     // The spawn-provenance and deferred-route entries are cleared by
     // cleanupAutotileTracking, which owns them for every caller.
-    cleanupAutotileTracking(windowId, screenId);
+    cleanupAutotileTracking(windowId);
 
     // Notify autotile daemon
     if (m_managedScreens.contains(screenId)) {
@@ -674,7 +688,7 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
 
 void TilingHandler::releaseWindowTracking(const QString& windowId, const QString& screenId)
 {
-    cleanupAutotileTracking(windowId, screenId);
+    cleanupAutotileTracking(windowId);
 
     if (m_managedScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Tiling,
@@ -1050,6 +1064,13 @@ void TilingHandler::onDaemonReady()
         QObject::disconnect(connIt.value());
     }
     m_pendingCrossScreenRestore.clear();
+    // Bump every generation rather than clearing the map: a watcher whose
+    // D-Bus call is still in flight across the daemon restart is unreachable
+    // by the disconnect loop above, and clearing would let it match the
+    // default 0 and apply a dead session's pre-tile size.
+    for (auto genIt = m_crossScreenRestoreGen.begin(); genIt != m_crossScreenRestoreGen.end(); ++genIt) {
+        ++genIt.value();
+    }
     // A stacking order saved before the restart describes a dead session's
     // z-order — the first post-restart retile's onComplete would replay it
     // and re-raise windows in stale order; same for a stale pending focus id.

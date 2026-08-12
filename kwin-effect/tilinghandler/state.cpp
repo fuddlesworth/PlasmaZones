@@ -701,7 +701,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // resolving both under the old set keeps one rule for the whole batch.
     QList<KWin::EffectWindow*> announceWindows;
     QHash<KWin::EffectWindow*, QString> announceScreens;
-    if (announcing) {
+    if (announcing && KWin::effects) {
         announceWindows = KWin::effects->stackingOrder();
         announceScreens.reserve(announceWindows.size());
         for (KWin::EffectWindow* w : std::as_const(announceWindows)) {
@@ -758,7 +758,9 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
         if (KWin::LogicalOutput* out = m_effect->outputForScreenId(removedScreen)) {
             m_effect->m_stripTransition.outputRemoved(out);
             m_effect->m_stripViewAnimator->forgetOutput(out);
-            KWin::effects->addRepaint(out->geometry());
+            if (KWin::effects) {
+                KWin::effects->addRepaint(out->geometry());
+            }
         }
     }
 
@@ -768,7 +770,7 @@ void TilingHandler::setScrollingScreens(const QSet<QString>& newSet, bool announ
     // active-layout write documents applies here: a `Mode Equals "scrolling"`
     // SetOpacity rule flips verdict on an engine swap, and an undamaged
     // window would keep its last-painted alpha until incidental damage.
-    if (m_effect->m_shaderManager.hasOpacityRules()) {
+    if (m_effect->m_shaderManager.hasOpacityRules() && KWin::effects) {
         KWin::effects->addRepaintFull();
     }
 
@@ -1102,10 +1104,13 @@ bool TilingHandler::isEligibleForTilingNotify(KWin::EffectWindow* w, bool* rejec
     // The fullscreen term first so the overwhelmingly common non-fullscreen
     // window pays neither the id lookup nor the screen resolve. Reuses the
     // requested-OR-committed answer computed above — see its comment for why
-    // the committed bit alone is not enough.
+    // the committed bit alone is not enough — and the scrolling-screen answer
+    // already resolved into fullscreenOnScrollingScreen, which is exactly this
+    // term inside the `fullScreen &&` short-circuit. Recomputing it here paid
+    // getWindowScreenId (a scroll-tracking lookup) twice for every fullscreen
+    // window.
     if (fullScreen
-        && !(m_effect->m_windowedFullscreenWindows.contains(m_effect->getWindowId(w))
-             || isScrollingScreen(m_effect->getWindowScreenId(w)))) {
+        && !(m_effect->m_windowedFullscreenWindows.contains(m_effect->getWindowId(w)) || fullscreenOnScrollingScreen)) {
         qCDebug(lcEffect) << "isEligibleForTilingNotify: rejected (fullscreen)" << m_effect->getWindowId(w);
         return false;
     }

@@ -489,6 +489,18 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         // findWindowById at this point, and the GL release must run (see
         // removeWindowDecoration) or the redirect paints opaque black.
         removeWindowDecoration(closedWindowId, w);
+        // And the multipass targets, for the case removeWindowDecoration skips:
+        // its no-border early return leaves a multipass entry behind, and such
+        // an entry can exist without a decoration entry (the surface-layer and
+        // backdrop paths create it on demand). The windowDeleted handler carries
+        // a belt for exactly this, but that belt lives inside the
+        // windowIdCache guard, and the branch a few lines below scrubs that
+        // cache on precisely this path — no transition — so the belt is
+        // unreachable here and the full-canvas textures and framebuffers would
+        // leak for the session. releaseSurfaceState, not a raw erase: it
+        // refuses while a transition owns the window, and in that case the
+        // cache IS retained and the delete-path belt does the freeing.
+        releaseSurfaceState(closedWindowId, w);
     }
 
     // Notify general daemon for cleanup. Pass the screen resolved at the

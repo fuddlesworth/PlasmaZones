@@ -659,10 +659,9 @@ void PlasmaZonesEffect::postPaintScreen()
                 // one cold fold, paid mid-scroll when every visible window
                 // is repainting anyway. (When a shader transition is live on
                 // the window, releaseSurfaceState early-returns WITHOUT
-                // erasing, and the stamp survives inside the kept state — so
-                // that case retries on every subsequent frame, driven by the
-                // transition's own repaints, until the transition drops. Two
-                // hash probes per retry.) The pinned clock, like every other
+                // erasing, and the stamp survives inside the kept state — that
+                // case re-arms the timer on a short retry, see below.) The
+                // pinned clock, like every other
                 // consumer in this loop; the parked stamp is inside the
                 // state so the erase disposes of it with everything else.
                 constexpr qint64 kParkReapMs = 10000;
@@ -673,6 +672,29 @@ void PlasmaZonesEffect::postPaintScreen()
                         remainingMs = kParkReapMs;
                     } else if (frameClockMs - sit->second.parkedSinceMs >= kParkReapMs) {
                         releaseSurfaceState(it.key(), sw);
+                        // The refusal case needs its own wake. The note above
+                        // says the retry is "driven by the transition's own
+                        // repaints, until the transition drops" — that holds
+                        // only while the transition is pumping. An anchor-extent
+                        // leg issues no damage when it ends (only surfaceExtent
+                        // legs repaint on teardown) and the postPaintScreen
+                        // transition pump has already gone false by then, so on
+                        // an idle desktop this loop would never run again. With
+                        // remainingMs left at -1 the arm below then STOPS the
+                        // timer, and the full-canvas composite, capture and
+                        // backdrop stay resident for the rest of the session —
+                        // the exact cost the reap exists to avoid.
+                        //
+                        // So re-probe: if the state survived the refusal, keep
+                        // the timer armed on a short retry. Deliberately NOT
+                        // resetting parkedSinceMs, so the entry stays elapsed
+                        // and the next attempt fires immediately once the
+                        // transition drops. The successful erase invalidates
+                        // sit, so this goes by key rather than through it.
+                        constexpr qint64 kParkReapRetryMs = 1000;
+                        if (m_surfaceMultipass.find(it.key()) != m_surfaceMultipass.end()) {
+                            remainingMs = kParkReapRetryMs;
+                        }
                     } else {
                         remainingMs = kParkReapMs - (frameClockMs - sit->second.parkedSinceMs);
                     }
