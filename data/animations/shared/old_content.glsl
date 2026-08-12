@@ -35,4 +35,17 @@ vec4 oldColor(vec2 uv) {
     return texture(uOldWindow, vec2(t.x, 1.0 - t.y)) * iWindowOpacity;
 }
 
+// The old→new blend itself, `a` running 0 (all old) to 1 (all new). Every pack
+// that fades one side into the other writes this same mix, so it is spelled
+// once here — the sibling of desktop_transition.glsl's crossFade, and named
+// apart from it because the pair it blends is different (a window's captured
+// past against its live present, rather than two desktops).
+//
+// The tab class is the caller this matters most to: there the "old" side is
+// another WINDOW's content, so which sampler is the from and which is the to
+// is a fact about the event rather than something a pack should restate.
+vec4 oldCrossFade(vec2 uv, float a) {
+    return mix(oldColor(uv), surfaceColor(uv), a);
+}
+
 #endif // PLASMAZONES_OLD_CONTENT_GLSL

@@ -1,0 +1,28 @@
+{
+    "id": "tab-zoom",
+    "name": "Tab Zoom",
+    "description": "Pulls the tab you left toward you as it fades, while the one you picked rises from just behind it. The two are always at different depths, so the swap reads as a change of focus rather than a change of place.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Zoom",
+    "appliesTo": ["tab"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "amount",
+            "name": "Zoom Amount",
+            "type": "float",
+            "default": 0.12,
+            "min": 0.0,
+            "max": 0.6
+        },
+        {
+            "id": "crossPoint",
+            "name": "Cross Point",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.2,
+            "max": 0.8
+        }
+    ]
+}
