@@ -6,7 +6,7 @@
 // at the arrival edge (content materializes through the family's navy
 // silhouette behind a cyan gradient rim, fed by ember sparks) and a
 // de-energize gate at the departure edge (peek's multiplicative drain into
-// the silhouette, leaving a rose persistence tail). The gates never move;
+// the silhouette, leaving a rose afterglow). The gates never move;
 // the CONTENT moves through them, which is the family's causality without a
 // progress variable: a column crossing the edge is what gets energized. The
 // middle of the screen is bit-exact identity, so the region the user is
@@ -84,17 +84,23 @@ vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P
     vec3 gArrCol = fluxGradient(clamp(qm * 0.35, 0.0, 0.35));
     col += gArrCol * rim * A * glow * sparkle * lumW * 0.9;
 
-    // ── Departure: de-energize with a rose persistence tail ──
+    // ── Departure: de-energize with a rose afterglow ──
     // Peek's multiplicative drain, strongest where content is about to
-    // leave, sinking the last sliver into the silhouette; scan's afterglow
-    // rotated to X carries rose at the edge grading into purple inward. The
-    // tail length is measured in FIELD units (the same q the kill uses), not
-    // in absolute screen distance: the gate is hard-killed at q = 1.2, so an
-    // absolute length longer than the field could never be seen and the
-    // slider would only flatten brightness instead of lengthening the tail.
+    // leave, sinking the last sliver into the silhouette; scan's trailing
+    // glow rotated to X carries rose at the edge grading into purple inward.
+    // The trail length is measured in FIELD units (the same q the kill
+    // uses), not in absolute screen distance: the gate is hard-killed at
+    // q = 1.2, so an absolute length longer than the field could never be
+    // seen and the slider would only flatten brightness instead of
+    // lengthening the trail.
+    //
+    // Param renamed persistence → afterglow pre-3.4-release (no configs to
+    // migrate): persistence is the one CRT term the set had borrowed, it
+    // belongs with phosphor-scan's beam and scanlines, and the family is a
+    // plasma one everywhere else.
     col *= 1.0 - fw * P * dimK * 0.7;
     col = mix(col, sil, (1.0 - smoothstep(0.0, 0.45, qm)) * P * 0.6 * kill);
-    float tail = 0.18 + clamp(p_persistence, 0.0, 1.0) * 0.75;
+    float tail = 0.18 + clamp(p_afterglow, 0.0, 1.0) * 0.75;
     float ag = exp(-max(q, 0.0) / tail) * kill;
     vec3 tailCol = fluxGradient(clamp(1.0 - qm * 0.35, 0.65, 1.0));
     col += tailCol * ag * P * glow * lumW * 0.35;

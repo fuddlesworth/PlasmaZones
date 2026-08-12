@@ -1,7 +1,7 @@
 {
     "id": "phosphor-gate",
     "name": "Phosphor Gate",
-    "description": "Edge gates for the scrolling strip in the official Phosphor style. Columns arriving on screen materialize through a cyan energize gate at the leading edge, and columns leaving drain to a dark navy silhouette with a rose persistence tail at the trailing edge. The gates breathe in with scroll speed, the middle of the screen is never touched, and everything settles to the plain strip the instant scrolling stops.",
+    "description": "Edge gates for the scrolling strip in the official Phosphor style. Columns arriving on screen materialize through a cyan energize gate at the leading edge, and columns leaving drain to a dark navy silhouette with a rose afterglow at the trailing edge. The gates breathe in with scroll speed, the middle of the screen is never touched, and everything settles to the plain strip the instant scrolling stops.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Reveal",
@@ -53,8 +53,8 @@
             "group": "Gates"
         },
         {
-            "id": "persistence",
-            "name": "Persistence Tail",
+            "id": "afterglow",
+            "name": "Afterglow Trail",
             "type": "float",
             "default": 0.5,
             "min": 0.0,
