@@ -65,7 +65,8 @@ class PLASMAZONES_EXPORT Settings : public ISettings,
     Q_INTERFACES(PhosphorEngine::IAutotileSettings PhosphorEngine::ISnapSettings PhosphorEngine::IScrollSettings)
 
 public:
-    /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
+    /** Maximum number of activation triggers per action (drag activation, zone span,
+     *  snap assist, autotile drag-insert, scrolling drag-insert).
      *  Source of truth lives in ConfigDefaults::maxTriggersPerAction() so both this
      *  public accessor and the schema-side validator (canonicalTriggerList) read
      *  from the same constant without either side depending on the other. */
@@ -1101,8 +1102,9 @@ public:
     // Per-screen snapping gaps project the config-backed per-monitor gap
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so
     // this is the sole accessor; writes go through setPerScreenAutotileSetting /
-    // the perScreenGap* helpers, and the ISettings set/clear/has snapping triplet
-    // stays as no-op defaults.
+    // the perScreenGap* helpers. ISettings carries no set/clear/has snapping
+    // triplet at all, unlike the autotile, scrolling and zone-selector blocks
+    // — see the note above the getter in isettings.h.
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
     // Per-monitor gap overrides (config-backed, unified — one value per monitor
@@ -2015,8 +2017,9 @@ private:
 
     // Palette-following zone colours: resolve one of the four theme-fallback
     // roles from the live application palette (with the ZoneDefaults alphas),
-    // falling back to the ConfigDefaults constants when no GUI application
-    // exists (headless config tools).
+    // falling back to the ConfigDefaults constants when the process cannot
+    // observe a palette — no GUI application (headless config tools), or a
+    // caller off the GUI thread.
     enum class SystemColorRole {
         Highlight,
         Inactive,
@@ -2065,11 +2068,17 @@ private:
     // signal trio (per-field NOTIFY + animationProfileChanged + settingsChanged).
     //
     // Hot path: per-field setters fired by settings-UI sliders at ~30 Hz.
-    // The helper consolidates the 5 near-identical animation field setters
-    // (duration / easing-curve / min-distance / sequence-mode / stagger-
-    // interval) so the merge contract (read existing blob → insert one
-    // field → write back, preserving every other on-disk key) is in one
-    // place rather than copy-pasted five times.
+    // The helper consolidates the 4 near-identical animation field setters
+    // (duration / min-distance / sequence-mode / stagger-interval) so the
+    // merge contract (read existing blob → insert one field → write back,
+    // preserving every other on-disk key) is in one place rather than
+    // copy-pasted four times. The easing-curve setter is deliberately NOT
+    // routed through it: its no-op guard compares the RAW CALLER string
+    // against the stored one BEFORE resolution, which this helper's
+    // signature cannot express, so re-routing it would change which writes
+    // emit. It duplicates the merge logic on purpose — see
+    // `setAnimationEasingCurve` in animationprofile.cpp, which documents the
+    // contract in full.
     //
     // T must be comparable (`operator==`) and convertible to QJsonValue
     // (the QJsonObject::insert overload set covers int / double / bool /

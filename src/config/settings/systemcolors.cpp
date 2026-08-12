@@ -3,8 +3,9 @@
 
 #include "config/settings.h"
 #include "config/configdefaults.h"
-#include "core/types/constants.h"
 #include "core/platform/logging.h"
+
+#include <PhosphorZones/ZoneDefaults.h>
 
 #include <QEvent>
 #include <QGuiApplication>

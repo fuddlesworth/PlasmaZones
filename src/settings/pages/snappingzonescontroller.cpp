@@ -5,6 +5,8 @@
 
 #include "config/configdefaults.h"
 
+#include <QString>
+
 namespace PlasmaZones {
 
 SnappingZonesController::SnappingZonesController(QObject* parent)

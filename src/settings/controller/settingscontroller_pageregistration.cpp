@@ -79,8 +79,8 @@ void SettingsController::buildApplicationController()
     // (2) per-feature configuration — Display, Placement, Appearance
     // (which parents Decorations and Animations), Rules;
     // (3) tools & meta — Editor, About.
-    // `divider` flags mark only those two seams (after General, after Window
-    // Rules) plus one inside the feature block (after Placement, to set the
+    // `divider` flags mark only those two seams (after General, after Rules)
+    // plus one inside the feature block (after Placement, to set the
     // placement categories apart from Appearance/Rules).
 
     // ── Block 1: top / global ──
@@ -119,11 +119,12 @@ void SettingsController::buildApplicationController()
     // Appearance, then Animations.
     // PER-SURFACE scope: per-surface CHAINS of decoration shader packs,
     // resolved through a DecorationProfileTree (walk-up inheritance). Each
-    // surface family (window / popup) is its own alwaysEnabled root. The nav
-    // handle ("decoration") redirects to its General page (the config-backed
-    // window-appearance page, registered below with the decoration children).
-    // The DecorationPageController is wired in
-    // as a headless staging domain below; it has no per-page staged state —
+    // surface family (window / osd / popup) is its own root card, whose toggle
+    // engages or clears that family's override; children diverge from it through
+    // the walk-up. The nav handle ("decoration") redirects to its General page
+    // (the config-backed window-appearance page, registered below with the
+    // decoration children). The DecorationPageController is wired in as a
+    // headless staging domain below; it has no per-page staged state —
     // dirty tracking rides the global decorationProfileTreeChanged NOTIFY loop.
     regVirtual(QStringLiteral("decorations"), QStringLiteral("appearance"), PhosphorI18n::tr("Decorations"), QString(),
                QStringLiteral("preferences-desktop-theme"));
@@ -188,8 +189,8 @@ void SettingsController::buildApplicationController()
     // the snapped Window, plus a shared Configuration block. Most leaves are
     // QML-only (regVirtual) and bind to the existing per-feature controllers —
     // Overlay→Behavior and Window→Behavior bind snappingBehaviorPage; Overlay→
-    // Appearance binds snappingZonesPage + snappingEffectsPage; Zone Selector
-    // binds snappingZoneSelectorPage. Those controllers stay exposed as
+    // Appearance binds snappingZonesPage; Zone Selector binds
+    // snappingZoneSelectorPage. Those controllers stay exposed as
     // Q_PROPERTY bridges on SettingsController but are no longer registered as
     // pages of their own. Window→Appearance keeps its dedicated controller
     // (border/gap bounds), so it alone stays a regPage. Per-page dirtiness keys
@@ -414,11 +415,10 @@ void SettingsController::buildApplicationController()
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Decoration children — Surfaces / Library categories drill in, the same
-    // two-bucket shape as animations. Unlike animations there is NO General
-    // page: decoration has no meaningful global default (borders and title
-    // bars are window-only; daemon surfaces default to no decoration), so
-    // Surfaces fans straight out to the per-surface override pages and
-    // Library holds the installed-pack browser.
+    // two-bucket shape as animations. Decoration has no meaningful global
+    // PACK default (borders and title bars are window-only; daemon surfaces
+    // default to no decoration), so Surfaces fans straight out to the
+    // per-surface override pages and Library holds the installed-pack browser.
     // Decoration → General: the shared, mode-neutral window-appearance page
     // (config-backed window border / title bar Windows.* + the unified gap
     // model Gaps.*). Lives under Decoration as its General page — the same
