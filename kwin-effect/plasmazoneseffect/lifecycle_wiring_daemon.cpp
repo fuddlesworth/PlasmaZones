@@ -294,7 +294,7 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // keeps marking them transformed off this map, and no re-tile can
         // arrive to clear the entry. Dropping it here is what lets the next
         // batch, or the next daemon, start from nothing.
-        m_scrollVisualPos.clear();
+        m_scrollVisualDelta.clear();
         // The commanded rects and the min-size cache are per-session scroll
         // state like everything above: the counter-assert must not re-arm
         // against a dead session's rects when a new daemon repopulates the

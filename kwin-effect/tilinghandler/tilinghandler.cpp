@@ -614,7 +614,7 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
     // same reason (inert off a scrolling output, but a stale relocation the
     // moment the window returns to one).
     m_effect->m_scrollCommandedRects.remove(windowId);
-    m_effect->m_scrollVisualPos.remove(windowId);
+    m_effect->m_scrollVisualDelta.remove(windowId);
     // Windowed fullscreen dies with the tracking: this funnel serves the
     // close path (where slotWindowClosed already removed the membership,
     // making this belt) and the cross-output transfer (where nothing else
@@ -970,8 +970,8 @@ void TilingHandler::onDaemonReady()
     // re-seeds it, cleared for symmetry with the teardown). The visual-pos
     // clear pairs with damage like its teardown twin: the removal changes
     // where the paint path draws those windows.
-    if (!m_effect->m_scrollVisualPos.isEmpty()) {
-        m_effect->m_scrollVisualPos.clear();
+    if (!m_effect->m_scrollVisualDelta.isEmpty()) {
+        m_effect->m_scrollVisualDelta.clear();
         if (KWin::effects) {
             KWin::effects->addRepaintFull();
         }

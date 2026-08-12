@@ -887,6 +887,14 @@ private:
                              bool skipAnimation = false,
                              const QString& profilePath = PhosphorAnimation::ProfilePaths::WindowSnapIn,
                              const QRectF& originOverride = QRectF(), const QRectF& visualTargetOverride = QRectF());
+    /// The rect applyWindowGeometry will actually COMMIT for a tile request:
+    /// X11/XWayland frames are constrained to the client's WM_SIZE_HINTS and
+    /// centred in the zone; everything else passes through unchanged. The
+    /// scrolling batch path calls this to build animation origins and
+    /// degenerate-leg comparisons against the committed rect rather than the
+    /// raw column rect (a fixed-size X11 game's column rect and committed
+    /// rect differ by the centring offset). Idempotent.
+    QRect constrainTileGeometry(KWin::EffectWindow* window, const QRect& geometry) const;
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
@@ -2050,20 +2058,27 @@ private:
     /// profile of its own — the caller resolves the scrolling.view motion node
     /// per batch and hands it in.
     std::unique_ptr<StripViewAnimator> m_stripViewAnimator;
-    /// Where a PARKED scrolling column should be drawn, by window id. Its
-    /// committed rect is the park below the union of all outputs — the only
-    /// rect that cannot stray onto a neighbouring monitor — so the paint path
-    /// translates it back here and then adds the view offset, which keeps it
-    /// travelling with the rest of the strip instead of vanishing the moment
-    /// it leaves the viewport. Absent for every window whose committed rect
-    /// already IS its paint position, which is almost all of them.
+    /// How far a PARKED scrolling column's drawing must be translated from
+    /// its committed rect to sit at its strip position, by window id. Stored
+    /// as the strip-minus-park DELTA of the batch's rects rather than the
+    /// strip position itself: the committed frame is not always the park rect
+    /// (applyWindowGeometry's X11 constrain-and-centre pass offsets a
+    /// fixed-size client within it), and the delta rides on top of whatever
+    /// was committed, preserving that offset — an absolute position erased it
+    /// and drew such windows at the column's top-left. The committed rect is
+    /// the park below the union of all outputs — the only rect that cannot
+    /// stray onto a neighbouring monitor — so the paint path applies this
+    /// delta and then adds the view offset, which keeps the column travelling
+    /// with the rest of the strip instead of vanishing the moment it leaves
+    /// the viewport. Absent for every window drawn at its committed rect,
+    /// which is almost all of them.
     /// DAMAGE CONTRACT: adding, changing or removing an entry moves where
     /// the paint path draws the window, so every mutation site must either
     /// pair with addRepaint(Full) or sit on a path whose follow-up geometry
     /// apply (or membership clear that already stopped the relocation)
     /// provably damages — the batch writer change-gates and damages, and
     /// the removers each document which half covers them.
-    QHash<QString, QPoint> m_scrollVisualPos;
+    QHash<QString, QPoint> m_scrollVisualDelta;
     /// Windows in scrolling WINDOWED FULLSCREEN: the client holds KWin
     /// fullscreen state (set by the effect from the batch flag) while the
     /// committed rect stays the column slot, stored here as the value. The

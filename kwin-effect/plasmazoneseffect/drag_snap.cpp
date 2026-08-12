@@ -153,6 +153,55 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
     }
 }
 
+QRect PlasmaZonesEffect::constrainTileGeometry(KWin::EffectWindow* window, const QRect& geometry) const
+{
+    // For X11/XWayland windows, KWin constrains the frame size to align with
+    // WM_SIZE_HINTS (size increments for terminals like Ghostty, Kitty, etc.;
+    // fixed-size hints for game launchers). Pre-compute the constrained size
+    // and center the window in its zone so the gap is distributed evenly
+    // instead of all at the bottom-right.
+    // This applies to all snap operations (zone snap, autotile, resnap, etc.).
+    // Wayland-native clients negotiate size async (constrainFrameSize only
+    // checks min/max, not char-cell grid), so they're handled by the deferred
+    // check in slotWindowFrameGeometryChanged().
+    //
+    // Split out of applyWindowGeometry so the scrolling batch path can predict
+    // the COMMITTED rect for a tile request: its animation origins and the
+    // degenerate-leg comparisons must be built against what will actually be
+    // committed, not the raw column rect — the mismatch drew a fixed-size X11
+    // game at its column's top-left (the top of the screen) for the length of
+    // every park and arrival. Idempotent: re-constraining an already
+    // constrained rect changes nothing.
+    if (!window || !window->isX11Client()) {
+        return geometry;
+    }
+    KWin::Window* kw = window->window();
+    if (!kw) {
+        return geometry;
+    }
+    QRect geo = geometry;
+    const QSizeF constrained = kw->constrainFrameSize(QSizeF(geo.size()));
+    const int cw = qRound(constrained.width());
+    const int ch = qRound(constrained.height());
+    if (cw != geo.width() || ch != geo.height()) {
+        // BOTH directions, not shrink-only: a min size larger than
+        // the zone previously skipped this branch entirely, so KWin
+        // committed the constrained-larger frame unanchored while
+        // every downstream comparand held the requested rect. Apply
+        // the constrained size here so the pre-computed geo matches
+        // what KWin will commit. Clamp the centring shift to
+        // non-negative: when min-size exceeds the zone in a
+        // dimension the window stays anchored at the zone's origin
+        // rather than shifting past its edge.
+        const int dx = qMax(0, geo.width() - cw) / 2;
+        const int dy = qMax(0, geo.height() - ch) / 2;
+        geo = QRect(geo.x() + dx, geo.y() + dy, cw, ch);
+        qCDebug(lcEffect) << "Pre-centered X11 window with size constraints:"
+                          << "zone=" << geometry.size() << "constrained=" << constrained << "adjusted=" << geo;
+    }
+    return geo;
+}
+
 void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
                                             bool skipAnimation, const QString& profilePath,
                                             const QRectF& originOverride, const QRectF& visualTargetOverride)
@@ -202,38 +251,9 @@ void PlasmaZonesEffect::applyWindowGeometry(KWin::EffectWindow* window, const QR
         }
     }
 
-    // For X11/XWayland windows, KWin constrains the frame size to align with
-    // WM_SIZE_HINTS (size increments for terminals like Ghostty, Kitty, etc.).
-    // Pre-compute the constrained size and center the window in its zone so the
-    // gap is distributed evenly instead of all at the bottom-right.
-    // This applies to all snap operations (zone snap, autotile, resnap, etc.).
-    // Wayland-native clients negotiate size async (constrainFrameSize only
-    // checks min/max, not char-cell grid), so they're handled by the deferred
-    // check in slotWindowFrameGeometryChanged().
-    if (window->isX11Client()) {
-        KWin::Window* kw = window->window();
-        if (kw) {
-            const QSizeF constrained = kw->constrainFrameSize(QSizeF(geo.size()));
-            const int cw = qRound(constrained.width());
-            const int ch = qRound(constrained.height());
-            if (cw != geo.width() || ch != geo.height()) {
-                // BOTH directions, not shrink-only: a min size larger than
-                // the zone previously skipped this branch entirely, so KWin
-                // committed the constrained-larger frame unanchored while
-                // every downstream comparand held the requested rect. Apply
-                // the constrained size here so the pre-computed geo matches
-                // what KWin will commit. Clamp the centring shift to
-                // non-negative: when min-size exceeds the zone in a
-                // dimension the window stays anchored at the zone's origin
-                // rather than shifting past its edge.
-                const int dx = qMax(0, geo.width() - cw) / 2;
-                const int dy = qMax(0, geo.height() - ch) / 2;
-                geo = QRect(geo.x() + dx, geo.y() + dy, cw, ch);
-                qCDebug(lcEffect) << "Pre-centered X11 window with size constraints:"
-                                  << "zone=" << geometry.size() << "constrained=" << constrained << "adjusted=" << geo;
-            }
-        }
-    }
+    // For X11/XWayland windows, pre-compute the size KWin will actually commit
+    // and center it in the zone — see constrainTileGeometry.
+    geo = constrainTileGeometry(window, geo);
 
     // If this window is held invisible until it is repositioned on open
     // (first-frame suppression — see RestoreSuppression), stamp the

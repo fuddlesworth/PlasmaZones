@@ -748,7 +748,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // (relocated position → nothing), so pair it with damage —
                 // the batch's own applies only damage the regions they
                 // touch, not the vacated relocation.
-                if (m_effect->m_scrollVisualPos.remove(wid) > 0) {
+                if (m_effect->m_scrollVisualDelta.remove(wid) > 0) {
                     KWin::effects->addRepaintFull();
                 }
                 if (!win || win->isMinimized()) {
@@ -1083,13 +1083,25 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             // strip position. The gate keeps the steady state (same visual
             // pos every batch) at zero repaint cost.
             {
+                // Stored as the TRANSLATION from the batch's park rect to the
+                // strip position, not as the strip position itself. The paint
+                // path adds it to wherever the window is actually committed,
+                // which preserves the offset applyWindowGeometry's X11
+                // constrain-and-centre pass puts between the park rect and the
+                // committed frame — subtracting the committed frame from the
+                // strip position (the previous form) erased that offset and
+                // drew a fixed-size game at its column's top-left, the top of
+                // the screen, for the length of every park. For an
+                // unconstrained window the committed rect IS the park rect and
+                // the two forms are identical.
                 bool visualPosChanged = false;
                 if (snap.hasVisualPos) {
-                    const auto vit = m_effect->m_scrollVisualPos.constFind(snap.windowId);
-                    visualPosChanged = (vit == m_effect->m_scrollVisualPos.constEnd() || vit.value() != snap.visualPos);
-                    m_effect->m_scrollVisualPos.insert(snap.windowId, snap.visualPos);
+                    const QPoint delta = snap.visualPos - snap.geometry.topLeft();
+                    const auto vit = m_effect->m_scrollVisualDelta.constFind(snap.windowId);
+                    visualPosChanged = (vit == m_effect->m_scrollVisualDelta.constEnd() || vit.value() != delta);
+                    m_effect->m_scrollVisualDelta.insert(snap.windowId, delta);
                 } else {
-                    visualPosChanged = m_effect->m_scrollVisualPos.remove(snap.windowId) > 0;
+                    visualPosChanged = m_effect->m_scrollVisualDelta.remove(snap.windowId) > 0;
                 }
                 if (visualPosChanged) {
                     KWin::effects->addRepaintFull();
@@ -1321,13 +1333,25 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                     QRectF originOverride;
                     QRectF visualTargetOverride;
                     bool skipScrollAnimation = false;
+                    // The rect applyWindowGeometry will actually COMMIT for
+                    // this request. For an X11 client with size hints that is
+                    // the constrained frame centred in the column, NOT the
+                    // column rect — and every origin/target below that means
+                    // "the committed rect" must be built from it, or a
+                    // fixed-size game gets a real animation leg from the
+                    // full-column rect to its centred frame on every batch
+                    // (drawn anchored at the column's top-left, the top of
+                    // the screen) instead of the degenerate leg these
+                    // branches intend. Identical to `geo` for everything
+                    // else, Wayland included.
+                    const QRect geoC = m_effect->constrainTileGeometry(snap.window, geo);
                     if (snap.hasVisualPos) {
                         // Parked, but drawn at its real strip position and
                         // carried by the view like every other column. There is
                         // no per-window motion left to describe, so the leg is
                         // deliberately degenerate — the edge-anchored slide-out
                         // below would fight the view offset for the same pixels.
-                        originOverride = QRectF(geo);
+                        originOverride = QRectF(geoC);
                     } else if (snap.viewDeltaX != 0 && startedViewScreens.contains(snap.screenId)) {
                         // Carried by the view: the strip's own spring moves
                         // this window, so the per-window animation must cover
@@ -1377,7 +1401,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // the paint position is origin + offset, and the
                             // offset already starts a delta out — which is
                             // exactly where this column was before the scroll.
-                            originOverride = QRectF(geo);
+                            originOverride = QRectF(geoC);
                         } else {
                             const KWin::RectF cur = snap.window->frameGeometry();
                             originOverride = QRectF(cur.x() - snap.viewDeltaX, cur.y(), cur.width(), cur.height());
@@ -1386,12 +1410,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
                         const QRect screenRect = out ? QRect(out->geometry()) : QRect();
                         if (screenRect.isValid()) {
-                            const bool arriving = screenRect.intersects(geo);
+                            const bool arriving = screenRect.intersects(geoC);
                             // Arriving: start from the target's own row and
-                            // size. Leaving: keep the rect the window occupies
-                            // right now, so it slides out as itself rather
-                            // than jumping to the park's row first.
-                            QRect atEdge = geo;
+                            // size — the COMMITTED row and size, so a
+                            // size-constrained window slides in as the frame
+                            // it will actually be, at the height it will
+                            // actually sit. Leaving: keep the rect the window
+                            // occupies right now, so it slides out as itself
+                            // rather than jumping to the park's row first.
+                            QRect atEdge = geoC;
                             if (!arriving) {
                                 const KWin::RectF cur = snap.window->frameGeometry();
                                 atEdge =
@@ -1431,7 +1458,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // and their targets are on-screen anyway.)
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
                         const QRect screenRect = out ? QRect(out->geometry()) : QRect();
-                        if (screenRect.isValid() && !screenRect.intersects(geo)) {
+                        if (screenRect.isValid() && !screenRect.intersects(geoC)) {
                             skipScrollAnimation = true;
                         }
                     }

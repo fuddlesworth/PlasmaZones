@@ -388,7 +388,7 @@ void TilingHandler::slotScreensChanged(const QStringList& screenIds, bool isDesk
             for (const QString& wid : std::as_const(windowsOnRemovedScreens)) {
                 clearWindowTiledAllScreens(wid);
                 m_effect->m_scrollCommandedRects.remove(wid);
-                anyVisualPosDropped = (m_effect->m_scrollVisualPos.remove(wid) > 0) || anyVisualPosDropped;
+                anyVisualPosDropped = (m_effect->m_scrollVisualDelta.remove(wid) > 0) || anyVisualPosDropped;
             }
             if (anyVisualPosDropped && KWin::effects) {
                 KWin::effects->addRepaintFull();

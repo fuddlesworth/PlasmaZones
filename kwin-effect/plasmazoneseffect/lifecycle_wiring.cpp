@@ -913,7 +913,7 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
             // also close-path (window_lifecycle) or daemon-teardown. A
             // stranded entry is never READ back (the paint-side probes key
             // on a LIVE window's id), so this is purely bounding the map.
-            m_scrollVisualPos.remove(cachedId);
+            m_scrollVisualDelta.remove(cachedId);
             // Windowed-fullscreen membership keeps the same backstop pairing
             // (slotWindowClosed removes it first in every ordering KWin
             // provides; this bounds the map if that ever changes). The

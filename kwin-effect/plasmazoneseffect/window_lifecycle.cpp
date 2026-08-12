@@ -421,14 +421,14 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // and costs a full-output repaint every frame for its duration. The
     // relocation that normally draws a parked column where it really sits is
     // dropped one line below, so nothing would move this back on screen.
-    const bool parkedOffAllOutputs = m_scrollVisualPos.contains(closingWindowId) && !w->frameGeometry().isEmpty()
+    const bool parkedOffAllOutputs = m_scrollVisualDelta.contains(closingWindowId) && !w->frameGeometry().isEmpty()
         && !KWin::effects->screenAt(w->frameGeometry().center().toPoint());
     if (!parkedOffAllOutputs) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowClose, animationDurationMs(),
                                /*reverse=*/true, /*holdCloseGrab=*/true);
     }
     m_windowAnimator->removeAnimation(w);
-    m_scrollVisualPos.remove(closingWindowId);
+    m_scrollVisualDelta.remove(closingWindowId);
     // A dying window needs no setFullScreen(false) — just the membership.
     // The keep-flag snapshot is RESTORED, not discarded: with the close
     // shader's holdCloseGrab the EffectWindow keeps painting for the

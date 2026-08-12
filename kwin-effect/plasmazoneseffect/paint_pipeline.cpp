@@ -909,7 +909,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // every frame of the drag for a window nothing is moving. windowId is the
     // one derived above rather than a second getWindowId call, which is what
     // the note at the top of this function asks for.
-    if (w && !m_scrollVisualPos.isEmpty() && scrollManagedOutputFor(w) && m_scrollVisualPos.contains(windowId)) {
+    if (w && !m_scrollVisualDelta.isEmpty() && scrollManagedOutputFor(w) && m_scrollVisualDelta.contains(windowId)) {
         data.setTransformed();
     }
 
@@ -1270,10 +1270,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                 if (!animatedFrame.isValid()) {
                     animatedFrame = w->frameGeometry();
                 }
-                if (const auto visualIt = m_scrollVisualPos.constFind(windowId);
-                    visualIt != m_scrollVisualPos.constEnd()) {
-                    const KWin::RectF committed = w->frameGeometry();
-                    animatedFrame.translate(visualIt->x() - committed.x(), visualIt->y() - committed.y());
+                if (const auto visualIt = m_scrollVisualDelta.constFind(windowId);
+                    visualIt != m_scrollVisualDelta.constEnd()) {
+                    // The stored strip-minus-park delta, matching the draw.
+                    animatedFrame.translate(visualIt->x(), visualIt->y());
                 }
                 animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut), 0.0);
             }
@@ -1371,11 +1371,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // never-parked column would be, which is what lets it be seen
             // travelling past during a scroll rather than blinking out the
             // moment it leaves the viewport.
-            if (!m_scrollVisualPos.isEmpty()) {
-                const auto vit = m_scrollVisualPos.constFind(windowId);
-                if (vit != m_scrollVisualPos.constEnd()) {
-                    const KWin::RectF committed = w->frameGeometry();
-                    data += QPointF(vit->x() - committed.x(), vit->y() - committed.y());
+            if (!m_scrollVisualDelta.isEmpty()) {
+                const auto vit = m_scrollVisualDelta.constFind(windowId);
+                if (vit != m_scrollVisualDelta.constEnd()) {
+                    // The stored strip-minus-park delta, on top of wherever the
+                    // window is committed — see the member's contract for why
+                    // this is a delta and not an absolute position.
+                    data += QPointF(vit->x(), vit->y());
                 }
             }
             const qreal viewOffset = m_stripViewAnimator->offsetFor(managed);
