@@ -22,6 +22,8 @@
 #include <QSet>
 #include <QTest>
 #include <QColor>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QSignalSpy>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -393,8 +395,15 @@ private Q_SLOTS:
         Settings settings;
         QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
         QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
-        // Following the palette: concrete and, for the border's sake, OPAQUE.
-        QVERIFY(settings.scrollingDropIndicatorColor().isValid());
+        // Following the palette: the resolved value IS the live Highlight, and
+        // opaque for the border's sake. Read from qGuiApp rather than compared
+        // against a literal — a hardcoded colour here would be a second source
+        // of truth for the resolution rule, which
+        // test_settings_system_palette_tracking.cpp already owns.
+        const QColor livePaletteHighlight = qGuiApp->palette().color(QPalette::Active, QPalette::Highlight);
+        QCOMPARE(settings.scrollingDropIndicatorColor(), livePaletteHighlight);
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
+        QCOMPARE(settings.scrollingDropIndicatorColor().alpha(), 255);
         QCOMPARE(settings.scrollingDropIndicatorBorderColor().alpha(), 255);
 
         settings.setScrollingDropIndicatorColor(QColor(QStringLiteral("#80112233")));
@@ -403,31 +412,67 @@ private Q_SLOTS:
 
         settings.setScrollingDropIndicatorColor(QColor());
         QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
-        QVERIFY(settings.scrollingDropIndicatorColor().isValid());
+        QCOMPARE(settings.scrollingDropIndicatorColor(), livePaletteHighlight);
 
-        // A hand-edited config can hold junk the D-Bus boundary would refuse;
-        // it must resolve like the sentinel rather than paint black.
+        // The border's own pin and un-pin, not just the fill's: the two go
+        // through separate macro invocations, so a setter wired to the wrong
+        // raw key would survive a fill-only check.
+        settings.setScrollingDropIndicatorBorderColor(QColor(QStringLiteral("#ff445566")));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QStringLiteral("#ff445566"));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        settings.setScrollingDropIndicatorBorderColor(QColor());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
+
+        // Junk in a hand-edited config. The load-bearing assertion is that the
+        // SCHEMA VALIDATOR snapped it to the sentinel on the way in: asserting
+        // only that the getter still returns something valid proves nothing,
+        // because resolveThemeColor's unparseable branch would answer the same
+        // way even with the validator gone.
         settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("not-a-colour"));
-        QVERIFY(settings.scrollingDropIndicatorBorderColor().isValid());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), livePaletteHighlight);
     }
 
     /**
-     * reset() must return the four colour keys to the empty theme-fallback
-     * sentinel (the schema default), after which the resolved getters follow
-     * the palette again.
+     * The no-palette fallback colour is spelled twice — ConfigDefaults for the
+     * config layer, isettings_detail for the interface's own default bodies —
+     * because the dependency runs config→core and neither is constexpr, so no
+     * static_assert can pin them. This is that pin, and both spellings' doc
+     * comments name it.
      */
-    void testReset_returnsZoneColorsToSentinel()
+    void dropIndicatorFallbackMatchesInterfaceDefault()
+    {
+        QCOMPARE(ConfigDefaults::scrollingDropIndicatorFallbackColor(),
+                 isettings_detail::opaqueDropIndicatorFallback());
+        QCOMPARE(ConfigDefaults::scrollingDropIndicatorFallbackColor().alpha(), 255);
+    }
+
+    /**
+     * reset() must return the theme-fallback colour keys to the empty sentinel
+     * (the schema default), after which the resolved getters follow the palette
+     * again. The drop indicator's pair is included because reset() only reaches
+     * a group listed in managedGroupNames(), and a group left off that list
+     * fails exactly here and nowhere else.
+     */
+    void testReset_returnsThemeFallbackColorsToSentinel()
     {
         IsolatedConfigGuard guard;
 
         Settings settings;
         settings.setHighlightColorRaw(QStringLiteral("#80112233"));
         settings.setLabelFontColorRaw(QStringLiteral("#ffddeeff"));
+        settings.setScrollingDropIndicatorColorRaw(QStringLiteral("#ff778899"));
+        settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("#ffaabbcc"));
         settings.reset();
         QCOMPARE(settings.highlightColorRaw(), QString());
         QCOMPARE(settings.labelFontColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
         QVERIFY(settings.highlightColor().isValid());
         QVERIFY(settings.labelFontColor().isValid());
+        QVERIFY(settings.scrollingDropIndicatorColor().isValid());
+        QVERIFY(settings.scrollingDropIndicatorBorderColor().isValid());
     }
 
     /**

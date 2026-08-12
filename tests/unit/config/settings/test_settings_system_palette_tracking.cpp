@@ -20,8 +20,7 @@ using namespace PlasmaZones;
  * The four zone colours, plus the scrolling drop indicator's fill and border
  * which share the machinery, are theme-fallback keys: an EMPTY stored string
  * means "follow the system palette", resolved in the getters. A palette change
- * must
- * re-announce the following colours (or a running daemon/settings app keeps
+ * must re-announce the following colours (or a running daemon/settings app keeps
  * serving the snapshot its bindings read last), must never dirty any config
  * key (nothing is written), and must stay silent for a colour the user pinned
  * to a concrete value.
@@ -135,8 +134,8 @@ private Q_SLOTS:
         QVERIFY(!settings.isAnnouncingPaletteChange());
 
         // The palette event is a NOTIFY fan-out over UNCHANGED stored
-        // sentinels — none of the four zone-color keys may count as modified,
-        // or the settings app shows a phantom unsaved-changes footer.
+        // sentinels — none of the six theme-fallback keys may count as
+        // modified, or the settings app shows a phantom unsaved-changes footer.
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::highlightKey()));
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::inactiveKey()));
         QVERIFY(!settings.isKeyModified(ConfigDefaults::snappingZonesColorsGroup(), ConfigDefaults::borderKey()));
@@ -144,11 +143,26 @@ private Q_SLOTS:
         QVERIFY(!settings.isKeyModified(ConfigDefaults::scrollingDropIndicatorGroup(), ConfigDefaults::colorKey()));
         QVERIFY(
             !settings.isKeyModified(ConfigDefaults::scrollingDropIndicatorGroup(), ConfigDefaults::borderColorKey()));
+
+        // Positive control for the six assertions above. isKeyModified compares
+        // the store against the baseline, and BOTH sides are a default-
+        // constructed QVariant for a group/key pair that is not schema-
+        // declared — so a renamed accessor or a copy-pasted wrong key would
+        // make every one of them pass forever. Pinning a colour here proves the
+        // pair this test names is live. It runs AFTER the negatives on purpose:
+        // pinning before the palette event would stop the colour following,
+        // and the QTRY_VERIFY above would spin to timeout.
+        settings.setScrollingDropIndicatorColor(QColor(0x21, 0x43, 0x65));
+        QVERIFY(settings.isKeyModified(ConfigDefaults::scrollingDropIndicatorGroup(), ConfigDefaults::colorKey()));
     }
 
     void pinnedColorsIgnorePaletteChange()
     {
         TestHelpers::IsolatedConfigGuard guard;
+        // Captured BEFORE the Settings exists: this is the colour its
+        // m_paletteBaseline is seeded from, and phase two below returns the
+        // palette to it deliberately.
+        const QColor constructionHighlight = qGuiApp->palette().color(QPalette::Active, QPalette::Highlight);
         Settings settings;
         settings.setHighlightColor(QColor(0xAA, 0x00, 0xAA, 0x80));
         QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#80aa00aa"));
@@ -159,6 +173,7 @@ private Q_SLOTS:
 
         QSignalSpy highlightSpy(&settings, &Settings::highlightColorChanged);
         QSignalSpy dropSpy(&settings, &Settings::scrollingDropIndicatorColorChanged);
+        QSignalSpy dropBorderSpy(&settings, &Settings::scrollingDropIndicatorBorderColorChanged);
         QSignalSpy aggregateSpy(&settings, &Settings::settingsChanged);
         // Only the Highlight ROLE moves: the pinned colours must stay
         // silent, and since no FOLLOWING colour's resolved value moved
@@ -172,9 +187,46 @@ private Q_SLOTS:
         QTest::qWait(50);
         QCOMPARE(highlightSpy.count(), 0);
         QCOMPARE(dropSpy.count(), 0);
+        QCOMPARE(dropBorderSpy.count(), 0);
         QCOMPARE(aggregateSpy.count(), 0);
         QCOMPARE(settings.highlightColor(), QColor(0xAA, 0x00, 0xAA, 0x80));
         QCOMPARE(settings.scrollingDropIndicatorColor(), QColor(0x11, 0x22, 0x33));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), QColor(0x44, 0x55, 0x66));
+
+        // Second phase: un-pin, then move the palette BACK to the value this
+        // Settings was constructed against. That specific value is what gives
+        // the phase teeth. The fan-out refreshes m_paletteBaseline
+        // unconditionally, including when every colour is pinned and nothing is
+        // announced; make that refresh conditional on something having moved
+        // and the baseline stays frozen at the construction colour, so an
+        // un-pinned colour returning to that colour compares equal and is
+        // silently never re-announced. Moving to a THIRD, unused colour would
+        // pass either way and prove nothing.
+        //
+        // Two other mechanics this phase depends on:
+        //  - the un-pin itself emits, so the spies are cleared after it rather
+        //    than before, or the counts below read as running totals;
+        //  - QGuiApplication::setPalette delivers nothing for an EQUAL palette,
+        //    and Highlight holds 0x556677 at this point, so returning to the
+        //    construction colour is a real change and does deliver.
+        settings.setScrollingDropIndicatorColor(QColor());
+        settings.setScrollingDropIndicatorBorderColor(QColor());
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QString());
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        dropSpy.clear();
+        dropBorderSpy.clear();
+        aggregateSpy.clear();
+
+        QVERIFY(constructionHighlight != QColor(0x55, 0x66, 0x77));
+        QPalette restored = qGuiApp->palette();
+        restored.setColor(QPalette::Active, QPalette::Highlight, constructionHighlight);
+        qGuiApp->setPalette(restored);
+
+        QTRY_COMPARE(dropSpy.count(), 1);
+        QCOMPARE(dropBorderSpy.count(), 1);
+        QCOMPARE(aggregateSpy.count(), 1);
+        QCOMPARE(settings.scrollingDropIndicatorColor(), constructionHighlight);
+        QCOMPARE(settings.scrollingDropIndicatorBorderColor(), constructionHighlight);
     }
 
     void unrelatedPaletteRoleChangeStaysSilent()
@@ -205,15 +257,23 @@ private Q_SLOTS:
         QCOMPARE(aggregateSpy.count(), 0);
     }
 
-    void allFourRawSettersWriteTheirOwnKey()
+    void everyRawSetterWritesItsOwnKey()
     {
         TestHelpers::IsolatedConfigGuard guard;
         Settings settings;
 
-        // Distinct hex per key, then per-key read-back with the other three
+        // Distinct hex per key, then per-key read-back with the others
         // asserted untouched at each step: a copy-paste key swap inside one
         // of the P_STORE macro invocations would otherwise pass the whole
         // suite (the palette tests only ever assert these raws are EMPTY).
+        //
+        // This is the ONLY place the drop indicator's pair is protected from
+        // that swap. The registry-contract scan cannot do it: its QString
+        // perturbation appends "zz", the schema's canonicalThemeFallbackColor
+        // validator rejects the result as unparseable and stores the empty
+        // sentinel, so both raws read back empty and a transposition compares
+        // equal. Here the values are valid colours, which survive the
+        // validator, so a swap actually shows up.
         settings.setHighlightColorRaw(QStringLiteral("#ff111111"));
         QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff111111"));
         QCOMPARE(settings.inactiveColorRaw(), QString());
@@ -232,6 +292,27 @@ private Q_SLOTS:
         QCOMPARE(settings.labelFontColorRaw(), QStringLiteral("#ff444444"));
         QCOMPARE(settings.borderColorRaw(), QStringLiteral("#ff333333"));
         QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff111111"));
+
+        // The drop indicator's pair shares the macro and the isolation
+        // contract. Their two NOTIFYs are spied here as well: they are what
+        // the settings card's storedColor bindings ride, so a misdeclared
+        // NOTIFY freezes both swatches with the rest of the suite still green.
+        QSignalSpy fillRawSpy(&settings, &Settings::scrollingDropIndicatorColorRawChanged);
+        QSignalSpy borderRawSpy(&settings, &Settings::scrollingDropIndicatorBorderColorRawChanged);
+
+        settings.setScrollingDropIndicatorColorRaw(QStringLiteral("#ff555555"));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QStringLiteral("#ff555555"));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QString());
+        QCOMPARE(settings.labelFontColorRaw(), QStringLiteral("#ff444444"));
+        QCOMPARE(fillRawSpy.count(), 1);
+        QCOMPARE(borderRawSpy.count(), 0);
+
+        settings.setScrollingDropIndicatorBorderColorRaw(QStringLiteral("#ff666666"));
+        QCOMPARE(settings.scrollingDropIndicatorBorderColorRaw(), QStringLiteral("#ff666666"));
+        QCOMPARE(settings.scrollingDropIndicatorColorRaw(), QStringLiteral("#ff555555"));
+        QCOMPARE(settings.highlightColorRaw(), QStringLiteral("#ff111111"));
+        QCOMPARE(fillRawSpy.count(), 1);
+        QCOMPARE(borderRawSpy.count(), 1);
     }
 
     void resetRawToSentinelResumesFollowing()
