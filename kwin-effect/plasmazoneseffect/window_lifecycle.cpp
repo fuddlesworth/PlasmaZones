@@ -708,9 +708,25 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // activity switch. m_shaderManager.m_lastFocusShaderWindow is a QPointer that auto-nulls
     // on window destroy, so a fresh window reusing the address can't
     // false-match.
+    //
+    // Suppressed while a scrolling TAB SWAP is running on this window. Picking
+    // a tab activates its window, so this handler fires for the very window
+    // the tile batch just installed the swap on, and whichever of the two
+    // lands second owns the slot. The swap is the one that should: it is the
+    // whole visual account of what happened, while the focus leg would replay
+    // a generic focus flourish over a window that has not moved — and it would
+    // strand the swap's captured snapshot of the tab being replaced.
+    //
+    // The stamp is still taken in both arms. It records which window is
+    // focused, not which animation played, so skipping the write would leave
+    // the next activation of this same window reading as a change and firing a
+    // late focus leg into the middle of the swap.
     if (m_shaderManager.m_lastFocusShaderWindow.data() != w) {
         m_shaderManager.m_lastFocusShaderWindow = w;
-        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowFocus, animationDurationMs());
+        const ShaderTransition* const live = m_shaderManager.findTransition(w);
+        if (!live || !live->tabSwap) {
+            tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowFocus, animationDurationMs());
+        }
     }
 
     if (!isDaemonReady("notify windowActivated")) {

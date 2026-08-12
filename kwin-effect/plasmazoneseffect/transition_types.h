@@ -374,6 +374,28 @@ struct ShaderTransition
     /// window that closes in that gap must degrade to no cross-fade rather
     /// than to a dangling read.
     QPointer<KWin::EffectWindow> snapshotSource;
+    /// This leg IS the scrolling tab swap (`scrolling.tabSwitch`).
+    ///
+    /// Load-bearing against the focus leg, which contends for the same
+    /// per-window transition slot. Activating a tab is a focus change, so KWin
+    /// emits windowActivated for the same window the tile batch installs this
+    /// on, and the two arrive in either order: activation first and the swap
+    /// replaces the focus leg (which is the outcome we want, and happens for
+    /// free), or activation last and the focus leg replaces the swap
+    /// mid-flight, which loses the cross-fade and leaves the leg's captured
+    /// snapshot pointing at a window nothing is fading from.
+    ///
+    /// The activation handler reads this and declines to install its own leg
+    /// while a swap is live. Gating on THIS rather than on mere liveness is
+    /// the `heldMove` lesson: findTransition hands back whatever leg is
+    /// running, so a liveness test would also swallow the focus leg during an
+    /// unrelated open or maximize animation.
+    ///
+    /// Self-clearing: it lives and dies with the transition, so the
+    /// suppression lasts exactly as long as the swap it is protecting. The
+    /// accepted cost is a genuine refocus of the same window WITHIN that leg
+    /// (click away and back inside ~200 ms), which loses its focus animation.
+    bool tabSwap = false;
     /// ── Held interactive-move state (window.movement.move) ──
     /// True while the user is still dragging: the transition stays active
     /// past durationMs (progress clamps at 1) and the duration-timer

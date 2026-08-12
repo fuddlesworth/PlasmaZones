@@ -1558,16 +1558,27 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // one) and re-point ITS snapshot at a foreign
                             // window.
                             if (ownsLeg) {
-                                if (auto* st = m_effect->m_shaderManager.findTransition(snap.window);
-                                    st && st->cached && st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
-                                    // Gated on the compiled pack actually
-                                    // LINKING uOldWindow, like the drag-snap
-                                    // and held-move capture requests: a pack
-                                    // that never samples the outgoing tab
-                                    // should not pay for a window-sized FBO
-                                    // and a skipped first frame.
-                                    st->snapshotSource = outgoing;
-                                    st->needsSnapshot = true;
+                                if (auto* st = m_effect->m_shaderManager.findTransition(snap.window); st) {
+                                    // Marks the leg as the swap so the
+                                    // activation this very tab switch causes
+                                    // does not install a focus leg over it —
+                                    // see ShaderTransition::tabSwap. Set
+                                    // BEFORE the snapshot request and outside
+                                    // its uOldWindow gate: a pack that ignores
+                                    // the outgoing tab still owns the swap's
+                                    // slot and still must not be displaced.
+                                    st->tabSwap = true;
+                                    // The capture request itself IS gated on
+                                    // the compiled pack linking uOldWindow,
+                                    // like the drag-snap and held-move
+                                    // requests: a pack that never samples the
+                                    // outgoing tab should not pay for a
+                                    // window-sized FBO and a skipped first
+                                    // frame.
+                                    if (st->cached && st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
+                                        st->snapshotSource = outgoing;
+                                        st->needsSnapshot = true;
+                                    }
                                 }
                             }
                         }
