@@ -25,7 +25,14 @@ KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindo
     // rect, so it keeps the rect-returning wrapper below. Both must stay in
     // step — a window suppressed from a foreign output's paint must also be
     // non-interactive there — so the wrapper is defined in terms of this.
-    if (!m_tilingHandler || !m_tilingHandler->hasScrollingScreens()) {
+    //
+    // No null guard on m_tilingHandler (nor on m_navigationHandler below, nor
+    // on m_stripViewAnimator in scrollParkedOffscreen): all three are
+    // constructed in the effect's ctor init list and never reset, and every
+    // caller of this predicate is a paint-path or input-filter site that only
+    // runs long after construction. A guard here would be dead code that reads
+    // as a live possibility.
+    if (!m_tilingHandler->hasScrollingScreens()) {
         return nullptr;
     }
     if (!w || w->isDeleted() || w->isUserMove() || w->isUserResize()) {
@@ -54,7 +61,7 @@ KWin::LogicalOutput* PlasmaZonesEffect::scrollManagedOutputFor(KWin::EffectWindo
     KWin::LogicalOutput* managed = nullptr;
     const QString windowId = getWindowId(w);
     const QString trackedScreen = m_tilingHandler->scrollTrackedScreenFor(windowId);
-    if (!trackedScreen.isEmpty() && m_navigationHandler && !m_navigationHandler->isWindowFloating(windowId)) {
+    if (!trackedScreen.isEmpty() && !m_navigationHandler->isWindowFloating(windowId)) {
         managed = outputForScreenId(trackedScreen);
     }
     if (inPass) {
@@ -117,8 +124,7 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
     // is drawn, and cull against the wrong rect.
     QRectF visual = w->expandedGeometry();
     if (visual.isEmpty()) {
-        const KWin::RectF committed = w->frameGeometry();
-        visual = QRectF(committed.x(), committed.y(), committed.width(), committed.height());
+        visual = w->frameGeometry();
     }
     if (visual.isEmpty()) {
         // Degenerate geometry (mid-unmap, zero-size commit): an empty rect

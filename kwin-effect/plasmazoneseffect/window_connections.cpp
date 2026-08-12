@@ -49,6 +49,17 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     if (!w)
         return;
 
+    // Idempotency guard. Every connect below uses a lambda slot, which rules out
+    // Qt::UniqueConnection, so a second call for the same window would silently
+    // double each per-window handler — every geometry change handled twice, every
+    // push marshalled twice. The two callers' window sets are disjoint by
+    // construction (see the member's declaration), so this never fires today; it
+    // is here so that stays true when a third caller appears.
+    if (m_wiredWindows.contains(w)) {
+        return;
+    }
+    m_wiredWindows.insert(w);
+
     connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
         updateWindowStickyState(window);
         // No metadata push here: the daemon's float resolver reads the

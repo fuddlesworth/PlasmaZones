@@ -135,7 +135,12 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // strip state cannot change under it, which one output pass guarantees.
     m_scrollManagedCache.clear();
 
-    // Tab-indicator paint re-slotting, computed once per pass. The indicator
+    // Tab-indicator paint re-slotting, computed once per OUTPUT PASS — which
+    // is N times per vsync on an N-monitor desktop, each pass walking the full
+    // stacking order for its own output. It has to be per pass rather than per
+    // frame: the anchor is the topmost strip member ON THIS OUTPUT, so the
+    // answer differs per output by construction. The empty-set gate below is
+    // what keeps that walk off every desktop with no indicators. The indicator
     // rides a layer-shell surface, which the protocol stacks above every
     // ordinary toplevel — so a floating window raised over the strip had the
     // indicator painted straight across it. paintWindow fixes that by drawing
@@ -151,10 +156,19 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     //
     // The empty-set gate keeps this off the common path: no indicators
     // anywhere, no stacking walk.
+    //
+    // KWin::effects IS NOT GUARDED ANYWHERE IN THIS FUNCTION, and that is the
+    // file's rule rather than an omission here. prePaintScreen ends in an
+    // unconditional `KWin::effects->prePaintScreen(data)` and postPaintScreen
+    // in an unconditional `KWin::effects->postPaintScreen()`, so neither entry
+    // point can survive a null global at all — a per-site guard inside them
+    // buys nothing but the illusion of one. The guards that remain in this
+    // tree sit on paths that genuinely CAN dispatch after teardown (a late
+    // D-Bus reply, the park-reap timer's fire), not on the paint bracket.
     m_scrollTabPaintAnchor = nullptr;
     m_scrollTabDeferred.clear();
     m_scrollTabDrawn.clear();
-    if (!m_scrollTabSurfaceIds.isEmpty() && data.screen && KWin::effects) {
+    if (!m_scrollTabSurfaceIds.isEmpty() && data.screen) {
         for (KWin::EffectWindow* sw : KWin::effects->stackingOrder()) {
             if (!sw || sw->isDeleted() || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop()
                 || !sw->isOnCurrentDesktop()) {
@@ -164,9 +178,23 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                 // A parked-offscreen column cannot anchor: paintWindow culls it
                 // (scrollParkedOffscreen), so an anchor picked here would never
                 // paint and the injection would never run — the same
-                // anchor-never-painted case the filter note above calls out,
-                // except deterministic rather than an occlusion accident. Skip
-                // it and let a visible strip member win.
+                // anchor-never-painted case the filter note above calls out.
+                // Skip it and let a visible strip member win.
+                //
+                // Read as ONE TICK STALE, not as deterministic. This election
+                // runs BEFORE advanceAnimations below, so the view offset the
+                // predicate folds in is the one the PREVIOUS tick left behind.
+                // At a leg boundary the two can disagree for a single frame,
+                // both ways: a column that unparks this tick is skipped here
+                // though the draw will paint it, and a column that parks this
+                // tick is elected here though the draw will cull it. Neither
+                // costs more than the fallback the filter note already
+                // describes — no injection runs, and the indicators paint at
+                // their natural layer slot, visible but mis-stacked, for that
+                // one frame. Moving the election after advanceAnimations would
+                // tighten it, but the anchor must also survive the scene's own
+                // occlusion culling, which nothing here can predict, so the
+                // fallback has to stay correct regardless.
                 if (scrollParkedOffscreen(sw, getWindowId(sw))) {
                     continue;
                 }
@@ -383,7 +411,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // identical iMouse, eliminating sub-frame jitter. Decorated windows read
     // it too (hover-reactive surface packs via pushBorderUniforms), so the
     // refresh also runs while any decoration exists, not only mid-transition.
-    if (KWin::effects && (!m_shaderManager.empty() || !m_windowDecorations.isEmpty())) {
+    if (!m_shaderManager.empty() || !m_windowDecorations.isEmpty()) {
         m_shaderManager.m_cachedCursorGlobal = KWin::effects->cursorPos();
     }
 
@@ -435,6 +463,14 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
 
 void PlasmaZonesEffect::postPaintScreen()
 {
+    // KWin::effects is dereferenced unguarded throughout, per the rule stated
+    // in prePaintScreen: this function ends in an unconditional
+    // `KWin::effects->postPaintScreen()`, so it cannot complete with a null
+    // global under any circumstances and a per-site guard would only hide that
+    // from the reader. The ONE guard below sits in the park-reap timer's
+    // callback, which is not part of this bracket — it fires later, from the
+    // event loop, and can genuinely land after compositor teardown.
+    //
     // Pass over. Defensive hygiene: every capture path in this tree reaches
     // paintWindow from INSIDE the pass (before this runs), so the clear only
     // protects a hypothetical paintWindow outside any bracket. Cleared at the
@@ -448,6 +484,13 @@ void PlasmaZonesEffect::postPaintScreen()
     m_scrollTabPaintAnchor = nullptr;
     m_scrollTabDeferred.clear();
     m_scrollTabDrawn.clear();
+    // Same reasoning, one map further: the per-pass resolve memo keys on raw
+    // EffectWindow* and stores raw LogicalOutput*, and either can die between
+    // passes. Every read is gated on the in-pass latch cleared just above, and
+    // prePaintScreen clears this before the pass's first read, so the stale
+    // entries were never reachable — but that safety rested on an argument
+    // spanning two files. Clearing here makes it local to the bracket.
+    m_scrollManagedCache.clear();
     // Schedule targeted repaints for active animations instead of full-screen
     m_windowAnimator->scheduleRepaints();
     // Keep the desktop-switch transition ticking (per-output repaints) while live.
@@ -490,10 +533,13 @@ void PlasmaZonesEffect::postPaintScreen()
                 continue;
             }
             // Skip windows KWin is not painting. An off-desktop window never reaches
-            // paintWindow, and paintWindow is the ONLY teardown for a durationMs == 0
-            // (animator-driven) leg — it has no timer. Without this, snapping a window
-            // and then switching virtual desktop mid-morph leaves the arm below
-            // requesting a FULL-OUTPUT repaint every vsync, indefinitely.
+            // paintWindow, and paintWindow is the only teardown for a durationMs == 0
+            // (animator-driven) leg reachable from the PAINT path — it has no timer.
+            // (The animator's own completion callback tears the same leg down
+            // independently of painting, so the runaway below needs the animator to
+            // never complete, not merely paintWindow to be skipped.) Without this,
+            // snapping a window and then switching virtual desktop mid-morph leaves
+            // the arm below requesting a FULL-OUTPUT repaint every vsync.
             //
             // EXCEPT a leg we hold the close grab on. A closing window is isDeleted()
             // for its ENTIRE close animation (we keep the corpse alive with that very
@@ -544,7 +590,7 @@ void PlasmaZonesEffect::postPaintScreen()
                 // output as dirty every frame the transition is live. The
                 // `heldActive` arm (hoisted above) keeps a held/ringing
                 // lattice repainting after the duration timer stands down.
-                if ((timeBasedActive || animatorActive || heldActive) && KWin::effects) {
+                if (timeBasedActive || animatorActive || heldActive) {
                     damageOutputOnce(w->screen());
                 }
             } else if (timeBasedActive || heldActive) {
@@ -560,9 +606,7 @@ void PlasmaZonesEffect::postPaintScreen()
                 // has stood down: the window emits no damage while the
                 // pointer is stationary, so its idle motion would otherwise
                 // freeze until release.
-                if (KWin::effects) {
-                    damageOutputOnce(w->screen());
-                }
+                damageOutputOnce(w->screen());
             }
         }
     }
@@ -586,19 +630,41 @@ void PlasmaZonesEffect::postPaintScreen()
     // above only iterates `m_shaderManager.m_shaderTransitions`, so
     // suppression-active-but-shader-active windows would lose their
     // surface-extent damage). Screen-level damage avoids the clip entirely.
-    if (KWin::effects) {
-        // KWin::effects cannot go null mid-loop (it's a global owned by
-        // KWin's effect system, not by any window we touch), so hoist the
-        // null-check above the loop — the per-iteration test was dead
-        // overhead in a hot path that runs every frame while any window
-        // has a restore-suppression active.
-        for (auto it = m_restoreSuppress.cbegin(); it != m_restoreSuppress.cend(); ++it) {
-            KWin::EffectWindow* sw = it.key();
-            if (!sw || sw->isDeleted()) {
-                continue;
-            }
-            damageOutputOnce(sw->screen());
+    //
+    // The clock prePaintScreen pinned for this cycle (it is unpinned at the
+    // end of this function, so it is still live here). Read ONCE for every
+    // consumer below: a live per-window sample would let two windows in the
+    // same frame disagree about the time.
+    const qint64 pinnedMs = m_shaderManager.currentFrameClockMs();
+    const qint64 frameClockMs = pinnedMs >= 0 ? pinnedMs : ShaderInternal::shaderClockNowMs();
+    for (auto it = m_restoreSuppress.cbegin(); it != m_restoreSuppress.cend(); ++it) {
+        KWin::EffectWindow* sw = it.key();
+        if (!sw || sw->isDeleted()) {
+            continue;
         }
+        // Past its own deadline, an entry must stop driving. paintWindow
+        // enforces the 250 ms deadline and erases the entry — but only for a
+        // window paintWindow actually reaches, and an OFF-DESKTOP window never
+        // does. Without this test such an entry pumped a full-output repaint
+        // every frame, forever, for a window nobody can see: the release
+        // branch that would clear it is precisely the one that never runs.
+        // A LIVE suppression is unaffected — it is still inside its deadline,
+        // still driven here, and still erased by paintWindow's release branch
+        // on the frame the deadline passes (or by the settle hook before it).
+        // The skipped entry is not erased here, only unpumped: it stays in the
+        // map until the window closes, or until it returns to the current
+        // desktop and paintWindow's release branch takes it. Deliberate — the
+        // window is the one thing that can tell us it is visible again. The
+        // readers that are not themselves deadline-gated either clear the
+        // residual or are startup one-shots; the paint-path one is
+        // prePaintWindow's transformDriven probe, which self-clears on the
+        // first paint that reaches the window — the same frame it becomes
+        // visible again. So the residual entry costs a hash slot and nothing
+        // else.
+        if (frameClockMs >= it->deadlineMs) {
+            continue;
+        }
+        damageOutputOnce(sw->screen());
     }
     // Drive continuous repaints for windows whose surface decoration animates
     // (a pack in the chain references iTime). Without content damage their
@@ -614,27 +680,62 @@ void PlasmaZonesEffect::postPaintScreen()
     // last decoration was just removed — a pending timer must be stopped in
     // that case too, or its stray fire composites an idle desktop.
     qint64 nextParkReapInMs = -1;
-    if (KWin::effects && !m_windowDecorations.isEmpty()) {
-        // The clock prePaintScreen pinned for this cycle (it is unpinned at the end
-        // of this function, so it is still live here). Read once: a live per-window
-        // sample would let two windows in the same frame disagree about the time.
-        const qint64 pinnedMs = m_shaderManager.currentFrameClockMs();
-        const qint64 frameClockMs = pinnedMs >= 0 ? pinnedMs : ShaderInternal::shaderClockNowMs();
+    if (!m_windowDecorations.isEmpty()) {
+        // `frameClockMs` is the pinned per-frame clock read above the
+        // suppression loop, shared by every consumer in this function.
+        //
+        // PER OUTPUT PASS, not per frame. postPaintScreen closes ONE output's
+        // bracket, so on an N-output desktop this whole loop — the decoration
+        // walk, the park probe and the reap arithmetic — runs N times per
+        // vsync over the SAME window set (the predicates are output-agnostic,
+        // which is what lets the timer arm/stop below not flap between
+        // passes). The repeats are idempotent and the damage is deduped per
+        // output by damageOutputOnce, so the cost is a re-walk rather than
+        // duplicated work; it is stated here so nobody reads "once a frame"
+        // into the loop when sizing it.
+        //
         // The park cull below removes the very repaint driver that used to
         // keep this loop running, so once the desktop goes idle nothing
         // composites and the reap threshold is never re-evaluated — the
         // timer armed after the loop forces one frame at the deadline so
         // the reap actually fires.
         for (auto it = m_windowDecorations.cbegin(); it != m_windowDecorations.cend(); ++it) {
-            if (!it->shaderApplied) {
-                continue;
-            }
             KWin::EffectWindow* const sw = findWindowByIdExact(it.key());
             // Exact-id discipline (mirrors reconcileDecorationOnPlacementFlip and
             // the teardown paths): findWindowById's fuzzy appId fallback can
             // return a same-app sibling for a stale id, and repainting the
             // sibling would be wrong. Skip unless it re-derives to this exact id.
             if (!sw || getWindowId(sw) != it.key() || sw->isDeleted() || !sw->isOnCurrentDesktop()) {
+                continue;
+            }
+            // The shaderApplied gate is deliberately NOT the loop's first test,
+            // and the resolve above deliberately precedes it.
+            //
+            // shaderApplied means "we own this window's decoration slot", and
+            // reconcileDecorationShader CEDES that ownership — clears the flag —
+            // for the whole time a shader transition holds the window. Skipping a
+            // ceded window outright meant a column parked while a transition owned
+            // it never reached the park block below, so parkedSinceMs was never
+            // stamped, nextParkReapInMs never accounted for it, and the arm/stop
+            // block then STOPPED the timer. On an idle desktop nothing composites
+            // after that (the park cull removed the only driver), so the
+            // full-canvas composite, capture and backdrop stayed resident for the
+            // rest of the session — the precise cost this reap exists to avoid,
+            // closed on one entry path and wide open on the other.
+            //
+            // The chain is ordinary rather than exotic: every tile batch ends in
+            // updateAllDecorations, which walks the whole stacking order, parked
+            // columns included. A transition live on one of them at that moment
+            // cedes the flag, and on an idle desktop nothing calls reconcile again
+            // to give it back.
+            //
+            // A ceded window is therefore let through to the park/reap half. It is
+            // still held back from the backdrop driver further down, which
+            // genuinely does require ownership — releaseSurfaceState declines
+            // while the transition is live and the retry below re-arms, so the
+            // reap resumes on its own once the transition drops.
+            const bool cededToTransition = !it->shaderApplied && m_shaderManager.findTransition(sw) != nullptr;
+            if (!it->shaderApplied && !cededToTransition) {
                 continue;
             }
             // The driver quarter of scrollParkedOffscreen's contract: stop
@@ -659,20 +760,51 @@ void PlasmaZonesEffect::postPaintScreen()
                 // one cold fold, paid mid-scroll when every visible window
                 // is repainting anyway. (When a shader transition is live on
                 // the window, releaseSurfaceState early-returns WITHOUT
-                // erasing, and the stamp survives inside the kept state — so
-                // that case retries on every subsequent frame, driven by the
-                // transition's own repaints, until the transition drops. Two
-                // hash probes per retry.) The pinned clock, like every other
-                // consumer in this loop; the parked stamp is inside the
-                // state so the erase disposes of it with everything else.
+                // erasing, and the stamp survives inside the kept state — that
+                // case re-arms the timer on a short retry, see below.) The
+                // pinned clock, like every other consumer in this loop; the
+                // parked stamp is inside the state so the erase disposes of it
+                // with everything else.
                 constexpr qint64 kParkReapMs = 10000;
                 if (const auto sit = m_surfaceMultipass.find(it.key()); sit != m_surfaceMultipass.end()) {
                     qint64 remainingMs = -1;
                     if (sit->second.parkedSinceMs < 0) {
                         sit->second.parkedSinceMs = frameClockMs;
                         remainingMs = kParkReapMs;
+                        // The stamp is the reap's whole clock, and until it exists
+                        // nothing can reclaim the window's full-canvas targets. It
+                        // is worth a line: a column that parks and never logs this
+                        // is a column whose render targets are pinned for the
+                        // session, which is invisible from the outside.
+                        qCDebug(lcEffect) << "park reap: stamped" << it.key()
+                                          << (cededToTransition ? "(slot ceded to a live transition)" : "");
                     } else if (frameClockMs - sit->second.parkedSinceMs >= kParkReapMs) {
                         releaseSurfaceState(it.key(), sw);
+                        // The refusal case needs its own wake. The note above
+                        // says the retry is "driven by the transition's own
+                        // repaints, until the transition drops" — that holds
+                        // only while the transition is pumping. An anchor-extent
+                        // leg issues no damage when it ends (only surfaceExtent
+                        // legs repaint on teardown) and the postPaintScreen
+                        // transition pump has already gone false by then, so on
+                        // an idle desktop this loop would never run again. With
+                        // remainingMs left at -1 the arm below then STOPS the
+                        // timer, and the full-canvas composite, capture and
+                        // backdrop stay resident for the rest of the session —
+                        // the exact cost the reap exists to avoid.
+                        //
+                        // So re-probe: if the state survived the refusal, keep
+                        // the timer armed on a short retry. Deliberately NOT
+                        // resetting parkedSinceMs, so the entry stays elapsed
+                        // and the next attempt fires immediately once the
+                        // transition drops. The successful erase invalidates
+                        // sit, so this goes by key rather than through it.
+                        constexpr qint64 kParkReapRetryMs = 1000;
+                        const bool refused = m_surfaceMultipass.find(it.key()) != m_surfaceMultipass.end();
+                        if (refused) {
+                            remainingMs = kParkReapRetryMs;
+                        }
+                        qCDebug(lcEffect) << "park reap:" << (refused ? "refused, retrying" : "released") << it.key();
                     } else {
                         remainingMs = kParkReapMs - (frameClockMs - sit->second.parkedSinceMs);
                     }
@@ -686,7 +818,17 @@ void PlasmaZonesEffect::postPaintScreen()
                 sit != m_surfaceMultipass.end() && sit->second.parkedSinceMs >= 0) {
                 // Back on (or near) the viewport before the reap fired:
                 // clear the stamp so a later park restarts the clock.
+                // Runs for a ceded window too — unparking is unparking whoever
+                // owns the slot, and leaving a stale stamp would make the next
+                // park reap early.
                 sit->second.parkedSinceMs = -1;
+            }
+            // Everything below drives repaints for a slot we own. A ceded window
+            // was let past the gate above only for the park/reap half; its
+            // transition is pumping its own repaints, so driving it from here
+            // would be both redundant and a claim on a slot that is not ours.
+            if (!it->shaderApplied) {
+                continue;
             }
             // needsBackdrop chains are repainted for backdrop changes that
             // land no damage on the window itself, rate-limited to ~30fps
@@ -1032,11 +1174,19 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // set, so an unconditional flag here kept every parked column (visual rect
     // off every output, invisible by construction) painting at full decoration
     // cost forever. Withholding the flag lets KWin's own culling skip it;
-    // paintWindow's matching cull and the repaint driver's skip are the other
-    // two thirds of the same predicate (see scrollParkedOffscreen). The view
+    // this is one of several sites enforcing the same predicate, whose
+    // authoritative list lives on scrollParkedOffscreen's declaration. The view
     // offset is part of the tested rect, so a column scrolling back toward the
     // viewport re-earns the flag on the frame it starts to intersect.
-    if (w && !m_scrollVisualDelta.isEmpty() && scrollManagedOutputFor(w) && m_scrollVisualDelta.contains(windowId)
+    //
+    // Term order is the convention this file states at the tab-indicator
+    // branch in paintWindow: the cheap hash probe first, the resolve after.
+    // `m_scrollVisualDelta.contains(windowId)` is one lookup in the same map
+    // the isEmpty() gate just tested, while scrollManagedOutputFor walks the
+    // tracked-screen resolution (memoised per pass, but only after the first
+    // ask), so a non-strip window on a scrolling desktop now answers on the
+    // probe instead of paying the resolve.
+    if (w && !m_scrollVisualDelta.isEmpty() && m_scrollVisualDelta.contains(windowId) && scrollManagedOutputFor(w)
         && !parkedOffscreen) {
         data.setTransformed();
     }
@@ -1108,7 +1258,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // On the column's own output the render target already scissors at the
     // edge; the only place the overhang becomes visible is the ADJACENT
     // output's paint pass, so skip the window entirely in passes whose output
-    // is not its managed screen. The predicate lives in scrollClipGeometryFor
+    // is not its managed screen. The predicate lives in scrollManagedOutputFor
     // and is shared with the overhang input filter, which keeps the same
     // invisible region from receiving pointer/touch input.
     //
@@ -1140,12 +1290,23 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // above. With the latch null the suppression fails open, matching
         // the permissive treatment every other null-screen branch in this
         // file applies.
-        if (const KWin::LogicalOutput* managed = scrollManagedOutputFor(w); managed && managed != m_currentPassOutput) {
+        //
+        // `w` IS TREATED AS NULLABLE THROUGHOUT THIS FUNCTION, here included.
+        // Both scroll predicates and getWindowId tolerate a null window, so
+        // the guard is not there to stop a crash — it is there so every use of
+        // `w` in this function reads the same way, rather than leaving the
+        // reader to check three callee contracts to find out which uses are
+        // load-bearing. The shared derivation below spells it `w ? ... : ...`
+        // for the same reason.
+        if (const KWin::LogicalOutput* managed = w ? scrollManagedOutputFor(w) : nullptr;
+            managed && managed != m_currentPassOutput) {
             return;
         }
-        // Off-viewport park cull, the paintWindow third of scrollParkedOffscreen's
-        // three-site contract (prePaintWindow withholds TRANSFORMED, the repaint
-        // driver stops driving). A parked column's visual rect touches no part of
+        // Off-viewport park cull: the paintWindow site of scrollParkedOffscreen's
+        // contract. The authoritative list of enforcement sites lives on that
+        // predicate's declaration — deliberately not restated (nor counted)
+        // here, because every copy of the count went stale as sites were added.
+        // A parked column's visual rect touches no part of
         // its output, so everything below — the backdrop capture, the decoration
         // fold, the draw itself — is work on pixels nobody can see. Behind the
         // same m_capturingSnapshot exemption as the foreign-output cull above,
@@ -1184,20 +1345,46 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // output cull above: a window-rect snapshot capture re-entering inside
     // the strip capture must not be diverted (latent today — an above-strip
     // window returns here before any snapshot is driven for it — but the
-    // symmetry keeps it latent). The endless-belt tail check keeps a window
-    // from being recorded twice if KWin ever paints it twice in one scene
-    // walk (multi-RenderView); a duplicate would double-blend its alpha in
-    // the composite.
+    // symmetry keeps it latent).
+    //
+    // The record is deduplicated by MEMBERSHIP (first-wins), not by comparing
+    // against the tail. A tail check only catches back-to-back repeats, and the
+    // shape that would defeat it is a window driven through this function twice
+    // in one capture walk with other records in between — the deferred tab
+    // indicator, which injectScrollTabIndicators drives at the ANCHOR's slot
+    // before its own natural slot arrives. Recorded twice, the composite would
+    // alpha-blend it twice and draw it at two different depths.
+    //
+    // POSITION IN THIS LIST IS THE COMPOSITE'S STACKING ORDER — StripTransition
+    // Manager replays it bottom to top — so which record survives decides the
+    // indicator's depth, and first-wins is the one that matches the injection's
+    // stated contract below: above all columns, below whatever the stacking
+    // puts over the strip. That IS the anchor's slot. The natural layer slot is
+    // precisely the mis-stacking the re-slotting exists to override, so keeping
+    // the later record would re-introduce it.
+    //
+    // Insurance rather than an observed fault: the above-strip election counts
+    // a same-screen indicator as a strip member when it picks the boundary, and
+    // excludes anything not intersecting the output, so the deferred set and
+    // the above-strip set look disjoint today. Cheap to keep correct either way.
     if (!m_capturingSnapshot && m_stripCaptureExclusionOutput && m_stripCaptureAboveStrip.contains(w)) {
-        if (m_stripCaptureSkippedWindows.isEmpty() || m_stripCaptureSkippedWindows.constLast() != w) {
+        if (!m_stripCaptureSkippedWindows.contains(w)) {
             m_stripCaptureSkippedWindows.append(w);
         }
         return;
     }
 
     // Tab-indicator paint re-slotting, part one: skip the surface at its
-    // NATURAL slot once the injection below has drawn it this pass. The
-    // natural slot is the layer bucket, which the scene walks after every
+    // NATURAL slot once the injection below has drawn it in THIS SCENE WALK.
+    // The drawn set is scoped to the walk, not to the pass: a bracket can
+    // contain more than one full walk (the desktop-transition capture, the
+    // strip capture), and each of those swaps an empty set in around its
+    // nested paintScreen and hands this one back afterwards. Scoping it to the
+    // pass instead let a capture walk mark every indicator drawn and the
+    // PRESENTED walk then skip them at both this slot and the injection, so
+    // they drew zero times. The clears in prePaintScreen / postPaintScreen
+    // remain the bracket-level hygiene for the outermost walk.
+    // The natural slot is the layer bucket, which the scene walks after every
     // ordinary toplevel — exactly the stacking that painted the indicator
     // across floating windows raised over the strip. The drawn-set gate (not
     // deferred-set membership) is what makes the anchor-never-painted case
@@ -1293,7 +1480,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // through normalized uvs, so capturing past that density stores and
         // re-blits texels the samplers stride over. Max, not min: a chain
         // with two blur packs must satisfy the denser reader.
-        const auto chainBackdropScale = [this](const WindowDecoration& deco, const QString& windowId) -> qreal {
+        // The id parameter is named apart from the `windowId` derived once for
+        // this function: the lambda is handed `backIt.key()`, which is the same
+        // string, and a shadowing name made that look like a coincidence to be
+        // checked rather than the identity it is.
+        const auto chainBackdropScale = [this](const WindowDecoration& deco, const QString& decoWindowId) -> qreal {
             std::optional<PhosphorSurfaceShaders::DecorationProfile> profile;
             qreal scale = 0.0;
             for (const QString& packId : deco.chain) {
@@ -1302,7 +1493,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     pk = &cacheIt->second;
                 } else {
                     if (!profile) {
-                        profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
+                        profile = m_decorationTree.resolve(resolveSurfacePathFor(decoWindowId));
                     }
                     pk = compiledPack(packId, *profile);
                 }
@@ -1546,7 +1737,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         // view, so the strip sliding underneath it is not something it can
         // double-count — unlike the animator transform above, which describes
         // the same motion the shader is already drawing.
-        if (KWin::LogicalOutput* managed = scrollManagedOutputFor(w)) {
+        if (KWin::LogicalOutput* managed = w ? scrollManagedOutputFor(w) : nullptr) {
             // A parked column is committed below the union of all outputs, so
             // relocate the drawing to where it really sits on the strip BEFORE
             // the view offset goes on. The two together put it exactly where a
@@ -1566,7 +1757,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             if (!qFuzzyIsNull(viewOffset)) {
                 data += QPointF(viewOffset, 0.0);
             }
-        } else if (KWin::LogicalOutput* out = w->screen();
+        } else if (KWin::LogicalOutput* out = w ? w->screen() : nullptr;
                    out && m_stripViewAnimator->isAnimatingOn(out) && isScrollTabIndicatorSurface(w)) {
             // The tab indicators take the SAME offset as the columns they
             // label, from the same spring, inside the same paint pass. That is

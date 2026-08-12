@@ -102,6 +102,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connectDragTracker();
     connectWindowAndScreenSignals();
     connectDaemonSubscriptions();
+    // Last, and it must stay last: the existing-window sweep inside can reach
+    // code that expects the daemon subscriptions above to be wired.
+    initExistingWindowsAndInput();
 }
 
 void PlasmaZonesEffect::clearDaemonCompositorState()

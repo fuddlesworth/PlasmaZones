@@ -71,6 +71,9 @@ void TilingHandler::applyFullScreenSuppressed(KWin::Window* kw, bool fullScreen)
 
 void TilingHandler::suppressFfmUntilCursorMoves()
 {
+    if (!KWin::effects) {
+        return;
+    }
     m_ffmSuppressPending = true;
     m_ffmSuppressAnchor = KWin::effects->cursorPos();
 }
@@ -183,6 +186,14 @@ void TilingHandler::handleCursorMoved(const QPointF& pos, const QString& screenI
 
     // Find the topmost autotile-managed window under the cursor.
     // Iterate stacking order in reverse (top → bottom).
+    //
+    // Cost, stated because this runs per pointer-motion event once
+    // focus-follows-mouse is on for any managed screen: EffectsHandler::
+    // stackingOrder() returns the list BY VALUE and builds it per call, so this
+    // is one list allocation per motion event. There is no const-reference form
+    // to take instead. It is paid only past every bail above (FFM off, peek,
+    // unmanaged screen, suppression latch, unfocusable active window), and the
+    // scan below is ordered cheap-test-first for the same reason.
     const auto windows = KWin::effects->stackingOrder();
     for (int i = windows.size() - 1; i >= 0; --i) {
         KWin::EffectWindow* w = windows[i];
@@ -435,17 +446,39 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
         // consumer's re-report leg only fires when the hints actually move.
         m_effect->m_lastReportedMinSize.insert(windowId, minSize);
 
+        // Announce stamp, the m_crossScreenRestoreGen idiom: the rollback below
+        // may only undo the tracking THIS announce established. Without it an
+        // error for announce N-1 erased the tracking announce N had just written,
+        // and a NoReply for an already-closed window re-inserted a
+        // spawn-provenance marker for a corpse — ids are appId-derived and
+        // reusable, and the tail prune in completeDeferredWindowRoutes only runs
+        // on a screen-query dispatch, so the stale marker would later flip a
+        // same-app sibling's re-add to knownFreeFloating=true and poison its free
+        // geometry with a zone rect. cleanupAutotileTracking erases the stamp, so
+        // a corpse's error arm reads back 0 and no-ops.
+        const quint64 announceGen = ++m_announceSeq;
+        m_announceGen[windowId] = announceGen;
+
         auto* watcher = new QDBusPendingCallWatcher(
             PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::Tiling,
                                                        QStringLiteral("windowOpened"),
                                                        {windowId, screenId, minSize.width(), minSize.height()}),
             this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                [this, windowId, wasFresh](QDBusPendingCallWatcher* w) {
-                    w->deleteLater();
-                    if (w->isError()) {
+                [this, windowId, wasFresh, announceGen](QDBusPendingCallWatcher* pw) {
+                    pw->deleteLater();
+                    if (pw->isError()) {
+                        // Superseded, or the window is gone (the stamp died with
+                        // its tracking). Nothing here is ours to roll back —
+                        // including endRestoreSuppression below, which is correct
+                        // in both cases: a newer announce owns the suppression it
+                        // armed, and a corpse resolves to null anyway.
+                        if (m_announceGen.value(windowId) != announceGen) {
+                            return;
+                        }
+                        m_announceGen.remove(windowId);
                         qCWarning(lcEffect)
-                            << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
+                            << "windowOpened D-Bus call failed for" << windowId << ":" << pw->error().message();
                         m_notifiedWindows.remove(windowId);
                         m_notifiedWindowScreens.remove(windowId);
                         // Min-size seed rollback, mirroring the batch error
@@ -472,10 +505,16 @@ bool TilingHandler::notifyWindowAdded(KWin::EffectWindow* w, bool knownFreeFloat
                         // the fuzzy appId fallback could resolve a same-app sibling
                         // for a just-closed window, ending the sibling's suppression
                         // early.
-                        if (KWin::EffectWindow* effectWindow = m_effect->findWindowById(windowId);
-                            effectWindow && m_effect->getWindowId(effectWindow) == windowId) {
+                        if (KWin::EffectWindow* effectWindow = m_effect->findWindowByIdExact(windowId)) {
                             m_effect->endRestoreSuppression(effectWindow);
                         }
+                        return;
+                    }
+                    // Landed: nothing left to roll back, so retire the stamp and
+                    // keep the map bounded. A still-in-flight older announce
+                    // reads back 0 afterwards and stays superseded.
+                    if (m_announceGen.value(windowId) == announceGen) {
+                        m_announceGen.remove(windowId);
                     }
                 });
         qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenId
@@ -495,6 +534,11 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
     PhosphorProtocol::WindowOpenedList batchEntries;
     QStringList batchWindowIds; // for error rollback
     QStringList batchFreshWindowIds; // spawn-provenance markers consumed below, restored on error
+    // Announce stamps, one PER ENTRY rather than one for the batch: a single
+    // batch-wide stamp would let one superseded window (re-announced on its own
+    // between dispatch and reply, or closed) disarm the rollback for every other
+    // window in the same batch. Same idiom as the single-window announce above.
+    QHash<QString, quint64> batchAnnounceGens;
 
     for (KWin::EffectWindow* w : windows) {
         // Deleted windows bail before any id/screen lookup (cache-pollution hazard).
@@ -530,8 +574,8 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
             // desktop's state, so re-track on return without re-notifying".
             //
             // Safe for all three resetNotified callers by construction: that
-            // set is inserted at exactly one site (signals.cpp's desktop-switch
-            // demotion) and only inside `if (m_notifiedWindows.remove(...))`,
+            // set is inserted at exactly one site (screenschanged.cpp's
+            // desktop-switch demotion) and only inside `if (m_notifiedWindows.remove(...))`,
             // so "parked" implies "already absent from m_notifiedWindows" and
             // this remove() cannot disturb a park. Parking here instead made
             // the desktop-return branch silently re-insert the window with no
@@ -583,6 +627,9 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
         entry.minHeight = minSize.height();
         batchEntries.append(entry);
         batchWindowIds.append(windowId);
+        const quint64 announceGen = ++m_announceSeq;
+        m_announceGen[windowId] = announceGen;
+        batchAnnounceGens.insert(windowId, announceGen);
     }
 
     if (batchEntries.isEmpty()) {
@@ -595,34 +642,54 @@ void TilingHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& wi
                                         QStringLiteral("windowsOpenedBatch"), {QVariant::fromValue(batchEntries)}),
                                     this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, batchWindowIds, batchFreshWindowIds](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                if (w->isError()) {
-                    qCWarning(lcEffect) << "windowsOpenedBatch D-Bus call failed:" << w->error().message();
+            [this, batchWindowIds, batchFreshWindowIds, batchAnnounceGens](QDBusPendingCallWatcher* pw) {
+                pw->deleteLater();
+                if (pw->isError()) {
+                    qCWarning(lcEffect) << "windowsOpenedBatch D-Bus call failed:" << pw->error().message();
                     // Tracking rollback only — deliberately NO endRestoreSuppression
                     // here, unlike notifyWindowAdded's error handler: the batch paths
                     // (daemon-restart re-announce, toggle-on) serve windows that are
                     // still physically tiled and may be re-announced when the daemon
                     // returns.
+                    //
+                    // Per-entry stamp check: only windows whose newest announce is
+                    // still THIS one are rolled back. A window re-announced on its
+                    // own since dispatch is owned by that announce, and a window
+                    // closed since then reads back 0 (cleanupAutotileTracking
+                    // erased the stamp) so its dead, reusable id is not re-armed
+                    // as spawn-provenance.
                     for (const QString& wid : batchWindowIds) {
+                        if (m_announceGen.value(wid) != batchAnnounceGens.value(wid)) {
+                            continue;
+                        }
+                        m_announceGen.remove(wid);
                         m_notifiedWindows.remove(wid);
                         m_notifiedWindowScreens.remove(wid);
                         // The min-size seed rolls back with the tracking: on
                         // a failed batch the daemon never heard the size,
                         // and the cache would otherwise record it as sent.
                         m_effect->m_lastReportedMinSize.remove(wid);
+                        // The consumed spawn-provenance marker rolls back with the
+                        // tracking — see the single-window handler above. Done in
+                        // the same pass so it shares the stamp verdict.
+                        if (batchFreshWindowIds.contains(wid)) {
+                            m_pendingFreshWindows.insert(wid);
+                        }
                     }
-                    // The consumed spawn-provenance markers roll back with the
-                    // tracking — see the single-window handler above.
-                    for (const QString& wid : batchFreshWindowIds) {
-                        m_pendingFreshWindows.insert(wid);
+                    return;
+                }
+                // Landed: nothing to roll back, so retire the stamps this batch
+                // still owns and keep the map bounded.
+                for (const QString& wid : batchWindowIds) {
+                    if (m_announceGen.value(wid) == batchAnnounceGens.value(wid)) {
+                        m_announceGen.remove(wid);
                     }
                 }
             });
     qCInfo(lcEffect) << "Notified autotile: windowsOpenedBatch with" << batchEntries.size() << "windows";
 }
 
-void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QString& screenId)
+void TilingHandler::cleanupAutotileTracking(const QString& windowId)
 {
     // Compositor-agnostic state cleanup (shared helper).
     TilingStateHelpers::TilingWindowState windowState{
@@ -638,6 +705,14 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
     m_unfloatRetryAttempts.remove(windowId);
     m_pendingFreshWindows.remove(windowId);
     m_deferredWindowRoutes.remove(windowId);
+    // The announce stamp dies with the tracking, and that erasure is what makes
+    // a late error reply for a CLOSED window harmless: the arm reads back 0,
+    // mismatches its captured stamp, and no-ops instead of re-inserting a
+    // spawn-provenance marker under an id another instance of the same app can
+    // be handed. Safe to erase rather than tombstone because the stamps come
+    // from a session-global monotonic counter (the m_crossScreenRestoreGen
+    // contract).
+    m_announceGen.remove(windowId);
     // The clip-loss dedupe entry dies with the window too: ids are
     // appId-derived and reusable, and a stale entry would swallow a reused
     // id's first genuine report (the success-path re-arm only runs when the
@@ -689,8 +764,20 @@ void TilingHandler::cleanupAutotileTracking(const QString& windowId, const QStri
         QObject::disconnect(pendingConn.value());
         m_pendingCrossScreenRestore.erase(pendingConn);
     }
-    if (m_savedAutotileStackingOrder.contains(screenId)) {
-        m_savedAutotileStackingOrder[screenId].removeAll(windowId);
+    // Safe to erase because the stamps come from a session-global monotonic
+    // counter: a continuation still in flight holds a non-zero stamp, and a
+    // removed entry reads back as 0, so it stays superseded without the map
+    // having to retain a row per window forever.
+    m_crossScreenRestoreGen.remove(windowId);
+    // Every screen, not just the one passed. On a cross-output transfer the
+    // caller passes the OLD screen, so the destination's saved order kept the
+    // id, and other screens' orders can hold it from an earlier session. The
+    // replay resolves by exact id and skips misses, so a residue was inert —
+    // but it was also unbounded across a session, growing one dead id per
+    // screen per transfer.
+    for (auto orderIt = m_savedAutotileStackingOrder.begin(); orderIt != m_savedAutotileStackingOrder.end();
+         ++orderIt) {
+        orderIt.value().removeAll(windowId);
     }
 }
 
@@ -698,7 +785,7 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
 {
     // The spawn-provenance and deferred-route entries are cleared by
     // cleanupAutotileTracking, which owns them for every caller.
-    cleanupAutotileTracking(windowId, screenId);
+    cleanupAutotileTracking(windowId);
 
     // Notify autotile daemon
     if (m_managedScreens.contains(screenId)) {
@@ -711,7 +798,7 @@ void TilingHandler::onWindowClosed(const QString& windowId, const QString& scree
 
 void TilingHandler::releaseWindowTracking(const QString& windowId, const QString& screenId)
 {
-    cleanupAutotileTracking(windowId, screenId);
+    cleanupAutotileTracking(windowId);
 
     if (m_managedScreens.contains(screenId)) {
         PhosphorProtocol::ClientHelpers::fireAndForget(m_effect, PhosphorProtocol::Service::Interface::Tiling,
@@ -870,9 +957,16 @@ void TilingHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wind
                     newX = qRound(cursor.x() - cursorOffsetRatio * savedW);
                 }
                 QRect sizeRestored(newX, newY, savedW, savedH);
-                // Snap-out: leaving tile-managed sizing.
-                m_effect->applyWindowGeometry(w, sizeRestored, /*allowDuringDrag=*/true, /*skipAnimation=*/false,
-                                              PhosphorAnimation::ProfilePaths::WindowSnapOut);
+                // No animation profile, deliberately rather than by omission,
+                // and matching the live drag-out unsnap in drag_snap.cpp:
+                // allowDuringDrag skips the whole animated branch in
+                // applyWindowGeometry, so a during-drag restore is instant by
+                // construction and any profile handed in here would be a dead
+                // argument. The window is following the pointer — it has to
+                // resize under the cursor now, not ease into the size. The
+                // drag-STOP arm below is not during a drag and does pass the
+                // snap-out profile.
+                m_effect->applyWindowGeometry(w, sizeRestored, /*allowDuringDrag=*/true, /*skipAnimation=*/false);
                 qCInfo(lcEffect) << "Drag-start float: restored pre-autotile size for" << windowId << savedW << "x"
                                  << savedH;
             } else {
@@ -991,6 +1085,55 @@ void TilingHandler::onDaemonReady()
     // No m_initialScreenQueryPending write here: loadSettings() below arms it
     // for its query and the reply clears it — a false store first was dead.
     loadSettings();
+    // Everything below the bring-up-only work above is the per-session drain,
+    // which lives in one named function so the list has a single home (see the
+    // header for the paired invariant and for why the serviceUnregistered
+    // teardown deliberately drains a smaller set).
+    clearPerSessionDaemonState();
+    // Paired with the tiled-membership clear inside that drain: every memoised
+    // rule verdict was resolved against the dead session's IsTiled membership.
+    m_effect->invalidateAllRuleCaches();
+    // The cache clear alone revives nothing — an IsTiled-keyed border or
+    // opacity rule is baked into the decoration at build time.
+    m_effect->scheduleBorderSweep();
+
+    // Re-send the effect's pre-autotile geometry cache to the freshly
+    // (re)connected daemon as a backstop. storePreTileGeometry lands in the
+    // unified WindowPlacementStore record (which IS persisted), but a record
+    // the store had not flushed before the daemon died — or a daemon started
+    // with wiped state — would leave already-tiled windows with no
+    // pre-autotile position to return to on autotile→snap or drag-to-float.
+    // The effect survives daemon restarts and still holds each window's true
+    // pre-autotile frame here. overwrite=false so anything the daemon
+    // restored from its own persisted records wins.
+    if (m_effect->m_daemonGate.serviceRegistered) {
+        int resent = 0;
+        for (auto scrIt = m_preTileGeometries.constBegin(); scrIt != m_preTileGeometries.constEnd(); ++scrIt) {
+            const QString& screenId = scrIt.key();
+            for (auto winIt = scrIt.value().constBegin(); winIt != scrIt.value().constEnd(); ++winIt) {
+                const QRectF& geo = winIt.value();
+                if (geo.width() <= 0 || geo.height() <= 0) {
+                    continue;
+                }
+                // qRound, not truncation: fractional-scale sub-pixel residue
+                // (matches the toRect() geometry-capture convention).
+                PhosphorProtocol::ClientHelpers::fireAndForget(
+                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
+                    QStringLiteral("storePreTileGeometry"),
+                    {winIt.key(), qRound(geo.x()), qRound(geo.y()), qRound(geo.width()), qRound(geo.height()), screenId,
+                     false},
+                    QStringLiteral("storePreTileGeometry"));
+                ++resent;
+            }
+        }
+        if (resent > 0) {
+            qCInfo(lcEffect) << "Re-sent" << resent << "pre-autotile geometries to daemon after reconnect";
+        }
+    }
+}
+
+void TilingHandler::clearPerSessionDaemonState()
+{
     m_notifiedWindows.clear();
     // Cleared with m_notifiedWindows, as its lifetime partner.
     //
@@ -1037,10 +1180,9 @@ void TilingHandler::onDaemonReady()
     // deliberately kept here for the reason given above, so its per-screen
     // removal transitions still run through slotScreensChanged.
     m_border.tiledWindowsByScreen.clear();
-    m_effect->invalidateAllRuleCaches();
-    // The cache clear alone revives nothing — an IsTiled-keyed border or
-    // opacity rule is baked into the decoration at build time.
-    m_effect->scheduleBorderSweep();
+    // The rule-cache invalidate and border sweep this membership clear needs are
+    // the CALLER's, immediately after this function returns: they are the
+    // bring-up half of the pairing, and the teardown path already does its own.
     // The FFM suppression latch belongs to the dead session too: its anchor
     // names a cursor position from before the restart, and leaving it armed
     // swallows the first cursor move that lands within the resume radius.
@@ -1057,6 +1199,16 @@ void TilingHandler::onDaemonReady()
     // batches. They are otherwise only ever inserted (one entry per distinct
     // screenId ever seen, never pruned), so resetting here both restarts the
     // staggered-apply epochs cleanly and keeps the map bounded across reconnects.
+    //
+    // The GLOBAL epoch is bumped alongside the clear, and the bump is the part
+    // that actually retires the dead session's cascades. The clear alone puts
+    // every per-screen value back to absent (reading 0), so the new session's
+    // first batch on a screen re-derives 1 — exactly the value a pre-restart
+    // batch still cascading captured. Both guard sites test the global epoch
+    // first and unconditionally, so one bump voids every straddling batch. It
+    // creates no new supersession victim: the clear already voided the same
+    // batches by the per-screen term.
+    ++m_tileStaggerGeneration;
     m_tileStaggerGenByScreen.clear();
     // Daemon-owned cross-output move markers belong to the dead session. A
     // stale one-shot armed before the restart (windowOutputMoveExpected fired,
@@ -1087,45 +1239,22 @@ void TilingHandler::onDaemonReady()
         QObject::disconnect(connIt.value());
     }
     m_pendingCrossScreenRestore.clear();
+    // Clearing is enough: the stamps are globally monotonic, so a watcher still
+    // in flight across the daemon restart holds a non-zero stamp that a cleared
+    // map (reading back 0) can never match.
+    m_crossScreenRestoreGen.clear();
     // A stacking order saved before the restart describes a dead session's
     // z-order — the first post-restart retile's onComplete would replay it
     // and re-raise windows in stale order; same for a stale pending focus id.
     m_savedAutotileStackingOrder.clear();
     m_pendingAutotileFocusWindowId.clear();
-
-    // Re-send the effect's pre-autotile geometry cache to the freshly
-    // (re)connected daemon as a backstop. storePreTileGeometry lands in the
-    // unified WindowPlacementStore record (which IS persisted), but a record
-    // the store had not flushed before the daemon died — or a daemon started
-    // with wiped state — would leave already-tiled windows with no
-    // pre-autotile position to return to on autotile→snap or drag-to-float.
-    // The effect survives daemon restarts and still holds each window's true
-    // pre-autotile frame here. overwrite=false so anything the daemon
-    // restored from its own persisted records wins.
-    if (m_effect->m_daemonGate.serviceRegistered) {
-        int resent = 0;
-        for (auto scrIt = m_preTileGeometries.constBegin(); scrIt != m_preTileGeometries.constEnd(); ++scrIt) {
-            const QString& screenId = scrIt.key();
-            for (auto winIt = scrIt.value().constBegin(); winIt != scrIt.value().constEnd(); ++winIt) {
-                const QRectF& geo = winIt.value();
-                if (geo.width() <= 0 || geo.height() <= 0) {
-                    continue;
-                }
-                // qRound, not truncation: fractional-scale sub-pixel residue
-                // (matches the toRect() geometry-capture convention).
-                PhosphorProtocol::ClientHelpers::fireAndForget(
-                    m_effect, PhosphorProtocol::Service::Interface::WindowTracking,
-                    QStringLiteral("storePreTileGeometry"),
-                    {winIt.key(), qRound(geo.x()), qRound(geo.y()), qRound(geo.width()), qRound(geo.height()), screenId,
-                     false},
-                    QStringLiteral("storePreTileGeometry"));
-                ++resent;
-            }
-        }
-        if (resent > 0) {
-            qCInfo(lcEffect) << "Re-sent" << resent << "pre-autotile geometries to daemon after reconnect";
-        }
-    }
+    // The announce stamps describe windowOpened / windowsOpenedBatch calls made
+    // to the DEAD daemon. Clearing is enough for the same reason it is for
+    // m_crossScreenRestoreGen: the stamps are globally monotonic, so an error
+    // reply still in flight across the restart holds a non-zero stamp that a
+    // cleared map (reading back 0) can never match, and its rollback would
+    // otherwise undo the tracking this bring-up's own re-announce establishes.
+    m_announceGen.clear();
 }
 
 // handleAutotileFloatToggle removed: float toggle is now daemon-local via
