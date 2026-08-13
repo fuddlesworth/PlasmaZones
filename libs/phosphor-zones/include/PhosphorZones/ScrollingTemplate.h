@@ -93,11 +93,16 @@ inline constexpr QLatin1String SourcePath{"sourcePath"};
  * Scrolling's own template object — the peer of snapping's zone Layout and
  * autotile's algorithm. It describes how a scrolling screen's strip behaves:
  *
- * - @ref columns is the SEED BLUEPRINT: a column materializing at strip
- *   index i < columns.size() takes the blueprint entry's width and display.
- *   The blueprint never resizes an existing column (a template change
- *   affects only columns created after it — the niri principle that opening
- *   or configuring never reshapes what you have).
+ * - @ref columns is the SEED BLUEPRINT: as a strip grows, each new column
+ *   takes the next UNSPENT entry's width and display. An entry is spent once
+ *   a column has taken it, so closing a column does not hand its entry back
+ *   to the next window that opens, and a column the user re-shaped by hand
+ *   keeps that shape. The seed restarts when the strip empties or the screen
+ *   is given a different blueprint. The blueprint never resizes an existing
+ *   column (a template change affects only columns created after it — the
+ *   niri principle that opening or configuring never reshapes what you
+ *   have). The engine holds the consumption cursor; see
+ *   PhosphorScrollEngine::ScrollState::blueprintCursor.
  * - The default width trio and @ref defaultColumnDisplay answer for columns
  *   BEYOND the blueprint. They mirror the engine's settings-channel wire
  *   values (DefaultWidthKind: 0 Proportion, 1 Fixed, 2 ClientDecides,

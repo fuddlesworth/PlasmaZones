@@ -847,17 +847,50 @@ void ScrollEngine::refreshConfigFromSettings()
 
 void ScrollEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
 {
-    if (m_perScreenOverrides.value(screenId) == overrides) {
+    const QVariantMap previous = m_perScreenOverrides.value(screenId);
+    if (previous == overrides) {
         return;
     }
+    // Compared BEFORE the insert, and on the blueprint key alone: every other
+    // override in this map answers per-open (widths, presets, insert
+    // position) and re-reads itself on the next open, while the blueprint is
+    // the one key a live cursor points INTO. A gap edit or a preset tweak
+    // must not restart the seed.
+    const bool blueprintChanged = previous.value(ScrollPerScreenKeys::templateColumns())
+        != overrides.value(ScrollPerScreenKeys::templateColumns());
     m_perScreenOverrides.insert(screenId, overrides);
+    if (blueprintChanged) {
+        resetBlueprintCursorsForScreen(screenId);
+    }
     scheduleRetileForScreen(screenId);
 }
 
 void ScrollEngine::clearPerScreenConfig(const QString& screenId)
 {
+    const bool hadBlueprint = m_perScreenOverrides.value(screenId).contains(ScrollPerScreenKeys::templateColumns());
     if (m_perScreenOverrides.remove(screenId) > 0) {
+        // Dropping the blueprint is a blueprint change like any other: a
+        // template re-applied later has to seed from its own first entry
+        // rather than resume a cursor that counted the old one's.
+        if (hadBlueprint) {
+            resetBlueprintCursorsForScreen(screenId);
+        }
         scheduleRetileForScreen(screenId);
+    }
+}
+
+void ScrollEngine::resetBlueprintCursorsForScreen(const QString& screenId)
+{
+    // EVERY state on the screen, not just the visible one: the override map
+    // is keyed by screen while states are per (screen, desktop, activity), so
+    // a template swap lands on all of them at once. A background desktop
+    // whose cursor kept counting the old blueprint would seed its next open
+    // from the wrong entry the moment you switched to it.
+    const auto& states = m_states.states();
+    for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        if (it.key().screenId == screenId && it.value()) {
+            it.value()->resetBlueprintCursor();
+        }
     }
 }
 

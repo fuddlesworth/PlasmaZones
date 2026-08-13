@@ -590,6 +590,38 @@ private Q_SLOTS:
         QCOMPARE(mgr->scrollingTemplateLayoutForScreen(QStringLiteral("DP-1"), 0), templId.toString());
     }
 
+    void testAssignmentEntry_scrollingTemplate_explicitNoneBeatsTheDefault()
+    {
+        // The three states of the template slot are distinguishable, and the
+        // reserved word is the only one that survives a configured default.
+        // Without it a screen could never opt out of a default set elsewhere,
+        // because "no template" and "inherit" shared the empty spelling.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* store = attachTemplateStore(mgr.get());
+        const QUuid fallbackId = createTestTemplate(store, QStringLiteral("Fallback"));
+        mgr->setDefaultScrollingTemplateProvider([fallbackId]() {
+            return fallbackId.toString();
+        });
+
+        // EMPTY slot: inherits the default.
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), QString());
+        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()).id, fallbackId);
+
+        // The reserved word: no template at all, default notwithstanding.
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), QString(PhosphorZones::NoScrollingTemplate));
+        QVERIFY(!mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()).isValid());
+        // Stored verbatim, so the settings UI can read the state back and show
+        // its own None row as the current pick rather than falling to Default.
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0).scrollingTemplateLayout,
+                 QString(PhosphorZones::NoScrollingTemplate));
+
+        // Back to empty: the default applies again, so the opt-out is a
+        // reversible per-context choice rather than a one-way door.
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), QString());
+        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()).id, fallbackId);
+    }
+
     void testAssignmentEntry_scrollingTemplate_deleteScrubs()
     {
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());

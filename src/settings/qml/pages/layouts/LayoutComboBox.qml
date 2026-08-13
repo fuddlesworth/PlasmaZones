@@ -35,6 +35,21 @@ ComboBox {
     property bool showPreview: false
     // Whether to show the "Default"/"None" entry at the top of the list
     property bool showNoneOption: true
+    // An optional SECOND leading entry, directly under the Default one, whose
+    // value is a caller-supplied token rather than the empty string. It exists
+    // for the scrolling-template pickers, where "inherit the configured
+    // default" and "explicitly no template at all" are different answers and
+    // the empty string can only spell the first. Off by default, so the two
+    // layout families keep their two-state pickers.
+    //
+    // Placed after Default rather than before it so row 0 keeps meaning what
+    // updateSelection and clearSelection assume it means.
+    property bool showExplicitNoneOption: false
+    property string explicitNoneText: i18n("None")
+    /// The value the explicit-none row carries. Never empty when the row is
+    /// shown — an empty token would collide with the Default row and make the
+    /// two indistinguishable to updateSelection's value match.
+    property string explicitNoneValue: ""
     // Filter layouts by category: -1 = show all, 0 = manual/zone only,
     // 1 = autotile only, 2 = scrolling templates only
     property int layoutFilter: -1
@@ -121,6 +136,20 @@ ComboBox {
                 "layout": defaultLayout,
                 "category": root.layoutFilter >= 0 ? root.layoutFilter : getCategory(defaultLayout, -1),
                 "isDefaultOption": true
+            });
+        }
+        if (root.showExplicitNoneOption && root.explicitNoneValue !== "") {
+            // No `layout`, deliberately: this row stands for the ABSENCE of
+            // one, so the preview delegate has nothing to draw and falls back
+            // to its no-layout rendering, exactly as it would for a row whose
+            // layout was deleted. isDefaultOption stays false — this is a real
+            // pick the user is making, not the inherit-the-default row.
+            items.push({
+                "text": root.explicitNoneText,
+                "value": root.explicitNoneValue,
+                "layout": null,
+                "category": root.layoutFilter,
+                "isDefaultOption": false
             });
         }
         if (appSettings && appSettings.layouts) {

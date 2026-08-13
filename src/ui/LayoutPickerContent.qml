@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// The card delegate lives in a Component now (two containers instantiate it,
+// the grid and the none row), and it reads the root id for its theme, metrics
+// and selection state. Binding the component context is what makes reaching
+// an outer id from a nested component well-defined rather than a historical
+// accident, and it pairs with the delegate's `required property modelData`,
+// which is the injection style Bound expects.
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
@@ -54,6 +62,11 @@ Item {
     // Layout data (array of layout objects with id, name, zones, category, autoAssign)
     property var layouts: []
     property string activeLayoutId: ""
+    // The reserved scrolling-template id whose card stands for "no template".
+    // Spelled here rather than passed from C++ because this surface already
+    // spells the autotile prefix the same way; the authoritative declaration
+    // is PhosphorZones::NoScrollingTemplate in AssignmentEntry.h.
+    readonly property string noTemplateId: "none"
     // Mirrors the global "Auto-assign for all layouts" master toggle (#370).
     // Forwarded into LayoutCard so the category badge shows effective state.
     property bool globalAutoAssign: false
@@ -107,8 +120,17 @@ Item {
     }
     // Grid dimensions
     readonly property int layoutCount: layouts.length
-    readonly property int gridColumns: Math.min(layoutCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(layoutCount * 1.5)))))
-    readonly property int gridRows: gridColumns > 0 ? Math.ceil(layoutCount / gridColumns) : 0
+    // The no-template row is drawn on its own centered row UNDER the grid
+    // rather than flowing into it, so it reads as "or none of these" instead
+    // of as one more choice. It is always last (the list builder sorts it
+    // there), so the split is a trailing slice rather than a filter.
+    readonly property bool hasNoneRow: layoutCount > 0 && layouts[layoutCount - 1].id === root.noTemplateId
+    readonly property int gridCount: layoutCount - (hasNoneRow ? 1 : 0)
+    readonly property var gridLayouts: hasNoneRow ? layouts.slice(0, layoutCount - 1) : layouts
+    // Sized off the GRID's own count, not the full list: counting the
+    // separate card here would widen the grid for a card that is not in it.
+    readonly property int gridColumns: Math.min(gridCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(gridCount * 1.5)))))
+    readonly property int gridRows: gridColumns > 0 ? Math.ceil(gridCount / gridColumns) : 0
     // Card dimensions
     readonly property int previewWidth: metrics.previewWidth
     readonly property int previewHeight: Math.round(previewWidth / safeAspectRatio)
@@ -139,17 +161,58 @@ Item {
         if (layoutCount === 0 || root.locked)
             return;
 
-        var col = selectedIndex % gridColumns;
-        var row = Math.floor(selectedIndex / gridColumns);
-        col = (col + dx + gridColumns) % gridColumns;
-        row = (row + dy + gridRows) % gridRows;
-        var newIndex = row * gridColumns + col;
-        if (newIndex >= layoutCount) {
-            // Clamp to last valid item in the target row
-            var lastColInRow = Math.min(gridColumns, layoutCount - row * gridColumns) - 1;
-            newIndex = row * gridColumns + Math.min(col, lastColInRow);
+        // With nothing in the grid the None card is the only thing to select,
+        // so every press is a no-op. Also the guard that keeps the modulos
+        // below away from a zero column count.
+        if (root.gridCount === 0)
+            return;
+
+        // The None card occupies one extra row of its own. Its index is the
+        // last in the model (the list builder sorts it there), and it answers
+        // to any column, which is what makes a Down press from anywhere in
+        // the bottom row land on it.
+        const noneIndex = root.hasNoneRow ? root.layoutCount - 1 : -1;
+        const totalRows = root.gridRows + (root.hasNoneRow ? 1 : 0);
+        const onNoneRow = selectedIndex === noneIndex;
+        // A row of one has no horizontal neighbours, so sideways presses stay
+        // put rather than wrapping onto a grid row the user did not aim at.
+        if (onNoneRow && dy === 0)
+            return;
+
+        // Leaving the None card vertically re-enters the grid at its middle
+        // column: the card is centered, so the middle is what sits above and
+        // below it. Nothing remembers which column the user came from, and
+        // guessing the edge would move focus sideways on a vertical press.
+        let col = onNoneRow ? Math.floor(root.gridColumns / 2) : selectedIndex % root.gridColumns;
+        let row = onNoneRow ? root.gridRows : Math.floor(selectedIndex / root.gridColumns);
+        col = (col + dx + root.gridColumns) % root.gridColumns;
+        row = (row + dy + totalRows) % totalRows;
+        if (row === root.gridRows) {
+            // The extra row: only the None card lives there.
+            selectedIndex = noneIndex;
+            return;
         }
-        selectedIndex = Math.max(0, Math.min(layoutCount - 1, newIndex));
+        let newIndex = row * root.gridColumns + col;
+        if (newIndex >= root.gridCount) {
+            // Clamp to last valid item in the target row
+            const lastColInRow = Math.min(root.gridColumns, root.gridCount - row * root.gridColumns) - 1;
+            newIndex = row * root.gridColumns + Math.min(col, lastColInRow);
+        }
+        selectedIndex = Math.max(0, Math.min(root.gridCount - 1, newIndex));
+    }
+
+    /// A layout's position in the FULL model, by id. The cards are drawn from
+    /// two containers now (the grid, and the None card's own row), so a
+    /// delegate's position within its Repeater is no longer its index in the
+    /// model the selection is keyed on. Deriving it from the id keeps one
+    /// delegate serving both, and the list is a handful of entries, so the
+    /// scan costs nothing. Returns -1 for an id the model does not carry.
+    function indexOfLayoutId(id) {
+        for (var i = 0; i < layouts.length; i++) {
+            if (layouts[i].id === id)
+                return i;
+        }
+        return -1;
     }
 
     function confirmSelection() {
@@ -194,9 +257,15 @@ Item {
         // any decoration halo and the show / hide transition are captured
         // instead of being clipped. See PopupFrame.qml.
         anchors.centerIn: parent
+        // The frame follows the GRID's width even when the none row is
+        // present: that row holds one card, which is narrower than any grid
+        // row, so letting it participate would only ever shrink the frame
+        // under the grid it has to contain.
         width: gridView.width + metrics.containerPadding
-        // top padding + title + gap below title + grid + bottom padding
-        height: titleLabel.height + gridView.height + metrics.paddingSide * 3
+        // top padding + title + gap below title + grid + the none row when
+        // it exists (its own top margin is folded into noneRow.height by the
+        // anchor, so a screen without one adds nothing) + bottom padding
+        height: titleLabel.height + gridView.height + noneRow.height + (root.hasNoneRow ? root.cardSpacing : 0) + metrics.paddingSide * 3
         backgroundColor: root.backgroundColor
 
         // Absorb clicks inside container so they do not reach the
@@ -244,114 +313,147 @@ Item {
             spacing: root.cardSpacing
 
             Repeater {
-                model: root.layouts
+                model: root.gridLayouts
+                delegate: layoutCardDelegate
+            }
+        }
 
-                Item {
-                    id: layoutCard
+        // The no-template card, on its own row under the grid and centered
+        // against it. Outside the Grid on purpose: a Grid flows its children
+        // in order, so this card would otherwise take the next free cell in
+        // the last row and read as one more choice rather than as the way out
+        // of the list. The Row is over a one-or-zero element slice, so on a
+        // screen with no template family nothing is instantiated and the row
+        // collapses to zero height.
+        Row {
+            id: noneRow
 
-                    required property var modelData
-                    required property int index
+            anchors.top: gridView.bottom
+            anchors.topMargin: root.hasNoneRow ? root.cardSpacing : 0
+            anchors.horizontalCenter: parent.horizontalCenter
 
-                    property var layoutData: modelData
-                    property bool isSelected: index === root.selectedIndex
-                    property bool isActive: layoutData.id === root.activeLayoutId
-                    property bool isHovered: cardMouse.containsMouse
+            Repeater {
+                model: root.hasNoneRow ? [root.layouts[root.layoutCount - 1]] : []
+                delegate: layoutCardDelegate
+            }
+        }
+    }
 
-                    width: root.cardWidth
-                    height: root.cardHeight
+    // Shared by both containers above. Its position in a Repeater is no
+    // longer its index in the model, so everything keyed on selection goes
+    // through root.indexOfLayoutId rather than a delegate index.
+    Component {
+        id: layoutCardDelegate
+
+        Item {
+            id: layoutCard
+
+            required property var modelData
+
+            property var layoutData: modelData
+            readonly property int modelIndex: root.indexOfLayoutId(layoutData.id)
+            property bool isSelected: modelIndex === root.selectedIndex
+            property bool isActive: layoutData.id === root.activeLayoutId
+            property bool isHovered: cardMouse.containsMouse
+
+            width: root.cardWidth
+            height: root.cardHeight
+            Accessible.role: Accessible.Button
+            Accessible.name: layoutData.displayName || ""
+            Accessible.focusable: true
+
+            QFZCommon.LayoutCard {
+                anchors.fill: parent
+                layoutData: layoutCard.layoutData
+                isActive: layoutCard.isActive
+                isSelected: layoutCard.isSelected
+                isHovered: layoutCard.isHovered
+                globalAutoAssign: root.globalAutoAssign
+                // The no-template row stands for an absence, so it has
+                // no zones and would otherwise draw an empty well that
+                // reads as a card which failed to load. The same
+                // symbol vocabulary as the lock overlay below.
+                placeholderIcon: layoutCard.layoutData.id === root.noTemplateId ? "edit-none" : ""
+                showMasterDot: layoutCard.layoutData.isAutotile === true && layoutCard.layoutData.supportsMasterCount === true
+                producesOverlappingZones: layoutCard.layoutData.producesOverlappingZones === true
+                zoneNumberDisplay: layoutCard.layoutData.zoneNumberDisplay || "all"
+                previewWidth: root.previewWidth
+                previewHeight: root.previewHeight
+                // Layout picker features
+                showCardBackground: true
+                // Zone appearance (consistent with zone selector)
+                zonePadding: 1
+                edgeGap: 1
+                minZoneSize: 8
+                zoneHighlightColor: root.highlightColor
+                zoneInactiveColor: root.inactiveColor
+                zoneBorderColor: root.borderColor
+                activeOpacity: root.activeOpacity
+                inactiveOpacity: root.inactiveOpacity
+                // Theme
+                highlightColor: root.highlightColor
+                textColor: root.textColor
+                backgroundColor: root.backgroundColor
+                // Font
+                fontFamily: root.fontFamily
+                fontSizeScale: root.fontSizeScale
+                fontWeight: root.fontWeight
+                fontItalic: root.fontItalic
+                fontUnderline: root.fontUnderline
+                fontStrikeout: root.fontStrikeout
+                animationDuration: Kirigami.Units.shortDuration
+            }
+
+            // Lock overlay for non-active layouts — absorbs all mouse events
+            Rectangle {
+                anchors.fill: parent
+                visible: root.locked && !layoutCard.isActive
+                z: 100
+                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                radius: Kirigami.Units.largeSpacing
+
+                Kirigami.Icon {
+                    anchors.centerIn: parent
+                    source: "object-locked"
+                    width: Math.min(parent.width, parent.height) * 0.3
+                    height: width
+                    color: Kirigami.Theme.textColor
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.ForbiddenCursor
                     Accessible.role: Accessible.Button
-                    Accessible.name: layoutData.displayName || ""
-                    Accessible.focusable: true
-
-                    QFZCommon.LayoutCard {
-                        anchors.fill: parent
-                        layoutData: layoutCard.layoutData
-                        isActive: layoutCard.isActive
-                        isSelected: layoutCard.isSelected
-                        isHovered: layoutCard.isHovered
-                        globalAutoAssign: root.globalAutoAssign
-                        showMasterDot: layoutCard.layoutData.isAutotile === true && layoutCard.layoutData.supportsMasterCount === true
-                        producesOverlappingZones: layoutCard.layoutData.producesOverlappingZones === true
-                        zoneNumberDisplay: layoutCard.layoutData.zoneNumberDisplay || "all"
-                        previewWidth: root.previewWidth
-                        previewHeight: root.previewHeight
-                        // Layout picker features
-                        showCardBackground: true
-                        // Zone appearance (consistent with zone selector)
-                        zonePadding: 1
-                        edgeGap: 1
-                        minZoneSize: 8
-                        zoneHighlightColor: root.highlightColor
-                        zoneInactiveColor: root.inactiveColor
-                        zoneBorderColor: root.borderColor
-                        activeOpacity: root.activeOpacity
-                        inactiveOpacity: root.inactiveOpacity
-                        // Theme
-                        highlightColor: root.highlightColor
-                        textColor: root.textColor
-                        backgroundColor: root.backgroundColor
-                        // Font
-                        fontFamily: root.fontFamily
-                        fontSizeScale: root.fontSizeScale
-                        fontWeight: root.fontWeight
-                        fontItalic: root.fontItalic
-                        fontUnderline: root.fontUnderline
-                        fontStrikeout: root.fontStrikeout
-                        animationDuration: Kirigami.Units.shortDuration
+                    Accessible.name: i18nc("@info:whatsthis layout picker lock overlay", "Layout is locked. Unlock the current layout before switching to another one.")
+                    onClicked: function (mouse) {
+                        mouse.accepted = true;
                     }
-
-                    // Lock overlay for non-active layouts — absorbs all mouse events
-                    Rectangle {
-                        anchors.fill: parent
-                        visible: root.locked && !layoutCard.isActive
-                        z: 100
-                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-                        radius: Kirigami.Units.largeSpacing
-
-                        Kirigami.Icon {
-                            anchors.centerIn: parent
-                            source: "object-locked"
-                            width: Math.min(parent.width, parent.height) * 0.3
-                            height: width
-                            color: Kirigami.Theme.textColor
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.ForbiddenCursor
-                            Accessible.role: Accessible.Button
-                            Accessible.name: i18nc("@info:whatsthis layout picker lock overlay", "Layout is locked. Unlock the current layout before switching to another one.")
-                            onClicked: function (mouse) {
-                                mouse.accepted = true;
-                            }
-                            onPressed: function (mouse) {
-                                mouse.accepted = true;
-                            }
-                        }
+                    onPressed: function (mouse) {
+                        mouse.accepted = true;
                     }
+                }
+            }
 
-                    MouseArea {
-                        id: cardMouse
+            MouseArea {
+                id: cardMouse
 
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        enabled: !(root.locked && !layoutCard.isActive)
-                        cursorShape: root.locked && !layoutCard.isActive ? Qt.ForbiddenCursor : Qt.PointingHandCursor
-                        onClicked: {
-                            if (root.locked)
-                                return;
+                anchors.fill: parent
+                hoverEnabled: true
+                enabled: !(root.locked && !layoutCard.isActive)
+                cursorShape: root.locked && !layoutCard.isActive ? Qt.ForbiddenCursor : Qt.PointingHandCursor
+                onClicked: {
+                    if (root.locked)
+                        return;
 
-                            root.selectedIndex = layoutCard.index;
-                            root.confirmSelection();
-                        }
-                        onEntered: {
-                            if (root.locked && !layoutCard.isActive)
-                                return;
+                    root.selectedIndex = layoutCard.modelIndex;
+                    root.confirmSelection();
+                }
+                onEntered: {
+                    if (root.locked && !layoutCard.isActive)
+                        return;
 
-                            root.selectedIndex = layoutCard.index;
-                        }
-                    }
+                    root.selectedIndex = layoutCard.modelIndex;
                 }
             }
         }

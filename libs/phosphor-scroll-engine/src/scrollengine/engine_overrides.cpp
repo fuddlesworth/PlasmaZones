@@ -223,6 +223,42 @@ QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId)
     return effectivePresetWindowHeights(m_perScreenOverrides.value(screenId));
 }
 
+ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& screenId) const
+{
+    ScrollBlueprintProgress progress;
+    if (screenId.isEmpty()) {
+        return progress;
+    }
+    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    const auto blueprintIt = overrides.constFind(ScrollPerScreenKeys::templateColumns());
+    if (blueprintIt == overrides.constEnd()) {
+        return progress;
+    }
+    // Capped the same way the consumption site indexes, so `total` counts
+    // entries that can actually be spent rather than everything an embedder
+    // supplied. A readout claiming twenty starting columns while the engine
+    // will only ever consume sixteen would be a lie in the direction that
+    // matters (the user waits for columns that never come).
+    progress.total = qMin(int(blueprintIt->toList().size()), kMaxTemplateEntries);
+    if (progress.total == 0) {
+        return progress;
+    }
+    // The CURRENT context's state, matching visibleStripJson. A screen with no
+    // state yet has spent nothing, which is the honest answer rather than an
+    // absence.
+    const ScrollState* state = m_states.stateForKey(currentKeyForScreen(screenId));
+    if (!state) {
+        return progress;
+    }
+    // The same floor the consumption site applies, for the same reason:
+    // columns that arrived through a non-consuming path still stand for the
+    // entries their positions cover, so a readout keyed on the bare cursor
+    // would under-report a restored strip.
+    const int spent = qMax(state->blueprintCursor(), int(state->strip().columns().size()));
+    progress.used = qMin(spent, progress.total);
+    return progress;
+}
+
 QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QVariantMap& overrides) const
 {
     return presetListFromOverride(overrides, ScrollPerScreenKeys::presetWindowHeights(), MinWindowHeightFraction,

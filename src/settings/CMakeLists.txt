@@ -334,6 +334,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/scrolling/ScrollingTabsPage.qml
         qml/pages/scrolling/ScrollingWindowPage.qml
         qml/pages/scrolling/ScrollingQuickShortcutsPage.qml
+        qml/pages/scrolling/PresetListEditor.qml
         qml/pages/scrolling/ScrollingWindowHandlingCard.qml
         qml/pages/scrolling/ScrollingDragInsertCard.qml
         qml/pages/scrolling/ScrollingDropIndicatorCard.qml

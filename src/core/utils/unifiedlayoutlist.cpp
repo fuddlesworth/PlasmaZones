@@ -16,6 +16,7 @@
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -80,13 +81,45 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
     return preview;
 }
 
-/// Append every store template as a preview row (its own section, after the
-/// aspect sections and the autotile family). Templates have no
-/// hidden/allow-list/aspect axes today, so no context filtering applies —
-/// which also satisfies the active-selection exemption trivially (the
-/// context's assigned template is always in the list).
-void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones::ScrollingTemplateStore* store)
+/// The synthetic "no template" row, carrying the reserved
+/// PhosphorZones::NoScrollingTemplate id. Opt-in per call site: it belongs in
+/// the lists that PICK a context's template, and not in the management and
+/// D-Bus lists, where a row standing for the absence of a template would read
+/// as a template you could rename or delete.
+///
+/// Deliberately zone-less. A template's preview draws its starting columns as
+/// bands, and "no template" has none to draw — a single full-width band would
+/// read as one maximized column, which is a shape the engine does not adopt.
+/// zoneCount 0 is the UnlimitedZoneCount sentinel, so the row passes
+/// LayoutPreview::isValid with an empty zone list.
+LayoutPreview noScrollingTemplatePreview()
 {
+    LayoutPreview preview;
+    preview.id = QString(PhosphorZones::NoScrollingTemplate);
+    preview.displayName = PhosphorI18n::tr("None");
+    preview.description =
+        PhosphorI18n::tr("Use no template on this screen, so columns keep the built-in widths and heights");
+    preview.isScrollingTemplate = true;
+    preview.sectionKey = QStringLiteral("scrolling-templates");
+    preview.sectionLabel = PhosphorI18n::tr("Scrolling Templates");
+    preview.sectionOrder = 10;
+    return preview;
+}
+
+/// Append every store template as a preview row (its own section, after the
+/// aspect sections and the autotile family), optionally led by the None row
+/// above. Templates have no hidden/allow-list/aspect axes today, so no context
+/// filtering applies — which also satisfies the active-selection exemption
+/// trivially (the context's assigned template is always in the list).
+void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones::ScrollingTemplateStore* store,
+                                     bool includeNoTemplateRow)
+{
+    // The None row does NOT depend on the store: "use no template" is offered
+    // even where there are no templates to choose between, because a screen
+    // inheriting a default template still has to be able to opt out of it.
+    if (includeNoTemplateRow) {
+        list.append(noScrollingTemplatePreview());
+    }
     if (!store) {
         return;
     }
@@ -178,6 +211,17 @@ void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAl
 // that decision in a second place.
 bool defaultPreviewLessThan(const LayoutPreview& a, const LayoutPreview& b)
 {
+    // The no-template row is an ESCAPE from the list rather than a member of
+    // it, so it sorts to the very end instead of taking its alphabetical
+    // place among the templates. Tested before every other term, including
+    // `recommended`, because none of them should be able to pull it back up:
+    // a row that means "none of these" reads as an afterthought to the
+    // choices, and landing between two real templates reads as one.
+    const bool aNone = a.id == PhosphorZones::NoScrollingTemplate;
+    const bool bNone = b.id == PhosphorZones::NoScrollingTemplate;
+    if (aNone != bNone) {
+        return bNone;
+    }
     if (a.recommended != b.recommended) {
         return a.recommended;
     }
@@ -264,21 +308,22 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
         appendAutotilePreviews(list, algorithmRegistry, autotileSource, autotilePreviewCanvas);
     }
 
-    appendScrollingTemplatePreviews(list, templateStore);
+    // No None row on this overload: it is the flat management list (the
+    // settings app's catalogue over D-Bus), where a row standing for the
+    // absence of a template has nothing to manage.
+    appendScrollingTemplatePreviews(list, templateStore, false);
 
     sortPreviews(list, customOrder);
 
     return list;
 }
 
-QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
-                                              PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                                              const QString& screenId, int virtualDesktop, const QString& activity,
-                                              bool includeManual, bool includeAutotile, qreal screenAspectRatio,
-                                              bool filterByAspectRatio, const QStringList& customOrder,
-                                              PhosphorLayout::ILayoutSource* autotileSource,
-                                              QSize autotilePreviewCanvas, bool includeScrollingTemplates,
-                                              PhosphorZones::ScrollingTemplateStore* templateStore)
+QVector<LayoutPreview> buildUnifiedLayoutList(
+    PhosphorZones::IZoneLayoutRegistry* layoutManager, PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
+    const QString& screenId, int virtualDesktop, const QString& activity, bool includeManual, bool includeAutotile,
+    qreal screenAspectRatio, bool filterByAspectRatio, const QStringList& customOrder,
+    PhosphorLayout::ILayoutSource* autotileSource, QSize autotilePreviewCanvas, bool includeScrollingTemplates,
+    PhosphorZones::ScrollingTemplateStore* templateStore, bool includeNoTemplateRow)
 {
     QVector<LayoutPreview> list;
 
@@ -381,7 +426,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
     }
 
     if (includeScrollingTemplates) {
-        appendScrollingTemplatePreviews(list, templateStore);
+        appendScrollingTemplatePreviews(list, templateStore, includeNoTemplateRow);
     }
 
     sortPreviews(list, customOrder);

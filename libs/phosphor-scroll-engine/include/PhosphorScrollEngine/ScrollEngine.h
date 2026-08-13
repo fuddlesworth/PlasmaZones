@@ -381,6 +381,18 @@ public:
     QList<qreal> effectivePresetColumnWidths(const QString& screenId) const;
     QList<qreal> effectivePresetWindowHeights(const QString& screenId) const;
 
+    /// How far this screen's CURRENT context has worked through its template
+    /// blueprint. Public for the same reason as the preset readers above: it
+    /// is a read-only introspection surface, here for
+    /// ScrollingAdaptor::blueprintProgressJson and the Monitors page that
+    /// renders it.
+    ///
+    /// Reports the current (desktop, activity) context, matching
+    /// visibleStripJson — a sibling desktop's strip has its own progress and
+    /// is not what a screen readout means. A screen with no blueprint, no
+    /// state yet, or one this engine does not own reports {0, 0}.
+    ScrollBlueprintProgress blueprintProgressForScreen(const QString& screenId) const;
+
     // ═══════════════════════════════════════════════════════════════════════
     // Cross-engine handoff
     // ═══════════════════════════════════════════════════════════════════════
@@ -745,6 +757,11 @@ private:
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);
+    /// Restart the template seed on every state of @p screenId, for the
+    /// blueprint-changed arm of applyPerScreenConfig / clearPerScreenConfig.
+    /// See ScrollState::blueprintCursor for what the cursor means and why a
+    /// new blueprint must not resume the old one's count.
+    void resetBlueprintCursorsForScreen(const QString& screenId);
     // engine_context.cpp
     /// Shared per-window side-map sweep for the SILENT prune paths (desktop
     /// and activity teardown), which emit no windowsReleased and so have no

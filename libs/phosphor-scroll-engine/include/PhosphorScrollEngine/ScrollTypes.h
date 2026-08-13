@@ -225,6 +225,26 @@ enum class ColumnDisplay : int {
     Tabbed = 1,
 };
 
+/// How far a screen has worked through its context template's seed blueprint.
+///
+/// The blueprint describes the columns a strip STARTS with, one entry per
+/// column, and an entry is spent once a column has taken it. This is that
+/// progress made inspectable: @ref total is how many starting columns the
+/// blueprint declares (after the engine's own kMaxTemplateEntries cap, so it
+/// counts entries that can actually be consumed rather than what an embedder
+/// supplied), and @ref used is how many the screen has already taken.
+///
+/// used == total means the blueprint is exhausted and further columns open at
+/// the template's ordinary defaults. Both are zero on a screen with no
+/// blueprint, which is also what a screen that is not scrolling reports.
+struct ScrollBlueprintProgress
+{
+    int total = 0;
+    int used = 0;
+
+    bool operator==(const ScrollBlueprintProgress&) const = default;
+};
+
 /// Which side of the column the tab indicator runs along (niri's
 /// TabIndicatorPosition, same declaration order). Left/Right put the
 /// indicator on a vertical edge and it runs down the column; Top/Bottom put it
