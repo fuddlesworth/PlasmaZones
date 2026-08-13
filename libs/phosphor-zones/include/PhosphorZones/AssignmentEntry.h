@@ -92,6 +92,24 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
     return seed;
 }
 
+/// Reserved value of @ref AssignmentEntry::scrollingTemplateLayout meaning
+/// "this context explicitly uses NO scrolling template", as opposed to an
+/// empty field, which means "not chosen here" and inherits the configured
+/// default template. See that field for why the third state exists.
+///
+/// A deliberately non-UUID word: every consumer that means "a template id"
+/// parses the field with QUuid::fromString, so a stray READER that has not
+/// been taught about the token degrades to a null UUID, which is the
+/// no-template answer anyway.
+///
+/// Exactly two places must know it, both in LayoutRegistry: the resolver
+/// (scrollingTemplateForContext), because it is the one that would otherwise
+/// substitute the default, and the write choke point
+/// (assignScrollingTemplate), because its UUID normalization would flatten
+/// the token back to empty on the way in. The D-Bus slot setter also skips
+/// its UUID validation for it, which is a refusal rather than a rewrite.
+inline constexpr QLatin1String NoScrollingTemplate{"none"};
+
 /**
  * @brief Explicit per-context assignment entry storing every mode's payload
  *
@@ -136,8 +154,18 @@ struct AssignmentEntry
     /// snappingLayout: the lossless mode-toggle contract preserves the
     /// snapping choice across mode flips, and the "scrolling:" sentinel in
     /// activeLayoutId() stays payload-free (rules match on the bare
-    /// sentinel). Empty = no template; the engine falls back to the
-    /// settings preset lists.
+    /// sentinel). Three states, not two. A UUID names a template. EMPTY
+    /// means "not chosen here", which INHERITS the configured default
+    /// template. @ref NoScrollingTemplate means "explicitly none", which
+    /// takes no template at all and leaves the engine on its built-in
+    /// vocabularies even while a default exists.
+    ///
+    /// The third state is why the token exists: with only empty and a UUID,
+    /// a screen could never opt out of a default someone else had set. It is
+    /// a reserved word rather than a flag so it rides every existing string
+    /// path (assignment JSON, the D-Bus slot setter, the rule action) with no
+    /// schema change, and it is ADDITIVE — no stored config can contain it,
+    /// so nothing needs migrating.
     QString scrollingTemplateLayout;
 
     QString activeLayoutId() const

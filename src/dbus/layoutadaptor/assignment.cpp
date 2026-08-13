@@ -835,10 +835,16 @@ void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virt
     if (!validDesktopArg(virtualDesktop, "setScrollingTemplateLayout")) {
         return;
     }
-    // Empty clears the context's template (the screen falls back to the
-    // settings preset lists) — every sibling slot setter has a clear form
+    // Empty clears the context's template, which makes the screen INHERIT the
+    // configured default again — every sibling slot setter has a clear form
     // and clearAssignmentForScreenDesktopActivity would wipe the whole
     // entry, which is the wrong tool for "just drop the template".
+    //
+    // The reserved PhosphorZones::NoScrollingTemplate word is the third form
+    // and passes the id check below untouched: it is stored verbatim and
+    // means "explicitly no template", which the resolver honours over the
+    // default. Validating it as a UUID would refuse the only spelling of
+    // that state.
     //
     // The clear is NOT mode-neutral: assignScrollingTemplate stamps
     // AssignmentEntry::Scrolling on the entry it upserts whatever the
@@ -847,7 +853,7 @@ void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virt
     // published DocString states this; leaving the mode alone here would
     // desync the clear form from the assigning form, which is why the
     // side effect is contractual rather than guarded.
-    if (!layoutId.isEmpty()) {
+    if (!layoutId.isEmpty() && layoutId != PhosphorZones::NoScrollingTemplate) {
         // A non-empty id must name an existing native ScrollingTemplate:
         // unlike the mode-only assignment setters there is no sentinel form
         // to accept, and an unknown UUID passed through to the registry

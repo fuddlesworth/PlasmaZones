@@ -33,6 +33,12 @@ SettingsFlickable {
     // Prefix the layout list uses to namespace tiling algorithms apart from
     // zone layouts. Named so the id surgery below never restates its length.
     readonly property string _autotilePrefix: "autotile:"
+    // The reserved scrolling-template word meaning "explicitly no template",
+    // as opposed to an empty slot, which inherits the configured default.
+    // Spelled here the way _autotilePrefix spells its own token; the
+    // authoritative declaration is PhosphorZones::NoScrollingTemplate in
+    // AssignmentEntry.h.
+    readonly property string _noTemplateToken: "none"
     // Aspect ratio of the currently selected screen (for layout preview).
     // With no selection yet, fall back to the SHOWN state's own screen — the
     // same object _currentState returns and _stageCurrentState writes against.
@@ -194,11 +200,15 @@ SettingsFlickable {
         var siblingAlgo = root._carrySibling(stateView.localAlgorithmCleared, stateView.localAlgorithmTouched, stateView.localAlgorithmId, state.algorithmIdExplicit, state.algorithmId);
         var siblingTiling = siblingAlgo ? root._autotilePrefix + siblingAlgo : "";
         if (stateView.isScrolling) {
-            // Scrolling's activeLayoutId is the bare sentinel (its TEMPLATE
-            // layout rides a separate assignment slot this page neither
-            // shows nor edits; setAssignmentEntry preserves it): the entry
-            // carries the mode plus both preserved sibling fields.
+            // Scrolling's activeLayoutId is the bare sentinel: the entry
+            // carries the mode plus both preserved sibling fields. Its
+            // TEMPLATE rides a separate assignment slot that setAssignmentEntry
+            // does not carry, so the template dropdown stages through its own
+            // call below and an untouched dropdown stages nothing at all,
+            // leaving the daemon's slot exactly as it found it.
             settingsController.stageAssignmentEntry(target, desktop, activity, stateView.localMode, siblingSnapping, siblingTiling);
+            if (stateView.localTemplateTouched)
+                settingsController.stageScrollingTemplate(target, desktop, activity, stateView.localTemplateId);
             return;
         }
         if (stateView.isTiling) {
@@ -455,6 +465,10 @@ SettingsFlickable {
             // title and the message below it both branch on that distinction,
             // and neither may claim a screen is template-free.
             readonly property string scrollingTemplateName: (screenState && screenState.scrollingTemplateName) || ""
+            // The raw slot beside the resolved name, so the note can tell the
+            // explicit-none token from an empty slot. The name is empty for
+            // both, which is exactly the pair that must not read alike.
+            readonly property string scrollingTemplateId: (screenState && screenState.scrollingTemplateId) || ""
             // Template seed progress, refreshed by refreshScrollingStrip on the
             // live beat. Zero total means "nothing to say" and covers all three
             // silent cases at once (not scrolling, no blueprint, daemon down),
@@ -463,6 +477,13 @@ SettingsFlickable {
             // progress to report either.
             property int blueprintTotal: 0
             property int blueprintUsed: 0
+            // The template slot the dropdown edits. Three values, matching the
+            // assignment field: a template UUID, "" (inherit the configured
+            // default) and root._noTemplateToken (explicitly none). Touched is
+            // tracked separately because "" is a legitimate pick, so it cannot
+            // double as "untouched".
+            property string localTemplateId: ""
+            property bool localTemplateTouched: false
             // Resolved layout object for LayoutThumbnail
             property var currentLayout: root._findLayout(localLayoutId)
             // One preview box shape for all three thumbnails, and the width the
@@ -726,11 +747,22 @@ SettingsFlickable {
                     // slot carries its own empty local id instead.
                     localLayoutTouched = true;
                     localAlgorithmTouched = true;
+                    // The template slot does NOT follow the whole-rule reading
+                    // above. It is staged independently (stageScrollingTemplate
+                    // writes only its own slot), so an absent key here means
+                    // "not staged" rather than "staged clear", and the daemon's
+                    // value is the honest fallback. Touched tracks presence for
+                    // the same reason: an untouched slot must not be rewritten
+                    // by an unrelated mode edit.
+                    localTemplateTouched = staged.scrollingTemplateId !== undefined;
+                    localTemplateId = localTemplateTouched ? staged.scrollingTemplateId : (screenState.scrollingTemplateId || "");
                 } else {
                     // No staged changes — use daemon state
                     localMode = screenState.mode || 0;
                     localLayoutId = screenState.layoutId || "";
                     localAlgorithmId = screenState.algorithmId || "";
+                    localTemplateId = screenState.scrollingTemplateId || "";
+                    localTemplateTouched = false;
                 }
 
                 // A context whose daemon mode is NOT scrolling can never be
@@ -920,8 +952,36 @@ SettingsFlickable {
                 Accessible.name: stateView.scrollingStripZones.length > 0 ? i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", stateView.scrollingStripZones.length) : i18nc("accessible name of the placeholder strip preview shown when the screen is not scrolling yet", "Scrolling strip preview, example strip")
             }
 
-            // Scrolling picks neither a layout nor an algorithm, so a short
-            // explanation stands in for the selector.
+            // Template selector (scrolling). The peer of the snapping and
+            // tiling selectors below, for the third family's own slot: it
+            // writes scrollingTemplateLayout rather than the entry's layout or
+            // algorithm, so it stages through its own call.
+            LayoutComboBox {
+                Layout.alignment: Qt.AlignHCenter
+                visible: stateView.isScrolling
+                Accessible.name: i18n("Scrolling template")
+                appSettings: root._layoutBridge
+                currentLayoutId: stateView.localTemplateId
+                layoutFilter: 2
+                noneText: i18n("Default")
+                // The third state this family needs and the other two do not.
+                showExplicitNoneOption: true
+                explicitNoneValue: root._noTemplateToken
+                showPreview: true
+                onActivated: function (idx) {
+                    var entry = model[idx];
+                    stateView.localTemplateId = entry ? (entry.value || "") : "";
+                    // Touched even when the pick lands back on Default: that is
+                    // a deliberate "inherit again", and without the flag the
+                    // stage below would skip the slot and leave the previous
+                    // template assigned.
+                    stateView.localTemplateTouched = true;
+                    root._stageCurrentState();
+                }
+            }
+
+            // Scrolling picks neither a zone layout nor an algorithm, so a
+            // short explanation stands in for those two selectors.
             Kirigami.InlineMessage {
                 // fillWidth with a maximum and an alignment, not alignment
                 // alone: an InlineMessage's implicitWidth collapses to its
@@ -944,7 +1004,15 @@ SettingsFlickable {
                 // Each half is a complete sentence on its own.
                 text: {
                     const strip = stateView.scrollingStripZones.length > 0 ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.");
-                    const template = stateView.scrollingTemplateName.length > 0 ? i18n("This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.", stateView.scrollingTemplateName) : i18n("This screen has no template of its own, so it follows the default template under Settings → Scrolling → Columns.");
+                    // Three states, matching the three the dropdown offers, so
+                    // the note never reads the same for two of them.
+                    let template;
+                    if (stateView.scrollingTemplateId === root._noTemplateToken)
+                        template = i18n("This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.");
+                    else if (stateView.scrollingTemplateName.length > 0)
+                        template = i18n("This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.", stateView.scrollingTemplateName);
+                    else
+                        template = i18n("This screen has no template of its own, so it follows the default template from the Layouts page.");
                     if (stateView.blueprintTotal <= 0)
                         return strip + " " + template;
 

@@ -166,6 +166,27 @@ void StagingService::stageAssignmentEntry(const QString& screen, int desktop, co
     e.tilingAlgorithmId = tilingAlgorithmId.isEmpty() ? std::nullopt : std::optional<QString>(tilingAlgorithmId);
 }
 
+void StagingService::stageScrollingTemplate(const QString& screen, int desktop, const QString& activity,
+                                            const QString& templateId)
+{
+    // Deliberately touches ONLY its own slot: the template is orthogonal to
+    // the mutually-exclusive snapping/tiling pair (a scrolling context can
+    // carry a preserved snapping layout AND a template), so the clearing
+    // that stageSnapping / stageTiling do to each other has no analogue here.
+    assignmentEntry(screen, desktop, activity).scrollingTemplateId = templateId;
+}
+
+bool StagingService::stagedScrollingTemplate(const QString& screen, int desktop, const QString& activity,
+                                             QString& out) const
+{
+    const auto* s = assignmentEntryConst(screen, desktop, activity);
+    if (!s || !s->scrollingTemplateId.has_value()) {
+        return false;
+    }
+    out = *s->scrollingTemplateId;
+    return true;
+}
+
 bool StagingService::stagedSnappingLayout(const QString& screen, int desktop, const QString& activity,
                                           QString& out) const
 {
@@ -243,6 +264,23 @@ bool StagingService::flushAssignmentsToDaemon()
                                          QStringLiteral("setAssignmentEntry"),
                                          {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling}),
                   "setAssignmentEntry", s.screenId);
+            // The template rides its own setter AFTER the entry write, because
+            // setAssignmentEntry carries no template argument. Order matters:
+            // the entry write stamps the mode and both preserved siblings, and
+            // this second call touches only the template slot.
+            //
+            // Gated on the staged mode being Scrolling, not merely on the slot
+            // being staged: setScrollingTemplateLayout stamps Scrolling on the
+            // entry it upserts (its own contract), so issuing it for a context
+            // the user just switched AWAY from scrolling would silently undo
+            // that switch.
+            if (s.scrollingTemplateId.has_value()
+                && mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
+                check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                             QStringLiteral("setScrollingTemplateLayout"),
+                                             {s.screenId, s.virtualDesktop, s.activityId, *s.scrollingTemplateId}),
+                      "setScrollingTemplateLayout", s.screenId);
+            }
             continue;
         }
 

@@ -591,6 +591,15 @@ public:
                                                 const QString& activityId = QString()) const;
 
     // ── Atomic mode+layout staging (overview page) ──────────────────────────
+    /// Stage the context's scrolling template slot. Orthogonal to
+    /// stageAssignmentEntry, which carries no template argument: the Overview
+    /// page calls both when its template dropdown was touched, and only the
+    /// former otherwise, so an untouched slot keeps whatever the daemon holds.
+    /// @p templateId takes a template UUID, an empty string (inherit the
+    /// configured default) or PhosphorZones::NoScrollingTemplate (explicitly
+    /// none).
+    Q_INVOKABLE void stageScrollingTemplate(const QString& screenName, int virtualDesktop, const QString& activityId,
+                                            const QString& templateId);
     Q_INVOKABLE void stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                           int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
     /// Remove any staged entry for the (screen × desktop × activity)

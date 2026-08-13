@@ -103,6 +103,29 @@ void SettingsController::stageAssignmentEntry(const QString& screenName, int vir
     setNeedsSave(true);
 }
 
+void SettingsController::stageScrollingTemplate(const QString& screenName, int virtualDesktop,
+                                                const QString& activityId, const QString& templateId)
+{
+    // Same desktop validation as stageAssignmentEntry, for the same reason:
+    // QML hands the number across as a bare int and it reaches the wire
+    // unchanged. There is no mode argument to validate here — the flush
+    // decides whether to issue this slot's call from the STAGED mode, so a
+    // template staged against a context that ends up non-scrolling is simply
+    // never written.
+    if (virtualDesktop < 0) {
+        qCWarning(lcCore) << "stageScrollingTemplate: refusing negative virtual desktop" << virtualDesktop
+                          << "for screen" << screenName;
+        return;
+    }
+    if (m_virtualDesktopCountFromDaemon && virtualDesktop > m_virtualDesktopCount) {
+        qCWarning(lcCore) << "stageScrollingTemplate: refusing virtual desktop" << virtualDesktop << "outside 0.."
+                          << m_virtualDesktopCount << "for screen" << screenName;
+        return;
+    }
+    m_staging.stageScrollingTemplate(screenName, virtualDesktop, activityId, templateId);
+    setNeedsSave(true);
+}
+
 void SettingsController::removeStagedAssignment(const QString& screenName, int virtualDesktop,
                                                 const QString& activityId)
 {
@@ -689,6 +712,13 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
         map[QStringLiteral("algorithmId")] =
             PhosphorLayout::LayoutId::isAutotile(val) ? PhosphorLayout::LayoutId::extractAlgorithmId(val) : val;
     }
+    // Key PRESENCE is the staged/not-staged answer here, as it is for the two
+    // slots above: the staged value is legitimately an empty string when the
+    // user picked "inherit the default", so a value test would read that back
+    // as untouched and the dropdown would snap away from the user's pick on
+    // the next page visit.
+    if (s->scrollingTemplateId.has_value())
+        map[QStringLiteral("scrollingTemplateId")] = *s->scrollingTemplateId;
     // Explicit mode takes priority (stageAssignmentEntry path)
     if (s->stagedMode.has_value()) {
         map[QStringLiteral("mode")] = *s->stagedMode;

@@ -475,17 +475,26 @@ void LayoutRegistry::assignScrollingTemplate(const QString& screenId, int virtua
     // braceless bus-supplied uuid stored verbatim would defeat the purge's
     // exact string compare on template delete and the upsert no-op guard's
     // byte-wise action compare. Empty stays empty (clears the template).
-    QUuid parsed = QUuid::fromString(templateId);
-    // Existence validation against the native template store: an unknown id
-    // stores as "no template", matching the resolver's deleted-template
-    // degrade rather than persisting a dangling reference. Without a wired
-    // store (some tests) the id is stored as-is — the resolver degrades the
-    // same way at read time.
-    if (!parsed.isNull() && m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed)) {
-        qCDebug(lcZonesLib) << "assignScrollingTemplate: unknown template" << parsed << "— storing no template";
-        parsed = QUuid();
+    if (templateId == NoScrollingTemplate) {
+        // The reserved word bypasses the UUID normalization below, which is
+        // the WRITE half of the token's contract (scrollingTemplateForContext
+        // is the read half). Normalizing it would parse to a null QUuid and
+        // store an empty field, silently turning "explicitly none" into
+        // "inherit the default" — the exact state the user asked not to be in.
+        entry.scrollingTemplateLayout = QString(NoScrollingTemplate);
+    } else {
+        QUuid parsed = QUuid::fromString(templateId);
+        // Existence validation against the native template store: an unknown id
+        // stores as "no template", matching the resolver's deleted-template
+        // degrade rather than persisting a dangling reference. Without a wired
+        // store (some tests) the id is stored as-is — the resolver degrades the
+        // same way at read time.
+        if (!parsed.isNull() && m_scrollingTemplateStore && !m_scrollingTemplateStore->contains(parsed)) {
+            qCDebug(lcZonesLib) << "assignScrollingTemplate: unknown template" << parsed << "— storing no template";
+            parsed = QUuid();
+        }
+        entry.scrollingTemplateLayout = parsed.isNull() ? QString() : parsed.toString();
     }
-    entry.scrollingTemplateLayout = parsed.isNull() ? QString() : parsed.toString();
     upsertAssignmentRule(screenId, virtualDesktop, activity, entry);
     // Emit unconditionally — see assignLayout: the write suppression is real,
     // but layoutAssigned drives the engine-screen re-derive (which pushes the
@@ -511,6 +520,14 @@ LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtual
         return resolveAssignmentEntry(sid, virtualDesktop, activity);
     });
     if (!entry || entry->mode != AssignmentEntry::Scrolling) {
+        return {};
+    }
+    // "Explicitly none" short-circuits BEFORE the default fallback, and that
+    // ordering is the whole feature: this context opted out of templates, so
+    // a default someone set later must not creep back in. Checked here and
+    // nowhere else — see the token's own doc for why every other reader can
+    // stay ignorant of it.
+    if (entry->scrollingTemplateLayout == NoScrollingTemplate) {
         return {};
     }
     QUuid id = QUuid::fromString(entry->scrollingTemplateLayout);
