@@ -192,6 +192,20 @@ QString WindowRegistry::canonicalizeWindowId(const QString& rawWindowId)
     if (it != m_canonicalByInstance.constEnd()) {
         return it.value();
     }
+    // An appId-less composite ("|instanceId") is a placeholder identity, not an
+    // identity: KWin reports a blank window class for a surface it has not
+    // finished mapping, and the effect's bring-up metadata walk pushes whatever
+    // it sees. Freezing that shape here would be permanent (the mapping is
+    // seeded once and deliberately never re-seeded, so class MUTATION cannot
+    // rewrite it), and every consumer that canonicalizes would then carry an id
+    // whose appId parses as empty — which is exactly the identity the appId
+    // buckets, the restore FIFO and the cross-screen reclaim key on. The
+    // window would silently stop matching its own placement records for the
+    // rest of its life. Hand the raw id back unfrozen instead and let the first
+    // well-formed contact win the freeze.
+    if (PhosphorIdentity::WindowId::extractAppId(rawWindowId).isEmpty()) {
+        return rawWindowId;
+    }
     m_canonicalByInstance.insert(instanceId, rawWindowId);
     return rawWindowId;
 }

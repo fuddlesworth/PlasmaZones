@@ -15,6 +15,17 @@ class PHOSPHORENGINE_EXPORT IWindowRegistry
 public:
     virtual ~IWindowRegistry() = default;
 
+    /**
+     * @brief Freeze (on first contact) and return the canonical id for
+     * @p rawWindowId's instance.
+     *
+     * The mapping is seeded once and never re-seeded, so a mid-session class
+     * mutation keeps resolving to the identity the stores were keyed with.
+     * An id whose appId part is EMPTY is exempt from the freeze and returned
+     * verbatim: a blank window class is a not-yet-mapped surface, and a
+     * permanent appId-less canonical would strip the identity every
+     * appId-keyed store looks a window up by.
+     */
     virtual QString canonicalizeWindowId(const QString& rawWindowId) = 0;
     virtual QString canonicalizeForLookup(const QString& rawWindowId) const = 0;
     virtual QString appIdFor(const QString& instanceId) const = 0;

@@ -198,6 +198,41 @@ private Q_SLOTS:
     }
 
     // ────────────────────────────────────────────────────────────────────
+    // canonical freeze
+    // ────────────────────────────────────────────────────────────────────
+
+    void canonicalizeWindowId_appIdLessComposite_isNotFrozen()
+    {
+        // The effect's bring-up metadata walk pushes whatever class KWin has
+        // resolved so far, and a session-restored surface that has not
+        // finished mapping yields "|instanceId". Freezing that would be
+        // permanent (the freeze is single-shot) and would hand every consumer
+        // an id whose appId parses as empty — the login-restore strand where a
+        // window stops matching its own placement records and floats on
+        // whatever monitor KWin opened it on.
+        WindowRegistry reg;
+
+        const QString placeholder = QStringLiteral("|u1");
+        QCOMPARE(reg.canonicalizeWindowId(placeholder), placeholder);
+        // Nothing frozen: a real id still resolves to itself, appId intact.
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("ghostty|u1")), QStringLiteral("ghostty|u1"));
+
+        // First well-formed contact wins the freeze, and a later class
+        // mutation still resolves back to it.
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("ghostty|u1")), QStringLiteral("ghostty|u1"));
+        QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("com.ghostty|u1")), QStringLiteral("ghostty|u1"));
+    }
+
+    void canonicalizeWindowId_firstWellFormedId_isFrozen()
+    {
+        WindowRegistry reg;
+
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("firefox|u1")), QStringLiteral("firefox|u1"));
+        // Single-shot: a mutated class never re-seeds the mapping.
+        QCOMPARE(reg.canonicalizeWindowId(QStringLiteral("renamed|u1")), QStringLiteral("firefox|u1"));
+    }
+
+    // ────────────────────────────────────────────────────────────────────
     // remove + clear
     // ────────────────────────────────────────────────────────────────────
 

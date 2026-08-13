@@ -53,7 +53,15 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
     // dispatch cannot produce an empty one, but this is public engine API
     // and an empty opening screen would defeat the predicate's same-screen
     // bail (empty compares unequal to every recorded screen).
+    // Every decline below is LOGGED, for the reason the scroll twin spells
+    // out: the deferring engine has already stood down, so a decline decides
+    // where the window spends the session, and a silent one leaves the
+    // resulting login-restore strand with no journal evidence.
     if (openingScreenId.isEmpty() || !m_windowTracker || !m_layoutManager) {
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen:" << windowId << "opened on" << openingScreenId
+            << "— declining, engine not wired for the claim (tracker" << bool(m_windowTracker) << "layouts"
+            << bool(m_layoutManager) << ")";
         return false;
     }
     // First observation only: a window this engine tracks anywhere is an
@@ -65,10 +73,19 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
     const PhosphorTiles::TilingState* state =
         keyIt != m_states.windowKeys().constEnd() ? m_states.stateForKey(keyIt.value()) : nullptr;
     if (state && state->containsWindow(windowId)) {
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen:" << windowId
+            << "is already held by this engine — declining, treating it as an in-session re-announce rather "
+               "than a session restore";
         return false;
     }
     const QString appId = currentAppIdFor(windowId);
     if (!PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
+        // Logged for the same reason the scroll twin logs it: the deferring
+        // engine has already stood down, so a silent decline here strands the
+        // window on whatever monitor it opened on for the session.
+        qCInfo(PhosphorTileEngine::lcTileEngine) << "claimCrossScreenReopen:" << windowId << "has no stable appId ("
+                                                 << appId << ") — declining, its placement records cannot be matched";
         return false;
     }
     // A window this engine could not TILE must not be claimed either: the
@@ -80,6 +97,8 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
     // adoption — autotile's refuses outright, so the precondition belongs
     // here. Do not mirror it into the scroll twin.
     if (!shouldTileWindow(windowId)) {
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen:" << windowId << "— declining, this engine would refuse to tile it anyway";
         return false;
     }
     // peekForReclaim, not peek: the live-instance exclusion is what stops a
@@ -100,6 +119,9 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
                 });
         });
     if (!pending) {
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen:" << windowId << "appId" << appId << "opened on" << openingScreenId
+            << "— declining, no record carries an autotile tile homed on another autotile-mode screen";
         return false;
     }
     const QString homeScreen = pending->screenId;

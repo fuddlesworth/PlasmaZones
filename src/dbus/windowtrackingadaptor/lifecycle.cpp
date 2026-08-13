@@ -839,16 +839,18 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
         }
     }
 
-    // Universal canonical seed. setWindowMetadata is the per-window choke point —
+    // Canonical seed. setWindowMetadata is the per-window choke point —
     // the effect pushes it for every window it tracks, ahead of the other
     // per-window notifications, snap-mode included. Freezing the first-seen
-    // composite (appId|instanceId) here gives EVERY window a canonical entry from
+    // composite (appId|instanceId) here gives a window its canonical entry from
     // first contact, so the snap stores (which canonicalize their keys) resolve a
     // window even after the effect restarts and re-derives a mutated-class
     // composite for it. Idempotent: the instance id is stable, so a later push
     // carrying a mutated appId returns the original composite rather than
-    // re-seeding (issue #628). The registry's own remove() retires the mapping
-    // when the window closes.
+    // re-seeding (issue #628). A push whose appId is still EMPTY (KWin has not
+    // finished mapping the surface) is deliberately not frozen by the registry
+    // and re-seeds on the next push — see canonicalizeWindowId. The registry's
+    // own remove() retires the mapping when the window closes.
     m_windowRegistry->canonicalizeWindowId(PhosphorIdentity::WindowId::buildCompositeId(appId, instanceId));
 
     m_windowRegistry->upsert(instanceId, meta);

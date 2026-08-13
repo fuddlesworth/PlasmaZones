@@ -423,7 +423,16 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
     // dispatch cannot produce an empty one, but this is public engine API and
     // an empty opening screen would defeat the predicate's same-screen bail
     // (empty compares unequal to every recorded screen).
+    // Every decline below is LOGGED. The deferring engine has already stood
+    // down by the time a claim runs, so a decline decides where the window
+    // spends the whole session (float on whatever monitor KWin opened it on,
+    // recoverable only by logging out). A silent one leaves the resulting
+    // login-restore strand with no evidence at all in the journal, which is
+    // exactly how one survived a shipped fix.
     if (windowId.isEmpty() || openingScreenId.isEmpty() || !m_scrollingModeResolver || !m_windowTracker) {
+        qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << rawWindowId << "opened on" << openingScreenId
+                               << "— declining, engine not wired for the claim (resolver"
+                               << bool(m_scrollingModeResolver) << "tracker" << bool(m_windowTracker) << ")";
         return false;
     }
     // First observation only, by MEMBERSHIP: a window this engine already
@@ -433,6 +442,9 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
     // (the rule windowOpened's defer gate documents): a phantom key left by
     // a refused earlier open must not veto a legitimate claim.
     if (const ScrollState* tracked = stateForWindow(windowId); tracked && tracked->containsWindow(windowId)) {
+        qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId
+                               << "is already held by this engine — declining, treating it as an in-session "
+                                  "re-announce rather than a session restore";
         return false;
     }
     // Registry-aware appId, like autotile's twin and like every record
@@ -441,6 +453,14 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
     // Electron/CEF class mutation.
     const QString appId = m_windowTracker->currentAppIdFor(windowId);
     if (!PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
+        // Logged, not silent: this guard swallowed a real login-restore strand
+        // (a window whose canonical id had been frozen without an appId
+        // declined here, floated on its arrival monitor, and only a relog
+        // recovered it). The deferring engine has already stood down by the
+        // time the claim runs, so a decline here decides where the window
+        // spends the session.
+        qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "has no stable appId (" << appId
+                               << ") — declining, its placement records cannot be matched";
         return false;
     }
     // peekForReclaim, not peek: the live-instance exclusion is what stops a
@@ -460,6 +480,10 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
                 });
         });
     if (!pending) {
+        qCInfo(lcScrollEngine) << "claimCrossScreenReopen:" << windowId << "appId" << appId << "opened on"
+                               << openingScreenId
+                               << "— declining, no record carries a scrolling tile homed on another "
+                                  "scrolling-mode screen";
         return false;
     }
     const QString homeScreen = pending->screenId;
