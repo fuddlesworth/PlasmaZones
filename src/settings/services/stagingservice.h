@@ -69,31 +69,14 @@ public:
 
     // ── Assignment staging ────────────────────────────────────────────
 
-    /// Stage a snapping-layout assignment. The snapping and tiling slots are
-    /// mutually exclusive in the unified Rule model — one assignment
-    /// context carries either a snapping layout or a tiling algorithm, not
-    /// both — so staging here clears any staged tiling assignment for the
-    /// same context. Callers that want to write both atomically must use
-    /// `stageAssignmentEntry`.
-    void stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-
-    /// Stage a tiling-algorithm assignment. See `stageSnapping` — the two
-    /// slots are mutually exclusive, so this clears any staged snapping
-    /// assignment for the same context.
-    void stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-
     /// Remove any staged entry for the (screen × desktop × activity)
     /// context entirely — a true unstage. After this, the flush leaves the
     /// context's daemon-side assignment untouched. No-op when nothing is
     /// staged for the context.
     void removeStagedAssignment(const QString& screen, int desktop, const QString& activity);
 
-    /// Stage a tiling-only clear (flushes as "mode=0 + no layouts",
-    /// reverting the context back to snapping mode).
-    void stageTilingClear(const QString& screen, int desktop, const QString& activity);
-
-    /// Atomic mode+layout staging used by the Overview page, bypasses the
-    /// per-field paths and flushes through `setAssignmentEntry`.
+    /// Atomic mode+layout staging used by the Overview page. The only way in:
+    /// the flush's one live path is this entry's explicit-mode branch.
     void stageAssignmentEntry(const QString& screen, int desktop, const QString& activity, int mode,
                               const QString& snappingLayoutId, const QString& tilingAlgorithmId);
 
@@ -102,22 +85,6 @@ public:
     /// `stageAssignmentEntry` when the template dropdown was touched, and
     /// omits it otherwise so an untouched slot is never rewritten.
     void stageScrollingTemplate(const QString& screen, int desktop, const QString& activity, const QString& templateId);
-
-    /// Out-param query for the scrolling template slot, same shape as
-    /// `stagedSnappingLayout`. The staged value may legitimately be an empty
-    /// string (inherit the default) or the explicit-none token, so the
-    /// return value is the only way to tell "staged" from "not staged".
-    bool stagedScrollingTemplate(const QString& screen, int desktop, const QString& activity, QString& out) const;
-
-    /// Out-param query: returns true if the context has a staged
-    /// snapping value, writes the staged value (possibly empty string for
-    /// a cleared state) into @p out.
-    bool stagedSnappingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
-
-    /// Same as `stagedSnappingLayout` for the tiling-algorithm slot.
-    /// Reattaches the `autotile:` id prefix when needed so callers can
-    /// compare against full layout IDs.
-    bool stagedTilingLayout(const QString& screen, int desktop, const QString& activity, QString& out) const;
 
     /// Raw staged-assignment lookup for callers that need the full entry
     /// (e.g., Q_INVOKABLE getStagedAssignment returns a variant-map

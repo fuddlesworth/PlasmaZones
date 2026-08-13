@@ -174,8 +174,19 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
     QDBusMessage reply =
         DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeSnapping, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         return reply.arguments().first().toString();
+    }
+    // Warned, not silent: an unassigned slot and a daemon that could not be
+    // reached both answer empty here, and every other reader in this file was
+    // deliberately given this distinction (see replyJsonArray's doc, and the
+    // explicit branches in refreshVirtualDesktops / refreshActivities). Left
+    // silent, a daemon-down launch rendered all slots as unassigned and a
+    // later Save could write those clears over real assignments.
+    qCWarning(lcCore) << "getQuickLayoutSlot: slot" << slotNumber
+                      << (reply.type() == QDBusMessage::ErrorMessage
+                              ? QStringLiteral("D-Bus call failed: %1").arg(reply.errorMessage())
+                              : QStringLiteral("reply carried no arguments"));
     return {};
 }
 
@@ -219,8 +230,19 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
     QDBusMessage reply =
         DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeTiling, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         return reply.arguments().first().toString();
+    }
+    // Warned, not silent: an unassigned slot and a daemon that could not be
+    // reached both answer empty here, and every other reader in this file was
+    // deliberately given this distinction (see replyJsonArray's doc, and the
+    // explicit branches in refreshVirtualDesktops / refreshActivities). Left
+    // silent, a daemon-down launch rendered all slots as unassigned and a
+    // later Save could write those clears over real assignments.
+    qCWarning(lcCore) << "getTilingQuickLayoutSlot: slot" << slotNumber
+                      << (reply.type() == QDBusMessage::ErrorMessage
+                              ? QStringLiteral("D-Bus call failed: %1").arg(reply.errorMessage())
+                              : QStringLiteral("reply carried no arguments"));
     return {};
 }
 
@@ -247,8 +269,19 @@ QString SettingsController::getScrollingQuickLayoutSlot(int slotNumber) const
     QDBusMessage reply =
         DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeScrolling, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty())
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         return reply.arguments().first().toString();
+    }
+    // Warned, not silent: an unassigned slot and a daemon that could not be
+    // reached both answer empty here, and every other reader in this file was
+    // deliberately given this distinction (see replyJsonArray's doc, and the
+    // explicit branches in refreshVirtualDesktops / refreshActivities). Left
+    // silent, a daemon-down launch rendered all slots as unassigned and a
+    // later Save could write those clears over real assignments.
+    qCWarning(lcCore) << "getScrollingQuickLayoutSlot: slot" << slotNumber
+                      << (reply.type() == QDBusMessage::ErrorMessage
+                              ? QStringLiteral("D-Bus call failed: %1").arg(reply.errorMessage())
+                              : QStringLiteral("reply carried no arguments"));
     return {};
 }
 
@@ -327,8 +360,16 @@ void SettingsController::refreshActivities()
                                                      QStringLiteral("isActivitiesAvailable"));
     if (availReply.type() == QDBusMessage::ReplyMessage && !availReply.arguments().isEmpty()) {
         m_activitiesAvailable = availReply.arguments().first().toBool();
-    } else if (availReply.type() == QDBusMessage::ErrorMessage) {
-        qCWarning(lcCore) << "refreshActivities: isActivitiesAvailable D-Bus call failed:" << availReply.errorMessage();
+    } else {
+        // A plain `else`, not an ErrorMessage test: an argument-less
+        // ReplyMessage is a successful call that answered nothing, and it
+        // matched NEITHER branch — leaving the stale availability in place,
+        // which is the very outcome the warning below describes. Same fix
+        // refreshVirtualDesktops already carries for the same shape.
+        qCWarning(lcCore) << "refreshActivities: isActivitiesAvailable"
+                          << (availReply.type() == QDBusMessage::ErrorMessage
+                                  ? QStringLiteral("D-Bus call failed: %1").arg(availReply.errorMessage())
+                                  : QStringLiteral("reply carried no arguments"));
         // Treat a D-Bus error the same as an explicit "false" reply —
         // without this, m_activitiesAvailable kept its previous (likely
         // true) value, the function then entered the `if (true)` branch
@@ -369,9 +410,12 @@ void SettingsController::refreshActivities()
             QString(PhosphorProtocol::Service::Interface::LayoutRegistry), QStringLiteral("getCurrentActivity"));
         if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
             m_currentActivity = currentReply.arguments().first().toString();
-        } else if (currentReply.type() == QDBusMessage::ErrorMessage) {
-            qCWarning(lcCore) << "refreshActivities: getCurrentActivity D-Bus call failed:"
-                              << currentReply.errorMessage();
+        } else {
+            // Plain `else` for the argument-less-reply reason given above.
+            qCWarning(lcCore) << "refreshActivities: getCurrentActivity"
+                              << (currentReply.type() == QDBusMessage::ErrorMessage
+                                      ? QStringLiteral("D-Bus call failed: %1").arg(currentReply.errorMessage())
+                                      : QStringLiteral("reply carried no arguments"));
             // Same clear-on-error posture as the two branches above and as the
             // activities-unavailable arm below. Keeping the previous id would
             // also defeat the restart change-detection that compares the
