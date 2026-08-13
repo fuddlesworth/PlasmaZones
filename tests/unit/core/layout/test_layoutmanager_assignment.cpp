@@ -426,8 +426,12 @@ private Q_SLOTS:
         QVERIFY(!mgr->quickLayoutSlots(scrolling).contains(1));
         mgr->setQuickLayoutSlot(scrolling, 1, templId.toString());
         QCOMPARE(mgr->quickLayoutSlots(scrolling).value(1), templId.toString());
-        // Scrolling slots resolve no Layout* (template ids have none).
+        // Scrolling slots resolve no Layout* (template ids have none). Paired
+        // with the snapping control below, which does resolve one — asserted
+        // only in its null form, this passed against an implementation that
+        // always answered nullptr.
         QCOMPARE(mgr->layoutForShortcut(scrolling, 1), nullptr);
+        QVERIFY(mgr->layoutForShortcut(snapping, 1) != nullptr);
         QCOMPARE(mgr->quickLayoutSlots(snapping).value(1), layoutId);
         QCOMPARE(mgr->quickLayoutSlots(autotile).value(1), QStringLiteral("autotile:bsp"));
         // A manual-layout uuid is refused in a scrolling slot (unknown to
