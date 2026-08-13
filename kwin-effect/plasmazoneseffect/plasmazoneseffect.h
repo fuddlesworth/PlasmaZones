@@ -2361,9 +2361,26 @@ private:
     /// layer slot once drawn; the drawn set records the injection so the skip
     /// and the fallback (anchor never painted — paint at the natural slot
     /// after all) cannot disagree.
+    ///
+    /// The above-anchor set holds every OTHER window stacked over the anchor
+    /// that is on the pass output or intersects it (a straddler assigned to
+    /// the neighbouring output paints — and occludes — in this pass all the
+    /// same) — dialogs raised over the strip, the passive
+    /// overlay shell carrying an OSD. It exists because the anchor's own
+    /// paint is not a reliable injection trigger: the scene culls a fully
+    /// occluded anchor, and a culled anchor used to mean no injection at all,
+    /// leaving the indicators to paint at their natural layer slot ON TOP of
+    /// the very windows covering the strip. Whether the anchor was culled
+    /// depends on what covered it that frame, so the indicators FLICKERED
+    /// between correctly-stacked and over-everything as occlusion came and
+    /// went. paintWindow now also injects just before the first above-anchor
+    /// window paints, so the indicators land under it whether or not the
+    /// anchor survived culling — an occluded anchor implies a painting
+    /// occluder above it, so one of the two triggers always fires.
     KWin::EffectWindow* m_scrollTabPaintAnchor = nullptr;
     QSet<KWin::EffectWindow*> m_scrollTabDeferred;
     QSet<KWin::EffectWindow*> m_scrollTabDrawn;
+    QSet<KWin::EffectWindow*> m_scrollTabAboveAnchor;
 
     // Phase 6: per-window shader transitions via OffscreenEffect.
     // Shader/texture cache, LRU eviction, warm-up pipeline, profile tree,
