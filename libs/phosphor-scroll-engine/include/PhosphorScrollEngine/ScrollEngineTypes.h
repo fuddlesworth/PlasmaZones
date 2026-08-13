@@ -17,6 +17,7 @@
 #include <QRect>
 #include <QRectF>
 #include <QString>
+#include <QVector>
 
 #include <optional>
 
@@ -96,6 +97,59 @@ struct ScrollVisibleTileWithRect
     ScrollVisibleTile tile;
     /// Same basis and fallback as ScrollEngine::visibleTileRectsRelative.
     QRectF relativeRect;
+};
+
+/// One tile of a strip snapshot (see ScrollEngine::stripSnapshot). Unlike
+/// ResolvedTile this keeps MINIMIZED tiles, because the snapshot's tile
+/// positions must stay valid DragInsertTarget.secondary indices — the same
+/// model-order rule computeDragInsertTargetAtPoint enforces by mapping
+/// resolved hits back through Column::indexOfWindow.
+struct ScrollStripSnapshotTile
+{
+    QString windowId;
+    /// Rect relative to the owning column's resolved bounds (0..1 on both
+    /// axes). Null for minimized tiles (they resolve no rect) and for the
+    /// hidden tabs of a tabbed column (a renderer draws those as tabs, not
+    /// stacked rects).
+    QRectF relRect;
+    bool minimized = false;
+    /// Non-active tab of a tabbed column.
+    bool hidden = false;
+    /// The column's active tile (for a tabbed column: the visible tab).
+    bool activeTab = false;
+};
+
+/// One column of a strip snapshot, in strip order.
+struct ScrollStripSnapshotColumn
+{
+    bool tabbed = false;
+    /// Resolved column width as a fraction of the work-area width. 0 when
+    /// the column resolves no rect (every tile minimized) — renderers clamp
+    /// to their own minimum card width.
+    qreal relWidth = 0.0;
+    /// Resolved column height as a fraction of the work-area height.
+    qreal relHeight = 0.0;
+    /// MODEL tile order, minimized tiles included.
+    QVector<ScrollStripSnapshotTile> tiles;
+};
+
+/// A column-aware strip snapshot for drag-popup renderers. INDEX CONTRACT:
+/// column positions in @c columns and tile positions in each column are the
+/// indices a DragInsertTarget built from this snapshot must carry — they
+/// name slots in the strip AS A COMMIT WILL SEE IT (the dragged window
+/// detached). When a drag-insert preview is live the resolve already runs
+/// against the preview's detached strip; when it is not, the accessor's
+/// excludeWindowId emulates the detach (tile removed, an emptied column
+/// dropped, later positions renumbered).
+struct ScrollStripSnapshot
+{
+    QVector<ScrollStripSnapshotColumn> columns;
+    /// Snapshot position of the strip's active column, -1 when it was
+    /// excluded or the strip is empty.
+    int activeColumnIndex = -1;
+    /// False when the screen has no strip state or no valid work area —
+    /// distinct from a valid, empty strip (zero columns).
+    bool valid = false;
 };
 
 } // namespace PhosphorScrollEngine

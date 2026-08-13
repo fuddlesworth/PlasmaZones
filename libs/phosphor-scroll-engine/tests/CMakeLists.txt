@@ -54,5 +54,6 @@ pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrolls
 # tracker, so their per-screen resolution is unobservable without one.
 pse_add_test(test_scrollengine_behaviour test_scrollengine_behaviour.cpp scrollstubsettings.h scrollstubtracking.h)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
+pse_add_test(test_scrollengine_snapshot test_scrollengine_snapshot.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)

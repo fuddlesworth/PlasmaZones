@@ -1,0 +1,115 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+// ScrollEngine::stripSnapshot — the column-aware read surface behind the
+// daemon's strip-mode drag popup. Kept out of engine_apply.cpp because the
+// snapshot's contract is drag-insert index fidelity, not the zone-number
+// space the visible-tile walks there serve; the two must be free to evolve
+// separately.
+
+#include <PhosphorScrollEngine/ScrollEngine.h>
+
+#include <PhosphorScreens/ScreenIdentity.h>
+
+#include <QHash>
+
+namespace PhosphorScrollEngine {
+
+ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const QString& excludeWindowId) const
+{
+    ScrollStripSnapshot snap;
+    // Preview-owned screens resolve against the preview's CAPTURED key for
+    // the same reason computeDragInsertTargetAtPoint does: a desktop or
+    // activity switch mid-drag must not swap the strip under indices a
+    // commit will apply to the captured one.
+    const bool previewOwnsScreen = m_dragInsertPreview
+        && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
+    const ScrollState* state = previewOwnsScreen ? m_states.stateForKey(m_dragInsertPreview->targetKey)
+                                                 : m_states.stateForKey(currentKeyForScreen(screenId));
+    if (!state) {
+        return snap;
+    }
+    const ScrollLayoutParams params =
+        layoutParamsForScreen(previewOwnsScreen ? m_dragInsertPreview->targetScreenId : screenId);
+    if (!params.workArea.isValid()) {
+        return snap;
+    }
+    snap.valid = true;
+    if (state->strip().isEmpty()) {
+        return snap;
+    }
+
+    // Exclusion only matters while the drag window is still ATTACHED (no
+    // live preview). Once a preview detached it, the strip resolved below no
+    // longer contains it and a second removal would be a no-op by id anyway;
+    // skipping the canonicalization keeps the common per-show path cheap.
+    const QString excluded =
+        (!previewOwnsScreen && !excludeWindowId.isEmpty()) ? canonicalizeForLookup(excludeWindowId) : QString();
+
+    const ResolvedStrip resolved = state->strip().relayout(params);
+    // Resolved columns keyed by model index: fully-minimized columns resolve
+    // no entry, and the model walk below must not skew when one is absent.
+    QHash<int, const ResolvedColumn*> resolvedByIndex;
+    resolvedByIndex.reserve(resolved.columns.size());
+    for (const ResolvedColumn& column : resolved.columns) {
+        resolvedByIndex.insert(column.columnIndex, &column);
+    }
+
+    const QVector<Column>& modelColumns = state->strip().columns();
+    snap.columns.reserve(modelColumns.size());
+    for (int ci = 0; ci < modelColumns.size(); ++ci) {
+        const Column& modelColumn = modelColumns.at(ci);
+        ScrollStripSnapshotColumn outColumn;
+        outColumn.tabbed = modelColumn.display == ColumnDisplay::Tabbed;
+
+        const ResolvedColumn* resolvedColumn = resolvedByIndex.value(ci, nullptr);
+        const QRect columnRect = resolvedColumn ? resolvedColumn->rect : QRect();
+        if (columnRect.isValid() && !columnRect.isEmpty()) {
+            outColumn.relWidth = static_cast<qreal>(columnRect.width()) / params.workArea.width();
+            outColumn.relHeight = static_cast<qreal>(columnRect.height()) / params.workArea.height();
+        }
+
+        for (int ti = 0; ti < modelColumn.tiles.size(); ++ti) {
+            const Tile& modelTile = modelColumn.tiles.at(ti);
+            if (!excluded.isEmpty() && modelTile.windowId == excluded) {
+                continue;
+            }
+            ScrollStripSnapshotTile outTile;
+            outTile.windowId = modelTile.windowId;
+            outTile.minimized = modelTile.minimized;
+            outTile.activeTab = ti == modelColumn.activeTileIdx;
+            outTile.hidden = outColumn.tabbed && !modelTile.minimized && !outTile.activeTab;
+            // A rect only for tiles a renderer stacks: not minimized (none
+            // resolves), not a hidden tab (drawn as a tab, and its resolved
+            // rect is just the active tile's — see ResolvedTile::rect).
+            if (!outTile.minimized && !outTile.hidden && resolvedColumn && !columnRect.isEmpty()) {
+                for (const ResolvedTile& resolvedTile : resolvedColumn->tiles) {
+                    if (resolvedTile.windowId == modelTile.windowId) {
+                        const QRect& r = resolvedTile.rect;
+                        outTile.relRect = QRectF(static_cast<qreal>(r.x() - columnRect.x()) / columnRect.width(),
+                                                 static_cast<qreal>(r.y() - columnRect.y()) / columnRect.height(),
+                                                 static_cast<qreal>(r.width()) / columnRect.width(),
+                                                 static_cast<qreal>(r.height()) / columnRect.height());
+                        break;
+                    }
+                }
+            }
+            outColumn.tiles.append(outTile);
+        }
+
+        // A column emptied by the exclusion is dropped WITH renumbering —
+        // that is the detach a commit will have performed (takeWindow removes
+        // the emptied column), so keeping a placeholder would offset every
+        // later card's index against the strip the target indices name.
+        if (outColumn.tiles.isEmpty()) {
+            continue;
+        }
+        if (ci == state->strip().activeColumnIndex()) {
+            snap.activeColumnIndex = snap.columns.size();
+        }
+        snap.columns.append(outColumn);
+    }
+    return snap;
+}
+
+} // namespace PhosphorScrollEngine
