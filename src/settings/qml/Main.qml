@@ -400,12 +400,25 @@ PhosphorUi.SettingsAppWindow {
     // default (no stored value yet) reads the controller's own default at
     // startup, so "what mode does a brand-new user get" is defined in ONE
     // place: SettingsController::m_advancedMode. The stored value is pushed
-    // into the controller at startup (Component.onCompleted below) and the
-    // sidebar footer toggle writes user flips back here.
+    // into the controller at startup (Component.onCompleted below) and every
+    // later controller-side flip writes back through the Connections below.
     Settings {
         id: uiModeSettings
         category: "UiMode"
         property bool advancedMode: settingsController.advancedMode
+    }
+
+    // Persist EVERY mode change regardless of what drove it — the sidebar
+    // footer toggle or a search result activated in the other mode (which
+    // flips the controller directly). The Settings property's binding above
+    // only supplies the first-run default: a stored value (or any explicit
+    // write) severs it, so the binding alone cannot be the persistence path.
+    Connections {
+        target: settingsController
+
+        function onAdvancedModeChanged() {
+            uiModeSettings.advancedMode = settingsController.advancedMode;
+        }
     }
 
     Component.onCompleted: {
@@ -842,6 +855,12 @@ PhosphorUi.SettingsAppWindow {
 
             property bool compact: false
 
+            // Names the CURRENT mode, not the switch's target: the switch
+            // position already reads as simple/advanced, so the label tracks
+            // it like the daemon row's Running label. Shared by the wide
+            // rail's label and the compact rail's tooltip.
+            readonly property string modeLabel: settingsController.advancedMode ? i18n("Advanced") : i18n("Simple")
+
             implicitHeight: advancedModeRow.implicitHeight + Kirigami.Units.largeSpacing * 2
 
             RowLayout {
@@ -873,7 +892,7 @@ PhosphorUi.SettingsAppWindow {
                     visible: !advancedModeFooter.compact
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
-                    text: i18n("Advanced")
+                    text: advancedModeFooter.modeLabel
                     elide: Text.ElideRight
                 }
 
@@ -881,9 +900,11 @@ PhosphorUi.SettingsAppWindow {
                     Layout.alignment: Qt.AlignVCenter
                     checked: settingsController.advancedMode
                     accessibleName: i18n("Toggle advanced settings")
+                    // Persistence rides the controller's advancedModeChanged
+                    // connection by uiModeSettings — one write path for every
+                    // mode-change source.
                     onToggled: function (newValue) {
                         settingsController.advancedMode = newValue;
-                        uiModeSettings.advancedMode = newValue;
                     }
 
                     HoverHandler {
@@ -892,7 +913,7 @@ PhosphorUi.SettingsAppWindow {
 
                     // Tooltip stands in for the hidden label, matching the
                     // compact rail rows.
-                    ToolTip.text: i18n("Advanced")
+                    ToolTip.text: advancedModeFooter.modeLabel
                     ToolTip.visible: advancedModeFooter.compact && advancedModeHover.hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
                 }
