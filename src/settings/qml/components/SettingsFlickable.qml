@@ -458,9 +458,9 @@ Flickable {
                 //     row — the user has to flip a switch on screen. Scroll to
                 //     and pulse the nearest ancestor card, whose header carries
                 //     that toggle. (An advanced-only row in simple mode also
-                //     lands here; the tier index normally filters it, so it is
-                //     an index/row disagreement, and the card is still a real
-                //     destination.)
+                //     lands here; search switches the mode before navigating,
+                //     so it is an index/row disagreement, and the card is
+                //     still a real destination.)
                 //   - It has none (a bare page-level row): nothing to show it
                 //     inside, so fall back to the top of the page.
                 settingsFlickable._revertRevealCards(pendingCards);

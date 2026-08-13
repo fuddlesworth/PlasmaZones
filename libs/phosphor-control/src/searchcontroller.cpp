@@ -256,8 +256,8 @@ QVector<SearchEntry> SearchController::buildIndex()
         if (e.kind == SearchEntry::Kind::Action || e.pageId.isEmpty()) {
             return true;
         }
-        // Unregistered pageId — drop it, loudly. pageAllowedInCurrentMode
-        // deliberately "expresses no opinion" on an unknown id (it is a tier
+        // Unregistered pageId — drop it, loudly. allowedInMode deliberately
+        // "expresses no opinion" on an unknown id (it is a tier
         // filter, not an existence check), so without this a typo'd pageId in
         // the catalogue sails through every gate below and produces a result
         // that navigates nowhere: the app's mode gate rejects the id and
@@ -371,8 +371,9 @@ void SearchController::recompute()
         : QString();
 
     // Emit only on a real change. recompute() runs on every invalidate(), and
-    // visibleSetChanged fires it for mode flips that often do not alter what the
-    // current query matches — re-emitting there would rebuild the QML ListView
+    // visibleSetChanged fires it for mode flips, which never alter what the
+    // current query matches (the index is mode-independent; only a restamp
+    // changes the tags) — re-emitting there would rebuild the QML ListView
     // and re-evaluate the results / resultCount / suggestion bindings for
     // nothing. Compares the built variant list, so a reordering counts as a
     // change while an identical rebuild does not.

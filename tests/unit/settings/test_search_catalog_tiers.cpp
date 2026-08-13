@@ -888,7 +888,7 @@ private Q_SLOTS:
     }
 
     /// Every pageId the catalogue registers must be a page the app registers.
-    /// SearchController::tierAllows now DROPS entries whose pageId is unknown
+    /// SearchController::classifyMode now DROPS entries whose pageId is unknown
     /// to the registry (they produced results that navigated nowhere), so a
     /// stale id here is no longer a dead link — it is a setting that silently
     /// cannot be found at all, with only a runtime warning as evidence. The
@@ -934,7 +934,7 @@ private Q_SLOTS:
         QSet<QString> unregistered;
         // setPageKeywords takes the page id directly. A stale id there costs
         // the page its entire synonym list SILENTLY: the call never reaches
-        // tierAllows, so nothing warns and the page just stops answering to
+        // classifyMode, so nothing warns and the page just stops answering to
         // its synonyms.
         static const QRegularExpression kKeywords(
             QStringLiteral("\\bsetPageKeywords\\(\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));

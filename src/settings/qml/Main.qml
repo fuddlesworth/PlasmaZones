@@ -855,6 +855,12 @@ PhosphorUi.SettingsAppWindow {
 
             property bool compact: false
 
+            // Names the CURRENT mode, not the switch's target: the switch
+            // position already reads as simple/advanced, so the label tracks
+            // it like the daemon row's Running label. Shared by the wide
+            // rail's label and the compact rail's tooltip.
+            readonly property string modeLabel: settingsController.advancedMode ? i18n("Advanced") : i18n("Simple")
+
             implicitHeight: advancedModeRow.implicitHeight + Kirigami.Units.largeSpacing * 2
 
             RowLayout {
@@ -886,10 +892,7 @@ PhosphorUi.SettingsAppWindow {
                     visible: !advancedModeFooter.compact
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
-                    // Names the CURRENT mode, not the switch's target: the
-                    // switch position already reads as simple/advanced, so the
-                    // label tracks it like the daemon row's Running label.
-                    text: settingsController.advancedMode ? i18n("Advanced") : i18n("Simple")
+                    text: advancedModeFooter.modeLabel
                     elide: Text.ElideRight
                 }
 
@@ -910,7 +913,7 @@ PhosphorUi.SettingsAppWindow {
 
                     // Tooltip stands in for the hidden label, matching the
                     // compact rail rows.
-                    ToolTip.text: settingsController.advancedMode ? i18n("Advanced") : i18n("Simple")
+                    ToolTip.text: advancedModeFooter.modeLabel
                     ToolTip.visible: advancedModeFooter.compact && advancedModeHover.hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
                 }

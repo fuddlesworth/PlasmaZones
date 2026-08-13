@@ -511,19 +511,26 @@ private Q_SLOTS:
         advanced.advancedOnly = true;
         sc.addEntry(advanced);
 
+        // An ungated sibling row on the same page, matching the same query, so
+        // the flag's effect is isolated to the entry that carries it.
+        SearchEntry ungated;
+        ungated.kind = SearchEntry::Kind::Setting;
+        ungated.pageId = QStringLiteral("general");
+        ungated.anchor = QStringLiteral("borderWidth");
+        ungated.title = QStringLiteral("Borders width");
+        sc.addEntry(ungated);
+
         m_app->registry()->setShowAdvanced(true);
         sc.setQuery(QStringLiteral("borders"));
         QCOMPARE(modeForTitle(sc, QStringLiteral("Apply borders to")),
                  static_cast<int>(SearchEntry::Mode::AdvancedOnly));
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Borders width")), static_cast<int>(SearchEntry::Mode::Both));
 
         m_app->registry()->setShowAdvanced(false);
         sc.setQuery(QStringLiteral("borders"));
         QCOMPARE(modeForTitle(sc, QStringLiteral("Apply borders to")),
                  static_cast<int>(SearchEntry::Mode::AdvancedOnly));
-
-        // An ungated sibling on the same page classifies Both.
-        sc.setQuery(QStringLiteral("general"));
-        QCOMPARE(modeForTitle(sc, QStringLiteral("General")), static_cast<int>(SearchEntry::Mode::Both));
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Borders width")), static_cast<int>(SearchEntry::Mode::Both));
     }
 
     void advancedOnlyEntryOnSimpleOnlyPageIsDropped()
