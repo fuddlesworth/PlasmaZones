@@ -34,6 +34,16 @@ inline QLatin1String presetWindowHeightsKey()
 {
     return QLatin1String("windowHeights");
 }
+/// The blueprintProgressJson payload keys, same one-place rule as the pair
+/// above.
+inline QLatin1String blueprintTotalKey()
+{
+    return QLatin1String("total");
+}
+inline QLatin1String blueprintUsedKey()
+{
+    return QLatin1String("used");
+}
 } // namespace
 
 ScrollingAdaptor::ScrollingAdaptor(PhosphorScrollEngine::ScrollEngine* engine, QObject* parent)
@@ -322,6 +332,21 @@ QString ScrollingAdaptor::presetVocabularyJson(const QString& screenId) const
     QJsonObject obj;
     obj[presetColumnWidthsKey()] = toArray(m_engine->effectivePresetColumnWidths(screenId));
     obj[presetWindowHeightsKey()] = toArray(m_engine->effectivePresetWindowHeights(screenId));
+    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
+QString ScrollingAdaptor::blueprintProgressJson(const QString& screenId) const
+{
+    // Same wire-boundary and screen gates as its two siblings. The gate is
+    // what makes a non-scrolling screen report {0, 0} rather than the progress
+    // its surviving overrides and state would still resolve to.
+    if (!m_engine || screenId.isEmpty() || !m_engine->isActiveOnScreen(screenId)) {
+        return QStringLiteral("{}");
+    }
+    const PhosphorScrollEngine::ScrollBlueprintProgress progress = m_engine->blueprintProgressForScreen(screenId);
+    QJsonObject obj;
+    obj[blueprintTotalKey()] = progress.total;
+    obj[blueprintUsedKey()] = progress.used;
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 

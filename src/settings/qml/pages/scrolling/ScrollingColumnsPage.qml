@@ -141,7 +141,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Default width")
                     searchAnchor: "defaultColumnWidthKind"
-                    description: i18n("How wide a column is when it first opens")
+                    description: i18n("How wide a column is when it first opens. A screen with a layout template of its own takes the width from that template instead, including the width set for this monitor.")
 
                     WideComboBox {
                         Accessible.name: i18n("Default column width")
@@ -252,7 +252,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Open new columns as")
                     searchAnchor: "defaultColumnDisplay"
-                    description: i18n("Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip.")
+                    description: i18n("Normal stacks the windows of a column above each other. Tabbed shows one window at a time behind a tab strip. A screen with a layout template of its own takes this from that template instead, and the template's starting columns each carry their own.")
 
                     WideComboBox {
                         Accessible.name: i18n("Open new columns as")

@@ -251,6 +251,27 @@ public Q_SLOTS:
     QString presetVocabularyJson(const QString& screenId) const;
 
     /**
+     * @brief How far the screen has worked through its template blueprint
+     *
+     * Returns a JSON object {"total": n, "used": n}. @c total is how many
+     * starting columns the context's resolved scrolling template declares,
+     * and @c used is how many of them the screen's strip has already taken.
+     * An entry is spent once a column has taken it, so a closed column does
+     * not return its entry to the pool, and @c used == @c total means further
+     * columns open at the template's ordinary width and display instead.
+     * The count restarts when the strip empties or the screen is given a
+     * different template.
+     *
+     * Reports the CURRENT (desktop, activity) context, matching
+     * visibleStripJson. Same silent ownership gate as focusColumn: an empty
+     * object when the screen is not scrolling.
+     *
+     * @param screenId Screen whose progress to describe
+     * @return JSON object string
+     */
+    QString blueprintProgressJson(const QString& screenId) const;
+
+    /**
      * @brief Every live tab-indicator surface, as screenId → wl_surface id.
      *
      * The replay half of @c scrollTabSurfaceChanged, for a compositor-side

@@ -11,6 +11,7 @@
 #include <QDBusMessage>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QJsonParseError>
 
 namespace PlasmaZones::DaemonDBus {
@@ -119,6 +120,36 @@ inline QJsonArray replyJsonArray(const QDBusMessage& reply, QLatin1String contex
         return {};
     }
     return doc.array();
+}
+
+/// Decode a daemon reply whose single argument is a JSON OBJECT string, with
+/// the same failure taxonomy as replyJsonArray above: an empty payload is a
+/// normal "nothing to report", and every other failure warns rather than
+/// letting the settings app render an absent daemon as an empty feature.
+inline QJsonObject replyJsonObject(const QDBusMessage& reply, QLatin1String context)
+{
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        qCInfo(lcCore) << context << "D-Bus call failed:" << reply.errorMessage();
+        return {};
+    }
+    if (reply.arguments().isEmpty()) {
+        return {};
+    }
+    const QString json = reply.arguments().at(0).toString();
+    if (json.isEmpty()) {
+        return {};
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcCore) << context << "reply is not valid JSON:" << parseError.errorString();
+        return {};
+    }
+    if (!doc.isObject()) {
+        qCWarning(lcCore) << context << "reply JSON is not an object";
+        return {};
+    }
+    return doc.object();
 }
 
 // The three settings-WRITE helpers that used to live here (setDaemonSettings,

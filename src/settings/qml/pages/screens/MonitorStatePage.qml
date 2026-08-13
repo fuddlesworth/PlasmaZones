@@ -447,6 +447,22 @@ SettingsFlickable {
             // branch on this instead of treating "not tiling" as snapping.
             property bool isScrolling: localMode === 2
             property bool isSnapping: localMode === 0
+            // The scrolling template governing this screen, by name. EMPTY
+            // when the screen has none of its own: the daemon reports the RAW
+            // assignment field here rather than the resolved one (see the
+            // adaptor's getScreenStates), so an empty string means "follows
+            // the default template", never "no template applies". The preview
+            // title and the message below it both branch on that distinction,
+            // and neither may claim a screen is template-free.
+            readonly property string scrollingTemplateName: (screenState && screenState.scrollingTemplateName) || ""
+            // Template seed progress, refreshed by refreshScrollingStrip on the
+            // live beat. Zero total means "nothing to say" and covers all three
+            // silent cases at once (not scrolling, no blueprint, daemon down),
+            // so the readout below is gated on it rather than on isScrolling:
+            // a screen whose template declares no starting columns has no
+            // progress to report either.
+            property int blueprintTotal: 0
+            property int blueprintUsed: 0
             // Resolved layout object for LayoutThumbnail
             property var currentLayout: root._findLayout(localLayoutId)
             // One preview box shape for all three thumbnails, and the width the
@@ -573,6 +589,17 @@ SettingsFlickable {
                 // prevent.
                 if (allowRetry && stateView.isScrolling && fresh.length === 0 && (screenState.mode || 0) === 2)
                     stripSettleRetry.restart();
+                // Template seed progress on the SAME beat, behind the same
+                // visibility gate. One more blocking round trip is the right
+                // trade: the daemon answers two ints off state it already
+                // holds, and a timer of its own would double the wakeups for
+                // a value that cannot change without the strip changing.
+                // An empty reply (screen not scrolling, no blueprint, daemon
+                // down) leaves both at zero, which is what suppresses the
+                // line below.
+                const progress = settingsController.getScrollingBlueprintProgress(screenState.screenId || "");
+                blueprintTotal = (progress && progress.total) || 0;
+                blueprintUsed = (progress && progress.used) || 0;
             }
 
             // True when two strip replies would render identically. Compares
@@ -859,7 +886,13 @@ SettingsFlickable {
                 // defaulting. A stable id would only invite code elsewhere to
                 // treat this throwaway snapshot as a real layout.
                 layout: ({
-                        "displayName": i18nc("tiling mode name", "Scrolling"),
+                        // The template's name when the screen has one, so the
+                        // card names what actually shapes the strip. A screen
+                        // on the default template keeps the bare mode name:
+                        // the wire field is the raw assignment, so naming a
+                        // template here would claim an assignment the screen
+                        // does not have.
+                        "displayName": stateView.scrollingTemplateName.length > 0 ? stateView.scrollingTemplateName : i18nc("tiling mode name", "Scrolling"),
                         "category": 1,
                         // The sketch is unnumbered, matching the daemon's OSD
                         // card: its shapes stand for "a strip", not tiles, so
@@ -904,7 +937,24 @@ SettingsFlickable {
                 // digit shortcuts — and says windows are numbered rather than
                 // that the numbers are legible, which they are not on a tile
                 // too narrow to carry a label.
-                text: stateView.scrollingStripZones.length > 0 ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.")
+                // Two sentences joined at runtime rather than four whole
+                // strings: the strip half and the template half vary
+                // independently, and spelling out the product would leave
+                // translators maintaining four near-identical paragraphs.
+                // Each half is a complete sentence on its own.
+                text: {
+                    const strip = stateView.scrollingStripZones.length > 0 ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.");
+                    const template = stateView.scrollingTemplateName.length > 0 ? i18n("This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.", stateView.scrollingTemplateName) : i18n("This screen has no template of its own, so it follows the default template under Settings → Scrolling → Columns.");
+                    if (stateView.blueprintTotal <= 0)
+                        return strip + " " + template;
+
+                    // A starting column is spent once a column has taken it, so
+                    // this counts up and stays there until the strip empties or
+                    // the template changes. Saying so is the point of the line:
+                    // it is the only place the "spent" rule is visible.
+                    const seed = stateView.blueprintUsed >= stateView.blueprintTotal ? i18n("All %1 of its starting columns are in use, so further columns open at the template's own width and display.", stateView.blueprintTotal) : i18n("%1 of its %2 starting columns are in use, and the rest shape the next columns you open.", stateView.blueprintUsed, stateView.blueprintTotal);
+                    return strip + " " + template + " " + seed;
+                }
                 visible: stateView.isScrolling
             }
 

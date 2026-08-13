@@ -568,6 +568,14 @@ public:
     /// no strip right now (not scrolling, no windows, daemon down) — the
     /// Monitors page then falls back to a representative static strip.
     Q_INVOKABLE QVariantList getScrollingStripPreview(const QString& screenId) const;
+    /// How far @p screenId has worked through its scrolling template's seed
+    /// blueprint, as {"total": int, "used": int}, fetched from
+    /// org.plasmazones.Scrolling. An EMPTY map when the screen is not
+    /// scrolling, has no template blueprint, or the daemon is down — the
+    /// Monitors page renders the progress line only for a non-empty answer,
+    /// so an absent daemon reads as "nothing to say" rather than "no starting
+    /// columns".
+    Q_INVOKABLE QVariantMap getScrollingBlueprintProgress(const QString& screenId) const;
     /// The staged (not yet applied) assignment for the (screen × desktop ×
     /// activity) context, as a map of only the fields that are actually staged.
     ///

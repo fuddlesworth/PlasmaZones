@@ -381,6 +381,18 @@ public:
     QList<qreal> effectivePresetColumnWidths(const QString& screenId) const;
     QList<qreal> effectivePresetWindowHeights(const QString& screenId) const;
 
+    /// How far this screen's CURRENT context has worked through its template
+    /// blueprint. Public for the same reason as the preset readers above: it
+    /// is a read-only introspection surface, here for
+    /// ScrollingAdaptor::blueprintProgressJson and the Monitors page that
+    /// renders it.
+    ///
+    /// Reports the current (desktop, activity) context, matching
+    /// visibleStripJson — a sibling desktop's strip has its own progress and
+    /// is not what a screen readout means. A screen with no blueprint, no
+    /// state yet, or one this engine does not own reports {0, 0}.
+    ScrollBlueprintProgress blueprintProgressForScreen(const QString& screenId) const;
+
     // ═══════════════════════════════════════════════════════════════════════
     // Cross-engine handoff
     // ═══════════════════════════════════════════════════════════════════════

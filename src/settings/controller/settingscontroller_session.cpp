@@ -598,6 +598,25 @@ QVariantList SettingsController::getScreenStates() const
     return result;
 }
 
+QVariantMap SettingsController::getScrollingBlueprintProgress(const QString& screenId) const
+{
+    if (screenId.isEmpty()) {
+        return {};
+    }
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::Scrolling),
+                                                QStringLiteral("blueprintProgressJson"), {screenId});
+    const QJsonObject obj = DaemonDBus::replyJsonObject(reply, QLatin1String("getScrollingBlueprintProgress"));
+    // A screen the daemon gated out answers "{}", which parses to an empty
+    // object and reaches QML as an empty map. Passed through as-is rather
+    // than defaulted to zeroes: the caller distinguishes "no blueprint to
+    // describe" from "a blueprint with nothing spent", and zeroes would
+    // collapse the two.
+    if (obj.isEmpty()) {
+        return {};
+    }
+    return obj.toVariantMap();
+}
+
 QVariantList SettingsController::getScrollingStripPreview(const QString& screenId) const
 {
     if (screenId.isEmpty()) {
