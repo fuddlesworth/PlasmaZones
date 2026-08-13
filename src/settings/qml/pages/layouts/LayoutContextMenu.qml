@@ -311,23 +311,36 @@ Menu {
     MenuSeparator {}
 
     MenuItem {
-        text: i18n("Set as Default")
-        icon.name: "favorite"
-        enabled: {
+        id: defaultItem
+
+        // Whether THIS entry is already its family's default. Drives the
+        // enabled state for the two layout families, and for templates it
+        // flips the item into its clearing form instead.
+        readonly property bool isFamilyDefault: {
             if (!layoutContextMenu.layout)
                 return false;
 
             if (layoutContextMenu.isTemplate)
-                return layoutContextMenu.layoutId !== layoutContextMenu.appSettings.defaultScrollingTemplate;
+                return layoutContextMenu.layoutId === layoutContextMenu.appSettings.defaultScrollingTemplate;
 
             if (layoutContextMenu.isAutotile)
-                return layoutContextMenu.layoutId !== ("autotile:" + layoutContextMenu.appSettings.defaultAutotileAlgorithm);
+                return layoutContextMenu.layoutId === ("autotile:" + layoutContextMenu.appSettings.defaultAutotileAlgorithm);
 
-            return layoutContextMenu.layoutId !== layoutContextMenu.appSettings.defaultLayoutId;
+            return layoutContextMenu.layoutId === layoutContextMenu.appSettings.defaultLayoutId;
         }
+
+        // Templates are the one family whose default can be CLEARED, because
+        // "no default template" is a state a scrolling screen can genuinely
+        // sit in: it falls back to the engine's built-in width and height
+        // steps. A snapping screen with no default layout and a tiling screen
+        // with no default algorithm have no such fallback, so those two keep
+        // the plain set-only item that greys out on the current default.
+        text: layoutContextMenu.isTemplate && defaultItem.isFamilyDefault ? i18n("Clear Default") : i18n("Set as Default")
+        icon.name: layoutContextMenu.isTemplate && defaultItem.isFamilyDefault ? "edit-clear" : "favorite"
+        enabled: layoutContextMenu.layout && (layoutContextMenu.isTemplate || !defaultItem.isFamilyDefault)
         onTriggered: {
             if (layoutContextMenu.isTemplate)
-                layoutContextMenu.appSettings.defaultScrollingTemplate = layoutContextMenu.layoutId;
+                layoutContextMenu.appSettings.defaultScrollingTemplate = defaultItem.isFamilyDefault ? "" : layoutContextMenu.layoutId;
             else if (layoutContextMenu.isAutotile)
                 layoutContextMenu.appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
             else

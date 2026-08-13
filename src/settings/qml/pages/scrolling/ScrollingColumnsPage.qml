@@ -220,7 +220,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset width")
                     searchAnchor: "defaultColumnWidthPresetIndex"
-                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template below, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.")
+                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindPreset
                     visible: true
 
@@ -314,7 +314,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset height")
                     searchAnchor: "defaultWindowHeightPresetIndex"
-                    description: i18n("Which height a new window opens at, counted from 1 into the heights of the screen's layout template. Screens with no template of their own use the default template below, and with no template at all the built-in height steps apply.")
+                    description: i18n("Which height a new window opens at, counted from 1 into the heights of the screen's layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in height steps apply.")
                     enabled: newColumnsCard.effectiveHeightKind === root.heightKindPreset
                     visible: true
 
@@ -334,105 +334,6 @@ SettingsFlickable {
                             value: root.settingValue("DefaultWindowHeightPresetIndex", appSettings.scrollingDefaultWindowHeightPresetIndex) + 1
                             when: !heightPresetIndexSpin.editing
                             restoreMode: Binding.RestoreNone
-                        }
-                    }
-                }
-            }
-        }
-
-        // =================================================================
-        // Layout Template Card
-        // =================================================================
-        SettingsCard {
-            Layout.fillWidth: true
-            headerText: i18n("Layout template")
-            searchAnchor: "scrollingDefaultTemplate"
-            collapsible: true
-
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Kirigami.Units.largeSpacing
-                    Layout.rightMargin: Kirigami.Units.largeSpacing
-                    text: i18n("Templates carry the starting columns and the width and height presets the cycling shortcuts step through. Manage them on the Layouts page under Scrolling Templates, and assign one per screen with the layout picker. The template chosen here applies to every scrolling screen without its own assignment.")
-                    font: Kirigami.Theme.smallFont
-                    color: Kirigami.Theme.disabledTextColor
-                    wrapMode: Text.Wrap
-                }
-
-                SettingsRow {
-                    title: i18n("Default template")
-                    searchAnchor: "defaultScrollingTemplate"
-                    description: i18n("Used when a scrolling screen has no template assigned")
-
-                    // `storedValue` is left undefined on purpose: rebuild()
-                    // owns currentIndex so a miss can stay at -1 instead of
-                    // taking WideComboBox's clamp to the leading None.
-                    WideComboBox {
-                        id: defaultTemplateCombo
-
-                        // Templates from the shared layouts model (the
-                        // isScrollingTemplate family), with a leading None.
-                        function rebuild() {
-                            let entries = [
-                                {
-                                    "text": i18n("None"),
-                                    "value": ""
-                                }
-                            ];
-                            const all = settingsController.layouts;
-                            for (let i = 0; i < all.length; i++) {
-                                if (all[i].isScrollingTemplate === true)
-                                    entries.push({
-                                        "text": all[i].displayName,
-                                        "value": all[i].id
-                                    });
-                            }
-                            model = entries;
-                            // Re-resolve AFTER the model swap: indexOfValue
-                            // inside a binding evaluates against the OLD
-                            // model (the combo-derived reset trap).
-                            // A miss stays at -1 rather than snapping to the
-                            // leading None: config still holds the stored id,
-                            // and displayText below names it as missing.
-                            currentIndex = indexOfValue(appSettings.defaultScrollingTemplate);
-                        }
-
-                        textRole: "text"
-                        valueRole: "value"
-                        // Gate the alarm on the layouts model having landed
-                        // (MonitorStatePage's in-flight rule): before it does,
-                        // every stored id resolves to -1, which is an unloaded
-                        // catalogue rather than a missing template. Once the
-                        // model is live the alarm shows even when only the
-                        // leading None row remains — a stored default with no
-                        // surviving template genuinely IS missing.
-                        displayText: currentIndex >= 0 ? currentText : (settingsController.layouts.length > 0 ? i18n("Missing template (%1)", appSettings.defaultScrollingTemplate) : "")
-                        Accessible.name: i18n("Default scrolling template")
-                        onActivated: appSettings.defaultScrollingTemplate = currentValue
-                        // Supersedes WideComboBox's own completion handler on
-                        // purpose: rebuild() assigns the model, whose change
-                        // hooks re-run the width sync, and storedValue stays
-                        // undefined so the base sync never fights rebuild()'s
-                        // ownership of currentIndex.
-                        Component.onCompleted: rebuild()
-
-                        Connections {
-                            function onLayoutsChanged() {
-                                defaultTemplateCombo.rebuild();
-                            }
-
-                            target: settingsController
-                        }
-
-                        Connections {
-                            function onDefaultScrollingTemplateChanged() {
-                                defaultTemplateCombo.currentIndex = defaultTemplateCombo.indexOfValue(appSettings.defaultScrollingTemplate);
-                            }
-
-                            target: appSettings
                         }
                     }
                 }

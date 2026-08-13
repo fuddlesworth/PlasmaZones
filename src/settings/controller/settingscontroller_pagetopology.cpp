@@ -383,11 +383,14 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::scrollingGroup(), CD::defaultWindowHeightKindKey()},
              {CD::scrollingGroup(), CD::defaultWindowHeightValueKey()},
              {CD::scrollingGroup(), CD::defaultWindowHeightPresetIndexKey()},
-             {CD::scrollingGroup(), CD::defaultTemplateKey()},
              // The two global preset lists are deliberately absent: the editor
              // rows for them were removed from this page, and the lists are
              // template-authored now (the config keys remain as the engine's
-             // fallback vocabulary), so no page owns them.
+             // fallback vocabulary), so no page owns them. The default
+             // template key is absent for the same reason: its row left this
+             // page for the Layouts page, where a template is made default
+             // through the card's own context menu alongside the other two
+             // families' defaults.
          }},
         // The Tabs leaf owns the whole Scrolling.TabIndicator subtree and
         // nothing else, so its per-page Reset covers the indicator's

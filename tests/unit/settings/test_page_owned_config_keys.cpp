@@ -66,6 +66,14 @@ const QSet<QString>& deliberatelyUnowned()
         // pages' Reset rewrite values the pages do not edit.
         qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetColumnWidthsKey()),
         qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetWindowHeightsKey()),
+        // The default template, for the same reason and by the same route:
+        // the Columns page's editor row went away, and a template is made
+        // default from the Layouts page's own context menu now, beside the
+        // default layout and the default algorithm. The Layouts page is not
+        // part of the per-page dirty/Reset/Discard manifest at all (it writes
+        // its settings immediately), so no page can own this key without
+        // giving a Reset the power to rewrite a value that page never edits.
+        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultTemplateKey()),
     };
     return kSet;
 }
