@@ -319,9 +319,10 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
     // guards it anyway (same cheap check both siblings apply to their tiled
     // side), so a seeding path that violates the premise degrades to a
     // no_target refusal instead of "activating" a hidden window. That
-    // refusal is reachable during the minimize→float conversion's retry
-    // window, where the strip briefly holds a minimized tile: the press
-    // now refuses there instead of activate-restoring the tile. The
+    // refusal is reachable during the minimize→float conversion's debounce
+    // window plus the D-Bus round trip, where the strip briefly holds a
+    // minimized tile: the press refuses there instead of
+    // activate-restoring the tile. The
     // float side filters minimized windows on both the remembered focus and
     // the fallback pool. Fallback order is the sorted floating set —
     // ARBITRARY (lowest id first), carrying no recency or position meaning;

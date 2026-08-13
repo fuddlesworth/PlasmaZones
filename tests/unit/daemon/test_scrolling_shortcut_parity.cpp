@@ -255,7 +255,9 @@ private Q_SLOTS:
             // The uncatalogued fallback yields category "Other" at order 99
             // with mode "all" and NO description, so a bare category/mode
             // check would stay green with the catalog entry deleted. Pin
-            // the order (General is 0) and the tooltip's presence instead.
+            // the category and order (General is 0) and the tooltip's
+            // presence instead.
+            QCOMPARE(row.value(QStringLiteral("category")).toString(), QStringLiteral("General"));
             QCOMPARE(row.value(QStringLiteral("categoryOrder")).toInt(), 0);
             QVERIFY2(!row.value(QStringLiteral("description")).toString().isEmpty(),
                      "The cheatsheet row lost its catalog entry (the Other-bucket fallback carries no tooltip).");

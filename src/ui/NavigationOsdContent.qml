@@ -190,9 +190,9 @@ Item {
 
             // The floating/tiling focus switch (all three engines) and
             // scrolling's explicit float verb: the layer asked for has no
-            // window to take focus (the focused window is already there, or
-            // the other layer is
-            // empty). Exact copy for the two switch legs; approximate for
+            // window to take focus (the focused window is already there,
+            // or the other layer is empty).
+            // Exact copy for the two switch legs; approximate for
             // moveFocusedToFloating's already-floating refusal, where it is
             // still closer than "Floating is unavailable" was (a per-site
             // token would be the exact fix, at the cost of a producer
