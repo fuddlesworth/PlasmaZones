@@ -826,6 +826,16 @@ PhosphorUi.SettingsAppWindow {
         id: flatTitleLabelsObject
 
         readonly property string windowAppearance: i18n("Appearance")
+        // The per-mode library leaves read fine nested under their mode
+        // section, but in the flat rail a bare "Layouts" / "Library" /
+        // "Templates" row floats with no parent to bind it to its mode —
+        // qualify each with its mode name. "Tiling Algorithms" rather than
+        // "Tiling Library": the Library-vs-Algorithm disambiguation only
+        // matters beside the advanced-only Algorithm page, which the flat
+        // rail never shows.
+        readonly property string snappingLayouts: i18n("Snapping Layouts")
+        readonly property string tilingLibrary: i18n("Tiling Algorithms")
+        readonly property string scrollingTemplates: i18n("Scrolling Templates")
     }
 
     // Constant, so declarative alongside its siblings rather than an
@@ -833,7 +843,10 @@ PhosphorUi.SettingsAppWindow {
     sidebar.searchEnabled: false
     sidebar.flattenTree: !settingsController.advancedMode
     sidebar.flatTitleOverrides: ({
-            "window-appearance": flatTitleLabelsObject.windowAppearance
+            "window-appearance": flatTitleLabelsObject.windowAppearance,
+            "snapping-layouts": flatTitleLabelsObject.snappingLayouts,
+            "tiling-library": flatTitleLabelsObject.tilingLibrary,
+            "scrolling-templates": flatTitleLabelsObject.scrollingTemplates
         })
 
     // Simple/advanced mode toggle, pinned at the bottom of the sidebar — it

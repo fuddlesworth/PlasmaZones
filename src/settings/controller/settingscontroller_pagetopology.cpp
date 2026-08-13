@@ -175,14 +175,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // its collapsed badge lights if any of them is dirty.
         {QStringLiteral("appearance"), kAnimationsAllLeaves + kDecorationAllLeaves},
         {QStringLiteral("decorations"), kDecorationAllLeaves},
-        // Top-level inline-collapsible parents must also propagate
-        // dirty state from their leaves — without these entries the
-        // sidebar's collapsed dirty badge stays cold even when a
-        // child page is dirty. Mirrors the registry topology in
-        // buildApplicationController() in the sibling _pageregistration.cpp.
-        {QStringLiteral("display"), {QStringLiteral("virtualscreens")}},
-        // No "rules" entry — Rules is a top-level leaf so its
-        // dirty state propagates without a parent-bucket intermediary.
+        // No "rules" or "virtualscreens" entries — both are top-level
+        // leaves, so their dirty state propagates without a parent-bucket
+        // intermediary.
     };
     return groups;
 }

@@ -76,7 +76,7 @@ void SettingsController::buildApplicationController()
     // Top-level entries. The rail reads top → bottom as three blocks split by
     // two dividers: (1) top/global — Overview (status dashboard), Profiles
     // (which frames everything below it) + General (global settings);
-    // (2) per-feature configuration — Display, Placement, Appearance
+    // (2) per-feature configuration — Virtual Screens, Placement, Appearance
     // (which parents Decorations and Animations), Rules;
     // (3) tools & meta — Editor, About.
     // `divider` flags mark only those two seams (after General, after Rules)
@@ -99,10 +99,16 @@ void SettingsController::buildApplicationController()
             QStringLiteral("configure"), /*collapsible=*/false, /*divider=*/true);
 
     // ── Block 2: per-feature configuration ──
-    regVirtual(QStringLiteral("display"), QString(), PhosphorI18n::tr("Display"), QString(),
-               QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
+    // Virtual Screens is a top-level leaf. It used to sit under a "Display"
+    // category, but once the layout library moved into the placement modes
+    // that category held this single child, and a one-child dropdown is pure
+    // friction.
+    regVirtual(QStringLiteral("virtualscreens"), QString(), PhosphorI18n::tr("Virtual Screens"),
+               QStringLiteral("pages/screens/VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
     // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
-    // inline-collapsible category, matching Display. Divider after it (i.e.
+    // inline-collapsible category. Divider after it (i.e.
     // above Animations) sets the placement categories apart from the
     // Animations / Rules pages that follow.
     regVirtual(QStringLiteral("placement"), QString(), PhosphorI18n::tr("Placement"), QString(),
@@ -175,16 +181,6 @@ void SettingsController::buildApplicationController()
     // showing it twice reads as two views of the same thing.
     regVirtual(QStringLiteral("scrolling"), QStringLiteral("placement"), PhosphorI18n::tr("Scrolling"), QString(),
                QStringLiteral("distribute-horizontal-equal"));
-
-    // Display children. The layout library moved out of Display: each
-    // placement mode owns its own library page below (Snapping → Layouts,
-    // Tiling → Library, Scrolling → Templates), so Display is purely
-    // screen concerns now — and auto-hides in simple mode, where its one
-    // remaining child is advanced-only.
-    regVirtual(QStringLiteral("virtualscreens"), QStringLiteral("display"), PhosphorI18n::tr("Virtual Screens"),
-               QStringLiteral("pages/screens/VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"),
-               /*collapsible=*/false,
-               /*divider=*/false, AdvancedOnly);
 
     // Snapping children — organised by SUBJECT, each carrying its own Behavior
     // and Appearance pages: the drag Overlay, the edge Zone-Selector popup, and
