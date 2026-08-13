@@ -1660,7 +1660,12 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // placement. Paint nothing until then. The deadline is the safety net
     // — if the reposition never lands, release and paint normally rather
     // than risk a permanently invisible window.
-    if (auto supIt = m_restoreSuppress.find(w); supIt != m_restoreSuppress.end()) {
+    // The !m_capturingSnapshot term matches every sibling preamble block, and
+    // here it also guards a MUTATION: this block re-stamps the transition
+    // clock and returns without drawing, which inside a capture would latch a
+    // cleared FBO as the snapshot. Unreachable today (the closed draw chain,
+    // see the guard above), so this is symmetry plus insurance.
+    if (auto supIt = m_restoreSuppress.find(w); !m_capturingSnapshot && supIt != m_restoreSuppress.end()) {
         // Tick per-frame book-keeping for any in-flight transition so the
         // first post-suppression paint doesn't see a stale clock. Open
         // shaders (window.open: bounce, fly-in) are installed in
@@ -1702,11 +1707,13 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // its own alpha. See the prePaintWindow cache comment for the one
     // remaining shader consumer (the transition fallback).
 
-    // Re-entrancy guard: captureOldWindowSnapshot below calls
-    // effects->drawWindow, which walks the chain back through our
-    // OffscreenEffect::drawWindow (to render the raw window into our capture
-    // FBO). Don't apply the C++ transform or any morph processing during that
-    // raw pass — just continue the chain plainly.
+    // Capture-pass guard. Under KWin's current closed draw chain a capture's
+    // effects->drawWindow cannot re-enter paintWindow at all (the draw chain
+    // terminates in finalDrawWindow; only apply() and our drawWindow override
+    // are genuinely re-entered, and their guards are load-bearing) — this arm
+    // is insurance against a third-party effect whose drawWindow override
+    // calls effects->paintWindow, which nothing in KWin forbids. If it ever
+    // runs, continue the chain plainly with no transform or morph processing.
     if (m_capturingSnapshot) {
         KWin::effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
         return;

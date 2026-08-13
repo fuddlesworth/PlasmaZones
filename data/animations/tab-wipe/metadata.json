@@ -4,7 +4,7 @@
     "description": "Sweeps the tab you picked across the column over the one you left, with a soft edge you can widen into a gradient or tighten to a hard line. Neither tab moves, so the column stays put while its contents change.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "category": "Wipe",
+    "category": "Reveal",
     "appliesTo": ["tab"],
     "fragmentShader": "effect.frag",
     "parameters": [

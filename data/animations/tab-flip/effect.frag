@@ -24,6 +24,14 @@
 // p_vertical / p_shade (customParams[0].xy) come from metadata.json.
 
 vec4 pTransition(vec2 uv, float t) {
+    // No snapshot of the outgoing tab: bail to the arriving tab at the
+    // fragment's own uv rather than flipping a card that shows the arriving
+    // content on BOTH faces (oldColor's fallback substitutes at the squashed
+    // cardUv, which reads as the new tab turning over onto itself).
+    if (iHasOldWindow == 0) {
+        return surfaceColor(uv);
+    }
+
     // Clamped: past either end the card would pass through edge-on a second
     // time and turn inside out. A flip is exactly one half-turn.
     float p = clamp(t, 0.0, 1.0);
@@ -49,6 +57,14 @@ vec4 pTransition(vec2 uv, float t) {
 
     // A card turning away from the light loses it. Deepest at the edge-on
     // frame and gone at both ends, so the tab settles at its true colours.
+    //
+    // The shade multiplies the WHOLE premultiplied vec4 — a coverage fade,
+    // not a pigment darkening. That is the deliberate family idiom for
+    // shading premultiplied content (fold and ripple-snap document the same
+    // choice for their valleys: it keeps the rgb <= a invariant intact for
+    // free), and here the wallpaper the fade admits is the same wallpaper
+    // the narrowing card is geometrically vacating anyway. An rgb-only dim
+    // would diverge from those siblings, not fix anything.
     float shade = mix(1.0, 1.0 - clamp(p_shade, 0.0, 1.0), 1.0 - open);
 
     return face * boundaryMask(cardUv) * shade;

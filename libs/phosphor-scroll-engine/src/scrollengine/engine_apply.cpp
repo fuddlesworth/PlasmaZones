@@ -531,9 +531,20 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // top), so a remembered rect at or below it was a park and one above it
     // was a real placement.
     const int parkTop = unionBottom + 1 + kParkMargin;
+    // BOTH pairing predicates demand POSITIVE evidence, symmetrically: an
+    // entry must exist AND sit on the right side of the park line. A missing
+    // entry means neither — onWindowResized's refused-ack arm drops a live
+    // tile's rect memory on purpose (see the m_parkedScrollEdge contract
+    // note below), and reading "no memory" as "was on screen" let such a tab
+    // be named as the outgoing half of a swap that never happened, or shadow
+    // the genuinely-outgoing sibling in a 3+ tab column.
     const auto wasParked = [&](const QString& windowId) {
         const auto it = m_lastAppliedRect.constFind(windowId);
         return it != m_lastAppliedRect.constEnd() && it->top() >= parkTop;
+    };
+    const auto wasOnScreen = [&](const QString& windowId) {
+        const auto it = m_lastAppliedRect.constFind(windowId);
+        return it != m_lastAppliedRect.constEnd() && it->top() < parkTop;
     };
     for (const ResolvedColumn& column : resolved.columns) {
         // TAB SWITCH pairing. A tabbed column shows one tile and parks the
@@ -552,15 +563,33 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // The pairing needs BOTH halves to be genuine, which is what keeps it
         // to real switches: a tile that is hidden now but was on screen last
         // batch, and (at the emit below) a tile that is shown now but was
-        // parked last batch. Tabbing a column for the FIRST time hides tiles
-        // that were all on screen, but the tile it leaves showing was on
-        // screen too, so no pairing is emitted — correctly, since nothing was
-        // swapped. A column scrolling back into view has parked hidden tiles,
-        // which fails the outgoing half for the same kind of reason.
+        // parked last batch. Tabbing a column for the FIRST time normally
+        // hides tiles that were all on screen while the tile it leaves
+        // showing was on screen too, so no pairing is emitted — nothing was
+        // swapped. ONE exception, deliberate: under respectMinimumSize a
+        // Normal stack can overflow the work area and park its trailing
+        // tiles, so first-time tabbing such a column CAN pair (the shown tab
+        // was overflow-parked, several siblings depart at once). The
+        // first-match pick below is then visually arbitrary and deliberately
+        // so — every candidate genuinely just vanished from the column's
+        // rect, so any of them is a legitimate cross-fade source and refusing
+        // to pick would cost the transition for no correctness gain. A column
+        // scrolling back into view has parked hidden tiles, which fails the
+        // outgoing half's positive on-screen requirement.
         QString tabFrom;
         if (column.tabbed) {
             for (const ResolvedTile& t : column.tiles) {
-                if (t.hidden && !wasParked(t.windowId)) {
+                // The dragged window's rect memory is deliberately frozen
+                // (the emit loop below skips it), so it is not evidence —
+                // the same doctrine the viewDelta evidence loop states: the
+                // loops must agree about which rects are trustworthy. Without
+                // this skip a tab dragged out of its column mid-switch could
+                // be named as the swap's source while visibly floating under
+                // the cursor.
+                if (!m_interactiveDragWindow.isEmpty() && t.windowId == m_interactiveDragWindow) {
+                    continue;
+                }
+                if (t.hidden && wasOnScreen(t.windowId)) {
                     tabFrom = t.windowId;
                     break;
                 }
@@ -842,8 +871,13 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // tile is shown now and was parked last batch, and a sibling made
             // the opposite trip. Named on the ARRIVING entry because that is
             // the window the compositor animates — the outgoing one is already
-            // gone by the time anything paints.
-            if (!tabFrom.isEmpty() && !tile.hidden && wasParked(tile.windowId)) {
+            // gone by the time anything paints. The !parkedNow term matches
+            // the two neighbouring per-entry fields: a switch inside a column
+            // that leaves the screen in the SAME batch has an arriving tab
+            // with no on-screen rect, and naming a source for it made the
+            // effect install a leg and capture a snapshot for a cross-fade
+            // nothing can see.
+            if (!tabFrom.isEmpty() && !tile.hidden && !parkedNow && wasParked(tile.windowId)) {
                 obj[QLatin1String("tabFrom")] = tabFrom;
             }
             // A PARKED tile is not carried by the view. Its committed rect is

@@ -19,10 +19,10 @@ namespace PlasmaZones {
 /// (@c buildOsdConfig / @c buildLayoutPickerConfig /
 /// @c buildZoneSelectorConfig / @c buildSnapAssistConfig /
 /// @c buildCheatsheetConfig; a
-/// @c tryBeginShaderForEvent(...) call under
-/// @c kwin-effect/plasmazoneseffect/ (window_lifecycle for the open, close and
-/// focus legs, window_connections for move and maximize, daemon_apply for
-/// minimize); or a
+/// @c tryBeginShaderForEvent(...) call (window_lifecycle for the open, close
+/// and focus legs, window_connections for move and maximize, daemon_apply for
+/// minimize — all under @c kwin-effect/plasmazoneseffect/ — and
+/// @c kwin-effect/tilinghandler/tiling.cpp for the tab-switch leg); or a
 /// @c resolveShaderWithDefault(tree, ...) call, which drives the
 /// scrolling strip's view pass from the tiling batch path
 /// (@c kwin-effect/tilinghandler/tiling.cpp), the
@@ -102,8 +102,9 @@ inline QStringList shaderConsumedLeafEventPaths()
         // scrolling sibling above: the tiling batch path installs it through
         // tryBeginShaderForEvent on the ARRIVING tab and seeds uOldWindow from
         // a capture of the outgoing one (tilinghandler/tiling.cpp), so the two
-        // tabs cross-fade instead of hard-cutting. Its shaders are the
-        // ordinary single-surface appearance class.
+        // tabs cross-fade instead of hard-cutting. Its shaders are the opt-in
+        // two-texture tab class (appliesTo ["tab"]), which resolves in
+        // isolation — see shaderPathResolvesInIsolation.
         PP::ScrollingTabSwitch,
         // Show-desktop peek — DesktopTransitionManager again (the entry two
         // above; the strip block in between has its own manager), resolved in

@@ -248,8 +248,11 @@ QString parentPath(const QString& path)
 
 QStringList allEventClassTokens()
 {
-    return {EventClassGeometry, EventClassAppearance, EventClassDesktop,
-            EventClassMove,     EventClassStrip,      EventClassTab};
+    // Built once: callers iterate this behind picker filters and validators,
+    // and the vocabulary cannot change at runtime.
+    static const QStringList tokens{EventClassGeometry, EventClassAppearance, EventClassDesktop,
+                                    EventClassMove,     EventClassStrip,      EventClassTab};
+    return tokens;
 }
 
 QString eventClassForPath(const QString& path)

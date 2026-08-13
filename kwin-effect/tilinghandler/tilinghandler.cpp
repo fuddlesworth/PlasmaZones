@@ -380,6 +380,13 @@ bool TilingHandler::atScrollPark(KWin::EffectWindow* w) const
         // animated leg, which is what a non-parked window should get.
         return false;
     }
+    if (!KWin::effects) {
+        // The doc promises fail-closed on "no resolvable outputs", and every
+        // sibling m_scrollVisualDelta damage pair guards this pointer — an
+        // unguarded deref in compositor code is a session crash, not a wrong
+        // answer.
+        return false;
+    }
     QRect unionRect;
     for (const KWin::LogicalOutput* output : KWin::effects->screens()) {
         unionRect = unionRect.united(QRect(output->geometry()));

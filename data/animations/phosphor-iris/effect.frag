@@ -76,8 +76,12 @@ vec4 pTransition(vec2 uv, float t) {
     // states for its weights.
     float p = clamp(t, 0.0, 1.0);
 
-    vec2 anchor = max(iAnchorSize, vec2(1.0));
-    float aspect = anchor.x / anchor.y;
+    // Aspect of the rect uv ACTUALLY spans — the expanded rect (iResolution),
+    // not the frame. This is an anchor-extent pack, so uv [0,1] covers frame
+    // plus decoration shadow; deriving the correction from the frame left the
+    // iris elliptical by the shadow-padding ratio on decorated windows.
+    vec2 res = max(iResolution, vec2(1.0));
+    float aspect = res.x / res.y;
 
     // ── Aspect-corrected radial coordinate: rr is 0 at the column's centre
     // and 1 at its corners, so the iris stays circular on any column shape
@@ -96,7 +100,12 @@ vec4 pTransition(vec2 uv, float t) {
     // that push the boundary outward in petals and so reach ahead of the ring
     // into the region that has not changed yet. Both distortions are bounded,
     // which is what lets the slack below guarantee clean endpoints. ──
-    float n = fbm(pos * grain * 4.0 / max(maxR, 1.0e-4) * 0.5 + 7.3, 4, 2.0);
+    // Normalised by the 4-octave fbm ceiling (0.9375) before centring, the
+    // same correction phosphor-gate applies to its 3-octave call: centring
+    // the raw sum on 0.5 leaves a small permanent negative bias in the
+    // wobble, and the two packs should not disagree about a documented
+    // concern.
+    float n = fbm(pos * grain * 4.0 / max(maxR, 1.0e-4) * 0.5 + 7.3, 4, 2.0) / 0.9375;
     float tendril = 0.0;
     if (arms >= 0.5) {
         float ang = atan(pos.y, pos.x);
@@ -115,17 +124,24 @@ vec4 pTransition(vec2 uv, float t) {
     // How far ahead of the ring the outgoing tab starts draining, and how far
     // behind it the embers survive. Tied to the rim softness rather than given
     // its own parameter, so a softer rim automatically gets a longer approach
-    // and the two never separate into a visible gap. Capped at 0.25 because at
-    // maximum softness an uncapped reach would swell the slack below past 1.5
-    // and the ring would cross the whole column in a third of the leg.
+    // and the two never separate into a visible gap. Capped at 0.25 so the
+    // reach term cannot come to dominate the slack at maximum softness.
     float reach = min(soft * 2.0, 0.25);
 
-    // Expand p past [0, 1] by the softness, the worst-case wobble AND the
-    // reach, so every one of the three effects is fully off at both endpoints.
-    // The 3x on soft is phosphor-ignite's gaussian margin: it takes the rim
-    // glow's exp(-md*md) down to e^-9 rather than merely taking the reveal
-    // smoothstep to its end, which the bare soft would do while leaving a
-    // visible ring parked on a settled tab.
+    // Expand p past [0, 1] by the gaussian rim margin, the worst-case wobble
+    // AND the reach, so every one of the three effects is fully off at both
+    // endpoints. The 3x on soft is phosphor-ignite's gaussian margin: it takes
+    // the rim glow's exp(-md*md) down to e^-9 rather than merely taking the
+    // reveal smoothstep to its end, which the bare soft would do while leaving
+    // a visible ring parked on a settled tab.
+    //
+    // THE COST, stated rather than hidden: front carries the FULL margin, so
+    // the reveal itself sits idle while the ring is still off the column —
+    // about a fifth of the leg at each end at the defaults, more at maximum
+    // softness. That is the deliberate trade for endpoint frames that are
+    // bit-clean of glow; splitting the padding (reveal padded by soft only,
+    // rim envelope by 3x) would use more of the leg but was rejected because
+    // the shipped motion was tuned and approved against this timing.
     float slack = 3.0 * soft + 0.21 * turb + reach;
     float front = p * (1.0 + 2.0 * slack) - slack;
 
@@ -153,9 +169,23 @@ vec4 pTransition(vec2 uv, float t) {
     // band. Falling back to the undisplaced sample keeps coverage intact and
     // still rejects the clamp-to-edge smear, which is the only thing the mask
     // was ever protecting against.
-    float bm = boundaryMask(suv);
-    vec4 newS = mix(surfaceColor(uv), surfaceColor(suv), bm);
-    vec4 oldS = mix(oldColor(uv), oldColor(suv), bm);
+    // Fetch cost gate: the displaced pair doubles both samplers' fetches, and
+    // rim (exp of a squared ratio) is effectively zero everywhere except the
+    // thin ring — for the vast majority of fragments suv == uv and the mix is
+    // an identity bought at two redundant texture reads. The rim test is
+    // coherent across the quad away from the ring, so the branch is nearly
+    // free where it matters; with shimmer at zero it removes the doubled
+    // fetch over the whole surface for the whole leg.
+    vec4 newS;
+    vec4 oldS;
+    if (rim * clamp(p_shimmer, 0.0, 1.0) < 1.0e-4) {
+        newS = surfaceColor(uv);
+        oldS = oldColor(uv);
+    } else {
+        float bm = boundaryMask(suv);
+        newS = mix(surfaceColor(uv), surfaceColor(suv), bm);
+        oldS = mix(oldColor(uv), oldColor(suv), bm);
+    }
 
     // ── Drain: the outgoing tab sinks toward the family's navy silhouette as
     // the ring closes on it, so the swap reads as the old picture losing its
@@ -185,7 +215,11 @@ vec4 pTransition(vec2 uv, float t) {
     // the family's per-frame sparkle. Coverage-weighted so the light stays
     // inside the window silhouette instead of spilling into the gaps. ──
     vec3 flux = fluxGradient(clamp(rr * 1.1, 0.0, 1.0));
-    float sparkle = 0.85 + 0.30 * niriHash(floor(uv * anchor / 2.0)
+    // Grain on a grid of two LOGICAL pixels of the drawn quad (iResolution is
+    // the rect uv spans; on a 2x display the cell is four device px, accepted
+    // for a shimmer). The first version mixed spaces (expanded-rect uv times
+    // the frame size), skewing the cell by the shadow ratio.
+    float sparkle = 0.85 + 0.30 * niriHash(floor(uv * res / 2.0)
                                            + floor(float(iFrame) * 0.2));
     float lift = 0.7 + 0.6 * tendril;
     col.rgb += flux * rim * lift * col.a * clamp(p_glow, 0.0, 2.0) * sparkle;
@@ -203,15 +237,19 @@ vec4 pTransition(vec2 uv, float t) {
         // sparks even before the slack margin is taken into account.
         float mid = clamp(p * (1.0 - p) * 4.0, 0.0, 1.0);
         float wake = (1.0 - clamp(m / max(reach, 1.0e-3), 0.0, 1.0)) * step(0.0, m);
-        float h = niriHash(floor(uv * anchor / 3.0) + floor(p * 40.0) * 0.37);
+        float h = niriHash(floor(uv * res / 3.0) + floor(p * 40.0) * 0.37);
         float spark = step(0.94, h) * wake * mid * sparks;
         col.rgb += flux * spark * 1.4 * col.a;
     }
 
-    // Bound the additive emissive. No alpha adjustment: unlike the open/close
-    // packs, col.a here is already the window's own coverage rather than a
-    // fraction of it being revealed, so there is nothing to raise it toward
-    // and raising it at all would push an opacity-ruled window back to opaque.
-    col.rgb = clamp(col.rgb, 0.0, 1.0);
+    // Bound the additive emissive against the ACTUAL coverage, not 1.0: on a
+    // rounded corner or a translucent client area the rim and sparks could
+    // otherwise leave rgb above alpha, which blends brighter than opaque over
+    // whatever is behind the column. No alpha adjustment: unlike the
+    // open/close packs, col.a here is already the window's own coverage
+    // rather than a fraction of it being revealed, so there is nothing to
+    // raise it toward and raising it at all would push an opacity-ruled
+    // window back to opaque.
+    col.rgb = clamp(col.rgb, vec3(0.0), vec3(max(col.a, 0.0)));
     return col;
 }

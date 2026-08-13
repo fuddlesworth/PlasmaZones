@@ -124,8 +124,8 @@ inline QVariantMap shaderProfileToMap(const PhosphorAnimationShaders::ShaderProf
 /// header so sibling helpers in this namespace can call it without
 /// depending on unity-build TU merging.
 ///
-/// Leaf-isolated paths (shaderPathResolvesInIsolation, today the
-/// interactive-drag leaf window.movement.move) are EXCLUDED even though
+/// Leaf-isolated paths (shaderPathResolvesInIsolation — the drag and
+/// tab-switch leaves) are EXCLUDED even though
 /// they are prefix-descendants: their resolve() never walks the ancestor,
 /// so an override there cannot shadow @p path. Counting one would show a
 /// false "shadowing children" warning on the ancestor card, and the

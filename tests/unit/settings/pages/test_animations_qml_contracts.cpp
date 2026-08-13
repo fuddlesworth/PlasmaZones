@@ -6,23 +6,29 @@
  * @brief Contracts between the animations settings QML and its C++ controller,
  *        pinned by parsing the QML source itself.
  *
- * Three things the compiler cannot check, because QML resolves names at
+ * Contracts the compiler cannot check, because QML resolves names at
  * runtime and the settings app has no QML test harness:
  *
  *   - every `animationsPage.<name>` the QML calls exists on the controller's
  *     meta-object, so a rename on either side fails here rather than as a
- *     silent no-op in the running app;
+ *     silent no-op in the running app (and likewise for the shader browser's
+ *     bridge calls);
  *   - every event path the simple Animations page hosts falls inside the C++
  *     page-scope roots, so a per-page Reset covers what the page shows;
  *   - the Override toggle's ON branch writes nothing, and its OFF branch closes
  *     the timing editor only when the clear was accepted. Both live entirely in
- *     QML and so cannot be observed by driving the controller from C++.
+ *     QML and so cannot be observed by driving the controller from C++;
+ *   - the shader browser's `_typeCatalog` declares exactly the event-class
+ *     vocabulary (every class present, the synthetic universal bucket absent,
+ *     keying independent of declaration order).
  *
  * Split out of `test_animations_page_controller.cpp`, which owns the
  * controller's own behaviour. These slots need `P_SOURCE_DIR` to read the
  * source tree; that is what makes them a separate concern rather than a
  * separate file for size alone.
  */
+
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QTest>
 
@@ -371,12 +377,17 @@ private Q_SLOTS:
         QVERIFY2(end > start, "could not find the end of the _typeCatalog block (_universalKey moved?)");
         const QString block = src.mid(start, end - start);
 
-        // Mirrors PhosphorAnimation::ProfilePaths::allEventClassTokens().
-        // "universal" is deliberately absent: it is the synthetic order-0
-        // bucket the helpers resolve, not a declared class.
-        const QStringList classTokens{QStringLiteral("geometry"), QStringLiteral("appearance"),
-                                      QStringLiteral("desktop"),  QStringLiteral("move"),
-                                      QStringLiteral("strip"),    QStringLiteral("tab")};
+        // The C++ SSOT itself, not a mirror: a hand-copied literal here passed
+        // green when a class was added to the vocabulary and NEITHER the QML
+        // catalog nor the copy was updated — the exact failure this slot
+        // exists to prevent. Reading the SSOT makes a new class fail here
+        // until _typeCatalog grows its entry. "universal" is deliberately
+        // absent from the vocabulary: it is the synthetic order-0 bucket the
+        // helpers resolve, not a declared class — pinned below.
+        const QStringList classTokens = PhosphorAnimation::ProfilePaths::allEventClassTokens();
+        QVERIFY(!classTokens.contains(QStringLiteral("universal")));
+        QVERIFY2(!block.contains(QStringLiteral("\"key\": \"universal\"")),
+                 "_typeCatalog must not declare the synthetic universal bucket as a class entry");
         QStringList missing;
         for (const QString& token : classTokens) {
             if (!block.contains(QStringLiteral("\"key\": \"") + token + QLatin1Char('"'))) {
@@ -453,7 +464,12 @@ private Q_SLOTS:
                                                 QStringLiteral("ShaderSetCard.qml")};
         {
             static const QRegularExpression bridgeUseRe(QStringLiteral("\\bbridge\\."));
-            QDirIterator sweep(shadersDir, QStringList{QStringLiteral("*.qml")}, QDir::Files);
+            // Subdirectories, matching the routeFiles walk: a browser-route
+            // file added in a subfolder must be visible to this completeness
+            // sweep, or the guard goes silent on exactly the file it exists
+            // to catch.
+            QDirIterator sweep(shadersDir, QStringList{QStringLiteral("*.qml")}, QDir::Files,
+                               QDirIterator::Subdirectories);
             while (sweep.hasNext()) {
                 const QString path = sweep.next();
                 if (routeFiles.contains(path) || setsRouteExclusions.contains(QFileInfo(path).fileName())) {

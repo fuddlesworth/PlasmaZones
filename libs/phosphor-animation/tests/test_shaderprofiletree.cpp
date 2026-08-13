@@ -447,9 +447,17 @@ private Q_SLOTS:
     void testShaderPathResolvesInIsolation()
     {
         // The isolation predicate is the SSOT shared by resolve() and the
-        // settings shadowing-children walk: exactly the interactive-drag
-        // leaf, never its parent, siblings, or unrelated paths.
+        // settings shadowing-children walk: the interactive-drag leaf and the
+        // scrolling tab swap, never their parents, siblings, or unrelated
+        // paths.
         QVERIFY(PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowMove));
+        // The tab leaf's membership is what keeps a strip-class pack set on
+        // `scrolling` from being inherited by a leaf whose applicability gate
+        // would then refuse it at install — the leaf would animate nothing
+        // while settings showed an inherited "current shader" that never
+        // runs. Dropping the membership compiles and passes everything else,
+        // which is exactly why it is pinned here.
+        QVERIFY(PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::ScrollingTabSwitch));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowMovement));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowSnapIn));
         QVERIFY(!PhosphorAnimationShaders::shaderPathResolvesInIsolation(PP::WindowOpen));

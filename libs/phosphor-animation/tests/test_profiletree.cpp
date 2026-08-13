@@ -104,7 +104,6 @@ private Q_SLOTS:
     void testEventClassForTabSwitchPath()
     {
         QCOMPARE(PP::eventClassForPath(PP::ScrollingTabSwitch), PP::EventClassTab);
-        QVERIFY(PP::eventClassForPath(PP::ScrollingTabSwitch) != PP::EventClassStrip);
         // Its ancestor keeps the strip class, which is exactly why the page
         // hosting both offers no cascade parent row.
         QCOMPARE(PP::eventClassForPath(PP::Scrolling), PP::EventClassStrip);
@@ -349,6 +348,35 @@ private Q_SLOTS:
             const Profile composed = tree.overlayChainOnto(leaf, animatorGlobal);
             QVERIFY2(composed.duration.has_value(), qPrintable(leaf));
             QCOMPARE(*composed.duration, 500.0);
+            QVERIFY2(std::dynamic_pointer_cast<const Spring>(composed.curve) != nullptr, qPrintable(leaf));
+        }
+    }
+
+    // MOTION inheritance reaches BOTH scrolling leaves — including the tab
+    // swap, whose SHADER resolve is leaf-isolated. The asymmetry is the
+    // load-bearing contract: shaderPathResolvesInIsolation pulls the tab leaf
+    // out of the SHADER tree's walk-up (its ancestor's strip pack is provably
+    // wrong for it) while the motion ProfileTree carries no isolation
+    // predicate at all, so a curve or duration set on `scrolling` legitimately
+    // times both children. This pin is what catches someone "fixing" the
+    // motion tree by copying the shader tree's isolation across.
+    void testOverlayChainOntoScrollingAllReachesBothLeaves()
+    {
+        ProfileTree tree;
+
+        Profile scrollingAll;
+        scrollingAll.duration = 420.0;
+        scrollingAll.curve = std::make_shared<Spring>(Spring::snappy());
+        tree.setOverride(PP::Scrolling, scrollingAll);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.curve = std::make_shared<Easing>();
+
+        for (const QString& leaf : {PP::ScrollingView, PP::ScrollingTabSwitch}) {
+            const Profile composed = tree.overlayChainOnto(leaf, animatorGlobal);
+            QVERIFY2(composed.duration.has_value(), qPrintable(leaf));
+            QCOMPARE(*composed.duration, 420.0);
             QVERIFY2(std::dynamic_pointer_cast<const Spring>(composed.curve) != nullptr, qPrintable(leaf));
         }
     }

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is around 1600 lines, past the
+// FILE-SIZE EXCEPTION (sanctioned): this file is around 1800 lines, past the
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already

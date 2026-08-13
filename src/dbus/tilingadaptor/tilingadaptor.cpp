@@ -190,6 +190,8 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // visual position above.
         if (!entry.floating) {
             entry.tabFrom = obj.value(QLatin1String("tabFrom")).toString();
+        } else if (obj.contains(QLatin1String("tabFrom"))) {
+            qCDebug(lcDbusTiling) << "relayTileRequestsJson: dropping tabFrom on floating entry" << entry.windowId;
         }
         // The protocol type ships its own validator (empty windowId /
         // screenId, degenerate rect, a tabFrom naming its own window) — run

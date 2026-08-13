@@ -1,7 +1,7 @@
 {
     "id": "tab-slide",
     "name": "Tab Slide",
-    "description": "Pushes the tab you left out of the column while the one you picked follows it in, like sliding a card out of a stack and the next one into its place. Set the direction to match where the tab bar sits.",
+    "description": "Pushes the tab you left out of the column while the one you picked follows it in, like sliding a card out of a stack and the next one into its place. The stronger of the two direction settings picks the axis, so the slide is horizontal or vertical, and you can point it at whichever edge the tab bar sits on.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Slide",

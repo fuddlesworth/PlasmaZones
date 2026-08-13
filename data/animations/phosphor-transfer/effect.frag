@@ -32,14 +32,24 @@
 // add a little coverage of their own on top, because a tab with rounded corners
 // or a transparent client area has no surface alpha there for them to ride.
 //
-// Geometry and texture coordinates coincide and nothing here samples outside
-// [0, 1], so no boundaryMask is needed — every sample is uv itself.
+// COORDINATE SPACE, load-bearing: this is an anchor-extent pack, so uv [0,1]
+// spans the EXPANDED rect (frame + decoration shadow) — the shadow band lives
+// INSIDE [0,1], not past it. Every SAMPLE is uv itself and needs no mask, but
+// every EMITTED term (the rim light, the unlit tint, the ember sparks and
+// their coverage bump) must be confined to the frame explicitly, or it paints
+// on the drop shadow. The first version skipped that on the reasoning that
+// "nothing samples outside [0,1]" — true, and beside the point: the embers'
+// own coverage bump lit the shadow band and flashed at the very window edges,
+// seen live. frameMask below (boundaryMask over anchorRemap'd card space) is
+// that confinement.
 
 // The harness supplies #version, <animation_uniforms.glsl>, the in/out and
 // main(). old_content.glsl carries uOldWindow / oldColor; noise.glsl carries
-// fbm / niriHash.
+// fbm / niriHash / boundaryMask; anchor_remap.glsl folds expanded-rect uv
+// into card space for the frame mask.
 #include <old_content.glsl>
 #include <noise.glsl>
+#include <anchor_remap.glsl>
 
 // Four-stop brand gradient, t in [0, 1]: cyan → blue → purple → rose. Same
 // helper phosphor-condense and phosphor-gate carry, including the non-black
@@ -73,14 +83,23 @@ vec4 pTransition(vec2 uv, float t)
     if (p <= 0.0) return oldColor(uv);
     if (p >= 1.0) return surfaceColor(uv);
 
-    vec2 anchor = max(iAnchorSize, vec2(1.0));
-    // Clamped: a pathologically tall, narrow tab column would otherwise drive
-    // the aspect toward zero and the ember-column math into denormal territory.
-    // The head/tail Gaussians below are aspect-invariant by construction (dx
-    // and cw both scale with it, so it cancels), but the frontier's noise
-    // lookup is not, and an unbounded aspect there smears the grain into
-    // stripes.
-    float aspect = clamp(anchor.x / anchor.y, 0.05, 20.0);
+    // Confine every emitted term to the FRAME. uv spans the expanded rect, so
+    // a term weighted by neither content alpha nor this mask paints on the
+    // drop shadow (the live-diagnosed edge flash). boundaryMask feathers just
+    // outside [0,1] in card space, which is exactly the frame boundary.
+    float frameMask = boundaryMask(anchorRemap(uv));
+
+    vec2 res = max(iResolution, vec2(1.0));
+    // Aspect of the rect uv ACTUALLY SPANS — the expanded rect (iResolution),
+    // not the frame (iAnchorSize). Deriving it from the frame left the
+    // correction off by the shadow-padding ratio, so the ember dots came out
+    // slightly elliptical on decorated windows. Clamped: a pathologically
+    // tall, narrow tab column would otherwise drive the aspect toward zero
+    // and the ember-column math into denormal territory. The head/tail
+    // Gaussians below are aspect-invariant by construction (dx and cw both
+    // scale with it, so it cancels), but the frontier's noise lookup is not,
+    // and an unbounded aspect there smears the grain into stripes.
+    float aspect = clamp(res.x / res.y, 0.05, 20.0);
 
     // ── Transfer frontier. Mostly height, so the handover climbs the column,
     // roughened by fBm so the boundary reads as material tearing rather than a
@@ -132,8 +151,10 @@ vec4 pTransition(vec2 uv, float t)
     // does not gain opaque navy where it had none. The 0.85 ceiling keeps a
     // trace of the underlying image even at unlitDim = 1, so the frontier never
     // becomes a flat navy bar dragged across the tab. ──
+    // frameMask keeps the sink off the drop shadow: base.a is small but
+    // nonzero there, so without it the navy faintly tinted the shadow band.
     vec3 tint = length(p_colorTint.rgb) > 0.01 ? p_colorTint.rgb : vec3(0.043, 0.090, 0.188);
-    float unlit = clamp(p_unlitDim, 0.0, 1.0) * band * mid * 0.85;
+    float unlit = clamp(p_unlitDim, 0.0, 1.0) * band * mid * 0.85 * frameMask;
     vec4 col = base;
     col.rgb = mix(base.rgb, tint * base.a, unlit);
 
@@ -147,11 +168,14 @@ vec4 pTransition(vec2 uv, float t)
     float rim = exp(-rimD * rimD);
     float yUp = 1.0 - uv.y;
     vec3 rimCol = fluxGradient(clamp(yUp * 0.8 + n * 0.2, 0.0, 1.0));
-    // Per-frame twinkle on a 2-device-pixel grid, so the rim shimmers instead
-    // of sitting there as a static gradient stripe.
-    float sparkle = 0.85 + 0.30 * niriHash(floor(uv * anchor / 2.0)
+    // Per-frame twinkle on a grid of two LOGICAL pixels of the drawn quad
+    // (iResolution is the rect uv spans; both uniforms are logical px, so on
+    // a 2x display the cell is four device px — acceptable for a shimmer).
+    // The first version mixed spaces (expanded-rect uv times the FRAME size),
+    // which skewed the cell by the shadow ratio.
+    float sparkle = 0.85 + 0.30 * niriHash(floor(uv * res / 2.0)
                                            + floor(float(iFrame) * 0.2));
-    col.rgb += rimCol * rim * mid * base.a * clamp(p_glow, 0.0, 2.0) * 0.8 * sparkle;
+    col.rgb += rimCol * rim * mid * base.a * clamp(p_glow, 0.0, 2.0) * 0.8 * sparkle * frameMask;
 
     // ── Ember columns. One comet-tailed spark per column, rising over the leg,
     // alive only near the frontier — so each spark reads as a piece that broke
@@ -184,10 +208,13 @@ vec4 pTransition(vec2 uv, float t)
 
         float cw = colW * aspect;
         float tailLen = 0.06 + 0.06 * seed;
-        // Aspect cancels in both ratios (dx and cw each carry one factor), so
-        // these stay round dots on any tab shape. The 1.0e-12 floors are pure
-        // defence: colW >= 1/60 and aspect >= 0.05 by the clamps above, so the
-        // denominators cannot actually reach zero.
+        // Aspect cancels in the LATERAL term (dx and cw each carry one
+        // factor); the vertical Gaussian's 0.0002 is a fixed uv-space sigma,
+        // so the dot is round near the default density and stretches into a
+        // gentle ellipse away from it — accepted, the sway sells it as
+        // motion. The 1.0e-12 floors are pure defence: colW >= 1/60 and
+        // aspect >= 0.05 by the clamps above, so the denominators cannot
+        // actually reach zero.
         float cwSq = max(cw * cw, 1.0e-12);
         float head = exp(-dx * dx / max(cwSq * 0.05, 1.0e-12))
                    * exp(-dy * dy / 0.0002);
@@ -215,12 +242,24 @@ vec4 pTransition(vec2 uv, float t)
             emberCol = mix(emberCol, emberCol * (srcRgb / mx), carry);
         }
 
-        float ember = (head + tailE * 0.5) * life * band * mid * emberAmt;
+        // frameMask is what keeps the sparks off the drop shadow — THE
+        // live-diagnosed edge flash: this bump adds coverage on purpose (a
+        // spark over a transparent client area has nothing to ride), so
+        // content alpha cannot confine it and the frame mask must.
+        // iWindowOpacity keeps the added coverage under a SetOpacity rule's
+        // ceiling, matching what both content samplers already do — without
+        // it a window ruled to 50% grew full-strength sparks.
+        float ember = (head + tailE * 0.5) * life * band * mid * emberAmt * frameMask;
         col.rgb += emberCol * ember;
-        col.a = min(col.a + ember * 0.5, 1.0);
+        col.a = min(col.a + ember * 0.5 * iWindowOpacity, 1.0);
     }
 
-    col.rgb = clamp(col.rgb, 0.0, 1.0);
-    col.a = clamp(col.a, 0.0, 1.0);
+    // Premultiplied invariant rgb <= a, enforced against the ACTUAL coverage
+    // rather than 1.0: on a rounded corner or a translucent client area the
+    // additive rim and embers could otherwise leave rgb above alpha, which
+    // blends brighter than opaque over whatever is behind the column. (The
+    // old trailing alpha clamp was dead — the ember min() above already
+    // bounds it — so the alpha line is gone rather than kept as ritual.)
+    col.rgb = clamp(col.rgb, vec3(0.0), vec3(max(col.a, 0.0)));
     return col;
 }

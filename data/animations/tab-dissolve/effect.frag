@@ -21,7 +21,10 @@
 vec4 pTransition(vec2 uv, float t) {
     // Speckles keyed off the UV grid rather than device pixels, so the grain
     // stays the same size relative to the column whatever its width — a tab in
-    // a narrow column and one in a wide column dissolve alike.
+    // a narrow column and one in a wide column dissolve alike. The max() is
+    // dead under the metadata slider (min 8) and guards only a hand-edited
+    // config: at scale 0 every speckle shares one hash and the dissolve
+    // collapses to a plain fade.
     float n = classicHash(floor(uv * max(p_scale, 1.0)));
     float soft = max(p_softness, 1.0e-3);
     // Padded like the wipe: without it, speckles whose threshold lands within

@@ -111,16 +111,16 @@ private Q_SLOTS:
     void scrollingOwnsItsRootDespiteShowingNoCardForIt()
     {
         // The one page whose scope is WIDER than the rows it displays.
-        // AnimationsScrollingPage lists only `scrolling.view`, because a
-        // cascade parent over a single child is noise — the Desktop page
-        // states the same rule and only grew its parent row once `peek` gave
-        // it a second leg. The scope still covers the bare root so this page's
-        // Reset can clear an override a motion set or preset wrote there,
-        // which no other page would reach.
+        // AnimationsScrollingPage lists `scrolling.view` and
+        // `scrolling.tabSwitch` but no row for the bare `scrolling` root —
+        // a cascade parent card over so few children is noise (the Desktop
+        // page states the same rule). The scope still covers the bare root so
+        // this page's Reset can clear an override a motion set or preset
+        // wrote there, which no other page would reach.
         //
         // Pinned because the obvious "fix" for the asymmetry is to exclude the
         // root, and that would silently empty the page: the exclude list is
-        // subtree-matched, so it would take `scrolling.view` with it.
+        // subtree-matched, so it would take both leaf rows with it.
         const AnimationPageScope scrolling = animationPageScope(QStringLiteral("animations-scrolling"));
         QCOMPARE(scrolling.kind, AnimationPageScope::EventSubtree);
         QCOMPARE(scrolling.include, QStringList{QStringLiteral("scrolling")});
@@ -128,6 +128,7 @@ private Q_SLOTS:
 
         QVERIFY(animationPathInScope(QStringLiteral("scrolling"), scrolling));
         QVERIFY(animationPathInScope(QStringLiteral("scrolling.view"), scrolling));
+        QVERIFY(animationPathInScope(QStringLiteral("scrolling.tabSwitch"), scrolling));
         // And it claims nothing outside its own subtree.
         QVERIFY(!animationPathInScope(QStringLiteral("window.movement"), scrolling));
         QVERIFY(!animationPathInScope(QStringLiteral("desktop.switch"), scrolling));

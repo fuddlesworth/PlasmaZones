@@ -115,7 +115,10 @@ QString TileRequestEntry::validationError() const
     // snapshot of itself, capturing through the very transition it is meant
     // to seed. A hint rather than an action, so garbling it costs only the
     // cross-fade — but the self-reference is cheap to reject and can only be
-    // a bug or a spoof.
+    // a bug or a spoof. Deliberately NOT rejected here: tabFrom on a floating
+    // entry. That pair is contradictory too, but unlike windowedFullscreen
+    // below the field is a paint hint, so the app-side parse strips it and
+    // keeps the placement rather than dropping the whole entry.
     if (!tabFrom.isEmpty() && tabFrom == windowId) {
         return QStringLiteral("TileRequestEntry: tabFrom names its own window (windowId=%1)").arg(windowId);
     }

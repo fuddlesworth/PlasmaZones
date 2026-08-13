@@ -359,7 +359,7 @@ private Q_SLOTS:
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"left\"},"
             "{\"windowId\":\"b|2\",\"screenId\":\"S1\",\"x\":600,\"y\":0,\"width\":600,\"height\":800,"
-            "\"windowedFullscreen\":true},"
+            "\"windowedFullscreen\":true,\"tabFrom\":\"a|1\"},"
             "{\"windowId\":\"c|3\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"scrollEdge\":\"up\"},"
             "{\"windowId\":\"a|1\",\"screenId\":\"S1\",\"x\":50,\"y\":0,\"width\":600,\"height\":800,"
@@ -371,7 +371,8 @@ private Q_SLOTS:
             "\"visualX\":4000.5,\"visualY\":10},"
             "{\"windowId\":\"g|7\",\"screenId\":\"S1\",\"x\":0,\"y\":0,\"width\":600,\"height\":800,"
             "\"visualX\":-1200,\"visualY\":40},"
-            "{\"windowId\":\"h|8\",\"screenId\":\"S1\",\"floating\":true,\"visualX\":5,\"visualY\":6}"
+            "{\"windowId\":\"h|8\",\"screenId\":\"S1\",\"floating\":true,\"visualX\":5,\"visualY\":6,"
+            "\"tabFrom\":\"a|1\"}"
             "]");
         adaptor.relayTileRequestsJson(json);
 
@@ -395,6 +396,11 @@ private Q_SLOTS:
         // absence on a|1 reads false.
         QCOMPARE(requests.at(1).windowedFullscreen, true);
         QCOMPARE(requests.at(0).windowedFullscreen, false);
+        // tabFrom parses through the same JSON hop on a tiled entry (key
+        // spelling pinned against the engine producer), and its absence on
+        // a|1 reads empty.
+        QCOMPARE(requests.at(1).tabFrom, QStringLiteral("a|1"));
+        QVERIFY(requests.at(0).tabFrom.isEmpty());
         // The visual-position unmarshal guard, per arm (previously
         // untested): visualX alone stays unset (the keys are a required
         // PAIR), a fractional value FAILS CLOSED (the floor check is what
@@ -412,6 +418,10 @@ private Q_SLOTS:
         QCOMPARE(requests.at(5).windowId, QStringLiteral("h|8"));
         QCOMPARE(requests.at(5).floating, true);
         QCOMPARE(requests.at(5).hasVisualPos, false);
+        // A floating entry never carries a tabFrom: the hint is dropped in
+        // the parse (a floating window is not a tab of anything), mirroring
+        // the visual-position gate above.
+        QVERIFY(requests.at(5).tabFrom.isEmpty());
     }
 };
 

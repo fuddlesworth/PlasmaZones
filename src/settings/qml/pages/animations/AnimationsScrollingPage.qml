@@ -39,7 +39,7 @@ import QtQuick
 // Card list is viewport-virtualized by AnimationEventCardList.
 AnimationEventCardList {
     Accessible.name: i18n("Scrolling animation events")
-    headerText: i18n("Animations for scrolling. The whole strip moves together, so scrolling is one setting for every column. Each event offers only the shaders that can drive it.")
+    headerText: i18n("Animations for scrolling. Strip Scrolled covers the whole strip moving together, and Tab Switched covers a tab replacing another in its column. Each event offers only the shaders that can drive it.")
     eventModel: [
         {
             "eventPath": "scrolling.view",

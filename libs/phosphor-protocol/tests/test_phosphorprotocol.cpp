@@ -132,6 +132,22 @@ private Q_SLOTS:
         QVERIFY(e.validationError().contains(QStringLiteral("scrollEdge")));
     }
 
+    void testTileRequestValidationTabFrom()
+    {
+        // tabFrom names the OTHER window of a tab swap: any foreign id is
+        // accepted (the effect resolves or drops unknown ids itself), only a
+        // self-reference is rejected as garbling.
+        TileRequestEntry e;
+        e.windowId = QStringLiteral("w");
+        e.screenId = QStringLiteral("s");
+        e.width = 100;
+        e.height = 100;
+        e.tabFrom = QStringLiteral("other");
+        QVERIFY(e.validationError().isEmpty());
+        e.tabFrom = e.windowId;
+        QVERIFY(e.validationError().contains(QStringLiteral("tabFrom")));
+    }
+
     void testTileRequestValidationWindowedFullscreen()
     {
         // The lib's own coverage of its newest cross-field invariants (the

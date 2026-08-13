@@ -101,7 +101,12 @@ vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P
     col *= 1.0 - fw * P * dimK * 0.7;
     col = mix(col, sil, (1.0 - smoothstep(0.0, 0.45, qm)) * P * 0.6 * kill);
     float tail = 0.18 + clamp(p_afterglow, 0.0, 1.0) * 0.75;
-    float ag = exp(-max(q, 0.0) / tail) * kill;
+    // The MEANDERED coordinate, like every neighbouring term — the drain
+    // width, the silhouette sink and this trail's own colour one line below
+    // all read qm, and an intensity profile on raw q sat as a straight
+    // vertical band inside a boundary everything else wavered around. The
+    // max() floors the slightly-negative excursions the meander can produce.
+    float ag = exp(-max(qm, 0.0) / tail) * kill;
     vec3 tailCol = fluxGradient(clamp(1.0 - qm * 0.35, 0.65, 1.0));
     col += tailCol * ag * P * glow * lumW * 0.35;
 
@@ -113,7 +118,11 @@ vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P
     float embers = clamp(p_embers, 0.0, 1.0);
     if (embers > 0.001 && A > 0.01) {
         float rows = max(p_density, 8.0);
-        float yRow = uvY * rows; // logical orientation, same space as the uv everywhere else
+        // Work-area-relative, the SAME space the gate field itself lives in
+        // (the callers pass stripUv(uv).y): under a top or bottom panel the
+        // p_density rows now span the strip the gates decorate rather than
+        // the whole output, and the grid keeps its phase against the gate.
+        float yRow = uvY * rows;
         float row = floor(yRow);
         float within = yRow - row;
         float seed = niriHash(vec2(row * 7.13 + 0.37, 1.7));
@@ -178,13 +187,26 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
         return base;
     }
 
-    float mask = stripMask(uv, clamp(p_edgeFeather, 0.0, 0.5));
+    // KNOWN CROSS-AXIS LIMIT, accepted: stripMask measures its feather on the
+    // SHORTER output axis (strip_transition.glsl documents the hazard), while
+    // these gates sit on the left/right edges — the long axis on a landscape
+    // output. Near the metadata maximum the feather therefore eats visibly
+    // into a gate's depth instead of only softening its edge. The clamp is
+    // matched to the metadata bound (0.2) rather than the old 0.5, so the
+    // unreachable range no longer suggests headroom that is not there.
+    float mask = stripMask(uv, clamp(p_edgeFeather, 0.0, 0.2));
     vec3 col = base.rgb;
     float lum = dot(col, vec3(0.299, 0.587, 0.114));
 
     resolveStops();
     vec3 tint = length(p_colorTint.rgb) > 0.01 ? p_colorTint.rgb : vec3(0.043, 0.090, 0.188);
-    vec3 sil = tint * (0.5 + 1.6 * lum); // the family silhouette: navy shaped by the content
+    // The family silhouette: navy shaped by the content. Deliberately NOT
+    // scaled by base.a the way phosphor-iris scales its copy: the strip
+    // capture is backed by the desktop background inside the work area, so
+    // base.a is 1 wherever the gates can reach (stripMask zeroes everything
+    // outside), and the multiply would be ritual. If a future capture change
+    // lets translucency through, revisit alongside iris's premultiply note.
+    vec3 sil = tint * (0.5 + 1.6 * lum);
     float glow = clamp(p_glow, 0.0, 2.0);
     float dimK = clamp(p_unlitDim, 0.0, 1.0);
     // The family sparkle grain, verbatim. iFrame grows without bound over a
@@ -201,8 +223,11 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
         * clamp(p_meander, 0.0, 1.0);
 
     // Left edge, then right edge, unrolled.
-    col = applyGate(col, lum, sil, qL, m, arrL * amp * mask, depL * amp * mask, glow, dimK, sparkle, t, uv.y);
-    col = applyGate(col, lum, sil, qR, m, arrR * amp * mask, depR * amp * mask, glow, dimK, sparkle, t, uv.y);
+    // stripUv(uv).y, not raw uv.y: the ember rows must live in the same
+    // work-area space as the gate field they feed (see the yRow comment).
+    float suvY = stripUv(uv).y;
+    col = applyGate(col, lum, sil, qL, m, arrL * amp * mask, depL * amp * mask, glow, dimK, sparkle, t, suvY);
+    col = applyGate(col, lum, sil, qR, m, arrR * amp * mask, depR * amp * mask, glow, dimK, sparkle, t, suvY);
 
     // Replace pass; NO upper clamp on rgb (HDR captures, per the desktop
     // packs' rationale). Alpha is the capture's own, matching the identity
