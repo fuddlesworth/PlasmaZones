@@ -11,7 +11,6 @@
 
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
-#include <PhosphorIdentity/WindowId.h>
 
 #include "scrollenginelogging.h"
 
@@ -270,7 +269,16 @@ std::optional<PhosphorEngine::WindowPlacement> ScrollEngine::capturePlacement(co
     }
     PhosphorEngine::WindowPlacement placement;
     placement.windowId = windowId;
-    placement.appId = PhosphorIdentity::WindowId::extractAppId(windowId);
+    // Registry answer, not a parse of the canonical id: the canonical is
+    // frozen at first contact, so a window KWin had not yet classed carries an
+    // appId-less id for its whole life, and WindowPlacementStore::record
+    // REJECTS a record with an empty appId — the capture would vanish and the
+    // window would have nothing to restore on reopen. This narrows that hole
+    // rather than closing it: currentAppIdFor falls back to the same parse
+    // when the registry record ALSO has no class yet, so a capture taken
+    // before the class-change push still produces an empty appId and is still
+    // dropped. It converges once the class arrives, which the parse never did.
+    placement.appId = currentAppIdFor(windowId);
     placement.screenId = key.screenId;
     placement.virtualDesktop = key.desktop;
     placement.activity = key.activity;

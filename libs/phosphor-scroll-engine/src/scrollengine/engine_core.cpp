@@ -40,6 +40,23 @@ QString ScrollEngine::canonicalizeForLookup(const QString& rawWindowId) const
     return rawWindowId;
 }
 
+QString ScrollEngine::currentAppIdFor(const QString& anyWindowId) const
+{
+    if (anyWindowId.isEmpty()) {
+        return QString();
+    }
+    if (m_windowRegistry) {
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
+        const QString fromRegistry = m_windowRegistry->appIdFor(instanceId);
+        if (!fromRegistry.isEmpty()) {
+            return fromRegistry;
+        }
+    }
+    // Fallback: parse the string. Note this returns the FIRST-seen class for
+    // canonical ids; accurate only when the window has never renamed.
+    return PhosphorIdentity::WindowId::extractAppId(anyWindowId);
+}
+
 // ── Screen ownership ────────────────────────────────────────────────────────
 
 bool ScrollEngine::isActiveOnScreen(const QString& screenId) const
@@ -354,6 +371,18 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
         // windows map one-to-one (a claimed tile is never re-claimed —
         // claiming rewrites its id to a live one, which later arrivals
         // cannot collide with).
+        // extractAppId, NOT currentAppIdFor, unlike the capture and float
+        // restore: this prefix is matched against ids stored VERBATIM by a
+        // previous session, so it has to be built the same way those ids were
+        // spelled. A registry answer would build "ghostty|" and never match a
+        // stashed "|olduuid" — and, the case that really separates them, an
+        // Electron/CEF app that RENAMED itself would build its new class here
+        // while the stash still holds the old one. The accepted cost is that a
+        // window whose canonical was frozen before KWin classed it has an
+        // empty prefix and skips the cross-session claim entirely: it takes
+        // the ordinary insertion-order position instead of reclaiming its
+        // column, leaving the stash entry intact for a later arrival. A
+        // degraded restore, not a wrong one.
         const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
         const QString appPrefix = appId.isEmpty() ? QString() : appId + QLatin1Char('|');
         if (!appPrefix.isEmpty()) {

@@ -40,6 +40,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/engine_apply.cpp
     src/scrollengine/drag_preview.cpp
     src/scrollengine/engine_lifecycle.cpp
+    src/scrollengine/engine_reopen.cpp
     src/scrollengine/engine_handoff.cpp
     src/scrollengine/engine_float.cpp
     src/scrollengine/engine_navigation.cpp

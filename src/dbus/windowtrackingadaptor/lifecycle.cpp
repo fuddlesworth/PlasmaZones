@@ -122,10 +122,19 @@ void WindowTrackingAdaptor::captureWindowPlacement(const QString& windowId, cons
         PhosphorPlacement::WindowTrackingService::downgradeMismatchedManagedSlots(*preserved, preserved->screenId,
                                                                                   authoritativeScreen);
         preserved->screenId = authoritativeScreen;
-        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
-        if (const auto context = m_windowRegistry->windowContext(instanceId)) {
-            preserved->virtualDesktop = context->virtualDesktop;
-            preserved->activity = context->activity;
+        // Registry-guarded like the minimize probe at the top of this function:
+        // a registry-less service is a supported state (tests call
+        // setWindowRegistry(nullptr) on a live adaptor), and this branch is
+        // reachable with a null registry because isSuspensionFloat above needs
+        // no registry to set treatAsMinimized. Without a registry the preserve
+        // keeps the record's own desktop/activity, which is the documented
+        // degradation rather than a crash.
+        if (m_windowRegistry) {
+            const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+            if (const auto context = m_windowRegistry->windowContext(instanceId)) {
+                preserved->virtualDesktop = context->virtualDesktop;
+                preserved->activity = context->activity;
+            }
         }
         // Synthesize the OWNING engine's floating slot whenever the record
         // lacks one — not merely when the map is empty (recordFloatingClose's
@@ -847,8 +856,11 @@ void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const Q
     // window even after the effect restarts and re-derives a mutated-class
     // composite for it. Idempotent: the instance id is stable, so a later push
     // carrying a mutated appId returns the original composite rather than
-    // re-seeding (issue #628). The registry's own remove() retires the mapping
-    // when the window closes.
+    // re-seeding (issue #628). That includes a first push whose appId is still
+    // EMPTY: the appId-less composite is frozen like any other, because a
+    // canonical that changed once the class arrived would strand the engine
+    // state keyed under the earlier id. The registry's own remove() retires the
+    // mapping when the window closes.
     m_windowRegistry->canonicalizeWindowId(PhosphorIdentity::WindowId::buildCompositeId(appId, instanceId));
 
     m_windowRegistry->upsert(instanceId, meta);
@@ -1120,16 +1132,15 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
             ++it;
         }
     }
-    // Same defensive sweep for the last-broadcast floating shadow: an entry
-    // would otherwise leak if the window died without a windowClosed signal.
-    // Not persisted, so it does not feed the save-scheduling decision below.
     // Fan the prune out to sibling adaptors' per-window caches (see the
     // signal doc). Consumers only erase from their OWN maps — nothing here
     // depends on emit-vs-sweep ordering. The payload is the same instance-id
     // view the local sweeps use, as a marshallable list: adaptor signals are
     // auto-relayed onto the bus, and QSet has no D-Bus signature.
     Q_EMIT stalePruned(QStringList(aliveInstances.cbegin(), aliveInstances.cend()));
-    // Same defensive sweep for the last-broadcast floating shadow.
+    // Same defensive sweep for the last-broadcast floating shadow: an entry
+    // would otherwise leak if the window died without a windowClosed signal.
+    // Not persisted, so it does not feed the save-scheduling decision below.
     for (auto it = m_broadcastFloating.begin(); it != m_broadcastFloating.end();) {
         if (!aliveInstances.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
             it = m_broadcastFloating.erase(it);

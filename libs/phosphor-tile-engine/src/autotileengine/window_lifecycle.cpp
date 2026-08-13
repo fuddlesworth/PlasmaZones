@@ -53,7 +53,17 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
     // dispatch cannot produce an empty one, but this is public engine API
     // and an empty opening screen would defeat the predicate's same-screen
     // bail (empty compares unequal to every recorded screen).
+    // Every decline below is LOGGED, for the reason the scroll twin spells
+    // out: the deferring engine has already stood down, so a decline decides
+    // where the window spends the session, and a silent one leaves the
+    // resulting login-restore strand with no journal evidence. Same info/debug
+    // split as the twin — the declines that fire on every ordinary open are
+    // debug so they cannot bury the rare ones that explain a strand.
     if (openingScreenId.isEmpty() || !m_windowTracker || !m_layoutManager) {
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen: declining" << windowId << "on" << openingScreenId
+            << "— preconditions unmet (screen empty" << openingScreenId.isEmpty() << "tracker" << bool(m_windowTracker)
+            << "layouts" << bool(m_layoutManager) << ")";
         return false;
     }
     // First observation only: a window this engine tracks anywhere is an
@@ -65,10 +75,19 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
     const PhosphorTiles::TilingState* state =
         keyIt != m_states.windowKeys().constEnd() ? m_states.stateForKey(keyIt.value()) : nullptr;
     if (state && state->containsWindow(windowId)) {
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen: declining" << windowId
+            << "— already held here, so this is an in-session re-announce, not a restore";
         return false;
     }
     const QString appId = currentAppIdFor(windowId);
     if (!PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
+        // Logged for the same reason the scroll twin logs it: the deferring
+        // engine has already stood down, so a silent decline here strands the
+        // window on whatever monitor it opened on for the session.
+        qCInfo(PhosphorTileEngine::lcTileEngine).nospace()
+            << "claimCrossScreenReopen: declining " << windowId << " — no stable appId: " << appId
+            << " (its placement records cannot be matched)";
         return false;
     }
     // A window this engine could not TILE must not be claimed either: the
@@ -80,6 +99,8 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
     // adoption — autotile's refuses outright, so the precondition belongs
     // here. Do not mirror it into the scroll twin.
     if (!shouldTileWindow(windowId)) {
+        qCInfo(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen:" << windowId << "— declining, this engine would refuse to tile it anyway";
         return false;
     }
     // peekForReclaim, not peek: the live-instance exclusion is what stops a
@@ -100,6 +121,15 @@ bool AutotileEngine::claimCrossScreenReopen(const QString& rawWindowId, const QS
                 });
         });
     if (!pending) {
+        // Debug: the ordinary-open case, and on a system with no autotile
+        // screens it fires for every open before the scroll twin is even
+        // asked. "No usable record" covers all of the store's null answers,
+        // including a qualifying record held by a still-live sibling
+        // instance, which naming only the homed-elsewhere case would
+        // misreport.
+        qCDebug(PhosphorTileEngine::lcTileEngine)
+            << "claimCrossScreenReopen: declining" << windowId << "appId" << appId << "on" << openingScreenId
+            << "— no usable cross-screen autotile record";
         return false;
     }
     const QString homeScreen = pending->screenId;
@@ -336,7 +366,17 @@ void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& scr
         m_states.setKeyForWindow(windowId, newKey);
     }
 
-    // Store window minimum size from KWin (used by enforceMinSizes)
+    // Store window minimum size from KWin (used by enforceMinSizes).
+    // Gated on >0 deliberately, which does leave storeWindowMinSize's own
+    // clearing arm unreachable from THIS path: a re-announce reporting a
+    // genuine 0x0 cannot clear a stale constraint here (windowClosed
+    // documents the same inflation risk for its own entry). Calling it
+    // unconditionally to reach that arm was tried and backed out: the stored
+    // value is SCREEN-CAPPED before comparison, so a 0x0 re-announce would
+    // discard a cap the layout is currently sized around, and whether the
+    // compositor ever reports 0x0 for a window that previously reported
+    // non-zero is not something the code can answer. Closing this properly
+    // needs that observation first, not a guess.
     if (minWidth > 0 || minHeight > 0) {
         storeWindowMinSize(windowId, minWidth, minHeight);
     }

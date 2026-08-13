@@ -709,6 +709,9 @@ Q_SIGNALS:
 private:
     // engine_core.cpp
     QString canonicalizeForLookup(const QString& rawWindowId) const;
+    /// App identity from the registry record, never parsed out of the
+    /// first-contact-frozen id. Mirrors AutotileEngine's twin; see engine_core.cpp.
+    QString currentAppIdFor(const QString& anyWindowId) const;
     PhosphorEngine::PlacementStateKey currentKeyForScreen(const QString& screenId) const
     {
         return m_context.currentKeyForScreen(screenId);
