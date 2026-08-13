@@ -139,6 +139,15 @@ Item {
     readonly property int cardWidth: previewWidth + metrics.paddingSide * 2
     readonly property int cardHeight: previewHeight + metrics.containerPadding + metrics.paddingSide
     readonly property int cardSpacing: metrics.indicatorSpacing
+    /// How tall the scrolling card area may grow before it starts scrolling.
+    ///
+    /// The frame is centred on this item, which fills the layer surface, so
+    /// the budget is the surface minus the frame's own chrome (title, the gap
+    /// under it, and the three paddings the height sum carries) minus a
+    /// margin either side so the popup never sits flush against the screen
+    /// edge. Floored at one card so a very short screen still shows something
+    /// scrollable rather than collapsing to nothing.
+    readonly property int maxCardsHeight: Math.max(root.cardHeight, root.height - titleLabel.height - metrics.paddingSide * 3 - metrics.containerPadding * 2)
 
     // Internal signals — host Window re-emits to its public signals.
     signal layoutSelected(string layoutId)
@@ -203,6 +212,41 @@ Item {
         selectedIndex = Math.max(0, Math.min(root.gridCount - 1, newIndex));
     }
 
+    /// Scroll the keyboard selection into view.
+    ///
+    /// Arrow navigation is index arithmetic, not focus, so nothing moves the
+    /// viewport on its own: past the fold the selection would travel to a
+    /// card the user cannot see and Return would confirm it blind. Derived
+    /// from the row rather than read off a delegate, because the delegates
+    /// live in two containers and a Repeater index is not a model index here.
+    ///
+    /// A no-op while everything fits, which is the ordinary case.
+    function _ensureSelectionVisible() {
+        if (cardScroll.contentHeight <= cardScroll.height)
+            return;
+
+        let itemY = 0;
+        let itemHeight = root.cardHeight;
+        if (root.hasNoneRow && root.selectedIndex === root.layoutCount - 1) {
+            itemHeight = noneRow.height;
+            itemY = cards.height - itemHeight;
+        } else if (root.gridColumns > 0) {
+            itemY = Math.floor(root.selectedIndex / root.gridColumns) * (root.cardHeight + root.cardSpacing);
+        }
+        if (itemY < cardScroll.contentY)
+            cardScroll.contentY = itemY;
+        else if (itemY + itemHeight > cardScroll.contentY + cardScroll.height)
+            cardScroll.contentY = itemY + itemHeight - cardScroll.height;
+    }
+
+    onSelectedIndexChanged: root._ensureSelectionVisible()
+    // The initial selection is a binding that resolves before the cards have
+    // been laid out, so the handler above runs against a contentHeight of
+    // zero and does nothing. Deferred to the next tick, this is what opens
+    // the picker already scrolled to the active card when it is past the
+    // fold — the whole point of highlighting it.
+    Component.onCompleted: Qt.callLater(root._ensureSelectionVisible)
+
     /// A layout's position in the FULL model, by id. The cards are drawn from
     /// two containers now (the grid, and the None card's own row), so a
     /// delegate's position within its Repeater is no longer its index in the
@@ -259,18 +303,17 @@ Item {
         // any decoration halo and the show / hide transition are captured
         // instead of being clipped. See PopupFrame.qml.
         anchors.centerIn: parent
-        // The wider of the two rows. The none row holds a single card, so it
-        // normally loses to any grid row and the grid decides the width — but
-        // a Templates screen with an empty store has NO grid rows at all, and
-        // following the grid alone collapsed the frame to its padding while
-        // the none row still drew a full-width card, leaving that card
-        // hanging outside the frame on both sides.
-        width: Math.max(gridView.width, root.hasNoneRow ? noneRow.width : 0) + metrics.containerPadding
-        // top padding + title + gap below title + grid + the none row and the
-        // spacing above it when it exists + bottom padding. The spacing is a
-        // separate term because anchors.topMargin does not contribute to an
-        // item's height.
-        height: titleLabel.height + gridView.height + noneRow.height + (root.hasNoneRow ? root.cardSpacing : 0) + metrics.paddingSide * 3
+        // The card area decides the width, and it is itself the wider of the
+        // grid and the none row. The none row holds a single card, so it
+        // normally loses to any grid row — but a Templates screen with an
+        // empty store has NO grid rows at all, and following the grid alone
+        // collapsed the frame to its padding while the none row still drew a
+        // full-width card, leaving it hanging outside the frame on both
+        // sides.
+        width: cardScroll.width + metrics.containerPadding
+        // top padding + title + gap below title + the (possibly clamped) card
+        // area + bottom padding.
+        height: titleLabel.height + cardScroll.height + metrics.paddingSide * 3
         backgroundColor: root.backgroundColor
 
         // Absorb clicks inside container so they do not reach the
@@ -307,39 +350,74 @@ Item {
             color: root.textColor
         }
 
-        // Layout grid
-        Grid {
-            id: gridView
+        // The cards scroll; the title does not. A long list used to size the
+        // frame past the screen and centre it, so it clipped symmetrically
+        // off the top and bottom with no way to reach what was cut — and the
+        // None row, being last, was the first thing lost. Bounding the card
+        // area and letting it scroll keeps every card reachable however many
+        // there are.
+        Flickable {
+            id: cardScroll
 
             anchors.top: titleLabel.bottom
             anchors.topMargin: metrics.paddingSide
             anchors.horizontalCenter: parent.horizontalCenter
-            columns: root.gridColumns
-            spacing: root.cardSpacing
+            width: cards.width
+            height: Math.min(cards.height, root.maxCardsHeight)
+            contentWidth: cards.width
+            contentHeight: cards.height
+            // Both gated on actually overflowing: an unclipped Flickable that
+            // fits lets the cards' selection halo paint outside its bounds as
+            // before, and a non-interactive one cannot swallow a press meant
+            // for a card.
+            clip: contentHeight > height
+            interactive: contentHeight > height
+            boundsBehavior: Flickable.StopAtBounds
 
-            Repeater {
-                model: root.gridLayouts
-                delegate: layoutCardDelegate
-            }
-        }
+            // One content item rather than a positioner, so the grid and the
+            // None row keep the exact relationship they had when they were
+            // anchored directly in the frame.
+            Item {
+                id: cards
 
-        // The no-template card, on its own row under the grid and centered
-        // against it. Outside the Grid on purpose: a Grid flows its children
-        // in order, so this card would otherwise take the next free cell in
-        // the last row and read as one more choice rather than as the way out
-        // of the list. The Row is over a one-or-zero element slice, so on a
-        // screen with no template family nothing is instantiated and the row
-        // collapses to zero height.
-        Row {
-            id: noneRow
+                width: Math.max(gridView.width, noneRow.width)
+                height: gridView.height + noneRow.height + (root.hasNoneRow ? root.cardSpacing : 0)
 
-            anchors.top: gridView.bottom
-            anchors.topMargin: root.hasNoneRow ? root.cardSpacing : 0
-            anchors.horizontalCenter: parent.horizontalCenter
+                // Layout grid
+                Grid {
+                    id: gridView
 
-            Repeater {
-                model: root.hasNoneRow ? [root.layouts[root.layoutCount - 1]] : []
-                delegate: layoutCardDelegate
+                    anchors.top: parent.top
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    columns: root.gridColumns
+                    spacing: root.cardSpacing
+
+                    Repeater {
+                        model: root.gridLayouts
+                        delegate: layoutCardDelegate
+                    }
+                }
+
+                // The no-template card, on its own row under the grid and
+                // centered against it. Outside the Grid on purpose: a Grid
+                // flows its children in order, so this card would otherwise
+                // take the next free cell in the last row and read as one
+                // more choice rather than as the way out of the list. The Row
+                // is over a one-or-zero element slice, so on a screen with no
+                // template family nothing is instantiated and the row
+                // collapses to zero height.
+                Row {
+                    id: noneRow
+
+                    anchors.top: gridView.bottom
+                    anchors.topMargin: root.hasNoneRow ? root.cardSpacing : 0
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    Repeater {
+                        model: root.hasNoneRow ? [root.layouts[root.layoutCount - 1]] : []
+                        delegate: layoutCardDelegate
+                    }
+                }
             }
         }
     }
