@@ -143,19 +143,43 @@ public:
         return {};
     }
 
+    /// True when the context has EXPLICITLY opted out of templates, as
+    /// opposed to merely resolving none (not scrolling, an unknown id, or no
+    /// default to inherit). The resolver above answers invalid for all of
+    /// those alike, so this is the only way to tell the deliberate choice from
+    /// the incidental absence — which the picker needs, because one of them
+    /// highlights its None card and the rest highlight nothing. Default false
+    /// so lightweight stubs need not implement it.
+    virtual bool scrollingTemplateExplicitlyNone(const QString& screenId, int virtualDesktop,
+                                                 const QString& activity) const
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(virtualDesktop)
+        Q_UNUSED(activity)
+        return false;
+    }
+
     /// The id the layout PICKER highlights for a scrolling context: the
-    /// resolved template's bare UUID, or the "scrolling:" sentinel (matches
-    /// no card) when no template resolves. The shared authority for the
-    /// picker-highlight sites (UnifiedLayoutController::displayIdForAssignment
-    /// and OverlayService::activeLayoutIdForScreen) — callers keep their own
+    /// resolved template's bare UUID, the reserved no-template word when the
+    /// context opted out explicitly, or the "scrolling:" sentinel (matches no
+    /// card) when no template resolves for any other reason. The shared
+    /// authority for the picker-highlight sites
+    /// (UnifiedLayoutController::displayIdForAssignment and
+    /// OverlayService::activeLayoutIdForScreen) — callers keep their own
     /// live-capability gates. Distinct from the rules-visible query stamp,
     /// which uses the PREFIXED "scrolling:<uuid>" form. Non-virtual on
-    /// purpose: a pure convenience over the virtual resolver above.
+    /// purpose: a pure convenience over the two virtuals above.
     QString scrollingDisplayIdForContext(const QString& screenId, int virtualDesktop, const QString& activity) const
     {
         const ScrollingTemplate templ = scrollingTemplateForContext(screenId, virtualDesktop, activity);
         if (templ.isValid()) {
             return templ.id.toString();
+        }
+        // Tested only once the resolver has come back empty: a context cannot
+        // both name a template and be opted out, and asking in this order
+        // keeps the common path a single call.
+        if (scrollingTemplateExplicitlyNone(screenId, virtualDesktop, activity)) {
+            return QString(NoScrollingTemplate);
         }
         return QString(PhosphorLayout::LayoutId::ScrollingId);
     }

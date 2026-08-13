@@ -827,6 +827,13 @@ public:
     /// snappingLayoutForScreen returning a preserved layout in autotile mode.
     QString scrollingTemplateLayoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                              const QString& activity = QString()) const;
+    /// Mode-gated like @ref scrollingTemplateForContext rather than like the
+    /// raw getter above: a token preserved on a context that has since been
+    /// switched to another engine is dormant data, and highlighting the
+    /// picker's None card for it would describe a choice the screen is not
+    /// currently making.
+    bool scrollingTemplateExplicitlyNone(const QString& screenId, int virtualDesktop,
+                                         const QString& activity) const override;
 
     /// Flip mode to @c Snapping for every entry currently in @c Autotile
     /// (preserves @c snappingLayout + @c tilingAlgorithm +

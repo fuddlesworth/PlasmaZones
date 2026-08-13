@@ -136,6 +136,57 @@ private Q_SLOTS:
         QCOMPARE(controller.displayIdForAssignment(QString(), sentinel), sentinel);
     }
 
+    void applyEntry_noTemplateCard_optsTheContextOut()
+    {
+        // The picker's synthetic None card. It has to survive the whole path:
+        // present in the controller's own list (applyLayoutById resolves the
+        // pressed id against it), accepted by applyEntry despite not being a
+        // UUID, and stored as the reserved word rather than downgraded to an
+        // empty slot, which would put the screen back on the default it was
+        // just told to stop using.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        Settings settings(nullptr);
+        auto* store = attachTemplateStore(mgr.data());
+        const QUuid templId = createTestTemplate(store, QStringLiteral("Template"));
+        const QUuid defaultId = createTestTemplate(store, QStringLiteral("Fallback"));
+        mgr->setDefaultScrollingTemplateProvider([defaultId]() {
+            return defaultId.toString();
+        });
+
+        UnifiedLayoutController controller(mgr.data(), &settings, nullptr, nullptr);
+        controller.setCurrentScreenName(QStringLiteral("DP-1"));
+        controller.setCurrentLayoutSupport(LayoutSupport::Templates);
+        controller.setLayoutFilter(/*manual=*/false, /*autotile=*/false, /*templates=*/true);
+
+        const int desktop = mgr->currentVirtualDesktopForScreen(QStringLiteral("DP-1"));
+        mgr->assignLayoutById(QStringLiteral("DP-1"), desktop, QString(),
+                              QString(PhosphorLayout::LayoutId::ScrollingId));
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), desktop, QString(), templId.toString());
+
+        const QString noneId = QString(PhosphorZones::NoScrollingTemplate);
+        // The card is in the list the press resolves against. Without this the
+        // press below would fail as "layout not found" and the rest of the
+        // test would be asserting against a refusal.
+        QVERIFY(PhosphorZones::LayoutUtils::findLayout(controller.layouts(), noneId) != nullptr);
+
+        QVERIFY(controller.applyLayoutById(noneId));
+        // Stored as the word, and the context now resolves to NO template even
+        // though a default is configured — the point of the card.
+        QCOMPARE(mgr->scrollingTemplateLayoutForScreen(QStringLiteral("DP-1"), desktop), noneId);
+        QVERIFY(!mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()).isValid());
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), desktop), PhosphorZones::AssignmentEntry::Scrolling);
+        // And the picker highlights the None card rather than nothing, so
+        // reopening it shows the state the screen is actually in.
+        QCOMPARE(
+            controller.displayIdForAssignment(QStringLiteral("DP-1"), QString(PhosphorLayout::LayoutId::ScrollingId)),
+            noneId);
+
+        // Reversible from the same picker: pressing a real template afterwards
+        // takes the context back off the opt-out.
+        QVERIFY(controller.applyLayoutById(templId.toString()));
+        QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()).id, templId);
+    }
+
     void applyEntry_templatesScreen_refusesManualPick()
     {
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());

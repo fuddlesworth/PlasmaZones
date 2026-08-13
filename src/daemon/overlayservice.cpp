@@ -1023,7 +1023,11 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
         !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
-        autotilePreviewCanvas, inc.templates, m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr);
+        autotilePreviewCanvas, inc.templates, m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
+        // The None row: this list is a PICKER of the context's template, so it
+        // carries the opt-out alongside the templates themselves. Mirrored in
+        // visibleLayoutCount below, which must agree with this row for row.
+        inc.templates);
     return PlasmaZones::toVariantList(entries);
 }
 
@@ -1075,7 +1079,12 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
         !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
         /*customOrder=*/{}, m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, inc.templates,
-        m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr);
+        m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
+        // Same None row as buildLayoutsList, on the same condition. This is
+        // the row-for-row agreement the header of that function calls out: a
+        // count short by one here would size the popup for fewer cards than
+        // it draws.
+        inc.templates);
     return entries.size();
 }
 

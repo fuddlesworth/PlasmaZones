@@ -548,6 +548,17 @@ LayoutRegistry::scrollingTemplateForContext(const QString& screenId, int virtual
     return m_scrollingTemplateStore->templateById(id);
 }
 
+bool LayoutRegistry::scrollingTemplateExplicitlyNone(const QString& screenId, int virtualDesktop,
+                                                     const QString& activity) const
+{
+    // Same resolution and same mode gate as scrollingTemplateForContext, so
+    // the two can never disagree about which entry they are describing.
+    const auto entry = resolveWithScreenFallback(screenId, [this, virtualDesktop, &activity](const QString& sid) {
+        return resolveAssignmentEntry(sid, virtualDesktop, activity);
+    });
+    return entry && entry->mode == AssignmentEntry::Scrolling && entry->scrollingTemplateLayout == NoScrollingTemplate;
+}
+
 void LayoutRegistry::setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                               const AssignmentEntry& entry)
 {
