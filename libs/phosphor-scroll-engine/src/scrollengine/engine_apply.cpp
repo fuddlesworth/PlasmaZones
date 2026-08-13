@@ -360,6 +360,13 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // there is no tile to activate on an empty resolve, and the caller's
         // request dies with the batch it was for.
         state->clearLastAppliedViewX();
+        // Same empty-strip reasoning applied to the template blueprint: the
+        // cursor records which entries this strip's columns already stand
+        // for, and an empty strip has no columns to stand for any of them.
+        // A screen cleared out and repopulated therefore opens from the top
+        // of the blueprint again, which is the "template describes the
+        // starting shape" contract in ScrollState::blueprintCursor.
+        state->resetBlueprintCursor();
         clearTabStripsForScreen(screenId);
         if (anchorMoved) {
             Q_EMIT placementChanged(screenId);
