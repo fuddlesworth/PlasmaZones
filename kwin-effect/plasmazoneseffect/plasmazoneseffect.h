@@ -2362,8 +2362,10 @@ private:
     /// and the fallback (anchor never painted — paint at the natural slot
     /// after all) cannot disagree.
     ///
-    /// The above-anchor set holds every OTHER window on the pass output
-    /// stacked over the anchor — dialogs raised over the strip, the passive
+    /// The above-anchor set holds every OTHER window stacked over the anchor
+    /// that is on the pass output or intersects it (a straddler assigned to
+    /// the neighbouring output paints — and occludes — in this pass all the
+    /// same) — dialogs raised over the strip, the passive
     /// overlay shell carrying an OSD. It exists because the anchor's own
     /// paint is not a reliable injection trigger: the scene culls a fully
     /// occluded anchor, and a culled anchor used to mean no injection at all,

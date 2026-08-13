@@ -175,6 +175,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     m_scrollTabDrawn.clear();
     m_scrollTabAboveAnchor.clear();
     if (!m_scrollTabSurfaceIds.isEmpty() && data.screen) {
+        const QRectF passOutputGeo = QRect(data.screen->geometry());
         for (KWin::EffectWindow* sw : KWin::effects->stackingOrder()) {
             if (!sw || sw->isDeleted() || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop()
                 || !sw->isOnCurrentDesktop()) {
@@ -210,7 +211,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                 m_scrollTabAboveAnchor.clear();
             } else if (sw->screen() == data.screen && isScrollTabIndicatorSurface(sw)) {
                 m_scrollTabDeferred.insert(sw);
-            } else if (sw->screen() == data.screen) {
+            } else if (sw->screen() == data.screen || QRectF(sw->expandedGeometry()).intersects(passOutputGeo)) {
                 // Candidate above-anchor trigger (see the member's doc): a
                 // non-strip window on this output stacked over the current
                 // anchor. Provisional while the walk runs — a later strip
@@ -221,6 +222,18 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                 // natural-slot paint ON TOP of the very dialog or OSD covering
                 // the strip (and from flickering against it as occlusion comes
                 // and goes).
+                //
+                // screen() OR rect intersection, per the transition-relevance
+                // convention above: a window straddling outputs but ASSIGNED to
+                // the neighbour still paints in this pass and its opaque region
+                // can cull the anchor exactly like a same-screen occluder, so
+                // keying on screen() alone left that configuration with neither
+                // trigger firing. A foreign-MANAGED strip column (crop-mode
+                // straddler) can land here too now; it is inert — paintWindow's
+                // foreign-output cull returns before the trigger — and it could
+                // not have culled the anchor anyway, since prePaintWindow marks
+                // it translucent on foreign passes. Over-inclusion is harmless:
+                // a member this pass never paints simply never triggers.
                 m_scrollTabAboveAnchor.insert(sw);
             }
         }
