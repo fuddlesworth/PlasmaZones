@@ -85,8 +85,13 @@ PHOSPHORANIMATION_EXPORT extern const QString EditorSnapResize;
 // rides that offset, rather than each column springing itself. It is its own
 // root rather than a window.movement.* leaf because its subject is the view
 // and not any window.
+// `scrolling.tabSwitch` shares the root for grouping only: its subject IS a
+// window (the tab arriving in the rect the outgoing one vacated), so it
+// carries its own opt-in `tab` class (see EventClassTab below), not the strip
+// class its siblings do.
 PHOSPHORANIMATION_EXPORT extern const QString Scrolling;
 PHOSPHORANIMATION_EXPORT extern const QString ScrollingView;
+PHOSPHORANIMATION_EXPORT extern const QString ScrollingTabSwitch;
 
 // osd.*
 PHOSPHORANIMATION_EXPORT extern const QString Osd;
@@ -164,18 +169,18 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneHighlightBorder;
 PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 
 // ── Event classes ───────────────────────────────────────────────────────
-// A coarse capability axis layered over the path taxonomy. Two of the five
+// A coarse capability axis layered over the path taxonomy. Two of the six
 // classes are the general ones: an animation either reshapes a window's
 // GEOMETRY (it has a before-rect and an after-rect) or it changes a
 // surface's APPEARANCE (a single surface fading / scaling / glitching in or
 // out). A geometry-only shader such as window-morph cross-fades
 // `iFromRect → iToRect` and is a silent no-op on an appearance event, so a
 // shader declares which classes it supports (AnimationShaderEffect::appliesTo)
-// and the settings UI filters the rows it can't drive. The other three —
-// DESKTOP, MOVE and STRIP — each name a distinct uniform contract a pack must
-// opt into explicitly, and a universal (empty `appliesTo`) pack never reaches
-// them. These string tokens are the SSOT for that vocabulary — matched
-// verbatim against `appliesTo` entries and `eventClassForPath`.
+// and the settings UI filters the rows it can't drive. The other four —
+// DESKTOP, MOVE, STRIP and TAB — each name a distinct uniform contract a
+// pack must opt into explicitly, and a universal (empty `appliesTo`) pack
+// never reaches them. These string tokens are the SSOT for that vocabulary —
+// matched verbatim against `appliesTo` entries and `eventClassForPath`.
 //
 // Adding a class token? It is not enough to declare it here. Every one of
 // these must be updated too, and the last three have each already shipped a
@@ -193,8 +198,19 @@ PHOSPHORANIMATION_EXPORT extern const QString WidgetZoneOverlayFlash;
 //      classified compositor-only and skipped by the daemon.
 //   4. `_typeCatalog` in ShaderBrowserPage.qml — the browser's type axis.
 //      A missing entry ships an untranslated badge sorted last.
-//   5. `coverageLabel` in AnimationsMotionSetsPage.qml — the coverage chip.
-//      A missing case ships the raw lowercase token.
+//   5. `shaderPathResolvesInIsolation` (shaderprofiletree.cpp) — decide
+//      whether the new class's leaves may inherit a shader from their
+//      ancestors. A leaf whose ONLY ancestors carry other classes must join
+//      the predicate, or it inherits packs the applicability gate then
+//      refuses at install: the leaf animates nothing while settings shows an
+//      inherited "current shader" that never runs (the tab class shipped
+//      with exactly this hazard).
+//   6. `shaderConsumedLeafEventPaths` (animationshadersupportedpaths.h) —
+//      the new class's consumed leaves must be registered, or the picker
+//      hides the shader row and the prune drops stored overrides.
+// (The coverage chips in AnimationsMotionSetsPage.qml / DecorationSetsPage.qml
+// key on the path ROOT segment, not on class tokens — a new class needs a
+// case there only if it also introduces a new path root.)
 
 /// Geometry transitions: snapIn/snapOut, layoutSwitch, maximize — every leg
 /// that carries an old and new rect.
@@ -242,6 +258,36 @@ PHOSPHORANIMATION_EXPORT extern const QString EventClassMove;
 /// pack is still daemon-routable through its appearance leg.
 PHOSPHORANIMATION_EXPORT extern const QString EventClassStrip;
 
+/// Tab transitions: the swap inside a tabbed scrolling column
+/// (`scrolling.tabSwitch`). TWO textures like `desktop`, but on a window quad
+/// rather than a screen: the outgoing tab's captured content is bound as
+/// `uOldWindow` (the same shared old-content sampler the geometry crossfades
+/// use) and the pack blends it into the arriving tab's live surface over a
+/// discrete forward leg.
+///
+/// Opt-in rather than universal-permissive, for a reason of its own. A
+/// universal single-surface pack would not fail here the way it does on a
+/// desktop path — its sampler IS bound — it would simply fade the arriving tab
+/// in over whatever lies behind the column, which is the wallpaper. That reads
+/// as a flash of desktop between two windows that never moved, so a pack must
+/// declare `appliesTo: ["tab"]` to be offered.
+///
+/// Like `move`, the tab leaf takes NO inherited shader from its ancestors
+/// (shaderPathResolvesInIsolation / ShaderProfileTree::resolve): its only
+/// ancestor is the strip-classed `scrolling` root, so everything it could
+/// inherit is provably wrong for it. Only a direct override at the leaf
+/// applies; motion (curve/duration) inheritance is unaffected.
+///
+/// A tab-ONLY pack is compositor-only by `shaderEffectIsCompositorOnly`'s
+/// appearance rule, which is what lets it include `old_content.glsl`
+/// unguarded: that sampler is binding-less and the daemon's strict SPIR-V
+/// bake rejects it. The BUNDLED-pack validator gate enforces this (a hybrid
+/// declaring "appearance" beside "tab" fails the daemon-dialect bake loudly,
+/// with a hint naming the fix); a user-installed hybrid bypasses the gate and
+/// degrades to logged bake failures rather than being rejected — the same
+/// standing gap every geometry+appearance old-content pack shares.
+PHOSPHORANIMATION_EXPORT extern const QString EventClassTab;
+
 /// Every event-class token, in the order the classes are declared above.
 /// This is the vocabulary `AnimationShaderEffect::appliesTo` is validated
 /// against and the one the pack validator lints and names in its diagnostic.
@@ -256,8 +302,10 @@ PHOSPHORANIMATION_EXPORT QStringList allEventClassTokens();
 /// are `appearance`; the window leaves split by motion-vs-lifecycle; the
 /// `window.movement.move` leaf is `move` (held interactive drag) while the
 /// rest of the movement sub-tree is `geometry`; the `desktop` root and every
-/// `desktop.*` leaf are `desktop`; the `scrolling` root and every
-/// `scrolling.*` leaf are `strip`; the `window` root itself is mixed → empty.
+/// `desktop.*` leaf are `desktop`; the `scrolling` root and `scrolling.view`
+/// are `strip` while the `scrolling.tabSwitch` leaf is `tab` (the same
+/// leaf-beats-subtree carve-out `window.movement.move` gets); the `window`
+/// root itself is mixed → empty.
 PHOSPHORANIMATION_EXPORT QString eventClassForPath(const QString& path);
 
 /// Full list of built-in paths in taxonomy order.

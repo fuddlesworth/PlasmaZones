@@ -1,7 +1,7 @@
 {
     "id": "phosphor-gate",
     "name": "Phosphor Gate",
-    "description": "Edge gates for the scrolling strip in the official Phosphor style. Columns arriving on screen materialize through a cyan energize gate at the leading edge, and columns leaving drain to a dark navy silhouette with a rose persistence tail at the trailing edge. The gates breathe in with scroll speed, the middle of the screen is never touched, and everything settles to the plain strip the instant scrolling stops.",
+    "description": "Edge gates for the scrolling strip in the official Phosphor style. Columns arriving on screen materialize through a cyan energize gate at the leading edge, and columns leaving drain to a dark navy silhouette with a rose afterglow at the trailing edge. The gates breathe in with scroll speed and never touch the middle of the screen. Everything settles to the plain strip the instant scrolling stops.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Reveal",
@@ -27,7 +27,7 @@
             "min": 0.05,
             "max": 0.22,
             "step": 0.01,
-            "description": "How far each edge gate reaches into the screen at full scroll speed, as a fraction of the screen width.",
+            "description": "How far each edge gate reaches inward at full scroll speed, as a fraction of the strip's work area width.",
             "group": "Gates"
         },
         {
@@ -53,8 +53,8 @@
             "group": "Gates"
         },
         {
-            "id": "persistence",
-            "name": "Persistence Tail",
+            "id": "afterglow",
+            "name": "Afterglow Trail",
             "type": "float",
             "default": 0.5,
             "min": 0.0,
@@ -100,10 +100,10 @@
             "id": "density",
             "name": "Ember Density",
             "type": "float",
-            "default": 24,
-            "min": 8,
-            "max": 60,
-            "step": 1,
+            "default": 24.0,
+            "min": 8.0,
+            "max": 60.0,
+            "step": 1.0,
             "description": "How many rows of ember sparks the arrival gate carries. More rows also means smaller sparks, since each one is sized to its row.",
             "group": "Embers"
         },

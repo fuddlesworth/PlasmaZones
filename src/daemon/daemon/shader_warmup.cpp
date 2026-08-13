@@ -287,7 +287,7 @@ void Daemon::setupShaderWarmBakes()
             if (!info.isValid() || info.fragmentShaderPath.isEmpty() || !QFile::exists(info.fragmentShaderPath)) {
                 return;
             }
-            // Compositor-only packs (desktop / geometry / move / strip
+            // Compositor-only packs (desktop / geometry / move / strip / tab
             // classes, no appearance) are authored against the kwin classic-GL dialect
             // with no daemon branch — their source does not compile on the
             // strict SPIR-V qsb target, and the daemon never runs them, so

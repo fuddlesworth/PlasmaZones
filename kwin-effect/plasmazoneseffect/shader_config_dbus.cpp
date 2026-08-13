@@ -463,6 +463,29 @@ void PlasmaZonesEffect::tryBeginShaderForEvent(KWin::EffectWindow* window, const
     if (!resolvedShaderAppliesToEvent(profile.effectiveEffectId(), profilePath)) {
         return;
     }
+    // The tab swap DEFEATS the same-effect short-circuit on purpose. That
+    // short-circuit exists for KWin's lifecycle-event bursts, where several
+    // signals describe ONE logical event and the first leg should keep
+    // running. A tab swap is never that shape: each swap is a distinct
+    // discrete leg with a DIFFERENT source window, so a live leg running the
+    // same pack — a repeat switch inside the previous leg's duration, or a
+    // focus leg from the very activation this switch caused when the user
+    // binds one pack to both classes — must be SUPERSEDED, not reused.
+    // Reusing it kept the old startTimeMs (the cross-fade began mid-progress
+    // or not at all), kept the old snapshot (the blend ran from the WRONG
+    // tab's pixels), left the teardown timer owned by the earlier event, and
+    // skipped the fresh-install repaint. Ending the same-pack leg first makes
+    // this install take beginShaderTransition's ordinary fresh path, which
+    // restarts the clock, re-seeds, re-arms teardown and repaints. Different-
+    // pack legs already supersede through beginShaderTransition itself.
+    if (profilePath == PhosphorAnimation::ProfilePaths::ScrollingTabSwitch) {
+        if (auto* live = m_shaderManager.findTransition(window)) {
+            const auto cacheIt = m_shaderManager.m_shaderCache.find(profile.effectiveEffectId());
+            if (cacheIt != m_shaderManager.m_shaderCache.end() && live->cached == &cacheIt->second) {
+                endShaderTransition(window);
+            }
+        }
+    }
     const bool installed = beginShaderTransition(window, profile, effectiveDurationMs, reverse, holdCloseGrab,
                                                  holdAddedGrab, animateMinimized, progressCurve);
     auto* transition = m_shaderManager.findTransition(window);

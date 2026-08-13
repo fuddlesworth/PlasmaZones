@@ -66,9 +66,36 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
     // One skipped frame at the very start of a snap is imperceptible. If
     // capture fails, needsSnapshot is cleared inside the helper and the
     // morph shader falls back to no cross-fade.
+    //
+    // EXCEPT for the scrolling tab swap, where the skipped frame is the most
+    // visible thing on screen. A snap morph hides it because the window is
+    // mid-move and its old pixels are still under the cursor; a tab swap has
+    // already parked the outgoing tab off-canvas, so the one frame that draws
+    // nothing shows the WALLPAPER through the column — a flash, then the
+    // animation. Falling through instead draws this frame through the shader
+    // at progress ~0, which is oldColor, which is the outgoing tab: exactly
+    // the frame the user was already looking at, so the leg begins invisibly.
+    //
+    // The cost is a second effects->drawWindow inside this outer paintWindow
+    // (the capture's, into its FBO, plus the on-screen one below). KWin's
+    // chain iterator is NOT the hazard — EffectsHandler::drawWindow
+    // post-increments and then decrements, so sequential calls each start
+    // from the same position (verified against the KWin source; the
+    // ghost-trail this file documents at the direct-call site comes from a
+    // DIRECT OffscreenEffect::drawWindow parking the iterator, which neither
+    // call here does). The honest cost is the second full chain walk per
+    // frame, and that is why the fall-through is gated on the tab leg rather
+    // than taken for every capture: a snap morph's capture frame is invisible
+    // (the moving window's old pixels still cover it) so it can keep the
+    // cheap skip, while a tab swap's capture frame showed the WALLPAPER
+    // through the column (the outgoing tab is already parked). Widen the gate
+    // only with the per-frame cost in view.
     if (transition.needsSnapshot && !transition.oldSnapshot) {
+        const bool tabLeg = transition.tabSwap;
         captureOldWindowSnapshot(transition, w);
-        return ShaderBranchOutcome::Handled;
+        if (!tabLeg) {
+            return ShaderBranchOutcome::Handled;
+        }
     }
     // Two progress sources, picked by the transition's mode (see
     // ShaderTransition's docstring). Lifecycle events started via
@@ -437,34 +464,56 @@ PlasmaZonesEffect::ShaderBranchOutcome PlasmaZonesEffect::paintShaderTransitionW
                 // the daemon's surface-sized-FBO path.
                 shader->setUniform(cached->iAnchorPosInFboLoc, anchorUniforms.anchorPosInFbo);
             }
-            if (cached->iWindowOpacityLoc >= 0) {
-                // SetOpacity is layer-backed: only a chain carrying the
-                // plain opacity-tint layer bakes the window's opacity
-                // into its composite (the folded opacity param), and when
-                // the fold produced the composite this shader samples
-                // (surfaceLayerTex) the alpha is already in it —
-                // re-applying here would dim twice. So push 1.0
-                // everywhere EXCEPT the bare-uTexture0 fallback of an
-                // opacity-baking chain: the fold didn't run there, so
-                // this push is the only dim the window gets for the
-                // transition's duration. The decoration's foldedOpacity
-                // carries the resolved value for BOTH sources (config
-                // default with the SetOpacity rule winning); the per-frame
-                // rule cache refines it when present, but is populated
-                // only while opacity RULES are loaded, so it cannot be
-                // the sole source — config-only opacity would render
-                // opaque here. Custom chains and undecorated windows
-                // never honour the setting, so they stay at 1.0 outright.
-                float winOpacity = 1.0f;
-                if (chainBakesOpacity && !surfaceLayerTex) {
-                    winOpacity = static_cast<float>(qBound(0.0, foldedOpacity, 1.0));
-                    if (m_shaderManager.frameOpacityCached(w)) {
-                        if (const auto cachedOpacity = m_shaderManager.cachedFrameOpacity(w)) {
-                            winOpacity = static_cast<float>(*cachedOpacity);
-                        }
+            // SetOpacity is layer-backed: only a chain carrying the
+            // plain opacity-tint layer bakes the window's opacity
+            // into its composite (the folded opacity param), and when
+            // the fold produced the composite this shader samples
+            // (surfaceLayerTex) the alpha is already in it —
+            // re-applying here would dim twice. So push 1.0
+            // everywhere EXCEPT the bare-uTexture0 fallback of an
+            // opacity-baking chain: the fold didn't run there, so
+            // this push is the only dim the window gets for the
+            // transition's duration. The decoration's foldedOpacity
+            // carries the resolved value for BOTH sources (config
+            // default with the SetOpacity rule winning); the per-frame
+            // rule cache refines it when present, but is populated
+            // only while opacity RULES are loaded, so it cannot be
+            // the sole source — config-only opacity would render
+            // opaque here. Custom chains and undecorated windows
+            // never honour the setting, so they stay at 1.0 outright.
+            // Hoisted above the location tests because BOTH opacity
+            // uniforms consume it.
+            float winOpacity = 1.0f;
+            if (chainBakesOpacity && !surfaceLayerTex) {
+                winOpacity = static_cast<float>(qBound(0.0, foldedOpacity, 1.0));
+                if (m_shaderManager.frameOpacityCached(w)) {
+                    if (const auto cachedOpacity = m_shaderManager.cachedFrameOpacity(w)) {
+                        winOpacity = static_cast<float>(*cachedOpacity);
                     }
                 }
+            }
+            if (cached->iWindowOpacityLoc >= 0) {
                 shader->setUniform(cached->iWindowOpacityLoc, winOpacity);
+            }
+            if (cached->iOldWindowOpacityLoc >= 0) {
+                // The OLD side's own opacity (old_content.glsl). For a
+                // self-cross-fade this mirrors winOpacity bit-for-bit — the
+                // old content is this window's past, so the same SetOpacity
+                // verdict covers both sides, and the mirror preserves the
+                // historical single-uniform behaviour. A foreign-source leg
+                // (the tab swap) carries the value the capture site resolved
+                // for the OUTGOING tab instead: dimming its snapshot by the
+                // arriving window's opacity dimmed the wrong window whenever
+                // a rule distinguished the two tabs of one column.
+                //
+                // Keyed on the stable tabSwap flag, NOT on the snapshotSource
+                // QPointer: the pointer nulls if the outgoing tab's window is
+                // destroyed mid-leg, and the push must not flip sources while
+                // oldSnapshot still holds its capture. A tabSwap leg whose
+                // capture never ran is covered too — oldSnapshotOpacity
+                // defaults to 1.0 and iHasOldWindow == 0 makes it inert.
+                shader->setUniform(cached->iOldWindowOpacityLoc,
+                                   transition.tabSwap ? transition.oldSnapshotOpacity : winOpacity);
             }
             if (cached->iAnchorRectInTextureLoc >= 0) {
                 // The anchor's UV sub-rect within uTexture0 (KWin's

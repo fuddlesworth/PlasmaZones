@@ -25,7 +25,7 @@ AnimationShaderEffect packWith(const QString& id, const QStringList& classes)
     return e;
 }
 
-// The five single-class packs the predicate matrix is built from, named for
+// The six single-class packs the predicate matrix is built from, named for
 // the class rather than the pack so the slots read as class-vs-class. Shared
 // across the per-class slots below, which is what makes splitting that matrix
 // free of duplication.
@@ -48,6 +48,10 @@ AnimationShaderEffect movePack()
 AnimationShaderEffect stripPack()
 {
     return packWith(QStringLiteral("strip-motion-blur"), {QStringLiteral("strip")});
+}
+AnimationShaderEffect tabPack()
+{
+    return packWith(QStringLiteral("tab-fade"), {QStringLiteral("tab")});
 }
 /// Universal: an EMPTY appliesTo, which is the "applies to every
 /// single-surface class" default rather than a declared class of its own.
@@ -344,6 +348,12 @@ private Q_SLOTS:
         stripOnly.fragmentShaderPath = QStringLiteral("effect.frag");
         stripOnly.appliesTo = QStringList{QStringLiteral("strip")};
         QCOMPARE(AnimationShaderEffect::fromJson(stripOnly.toJson()).appliesTo, stripOnly.appliesTo);
+
+        AnimationShaderEffect tabOnly;
+        tabOnly.id = QStringLiteral("tab-fade");
+        tabOnly.fragmentShaderPath = QStringLiteral("effect.frag");
+        tabOnly.appliesTo = QStringList{QStringLiteral("tab")};
+        QCOMPARE(AnimationShaderEffect::fromJson(tabOnly.toJson()).appliesTo, tabOnly.appliesTo);
     }
 
     /// The accepted token vocabulary, pinned as a SET. fromJson validates
@@ -356,7 +366,7 @@ private Q_SLOTS:
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
         const QStringList expected{QStringLiteral("geometry"), QStringLiteral("appearance"), QStringLiteral("desktop"),
-                                   QStringLiteral("move"), QStringLiteral("strip")};
+                                   QStringLiteral("move"),     QStringLiteral("strip"),      QStringLiteral("tab")};
         QCOMPARE(PP::allEventClassTokens(), expected);
 
         // Every one of them survives a fromJson round trip. The vocabulary
@@ -480,7 +490,7 @@ private Q_SLOTS:
     /// long slot. QVERIFY aborts the slot it fails in, so a single regression
     /// in the geometry block used to take every later class's assertions with
     /// it — the strip block at the end never ran at all. Split, a geometry
-    /// break reports as one failure and the other four still tell you whether
+    /// break reports as one failure and the other five still tell you whether
     /// they hold. The packs are built by the shared factories above so the
     /// split costs no duplication.
     void testShaderEffectAppliesToEventPath()
@@ -673,6 +683,50 @@ private Q_SLOTS:
         QVERIFY(shaderEffectAppliesToEventPath(stripHybrid, PP::Global));
     }
 
+    /// The tab class: opt-in like desktop / move / strip, but the OTHER leaf
+    /// of the scrolling family — the swap of two windows in one rect. The
+    /// pin that matters most: a UNIVERSAL pack is refused on the tab leaf.
+    /// That refusal is the class's entire reason to exist (a universal pack
+    /// would fade the arriving tab in over the wallpaper), and deleting the
+    /// `cls == EventClassTab` arm makes the leaf universal-permissive with
+    /// every other slot in this file staying green.
+    void testShaderEffectAppliesToEventPath_tabClass()
+    {
+        using PhosphorAnimationShaders::shaderEffectAppliesToEventPath;
+        namespace PP = PhosphorAnimation::ProfilePaths;
+
+        const AnimationShaderEffect tabOnly = tabPack();
+        QVERIFY(shaderEffectAppliesToEventPath(tabOnly, PP::ScrollingTabSwitch));
+        // Refused everywhere else, its scrolling sibling and ancestor
+        // included: the leaf carries `tab`, the root carries `strip`, and
+        // the two must not leak into each other.
+        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::ScrollingView));
+        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::Scrolling));
+        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::WindowOpen));
+        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::WindowSnapIn));
+        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::WindowMove));
+        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::DesktopSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::Window));
+        QVERIFY(!shaderEffectAppliesToEventPath(tabOnly, PP::Global));
+
+        // Opt-in in both directions — every other class is refused on the
+        // tab leaf, THE UNIVERSAL PACK FIRST (the load-bearing case).
+        QVERIFY(!shaderEffectAppliesToEventPath(universalPack(), PP::ScrollingTabSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(geometryPack(), PP::ScrollingTabSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(appearancePack(), PP::ScrollingTabSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(desktopPack(), PP::ScrollingTabSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(movePack(), PP::ScrollingTabSwitch));
+        QVERIFY(!shaderEffectAppliesToEventPath(stripPack(), PP::ScrollingTabSwitch));
+
+        // A tab+appearance HYBRID is live on both its legs, like the strip
+        // hybrid above — the classes are independent capabilities.
+        const AnimationShaderEffect tabHybrid =
+            packWith(QStringLiteral("hybrid-tab-appearance"), {QStringLiteral("tab"), QStringLiteral("appearance")});
+        QVERIFY(shaderEffectAppliesToEventPath(tabHybrid, PP::ScrollingTabSwitch));
+        QVERIFY(shaderEffectAppliesToEventPath(tabHybrid, PP::WindowOpen));
+        QVERIFY(shaderEffectAppliesToEventPath(tabHybrid, PP::Global));
+    }
+
     /// Compositor-only classification: a pack whose declared classes never
     /// include `appearance` can only execute in the kwin-effect — the daemon
     /// skips its warm bake and SurfaceAnimator refuses to attach it. A
@@ -700,6 +754,11 @@ private Q_SLOTS:
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("move")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("strip")})));
+        // The tab pin is load-bearing beyond symmetry: a tab-only pack being
+        // compositor-only is what lets it include old_content.glsl's
+        // binding-less uOldWindow unguarded (the daemon's strict SPIR-V bake
+        // would reject it) — see EventClassTab's contract in ProfilePaths.h.
+        QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("tab")})));
         QVERIFY(shaderEffectIsCompositorOnly(effectWith({QStringLiteral("geometry"), QStringLiteral("move")})));
         // Default-constructed (invalid) effect: empty appliesTo → not
         // compositor-only, so runLeg's unknown-id resolve stays a plain

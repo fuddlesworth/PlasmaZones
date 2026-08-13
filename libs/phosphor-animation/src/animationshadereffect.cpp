@@ -204,13 +204,13 @@ AnimationShaderEffect AnimationShaderEffect::fromJson(const QJsonObject& obj)
     e.version = obj.value(QLatin1String("version")).toString();
     e.category = obj.value(QLatin1String("category")).toString();
     // `appliesTo` (array of event-class tokens). Only the documented
-    // vocabulary — "geometry" / "appearance" / "desktop" / "move" / "strip" —
-    // is accepted; an unknown token is a typo or a foreign import and is
-    // dropped with a warning so it neither restricts the picker on a class
+    // vocabulary — "geometry" / "appearance" / "desktop" / "move" / "strip" /
+    // "tab" — is accepted; an unknown token is a typo or a foreign import and
+    // is dropped with a warning so it neither restricts the picker on a class
     // that doesn't exist nor round-trips the typo back to disk via toJson. An
     // array that validates down to empty is indistinguishable from
     // "universal", which is the correct fallback (the effect applies
-    // everywhere except the opt-in desktop, move and strip classes — see
+    // everywhere except the opt-in desktop, move, strip and tab classes — see
     // shaderEffectAppliesToEventPath).
     {
         namespace PP = PhosphorAnimation::ProfilePaths;
@@ -466,7 +466,7 @@ bool AnimationShaderEffect::operator==(const AnimationShaderEffect& other) const
     // a content change to every equality-gated path (registry reload
     // diffing, the settings dirty check). fromJson already dedupes, so a
     // sorted copy is a faithful set comparison; both lists are at most the
-    // five class tokens, so the sort is free.
+    // six class tokens, so the sort is free.
     //
     // The one consumer that used to care about order was the shader
     // browser's type badge, which read appliesTo[0]; it now picks by catalog
@@ -528,16 +528,14 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // paths, where its lone surface sampler would be unbound; conversely a
     // desktop effect declaring appliesTo:["desktop"] is dimmed on window/OSD
     // paths (their class isn't `desktop`) by the concrete-mismatch check below.
-    if (cls == PP::EventClassDesktop)
-        return effect.appliesTo.contains(cls);
+    //
     // The move class (the held interactive drag) is opt-in for the same
     // structural reason: a drag installs a held transition with no old→new
     // crossfade, so only a pack consuming the move-physics inputs — declared
     // via `appliesTo: ["move"]` — does anything there. A universal or
     // geometry pack on the move leaf would install a dead transition that
     // pins full-output repaints for the whole drag.
-    if (cls == PP::EventClassMove)
-        return effect.appliesTo.contains(cls);
+    //
     // The strip class (the scrolling strip's view leg) is opt-in for the same
     // structural reason as move: the view spring retargets continuously under
     // wheel scrolling, so there is no discrete from/to leg for a crossfade
@@ -546,7 +544,18 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // decorates the live per-output capture. A universal or single-surface
     // pack on the strip row would install a dead full-output pass for every
     // scroll.
-    if (cls == PP::EventClassStrip)
+    //
+    // The tab class (a tab swap inside a tabbed scrolling column) is opt-in
+    // for a softer reason than the three above: a universal single-surface
+    // pack CAN run there, its sampler is bound, but the leg exists to blend
+    // the outgoing tab into the incoming one and a pack that ignores
+    // uOldWindow just fades the arriving tab in over the wallpaper — a flash
+    // of desktop between two windows that never moved. Declaring
+    // `appliesTo: ["tab"]` is the statement that the pack reads the tab it is
+    // replacing.
+    static const QStringList optInClasses{PP::EventClassDesktop, PP::EventClassMove, PP::EventClassStrip,
+                                          PP::EventClassTab};
+    if (optInClasses.contains(cls))
         return effect.appliesTo.contains(cls);
     // Universal effect (no declared constraint) runs on every single-surface path.
     if (effect.appliesTo.isEmpty())
@@ -556,18 +565,19 @@ bool shaderEffectAppliesToEventPath(const AnimationShaderEffect& effect, const Q
     // (mixed ancestor / non-window path → empty class) is left compatible
     // so the picker never dims an effect on a row it can't classify — EXCEPT
     // an effect that declares NEITHER geometry NOR appearance, which is to
-    // say a pack that is exclusively one of the three opt-in classes
-    // (desktop / move / strip).
+    // say a pack that is exclusively one of the four opt-in classes
+    // (desktop / move / strip / tab).
     //
     // What an ambiguous row can actually feed is only the geometry and
-    // appearance legs beneath it. The move leaf takes no inherited shader at
-    // all (ShaderProfileTree::resolve leaf isolation), and while the desktop
-    // and strip leaves DO inherit — so a screen-level-only pack assigned at
-    // `global` would in fact be picked up and run — offering it on a row that
-    // spans mostly single-surface events advertises a behaviour it does not
-    // have there. So for those two this is picker POLICY (assign it on the
-    // leaf that runs it) rather than a deadness proof, while for move-only it
-    // is a genuine proof.
+    // appearance legs beneath it. The move AND tab leaves take no inherited
+    // shader at all (ShaderProfileTree::resolve leaf isolation via
+    // shaderPathResolvesInIsolation), while the desktop and strip leaves DO
+    // inherit — so a screen-level-only pack assigned at `global` would in
+    // fact be picked up and run there, and offering it on a row that spans
+    // mostly single-surface events advertises a behaviour it does not have.
+    // So for desktop-only and strip-only this is picker POLICY (assign it on
+    // the leaf that runs it) rather than a deadness proof, while for
+    // move-only and tab-only it is a genuine proof.
     //
     // The test is on the single-surface classes rather than on the opt-in
     // ones so a HYBRID keeps working: a pack declaring ["strip",
@@ -585,8 +595,8 @@ bool shaderEffectIsCompositorOnly(const AnimationShaderEffect& effect)
     namespace PP = PhosphorAnimation::ProfilePaths;
     // Universal packs (no declared constraint) run on every single-surface
     // path, daemon overlays included. A constrained pack reaches the daemon
-    // only through the appearance class — desktop / geometry / move / strip
-    // events exist solely inside the kwin-effect.
+    // only through the appearance class — desktop / geometry / move / strip /
+    // tab events exist solely inside the kwin-effect.
     return !effect.appliesTo.isEmpty() && !effect.appliesTo.contains(PP::EventClassAppearance);
 }
 

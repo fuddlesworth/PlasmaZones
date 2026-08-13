@@ -18,6 +18,7 @@ const QString EventClassAppearance = QStringLiteral("appearance");
 const QString EventClassDesktop = QStringLiteral("desktop");
 const QString EventClassMove = QStringLiteral("move");
 const QString EventClassStrip = QStringLiteral("strip");
+const QString EventClassTab = QStringLiteral("tab");
 
 // window.* — split into two contract sub-trees so each has a real cascade
 // parent for its "All": appearance (a surface materialising / dissolving) and
@@ -71,6 +72,13 @@ const QString EditorSnapResize = QStringLiteral("editor.snapResize");
 // that moves the columns.
 const QString Scrolling = QStringLiteral("scrolling");
 const QString ScrollingView = QStringLiteral("scrolling.view");
+// The tab swap inside a tabbed column. Grouped under scrolling because tabbed
+// columns exist only there, but it is NOT the strip's one-scene contract and
+// carries its own opt-in class instead — see eventClassForPath. The subject is
+// a single window taking the rect another just vacated, which is the same
+// old-content crossfade the snap morph runs, only with the old content coming
+// from a DIFFERENT window.
+const QString ScrollingTabSwitch = QStringLiteral("scrolling.tabSwitch");
 
 // osd.*
 const QString Osd = QStringLiteral("osd");
@@ -167,6 +175,7 @@ QStringList allBuiltInPaths()
         EditorSnapResize,
         Scrolling,
         ScrollingView,
+        ScrollingTabSwitch,
         Osd,
         OsdShow,
         OsdPop,
@@ -239,7 +248,11 @@ QString parentPath(const QString& path)
 
 QStringList allEventClassTokens()
 {
-    return {EventClassGeometry, EventClassAppearance, EventClassDesktop, EventClassMove, EventClassStrip};
+    // Built once: callers iterate this behind picker filters and validators,
+    // and the vocabulary cannot change at runtime.
+    static const QStringList tokens{EventClassGeometry, EventClassAppearance, EventClassDesktop,
+                                    EventClassMove,     EventClassStrip,      EventClassTab};
+    return tokens;
 }
 
 QString eventClassForPath(const QString& path)
@@ -298,6 +311,18 @@ QString eventClassForPath(const QString& path)
     // offset/velocity (iStripMotion) and must opt in via
     // `appliesTo: ["strip"]`. Root and every leaf carry the class, mirroring
     // desktop.
+    // The tab swap is the one scrolling leaf that is NOT a strip pass, and it
+    // is not an appearance leg either. It cross-fades a snapshot of the
+    // OUTGOING tab (uOldWindow) into the live content of the incoming one, so
+    // it is two-texture like the desktop switch, on a window quad rather than
+    // a screen. A universal single-surface pack would fade the arriving tab in
+    // over whatever lies behind the column, which is the wallpaper, so its own
+    // class keeps it opt-in the way desktop and strip are. Checked BEFORE the
+    // sub-tree match below so the leaf wins over its scrolling ancestor, the
+    // same ordering window.movement.move uses against its own family.
+    if (path == ScrollingTabSwitch) {
+        return EventClassTab;
+    }
     if (path == Scrolling || path.startsWith(scrollingPrefix)) {
         return EventClassStrip;
     }
@@ -345,6 +370,14 @@ QString defaultShaderEffectIdForPath(const QString& path)
     // would put a full-screen post-process on the most frequent interaction
     // in the mode. Scrolling stays a plain translation until the user picks a
     // strip pack on Animations → Motion → Scrolling.
+    //
+    // `scrolling.tabSwitch` joins them, and its case is the closest call of
+    // the three. Without a pack the swap is a hard cut, which IS worse than
+    // the plain behaviour the other two fall back to — but the pass costs a
+    // window-sized capture and a skipped frame per switch, and a transition
+    // that installs itself on a fresh config is the kind of thing a user
+    // should choose rather than discover. Every tab pack (Tab Fade first) is
+    // one pick away on the same page as the strip packs.
     // Every other event defaults to no shader.
     return QString();
 }

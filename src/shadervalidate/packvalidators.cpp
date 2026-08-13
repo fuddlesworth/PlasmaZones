@@ -385,7 +385,7 @@ static QStringList compositorOnlySamplersUsed(const QString& expandedSource)
 // uniforms) is NOT baked here: QShaderBaker compiles Vulkan-dialect GLSL and
 // rejects default-block uniforms, so the kwin branch needs a separate
 // OpenGL-target compiler. Compositor-only packs (desktop / geometry / move /
-// strip classes — see shaderEffectIsCompositorOnly) are authored against that kwin
+// strip / tab classes — see shaderEffectIsCompositorOnly) are authored against that kwin
 // dialect directly and never run on the daemon, so only their metadata is
 // linted here; their compile coverage is test_animation_shader_kwin_bake.
 // Daemon-capable packs get the full stage compile below.

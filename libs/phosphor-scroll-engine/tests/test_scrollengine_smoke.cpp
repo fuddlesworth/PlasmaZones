@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): this file is around 1600 lines, past the
+// FILE-SIZE EXCEPTION (sanctioned): this file is around 1800 lines, past the
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
@@ -80,6 +80,7 @@ private Q_SLOTS:
     void aWidthChangeKeepsTheResizedColumnInTheBatch();
     void aDepartingColumnKeepsItsTabIndicator();
     void onlyAHorizontallyParkedTileCarriesAVisualPosition();
+    void aTabSwitchNamesTheTabItReplaces();
     void modeRoundTripRestoresStripStructure();
     void operationScreenFallbackIsDeterministic();
     void minSizeSeedsAndCarries();
@@ -1279,6 +1280,70 @@ void TestScrollEngineSmoke::onlyAHorizontallyParkedTileCarriesAVisualPosition()
         }
     }
     QVERIFY2(sawCarriedPark, "a horizontally departed column must carry the visual-position paint hint");
+}
+
+void TestScrollEngineSmoke::aTabSwitchNamesTheTabItReplaces()
+{
+    // The pairing the compositor cannot derive. Activating a tab is two
+    // commits sharing one rect — the shown tab parks, the picked one takes the
+    // rect it vacated — and both are ordinary placements on the wire, so
+    // without `tabFrom` the effect can only hard-cut between two different
+    // windows in one rectangle.
+    //
+    // Both halves are asserted, because either alone would pass against a
+    // field that always fired: the ARRIVING tab names the outgoing one, and
+    // the outgoing entry carries nothing.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("S1"), 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
+    engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+
+    // Tabbing is NOT a switch, and this is the assertion that says so. Every
+    // tile the toggle hides was on screen a moment ago, but so was the one it
+    // leaves showing, so no pairing exists — a rule keyed on "something got
+    // hidden" alone would fire here and cross-fade a window against itself.
+    const QJsonArray tabbedBatch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    QVERIFY(!tabbedBatch.isEmpty());
+    for (const QJsonValue& v : tabbedBatch) {
+        QVERIFY2(!v.toObject().contains(QLatin1String("tabFrom")),
+                 "tabbing a column swaps nothing, so no entry may name a replaced tab");
+    }
+
+    // Now the switch itself: focus the hidden tab, which shows it and parks
+    // the one that was showing.
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    const QString shown = state->strip().activeWindowId();
+    const QString hidden = shown == QLatin1String("app|a") ? QStringLiteral("app|b") : QStringLiteral("app|a");
+    const int beforeSwitch = tiled.count();
+    engine->windowFocused(hidden, QStringLiteral("S1"));
+    QVERIFY2(tiled.count() > beforeSwitch, "a tab switch must emit its own batch");
+    const QJsonArray batch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+
+    QJsonObject arriving;
+    QJsonObject leaving;
+    for (const QJsonValue& v : batch) {
+        const QJsonObject o = v.toObject();
+        if (o.value(QLatin1String("y")).toInt() > defaultScreenRect().bottom()) {
+            leaving = o;
+        } else {
+            arriving = o;
+        }
+    }
+    QVERIFY2(!arriving.isEmpty() && !leaving.isEmpty(),
+             "precondition: the switch must park one tab and show the other");
+    QCOMPARE(arriving.value(QLatin1String("tabFrom")).toString(), leaving.value(QLatin1String("windowId")).toString());
+    QVERIFY2(!leaving.contains(QLatin1String("tabFrom")),
+             "the outgoing tab is the source of the cross-fade, not a subject of one");
+    // Not a self-reference: the wire validator rejects that outright, and it is
+    // what a naive "the other tile in this column" rule would produce on a
+    // single-tab column.
+    QVERIFY(arriving.value(QLatin1String("tabFrom")).toString()
+            != arriving.value(QLatin1String("windowId")).toString());
 }
 
 void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()

@@ -339,6 +339,26 @@ private Q_SLOTS:
         QVERIFY(e.validationError().isEmpty());
     }
 
+    void tileRequestEntry_tabFromSelfReference_rejected()
+    {
+        // tabFrom is a paint hint naming the OTHER window of a tab swap. A
+        // foreign id is accepted as-is (the effect resolves or drops ids it
+        // cannot find), but a self-reference would cross-fade a window
+        // against a snapshot of itself, so the boundary rejects it as
+        // garbling.
+        PhosphorProtocol::TileRequestEntry e;
+        e.windowId = QStringLiteral("win-1");
+        e.screenId = QStringLiteral("DP-1");
+        e.width = 1920;
+        e.height = 1080;
+        e.tabFrom = QStringLiteral("win-2");
+        QVERIFY(e.validationError().isEmpty());
+        e.tabFrom = QStringLiteral("win-1");
+        const QString err = e.validationError();
+        QVERIFY(!err.isEmpty());
+        QVERIFY(err.contains(QStringLiteral("tabFrom")));
+    }
+
     void tileRequestEntry_windowedFullscreenOnFloating_rejected()
     {
         // The pair is contradictory (the flag means "keeps its column slot")

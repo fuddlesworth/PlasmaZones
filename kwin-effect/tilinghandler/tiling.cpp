@@ -139,7 +139,10 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // getWindowId, and after a cross-session restore the daemon can still
         // send the pre-restore UUID (slotWindowStateChanged spells out why).
         // Unresolved falls back to the daemon id, correct for the ordinary
-        // same-session case where the two are identical.
+        // same-session case where the two are identical. findWindowById's
+        // fuzzy appId fallback is fine HERE, unlike the tab-swap install's
+        // exact wire-to-live map below: a wrong-instance hit invalidates a
+        // sibling's cache entry (a spurious re-resolve), not a wrong paint.
         QString liveWindowId = req.windowId;
         if (KWin::EffectWindow* const w = m_effect->findWindowById(req.windowId)) {
             liveWindowId = m_effect->getWindowId(w);
@@ -202,6 +205,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         /// it, which would erase the X11 constrain-and-centre offset.
         QPoint visualPos;
         bool hasVisualPos = false;
+        QString tabFrom; ///< scrolling strip: the tab this entry replaces in a tabbed column, else empty
     };
     QVector<Entry> entries;
 
@@ -311,6 +315,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             qBound(-StripViewAnimator::kMaxViewDeltaPx, req.viewDeltaX, StripViewAnimator::kMaxViewDeltaPx);
         entry.visualPos = req.hasVisualPos ? QPoint(req.visualX, req.visualY) : QPoint();
         entry.hasVisualPos = req.hasVisualPos;
+        entry.tabFrom = req.tabFrom;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -395,6 +400,11 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         }
     }
 
+    // wire id → live id for every resolved entry of THIS batch, built in the
+    // loop below. Consumed by the tab-swap install to re-key tabFrom (see the
+    // comment at the insert). Captured BY VALUE into the apply lambda: the
+    // staggered applies outlive this function.
+    QHash<QString, QString> wireToLive;
     // Build snapshot with QPointer for safe deferred access
     struct TileSnap
     {
@@ -411,6 +421,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         /// paint path consumes it (a delta ADDED to the commit).
         QPoint visualPos;
         bool hasVisualPos = false;
+        QString tabFrom;
     };
     QVector<TileSnap> toApply;
     QSet<KWin::EffectWindow*> applied;
@@ -436,7 +447,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // pre-autotile capture — must key on the live id the readers use, or
         // the tiling goes untracked and the stale-keyed entries are never
         // reclaimed.
+        //
+        // The wire→live pairs are remembered so tabFrom — a daemon-supplied
+        // id NAMING ANOTHER WINDOW — can be re-keyed through the same
+        // resolution its target's own entry already went through. The
+        // outgoing tab of a swap is by construction a sibling entry of this
+        // very batch, so the map is the exact, fuzzy-free translation the
+        // tabFrom lookup needs; a tabFrom whose window has no entry falls
+        // back to the wire spelling unchanged.
+        const QString wireId = e.windowId;
         e.windowId = m_effect->getWindowId(e.window);
+        wireToLive.insert(wireId, e.windowId);
         // Key on the daemon's TARGET screen (from the tile request), NOT the
         // window's current physical screen. On a cross-output move the moved
         // window has not physically relocated when this batch is built, so
@@ -447,7 +468,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
-                        e.isWindowedFullscreen, e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos});
+                        e.isWindowedFullscreen, e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos,
+                        e.tabFrom});
     }
 
     // Start this batch's view legs, ONCE per output. The delta is a property
@@ -558,6 +580,17 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         }
     }
     const bool startedViewLegs = !startedViewScreens.isEmpty();
+    // A batch carrying a tab swap must apply in ONE pass. The default Cascade
+    // stagger runs paint frames BETWEEN entries, and the swap's two entries
+    // are order-unspecified: park-first re-folds the outgoing tab's composite
+    // at the park before the seed reads it (losing exactly the pre-park fold
+    // the seed exists to capture), while arrival-first leaves both tabs
+    // committed at one rect for a stagger interval — a visible double
+    // exposure. forceImmediate is the documented "this batch cannot be split
+    // without tearing" channel, the same one the view legs already use.
+    const bool anyTabSwap = std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
+        return !s.tabFrom.isEmpty();
+    });
 
     // Cascade order follows the direction of travel for a scrolling strip.
     //
@@ -1059,7 +1092,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
     m_effect->applyStaggeredOrImmediate(
         toApply.size(),
-        [this, toApply, gen, genByScreen, startedViewScreens](int i) {
+        [this, toApply, gen, genByScreen, startedViewScreens, wireToLive](int i) {
             // Local copy (not const ref) so a stale window pointer can be
             // re-resolved below; the rest of the body reads snap.window.
             TileSnap snap = toApply[i];
@@ -1324,6 +1357,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         const auto fsGuard = qScopeGuard([this, prevInApply] {
                             m_effect->m_daemonGate.inGeometryApply = prevInApply;
                         });
+                        // Ordering note vs the tab-swap install below: this
+                        // in-stack moveResize lands the frame at the column
+                        // BEFORE atScrollPark reads it, so an arriving tab
+                        // taking THIS arm loses its park-origin override and
+                        // derives a difference origin instead. Accepted: the
+                        // arm needs Adopt (effect restart, window never seen)
+                        // AND an uncommitted fullscreen state at once — a
+                        // same-session arriving tab takes Refresh, which does
+                        // not move the frame.
                         kwFs->moveResize(QRectF(snap.geometry));
                         ++m_suppressFullScreenChanged;
                         kwFs->setFullScreen(true);
@@ -1576,9 +1618,28 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // already-at-target no-op skip, forcing a
                             // redundant moveResize per tick. Rounding makes
                             // the pure-scroll case genuinely degenerate again.
-                            const KWin::RectF cur = snap.window->frameGeometry();
-                            originOverride = QRectF(QRect(qRound(cur.x()) - snap.viewDeltaX, qRound(cur.y()),
-                                                          qRound(cur.width()), qRound(cur.height())));
+                            //
+                            // EXCEPT a window sitting AT A PARK right now: an
+                            // arriving tab whose batch also carries view
+                            // travel lands here (its edge is empty — a hidden
+                            // tab of an on-screen column parks without one —
+                            // while viewDeltaX is set because it is not
+                            // parked NOW). Differencing against the park
+                            // builds an origin below the union of every
+                            // output and the tab flies up the full screen:
+                            // the exact bug the arrival branch below exists
+                            // to prevent, resurfacing through this branch's
+                            // priority. The park says nothing about motion,
+                            // so the answer is the same degenerate leg,
+                            // mirroring the sibling at the ARRIVING-from-park
+                            // arm above.
+                            if (atScrollPark(snap.window)) {
+                                originOverride = QRectF(committedGeo);
+                            } else {
+                                const KWin::RectF cur = snap.window->frameGeometry();
+                                originOverride = QRectF(QRect(qRound(cur.x()) - snap.viewDeltaX, qRound(cur.y()),
+                                                              qRound(cur.width()), qRound(cur.height())));
+                            }
                         }
                     } else if (!snap.scrollEdge.isEmpty()) {
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
@@ -1622,23 +1683,170 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             skipScrollAnimation = true;
                         }
                     } else if (!scrollTrackedScreenFor(snap.windowId).isEmpty()) {
-                        // Edge-less commit of a scroll-tracked window whose
-                        // target is entirely off its own output: a vertical
-                        // stack-overflow park. There is no side to slide out
-                        // by, and animating to a target below the union would
-                        // sweep the window down the whole screen. Commit
-                        // without an animation. (Autotile batches never take
-                        // this branch — their windows are not scroll-tracked
-                        // and their targets are on-screen anyway.)
+                        // Edge-less commit of a scroll-tracked window. The
+                        // engine clears the departure edge for exactly two
+                        // parks, and this branch owns both directions of them.
+                        // (Autotile batches never take it — their windows are
+                        // not scroll-tracked and their targets are on-screen
+                        // anyway.)
+                        //
+                        // LEAVING (target entirely off its own output): a
+                        // vertical stack-overflow park, or a tab going hidden.
+                        // There is no side to slide out by, and animating to a
+                        // target below the union would sweep the window down
+                        // the whole screen. Commit without an animation.
+                        //
+                        // ARRIVING (target on its output, window sitting at a
+                        // park right now): the tab of an on-screen tabbed
+                        // column being ACTIVATED, or a tile the layout pushed
+                        // past the stack floor coming back. The park is below
+                        // the union of every output and is chosen for safety,
+                        // so it says nothing about where the window should
+                        // appear to come from — animating from it flies the
+                        // window up the full height of the screen. A tab switch
+                        // has no motion to describe at all: the arriving tab
+                        // occupies the rect the outgoing one just vacated, so
+                        // it must appear IN PLACE. Degenerate leg, the same
+                        // answer (and for the same reason) as the hasVisualPos
+                        // branch above. It is also what makes the pair
+                        // symmetric: the outgoing tab teleports away, so a
+                        // travelling arrival had nothing to travel from.
                         const KWin::LogicalOutput* out = m_effect->outputForScreenId(snap.screenId);
                         const QRect screenRect = out ? QRect(out->geometry()) : QRect();
-                        if (screenRect.isValid() && !screenRect.intersects(committedGeo)) {
+                        if (!screenRect.isValid()) {
+                            // No resolvable output (disconnect race): both
+                            // arms below need the rect, and falling through
+                            // silently gave a scroll-tracked window a full
+                            // animated leg from its live frame — the park,
+                            // below the union — which is the exact sweep the
+                            // arms exist to prevent. Teleport, mirroring the
+                            // scrollEdge branch's identical case above.
+                            qCDebug(lcEffect) << "scroll batch: no output for" << snap.screenId << "- teleporting"
+                                              << snap.windowId << "to its target";
                             skipScrollAnimation = true;
+                        } else if (!screenRect.intersects(committedGeo)) {
+                            skipScrollAnimation = true;
+                        } else if (atScrollPark(snap.window)) {
+                            originOverride = QRectF(committedGeo);
                         }
                     }
                     m_effect->applyWindowGeometry(snap.window, geo, /*allowDuringDrag=*/false, skipScrollAnimation,
                                                   PhosphorAnimation::ProfilePaths::WindowSnapIn, originOverride,
                                                   visualTargetOverride);
+                }
+            }
+
+            // Tab swap: cross-fade the outgoing tab into this one.
+            //
+            // At the monocle/else JOIN, decoupled on purpose from the two arms
+            // it used to sit inside: the Wayland already-centred short-circuit
+            // (skipMoveResize) says the GEOMETRY needs no commit, which says
+            // nothing about whether the CONTENTS just swapped, and burying the
+            // install there silently suppressed the cross-fade for a swap
+            // inside an already-parked column. The monocle case is refused
+            // explicitly below rather than structurally, so it is diagnosable.
+            //
+            // A SEPARATE leg from the geometry apply above, not a shader hung
+            // off it: the apply's leg is deliberately degenerate (the tab
+            // appears in place) and a degenerate leg starts no animation, so
+            // applyWindowGeometry installs no shader at all. The cross-fade is
+            // not describing motion anyway — it is a discrete, time-driven
+            // content change over a rect that does not move, which is exactly
+            // what tryBeginShaderForEvent drives. Installed on the ARRIVING
+            // tab; the outgoing one is parked off-canvas by the end of this
+            // batch and painted by nothing.
+            if (!snap.tabFrom.isEmpty()) {
+                if (snap.isMonocle) {
+                    // No producer emits the pair today (monocle comes from
+                    // autotile, tabFrom from the scroll engine), but this
+                    // file's own mode-flip reasoning declines to call the two
+                    // provably disjoint — so the drop is logged rather than
+                    // structural-and-silent.
+                    qCDebug(lcEffect) << "tabSwap install: dropping monocle+tabFrom pair for" << snap.windowId;
+                } else if (snap.window->isUserMove() || snap.window->isUserResize()) {
+                    // Mid-drag, the geometry apply above DEFERRED its commit
+                    // to windowFinishUserMovedResized — installing the swap
+                    // now would play the cross-fade under the pointer against
+                    // a window still at its drag rect, and the seed's
+                    // identity map would miss (the frame is not at the
+                    // column). The deferred replay deliberately does not
+                    // re-install: by drag end the outgoing tab is parked and
+                    // re-folded, so the honest outcome is no cross-fade —
+                    // the same predicate the commanded-rect arm below uses.
+                    qCDebug(lcEffect) << "tabSwap install: skipped mid-drag for" << snap.windowId;
+                } else {
+                    // tabFrom is a WIRE id; every entry of this batch had its
+                    // own id re-keyed to the live one, and the outgoing tab
+                    // is by construction a sibling entry — so translate
+                    // through the batch's own wire→live map first. Exact
+                    // lookup after that, never the fuzzy appId fallback: this
+                    // is a paint hint, and a fuzzy match on a stale id would
+                    // cross-fade a same-app window that has nothing to do
+                    // with the swap. Unresolvable (closed between the emit
+                    // and here) simply means no cross-fade. Not defended
+                    // against: a tabFrom naming some OTHER window of this
+                    // batch that is arriving on screen rather than parking.
+                    // The engine cannot emit that shape (the pair is derived
+                    // from one column's hidden-flag flip), and a garbled hint
+                    // costs one wrong-source cross-fade, not a wrong
+                    // placement.
+                    const QString outgoingId = wireToLive.value(snap.tabFrom, snap.tabFrom);
+                    KWin::EffectWindow* const outgoing = m_effect->findWindowByIdExact(outgoingId);
+                    // Chain trace, DEBUG level (enable plasmazones.effect):
+                    // every link here fails SILENTLY on screen — the pack
+                    // still runs, it just cross-fades the arriving tab
+                    // against itself — so the trace is the only way to tell
+                    // which link broke.
+                    qCDebug(lcEffect) << "tabSwap install:" << snap.windowId << "replacing" << outgoingId << "resolved"
+                                      << (outgoing ? "yes" : "NO");
+                    if (outgoing && outgoing != snap.window && !outgoing->isDeleted()) {
+                        bool ownsLeg = false;
+                        m_effect->tryBeginShaderForEvent(
+                            snap.window, PhosphorAnimation::ProfilePaths::ScrollingTabSwitch,
+                            m_effect->animationDurationMs(), /*reverse=*/false, /*holdCloseGrab=*/false,
+                            /*holdAddedGrab=*/false, /*animateMinimized=*/false, &ownsLeg);
+                        // ownsLeg, not liveness: the resolve installs nothing
+                        // when the user picked "None", and findTransition
+                        // would then hand back whatever unrelated leg is live
+                        // and re-point ITS snapshot at a foreign window. For
+                        // THIS path ownsLeg also means FRESH: the tab install
+                        // defeats the same-effect short-circuit inside
+                        // tryBeginShaderForEvent (each swap supersedes a
+                        // same-pack leg — repeat switches and a focus leg
+                        // running the same pack both got stale snapshots and
+                        // a mid-progress clock before that).
+                        if (ownsLeg) {
+                            auto* st = m_effect->m_shaderManager.findTransition(snap.window);
+                            const bool hasCached = st && st->cached;
+                            if (st) {
+                                // Marks the leg as the swap so the activation
+                                // this very switch causes does not install a
+                                // focus leg over it — see
+                                // ShaderTransition::tabSwap. Set BEFORE the
+                                // snapshot request and outside its uOldWindow
+                                // gate: a pack that ignores the outgoing tab
+                                // still owns the swap's slot.
+                                st->tabSwap = true;
+                                // The capture is gated on the compiled pack
+                                // LINKING uOldWindow, like the drag-snap and
+                                // held-move requests. Seeded NOW,
+                                // synchronously: by the leg's first paint
+                                // frame the outgoing tab has been re-folded
+                                // at its park with the park's unwritten
+                                // backdrop baked into any frost pane (the
+                                // "goes opaque, then animates" artifact seen
+                                // live); inside this batch slot the composite
+                                // still holds the pre-switch column fold. See
+                                // seedTabSwapSnapshot.
+                                qCDebug(lcEffect) << "tabSwap leg installed, cached" << (hasCached ? "yes" : "NO")
+                                                  << "uOldWindow linked" << (hasCached ? st->cached->iOldWindowLoc : -1)
+                                                  << "existing snapshot" << (st->oldSnapshot ? "yes" : "no");
+                                if (hasCached && st->cached->iOldWindowLoc >= 0 && !st->oldSnapshot) {
+                                    m_effect->seedTabSwapSnapshot(*st, outgoing, snap.window);
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -1742,7 +1950,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 m_effect->m_scrollCommandedRects.remove(snap.windowId);
             }
         },
-        onComplete, startedViewLegs);
+        onComplete, startedViewLegs || anyTabSwap);
 }
 
 void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)

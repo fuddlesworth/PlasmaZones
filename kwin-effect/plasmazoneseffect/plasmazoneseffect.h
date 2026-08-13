@@ -212,15 +212,25 @@ protected:
     // its own geometry).
     void apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data, KWin::WindowQuadList& quads) override;
 
-    // Capture the redirected window's current (pre-moveResize) content into a
-    // GLTexture for the geometry-morph cross-fade. Replicates KWin's
-    // OffscreenData::maybeRender: render the window into our own FBO via
-    // effects->drawWindow (our morph shader temporarily bypassed so the copy
-    // is the raw old content), then store the texture in
-    // `transition.oldSnapshot` (bound as uOldWindow). Called once on the first
-    // morph paint, while the content is still old (the moveResize configure
-    // hasn't round-tripped).
+    // Capture the OLD content into a GLTexture for a cross-fade, storing it in
+    // `transition.oldSnapshot` (bound as uOldWindow). Replicates KWin's
+    // OffscreenData::maybeRender: render into our own FBO via
+    // effects->drawWindow, the capture-target's shader temporarily bypassed so
+    // the copy is raw content. Two callers with different subjects:
+    //  - the geometry morph, on the leg's first paint, capturing @p window's
+    //    OWN still-old content (the moveResize configure hasn't
+    //    round-tripped);
+    //  - the tab swap's LAZY FALLBACK (transition.snapshotSource set),
+    //    capturing the OUTGOING tab — a different window — wherever it is
+    //    parked, at first paint, when seedTabSwapSnapshot found no usable
+    //    composite at install time.
     void captureOldWindowSnapshot(ShaderTransition& transition, KWin::EffectWindow* window);
+    /// Install-time snapshot for the scrolling tab swap: blits the outgoing
+    /// tab's decorated composite while it is still the PRE-SWITCH fold (the
+    /// lazy first-paint capture reads a park-poisoned re-fold instead — see
+    /// the definition). Arms the lazy raw-capture fallback when no usable
+    /// composite exists.
+    void seedTabSwapSnapshot(ShaderTransition& transition, KWin::EffectWindow* src, KWin::EffectWindow* window);
 
     /// Outcome of the shader-transition branch extracted from paintWindow.
     /// Handled: the branch painted (or captured / suppressed / queued its own

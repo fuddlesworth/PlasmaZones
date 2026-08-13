@@ -94,6 +94,27 @@ private Q_SLOTS:
         QVERIFY(PP::eventClassForPath(QStringLiteral("scrollingx.view")).isEmpty());
     }
 
+    // The tab leaf is the exception inside the scrolling family: it lives
+    // under the same root but carries its OWN class, because it is a
+    // two-texture window-quad cross-fade rather than the strip's one-scene
+    // pass. The leaf check has to be ordered BEFORE the sub-tree match in
+    // eventClassForPath, and this is what catches it being reordered — the
+    // leaf would silently classify as strip and offer exactly the packs that
+    // cannot drive it.
+    void testEventClassForTabSwitchPath()
+    {
+        QCOMPARE(PP::eventClassForPath(PP::ScrollingTabSwitch), PP::EventClassTab);
+        // Its ancestor keeps the strip class, which is exactly why the page
+        // hosting both offers no cascade parent row.
+        QCOMPARE(PP::eventClassForPath(PP::Scrolling), PP::EventClassStrip);
+        QCOMPARE(PP::parentPath(PP::ScrollingTabSwitch), PP::Scrolling);
+        // Opt-in like its strip sibling and like the desktop legs: no built-in
+        // default, so a fresh config hard-cuts until the user picks a tab pack.
+        // Pinned because the alternative is a one-line change that silently
+        // installs a capture-and-blend pass on every tab switch for every user.
+        QVERIFY(PP::defaultShaderEffectIdForPath(PP::ScrollingTabSwitch).isEmpty());
+    }
+
     void testAllBuiltInPathsNonEmpty()
     {
         const QStringList paths = PP::allBuiltInPaths();
@@ -137,6 +158,7 @@ private Q_SLOTS:
         // reach.
         QVERIFY(paths.contains(PP::Scrolling));
         QVERIFY(paths.contains(PP::ScrollingView));
+        QVERIFY(paths.contains(PP::ScrollingTabSwitch));
         // No regression: legacy zone.* strings must not reappear.
         for (const QString& path : paths) {
             QVERIFY2(!path.startsWith(QLatin1String("zone.")) && path != QLatin1String("zone"),
@@ -326,6 +348,35 @@ private Q_SLOTS:
             const Profile composed = tree.overlayChainOnto(leaf, animatorGlobal);
             QVERIFY2(composed.duration.has_value(), qPrintable(leaf));
             QCOMPARE(*composed.duration, 500.0);
+            QVERIFY2(std::dynamic_pointer_cast<const Spring>(composed.curve) != nullptr, qPrintable(leaf));
+        }
+    }
+
+    // MOTION inheritance reaches BOTH scrolling leaves — including the tab
+    // swap, whose SHADER resolve is leaf-isolated. The asymmetry is the
+    // load-bearing contract: shaderPathResolvesInIsolation pulls the tab leaf
+    // out of the SHADER tree's walk-up (its ancestor's strip pack is provably
+    // wrong for it) while the motion ProfileTree carries no isolation
+    // predicate at all, so a curve or duration set on `scrolling` legitimately
+    // times both children. This pin is what catches someone "fixing" the
+    // motion tree by copying the shader tree's isolation across.
+    void testOverlayChainOntoScrollingAllReachesBothLeaves()
+    {
+        ProfileTree tree;
+
+        Profile scrollingAll;
+        scrollingAll.duration = 420.0;
+        scrollingAll.curve = std::make_shared<Spring>(Spring::snappy());
+        tree.setOverride(PP::Scrolling, scrollingAll);
+
+        Profile animatorGlobal;
+        animatorGlobal.duration = 300.0;
+        animatorGlobal.curve = std::make_shared<Easing>();
+
+        for (const QString& leaf : {PP::ScrollingView, PP::ScrollingTabSwitch}) {
+            const Profile composed = tree.overlayChainOnto(leaf, animatorGlobal);
+            QVERIFY2(composed.duration.has_value(), qPrintable(leaf));
+            QCOMPARE(*composed.duration, 420.0);
             QVERIFY2(std::dynamic_pointer_cast<const Spring>(composed.curve) != nullptr, qPrintable(leaf));
         }
     }

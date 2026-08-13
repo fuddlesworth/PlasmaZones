@@ -72,6 +72,12 @@ void seedAnimationEventAnchors(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("animations-scrolling"), QStringLiteral("scrolling.view"),
                PhosphorI18n::tr("Strip Scrolled"),
                {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("strip"), PhosphorI18n::tr("column")});
+    // The tab row needs only the tokens its label lacks: "scrolling" for the
+    // same reason as its sibling above, and "cross-fade", which is what the
+    // effect is rather than what it is called. "tab" itself already stems
+    // from the label.
+    addSetting(search, QStringLiteral("animations-scrolling"), QStringLiteral("scrolling.tabSwitch"),
+               PhosphorI18n::tr("Tab Switched"), {PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("cross-fade")});
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideIn"),
                PhosphorI18n::tr("Slide In"));
     addSetting(search, QStringLiteral("animations-side-panels"), QStringLiteral("panel.slideOut"),

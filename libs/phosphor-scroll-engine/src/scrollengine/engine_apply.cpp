@@ -525,7 +525,76 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // window per relayout. Same doctrine as layoutParamsForScreen's single
     // fetch at the top of this file.
     const bool cropStraddlers = effectiveCropStraddlers(screenId);
+    // The park's top edge, the one number that separates "was on screen last
+    // batch" from "was parked last batch" in m_lastAppliedRect. Every park
+    // this pass commits lands exactly here (the park lambda moves only the
+    // top), so a remembered rect at or below it was a park and one above it
+    // was a real placement.
+    const int parkTop = unionBottom + 1 + kParkMargin;
+    // BOTH pairing predicates demand POSITIVE evidence, symmetrically: an
+    // entry must exist AND sit on the right side of the park line. A missing
+    // entry means neither — onWindowResized's refused-ack arm drops a live
+    // tile's rect memory on purpose (see the m_parkedScrollEdge contract
+    // note below), and reading "no memory" as "was on screen" let such a tab
+    // be named as the outgoing half of a swap that never happened, or shadow
+    // the genuinely-outgoing sibling in a 3+ tab column.
+    const auto wasParked = [&](const QString& windowId) {
+        const auto it = m_lastAppliedRect.constFind(windowId);
+        return it != m_lastAppliedRect.constEnd() && it->top() >= parkTop;
+    };
+    const auto wasOnScreen = [&](const QString& windowId) {
+        const auto it = m_lastAppliedRect.constFind(windowId);
+        return it != m_lastAppliedRect.constEnd() && it->top() < parkTop;
+    };
     for (const ResolvedColumn& column : resolved.columns) {
+        // TAB SWITCH pairing. A tabbed column shows one tile and parks the
+        // rest, so activating a tab is two commits that share one rect: the
+        // outgoing tab parks and the incoming tab takes the rect it vacated.
+        // The compositor cannot pair those on its own — both entries are
+        // ordinary rects, and inferring the pair from rect coincidence would
+        // also fire on a column that merely re-laid out — so the engine names
+        // the outgoing tab and the effect cross-fades one into the other.
+        //
+        // Derived from m_lastAppliedRect rather than a remembered hidden-set:
+        // that map is already swept by every path that drops a window
+        // (close, float, handoff, drag), so this cannot strand a pairing
+        // against a window that is no longer a tile.
+        //
+        // The pairing needs BOTH halves to be genuine, which is what keeps it
+        // to real switches: a tile that is hidden now but was on screen last
+        // batch, and (at the emit below) a tile that is shown now but was
+        // parked last batch. Tabbing a column for the FIRST time normally
+        // hides tiles that were all on screen while the tile it leaves
+        // showing was on screen too, so no pairing is emitted — nothing was
+        // swapped. ONE exception, deliberate: under respectMinimumSize a
+        // Normal stack can overflow the work area and park its trailing
+        // tiles, so first-time tabbing such a column CAN pair (the shown tab
+        // was overflow-parked, several siblings depart at once). The
+        // first-match pick below is then visually arbitrary and deliberately
+        // so — every candidate genuinely just vanished from the column's
+        // rect, so any of them is a legitimate cross-fade source and refusing
+        // to pick would cost the transition for no correctness gain. A column
+        // scrolling back into view has parked hidden tiles, which fails the
+        // outgoing half's positive on-screen requirement.
+        QString tabFrom;
+        if (column.tabbed) {
+            for (const ResolvedTile& t : column.tiles) {
+                // The dragged window's rect memory is deliberately frozen
+                // (the emit loop below skips it), so it is not evidence —
+                // the same doctrine the viewDelta evidence loop states: the
+                // loops must agree about which rects are trustworthy. Without
+                // this skip a tab dragged out of its column mid-switch could
+                // be named as the swap's source while visibly floating under
+                // the cursor.
+                if (!m_interactiveDragWindow.isEmpty() && t.windowId == m_interactiveDragWindow) {
+                    continue;
+                }
+                if (t.hidden && wasOnScreen(t.windowId)) {
+                    tabFrom = t.windowId;
+                    break;
+                }
+            }
+        }
         for (const ResolvedTile& tile : column.tiles) {
             if (!m_interactiveDragWindow.isEmpty() && tile.windowId == m_interactiveDragWindow) {
                 columnHadSkippedTile.insert(column.columnIndex);
@@ -797,6 +866,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             }
             if (!scrollEdge.isEmpty()) {
                 obj[QLatin1String("scrollEdge")] = scrollEdge;
+            }
+            // The incoming half of the tab-switch pairing resolved above: this
+            // tile is shown now and was parked last batch, and a sibling made
+            // the opposite trip. Named on the ARRIVING entry because that is
+            // the window the compositor animates — the outgoing one is already
+            // gone by the time anything paints. The !parkedNow term matches
+            // the two neighbouring per-entry fields: a switch inside a column
+            // that leaves the screen in the SAME batch has an arriving tab
+            // with no on-screen rect, and naming a source for it made the
+            // effect install a leg and capture a snapshot for a cross-fade
+            // nothing can see.
+            if (!tabFrom.isEmpty() && !tile.hidden && !parkedNow && wasParked(tile.windowId)) {
+                obj[QLatin1String("tabFrom")] = tabFrom;
             }
             // A PARKED tile is not carried by the view. Its committed rect is
             // the park (below the union of all outputs), which no translation

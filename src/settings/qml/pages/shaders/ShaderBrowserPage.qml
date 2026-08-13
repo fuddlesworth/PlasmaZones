@@ -119,6 +119,11 @@ SettingsFlickable {
             "key": "strip",
             "label": i18nc("@item shader capability (the scrolling strip's view motion)", "Scrolling strip"),
             "order": 5
+        },
+        {
+            "key": "tab",
+            "label": i18nc("@item shader capability (switching tabs in a scrolling column)", "Tab switch"),
+            "order": 6
         }
     ]
     readonly property string _universalKey: "universal"

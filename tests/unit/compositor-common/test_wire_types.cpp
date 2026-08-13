@@ -209,7 +209,8 @@ private Q_SLOTS:
                                                  -240,
                                                  4000,
                                                  120,
-                                                 true};
+                                                 true,
+                                                 QStringLiteral("konsole|9")};
 
         // FIELD-ORDER PROBE, not a legal payload: monocle and
         // windowedFullscreen both true is rejected by validationError()
@@ -219,12 +220,12 @@ private Q_SLOTS:
         // coverage lives in the bus round-trip's two payloads instead. Do
         // not copy this fixture into a validator test.
         //
-        // Verify D-Bus signature: (siiiissbbbssiiib) = string + 4 ints + 2
+        // Verify D-Bus signature: (siiiissbbbssiiibs) = string + 4 ints + 2
         // strings + 3 bools (monocle, floating, windowedFullscreen) +
         // stacking + scrollEdge + viewDeltaX + the visual position pair and
-        // its validity flag
+        // its validity flag + tabFrom
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiib)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiibs)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();
@@ -247,6 +248,7 @@ private Q_SLOTS:
         QCOMPARE(entry.visualX, 4000);
         QCOMPARE(entry.visualY, 120);
         QCOMPARE(entry.hasVisualPos, true);
+        QCOMPARE(entry.tabFrom, QStringLiteral("konsole|9"));
 
         // Verify default construction
         PhosphorProtocol::TileRequestEntry defaultEntry;
@@ -263,6 +265,7 @@ private Q_SLOTS:
         // a reader that forgets would see.
         QCOMPARE(defaultEntry.visualX, 0);
         QCOMPARE(defaultEntry.visualY, 0);
+        QVERIFY(defaultEntry.tabFrom.isEmpty());
     }
 
     // A real bus round-trip so operator>> is exercised too — the signature
@@ -308,6 +311,7 @@ private Q_SLOTS:
             QCOMPARE(got.visualX, sent.visualX);
             QCOMPARE(got.visualY, sent.visualY);
             QCOMPARE(got.hasVisualPos, sent.hasVisualPos);
+            QCOMPARE(got.tabFrom, sent.tabFrom);
         };
 
         // TWO legal payloads, because no single legal payload can cover the
@@ -339,7 +343,8 @@ private Q_SLOTS:
                                                 512,
                                                 -900,
                                                 64,
-                                                true};
+                                                true,
+                                                QStringLiteral("konsole|9")};
         roundTrip(sent);
         sent.monocle = true;
         sent.windowedFullscreen = false;
@@ -475,9 +480,26 @@ private Q_SLOTS:
 
     void testTileRequestToRect()
     {
-        PhosphorProtocol::TileRequestEntry entry{
-            QStringLiteral("app|5"), 15,    25,    640,   480,       QStringLiteral("{z}"),
-            QStringLiteral("s0"),    false, false, false, QString(), QString()};
+        // Trailing members spelled out rather than left to aggregate
+        // zero-init: the struct grows a field per wire widening, and
+        // -Wmissing-field-initializers fires on the new one every time.
+        PhosphorProtocol::TileRequestEntry entry{QStringLiteral("app|5"),
+                                                 15,
+                                                 25,
+                                                 640,
+                                                 480,
+                                                 QStringLiteral("{z}"),
+                                                 QStringLiteral("s0"),
+                                                 false,
+                                                 false,
+                                                 false,
+                                                 QString(),
+                                                 QString(),
+                                                 0,
+                                                 0,
+                                                 0,
+                                                 false,
+                                                 QString()};
         QCOMPARE(entry.toRect(), QRect(15, 25, 640, 480));
     }
 

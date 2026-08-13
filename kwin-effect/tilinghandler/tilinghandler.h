@@ -341,6 +341,15 @@ public:
     /// id-keyed consumer would keep resolving to the dead output.
     QString scrollTrackedScreenFor(const QString& windowId) const;
 
+    /// True when @p w's live frame lies entirely off the union of every
+    /// connected output — i.e. it is sitting at a strip park right now.
+    ///
+    /// Answers about the CURRENT frame, so it is the arrival test the batch
+    /// apply needs ("was this window parked until this batch?"), not a
+    /// statement about where it is heading. Fails closed (false) on a null
+    /// window, degenerate geometry, or no resolvable outputs.
+    bool atScrollPark(KWin::EffectWindow* w) const;
+
     /// Cheap gate for callers that want to skip scroll-specific work in a
     /// session with no scrolling screens at all. RAW set, deliberately NOT
     /// the isScrollingScreen intersection — the clip / input-filter /

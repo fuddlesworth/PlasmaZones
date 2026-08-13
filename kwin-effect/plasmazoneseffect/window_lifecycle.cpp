@@ -198,6 +198,13 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // producing the visible multi-copy ghost trail. tryBeginShaderForEvent
     // takes the grab only after shouldAnimateWindow passes, so it is never held
     // for a window we don't animate.
+    //
+    // Runs BEFORE applyRuleOpenFullscreen below, so the animation filter sees
+    // the window's pre-flip fullscreen state. Deliberate: the transition must
+    // install before KWin composites the first frame or the stock built-ins
+    // race it (the grab above), while the rule flip commits a client
+    // round-trip later on Wayland anyway — an after-the-flip verdict would
+    // read the same pre-commit state.
     if (!w->isMinimized()) {
         tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowOpen, animationDurationMs(),
                                /*reverse=*/false, /*holdCloseGrab=*/false, /*holdAddedGrab=*/true);
@@ -524,6 +531,15 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
         // leak for the session. releaseSurfaceState, not a raw erase: it
         // refuses while a transition owns the window, and in that case the
         // cache IS retained and the delete-path belt does the freeing.
+        //
+        // COUPLING, load-bearing: when the closing window is a live tab-swap
+        // leg's snapshotSource, this frees ITS multipass composite while the
+        // swap on the OTHER window keeps animating. That is safe only because
+        // the foreign paint-time capture deliberately skips the composite
+        // seed (paint_capture.cpp reads m_surfaceMultipass only for
+        // src == window) and the swap's oldSnapshot is an independently-owned
+        // texture. Letting a foreign source read the composite at paint time
+        // would turn this release into a use-after-free.
         releaseSurfaceState(closedWindowId, w);
     }
 
@@ -770,9 +786,26 @@ bool PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // this exists to swallow. Our own drag overlay is the sharpest example: a
     // focus shader firing every time a snap drag ends would be pure noise. The
     // accepted cost is that a genuine A → nothing → A refocus is silent too.
+    //
+    // Suppressed while a scrolling TAB SWAP is running on this window. Picking
+    // a tab activates its window, so this handler fires for the very window
+    // the tile batch just installed the swap on, and whichever of the two
+    // lands second owns the slot. The swap is the one that should: it is the
+    // whole visual account of what happened, while the focus leg would replay
+    // a generic focus flourish over a window that has not moved — and it would
+    // strand the swap's captured snapshot of the tab being replaced.
+    //
+    // The suppression skips the INSTALL, never the stamp: once this path is
+    // reached the window IS the focused one, which is the fact the stamp
+    // records, and withholding it would leave the next activation of this same
+    // window reading as a change and firing a late focus leg into the middle
+    // of the swap.
     if (m_shaderManager.m_lastFocusShaderWindow.data() != w) {
         m_shaderManager.m_lastFocusShaderWindow = w;
-        tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowFocus, animationDurationMs());
+        const ShaderTransition* const live = m_shaderManager.findTransition(w);
+        if (!live || !live->tabSwap) {
+            tryBeginShaderForEvent(w, PhosphorAnimation::ProfilePaths::WindowFocus, animationDurationMs());
+        }
     }
 
     if (!isDaemonReady("notify windowActivated")) {

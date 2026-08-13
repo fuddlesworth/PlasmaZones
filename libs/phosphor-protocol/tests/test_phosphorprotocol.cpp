@@ -132,6 +132,22 @@ private Q_SLOTS:
         QVERIFY(e.validationError().contains(QStringLiteral("scrollEdge")));
     }
 
+    void testTileRequestValidationTabFrom()
+    {
+        // tabFrom names the OTHER window of a tab swap: any foreign id is
+        // accepted (the effect resolves or drops unknown ids itself), only a
+        // self-reference is rejected as garbling.
+        TileRequestEntry e;
+        e.windowId = QStringLiteral("w");
+        e.screenId = QStringLiteral("s");
+        e.width = 100;
+        e.height = 100;
+        e.tabFrom = QStringLiteral("other");
+        QVERIFY(e.validationError().isEmpty());
+        e.tabFrom = e.windowId;
+        QVERIFY(e.validationError().contains(QStringLiteral("tabFrom")));
+    }
+
     void testTileRequestValidationWindowedFullscreen()
     {
         // The lib's own coverage of its newest cross-field invariants (the
@@ -206,13 +222,13 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 10 alongside the TileRequestEntry windowedFullscreen
-        // widening (a(siiiissbbssiiib) → a(siiiissbbbssiiib)), for the same
-        // reason v6 through v9 were bumped: Qt matches signal-hook signatures
-        // before demarshalling, so a v9 effect's tiling slot would silently
+        // Bumped to 11 alongside the TileRequestEntry tabFrom widening
+        // (a(siiiissbbbssiiib) → a(siiiissbbbssiiibs)), for the same reason
+        // v6 through v10 were bumped: Qt matches signal-hook signatures
+        // before demarshalling, so a v10 effect's tiling slot would silently
         // never fire — both sides must move together.
-        QCOMPARE(Service::ApiVersion, 10);
-        QCOMPARE(Service::MinPeerApiVersion, 10);
+        QCOMPARE(Service::ApiVersion, 11);
+        QCOMPARE(Service::MinPeerApiVersion, 11);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.

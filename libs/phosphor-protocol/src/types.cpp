@@ -110,6 +110,18 @@ QString TileRequestEntry::validationError() const
     if (!scrollEdge.isEmpty() && scrollEdge != QLatin1String("left") && scrollEdge != QLatin1String("right")) {
         return QStringLiteral("TileRequestEntry: invalid scrollEdge '%1' (windowId=%2)").arg(scrollEdge, windowId);
     }
+    // tabFrom names the OTHER window of a tab swap, so it can never be this
+    // entry's own id: the compositor would cross-fade a window against a
+    // snapshot of itself, capturing through the very transition it is meant
+    // to seed. A hint rather than an action, so garbling it costs only the
+    // cross-fade — but the self-reference is cheap to reject and can only be
+    // a bug or a spoof. Deliberately NOT rejected here: tabFrom on a floating
+    // entry. That pair is contradictory too, but unlike windowedFullscreen
+    // below the field is a paint hint, so the app-side parse strips it and
+    // keeps the placement rather than dropping the whole entry.
+    if (!tabFrom.isEmpty() && tabFrom == windowId) {
+        return QStringLiteral("TileRequestEntry: tabFrom names its own window (windowId=%1)").arg(windowId);
+    }
     // Windowed fullscreen is a strip placement by definition (the tile keeps
     // its column slot), so it cannot ride a floating entry — the effect
     // would flip KWin fullscreen state on a free window. The engine never

@@ -446,6 +446,90 @@ private Q_SLOTS:
                  QStringLiteral("strip-motion-blur"));
     }
 
+    /// The tab-leaf picker contract, mirroring the drag and strip leaves
+    /// above: the Tab Switched row offers only tab packs (bundled generics
+    /// and the branded pair), and tab packs stay out of every other picker.
+    void availableShaderEffectsForPath_tabLeafOffersOnlyTabShaders()
+    {
+        const QString dataDir = QStringLiteral(P_SOURCE_DIR "/data/animations");
+        if (!QDir(dataDir).exists())
+            QSKIP("data/animations not found — running outside source tree");
+
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        IsolatedConfigGuard guard;
+        Settings settings;
+        PhosphorAnimationShaders::AnimationShaderRegistry registry;
+        registry.addSearchPath(dataDir, PhosphorFsLoader::LiveReload::Off);
+        AnimationsPageController c(&registry, &settings);
+
+        const auto idsFor = [&c](const QString& path) {
+            QStringList ids;
+            const QVariantList list = c.availableShaderEffectsForPath(path);
+            ids.reserve(list.size());
+            for (const QVariant& v : list)
+                ids.append(v.toMap().value(QStringLiteral("id")).toString());
+            return ids;
+        };
+
+        const QStringList tabIds = idsFor(PP::ScrollingTabSwitch);
+        QVERIFY2(tabIds.contains(QStringLiteral("tab-fade")), "bundled tab pack must be offered on the tab leaf");
+        QVERIFY2(tabIds.contains(QStringLiteral("phosphor-transfer")),
+                 "branded tab pack must be offered, not just the generics");
+        QVERIFY2(!tabIds.contains(QStringLiteral("window-morph")), "geometry pack must not be offered on the tab leaf");
+        QVERIFY2(!tabIds.contains(QStringLiteral("wobble")), "move pack must not be offered on the tab leaf");
+        QVERIFY2(!tabIds.contains(QStringLiteral("dissolve")),
+                 "universal crossfade must not be offered on the tab leaf");
+        QVERIFY2(!tabIds.contains(QStringLiteral("strip-motion-blur")),
+                 "strip pack must not be offered on the tab leaf");
+        QVERIFY2(!tabIds.contains(QStringLiteral("desktop-fade")), "desktop pack must not be offered on the tab leaf");
+
+        // …and the tab packs stay out of every other picker, including the
+        // strip sibling that shares the scrolling subtree.
+        for (const QString& path :
+             {PP::WindowSnapIn, PP::WindowOpen, PP::WindowMove, PP::DesktopSwitch, PP::ScrollingView}) {
+            const QStringList ids = idsFor(path);
+            QVERIFY2(!ids.contains(QStringLiteral("tab-fade")),
+                     qPrintable(QStringLiteral("tab pack offered on ") + path));
+        }
+    }
+
+    /// The tab-leaf isolation twin of the move-leaf slot above: an ancestor
+    /// shader on `scrolling` must NOT be inherited by scrolling.tabSwitch,
+    /// while the strip sibling still inherits normally. Empty registry, so
+    /// this pins pure tree resolution.
+    void resolvedShaderProfile_tabLeafRefusesAncestorInheritance()
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        // Family root carries a shader...
+        QVERIFY(c.setShaderOverride(QStringLiteral("scrolling"), QStringLiteral("matrix"), {}));
+        // ...the strip sibling inherits it...
+        QCOMPARE(c.resolvedShaderProfile(PP::ScrollingView).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("matrix"));
+        // ...the tab leaf refuses it.
+        QVERIFY(c.resolvedShaderProfile(PP::ScrollingTabSwitch).value(QStringLiteral("effectId")).toString().isEmpty());
+
+        // A direct pick on the tab leaf itself still lands.
+        QVERIFY(c.setShaderOverride(PP::ScrollingTabSwitch, QStringLiteral("tab-fade"), {}));
+        QCOMPARE(c.resolvedShaderProfile(PP::ScrollingTabSwitch).value(QStringLiteral("effectId")).toString(),
+                 QStringLiteral("tab-fade"));
+    }
+
+    /// A fresh tree gives the tab leaf NO built-in default: the switch is
+    /// instant in-place unless the user opts in, matching the drag and strip
+    /// leaves. A regression re-adding a default would fade every tab switch
+    /// for every fresh config.
+    void resolvedShaderProfile_tabLeafHasNoBuiltInDefault()
+    {
+        namespace PP = PhosphorAnimation::ProfilePaths;
+        ControllerFixture fx;
+        [[maybe_unused]] auto& [guard, settings, registry, c] = fx;
+
+        QVERIFY(c.resolvedShaderProfile(PP::ScrollingTabSwitch).value(QStringLiteral("effectId")).toString().isEmpty());
+    }
+
     /// User-reported scenario: parent ("All Window Events" / "All
     /// Popups" / etc.) has an explicit shader. The user wants to override
     /// a CHILD event with a different shader. Each step's resolution

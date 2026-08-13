@@ -1,0 +1,20 @@
+{
+    "id": "tab-fade",
+    "name": "Tab Fade",
+    "description": "Cross-fade between the two tabs of a scrolling column. The tab you left dissolves into the one you picked, both at the same size in the same place, so the column reads as one surface changing its contents rather than two windows swapping.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "category": "Fade",
+    "appliesTo": ["tab"],
+    "fragmentShader": "effect.frag",
+    "parameters": [
+        {
+            "id": "crossPoint",
+            "name": "Cross Point",
+            "type": "float",
+            "default": 0.5,
+            "min": 0.2,
+            "max": 0.8
+        }
+    ]
+}
