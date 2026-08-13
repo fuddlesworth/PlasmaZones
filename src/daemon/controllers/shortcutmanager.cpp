@@ -153,7 +153,7 @@ const StaticEntry kStaticEntries[] = {
      }},
     {kIdSwitchFocusFloatTiling, &ConfigDefaults::switchFocusFloatTilingShortcut,
      &Settings::switchFocusFloatTilingShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Switch Focus Between Floating and Tiled"),
+     QT_TRANSLATE_NOOP("plasmazones", "Switch Focus Between Floating and Placed Windows"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->switchFocusFloatTilingRequested();
      }},

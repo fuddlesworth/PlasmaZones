@@ -802,6 +802,10 @@ void SnapEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
         return;
     }
+    // ensureStateForKey never returns null for a non-empty screen (a miss
+    // lazily creates an empty store, bounded by screens × desktops ×
+    // activities), so this refusal is belt-and-braces: a virgin screen
+    // resolves an empty store and refuses below with no_target instead.
     SnapState* state = ensureStateForKey(currentKeyForScreen(screen));
     if (!state) {
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
@@ -822,23 +826,49 @@ void SnapEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
     const auto isHidden = [this](const QString& id) {
         return m_windowRegistry && m_windowRegistry->minimizedState(id).value_or(false);
     };
+    // Both pools come from the per-(screen,desktop,activity) store, but a
+    // cross-desktop directional move re-stamps the window's desktop while
+    // leaving it in its source store (reassignDesktop), so the raw pools can
+    // name windows living on OTHER desktops. Activating one would yank the
+    // user's desktop out from under the press — filter both sides to the
+    // screen's current desktop. 0 means "on all desktops" per the KWin
+    // convention buildOccupiedZoneSet documents, and an unstamped plain
+    // float reads as 0 too.
+    const int currentDesktop = currentVirtualDesktopForScreen(screen);
+    const auto onCurrentDesktop = [state, currentDesktop](const QString& id) {
+        if (currentDesktop == 0) {
+            // No virtual-desktop authority resolves (no VDM wired, or the
+            // screen is unknown to it) — fail open like the minimize
+            // filter: a focus verb must not refuse windows because the
+            // desktop is unknowable.
+            return true;
+        }
+        const int desktop = state->desktopForWindow(id);
+        return desktop == 0 || desktop == currentDesktop;
+    };
     PhosphorEngine::LayerSwitchSide snappedSide;
     snappedSide.candidate = state->lastSnappedFocus();
     snappedSide.fallbacks = state->snappedWindows();
     // snappedWindows() walks a hash — sort so the fallback pick is
     // deterministic, matching the sorted floating pool.
     std::sort(snappedSide.fallbacks.begin(), snappedSide.fallbacks.end());
-    snappedSide.isEligible = [state, isHidden](const QString& id) {
-        return state->isWindowSnapped(id) && !isHidden(id);
+    // The !isFloating term is defence in depth (every traced producer clears
+    // the zone before setting the float bit), mirroring the autotile twin and
+    // reapplyManagedWindowAppearance's guard.
+    snappedSide.isEligible = [state, isHidden, onCurrentDesktop](const QString& id) {
+        return state->isWindowSnapped(id) && !state->isFloating(id) && !isHidden(id) && onCurrentDesktop(id);
     };
-    snappedSide.focusForFeedback = floatingHasFocus ? state->lastSnappedFocus() : currentFocus;
     PhosphorEngine::LayerSwitchSide floatingSide;
     floatingSide.candidate = state->lastFloatingFocus();
     floatingSide.fallbacks = state->floatingWindows();
-    floatingSide.isEligible = [state, isHidden](const QString& id) {
-        return state->isFloating(id) && !isHidden(id);
+    floatingSide.isEligible = [state, isHidden, onCurrentDesktop](const QString& id) {
+        return state->isFloating(id) && !isHidden(id) && onCurrentDesktop(id);
     };
-    floatingSide.focusForFeedback = floatingHasFocus ? currentFocus : state->lastFloatingFocus();
+    // The resolver reads focusForFeedback from the SOURCE side only, and the
+    // source of this verb is always the live focus derived above — one value,
+    // no per-leg distinction.
+    snappedSide.focusForFeedback = currentFocus;
+    floatingSide.focusForFeedback = currentFocus;
 
     // No eager bookkeeping precedes the activation (unlike scroll's echo
     // queue): snap derives the focus side live and windowFocused's memory

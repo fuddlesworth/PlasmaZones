@@ -607,11 +607,11 @@ void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 {
     m_lastActiveScreenId = screenId;
     // Arm the owning store's layer-side focus memory (the switch verb's
-    // remembered targets). Only the store tracking the window classifies —
-    // a report for an untracked window updates nothing.
-    if (SnapState* state = stateForWindow(windowId)) {
-        state->noteFocused(windowId);
-    }
+    // remembered targets). stateForWindow never returns null — an untracked
+    // window resolves to m_globals, where noteFocused finds it on neither
+    // layer and takes neither branch, so the update is a no-op there by
+    // classification, not by lookup failure.
+    stateForWindow(windowId)->noteFocused(windowId);
 }
 
 // toggleWindowFloat and setWindowFloat are implemented in snapengine/float.cpp

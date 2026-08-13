@@ -117,13 +117,29 @@ private Q_SLOTS:
         engine->windowFocused(QStringLiteral("win1"), kScreen);
         QCoreApplication::processEvents();
         QVERIFY(!state->floatingHasFocus());
+
+        // Third press, with a SECOND float present whose id sorts before
+        // the remembered one: float win3, make it the remembered float,
+        // refocus the tile, and assert the memory answers — the sorted
+        // fallback scan would answer win2, so this fails if the candidate
+        // read is deleted.
+        engine->toggleWindowFloat(QStringLiteral("win3"), kScreen);
+        QCoreApplication::processEvents();
+        engine->windowFocused(QStringLiteral("win3"), kScreen);
+        engine->windowFocused(QStringLiteral("win1"), kScreen);
+        QCoreApplication::processEvents();
+        engine->switchFocusBetweenFloatingAndTiling(kScreen);
+        QCOMPARE(activateSpy.count(), 1);
+        QCOMPARE(activateSpy.takeFirst().at(0).toString(), QStringLiteral("win3"));
     }
 
     void minimizedFloatsAreSkipped()
     {
+        // Registry before the engine: the engine stores a raw pointer to
+        // it, so reverse destruction order must tear the engine down first.
+        FakeMinimizeRegistry registry;
         std::unique_ptr<AutotileEngine> engine(
             PlasmaZones::TestHelpers::createEngineWithWindows(kScreen, 3, QStringLiteral("win1")));
-        FakeMinimizeRegistry registry;
         engine->setWindowRegistry(&registry);
         engine->toggleWindowFloat(QStringLiteral("win2"), kScreen);
         engine->toggleWindowFloat(QStringLiteral("win3"), kScreen);
@@ -148,6 +164,7 @@ private Q_SLOTS:
         feedbackSpy.clear();
         engine->switchFocusBetweenFloatingAndTiling(kScreen);
         QCOMPARE(activateSpy.count(), 0);
+        QCOMPARE(feedbackSpy.count(), 1);
         const auto refusal = feedbackSpy.takeFirst();
         QCOMPARE(refusal.at(0).toBool(), false);
         QCOMPARE(refusal.at(2).toString(), QStringLiteral("no_target"));

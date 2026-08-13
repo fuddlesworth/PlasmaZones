@@ -684,6 +684,8 @@ public:
                    NOTIFY restoreWindowSizeShortcutChanged)
     Q_PROPERTY(QString toggleWindowFloatShortcut READ toggleWindowFloatShortcut WRITE setToggleWindowFloatShortcut
                    NOTIFY toggleWindowFloatShortcutChanged)
+    Q_PROPERTY(QString switchFocusFloatTilingShortcut READ switchFocusFloatTilingShortcut WRITE
+                   setSwitchFocusFloatTilingShortcut NOTIFY switchFocusFloatTilingShortcutChanged)
 
     // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
     Q_PROPERTY(QString swapWindowLeftShortcut READ swapWindowLeftShortcut WRITE setSwapWindowLeftShortcut NOTIFY

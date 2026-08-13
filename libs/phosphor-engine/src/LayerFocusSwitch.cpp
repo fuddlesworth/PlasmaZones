@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "PhosphorEngine/LayerFocusSwitch.h"
+#include <PhosphorEngine/LayerFocusSwitch.h>
 
 namespace PhosphorEngine {
 
@@ -17,9 +17,11 @@ QString pickTarget(const LayerSwitchSide& side)
     }
     // Fallback order is the caller's pool order (typically the sorted
     // floating set — arbitrary, carrying no recency meaning; no engine has
-    // a frontmost-float notion to prefer).
+    // a frontmost-float notion to prefer). The emptiness guard mirrors the
+    // candidate check: a blank pool entry sorts first, and returning it
+    // would read as a no_target refusal despite valid entries behind it.
     for (const QString& id : side.fallbacks) {
-        if (eligible(id)) {
+        if (!id.isEmpty() && eligible(id)) {
             return id;
         }
     }

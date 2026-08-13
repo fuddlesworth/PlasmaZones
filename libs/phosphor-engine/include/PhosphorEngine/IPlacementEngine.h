@@ -253,8 +253,12 @@ public:
     /// Jump focus between the float layer and the engine's placement layer
     /// (niri's switch-focus-between-floating-and-tiling): activate the last
     /// focused window on the OTHER layer, falling back to a scan when that
-    /// memory is stale, never targeting a minimized window. All three
-    /// engines implement it on the shared resolver
+    /// memory is stale. Minimized-window filtering is each engine's own
+    /// LayerSwitchSide::isEligible — the resolver applies no policy of its
+    /// own, so a new engine must install the filter itself (a compositor
+    /// state the registry has not reported is treated as visible: a focus
+    /// verb must not refuse a window merely because its state is unknown).
+    /// All three engines implement it on the shared resolver
     /// (resolveLayerFocusSwitch), so the default is a no-op only for
     /// hypothetical future engines — defaulted rather than pure so the
     /// daemon routes it mode-agnostically like spanFocusedInDirection.

@@ -93,8 +93,10 @@ void AutotileEngine::toggleFocusedWindowFloat()
 
 void AutotileEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
 {
-    // Prefer the caller's screen when it is an autotile screen with state;
-    // otherwise resolve the screen holding the focus, with
+    // Prefer the caller's screen when it names a KNOWN autotile screen —
+    // tilingStateForScreen lazily creates state, so a known screen always
+    // resolves and the fallback below runs only for an empty or foreign
+    // screen id. In that case resolve the screen holding the focus, with
     // requireTiledWindows false for the same reason toggleFocusedWindowFloat
     // passes it: an all-floating monitor is a legitimate press target.
     QString screen = screenId;
@@ -131,14 +133,17 @@ void AutotileEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId
     tiledSide.isEligible = [state, isHidden](const QString& id) {
         return state->containsWindow(id) && !state->isFloating(id) && !isHidden(id);
     };
-    tiledSide.focusForFeedback = state->floatingHasFocus() ? state->lastTiledFocus() : state->focusedWindow();
     PhosphorEngine::LayerSwitchSide floatingSide;
     floatingSide.candidate = state->lastFloatingFocus();
     floatingSide.fallbacks = state->floatingWindows();
     floatingSide.isEligible = [state, isHidden](const QString& id) {
         return state->isFloating(id) && !isHidden(id);
     };
-    floatingSide.focusForFeedback = state->floatingHasFocus() ? state->focusedWindow() : state->lastFloatingFocus();
+    // The resolver reads focusForFeedback from the SOURCE side only, and
+    // this verb's source is always the state's live focus slot — one value,
+    // no per-leg distinction.
+    tiledSide.focusForFeedback = state->focusedWindow();
+    floatingSide.focusForFeedback = state->focusedWindow();
 
     announceLayerSwitch(PhosphorEngine::resolveLayerFocusSwitch(state->floatingHasFocus(), tiledSide, floatingSide),
                         action, screen);

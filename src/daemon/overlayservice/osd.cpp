@@ -785,8 +785,12 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // The fullscreen action's reason is a resulting-state token ("on"/"off")
     // and its window rides sourceZoneId, so two DIFFERENT windows toggled to
     // the same state within the window are distinct events — key them apart.
-    // Other actions keep the plain key: their reasons discriminate the event
-    // and their sourceZoneId is a zone, not an identity.
+    // Other actions keep the plain key: their reasons discriminate the
+    // event. (The float-family actions carry WINDOW ids in the zone fields,
+    // but they stay on the plain key deliberately — under key auto-repeat
+    // the switch re-resolves the same leg and target, so suppressing the
+    // identical repeat OSD is the desired outcome, unlike fullscreen's
+    // distinct-window toggles.)
     QString actionKey = action + QLatin1Char(':') + reason;
     if (action == QLatin1String("fullscreen")) {
         actionKey += QLatin1Char(':') + sourceZoneId;

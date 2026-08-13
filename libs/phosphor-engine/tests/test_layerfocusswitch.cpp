@@ -15,9 +15,12 @@ class TestLayerFocusSwitch : public QObject
 private Q_SLOTS:
     void floatSideFocusTargetsTiledCandidate();
     void tiledSideFocusTargetsRememberedFloat();
+    void tiledCandidateBeatsTiledScanPool();
     void ineligibleCandidateFallsThroughToScan();
     void scanSkipsIneligibleEntries();
+    void scanSkipsBlankPoolEntries();
     void emptyTargetSideFailsWithNoTarget();
+    void allIneligibleRefusesWithNoTarget();
     void nullEligibilityAcceptsEverything();
 };
 
@@ -58,6 +61,22 @@ void TestLayerFocusSwitch::tiledSideFocusTargetsRememberedFloat()
     QCOMPARE(result.source, QStringLiteral("tile-a"));
 }
 
+void TestLayerFocusSwitch::tiledCandidateBeatsTiledScanPool()
+{
+    // Candidate precedence on the TILED leg, mirroring the floating-leg
+    // case above: the remembered tile wins over the pool's first entry.
+    LayerSwitchSide tiled;
+    tiled.candidate = QStringLiteral("tile-b");
+    tiled.fallbacks = {QStringLiteral("tile-a"), QStringLiteral("tile-b")};
+    LayerSwitchSide floating;
+    floating.focusForFeedback = QStringLiteral("float-a");
+
+    const auto result = resolveLayerFocusSwitch(true, tiled, floating);
+    QVERIFY(result.success);
+    QVERIFY(result.toTiled);
+    QCOMPARE(result.target, QStringLiteral("tile-b"));
+}
+
 void TestLayerFocusSwitch::ineligibleCandidateFallsThroughToScan()
 {
     LayerSwitchSide tiled;
@@ -92,6 +111,21 @@ void TestLayerFocusSwitch::scanSkipsIneligibleEntries()
     QCOMPARE(result.source, QStringLiteral("float-a"));
 }
 
+void TestLayerFocusSwitch::scanSkipsBlankPoolEntries()
+{
+    // A blank id in the pool (which sorts FIRST in the engines' sorted
+    // pools) must not short-circuit the scan into a false no_target — the
+    // emptiness guard mirrors the candidate check.
+    LayerSwitchSide tiled;
+    tiled.fallbacks = {QString(), QStringLiteral("tile-ok")};
+    LayerSwitchSide floating;
+    floating.focusForFeedback = QStringLiteral("float-a");
+
+    const auto result = resolveLayerFocusSwitch(true, tiled, floating);
+    QVERIFY(result.success);
+    QCOMPARE(result.target, QStringLiteral("tile-ok"));
+}
+
 void TestLayerFocusSwitch::emptyTargetSideFailsWithNoTarget()
 {
     LayerSwitchSide tiled;
@@ -120,6 +154,28 @@ void TestLayerFocusSwitch::emptyTargetSideFailsWithNoTarget()
     QCOMPARE(reverse.source, QStringLiteral("float-a"));
 }
 
+void TestLayerFocusSwitch::allIneligibleRefusesWithNoTarget()
+{
+    // The refusal shape the minimize filter actually produces in
+    // production: candidate AND every fallback present but ineligible
+    // (every float on the target side minimized).
+    LayerSwitchSide tiled;
+    tiled.focusForFeedback = QStringLiteral("tile-a");
+    LayerSwitchSide floating;
+    floating.candidate = QStringLiteral("float-min-1");
+    floating.fallbacks = {QStringLiteral("float-min-1"), QStringLiteral("float-min-2")};
+    floating.isEligible = [](const QString&) {
+        return false;
+    };
+
+    const auto result = resolveLayerFocusSwitch(false, tiled, floating);
+    QVERIFY(!result.success);
+    QVERIFY(!result.toTiled);
+    QCOMPARE(result.reason, QStringLiteral("no_target"));
+    QVERIFY(result.target.isEmpty());
+    QCOMPARE(result.source, QStringLiteral("tile-a"));
+}
+
 void TestLayerFocusSwitch::nullEligibilityAcceptsEverything()
 {
     LayerSwitchSide tiled;
@@ -127,8 +183,14 @@ void TestLayerFocusSwitch::nullEligibilityAcceptsEverything()
     LayerSwitchSide floating;
     floating.fallbacks = {QStringLiteral("float-a")};
 
-    QVERIFY(resolveLayerFocusSwitch(true, tiled, floating).success);
-    QVERIFY(resolveLayerFocusSwitch(false, tiled, floating).success);
+    // Assert the PICKED TARGET on both legs, not just success — a wrong-side
+    // pick under a null filter must fail here.
+    const auto toTiled = resolveLayerFocusSwitch(true, tiled, floating);
+    QVERIFY(toTiled.success);
+    QCOMPARE(toTiled.target, QStringLiteral("tile-a"));
+    const auto toFloat = resolveLayerFocusSwitch(false, tiled, floating);
+    QVERIFY(toFloat.success);
+    QCOMPARE(toFloat.target, QStringLiteral("float-a"));
 }
 
 QTEST_APPLESS_MAIN(TestLayerFocusSwitch)

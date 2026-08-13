@@ -29,16 +29,15 @@ int PlacementEngineBase::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     return 0;
 }
 
-bool PlacementEngineBase::announceLayerSwitch(const LayerSwitchResult& result, const QString& action,
+void PlacementEngineBase::announceLayerSwitch(const LayerSwitchResult& result, const QString& action,
                                               const QString& screenId)
 {
     if (!result.success) {
         Q_EMIT navigationFeedback(false, action, result.reason, result.source, QString(), screenId);
-        return false;
+        return;
     }
     Q_EMIT activateWindowRequested(result.target);
     Q_EMIT navigationFeedback(true, action, result.reason, result.source, result.target, screenId);
-    return true;
 }
 
 void PlacementEngineBase::setEngineSettings(QObject* settings)

@@ -17,9 +17,10 @@ namespace PhosphorEngine {
 /// snapshots what it knows into this struct and interprets the result.
 struct LayerSwitchSide
 {
-    /// Preferred target on this side: the remembered last focus (floating
-    /// side) or the current active/focused window (tiled side). May be
-    /// empty or stale — an ineligible candidate falls through to the scan.
+    /// Preferred target on this side: the side's remembered last focus, or,
+    /// for an engine whose live selection IS the side, its current active
+    /// window (the scroll strip's tiled side). May be empty or stale — an
+    /// ineligible candidate falls through to the scan.
     QString candidate;
 
     /// Ordered fallback pool scanned when the candidate is not eligible.
@@ -35,7 +36,11 @@ struct LayerSwitchSide
     std::function<bool(const QString&)> isEligible;
 
     /// The window reported as the feedback SOURCE when this side holds
-    /// focus (i.e. when the switch departs from this side).
+    /// focus (i.e. when the switch departs from this side). Passed through
+    /// UNVALIDATED — no eligibility filter runs on it — so supply the live
+    /// focus, not a memory that may name a closed or minimized window. The
+    /// resolver only ever reads the source side's value, so callers that
+    /// know the live focus can assign the same value to both sides.
     QString focusForFeedback;
 };
 

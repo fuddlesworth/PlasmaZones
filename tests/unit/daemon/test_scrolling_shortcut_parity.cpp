@@ -34,6 +34,7 @@
 // Asserting the registry again here would copy that canary, not extend it.
 
 #include "daemon/controllers/shortcutmanager.h"
+#include "daemon/controllers/shortcutmanager_ids.h"
 
 #include "config/configdefaults.h"
 #include "config/settings.h"
@@ -152,6 +153,13 @@ private Q_SLOTS:
                 registeredIds.insert(id);
             }
         }
+        // One legacy exception to the prefix heuristic: the floating/tiling
+        // focus switch was promoted out of the Scrolling family but keeps
+        // its scroll_-prefixed ON-DISK id (the id is the kglobalshortcutsrc
+        // record key, and the ids header forbids renaming shipped ids). Its
+        // schema key lives in Shortcuts.Global now, so it is pinned by
+        // globalPromotedRowKeepsFourWayParity below, not by this family.
+        registeredIds.remove(QLatin1String(PlasmaZones::ShortcutIds::kIdSwitchFocusFloatTiling));
 
         const QStringList onlyInSchema = QStringList(QSet(expectedIds).subtract(registeredIds).values());
         const QStringList onlyInDaemon = QStringList(QSet(registeredIds).subtract(expectedIds).values());
@@ -178,6 +186,12 @@ private Q_SLOTS:
             if (!id.startsWith(QLatin1String("scroll_"))) {
                 continue;
             }
+            // Same legacy-id exemption as list 2: the promoted mode-neutral
+            // row keeps its scroll_-prefixed on-disk id but is catalogued
+            // under General/"all", pinned by its own slot below.
+            if (id == QLatin1String(PlasmaZones::ShortcutIds::kIdSwitchFocusFloatTiling)) {
+                continue;
+            }
             ++scrollingRows;
             if (row.value(QStringLiteral("mode")).toString() != QLatin1String("scrolling")) {
                 uncatalogued.append(id);
@@ -188,6 +202,58 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("These registered scrolling chords are missing from the cheatsheet "
                                            "catalog, so they bind but never appear in Settings or on the sheet: %1")
                                 .arg(uncatalogued.join(QStringLiteral(", ")))));
+    }
+
+    /// The promoted floating/tiling focus switch left the scrolling family
+    /// (the only one with a 4-way parity canary) for Shortcuts.Global,
+    /// which has none — and the promotion itself shipped without a
+    /// Q_PROPERTY, proving the loss matters. This slot restores the four
+    /// legs for that one row: schema key, Settings Q_PROPERTY (the bridge
+    /// to the D-Bus registry contract test), registration table, and a
+    /// catalogued cheatsheet row.
+    void globalPromotedRowKeepsFourWayParity()
+    {
+        IsolatedConfigGuard guard;
+
+        const auto& schema = PlasmaZones::cachedSettingsSchema();
+        const auto group = schema.groups.value(ConfigDefaults::shortcutsGlobalGroup());
+        QVERIFY2(!group.isEmpty(), "Schema group Shortcuts.Global is empty: the schema lookup itself is broken.");
+        bool schemaHasKey = false;
+        for (const auto& def : group) {
+            if (def.key == QLatin1String("SwitchFocusFloatTiling")) {
+                schemaHasKey = true;
+                break;
+            }
+        }
+        QVERIFY2(schemaHasKey, "Shortcuts.Global schema lost the SwitchFocusFloatTiling key.");
+
+        Settings settings(nullptr);
+        QVERIFY2(settings.metaObject()->indexOfProperty("switchFocusFloatTilingShortcut") >= 0,
+                 "Settings lost the switchFocusFloatTilingShortcut Q_PROPERTY, so bulk reload/profile apply "
+                 "cannot re-emit it and the D-Bus registry contract test cannot see it.");
+
+        const QString id = QLatin1String(PlasmaZones::ShortcutIds::kIdSwitchFocusFloatTiling);
+        QVERIFY2(ShortcutManager::staticShortcutIds().contains(id),
+                 "The registration table lost the floating/tiling focus switch row.");
+
+        ShortcutManager manager(&settings);
+        manager.setBackendForTesting(std::make_unique<SilentBackend>());
+        manager.registerShortcuts();
+        bool rowFound = false;
+        const QVariantList rows = manager.cheatsheetModel();
+        for (const QVariant& v : rows) {
+            const QVariantMap row = v.toMap();
+            if (row.value(QStringLiteral("id")).toString() != id) {
+                continue;
+            }
+            rowFound = true;
+            QVERIFY2(!row.value(QStringLiteral("category")).toString().isEmpty(),
+                     "The cheatsheet row for the floating/tiling focus switch has no category, so it lands in "
+                     "the Other bucket.");
+            QCOMPARE(row.value(QStringLiteral("mode")).toString(), QStringLiteral("all"));
+            break;
+        }
+        QVERIFY2(rowFound, "The cheatsheet model produced no row for the floating/tiling focus switch.");
     }
 
     /// Pins the layout-capability tag split the daemon's layoutSupportForScreen

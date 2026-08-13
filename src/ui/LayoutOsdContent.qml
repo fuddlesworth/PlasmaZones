@@ -68,11 +68,13 @@ Item {
             return safeAspectRatio;
         }
     }
-    // Auto-dismiss interval. Show/hide fade shapes are owned by the
-    // SurfaceAnimator's `osd.show` / `osd.pop` / `osd.hide` profile JSONs;
-    // tune the JSONs to adjust the appear/disappear feel rather than
-    // re-introducing per-window duration overrides here.
-    property int displayDuration: 1500
+    // Auto-dismiss interval — a local constant (readonly: no C++ path
+    // writes it and the shell does not forward it). Show/hide fade shapes
+    // are owned by the SurfaceAnimator's `osd.show` / `osd.pop` /
+    // `osd.hide` profile JSONs; tune the JSONs to adjust the
+    // appear/disappear feel rather than re-introducing per-window duration
+    // overrides here.
+    readonly property int displayDuration: 1500
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor

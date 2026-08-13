@@ -114,6 +114,13 @@ add_executable(test_snap_layer_switch core/snap/test_snap_layer_switch.cpp helpe
 target_link_libraries(test_snap_layer_switch PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_layer_switch COMMAND test_snap_layer_switch)
 
+# Pure SnapState coverage of the layer-side focus memories (noteFocused
+# classification, every clear-on-layer-change site, migration semantics,
+# clear()/isEmpty()). No engine, no fixture.
+add_executable(test_snap_state_focus_memory core/snap/test_snap_state_focus_memory.cpp)
+target_link_libraries(test_snap_state_focus_memory PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_state_focus_memory COMMAND test_snap_state_focus_memory)
+
 # Restore-resolution half of the SnapEngine suite (capture placement, window
 # restore, fallback unfloat geometry, snap-to-empty gating). The fixture header
 # is listed as a source so AUTOMOC scans its Q_OBJECT classes.

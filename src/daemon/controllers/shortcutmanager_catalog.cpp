@@ -128,11 +128,19 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleCheatsheet, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleWindowFloat, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        // Mode-all row, so the label avoids "Tiled": snap users know their
+        // layer as "snapped" (the OSD splits the token for exactly that
+        // reason), and "placed" reads correctly in all three modes. The
+        // tooltip promises the remembered window only conditionally — the
+        // fallback scan is sorted, not recency-ordered.
         add(kIdSwitchFocusFloatTiling, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all", nullptr,
-            QT_TRANSLATE_NOOP("plasmazones", "Switch Floating and Tiled Focus"),
+            QT_TRANSLATE_NOOP("plasmazones", "Switch Floating and Placed Focus"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Moves focus between the floating windows and the placed layout, returning to "
-                              "the most recent window on each side."));
+                              "Moves focus between the floating windows and the placed layout. It returns to "
+                              "the window that last had focus there when that window is still available."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus between the floating windows and the scrolling columns. It returns to "
+                              "the window that last had focus there when that window is still available."));
         // "all", not a per-mode tag, and deliberately not gated on how many
         // modes are enabled. The row advertises the mode CYCLE, which is a
         // hard no-op only in the one configuration where every mode but the

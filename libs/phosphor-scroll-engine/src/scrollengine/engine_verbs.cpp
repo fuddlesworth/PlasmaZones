@@ -313,17 +313,22 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
     // engines answer this verb identically; what stays scroll-specific is
     // the activation policy below.
     //
-    // The tiled side is the strip's active window with no fallback scan and
-    // no eligibility filter: the strip IS the tiled side, and the daemon
-    // models minimize as a float, so a strip tile is never hidden. The
+    // The tiled side is the strip's active window with no fallback scan:
+    // the strip IS the tiled side. The daemon models minimize as a float,
+    // so a strip tile should never be hidden — but the eligibility filter
+    // guards it anyway (same cheap check both siblings apply to their tiled
+    // side), so a seeding path that violates the premise degrades to a
+    // no_target refusal instead of "activating" a hidden window. The
     // float side filters minimized windows on both the remembered focus and
-    // the fallback pool — a hidden float must not be "activated" with
-    // success reported. Fallback order is the sorted floating set —
+    // the fallback pool. Fallback order is the sorted floating set —
     // ARBITRARY (lowest id first), carrying no recency or position meaning;
     // the strip has no frontmost-float notion to prefer.
     PhosphorEngine::LayerSwitchSide tiledSide;
     tiledSide.candidate = state->strip().activeWindowId();
     tiledSide.focusForFeedback = tiledSide.candidate;
+    tiledSide.isEligible = [this](const QString& id) {
+        return !(m_windowRegistry && m_windowRegistry->isMinimized(id));
+    };
     PhosphorEngine::LayerSwitchSide floatingSide;
     floatingSide.candidate = state->lastFloatingFocus();
     floatingSide.fallbacks = state->floatingWindows();

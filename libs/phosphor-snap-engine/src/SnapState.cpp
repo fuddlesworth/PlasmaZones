@@ -144,10 +144,15 @@ void SnapState::assignWindowToZones(const QString& rawWindowId, const QStringLis
         Q_EMIT windowAssigned(windowId, validZoneIds.first());
     }
     if (wasFloating) {
-        // Snapping clears the float bit; the dedicated signal must fire like
-        // setFloating/setFloatingOnScreen do, or an exported-API subscriber
-        // tracking float state via floatingChanged misses every
-        // snap-clears-float transition.
+        // Snapping clears the float bit — a layer change, so a float-side
+        // focus memory naming this window is now stale (same rule as
+        // setFloating's arms).
+        if (m_lastFloatingFocus == windowId) {
+            m_lastFloatingFocus.clear();
+        }
+        // The dedicated signal must fire like setFloating/setFloatingOnScreen
+        // do, or an exported-API subscriber tracking float state via
+        // floatingChanged misses every snap-clears-float transition.
         Q_EMIT floatingChanged(windowId, false);
     }
     if (zoneChanged || screenChanged || desktopChanged || wasFloating) {
@@ -181,6 +186,12 @@ SnapState::UnassignResult SnapState::clearZoneAssignment(const QString& rawWindo
         return result;
     }
     result.wasAssigned = true;
+    // Unsnapping is a layer departure: a snapped-side focus memory naming
+    // this window is now stale (the eligibility filter would reject it
+    // anyway, but the header promises the memories clear on layer changes).
+    if (m_lastSnappedFocus == windowId) {
+        m_lastSnappedFocus.clear();
+    }
     if (!preserveScreenAndDesktop) {
         m_windowScreenAssignments.remove(windowId);
         m_windowDesktopAssignments.remove(windowId);
@@ -550,7 +561,7 @@ bool SnapState::isEmpty() const
         && m_windowDesktopAssignments.isEmpty() && m_floatingWindows.isEmpty() && m_preFloatZoneAssignments.isEmpty()
         && m_preFloatScreenAssignments.isEmpty() && m_lastUsedZoneId.isEmpty() && m_lastUsedScreenId.isEmpty()
         && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0 && m_userSnappedClasses.isEmpty()
-        && m_autoSnappedWindows.isEmpty();
+        && m_autoSnappedWindows.isEmpty() && m_lastSnappedFocus.isEmpty() && m_lastFloatingFocus.isEmpty();
 }
 
 void SnapState::clear()
@@ -571,6 +582,8 @@ void SnapState::clear()
     m_lastUsedSeq = 0;
     m_userSnappedClasses.clear();
     m_autoSnappedWindows.clear();
+    m_lastSnappedFocus.clear();
+    m_lastFloatingFocus.clear();
     Q_EMIT stateChanged();
 }
 
