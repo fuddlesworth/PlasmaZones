@@ -7,6 +7,7 @@
 #include <QString>
 #include <QVariantList>
 
+#include <functional>
 #include <optional>
 
 namespace PlasmaZones {
@@ -139,7 +140,18 @@ public:
     /// staged, did nothing, and cleared the unsaved badge while the daemon had
     /// never applied the edits. Every call this method makes is an idempotent
     /// setter, so re-flushing the whole retained map on the next Save is safe.
-    [[nodiscard]] bool flushAssignmentsToDaemon();
+    /// @param templateExists Optional predicate answering whether a scrolling
+    /// template UUID still names a live template. Supplied because the
+    /// daemon's `setScrollingTemplateLayout` is a VOID slot: it refuses an
+    /// unknown id with a warning and a bare return, which on the wire is an
+    /// ordinary successful reply, so the flush's transport check cannot see
+    /// the refusal. Without this the staged pick was discarded, the map
+    /// cleared and the unsaved badge dropped as though it had saved — and the
+    /// refusal is reachable in one session, by deleting a template on the
+    /// Layouts page while a Monitors-page pick is still staged. Left unset
+    /// (fixtures, embedders) the pre-check is skipped and the old behaviour
+    /// stands.
+    [[nodiscard]] bool flushAssignmentsToDaemon(const std::function<bool(const QString&)>& templateExists = {});
 
     // ── Virtual screen staging ────────────────────────────────────────
 

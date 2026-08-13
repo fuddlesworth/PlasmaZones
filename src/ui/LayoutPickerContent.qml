@@ -259,14 +259,17 @@ Item {
         // any decoration halo and the show / hide transition are captured
         // instead of being clipped. See PopupFrame.qml.
         anchors.centerIn: parent
-        // The frame follows the GRID's width even when the none row is
-        // present: that row holds one card, which is narrower than any grid
-        // row, so letting it participate would only ever shrink the frame
-        // under the grid it has to contain.
-        width: gridView.width + metrics.containerPadding
-        // top padding + title + gap below title + grid + the none row when
-        // it exists (its own top margin is folded into noneRow.height by the
-        // anchor, so a screen without one adds nothing) + bottom padding
+        // The wider of the two rows. The none row holds a single card, so it
+        // normally loses to any grid row and the grid decides the width — but
+        // a Templates screen with an empty store has NO grid rows at all, and
+        // following the grid alone collapsed the frame to its padding while
+        // the none row still drew a full-width card, leaving that card
+        // hanging outside the frame on both sides.
+        width: Math.max(gridView.width, root.hasNoneRow ? noneRow.width : 0) + metrics.containerPadding
+        // top padding + title + gap below title + grid + the none row and the
+        // spacing above it when it exists + bottom padding. The spacing is a
+        // separate term because anchors.topMargin does not contribute to an
+        // item's height.
         height: titleLabel.height + gridView.height + noneRow.height + (root.hasNoneRow ? root.cardSpacing : 0) + metrics.paddingSide * 3
         backgroundColor: root.backgroundColor
 

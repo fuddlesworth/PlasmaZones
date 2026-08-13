@@ -633,6 +633,15 @@ private Q_SLOTS:
         mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), templId);
         QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()).id, parsed);
 
+        // A DEFAULT template is configured, which is what makes the slot's
+        // scrubbed VALUE observable: empty means "inherit the default", so
+        // scrubbing to empty would silently move this screen onto Fallback —
+        // a template the user never picked for it.
+        const QUuid fallback = createTestTemplate(store, QStringLiteral("Fallback"));
+        mgr->setDefaultScrollingTemplateProvider([fallback] {
+            return fallback.toString();
+        });
+
         // Deleting the template (store delete + the id-keyed purge the D-Bus
         // delete verb drives) scrubs the SetScrollingTemplate reference; the
         // context stays Scrolling (mode is intent, the template was data).
@@ -643,10 +652,11 @@ private Q_SLOTS:
         QVERIFY(mgr->purgeLayoutIdFromAssignments(templId));
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
         QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Scrolling);
-        QVERIFY(entry.scrollingTemplateLayout.isEmpty());
-        // Degrade check: with the reference scrubbed the mode-gated resolver
-        // has nothing to answer with, so a Scrolling context reports invalid
-        // rather than a stale template.
+        // The reserved word, not empty: deleting the template a screen was
+        // using leaves that screen with NO template.
+        QCOMPARE(entry.scrollingTemplateLayout, QString(PhosphorZones::NoScrollingTemplate));
+        // Degrade check, and the point of the fixture's default provider: the
+        // screen resolves to no template rather than adopting Fallback.
         QVERIFY(!mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()).isValid());
     }
 

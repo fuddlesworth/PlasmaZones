@@ -262,7 +262,23 @@ bool LayoutRegistry::purgeLayoutIdFromAssignments(const QString& layoutId)
                 entry.snappingLayout.clear();
             }
             if (entry.scrollingTemplateLayout == layoutId) {
-                entry.scrollingTemplateLayout.clear();
+                // The reserved word rather than empty, but ONLY where the
+                // template is actually in force. Empty means "inherit the
+                // configured default", so clearing a Scrolling context's slot
+                // handed a screen whose template was just deleted to whatever
+                // OTHER template happened to be the default — silently
+                // reshaping it with a template the user never picked. Writing
+                // "explicitly none" leaves it with no template, which is what
+                // deleting its template means and what the dangling-id path
+                // already resolves to.
+                //
+                // A non-Scrolling context keeps the plain clear: the slot is
+                // only a remembered value for a mode this context is not in,
+                // the user never asked for an opt-out, and the sentinel would
+                // also defeat the drop-if-nothing-remains test below and
+                // leave the rule behind as clutter.
+                entry.scrollingTemplateLayout =
+                    entry.mode == AssignmentEntry::Scrolling ? QString(NoScrollingTemplate) : QString();
             }
             const ContextDims dims = decodeDims(rule.match);
             // Track the affected (screen, desktop) for the post-update

@@ -252,7 +252,18 @@ void SettingsController::save()
                 << "— skipping flush+apply to avoid per-assignment writes the batch was meant to coalesce";
             commitOk = false;
         } else {
-            if (!m_staging.flushAssignmentsToDaemon()) {
+            // The local store is the settings app's own view of the template
+            // set, kept in step with the Layouts page, so it answers this
+            // without a round trip. See the parameter's doc for why a
+            // pre-check is needed at all: the daemon's setter refuses an
+            // unknown template with a successful-looking reply.
+            const auto templateStillExists = [this](const QString& templateId) {
+                if (!m_localTemplateStore) {
+                    return true;
+                }
+                return m_localTemplateStore->contains(QUuid::fromString(templateId));
+            };
+            if (!m_staging.flushAssignmentsToDaemon(templateStillExists)) {
                 commitOk = false;
             }
             QDBusMessage apply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),

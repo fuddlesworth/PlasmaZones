@@ -225,7 +225,7 @@ const StagingService::StagedAssignment* StagingService::stagedAssignmentFor(cons
     return assignmentEntryConst(screen, desktop, activity);
 }
 
-bool StagingService::flushAssignmentsToDaemon()
+bool StagingService::flushAssignmentsToDaemon(const std::function<bool(const QString&)>& templateExists)
 {
     qCDebug(lcCore) << "flushStagedAssignments: count=" << m_assignments.size();
     bool ok = true;
@@ -276,10 +276,27 @@ bool StagingService::flushAssignmentsToDaemon()
             // that switch.
             if (s.scrollingTemplateId.has_value()
                 && mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
-                check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                             QStringLiteral("setScrollingTemplateLayout"),
-                                             {s.screenId, s.virtualDesktop, s.activityId, *s.scrollingTemplateId}),
-                      "setScrollingTemplateLayout", s.screenId);
+                // Pre-checked, because the daemon's refusal is invisible on
+                // the wire: setScrollingTemplateLayout is a void slot that
+                // warns and returns for an id naming no live template, which
+                // replies successfully. Without this the pick was dropped and
+                // the app reported a clean save. Only a UUID form is checked —
+                // the empty string and the reserved "explicitly none" word are
+                // both legal values the daemon always accepts.
+                const QString& templateId = *s.scrollingTemplateId;
+                const bool needsExistenceCheck =
+                    templateExists && !templateId.isEmpty() && templateId != PhosphorZones::NoScrollingTemplate;
+                if (needsExistenceCheck && !templateExists(templateId)) {
+                    qCWarning(lcCore) << "flushAssignmentsToDaemon: staged scrolling template" << templateId
+                                      << "for screen" << s.screenId
+                                      << "no longer exists — refusing the write and keeping the staged state";
+                    ok = false;
+                } else {
+                    check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                 QStringLiteral("setScrollingTemplateLayout"),
+                                                 {s.screenId, s.virtualDesktop, s.activityId, templateId}),
+                          "setScrollingTemplateLayout", s.screenId);
+                }
             }
             continue;
         }
