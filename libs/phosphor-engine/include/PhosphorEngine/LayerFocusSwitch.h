@@ -38,9 +38,10 @@ struct LayerSwitchSide
     /// The window reported as the feedback SOURCE when this side holds
     /// focus (i.e. when the switch departs from this side). Passed through
     /// UNVALIDATED — no eligibility filter runs on it — so supply the live
-    /// focus, not a memory that may name a closed or minimized window. The
-    /// resolver only ever reads the source side's value, so callers that
-    /// know the live focus can assign the same value to both sides.
+    /// focus, or a memory the engine keeps in lockstep with it (the scroll
+    /// engine's lastFloatingFocus, written on every floating focus report).
+    /// The resolver only ever reads the source side's value, so callers
+    /// that know the live focus can assign the same value to both sides.
     QString focusForFeedback;
 };
 

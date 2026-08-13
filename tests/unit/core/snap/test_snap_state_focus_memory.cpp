@@ -10,7 +10,6 @@
 
 #include <PhosphorSnapEngine/SnapState.h>
 
-#include <QSignalSpy>
 #include <QTest>
 
 using PhosphorSnapEngine::SnapState;
@@ -55,7 +54,11 @@ private Q_SLOTS:
         QCOMPARE(state.lastSnappedFocus(), kSnapped);
 
         // unsnap-then-float is the production shape; the float bit alone
-        // must already clear the snapped memory.
+        // must already clear the snapped memory. (This leaves the window in
+        // both the zone map and the float set, a state production never
+        // produces — the point here is the departed-side clear, and the
+        // noteFocused below incidentally exercises its float-first
+        // precedence in that artificial state.)
         state.setFloating(kSnapped, true);
         QVERIFY(state.lastSnappedFocus().isEmpty());
 
@@ -134,16 +137,12 @@ private Q_SLOTS:
     void clearCoversTheMemories()
     {
         SnapState state(kScreen);
-        state.setFloating(kFloat, true);
-        state.noteFocused(kFloat);
-
-        // A store holding a focus memory is not "empty", so clear() must
-        // not early-return past it.
-        state.removeWindowData(kFloat);
-        QVERIFY(state.lastFloatingFocus().isEmpty());
-
-        // And when a memory is somehow the only surviving state, clear()
-        // resets it rather than bailing on the emptiness probe.
+        // Full teardown clears an armed memory alongside everything else.
+        // (The memory can never be the ONLY surviving state through the
+        // public API — every path that empties the layer sets also clears
+        // the matching memory — so isEmpty()'s memory terms are pure
+        // defence and cannot be pinned from here; this slot pins clear()'s
+        // own resets.)
         state.setFloating(kFloat, true);
         state.noteFocused(kFloat);
         QVERIFY(!state.isEmpty());

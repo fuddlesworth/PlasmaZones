@@ -560,7 +560,13 @@ bool SnapState::isEmpty() const
     return m_windowZoneAssignments.isEmpty() && m_windowScreenAssignments.isEmpty()
         && m_windowDesktopAssignments.isEmpty() && m_floatingWindows.isEmpty() && m_preFloatZoneAssignments.isEmpty()
         && m_preFloatScreenAssignments.isEmpty() && m_lastUsedZoneId.isEmpty() && m_lastUsedScreenId.isEmpty()
-        && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0 && m_userSnappedClasses.isEmpty()
+        && m_lastUsedZoneClass.isEmpty() && m_lastUsedDesktop == 0
+        && m_userSnappedClasses.isEmpty()
+        // The two focus-memory terms are defence in depth: every public
+        // path that empties the layer sets also clears the matching
+        // memory, so a memories-only store is unreachable today — but
+        // clear()'s early return keys off this predicate, and a future
+        // write path must not let it skip a live memory.
         && m_autoSnappedWindows.isEmpty() && m_lastSnappedFocus.isEmpty() && m_lastFloatingFocus.isEmpty();
 }
 

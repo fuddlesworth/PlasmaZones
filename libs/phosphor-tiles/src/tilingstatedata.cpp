@@ -235,7 +235,9 @@ void TilingState::rebuildSplitTree()
             // Truncation drops windows without routing through removeWindow,
             // so clear any focus bookkeeping naming a dropped id — the same
             // invariant removeWindow keeps. (The clamp keeps every floating
-            // window, so only tiled ids can be dropped here.)
+            // window, so only tiled ids can be dropped here. Defence in
+            // depth: addWindow already refuses at the tiled cap, so this
+            // truncated branch is unreachable through the public API today.)
             if (!m_focusedWindow.isEmpty() && !clamped.contains(m_focusedWindow)) {
                 m_focusedWindow.clear();
                 Q_EMIT focusedWindowChanged();

@@ -1003,7 +1003,12 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         // TilingAdaptor lifecycle vector, whose focus relay serves the
         // tiling family. Must run AFTER the migrate above: noteFocused
         // writes through the window's owning store, and the migrate is what
-        // re-keys that store onto the activation screen.
+        // re-keys that store onto the activation screen. Accepted side
+        // effect: this also populates SnapEngine::m_lastActiveScreenId on
+        // every activation (previously never written in production), which
+        // activates tier 3 of setWindowFloat's screen-resolution chain —
+        // the tier that member was documented to feed. resolvedScreen (not
+        // the raw screenId) keeps virtual-screen ids intact for it.
         snap->windowFocused(windowId, resolvedScreen);
     }
 

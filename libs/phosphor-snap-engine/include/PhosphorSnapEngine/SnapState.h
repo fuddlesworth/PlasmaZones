@@ -110,7 +110,10 @@ public:
     /// friends), leaves the store (removeWindowData, migrateWindowTo), and
     /// never serialized — focus history dies with the session. Consumers
     /// validate before use, so a stale value degrades to a fallback scan,
-    /// never a wrong activation.
+    /// never a wrong activation. Deliberate divergence from TilingState:
+    /// the tiling twin RETAINS a non-focused window's old-side memory on a
+    /// layer change (its transient floats round-trip), which needs a focus
+    /// slot to condition on — snap holds none, so it clears unconditionally.
     void noteFocused(const QString& windowId);
     QString lastSnappedFocus() const
     {

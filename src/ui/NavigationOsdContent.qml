@@ -190,8 +190,8 @@ Item {
 
             // The floating/tiling focus switch (all three engines) and
             // scrolling's explicit float verb: the layer asked for has no
-            // window to take focus (the focused window is already there,
-            // or the other layer is
+            // window to take focus (the focused window is already there, or
+            // the other layer is
             // empty). Exact copy for the two switch legs; approximate for
             // moveFocusedToFloating's already-floating refusal, where it is
             // still closer than "Floating is unavailable" was (a per-site
@@ -460,11 +460,13 @@ Item {
             return i18nc("@info:status the window's previous position was restored", "Restored");
         } else if (action === "float") {
             // Show different message based on float state from reason field.
-            // The "tiled"/"floating" arms serve BOTH the float toggle and
-            // the layer-focus switch: the producers do not distinguish
-            // switch-origin from toggle-origin on these tokens, and splitting
-            // the copy would need a producer token split (the same tradeoff
-            // the no_target comment above weighs and declines).
+            // The "tiled" arm and the "Floating" fallthrough at the bottom
+            // serve BOTH the float toggle and the layer-focus switch (the
+            // fallthrough also absorbs the toggle's "floated" token): the
+            // producers do not distinguish switch-origin from toggle-origin
+            // on these tokens, and splitting the copy would need a producer
+            // token split (the same tradeoff the no_target comment above
+            // weighs and declines).
             if (reason === "tiled")
                 return i18nc("@info:status the window is now tiled (adjective, not a verb)", "Tiled");
 
@@ -706,9 +708,13 @@ Item {
             font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
             font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * root.messageFontScale * root.fontSizeScale)
             // The nav card deliberately fixes its headline weight and takes
-            // only family/scale from the user's OSD font settings; the
-            // style flags (weight/italic/underline/strikeout) that
-            // LayoutOsdContent honours are not forwarded to this slot.
+            // only family/scale from the user's OSD font settings. C++ does
+            // write all six font fields onto the shared osdSlot; what stops
+            // the style flags (weight/italic/underline/strikeout) here is
+            // PassiveOverlayShell's navigationOsdComp, which forwards only
+            // family and scale. LayoutOsdContent forwards the flags to
+            // ZonePreview's zone-number labels while its own name label
+            // fixes Font.Medium the same way this one does.
             font.weight: Font.Medium
             color: (root.success || root.atClampBound) ? root.textColor : root.errorColor
             horizontalAlignment: Text.AlignHCenter

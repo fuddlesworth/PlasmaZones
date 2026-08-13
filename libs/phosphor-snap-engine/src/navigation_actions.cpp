@@ -837,10 +837,12 @@ void SnapEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
     const int currentDesktop = currentVirtualDesktopForScreen(screen);
     const auto onCurrentDesktop = [state, currentDesktop](const QString& id) {
         if (currentDesktop == 0) {
-            // No virtual-desktop authority resolves (no VDM wired, or the
-            // screen is unknown to it) — fail open like the minimize
-            // filter: a focus verb must not refuse windows because the
-            // desktop is unknowable.
+            // No virtual-desktop authority resolves. In production the VDM
+            // never answers 0 (an unknown screen falls back to the global
+            // current desktop), so this branch serves reduced wirings with
+            // no VDM at all (tests) — fail open like the minimize filter:
+            // a focus verb must not refuse windows because the desktop is
+            // unknowable.
             return true;
         }
         const int desktop = state->desktopForWindow(id);

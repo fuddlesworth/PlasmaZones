@@ -203,7 +203,11 @@ bool TilingState::swapWindows(int index1, int index2)
         // floating side has no leaf, so SplitTree::swap would no-op and
         // leave the tree diverged from the order — the invariant moveWindow
         // protects with this same rebuild fallback. Also covers a tiled
-        // window truncated out of the tree.
+        // window truncated out of the tree. Accepted trade: the rebuild
+        // restores tuned split ratios only for pairs that stay direct
+        // siblings, so a mixed swap (reachable only from the D-Bus
+        // swapWindows surface) can reset broken pairs to the default ratio,
+        // which beats the silent divergence it replaces.
         rebuildSplitTree();
     }
 

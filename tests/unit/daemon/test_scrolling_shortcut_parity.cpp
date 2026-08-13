@@ -233,6 +233,11 @@ private Q_SLOTS:
                  "cannot re-emit it and the D-Bus registry contract test cannot see it.");
 
         const QString id = QLatin1String(PlasmaZones::ShortcutIds::kIdSwitchFocusFloatTiling);
+        // Pin the LITERAL on-disk spelling, not just the constant: the id is
+        // the kglobalshortcutsrc record key, so a well-meaning rename of the
+        // constant's VALUE would orphan every user's saved chord while every
+        // constant-based check stayed green.
+        QCOMPARE(id, QStringLiteral("scroll_switch_focus_float_tiling"));
         QVERIFY2(ShortcutManager::staticShortcutIds().contains(id),
                  "The registration table lost the floating/tiling focus switch row.");
 
@@ -247,9 +252,13 @@ private Q_SLOTS:
                 continue;
             }
             rowFound = true;
-            QVERIFY2(!row.value(QStringLiteral("category")).toString().isEmpty(),
-                     "The cheatsheet row for the floating/tiling focus switch has no category, so it lands in "
-                     "the Other bucket.");
+            // The uncatalogued fallback yields category "Other" at order 99
+            // with mode "all" and NO description, so a bare category/mode
+            // check would stay green with the catalog entry deleted. Pin
+            // the order (General is 0) and the tooltip's presence instead.
+            QCOMPARE(row.value(QStringLiteral("categoryOrder")).toInt(), 0);
+            QVERIFY2(!row.value(QStringLiteral("description")).toString().isEmpty(),
+                     "The cheatsheet row lost its catalog entry (the Other-bucket fallback carries no tooltip).");
             QCOMPARE(row.value(QStringLiteral("mode")).toString(), QStringLiteral("all"));
             break;
         }

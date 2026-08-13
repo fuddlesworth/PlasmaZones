@@ -99,7 +99,10 @@ struct CatalogMeta
     // Optional Templates-capability variant of `explanation`: shown instead
     // of it when the bound screen's engine consumes layouts as sizing
     // templates (a scrolling screen), where the same key picks a TEMPLATE
-    // rather than a placement layout. nullptr = `explanation` serves both.
+    // rather than a placement layout. The same slot also serves plain
+    // scrolling-screen wording for mode-neutral rows whose vocabulary
+    // shifts there (the layer-focus switch names columns instead of the
+    // placed layout). nullptr = `explanation` serves both.
     const char* templatesExplanation = nullptr;
 };
 
