@@ -268,7 +268,13 @@ QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QVariantMap& overr
 ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& screenId) const
 {
     ScrollBlueprintProgress progress;
-    if (screenId.isEmpty()) {
+    // Ownership gate, so the documented "a screen this engine does not own
+    // reports {0, 0}" holds for a direct caller too. The in-tree path is
+    // gated a layer up in ScrollingAdaptor, but this is exported library
+    // surface: an embedder asking about a screen the engine has since given
+    // up would otherwise get the progress its surviving overrides still
+    // resolve to.
+    if (screenId.isEmpty() || !m_scrollingScreens.contains(screenId)) {
         return progress;
     }
     const QVariantMap overrides = overridesForScreen(screenId);
@@ -281,6 +287,14 @@ ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& 
     // supplied. A readout claiming twenty starting columns while the engine
     // will only ever consume sixteen would be a lie in the direction that
     // matters (the user waits for columns that never come).
+    //
+    // Entries are counted as POSITIONS, not as carriers of usable overrides,
+    // which is exactly how the consumption site spends them: an entry whose
+    // width and display are both absent or malformed still names a starting
+    // column, and that column opens on the resolved defaults. Counting only
+    // "contributing" entries here would make total and used disagree with the
+    // cursor the moment a blueprint carried one, which is the divergence this
+    // pair exists to avoid.
     progress.total = qMin(int(blueprintIt->toList().size()), kMaxTemplateEntries);
     if (progress.total == 0) {
         return progress;

@@ -44,7 +44,7 @@ void ScrollEngine::restoreFloatRecordForOpen(const QString& windowId, const QStr
     // the class has no appId to parse, and this gate would then silently skip
     // the float restore for the window's whole life.
     const QString appId = currentAppIdFor(windowId);
-    if (!m_windowTracker || appId.isEmpty() || appId == windowId) {
+    if (!m_windowTracker || !PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
         return;
     }
     // The window floats regardless (the caller already decided that), so only
@@ -141,7 +141,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // anchors that every structural mutation had to invalidate, and the
     // strip stash already restores structure where it matters.
     const QString appId = currentAppIdFor(windowId);
-    if (m_windowTracker && !appId.isEmpty() && appId != windowId) {
+    if (m_windowTracker && PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
         const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
         if (const auto record =
                 m_windowTracker->placementStore().takeForReopen(engineId(), windowId, appId, currentKey.screenId)) {
@@ -370,20 +370,26 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
                     && fraction <= 1.0) {
                     width = ColumnWidth::makeProportion(fraction);
                 }
-                // Guarded on PRESENCE, mirroring the width arm's fall-through:
-                // an entry that carries a width only must leave `display` on
-                // the effective default resolved above. Reading an absent key
-                // as 0 forced every such column to Normal and silently
-                // discarded a Tabbed default (from the settings-channel
-                // default, or a SetScrollDefaultColumnDisplay rule) for
-                // exactly the first N columns. The in-tree daemon always
-                // writes both keys on every entry, so this guard is a
-                // public-API belt for embedder-supplied maps rather than a
-                // fix for a shipped bug.
-                if (!openParams.tabbed && entry.contains(ScrollPerScreenKeys::templateColumnDisplay())) {
-                    display = entry.value(ScrollPerScreenKeys::templateColumnDisplay()).toInt() == 1
-                        ? ColumnDisplay::Tabbed
-                        : ColumnDisplay::Normal;
+                // Guarded on the VALUE, not merely on the key's presence, and
+                // for the same reason effectiveDefaultColumnDisplay is:
+                // QVariant::toInt() answers 0 for anything unconvertible, and
+                // 0 is a legal ColumnDisplay (Normal). Reading "any value that
+                // is not 1" as Normal let a garbage override — or a display
+                // kind a future build knows and this one does not — silently
+                // replace a Tabbed default (from the settings channel, or a
+                // SetScrollDefaultColumnDisplay rule) for exactly the first N
+                // columns. An entry that carries no usable display leaves
+                // `display` on the effective default resolved above, which is
+                // the same fall-through the width arm's range test gives.
+                const auto displayIt = entry.constFind(ScrollPerScreenKeys::templateColumnDisplay());
+                if (!openParams.tabbed && displayIt != entry.constEnd()) {
+                    bool displayOk = false;
+                    const int displayValue = displayIt->toInt(&displayOk);
+                    if (displayOk
+                        && (displayValue == static_cast<int>(ColumnDisplay::Normal)
+                            || displayValue == static_cast<int>(ColumnDisplay::Tabbed))) {
+                        display = static_cast<ColumnDisplay>(displayValue);
+                    }
                 }
             }
         }

@@ -97,17 +97,30 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 /// empty field, which means "not chosen here" and inherits the configured
 /// default template. See that field for why the third state exists.
 ///
-/// A deliberately non-UUID word: every consumer that means "a template id"
-/// parses the field with QUuid::fromString, so a stray READER that has not
-/// been taught about the token degrades to a null UUID, which is the
-/// no-template answer anyway.
+/// A deliberately non-UUID word. Every consumer that RESOLVES the field to a
+/// template parses it with QUuid::fromString, so a resolver that has not been
+/// taught about the token degrades to a null UUID, which is the no-template
+/// answer anyway. That safety argument covers behaviour and NOT presentation:
+/// a reader that displays the field without parsing shows the word itself, so
+/// any new display surface has to translate it (see the ones that already do,
+/// below).
 ///
-/// Exactly two places must know it, both in LayoutRegistry: the resolver
+/// Only two places may TRANSLATE it, both in LayoutRegistry: the resolver
 /// (scrollingTemplateForContext), because it is the one that would otherwise
 /// substitute the default, and the write choke point
 /// (assignScrollingTemplate), because its UUID normalization would flatten
-/// the token back to empty on the way in. The D-Bus slot setter also skips
-/// its UUID validation for it, which is a refusal rather than a rewrite.
+/// the token back to empty on the way in. Everywhere else passes it through.
+///
+/// The pass-through sites are not few, so treat this as the list to check
+/// when the spelling changes rather than as a claim that nothing else knows
+/// it: the D-Bus setter skips its UUID validation for it (a refusal, not a
+/// rewrite), the purge writes it when a Scrolling context's template is
+/// deleted, scrollingTemplateExplicitlyNone and scrollingDisplayIdForContext
+/// test it, the unified layout list builds the picker's None row around it
+/// and sorts on it, the daemon's UnifiedLayoutController carries it through
+/// its apply and current-selection answers, the picker's apply path compares
+/// against it, and two QML files (LayoutPickerContent and MonitorStatePage)
+/// hardcode the literal against this declaration.
 inline constexpr QLatin1String NoScrollingTemplate{"none"};
 
 /**
@@ -165,8 +178,11 @@ struct AssignmentEntry
     /// a screen could never opt out of a default someone else had set. It is
     /// a reserved word rather than a flag so it rides every existing string
     /// path (assignment JSON, the D-Bus slot setter, the rule action) with no
-    /// schema change, and it is ADDITIVE — no stored config can contain it,
-    /// so nothing needs migrating.
+    /// schema change, and it is ADDITIVE: no config this project writes can
+    /// contain it, so nothing needs migrating. (rules.json is hand-editable
+    /// and the SetScrollingTemplate descriptor accepts any non-empty string,
+    /// so a hand-written "none" was loadable before and meant the opposite —
+    /// not a case for migration code, just not a claim worth overstating.)
     QString scrollingTemplateLayout;
 
     QString activeLayoutId() const

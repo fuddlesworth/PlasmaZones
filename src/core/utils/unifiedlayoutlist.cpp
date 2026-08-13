@@ -92,6 +92,19 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
 /// read as one maximized column, which is a shape the engine does not adopt.
 /// zoneCount 0 is the UnlimitedZoneCount sentinel, so the row passes
 /// LayoutPreview::isValid with an empty zone list.
+/// Stamp the scrolling-template section triple onto @p preview.
+///
+/// One home for the three fields, called from both row builders below. They
+/// were spelled out twice, twenty lines apart, and drift would have put the
+/// None row under a header of its own — separated from the very templates it
+/// is an escape from.
+void stampScrollingTemplateSection(LayoutPreview& preview)
+{
+    preview.sectionKey = QStringLiteral("scrolling-templates");
+    preview.sectionLabel = PhosphorI18n::tr("Scrolling Templates");
+    preview.sectionOrder = 10;
+}
+
 LayoutPreview noScrollingTemplatePreview()
 {
     LayoutPreview preview;
@@ -100,9 +113,7 @@ LayoutPreview noScrollingTemplatePreview()
     preview.description =
         PhosphorI18n::tr("Use no template on this screen, so columns keep the built-in widths and heights");
     preview.isScrollingTemplate = true;
-    preview.sectionKey = QStringLiteral("scrolling-templates");
-    preview.sectionLabel = PhosphorI18n::tr("Scrolling Templates");
-    preview.sectionOrder = 10;
+    stampScrollingTemplateSection(preview);
     return preview;
 }
 
@@ -131,9 +142,7 @@ void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones
     list.reserve(list.size() + templates.size());
     for (const PhosphorZones::ScrollingTemplate& templ : templates) {
         LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ, verticalAxis);
-        preview.sectionKey = QStringLiteral("scrolling-templates");
-        preview.sectionLabel = PhosphorI18n::tr("Scrolling Templates");
-        preview.sectionOrder = 10;
+        stampScrollingTemplateSection(preview);
         list.append(preview);
     }
 }
@@ -209,10 +218,12 @@ void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAl
 }
 
 // Manual before autotile, recommended first, then by name. There is
-// deliberately no template arm: grouping templates away from the other two
-// families is a QML concern driven by sectionKey/sectionLabel/sectionOrder,
-// which only the QML side reads, so adding a sort arm here would duplicate
-// that decision in a second place.
+// deliberately no arm that GROUPS templates away from the other two families:
+// that is a QML concern driven by sectionKey/sectionLabel/sectionOrder, which
+// only the QML side reads, so sorting on it here would duplicate the decision
+// in a second place. The one template-aware arm below is a different
+// question — where a single row sits WITHIN its own section — which no
+// section field can express.
 bool defaultPreviewLessThan(const LayoutPreview& a, const LayoutPreview& b)
 {
     // The no-template row is an ESCAPE from the list rather than a member of

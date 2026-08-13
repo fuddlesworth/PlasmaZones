@@ -54,7 +54,8 @@ namespace {
 /// the chain, exactly as the inline retries did. Centralizes the rewrite shared
 /// by layoutForScreen / storedAssignmentIdForScreen (which assignmentIdForScreen
 /// delegates to) / assignmentEntryForScreen / hasMatchingAssignmentRule /
-/// scrollingTemplateForContext so the five callers cannot drift.
+/// scrollingTemplateForContext / scrollingTemplateExplicitlyNone so the six
+/// callers cannot drift.
 template<typename TryFn>
 auto resolveWithScreenFallback(const QString& screenId, TryFn&& tryOne) -> decltype(tryOne(screenId))
 {
@@ -433,8 +434,10 @@ void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, c
                             << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity)
                             << "layout=" << layout->name();
     } else {
-        // Clearing: remove the exact-shape rule entirely. Skip the signal
-        // when there was nothing to remove.
+        // Clearing: strip the exact-shape rule's assignment slots.
+        // removeAssignmentRule deletes the rule outright only when nothing
+        // else survives on it — a rule carrying other actions keeps them.
+        // Skip the signal when there was nothing to remove.
         if (!removeAssignmentRule(screenId, virtualDesktop, activity)) {
             return;
         }
