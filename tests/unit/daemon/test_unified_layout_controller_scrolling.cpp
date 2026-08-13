@@ -167,7 +167,14 @@ private Q_SLOTS:
         // The card is in the list the press resolves against. Without this the
         // press below would fail as "layout not found" and the rest of the
         // test would be asserting against a refusal.
-        QVERIFY(PhosphorZones::LayoutUtils::findLayout(controller.layouts(), noneId) != nullptr);
+        const auto listed = controller.layouts();
+        QVERIFY(PhosphorZones::LayoutUtils::findLayout(listed, noneId) != nullptr);
+        // And it sorts LAST, not into its alphabetical place. The two
+        // templates here are named to bracket it ("Fallback" < "None" <
+        // "Template"), so a row taking its alphabetical seat would land in the
+        // middle and this would catch it. A row meaning "none of these"
+        // between two real choices reads as one of them.
+        QCOMPARE(listed.last().id, noneId);
 
         QVERIFY(controller.applyLayoutById(noneId));
         // Stored as the word, and the context now resolves to NO template even

@@ -54,6 +54,11 @@ Item {
     // Layout data (array of layout objects with id, name, zones, category, autoAssign)
     property var layouts: []
     property string activeLayoutId: ""
+    // The reserved scrolling-template id whose card stands for "no template".
+    // Spelled here rather than passed from C++ because this surface already
+    // spells the autotile prefix the same way; the authoritative declaration
+    // is PhosphorZones::NoScrollingTemplate in AssignmentEntry.h.
+    readonly property string noTemplateId: "none"
     // Mirrors the global "Auto-assign for all layouts" master toggle (#370).
     // Forwarded into LayoutCard so the category badge shows effective state.
     property bool globalAutoAssign: false
@@ -270,6 +275,11 @@ Item {
                         isSelected: layoutCard.isSelected
                         isHovered: layoutCard.isHovered
                         globalAutoAssign: root.globalAutoAssign
+                        // The no-template row stands for an absence, so it has
+                        // no zones and would otherwise draw an empty well that
+                        // reads as a card which failed to load. The same
+                        // symbol vocabulary as the lock overlay below.
+                        placeholderIcon: layoutCard.layoutData.id === root.noTemplateId ? "edit-none" : ""
                         showMasterDot: layoutCard.layoutData.isAutotile === true && layoutCard.layoutData.supportsMasterCount === true
                         producesOverlappingZones: layoutCard.layoutData.producesOverlappingZones === true
                         zoneNumberDisplay: layoutCard.layoutData.zoneNumberDisplay || "all"

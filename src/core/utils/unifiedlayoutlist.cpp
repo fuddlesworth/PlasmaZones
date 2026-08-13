@@ -211,6 +211,17 @@ void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAl
 // that decision in a second place.
 bool defaultPreviewLessThan(const LayoutPreview& a, const LayoutPreview& b)
 {
+    // The no-template row is an ESCAPE from the list rather than a member of
+    // it, so it sorts to the very end instead of taking its alphabetical
+    // place among the templates. Tested before every other term, including
+    // `recommended`, because none of them should be able to pull it back up:
+    // a row that means "none of these" reads as an afterthought to the
+    // choices, and landing between two real templates reads as one.
+    const bool aNone = a.id == PhosphorZones::NoScrollingTemplate;
+    const bool bNone = b.id == PhosphorZones::NoScrollingTemplate;
+    if (aNone != bNone) {
+        return bNone;
+    }
     if (a.recommended != b.recommended) {
         return a.recommended;
     }
