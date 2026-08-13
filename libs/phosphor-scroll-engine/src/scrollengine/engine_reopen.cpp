@@ -53,12 +53,12 @@ bool ScrollEngine::claimCrossScreenReopen(const QString& rawWindowId, const QStr
         return false;
     }
     // Registry-aware appId, like autotile's twin and like every record
-    // producer (captures write the tracker's current appId): parsing the
-    // frozen canonical string would look in the wrong bucket after an
-    // Electron/CEF class mutation.
-    // The engine's own resolver, the same spelling the capture and float
-    // restore use — it and the tracker's are line-for-line identical, but one
-    // spelling cannot drift.
+    // producer: parsing the frozen canonical string would look in the wrong
+    // bucket after an Electron/CEF class mutation, and finds nothing at all
+    // for a window KWin had not classed when the id was frozen. The engine's
+    // own resolver rather than the tracker's — they are line-for-line
+    // identical, and it is the same spelling the capture and float restore
+    // use, so the three cannot drift apart.
     const QString appId = currentAppIdFor(windowId);
     if (!PhosphorEngine::hasStableAppIdFor(appId, windowId)) {
         // Info, not debug: an unmatchable appId means this window can never be
