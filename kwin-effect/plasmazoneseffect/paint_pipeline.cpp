@@ -149,10 +149,15 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     // and the pass output's indicator surfaces are picked out of the stacking
     // order. The filter drops the windows KWin plainly will not draw
     // (minimized, hidden, off-desktop); it CANNOT rule out an anchor the scene
-    // culls later as fully occluded, and it does not try. An anchor that never
-    // paints simply means the injection never runs, leaving the indicator on
-    // its layer slot — visible but mis-stacked, which is the right direction to
-    // fail in.
+    // culls later as fully occluded, and it does not try. That case is covered
+    // by the SECOND trigger instead: the walk also collects the windows above
+    // the final anchor (m_scrollTabAboveAnchor), and paintWindow injects just
+    // before the first of those that paints — an occluded anchor implies a
+    // visible occluder above it, so the injection runs either way instead of
+    // falling through to the natural-slot paint on top of the occluder (which
+    // flickered against the correct stacking as the anchor's culling came and
+    // went). The natural slot remains the last-resort fallback for a pass
+    // where neither trigger fired.
     //
     // The empty-set gate keeps this off the common path: no indicators
     // anywhere, no stacking walk.
@@ -168,6 +173,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
     m_scrollTabPaintAnchor = nullptr;
     m_scrollTabDeferred.clear();
     m_scrollTabDrawn.clear();
+    m_scrollTabAboveAnchor.clear();
     if (!m_scrollTabSurfaceIds.isEmpty() && data.screen) {
         for (KWin::EffectWindow* sw : KWin::effects->stackingOrder()) {
             if (!sw || sw->isDeleted() || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop()
@@ -199,8 +205,23 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
                     continue;
                 }
                 m_scrollTabPaintAnchor = sw; // topmost strip member wins
+                // Everything collected so far sits BELOW the new anchor, so it
+                // cannot be this pass's injection trigger.
+                m_scrollTabAboveAnchor.clear();
             } else if (sw->screen() == data.screen && isScrollTabIndicatorSurface(sw)) {
                 m_scrollTabDeferred.insert(sw);
+            } else if (sw->screen() == data.screen) {
+                // Candidate above-anchor trigger (see the member's doc): a
+                // non-strip window on this output stacked over the current
+                // anchor. Provisional while the walk runs — a later strip
+                // member resets it above — so what survives is exactly the
+                // windows above the FINAL anchor. paintWindow injects the
+                // indicators just before the first of these that paints, which
+                // is what keeps a culled anchor from degrading into the
+                // natural-slot paint ON TOP of the very dialog or OSD covering
+                // the strip (and from flickering against it as occlusion comes
+                // and goes).
+                m_scrollTabAboveAnchor.insert(sw);
             }
         }
         // No column on this output — the mode-teardown race (indicators
@@ -210,6 +231,7 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data)
         // surfaces on their normal layer-slot paint.
         if (!m_scrollTabPaintAnchor) {
             m_scrollTabDeferred.clear();
+            m_scrollTabAboveAnchor.clear();
         }
     }
     if (data.screen) {
@@ -484,6 +506,7 @@ void PlasmaZonesEffect::postPaintScreen()
     m_scrollTabPaintAnchor = nullptr;
     m_scrollTabDeferred.clear();
     m_scrollTabDrawn.clear();
+    m_scrollTabAboveAnchor.clear();
     // Same reasoning, one map further: the per-pass resolve memo keys on raw
     // EffectWindow* and stores raw LogicalOutput*, and either can die between
     // passes. Every read is gated on the in-pass latch cleared just above, and
@@ -1387,10 +1410,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // The natural slot is the layer bucket, which the scene walks after every
     // ordinary toplevel — exactly the stacking that painted the indicator
     // across floating windows raised over the strip. The drawn-set gate (not
-    // deferred-set membership) is what makes the anchor-never-painted case
-    // fail safe: an anchor KWin culled means no injection ran, the set stays
-    // empty, and the surface paints here in its old mis-stacked position
-    // rather than not at all. Injection re-enters this function under
+    // deferred-set membership) keeps this a true last resort: a pass where
+    // NEITHER injection trigger fired (the anchor culled and nothing above it
+    // painted either) leaves the set empty and the surface paints here rather
+    // than not at all. Injection re-enters this function under
     // m_directPaintCapture, which is why that latch exempts the skip.
     if (!m_capturingSnapshot && !m_directPaintCapture && m_scrollTabDrawn.contains(w)) {
         return;
@@ -1408,6 +1431,24 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             injectScrollTabIndicators(renderTarget, viewport);
         }
     });
+    // Part two-and-a-half: the anchor's paint alone is not a reliable trigger.
+    // The scene culls a fully occluded anchor — a dialog or a raised floating
+    // window covering the column — and then the guard above never arms, the
+    // indicators fell through to their natural layer slot, and they painted ON
+    // TOP of the very window covering the strip (dialogs, and the passive
+    // shell's OSDs with it). Worse than one bad frame: whether the anchor
+    // survives culling shifts with whatever occludes it, so the indicators
+    // FLICKERED between correctly-stacked and over-everything. So ALSO inject
+    // just before the first window stacked above the anchor paints — an
+    // occluded anchor implies a visible occluder above it, so one of the two
+    // triggers always fires. Injection marks every indicator drawn, which
+    // makes the two triggers and the natural-slot skip mutually exclusive; the
+    // size compare keeps the common already-injected case to two integer
+    // reads.
+    if (!m_capturingSnapshot && !m_directPaintCapture && w && !m_scrollTabDeferred.isEmpty()
+        && m_scrollTabDrawn.size() < m_scrollTabDeferred.size() && m_scrollTabAboveAnchor.contains(w)) {
+        injectScrollTabIndicators(renderTarget, viewport);
+    }
 
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple
     // paintWindow calls within one OUTPUT PASS (multi-pass, back-to-back
