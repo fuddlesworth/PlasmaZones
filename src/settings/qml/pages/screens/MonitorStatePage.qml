@@ -952,80 +952,6 @@ SettingsFlickable {
                 Accessible.name: stateView.scrollingStripZones.length > 0 ? i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", stateView.scrollingStripZones.length) : i18nc("accessible name of the placeholder strip preview shown when the screen is not scrolling yet", "Scrolling strip preview, example strip")
             }
 
-            // Template selector (scrolling). The peer of the snapping and
-            // tiling selectors below, for the third family's own slot: it
-            // writes scrollingTemplateLayout rather than the entry's layout or
-            // algorithm, so it stages through its own call.
-            LayoutComboBox {
-                Layout.alignment: Qt.AlignHCenter
-                visible: stateView.isScrolling
-                Accessible.name: i18n("Scrolling template")
-                appSettings: root._layoutBridge
-                currentLayoutId: stateView.localTemplateId
-                layoutFilter: 2
-                noneText: i18n("Default")
-                // The third state this family needs and the other two do not.
-                showExplicitNoneOption: true
-                explicitNoneValue: root._noTemplateToken
-                showPreview: true
-                onActivated: function (idx) {
-                    var entry = model[idx];
-                    stateView.localTemplateId = entry ? (entry.value || "") : "";
-                    // Touched even when the pick lands back on Default: that is
-                    // a deliberate "inherit again", and without the flag the
-                    // stage below would skip the slot and leave the previous
-                    // template assigned.
-                    stateView.localTemplateTouched = true;
-                    root._stageCurrentState();
-                }
-            }
-
-            // Scrolling picks neither a zone layout nor an algorithm, so a
-            // short explanation stands in for those two selectors.
-            Kirigami.InlineMessage {
-                // fillWidth with a maximum and an alignment, not alignment
-                // alone: an InlineMessage's implicitWidth collapses to its
-                // padding, so without fillWidth the text rendered as a sliver.
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignHCenter
-                Layout.maximumWidth: stateView._messageMaxWidth
-                type: Kirigami.MessageType.Information
-                // The numbering sentence is only shown for a LIVE strip: the
-                // placeholder sketch above is deliberately unnumbered, so
-                // promising numbers over it describes something not on screen.
-                // It also promises no more than Snap to Zone delivers — nine
-                // digit shortcuts — and says windows are numbered rather than
-                // that the numbers are legible, which they are not on a tile
-                // too narrow to carry a label.
-                // Two sentences joined at runtime rather than four whole
-                // strings: the strip half and the template half vary
-                // independently, and spelling out the product would leave
-                // translators maintaining four near-identical paragraphs.
-                // Each half is a complete sentence on its own.
-                text: {
-                    const strip = stateView.scrollingStripZones.length > 0 ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.");
-                    // Three states, matching the three the dropdown offers, so
-                    // the note never reads the same for two of them.
-                    let template;
-                    if (stateView.scrollingTemplateId === root._noTemplateToken)
-                        template = i18n("This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.");
-                    else if (stateView.scrollingTemplateName.length > 0)
-                        template = i18n("This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.", stateView.scrollingTemplateName);
-                    else
-                        template = i18n("This screen has no template of its own, so it follows the default template from the Layouts page.");
-                    if (stateView.blueprintTotal <= 0)
-                        return strip + " " + template;
-
-                    // A starting column is spent once a column has taken it, so
-                    // this counts up and stays there until the strip empties or
-                    // the template changes. Saying so is the point of the line:
-                    // it is the only place the "spent" rule is visible.
-                    const seed = stateView.blueprintUsed >= stateView.blueprintTotal ? i18n("All %1 of its starting columns are in use, so further columns open at the template's own width and display.", stateView.blueprintTotal) : i18n("%1 of its %2 starting columns are in use, and the rest shape the next columns you open.", stateView.blueprintUsed, stateView.blueprintTotal);
-                    return strip + " " + template + " " + seed;
-                }
-                visible: stateView.isScrolling
-            }
-
             // Mode toggle (below preview)
             SettingsButtonGroup {
                 Layout.alignment: Qt.AlignHCenter
@@ -1136,6 +1062,83 @@ SettingsFlickable {
                 text: i18n("This monitor uses %1, which is not in your algorithm list.", (stateView.screenState && stateView.screenState.algorithmName) || stateView.localAlgorithmId)
                 // Same in-flight-fetch guard as the snapping hint above.
                 visible: stateView.isTiling && tilingSelector.currentIndex === -1 && tilingSelector.count > 1
+            }
+
+            // Template selector (scrolling). Third in the same selector band as
+            // its two siblings above, in the same order the previews are drawn,
+            // so each mode's control sits where the other modes' controls do.
+            // It writes scrollingTemplateLayout rather than the entry's layout
+            // or algorithm, so it stages through its own call.
+            LayoutComboBox {
+                Layout.alignment: Qt.AlignHCenter
+                visible: stateView.isScrolling
+                Accessible.name: i18n("Scrolling template")
+                appSettings: root._layoutBridge
+                currentLayoutId: stateView.localTemplateId
+                layoutFilter: 2
+                noneText: i18n("Default")
+                // The third state this family needs and the other two do not.
+                showExplicitNoneOption: true
+                explicitNoneValue: root._noTemplateToken
+                showPreview: true
+                onActivated: function (idx) {
+                    var entry = model[idx];
+                    stateView.localTemplateId = entry ? (entry.value || "") : "";
+                    // Touched even when the pick lands back on Default: that is
+                    // a deliberate "inherit again", and without the flag the
+                    // stage below would skip the slot and leave the previous
+                    // template assigned.
+                    stateView.localTemplateTouched = true;
+                    root._stageCurrentState();
+                }
+            }
+
+            // The scrolling family's message slot, holding an explainer rather
+            // than the missing-entry alarm its two siblings carry: a template
+            // is optional, so there is no "not in your list" state to warn
+            // about, and what the mode does needs saying instead.
+            Kirigami.InlineMessage {
+                // fillWidth with a maximum and an alignment, not alignment
+                // alone: an InlineMessage's implicitWidth collapses to its
+                // padding, so without fillWidth the text rendered as a sliver.
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignHCenter
+                Layout.maximumWidth: stateView._messageMaxWidth
+                type: Kirigami.MessageType.Information
+                // The numbering sentence is only shown for a LIVE strip: the
+                // placeholder sketch above is deliberately unnumbered, so
+                // promising numbers over it describes something not on screen.
+                // It also promises no more than Snap to Zone delivers — nine
+                // digit shortcuts — and says windows are numbered rather than
+                // that the numbers are legible, which they are not on a tile
+                // too narrow to carry a label.
+                // Two sentences joined at runtime rather than four whole
+                // strings: the strip half and the template half vary
+                // independently, and spelling out the product would leave
+                // translators maintaining four near-identical paragraphs.
+                // Each half is a complete sentence on its own.
+                text: {
+                    const strip = stateView.scrollingStripZones.length > 0 ? i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout. Windows are numbered in the order they appear on screen, and Snap to Zone reaches the first nine.") : i18n("Scrolling mode arranges windows in resizable columns on an endless strip. It does not use a zone layout.");
+                    // Three states, matching the three the dropdown offers, so
+                    // the note never reads the same for two of them.
+                    let template;
+                    if (stateView.scrollingTemplateId === root._noTemplateToken)
+                        template = i18n("This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.");
+                    else if (stateView.scrollingTemplateName.length > 0)
+                        template = i18n("This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.", stateView.scrollingTemplateName);
+                    else
+                        template = i18n("This screen has no template of its own, so it follows the default template from the Layouts page.");
+                    if (stateView.blueprintTotal <= 0)
+                        return strip + " " + template;
+
+                    // A starting column is spent once a column has taken it, so
+                    // this counts up and stays there until the strip empties or
+                    // the template changes. Saying so is the point of the line:
+                    // it is the only place the "spent" rule is visible.
+                    const seed = stateView.blueprintUsed >= stateView.blueprintTotal ? i18n("All %1 of its starting columns are in use, so further columns open at the template's own width and display.", stateView.blueprintTotal) : i18n("%1 of its %2 starting columns are in use, and the rest shape the next columns you open.", stateView.blueprintUsed, stateView.blueprintTotal);
+                    return strip + " " + template + " " + seed;
+                }
+                visible: stateView.isScrolling
             }
         }
     }
