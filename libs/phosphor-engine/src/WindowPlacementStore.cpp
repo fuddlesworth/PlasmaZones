@@ -39,6 +39,12 @@ bool sameWindowInstance(const QString& lhs, const QString& rhs)
 bool WindowPlacementStore::record(WindowPlacement incoming)
 {
     if (incoming.windowId.isEmpty() || incoming.appId.isEmpty() || !incoming.isValid()) {
+        // Logged: an appId-less capture is dropped here and the window then
+        // has nothing to restore on reopen, which reads downstream as "the
+        // placement was never saved" with no evidence of where it went. The
+        // common source is a window KWin had not classed when the capture ran.
+        qCDebug(lcPlacementStore) << "record: refusing" << incoming.windowId << "appId" << incoming.appId << "valid"
+                                  << incoming.isValid();
         return false;
     }
 
