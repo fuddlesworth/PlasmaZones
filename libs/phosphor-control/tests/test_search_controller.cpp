@@ -150,6 +150,19 @@ QString subtitleForTitle(const SearchController& sc, const QString& title)
     return QString();
 }
 
+// The `mode` tag of the result whose title matches, or -1 when the title is
+// absent — so "wrong tag" and "not a result at all" fail distinguishably.
+int modeForTitle(const SearchController& sc, const QString& title)
+{
+    for (const QVariant& v : sc.results()) {
+        const QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("title")).toString() == title) {
+            return m.value(QStringLiteral("mode")).toInt();
+        }
+    }
+    return -1;
+}
+
 } // namespace
 
 class TestSearchController : public QObject
@@ -480,14 +493,15 @@ private Q_SLOTS:
         QVERIFY(sc.suggestion().isEmpty());
     }
 
-    void advancedOnlyEntryIsHiddenInSimpleMode()
+    void advancedOnlyEntryIsTaggedAdvancedInBothModes()
     {
-        // SearchEntry::advancedOnly is the ONLY thing keeping an advanced row
-        // off the simple-mode result list when its owning page is visible in
-        // BOTH modes (the page-tier gate cannot help there). Roughly 25
-        // catalogue rows depend on it, so without this test deleting the
-        // `!e.advancedOnly ||` clause in SearchController::tierAllows passes
-        // the whole suite.
+        // SearchEntry::advancedOnly is the ONLY thing classifying an
+        // advanced-gated row AdvancedOnly when its owning page is visible in
+        // BOTH modes (the page-tier walk cannot see a per-row gate). Roughly
+        // 25 catalogue rows depend on it: without the tag a simple-mode
+        // activation would skip the mode switch and reveal a collapsed row.
+        // The entry stays LISTED in simple mode — the UI badges it and flips
+        // to advanced on activation.
         SearchController sc(m_app.get());
         SearchEntry advanced;
         advanced.kind = SearchEntry::Kind::Setting;
@@ -497,21 +511,48 @@ private Q_SLOTS:
         advanced.advancedOnly = true;
         sc.addEntry(advanced);
 
-        const auto titles = [&sc]() {
-            QStringList out;
-            for (const QVariant& v : sc.results()) {
-                out << v.toMap().value(QStringLiteral("title")).toString();
-            }
-            return out;
-        };
+        // An ungated sibling row on the same page, matching the same query, so
+        // the flag's effect is isolated to the entry that carries it.
+        SearchEntry ungated;
+        ungated.kind = SearchEntry::Kind::Setting;
+        ungated.pageId = QStringLiteral("general");
+        ungated.anchor = QStringLiteral("borderWidth");
+        ungated.title = QStringLiteral("Borders width");
+        sc.addEntry(ungated);
 
         m_app->registry()->setShowAdvanced(true);
         sc.setQuery(QStringLiteral("borders"));
-        QVERIFY(titles().contains(QStringLiteral("Apply borders to")));
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Apply borders to")),
+                 static_cast<int>(SearchEntry::Mode::AdvancedOnly));
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Borders width")), static_cast<int>(SearchEntry::Mode::Both));
 
         m_app->registry()->setShowAdvanced(false);
         sc.setQuery(QStringLiteral("borders"));
-        QVERIFY(!titles().contains(QStringLiteral("Apply borders to")));
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Apply borders to")),
+                 static_cast<int>(SearchEntry::Mode::AdvancedOnly));
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Borders width")), static_cast<int>(SearchEntry::Mode::Both));
+    }
+
+    void advancedOnlyEntryOnSimpleOnlyPageIsDropped()
+    {
+        // An advanced-gated row on a SimpleOnly page is an authoring
+        // contradiction: no mode can ever render it, so listing it would
+        // produce a result whose activation reveals nothing in EITHER mode.
+        ApplicationController app;
+        app.registerPage(new StubPage(QStringLiteral("condensed")), {}, QStringLiteral("Condensed"),
+                         QUrl(QStringLiteral("qrc:/condensed.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::SimpleOnly);
+
+        SearchController sc(&app);
+        SearchEntry contradiction;
+        contradiction.kind = SearchEntry::Kind::Setting;
+        contradiction.pageId = QStringLiteral("condensed");
+        contradiction.title = QStringLiteral("Unreachable knob");
+        contradiction.advancedOnly = true;
+        sc.addEntry(contradiction);
+
+        sc.setQuery(QStringLiteral("unreachable"));
+        QCOMPARE(sc.resultCount(), 0);
     }
 
     void providerEntitiesAreSearchable()
@@ -692,19 +733,22 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 1);
     }
 
-    void hidesEntriesForPagesTheCurrentModeFilters()
+    void modeSpecificPagesAreTaggedNotFiltered()
     {
-        // A result the active tier hides is unreachable: activating it lets
-        // the app's mode gate send the user somewhere else entirely. Both
-        // page entries and page-resident static entries must drop out, and
-        // the index must REBUILD on the flip rather than serving the mode's
-        // set from the session's first query onwards.
+        // The index spans BOTH modes: a page only one mode shows stays a
+        // result in the other mode, tagged with the mode that owns it, so the
+        // UI can badge it and switch modes on activation. Both page entries
+        // and page-resident static entries carry the tag, and a mode flip
+        // must NOT change the result list (it is mode-independent now).
         ApplicationController app;
         app.registerPage(new StubPage(QStringLiteral("always")), {}, QStringLiteral("Always"),
                          QUrl(QStringLiteral("qrc:/always.qml")));
         app.registerPage(new StubPage(QStringLiteral("advanced")), {}, QStringLiteral("Advanced"),
                          QUrl(QStringLiteral("qrc:/advanced.qml")), QString(), false, false,
                          PageRegistry::PageVisibility::AdvancedOnly);
+        app.registerPage(new StubPage(QStringLiteral("condensed")), {}, QStringLiteral("Condensed"),
+                         QUrl(QStringLiteral("qrc:/condensed.qml")), QString(), false, false,
+                         PageRegistry::PageVisibility::SimpleOnly);
 
         SearchController sc(&app);
         SearchEntry setting;
@@ -713,36 +757,36 @@ private Q_SLOTS:
         setting.title = QStringLiteral("Advanced knob");
         sc.addEntry(setting);
 
-        // Advanced mode (the registry default): both are reachable.
+        // Advanced mode (the registry default): everything is listed, each
+        // tagged with the mode that owns it.
         sc.setQuery(QStringLiteral("advanced"));
         QCOMPARE(sc.resultCount(), 2);
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Advanced")), static_cast<int>(SearchEntry::Mode::AdvancedOnly));
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Advanced knob")), static_cast<int>(SearchEntry::Mode::AdvancedOnly));
+        const QVariantList advancedModeResults = sc.results();
 
-        // Flip to simple WITHOUT touching the query: the live results must
-        // refresh, which only happens if the flip invalidated the index.
-        app.registry()->setShowAdvanced(false);
-        QCOMPARE(sc.resultCount(), 0);
+        sc.setQuery(QStringLiteral("condensed"));
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Condensed")), static_cast<int>(SearchEntry::Mode::SimpleOnly));
+        sc.setQuery(QStringLiteral("always"));
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Always")), static_cast<int>(SearchEntry::Mode::Both));
 
-        // And back again.
-        app.registry()->setShowAdvanced(true);
-        QCOMPARE(sc.resultCount(), 2);
-        // Assert WHICH entries survive, not just how many — a future entry
-        // matching "advanced" would otherwise keep the count assertion
-        // passing for the wrong reason.
-        QVERIFY(resultPageIds(sc).contains(QStringLiteral("advanced")));
-
-        // The flip must re-emit so QML's resultCount/results bindings
-        // refresh; a rebuild without the signal leaves the UI stale.
+        // Flip to simple WITHOUT touching the query: the results are
+        // identical (the tags are reachability, not the live mode), and the
+        // suppressed-emit path keeps QML from rebuilding its list for
+        // nothing.
+        sc.setQuery(QStringLiteral("advanced"));
         QSignalSpy spy(&sc, &SearchController::resultsChanged);
         app.registry()->setShowAdvanced(false);
-        QVERIFY(spy.count() > 0);
+        QCOMPARE(sc.results(), advancedModeResults);
+        QCOMPARE(spy.count(), 0);
     }
 
-    void hidesProviderEntriesForHiddenPagesToo()
+    void providerEntriesOnModeSpecificPagesAreTaggedToo()
     {
-        // The provider loop applies the same tier gate as the static loop.
-        // Pinned separately because a regression reverting only the provider
-        // call site would otherwise ship green — and providers are the
-        // highest-volume entry source in the real app.
+        // The provider loop applies the same mode classification as the
+        // static loop. Pinned separately because a regression reverting only
+        // the provider call site would otherwise ship green — and providers
+        // are the highest-volume entry source in the real app.
         ApplicationController app;
         app.registerPage(new StubPage(QStringLiteral("hidden")), {}, QStringLiteral("Hidden"),
                          QUrl(QStringLiteral("qrc:/hidden.qml")), QString(), false, false,
@@ -767,15 +811,18 @@ private Q_SLOTS:
 
         sc.setQuery(QStringLiteral("zebra"));
         QCOMPARE(sc.resultCount(), 1);
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Zebra")), static_cast<int>(SearchEntry::Mode::AdvancedOnly));
 
+        // Still listed after a flip to simple, tag unchanged.
         app.registry()->setShowAdvanced(false);
-        QCOMPARE(sc.resultCount(), 0);
+        QCOMPARE(sc.resultCount(), 1);
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Zebra")), static_cast<int>(SearchEntry::Mode::AdvancedOnly));
     }
 
-    void reclassifyingAPageRefreshesTheIndex()
+    void reclassifyingAPageRetagsTheIndex()
     {
         // setPageVisibility is the late-reclassification path; the cached
-        // index must learn about it.
+        // index's mode tags must learn about it.
         ApplicationController app;
         app.registerPage(new StubPage(QStringLiteral("later")), {}, QStringLiteral("Later"),
                          QUrl(QStringLiteral("qrc:/later.qml")));
@@ -783,10 +830,11 @@ private Q_SLOTS:
         SearchController sc(&app);
         sc.setQuery(QStringLiteral("later"));
         QCOMPARE(sc.resultCount(), 1);
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Later")), static_cast<int>(SearchEntry::Mode::Both));
 
-        app.registry()->setShowAdvanced(false);
         app.registry()->setPageVisibility(QStringLiteral("later"), PageRegistry::PageVisibility::AdvancedOnly);
-        QCOMPARE(sc.resultCount(), 0);
+        QCOMPARE(sc.resultCount(), 1);
+        QCOMPARE(modeForTitle(sc, QStringLiteral("Later")), static_cast<int>(SearchEntry::Mode::AdvancedOnly));
     }
 
 private:
