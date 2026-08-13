@@ -108,14 +108,13 @@ buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
  * See the non-filtered overload for @p autotileSource / @p algorithmRegistry
  * semantics - same fallback rules apply.
  */
-PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
-buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
-                       PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, const QString& screenId,
-                       int virtualDesktop, const QString& activity, bool includeManual = true,
-                       bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
-                       const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
-                       QSize autotilePreviewCanvas = {}, bool includeScrollingTemplates = false,
-                       PhosphorZones::ScrollingTemplateStore* templateStore = nullptr);
+PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview> buildUnifiedLayoutList(
+    PhosphorZones::IZoneLayoutRegistry* layoutManager, PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
+    const QString& screenId, int virtualDesktop, const QString& activity, bool includeManual = true,
+    bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
+    const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr,
+    QSize autotilePreviewCanvas = {}, bool includeScrollingTemplates = false,
+    PhosphorZones::ScrollingTemplateStore* templateStore = nullptr, bool includeNoTemplateRow = false);
 
 /**
  * @brief Build a combined custom order list from settings

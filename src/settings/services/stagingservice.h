@@ -47,6 +47,15 @@ public:
         QString activityId;
         std::optional<QString> snappingLayoutId;
         std::optional<QString> tilingAlgorithmId;
+        /// The scrolling template slot. Unlike its two siblings this one is
+        /// NOT carried by setAssignmentEntry — the daemon writes it through
+        /// its own per-slot setter — so the flush issues a second call for it
+        /// after the entry write. Three values, matching the field it lands
+        /// in: a template UUID, an empty string (inherit the default), and
+        /// PhosphorZones::NoScrollingTemplate (explicitly none). Engaged only
+        /// when the user actually touched the control, so a mode toggle on a
+        /// scrolling screen never rewrites the template slot.
+        std::optional<QString> scrollingTemplateId;
         std::optional<int> stagedMode;
     };
 
@@ -86,6 +95,18 @@ public:
     /// per-field paths and flushes through `setAssignmentEntry`.
     void stageAssignmentEntry(const QString& screen, int desktop, const QString& activity, int mode,
                               const QString& snappingLayoutId, const QString& tilingAlgorithmId);
+
+    /// Stage the scrolling template slot for a context. Independent of the
+    /// mode/layout staging above: the Overview page calls this alongside
+    /// `stageAssignmentEntry` when the template dropdown was touched, and
+    /// omits it otherwise so an untouched slot is never rewritten.
+    void stageScrollingTemplate(const QString& screen, int desktop, const QString& activity, const QString& templateId);
+
+    /// Out-param query for the scrolling template slot, same shape as
+    /// `stagedSnappingLayout`. The staged value may legitimately be an empty
+    /// string (inherit the default) or the explicit-none token, so the
+    /// return value is the only way to tell "staged" from "not staged".
+    bool stagedScrollingTemplate(const QString& screen, int desktop, const QString& activity, QString& out) const;
 
     /// Out-param query: returns true if the context has a staged
     /// snapping value, writes the staged value (possibly empty string for

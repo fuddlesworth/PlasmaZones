@@ -58,14 +58,19 @@ const QSet<QString>& deliberatelyUnowned()
         // page-Reset hazard that used to justify unowning it is closed by
         // resetExemptModeEnableKeys() instead — pinned by the exemption slot
         // below.
-        // The two global preset lists. No page offers an EDITOR for them any
-        // more — the Columns page's editor rows went away when templates became
-        // the authoring surface — and the keys stay config-backed as the
-        // engine's fallback vocabulary. Two scrolling pages still READ them, to
-        // bound their preset-index spin boxes, so owning them would make those
-        // pages' Reset rewrite values the pages do not edit.
-        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetColumnWidthsKey()),
-        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::presetWindowHeightsKey()),
+        // The two global preset lists are NOT here any more: the Columns page
+        // carries their editors again, because they are the vocabulary the
+        // cycling shortcuts walk on a screen with no template — reachable
+        // now that a screen can be set to no template explicitly. An editor
+        // means an owner, so they moved into that page's manifest.
+        // The default template, on the other hand, is unowned:
+        // the Columns page's editor row went away, and a template is made
+        // default from the Layouts page's own context menu now, beside the
+        // default layout and the default algorithm. The Layouts page is not
+        // part of the per-page dirty/Reset/Discard manifest at all (it writes
+        // its settings immediately), so no page can own this key without
+        // giving a Reset the power to rewrite a value that page never edits.
+        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultTemplateKey()),
     };
     return kSet;
 }

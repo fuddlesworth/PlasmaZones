@@ -53,6 +53,9 @@
  *     and write the intent kind each form documents — width proportion
  *     exact, width/height px Fixed, height proportion a Preset anchor that
  *     relayout snaps to the height vocabulary.
+ * 16. blueprintProgressJson carries the same ownership gates, answers zeroes
+ *     (not an empty object) for an owned screen with no blueprint, and its
+ *     `used` counter SPENDS: it does not fall back when a column closes.
  */
 
 #include <QTest>
@@ -544,6 +547,52 @@ private Q_SLOTS:
         QCOMPARE(widths.at(0).toDouble(), 0.2);
         QCOMPARE(widths.at(1).toDouble(), 0.8);
         QCOMPARE(obj.value(QLatin1String("windowHeights")).toArray(), fallbackHeights);
+    }
+
+    // The blueprint readout carries focusColumn's ownership gates, and its
+    // counter SPENDS rather than tracking the live column count: the whole
+    // point of the wire field is to show that a closed column does not give
+    // its starting column back.
+    void testBlueprintProgressJson_gatesAndSpends()
+    {
+        // Foreign and empty screen ids answer the empty object.
+        QCOMPARE(m_adaptor->blueprintProgressJson(QStringLiteral("HDMI-2")), QStringLiteral("{}"));
+        QCOMPARE(m_adaptor->blueprintProgressJson(QString()), QStringLiteral("{}"));
+
+        const auto progress = [this]() {
+            const QString payload = m_adaptor->blueprintProgressJson(QStringLiteral("DP-1"));
+            return QJsonDocument::fromJson(payload.toUtf8()).object();
+        };
+
+        // An owned screen with NO blueprint answers zeroes rather than an
+        // empty object: the gate above is about ownership, not content.
+        QCOMPARE(progress().value(QLatin1String("total")).toInt(), 0);
+
+        QVariantList blueprint;
+        for (const qreal width : {0.6, 0.4}) {
+            QVariantMap entry;
+            entry.insert(PhosphorScrollEngine::ScrollPerScreenKeys::templateColumnWidth(), width);
+            blueprint.append(entry);
+        }
+        QVariantMap templ;
+        templ.insert(PhosphorScrollEngine::ScrollPerScreenKeys::templateColumns(), blueprint);
+        m_engine->applyPerScreenConfig(QStringLiteral("DP-1"), templ);
+
+        QCOMPARE(progress().value(QLatin1String("total")).toInt(), 2);
+        QCOMPARE(progress().value(QLatin1String("used")).toInt(), 0);
+
+        m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
+        QCOMPARE(progress().value(QLatin1String("used")).toInt(), 1);
+        m_engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("DP-1"), 0, 0);
+        QCOMPARE(progress().value(QLatin1String("used")).toInt(), 2);
+
+        // The load-bearing leg: one column closes and `used` STAYS at 2. A
+        // readout derived from the column count would drop back to 1 and
+        // promise a starting column the engine will never hand out again.
+        m_engine->windowClosed(QStringLiteral("app|b"));
+        QCoreApplication::processEvents();
+        QCOMPARE(progress().value(QLatin1String("used")).toInt(), 2);
+        QCOMPARE(progress().value(QLatin1String("total")).toInt(), 2);
     }
 
     // The property is documented as sorted so a consumer can compare it with

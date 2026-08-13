@@ -159,6 +159,48 @@ public:
         m_hasLastAppliedViewX = false;
     }
 
+    /// How many entries this strip has taken from the context template's seed
+    /// blueprint since it was last empty.
+    ///
+    /// The blueprint is a SEED, not a standing rule: entry `i` describes the
+    /// i-th column this strip grows, and once consumed it is spent. Deriving
+    /// the index from the live column count instead made the blueprint refill
+    /// any gap — closing a column handed its prescription straight back to the
+    /// next open, so a column the user toggled to Normal came back Tabbed and
+    /// the toggle read as broken.
+    ///
+    /// Readers take qMax(cursor, columnCount), never the cursor alone. Columns
+    /// also materialize through paths that consume NOTHING (stash restore,
+    /// mode-transition seed, unfloat, re-home), and without that floor a
+    /// restored three-column strip would hand entry 0 to its next open. The
+    /// floor states the real invariant: entry `i` is never given to a column
+    /// when `i` columns already exist. While a strip only grows the two agree
+    /// exactly, which is why growing a strip behaves as it always did.
+    ///
+    /// TRANSIENT — deliberately not serialized, like the view-delta baseline
+    /// above. The floor makes a restored strip resolve correctly without any
+    /// stored cursor, so persisting one would add a migration and a staleness
+    /// class to buy nothing.
+    ///
+    /// Reset on exactly two events: the strip EMPTIES (applyLayout's empty
+    /// branch, beside clearLastAppliedViewX — a screen you cleared out starts
+    /// its next session from the top of the blueprint), and the screen's
+    /// blueprint CHANGES (applyPerScreenConfig — picking a new template is an
+    /// explicit act, and a cursor describing the old template's entries would
+    /// silently swallow the new one's opening columns).
+    int blueprintCursor() const
+    {
+        return m_blueprintCursor;
+    }
+    void setBlueprintCursor(int cursor)
+    {
+        m_blueprintCursor = qMax(0, cursor);
+    }
+    void resetBlueprintCursor()
+    {
+        m_blueprintCursor = 0;
+    }
+
     // ── IPlacementState ─────────────────────────────────────────────────────
     QString screenId() const override
     {
@@ -224,6 +266,7 @@ private:
     int m_lastAppliedViewX = 0;
     QRect m_lastAppliedWorkArea;
     bool m_hasLastAppliedViewX = false;
+    int m_blueprintCursor = 0;
 };
 
 } // namespace PhosphorScrollEngine

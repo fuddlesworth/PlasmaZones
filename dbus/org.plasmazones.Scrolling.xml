@@ -100,6 +100,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
 
+        <method name="blueprintProgressJson">
+            <annotation name="org.gtk.GDBus.DocString" value="How far the screen has worked through its scrolling template's seed blueprint, as a JSON object {&quot;total&quot;: n, &quot;used&quot;: n}. total is how many starting columns the context's resolved template declares, and used is how many of them the strip has already taken. An entry is spent once a column has taken it, so closing a column does not return its entry to the pool, and used == total means further columns open at the template's ordinary width and display instead. The count restarts when the strip empties or the screen is given a different template. Reports the current desktop and activity context, matching visibleStripJson. Same silent ownership gate as focusColumn: an empty object when the screen is not scrolling."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose progress to describe. An empty string yields an empty object."/>
+            </arg>
+            <arg name="progressJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object string."/>
+            </arg>
+        </method>
+
         <method name="scrollTabSurfaces">
             <annotation name="org.gtk.GDBus.DocString" value="Every live tab-indicator surface, as a map of effective screen id to wl_surface protocol object id. The replay half of scrollTabSurfaceChanged, for a compositor-side consumer that starts (or restarts) after the surfaces already exist and would otherwise wait for an announcement that only fires on change."/>
             <arg name="surfaces" type="a{sv}" direction="out">

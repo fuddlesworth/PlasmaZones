@@ -316,9 +316,8 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // (same shape as the openColumnPlacement rule) and falls through to
         // a positional insert on an empty strip.
         //
-        // TEMPLATE blueprint: while the strip holds fewer columns than the
-        // context template's blueprint, the materializing column takes the
-        // next blueprint entry's width and display. Applied ONLY here (a
+        // TEMPLATE blueprint: a materializing column takes the next UNSPENT
+        // blueprint entry's width and display. Applied ONLY here (a
         // genuinely new column on the fresh-open path) so restore, seed and
         // stash adoptions keep their remembered shapes, and never
         // retroactively — a template change reshapes nothing that already
@@ -326,16 +325,30 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // blueprint; the blueprint outranks every default, including a
         // client-decides width already resolved into `width`.
         const auto blueprintIt = screenOverrides.constFind(ScrollPerScreenKeys::templateColumns());
-        const int columnCount = int(state->strip().columns().size());
+        // The entry this column would take: the strip's consumption cursor,
+        // floored at the live column count. ScrollState::blueprintCursor
+        // carries the full contract for both halves — the cursor makes an
+        // entry SPENT once used (so closing a column no longer hands its
+        // prescription back to the next open, which is what made a manual
+        // untab look like it reverted), and the floor keeps a strip that grew
+        // through a non-consuming path (stash restore, seed, unfloat) from
+        // re-taking entries its columns already stand for.
+        const int blueprintIdx = qMax(state->blueprintCursor(), int(state->strip().columns().size()));
+        // Set once an entry is actually READ below, and turned into a cursor
+        // advance only after a new column materialized. Consuming at the read
+        // would spend the entry on an insert that never happened (a duplicate
+        // id refusal) or on one that joined an EXISTING column.
+        int consumedBlueprintIdx = -1;
         // Bounded at kMaxTemplateEntries, the same library-boundary cap the
         // preset vocabularies get: applyPerScreenConfig is exported LGPL
         // surface and an embedder-supplied blueprint must not be read past
         // it. Tested BEFORE the list conversion so a strip that is already
         // longer than any consumable entry pays nothing on the open path.
-        if (blueprintIt != screenOverrides.constEnd() && columnCount < kMaxTemplateEntries) {
+        if (blueprintIt != screenOverrides.constEnd() && blueprintIdx < kMaxTemplateEntries) {
             const QVariantList blueprint = blueprintIt->toList();
-            if (columnCount < blueprint.size()) {
-                const QVariantMap entry = blueprint.at(columnCount).toMap();
+            if (blueprintIdx < blueprint.size()) {
+                consumedBlueprintIdx = blueprintIdx;
+                const QVariantMap entry = blueprint.at(blueprintIdx).toMap();
                 const qreal fraction = entry.value(ScrollPerScreenKeys::templateColumnWidth()).toDouble();
                 if (!openParams.widthFraction && !ruleMaximized && fraction >= MinColumnWidthFraction
                     && fraction <= 1.0) {
@@ -367,6 +380,14 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             inserted = state->strip().insertWindow(
                 windowId, width, display, params, minWidth, minHeight,
                 insertPos == ScrollInsertPosition::IntoActiveColumn ? ScrollInsertPosition::RightOfActive : insertPos);
+            // The entry is spent HERE and nowhere else: this is the only arm
+            // that creates a column out of the blueprint. The
+            // IntoActiveColumn arm just above appends to a column that
+            // already exists — it spends nothing, and the tile it adds
+            // carries no column shape of its own.
+            if (inserted && consumedBlueprintIdx >= 0) {
+                state->setBlueprintCursor(consumedBlueprintIdx + 1);
+            }
         }
     }
     if (inserted && !restoredFromStash && openParams.heightFraction) {

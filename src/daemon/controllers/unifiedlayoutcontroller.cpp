@@ -185,7 +185,12 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             m_settings && m_settings->filterLayoutsByAspectRatio(),
             PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
             m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, m_includeScrollingTemplates,
-            m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr);
+            m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
+            // The None row has to be in THIS list too, not just the popup's:
+            // applyLayoutById resolves the picked id against this cache, so a
+            // row the picker draws but this list omits would be refused as
+            // "layout not found" and the press would do nothing.
+            m_includeScrollingTemplates);
 
         m_cachedScreenDesktop = desktop;
         m_cacheValid = true;
@@ -446,19 +451,31 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
                                 << "on a screen that is not live in scrolling mode";
             return false;
         }
-        // Store validation stays at this site because assignScrollingTemplate
-        // DOWNGRADES an unknown id to "no template" rather than refusing, and
-        // a mis-routed press must read as "nothing happened" instead of
-        // clearing the context's template. Same refusal
-        // applyScrollingTemplateToScreen performs for its own callers.
-        const auto templateUuid = Utils::parseUuid(preview.id);
-        PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
-        if (!templateUuid || (store && !store->contains(*templateUuid))) {
-            qCWarning(lcDaemon) << "applyEntry: refusing unknown scrolling template" << preview.id;
-            return false;
+        // The synthetic None row carries the reserved word rather than a UUID,
+        // so it takes the store validation OUT of the path: there is no
+        // template to find, and parsing it as a UUID would fail the check
+        // below and refuse the one press whose whole job is to clear the
+        // slot. Everything downstream of the assignment is shared with a real
+        // template, including the applied signal, because "the context's
+        // template changed" is equally true of a change to none.
+        QString assignedId;
+        if (preview.id == PhosphorZones::NoScrollingTemplate) {
+            assignedId = QString(PhosphorZones::NoScrollingTemplate);
+        } else {
+            // Store validation stays at this site because assignScrollingTemplate
+            // DOWNGRADES an unknown id to "no template" rather than refusing, and
+            // a mis-routed press must read as "nothing happened" instead of
+            // clearing the context's template. Same refusal
+            // applyScrollingTemplateToScreen performs for its own callers.
+            const auto templateUuid = Utils::parseUuid(preview.id);
+            PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
+            if (!templateUuid || (store && !store->contains(*templateUuid))) {
+                qCWarning(lcDaemon) << "applyEntry: refusing unknown scrolling template" << preview.id;
+                return false;
+            }
+            assignedId = templateUuid->toString();
         }
-        m_layoutManager->assignScrollingTemplate(m_currentScreenName, desktop, m_currentActivity,
-                                                 templateUuid->toString());
+        m_layoutManager->assignScrollingTemplate(m_currentScreenName, desktop, m_currentActivity, assignedId);
         setCurrentLayoutId(preview.id);
         qCInfo(lcDaemon) << "Applied scrolling template=" << preview.displayName << "screen=" << m_currentScreenName;
         Q_EMIT scrollingTemplateApplied(preview.id, m_currentScreenName);
