@@ -81,11 +81,6 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
     return preview;
 }
 
-/// Append every store template as a preview row (its own section, after the
-/// aspect sections and the autotile family). Templates have no
-/// hidden/allow-list/aspect axes today, so no context filtering applies —
-/// which also satisfies the active-selection exemption trivially (the
-/// context's assigned template is always in the list).
 /// The synthetic "no template" row, carrying the reserved
 /// PhosphorZones::NoScrollingTemplate id. Opt-in per call site: it belongs in
 /// the lists that PICK a context's template, and not in the management and
@@ -111,6 +106,11 @@ LayoutPreview noScrollingTemplatePreview()
     return preview;
 }
 
+/// Append every store template as a preview row (its own section, after the
+/// aspect sections and the autotile family), optionally led by the None row
+/// above. Templates have no hidden/allow-list/aspect axes today, so no context
+/// filtering applies — which also satisfies the active-selection exemption
+/// trivially (the context's assigned template is always in the list).
 void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones::ScrollingTemplateStore* store,
                                      bool includeNoTemplateRow)
 {
