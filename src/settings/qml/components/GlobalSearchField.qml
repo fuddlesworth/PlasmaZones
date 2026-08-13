@@ -13,6 +13,9 @@ import org.kde.kirigami as Kirigami
  * `searchController.query` and the dropdown to `searchController.results`;
  * selecting a result calls `settingsController.navigateTo(address)`, which
  * drills to the page and (for setting/section anchors) reveals the target.
+ * Results span both simple and advanced mode: a mode-specific result carries a
+ * Simple/Advanced badge, and activating one the live mode does not show flips
+ * `settingsController.advancedMode` before navigating.
  *
  * `searchOpen` exposes dropdown state so the host can suppress page-step
  * shortcuts while searching.
@@ -45,6 +48,15 @@ Item {
             return;
         }
         if (entry.address) {
+            // A result the other mode owns (mode: 0 = both, 1 = simple-only,
+            // 2 = advanced-only) switches the mode FIRST, so the page gate
+            // cannot redirect the navigation away and an advanced-gated row
+            // is actually rendered when the reveal fires. Main.qml persists
+            // the flip via its advancedModeChanged connection.
+            if (entry.mode === 1 && settingsController.advancedMode)
+                settingsController.advancedMode = false;
+            else if (entry.mode === 2 && !settingsController.advancedMode)
+                settingsController.advancedMode = true;
             settingsController.navigateTo(entry.address);
             root.dismiss();
         }
@@ -221,6 +233,10 @@ Item {
                     required property int index
                     required property var modelData
 
+                    // Mode badge text for a result only one mode shows;
+                    // empty for a result reachable in both modes.
+                    readonly property string modeLabel: modelData.mode === 1 ? i18nc("@info search result mode badge", "Simple") : modelData.mode === 2 ? i18nc("@info search result mode badge", "Advanced") : ""
+
                     // Reserve the scrollbar's gutter so the row content ends
                     // at the scrollbar's left edge instead of running
                     // underneath it (mirrors the LayoutComboBox popup list).
@@ -228,7 +244,17 @@ Item {
                     highlighted: ListView.isCurrentItem
                     topPadding: Kirigami.Units.smallSpacing
                     bottomPadding: Kirigami.Units.smallSpacing
-                    Accessible.name: resultDelegate.modelData.subtitle.length > 0 ? i18nc("@info:whatsthis search result: title, breadcrumb", "%1, %2", resultDelegate.modelData.title, resultDelegate.modelData.subtitle) : resultDelegate.modelData.title
+                    // Title, then breadcrumb, then the mode badge — each
+                    // appended only when present, so screen readers hear the
+                    // same context the row shows.
+                    Accessible.name: {
+                        var parts = [resultDelegate.modelData.title];
+                        if (resultDelegate.modelData.subtitle.length > 0)
+                            parts.push(resultDelegate.modelData.subtitle);
+                        if (resultDelegate.modeLabel.length > 0)
+                            parts.push(resultDelegate.modeLabel);
+                        return parts.join(i18nc("@info:whatsthis joiner between search-result context parts", ", "));
+                    }
                     onClicked: root.activate(resultDelegate.index)
 
                     contentItem: RowLayout {
@@ -263,6 +289,30 @@ Item {
                                 color: resultDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
                                 opacity: resultDelegate.highlighted ? 0.85 : 1.0
                                 elide: Text.ElideRight
+                            }
+                        }
+
+                        // Mode badge: which mode owns this result. Activating
+                        // it from the other mode switches automatically (see
+                        // activate()), so the pill is information, not a
+                        // warning.
+                        Rectangle {
+                            visible: resultDelegate.modeLabel.length > 0
+                            Layout.alignment: Qt.AlignVCenter
+                            implicitWidth: modeBadgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+                            implicitHeight: modeBadgeLabel.implicitHeight + Kirigami.Units.smallSpacing
+                            radius: height / 2
+                            color: "transparent"
+                            border.width: 1
+                            border.color: resultDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+
+                            Label {
+                                id: modeBadgeLabel
+
+                                anchors.centerIn: parent
+                                text: resultDelegate.modeLabel
+                                font: Kirigami.Theme.smallFont
+                                color: resultDelegate.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
                             }
                         }
                     }

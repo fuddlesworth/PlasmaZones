@@ -214,6 +214,12 @@ public:
      *  "hidden, or unverifiable" rather than strictly "hidden by tier" — the
      *  safe direction for every consumer, all of which treat false as skip. */
     bool pageAllowedInCurrentMode(const QString& id) const;
+    /** pageAllowedInCurrentMode against an EXPLICIT mode rather than the
+     *  current one. Same ancestor walk, same fail-closed behaviour and same
+     *  unknown-id semantics. Public so SearchController can classify an
+     *  entry's reachability in BOTH modes (its per-result simple/advanced
+     *  tag) without flipping the live mode back and forth. */
+    bool allowedInMode(const QString& id, bool advanced) const;
     /** Log a warning for every entry whose `counterpartId` is broken. Listed
      *  in the order the warnings are emitted, which the tests assert:
      *  the counterpart is this entry ITSELF; it names a page that does not
@@ -335,10 +341,6 @@ private:
     /// validateCounterparts can ask "would this be reachable in the mode that
     /// hides its partner" without mutating m_showAdvanced.
     static bool modeAllowsIn(PageVisibility v, bool advanced);
-    /// pageAllowedInCurrentMode against an explicit mode. Same ancestor walk,
-    /// same fail-closed behaviour; the public accessor binds `advanced` to
-    /// m_showAdvanced.
-    bool allowedInMode(const QString& id, bool advanced) const;
     /// Full visibility test for a sidebar tree accessor: the entry's own
     /// tier must match the mode AND, for a virtual node (no qmlSource), at
     /// least one descendant must itself be visible — so an emptied-out

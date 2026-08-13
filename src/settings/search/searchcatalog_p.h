@@ -18,10 +18,12 @@ namespace SearchCatalogDetail {
 
 // `advancedOnly` mirrors the `advancedOnly:` declaration on the row or card
 // this anchor points at, for anchors whose HOST PAGE shows in both modes. The
-// registry's page tier cannot express a per-row tier, so without it a
-// simple-mode search offers a result that reveals a collapsed row. The two
-// declarations are cross-checked by tests/unit/settings/
-// test_search_catalog_tiers.cpp, so they cannot drift apart silently.
+// registry's page tier cannot express a per-row tier; the flag classifies the
+// entry AdvancedOnly, which badges the result and makes a simple-mode
+// activation switch to advanced first — without it the activation would skip
+// the switch and reveal a collapsed row. The two declarations are
+// cross-checked by tests/unit/settings/test_search_catalog_tiers.cpp, so they
+// cannot drift apart silently.
 inline void addSetting(PhosphorControl::SearchController* search, const QString& pageId, const QString& anchor,
                        const QString& title, const QStringList& keywords = {}, bool advancedOnly = false)
 {

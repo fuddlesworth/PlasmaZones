@@ -31,10 +31,14 @@ class ISearchProvider;
  *     addEntry(); dynamic content (rules/shaders/…) via registerProvider().
  *
  * QML binds `query` (the search field) and `results` (a ListView). Each result
- * map carries `title`, `subtitle`, `icon`, `kind`, `pageId`, `anchor`,
+ * map carries `title`, `subtitle`, `icon`, `kind`, `mode`, `pageId`, `anchor`,
  * `address` and `actionId` — selecting one calls
  * `SettingsController::navigateTo(address)`, except for Kind::Action results,
  * which are dispatched by `actionId` instead.
+ * The index spans BOTH simple/advanced modes: `mode` (SearchEntry::Mode as an
+ * int — 0 both, 1 simple-only, 2 advanced-only) tags each result with where it
+ * lives, and the app's search UI is expected to badge mode-specific results
+ * and flip the mode before navigating to one the live mode does not show.
  * `suggestion` holds a "did you mean …" title, populated only when a non-empty
  * query yields zero results.
  *
