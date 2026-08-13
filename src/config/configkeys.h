@@ -621,6 +621,7 @@ public:
     P_CONFIG_KEY(pushToEmptyZoneKey, "PushToEmptyZone")
     P_CONFIG_KEY(restoreWindowSizeKey, "RestoreWindowSize")
     P_CONFIG_KEY(toggleWindowFloatKey, "ToggleWindowFloat")
+    P_CONFIG_KEY(switchFocusFloatTilingKey, "SwitchFocusFloatTiling")
     P_CONFIG_KEY(swapWindowLeftKey, "SwapWindowLeft")
     P_CONFIG_KEY(swapWindowRightKey, "SwapWindowRight")
     P_CONFIG_KEY(swapWindowUpKey, "SwapWindowUp")

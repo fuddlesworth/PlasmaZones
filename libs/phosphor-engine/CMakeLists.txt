@@ -32,6 +32,8 @@ set(CMAKE_AUTOMOC ON)
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
     include/PhosphorEngine/GapResolution.h
+    include/PhosphorEngine/LayerFocusSwitch.h
+    src/LayerFocusSwitch.cpp
     include/PhosphorEngine/PerScreenStates.h
     include/PhosphorEngine/ScreenContextTracker.h
     include/PhosphorEngine/WindowPlacement.h

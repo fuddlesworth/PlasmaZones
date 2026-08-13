@@ -212,6 +212,7 @@ Q_SIGNALS:
     void pushToEmptyZoneRequested();
     void restoreWindowSizeRequested();
     void toggleWindowFloatRequested();
+    void switchFocusFloatTilingRequested();
     void swapWindowRequested(NavigationDirection direction);
     void snapToZoneRequested(int zoneNumber);
     void rotateWindowsRequested(bool clockwise);
@@ -264,7 +265,6 @@ Q_SIGNALS:
     /// variant, which falls through to the far end at the strip edge.
     void scrollFocusColumnPlainRequested(int delta);
     void scrollFocusColumnWrapRequested(int delta);
-    void scrollSwitchFocusFloatTilingRequested();
     /// true = move the focused window to the float layer, false = re-tile it.
     void scrollMoveToFloatRequested(bool floating);
 

@@ -777,6 +777,7 @@ Q_SIGNALS:
     void pushToEmptyZoneShortcutChanged();
     void restoreWindowSizeShortcutChanged();
     void toggleWindowFloatShortcutChanged();
+    void switchFocusFloatTilingShortcutChanged();
 
     // Swap Window Shortcuts
     void swapWindowLeftShortcutChanged();
@@ -965,7 +966,6 @@ Q_SIGNALS:
     void scrollingFocusColumnRightShortcutChanged();
     void scrollingFocusColumnLeftOrLastShortcutChanged();
     void scrollingFocusColumnRightOrFirstShortcutChanged();
-    void scrollingSwitchFocusFloatTilingShortcutChanged();
     void scrollingMoveToFloatingShortcutChanged();
     void scrollingMoveToTilingShortcutChanged();
 

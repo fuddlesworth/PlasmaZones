@@ -488,6 +488,73 @@ private Q_SLOTS:
 
         QVERIFY(!state.moveToPosition(QStringLiteral("nonexistent"), 0));
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Layer-side focus memory (switch-focus-between-floating-and-tiling)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testLayerFocusMemory_classifiesBySide()
+    {
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        state.addWindow(QStringLiteral("A"));
+        state.addWindow(QStringLiteral("B"));
+        state.setFloating(QStringLiteral("B"), true);
+
+        state.setFocusedWindow(QStringLiteral("A"));
+        QCOMPARE(state.lastTiledFocus(), QStringLiteral("A"));
+        QVERIFY(state.lastFloatingFocus().isEmpty());
+        QVERIFY(!state.floatingHasFocus());
+
+        state.setFocusedWindow(QStringLiteral("B"));
+        QCOMPARE(state.lastFloatingFocus(), QStringLiteral("B"));
+        // The tiled memory survives the float taking focus — that is its point.
+        QCOMPARE(state.lastTiledFocus(), QStringLiteral("A"));
+        QVERIFY(state.floatingHasFocus());
+    }
+
+    void testLayerFocusMemory_layerMoveUnderFocus()
+    {
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        state.addWindow(QStringLiteral("A"));
+        state.setFocusedWindow(QStringLiteral("A"));
+        QCOMPARE(state.lastTiledFocus(), QStringLiteral("A"));
+
+        // Floating the focused window moves the layer under the focus: the
+        // float side inherits the memory, the tiled side drops the stale one.
+        state.setFloating(QStringLiteral("A"), true);
+        QCOMPARE(state.lastFloatingFocus(), QStringLiteral("A"));
+        QVERIFY(state.lastTiledFocus().isEmpty());
+        QVERIFY(state.floatingHasFocus());
+
+        // And back.
+        state.setFloating(QStringLiteral("A"), false);
+        QCOMPARE(state.lastTiledFocus(), QStringLiteral("A"));
+        QVERIFY(state.lastFloatingFocus().isEmpty());
+        QVERIFY(!state.floatingHasFocus());
+    }
+
+    void testLayerFocusMemory_clearedOnRemoval()
+    {
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        state.addWindow(QStringLiteral("A"));
+        state.addWindow(QStringLiteral("B"));
+        state.setFloating(QStringLiteral("B"), true);
+        state.setFocusedWindow(QStringLiteral("A"));
+        state.setFocusedWindow(QStringLiteral("B"));
+
+        state.removeWindow(QStringLiteral("B"));
+        QVERIFY(state.lastFloatingFocus().isEmpty());
+        QCOMPARE(state.lastTiledFocus(), QStringLiteral("A"));
+
+        state.removeWindow(QStringLiteral("A"));
+        QVERIFY(state.lastTiledFocus().isEmpty());
+
+        state.addWindow(QStringLiteral("C"));
+        state.setFocusedWindow(QStringLiteral("C"));
+        state.clear();
+        QVERIFY(state.lastTiledFocus().isEmpty());
+        QVERIFY(state.lastFloatingFocus().isEmpty());
+    }
 };
 
 QTEST_MAIN(TestTilingStateWindows)

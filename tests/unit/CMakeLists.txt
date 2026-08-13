@@ -110,6 +110,10 @@ add_executable(test_snap_engine core/snap/test_snap_engine.cpp helpers/SnapEngin
 target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_snap_engine COMMAND test_snap_engine)
 
+add_executable(test_snap_layer_switch core/snap/test_snap_layer_switch.cpp helpers/SnapEngineTestFixture.h)
+target_link_libraries(test_snap_layer_switch PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_layer_switch COMMAND test_snap_layer_switch)
+
 # Restore-resolution half of the SnapEngine suite (capture placement, window
 # restore, fallback unfloat geometry, snap-to-empty gating). The fixture header
 # is listed as a source so AUTOMOC scans its Q_OBJECT classes.
@@ -262,6 +266,7 @@ target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "P_SOURCE_
 p_add_test(test_autotile_engine_class_mutation autotile/engine/test_autotile_engine_class_mutation.cpp)
 p_add_test(test_autotile_drag_insert autotile/behavior/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+p_add_test(test_autotile_layer_switch autotile/behavior/test_autotile_layer_switch.cpp)
 p_add_test(test_autotile_handoff autotile/behavior/test_autotile_handoff.cpp)
 target_compile_definitions(test_autotile_handoff PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 # Producer-side validator guard - ensures the JSON emitted by

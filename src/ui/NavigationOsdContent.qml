@@ -186,7 +186,8 @@ Item {
             if (reason === "no_pre_float_zone")
                 return i18n("No zone to return to");
 
-            // Scrolling's floating/tiling focus switch and explicit float
+            // The floating/tiling focus switch (all three engines) and
+            // scrolling's explicit float
             // verb: the layer asked for has no window to take focus (the
             // focused window is already there, or the other layer is
             // empty). Exact copy for the two switch legs; approximate for
@@ -462,6 +463,12 @@ Item {
 
             if (reason === "unfloated")
                 return i18nc("@info:status the window was snapped into a zone", "Snapped");
+
+            // The snap engine's floating/snapped focus switch: focus moved
+            // to the zone layer, which snap users know as "snapped", not
+            // "tiled".
+            if (reason === "snapped")
+                return i18nc("@info:status the snapped layer took focus", "Snapped");
 
             // Autotile auto-floats windows that overflow the layout; the
             // generic copy would read as a deliberate float of the focused

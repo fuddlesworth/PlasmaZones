@@ -16,6 +16,8 @@
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on PhosphorTiles::TilingAlgorithm
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/SplitTree.h>
+#include <PhosphorEngine/IWindowRegistry.h>
+#include <PhosphorEngine/LayerFocusSwitch.h>
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
@@ -87,6 +89,59 @@ void AutotileEngine::toggleFocusedWindowFloat()
     }
 
     performToggleFloat(state, focused, screenId);
+}
+
+void AutotileEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
+{
+    // Prefer the caller's screen when it is an autotile screen with state;
+    // otherwise resolve the screen holding the focus, with
+    // requireTiledWindows false for the same reason toggleFocusedWindowFloat
+    // passes it: an all-floating monitor is a legitimate press target.
+    QString screen = screenId;
+    PhosphorTiles::TilingState* state = nullptr;
+    if (!screen.isEmpty() && isAutotileScreen(screen)) {
+        state = tilingStateForScreen(screen);
+    }
+    if (!state) {
+        screen.clear();
+        m_navigation->tiledWindowsForFocusedScreen(screen, state, QString(), /*requireTiledWindows=*/false);
+    }
+    const QString action = QStringLiteral("float");
+    if (!state) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
+        return;
+    }
+
+    // Leg/target/refusal shape comes from the shared resolver (see the
+    // scroll engine's switchFocusBetweenFloatingAndTiling for the contract).
+    // Minimized windows are filtered on BOTH sides: the daemon models
+    // minimize as a float, and the layer memories can name one.
+    //
+    // Unlike scroll, no eager bookkeeping precedes the activation: autotile
+    // has no self-activation echo filter, so the compositor's answering
+    // focus report flows through setFocusedWindow and updates the layer
+    // memories exactly as a genuine focus would — the switch is self-healing
+    // when the compositor drops the activation.
+    const auto isHidden = [this](const QString& id) {
+        return m_windowRegistry && m_windowRegistry->minimizedState(id).value_or(false);
+    };
+    PhosphorEngine::LayerSwitchSide tiledSide;
+    tiledSide.candidate = state->lastTiledFocus();
+    tiledSide.fallbacks = state->tiledWindows();
+    tiledSide.isEligible = [state, isHidden](const QString& id) {
+        return state->containsWindow(id) && !state->isFloating(id) && !isHidden(id);
+    };
+    tiledSide.focusForFeedback = state->floatingHasFocus() ? state->lastTiledFocus() : state->focusedWindow();
+    PhosphorEngine::LayerSwitchSide floatingSide;
+    floatingSide.candidate = state->lastFloatingFocus();
+    floatingSide.fallbacks = state->floatingWindows();
+    floatingSide.isEligible = [state, isHidden](const QString& id) {
+        return state->isFloating(id) && !isHidden(id);
+    };
+    floatingSide.focusForFeedback = state->floatingHasFocus() ? state->focusedWindow() : state->lastFloatingFocus();
+
+    announceLayerSwitch(PhosphorEngine::resolveLayerFocusSwitch(state->floatingHasFocus(), tiledSide, floatingSide),
+                        action, screen);
 }
 
 void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString& screenId)

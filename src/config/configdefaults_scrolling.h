@@ -973,11 +973,6 @@ public:
     {
         return QString();
     }
-    static QString scrollingSwitchFocusFloatTilingShortcut()
-    {
-        // X as in eXchange the focused layer.
-        return QStringLiteral("Meta+Alt+X");
-    }
     static QString scrollingMoveToFloatingShortcut()
     {
         // Unbound: Meta+F already toggles float, and the explicit one-way

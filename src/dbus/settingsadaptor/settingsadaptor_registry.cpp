@@ -766,6 +766,8 @@ void SettingsAdaptor::initializeRegistry()
         REGISTER_CONCRETE_STRING("pushToEmptyZoneShortcut", pushToEmptyZoneShortcut, setPushToEmptyZoneShortcut)
         REGISTER_CONCRETE_STRING("restoreWindowSizeShortcut", restoreWindowSizeShortcut, setRestoreWindowSizeShortcut)
         REGISTER_CONCRETE_STRING("toggleWindowFloatShortcut", toggleWindowFloatShortcut, setToggleWindowFloatShortcut)
+        REGISTER_CONCRETE_STRING("switchFocusFloatTilingShortcut", switchFocusFloatTilingShortcut,
+                                 setSwitchFocusFloatTilingShortcut)
 
         // Swap window shortcuts
         REGISTER_CONCRETE_STRING("swapWindowLeftShortcut", swapWindowLeftShortcut, setSwapWindowLeftShortcut)

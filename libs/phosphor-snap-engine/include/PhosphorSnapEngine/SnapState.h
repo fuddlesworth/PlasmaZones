@@ -98,6 +98,29 @@ public:
     QStringList snappedWindows() const;
     bool isWindowSnapped(const QString& windowId) const;
 
+    /// Layer-side focus memory for switch-focus-between-floating-and-tiling.
+    ///
+    /// SnapState holds no focus slot of its own (the engine reads the live
+    /// focus from INavigationStateProvider on demand), so these remember
+    /// only what noteFocused() classified from the engine's windowFocused
+    /// reports: the last SNAPPED window focused and the last FLOATING
+    /// window focused. Residence-only windows (screen recorded, no zone,
+    /// no float bit) belong to neither layer and update neither memory.
+    /// Cleared when the remembered window changes layer (setFloating and
+    /// friends), leaves the store (removeWindowData, migrateWindowTo), and
+    /// never serialized — focus history dies with the session. Consumers
+    /// validate before use, so a stale value degrades to a fallback scan,
+    /// never a wrong activation.
+    void noteFocused(const QString& windowId);
+    QString lastSnappedFocus() const
+    {
+        return m_lastSnappedFocus;
+    }
+    QString lastFloatingFocus() const
+    {
+        return m_lastFloatingFocus;
+    }
+
     QString screenForWindow(const QString& windowId) const;
 
     /// Record screen + desktop residence WITHOUT a zone assignment and without
@@ -363,6 +386,9 @@ private:
     QSet<QString> m_floatingWindows;
     QHash<QString, QStringList> m_preFloatZoneAssignments;
     QHash<QString, QString> m_preFloatScreenAssignments;
+
+    QString m_lastSnappedFocus;
+    QString m_lastFloatingFocus;
 
     QString m_lastUsedZoneId;
     QString m_lastUsedScreenId;

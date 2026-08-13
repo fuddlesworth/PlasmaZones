@@ -128,6 +128,8 @@ void TilingState::clear()
     m_windowOrder.clear();
     m_floatingWindows.clear();
     m_focusedWindow.clear();
+    m_lastTiledFocus.clear();
+    m_lastFloatingFocus.clear();
     m_calculatedZones.clear();
     m_masterCount = DefaultMasterCount;
     m_splitRatio = DefaultSplitRatio;

@@ -109,6 +109,12 @@ bool TilingState::removeWindow(const QString& windowId)
         m_focusedWindow.clear();
         Q_EMIT focusedWindowChanged();
     }
+    if (m_lastTiledFocus == windowId) {
+        m_lastTiledFocus.clear();
+    }
+    if (m_lastFloatingFocus == windowId) {
+        m_lastFloatingFocus.clear();
+    }
 
     Q_EMIT windowCountChanged();
     notifyStateChanged();
@@ -456,6 +462,26 @@ void TilingState::setFloating(const QString& windowId, bool floating)
         rebuildSplitTree();
     }
 
+    // The window changed layers: a memory naming it on the OLD side is now
+    // stale, and if it is the focused window the NEW side inherits the
+    // focus with no compositor report coming — the layer moved under the
+    // focus, not the focus under the layers.
+    if (floating) {
+        if (m_lastTiledFocus == windowId) {
+            m_lastTiledFocus.clear();
+        }
+        if (m_focusedWindow == windowId) {
+            m_lastFloatingFocus = windowId;
+        }
+    } else {
+        if (m_lastFloatingFocus == windowId) {
+            m_lastFloatingFocus.clear();
+        }
+        if (m_focusedWindow == windowId) {
+            m_lastTiledFocus = windowId;
+        }
+    }
+
     Q_EMIT floatingChanged(windowId, floating);
     Q_EMIT windowCountChanged(); // Tiled count changed
     notifyStateChanged();
@@ -514,10 +540,36 @@ void TilingState::setFocusedWindow(const QString& windowId)
         return;
     }
 
+    // Layer-side memory is written even when the focus slot is unchanged: a
+    // re-reported focus after a layer change (float then refocus) must
+    // reclassify the window onto its current side.
+    if (!windowId.isEmpty()) {
+        if (m_floatingWindows.contains(windowId)) {
+            m_lastFloatingFocus = windowId;
+        } else {
+            m_lastTiledFocus = windowId;
+        }
+    }
+
     if (m_focusedWindow != windowId) {
         m_focusedWindow = windowId;
         Q_EMIT focusedWindowChanged();
     }
+}
+
+QString TilingState::lastTiledFocus() const
+{
+    return m_lastTiledFocus;
+}
+
+QString TilingState::lastFloatingFocus() const
+{
+    return m_lastFloatingFocus;
+}
+
+bool TilingState::floatingHasFocus() const
+{
+    return !m_focusedWindow.isEmpty() && m_floatingWindows.contains(m_focusedWindow);
 }
 
 int TilingState::focusedTiledIndex() const

@@ -605,8 +605,13 @@ void SnapEngine::windowClosed(const QString& windowId)
 
 void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 {
-    Q_UNUSED(windowId)
     m_lastActiveScreenId = screenId;
+    // Arm the owning store's layer-side focus memory (the switch verb's
+    // remembered targets). Only the store tracking the window classifies —
+    // a report for an untracked window updates nothing.
+    if (SnapState* state = stateForWindow(windowId)) {
+        state->noteFocused(windowId);
+    }
 }
 
 // toggleWindowFloat and setWindowFloat are implemented in snapengine/float.cpp

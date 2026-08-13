@@ -3,6 +3,7 @@
 
 #include <PhosphorScrollEngine/ScrollEngine.h>
 
+#include <PhosphorEngine/LayerFocusSwitch.h>
 #include <PhosphorEngine/WindowRegistry.h>
 
 #include "scrollverbresolve_p.h"
@@ -308,58 +309,47 @@ void ScrollEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
         return;
     }
-    if (state->floatingHasFocus()) {
+    // Leg/target/refusal shape comes from the shared resolver so all three
+    // engines answer this verb identically; what stays scroll-specific is
+    // the activation policy below.
+    //
+    // The tiled side is the strip's active window with no fallback scan and
+    // no eligibility filter: the strip IS the tiled side, and the daemon
+    // models minimize as a float, so a strip tile is never hidden. The
+    // float side filters minimized windows on both the remembered focus and
+    // the fallback pool — a hidden float must not be "activated" with
+    // success reported. Fallback order is the sorted floating set —
+    // ARBITRARY (lowest id first), carrying no recency or position meaning;
+    // the strip has no frontmost-float notion to prefer.
+    PhosphorEngine::LayerSwitchSide tiledSide;
+    tiledSide.candidate = state->strip().activeWindowId();
+    tiledSide.focusForFeedback = tiledSide.candidate;
+    PhosphorEngine::LayerSwitchSide floatingSide;
+    floatingSide.candidate = state->lastFloatingFocus();
+    floatingSide.fallbacks = state->floatingWindows();
+    floatingSide.isEligible = [this, state](const QString& id) {
+        return state->isFloating(id) && !(m_windowRegistry && m_windowRegistry->isMinimized(id));
+    };
+    floatingSide.focusForFeedback = state->lastFloatingFocus();
+
+    const auto result = PhosphorEngine::resolveLayerFocusSwitch(state->floatingHasFocus(), tiledSide, floatingSide);
+    if (result.success && result.toTiled) {
         // Float → tiling. The activation is this engine's own doing, so it is
         // queued for the windowFocused echo filter like applyLayout's arm.
         // The flag write and the feedback are optimistic — a compositor that
         // drops the activation leaves the flag false until the next genuine
         // focus report heals it. Accepted: the activation round trip is
         // asynchronous and there is no ack to gate on at this seam.
-        const QString target = state->strip().activeWindowId();
-        if (target.isEmpty()) {
-            Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), state->lastFloatingFocus(), QString(),
-                                      screen);
-            return;
-        }
+        //
+        // The tiling → float leg is deliberately NOT queued as a
+        // self-activation echo: the float branch of windowFocused only
+        // records bookkeeping (no strip focus to rewind), and swallowing the
+        // report would leave floatingHasFocus false after a switch the
+        // compositor honoured.
         state->setFloatingHasFocus(false);
-        queueSelfActivation(target);
-        Q_EMIT activateWindowRequested(target);
-        Q_EMIT navigationFeedback(true, action, QStringLiteral("tiled"), state->lastFloatingFocus(), target, screen);
-        return;
+        queueSelfActivation(result.target);
     }
-    // Tiling → float. Deliberately NOT queued as a self-activation echo: the
-    // float branch of windowFocused only records bookkeeping (no strip focus
-    // to rewind), and swallowing the report would leave floatingHasFocus
-    // false after a switch the compositor honoured.
-    //
-    // Minimized floats are not focus candidates — the daemon models minimize
-    // as a float, so both the remembered focus and the fallback scan must
-    // skip hidden windows rather than "activating" one and reporting success.
-    const auto isHidden = [this](const QString& id) {
-        return m_windowRegistry && m_windowRegistry->isMinimized(id);
-    };
-    QString target = state->lastFloatingFocus();
-    if (target.isEmpty() || !state->isFloating(target) || isHidden(target)) {
-        // Fallback order is the sorted floating set — ARBITRARY (lowest id
-        // first), carrying no recency or position meaning; the strip has no
-        // frontmost-float notion to prefer.
-        target.clear();
-        const QStringList floats = state->floatingWindows();
-        for (const QString& id : floats) {
-            if (!isHidden(id)) {
-                target = id;
-                break;
-            }
-        }
-    }
-    if (target.isEmpty()) {
-        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), state->strip().activeWindowId(),
-                                  QString(), screen);
-        return;
-    }
-    Q_EMIT activateWindowRequested(target);
-    Q_EMIT navigationFeedback(true, action, QStringLiteral("floating"), state->strip().activeWindowId(), target,
-                              screen);
+    announceLayerSwitch(result, action, screen);
 }
 
 #undef P_SCROLL_VERB

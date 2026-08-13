@@ -61,7 +61,6 @@ public:
     P_CONFIG_KEY(focusColumnRightKey, "FocusColumnRight")
     P_CONFIG_KEY(focusColumnLeftOrLastKey, "FocusColumnLeftOrLast")
     P_CONFIG_KEY(focusColumnRightOrFirstKey, "FocusColumnRightOrFirst")
-    P_CONFIG_KEY(switchFocusFloatTilingKey, "SwitchFocusFloatTiling")
     P_CONFIG_KEY(moveToFloatingKey, "MoveToFloating")
     P_CONFIG_KEY(moveToTilingKey, "MoveToTiling")
 };

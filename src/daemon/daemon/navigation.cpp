@@ -353,6 +353,21 @@ void Daemon::handleResnap()
     }
 }
 
+void Daemon::handleSwitchFocusFloatTiling()
+{
+    // Mode-agnostic since all three engines implement the verb on the
+    // shared resolver; the router picks the focused screen's engine and the
+    // engine resolves its own state for that screen.
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "SwitchFocusFloatTiling")) {
+        if (isFocusedContextGated(ctx.screenId)) {
+            return;
+        }
+        nav->switchFocusBetweenFloatingAndTiling(ctx.screenId);
+    }
+}
+
 void Daemon::handleSnapAll()
 {
     NavigationContext ctx;

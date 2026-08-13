@@ -3,6 +3,8 @@
 
 #include <PhosphorEngine/PlacementEngineBase.h>
 
+#include <PhosphorEngine/LayerFocusSwitch.h>
+
 #include <QLoggingCategory>
 
 // Filterable like every other diagnostic in this library (the bare qWarning
@@ -25,6 +27,18 @@ int PlacementEngineBase::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // prune their own state (window→state maps, overflow, float markers).
     Q_UNUSED(aliveWindowIds)
     return 0;
+}
+
+bool PlacementEngineBase::announceLayerSwitch(const LayerSwitchResult& result, const QString& action,
+                                              const QString& screenId)
+{
+    if (!result.success) {
+        Q_EMIT navigationFeedback(false, action, result.reason, result.source, QString(), screenId);
+        return false;
+    }
+    Q_EMIT activateWindowRequested(result.target);
+    Q_EMIT navigationFeedback(true, action, result.reason, result.source, result.target, screenId);
+    return true;
 }
 
 void PlacementEngineBase::setEngineSettings(QObject* settings)

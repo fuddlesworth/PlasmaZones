@@ -186,9 +186,6 @@ void Daemon::connectScrollingShortcuts()
     wire(&ShortcutManager::scrollFocusColumnWrapRequested, intVerb([](Scroll* s, const QString& id, int delta) {
         s->focusColumnWrap(delta, id);
     }));
-    wire(&ShortcutManager::scrollSwitchFocusFloatTilingRequested, plainVerb([](Scroll* s, const QString& id) {
-        s->switchFocusBetweenFloatingAndTiling(id);
-    }));
     // POLARITY CONTRACT: the emitter passes floating=true for
     // kIdScrollMoveToFloating and false for the MoveToTiling id — same
     // swap-silently hazard as the focus-end wire above.

@@ -494,6 +494,7 @@ void appendShortcutsSchema(PhosphorConfig::Schema& schema)
     addShortcut(globals, CD::pushToEmptyZoneKey(), CD::pushToEmptyZoneShortcut());
     addShortcut(globals, CD::restoreWindowSizeKey(), CD::restoreWindowSizeShortcut());
     addShortcut(globals, CD::toggleWindowFloatKey(), CD::toggleWindowFloatShortcut());
+    addShortcut(globals, CD::switchFocusFloatTilingKey(), CD::switchFocusFloatTilingShortcut());
     addShortcut(globals, CD::swapWindowLeftKey(), CD::swapWindowLeftShortcut());
     addShortcut(globals, CD::swapWindowRightKey(), CD::swapWindowRightShortcut());
     addShortcut(globals, CD::swapWindowUpKey(), CD::swapWindowUpShortcut());

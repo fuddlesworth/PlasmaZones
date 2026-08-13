@@ -128,6 +128,11 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleCheatsheet, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleWindowFloat, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        add(kIdSwitchFocusFloatTiling, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Switch Floating and Tiled Focus"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus between the floating windows and the placed layout, returning to "
+                              "the most recent window on each side."));
         // "all", not a per-mode tag, and deliberately not gated on how many
         // modes are enabled. The row advertises the mode CYCLE, which is a
         // hard no-op only in the one configuration where every mode but the
@@ -342,11 +347,6 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right (Wrap)"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Moves focus one column right, wrapping to the first column at the edge."));
-        add(kIdScrollSwitchFocusFloatTiling, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Switch Floating and Tiled Focus"),
-            QT_TRANSLATE_NOOP("plasmazones",
-                              "Moves focus between the floating windows and the tiled columns, returning to "
-                              "the most recent window on each side."));
         add(kIdScrollMoveToFloating, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Move to Floating"),
             QT_TRANSLATE_NOOP("plasmazones",

@@ -894,6 +894,13 @@ public:
     {
         return QStringLiteral("Meta+F");
     }
+    static QString switchFocusFloatTilingShortcut()
+    {
+        // X as in eXchange the focused layer. Promoted from the
+        // scrolling-only shortcut group when all three engines gained the
+        // verb; the binding is unchanged.
+        return QStringLiteral("Meta+Alt+X");
+    }
     static QString snapToZone1Shortcut()
     {
         return QStringLiteral("Meta+Ctrl+1");

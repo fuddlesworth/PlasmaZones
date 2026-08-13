@@ -317,6 +317,35 @@ public:
     int focusedTiledIndex() const;
 
     /**
+     * @brief Layer-side focus memory for switch-focus-between-floating-and-tiling
+     *
+     * m_focusedWindow is a single slot shared by tiles and floats, so a
+     * float taking focus erases the answer to "which tile do I return to".
+     * These remember the last focus PER LAYER: written by setFocusedWindow
+     * (classified against the float set) and by setFloating when the
+     * focused window changes layer with no focus report coming (the layer
+     * moved under the focus, mirroring the scroll engine's
+     * floatWindowInternal active-tile arm). Cleared when the remembered
+     * window leaves the layer (setFloating) or the state (removeWindow,
+     * clear). Not serialized — focus history dies with the session.
+     * Consumers validate before use (the switch verb's eligibility filter),
+     * so a stale value is a fallback-scan, never a wrong activation.
+     */
+    QString lastTiledFocus() const;
+    QString lastFloatingFocus() const;
+
+    /**
+     * @brief Whether the float layer holds focus right now (derived)
+     *
+     * Derived from m_focusedWindow's membership in the float set rather
+     * than stored: autotile funnels every focus report through
+     * setFocusedWindow and has no self-activation echo filter swallowing
+     * reports, so the derivation cannot go stale the way a stored flag
+     * could.
+     */
+    bool floatingHasFocus() const;
+
+    /**
      * @brief Clear all state (remove all windows, reset to defaults)
      */
     void clear();
@@ -465,6 +494,8 @@ private:
     QStringList m_windowOrder;
     QSet<QString> m_floatingWindows;
     QString m_focusedWindow;
+    QString m_lastTiledFocus;
+    QString m_lastFloatingFocus;
     int m_masterCount = AutotileDefaults::DefaultMasterCount;
     qreal m_splitRatio = AutotileDefaults::DefaultSplitRatio;
     QVector<QRect> m_calculatedZones;

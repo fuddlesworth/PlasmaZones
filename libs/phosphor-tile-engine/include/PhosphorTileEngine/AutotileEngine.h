@@ -855,6 +855,20 @@ public:
     Q_INVOKABLE void toggleFocusedWindowFloat();
 
     /**
+     * @brief Jump focus between the float layer and the tiled layout
+     *
+     * niri's switch-focus-between-floating-and-tiling: activates the last
+     * focused window on the OTHER layer, falling back to a scan when the
+     * memory is stale. Minimized windows are never switch targets. Built on
+     * the shared resolver (PhosphorEngine::resolveLayerFocusSwitch) so all
+     * engines answer identically; refusals report action "float" reason
+     * "no_target".
+     *
+     * @param screenId Target screen; empty resolves the focused screen
+     */
+    Q_INVOKABLE void switchFocusBetweenFloatingAndTiling(const QString& screenId) override;
+
+    /**
      * @brief Toggle a specific window between tiled and floating states
      *
      * Bypasses internal focus tracking by using the caller-supplied windowId

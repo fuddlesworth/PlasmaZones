@@ -238,7 +238,7 @@ public:
     void moveFocusedToFloating(const QString& screenId);
     void moveFocusedToTiling(const QString& screenId);
     /// niri switch-focus-between-floating-and-tiling.
-    void switchFocusBetweenFloatingAndTiling(const QString& screenId);
+    void switchFocusBetweenFloatingAndTiling(const QString& screenId) override;
     /// Absolute width/height intents (niri set-column-width/set-window-height
     /// with an absolute value). D-Bus surface; no shortcut carries a value.
     void setColumnWidth(const ColumnWidth& width, const QString& screenId);
