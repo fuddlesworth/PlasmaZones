@@ -214,6 +214,9 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::toggleWindowFloatRequested, this, [this]() {
         handleFloat();
     });
+    connect(m_shortcutManager.get(), &ShortcutManager::switchFocusFloatTilingRequested, this, [this]() {
+        handleSwitchFocusFloatTiling();
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this, [this](NavigationDirection d) {
         handleSwap(d);
     });

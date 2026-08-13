@@ -4,9 +4,10 @@
 # PhosphorEngine — Unified placement engine contracts + base class.
 #
 # Shared library providing IPlacementEngine, IPlacementState,
-# NavigationContext, and PlacementEngineBase. Both phosphor-zones (snap)
-# and phosphor-tiles (autotile) inherit PlacementEngineBase so daemons
-# and compositor plugins get the shared placement-engine plumbing
+# NavigationContext, LayerFocusSwitch, and PlacementEngineBase. All three
+# placement engines (phosphor-snap-engine, phosphor-tile-engine,
+# phosphor-scroll-engine) inherit PlacementEngineBase so daemons and
+# compositor plugins get the shared placement-engine plumbing
 # (settings injection, stale-window pruning, common signals) for free.
 #
 # Depends on Qt6::Core (QString, QStringList, QRect, QJsonObject, QObject).
@@ -32,10 +33,12 @@ set(CMAKE_AUTOMOC ON)
 add_library(PhosphorEngine SHARED
     include/PhosphorEngine/PlacementEngineBase.h
     include/PhosphorEngine/GapResolution.h
+    include/PhosphorEngine/LayerFocusSwitch.h
     include/PhosphorEngine/PerScreenStates.h
     include/PhosphorEngine/ScreenContextTracker.h
     include/PhosphorEngine/WindowPlacement.h
     include/PhosphorEngine/WindowPlacementStore.h
+    src/LayerFocusSwitch.cpp
     src/PlacementEngineBase.cpp
     src/ScreenContextTracker.cpp
     src/WindowPlacementStore.cpp

@@ -437,6 +437,7 @@ private:
     void handleCycle(bool forward);
     void handleResnap();
     void handleSnapAll();
+    void handleSwitchFocusFloatTiling();
     void handleFocusMaster();
     void handleSwapWithMaster();
     void handleIncreaseMasterRatio();

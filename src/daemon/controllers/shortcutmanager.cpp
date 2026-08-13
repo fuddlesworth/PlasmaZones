@@ -151,6 +151,12 @@ const StaticEntry kStaticEntries[] = {
      [](ShortcutManager* sm) {
          Q_EMIT sm->toggleWindowFloatRequested();
      }},
+    {kIdSwitchFocusFloatTiling, &ConfigDefaults::switchFocusFloatTilingShortcut,
+     &Settings::switchFocusFloatTilingShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Switch Focus Between Floating and Placed Windows"),
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->switchFocusFloatTilingRequested();
+     }},
 
     // ─── Swap window ───────────────────────────────────────────────────────
     {kIdSwapWindowLeft, &ConfigDefaults::swapWindowLeftShortcut, &Settings::swapWindowLeftShortcut,
@@ -459,12 +465,6 @@ const StaticEntry kStaticEntries[] = {
      QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right, Wrapping"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollFocusColumnWrapRequested(1);
-     }},
-    {kIdScrollSwitchFocusFloatTiling, &ConfigDefaults::scrollingSwitchFocusFloatTilingShortcut,
-     &Settings::scrollingSwitchFocusFloatTilingShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Switch Focus Between Floating and Tiled"),
-     [](ShortcutManager* sm) {
-         Q_EMIT sm->scrollSwitchFocusFloatTilingRequested();
      }},
     {kIdScrollMoveToFloating, &ConfigDefaults::scrollingMoveToFloatingShortcut,
      &Settings::scrollingMoveToFloatingShortcut, QT_TRANSLATE_NOOP("plasmazones", "Move Window to Floating"),

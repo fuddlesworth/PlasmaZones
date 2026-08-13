@@ -101,11 +101,15 @@ static PhosphorEngine::IPlacementEngine* navigatorForShortcut(ScreenModeRouter* 
     PhosphorEngine::IPlacementEngine* nav = router->engineFor(outCtx.screenId);
     // Global feature-toggle gate. engineFor() routes purely on the screen's
     // layout mode; it does not consult whether that mode's master toggle is
-    // on. isEnabled() reports the effective on/off state for both engines
-    // (SnapEngine → snappingEnabled, AutotileEngine → any-screen autotiling),
-    // so one check here suppresses every snap- and autotile-mode shortcut
-    // when its feature is globally disabled — the keyboard-nav counterpart of
-    // the auto-snap-on-open kill-switch in SnapEngine::resolveWindowRestore.
+    // on. isEnabled() reports the effective on/off state per engine
+    // (SnapEngine → snappingEnabled, AutotileEngine → any-screen autotiling,
+    // ScrollEngine → any scrolling screen exists, a set-membership fact
+    // rather than a user toggle), so one check here suppresses every
+    // mode shortcut whose feature is globally disabled — for snap and
+    // autotile the keyboard-nav counterpart of the auto-snap-on-open
+    // kill-switch in SnapEngine::resolveWindowRestore. A screen the router
+    // resolves to scrolling is necessarily in the scroll engine's set, so
+    // the gate can never wrongly refuse a scrolling shortcut.
     if (nav && !nav->isEnabled()) {
         qCDebug(lcDaemon) << shortcutName << "shortcut: ignored — engine disabled for screen" << outCtx.screenId;
         return nullptr;
@@ -350,6 +354,26 @@ void Daemon::handleResnap()
             return;
         }
         nav->reapplyLayout(ctx);
+    }
+}
+
+void Daemon::handleSwitchFocusFloatTiling()
+{
+    // Mode-agnostic since all three engines implement the verb on the
+    // shared resolver; the router picks the focused screen's engine. Snap
+    // resolves its own state for exactly that screen; scroll and autotile
+    // prefer it but may re-resolve (scroll to its active/first scrolling
+    // screen for a non-scrolling id, autotile to the focused screen when
+    // the named screen has no state).
+    //
+    // No isFocusedContextGated() call: this verb only moves focus (all
+    // three engine bodies emit activation + feedback, no geometry), and
+    // per the gate's contract focus-only handlers keep working on a
+    // "disabled" context, matching handleFocus/handleCycle.
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, m_screenManager.get(), ctx,
+                                         "SwitchFocusFloatTiling")) {
+        nav->switchFocusBetweenFloatingAndTiling(ctx.screenId);
     }
 }
 

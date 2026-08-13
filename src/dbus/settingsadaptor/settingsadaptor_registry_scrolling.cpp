@@ -509,8 +509,6 @@ void SettingsAdaptor::initializeRegistryScrolling()
                                  setScrollingFocusColumnLeftOrLastShortcut)
         REGISTER_CONCRETE_STRING("scrollingFocusColumnRightOrFirstShortcut", scrollingFocusColumnRightOrFirstShortcut,
                                  setScrollingFocusColumnRightOrFirstShortcut)
-        REGISTER_CONCRETE_STRING("scrollingSwitchFocusFloatTilingShortcut", scrollingSwitchFocusFloatTilingShortcut,
-                                 setScrollingSwitchFocusFloatTilingShortcut)
         REGISTER_CONCRETE_STRING("scrollingMoveToFloatingShortcut", scrollingMoveToFloatingShortcut,
                                  setScrollingMoveToFloatingShortcut)
         REGISTER_CONCRETE_STRING("scrollingMoveToTilingShortcut", scrollingMoveToTilingShortcut,

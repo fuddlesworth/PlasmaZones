@@ -93,7 +93,8 @@ public:
      * @brief Add a window to the tiling
      * @param windowId Window identifier
      * @param position Insert position (-1 = end, 0 = beginning/master)
-     * @return true if window was added, false if already tracked or invalid
+     * @return true if window was added; false if already tracked, invalid,
+     *         or the state is at the MaxRuntimeTreeDepth tiled-window cap
      */
     bool addWindow(const QString& windowId, int position = -1);
 
@@ -151,7 +152,9 @@ public:
 
     /**
      * @brief Set number of windows in master area
-     * @param count New master count (clamped to 1..windowCount)
+     * @param count New master count (clamped to AutotileDefaults::
+     *        MinMasterCount..MaxMasterCount; algorithms clamp operationally
+     *        against the window count)
      */
     void setMasterCount(int count);
 
@@ -202,7 +205,9 @@ public:
     /**
      * @brief Get the position of a window (alias for windowIndex)
      * @param windowId Window to find
-     * @return Position in tiled list, or -1 if not found
+     * @return Index in the raw window order (floating windows included),
+     *         or -1 if not found. Use tiledWindowIndex() for the
+     *         tiled-only index.
      */
     int windowPosition(const QString& windowId) const;
 
@@ -312,9 +317,48 @@ public:
 
     /**
      * @brief Get index of focused window in tiled list
-     * @return Index or -1 if no focused window
+     * @return Index, or -1 when there is no focused window or the focused
+     *         window is floating
      */
     int focusedTiledIndex() const;
+
+    /**
+     * @brief Layer-side focus memory for switch-focus-between-floating-and-tiling
+     *
+     * m_focusedWindow is a single slot shared by tiles and floats, so a
+     * float taking focus erases the answer to "which tile do I return to".
+     * These remember the last focus PER LAYER: written by setFocusedWindow
+     * (classified against the float set) and by setFloating when the
+     * FOCUSED window changes layer with no focus report coming (the layer
+     * moved under the focus, mirroring the scroll engine's
+     * floatWindowInternal active-tile arm — the new side inherits, the old
+     * side drops). A NON-focused window's layer change leaves the memories
+     * alone: they are advisory, validated at every read, and retention is
+     * what lets engine-internal transient floats (drag-eviction, overflow
+     * churn) round-trip without erasing the remembered tile. Cleared when
+     * the remembered window leaves the state (removeWindow, clear). Not
+     * serialized — focus history dies with the session. Consumers validate
+     * before use (the switch verb's eligibility filter), so a stale value
+     * is a fallback-scan, never a wrong activation.
+     */
+    ///@{
+    QString lastTiledFocus() const;
+    QString lastFloatingFocus() const;
+    ///@}
+
+    /**
+     * @brief Whether the float layer holds focus right now (derived)
+     *
+     * Derived from m_focusedWindow's membership in the float set rather
+     * than stored: autotile funnels every focus report through
+     * setFocusedWindow and has no self-activation echo filter swallowing
+     * reports, so for focus reports naming windows in THIS state the
+     * derivation cannot go stale the way a stored flag could. A state
+     * whose screen does not hold focus keeps its last m_focusedWindow by
+     * design (nothing clears focus on the losing screen), so the answer is
+     * only meaningful on the screen the report came from.
+     */
+    bool floatingHasFocus() const;
 
     /**
      * @brief Clear all state (remove all windows, reset to defaults)
@@ -465,6 +509,8 @@ private:
     QStringList m_windowOrder;
     QSet<QString> m_floatingWindows;
     QString m_focusedWindow;
+    QString m_lastTiledFocus;
+    QString m_lastFloatingFocus;
     int m_masterCount = AutotileDefaults::DefaultMasterCount;
     qreal m_splitRatio = AutotileDefaults::DefaultSplitRatio;
     QVector<QRect> m_calculatedZones;

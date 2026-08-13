@@ -29,7 +29,9 @@
 #include <PhosphorSnapEngine/SnapState.h>
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorEngine/IWindowRegistry.h>
 #include <PhosphorEngine/IWindowTrackingService.h>
+#include <PhosphorEngine/LayerFocusSwitch.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 
 #include <PhosphorSnapEngine/INavigationStateProvider.h>
@@ -43,6 +45,8 @@
 #include <PhosphorZones/AssignmentEntry.h>
 #include "snapenginelogging.h"
 #include <PhosphorSnapEngine/snapnavigationtargets.h>
+
+#include <algorithm>
 
 namespace PhosphorSnapEngine {
 
@@ -782,6 +786,102 @@ void SnapEngine::toggleFocusedFloat(const NavigationContext& ctx)
     // lives in snapengine/float.cpp). No need to route through WTA —
     // the router already ensured this screen is snap-mode.
     toggleWindowFloat(windowId, screenId);
+}
+
+void SnapEngine::switchFocusBetweenFloatingAndTiling(const QString& screenId)
+{
+    // Action "float": the OSD's float success arm renders layer copy from
+    // the reason token ("Snapped" / "Floating"); the directional success
+    // arm would render an arrow for a verb that has no direction.
+    const QString action = QStringLiteral("float");
+    QString screen = screenId;
+    if (screen.isEmpty() && m_navState) {
+        screen = m_navState->lastActiveScreenName();
+    }
+    if (screen.isEmpty()) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
+        return;
+    }
+    // ensureStateForKey never returns null for a non-empty screen (a miss
+    // lazily creates an empty store, bounded by screens × desktops ×
+    // activities), so this refusal is belt-and-braces: a virgin screen
+    // resolves an empty store and refuses below with no_target instead.
+    SnapState* state = ensureStateForKey(currentKeyForScreen(screen));
+    if (!state) {
+        Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), QString(), QString(), screen);
+        return;
+    }
+
+    // Whether the float layer holds focus is DERIVED from the live focus
+    // (the navigation state provider's last-active window) rather than
+    // stored: snap keeps no focus slot, and the provider is the same
+    // compositor shadow every other snap verb trusts. Residence-only
+    // windows are on neither layer, so a focused free window takes the
+    // tiling→float leg — "give me a float" is the sensible answer there.
+    const QString currentFocus = m_navState ? canonicalWindowId(m_navState->lastActiveWindowId()) : QString();
+    const bool floatingHasFocus = !currentFocus.isEmpty() && state->isFloating(currentFocus);
+
+    // Minimized windows are filtered on BOTH sides: the daemon models
+    // minimize as a float, and the layer memories can name one.
+    const auto isHidden = [this](const QString& id) {
+        return m_windowRegistry && m_windowRegistry->minimizedState(id).value_or(false);
+    };
+    // Both pools come from the per-(screen,desktop,activity) store, but a
+    // cross-desktop directional move re-stamps the window's desktop while
+    // leaving it in its source store (reassignDesktop), so the raw pools can
+    // name windows living on OTHER desktops. Activating one would yank the
+    // user's desktop out from under the press — filter both sides to the
+    // screen's current desktop. 0 means "on all desktops" per the KWin
+    // convention buildOccupiedZoneSet documents, and an unstamped plain
+    // float reads as 0 too.
+    const int currentDesktop = currentVirtualDesktopForScreen(screen);
+    const auto onCurrentDesktop = [state, currentDesktop](const QString& id) {
+        if (currentDesktop == 0) {
+            // No virtual-desktop authority resolves. In production the VDM
+            // never answers 0 (an unknown screen falls back to the global
+            // current desktop), so this branch serves reduced wirings with
+            // no VDM at all (tests) — fail open like the minimize filter:
+            // a focus verb must not refuse windows because the desktop is
+            // unknowable.
+            return true;
+        }
+        const int desktop = state->desktopForWindow(id);
+        return desktop == 0 || desktop == currentDesktop;
+    };
+    PhosphorEngine::LayerSwitchSide snappedSide;
+    snappedSide.candidate = state->lastSnappedFocus();
+    snappedSide.fallbacks = state->snappedWindows();
+    // snappedWindows() walks a hash — sort so the fallback pick is
+    // deterministic, matching the sorted floating pool.
+    std::sort(snappedSide.fallbacks.begin(), snappedSide.fallbacks.end());
+    // The !isFloating term is defence in depth (every traced producer clears
+    // the zone before setting the float bit), mirroring the autotile twin and
+    // reapplyManagedWindowAppearance's guard.
+    snappedSide.isEligible = [state, isHidden, onCurrentDesktop](const QString& id) {
+        return state->isWindowSnapped(id) && !state->isFloating(id) && !isHidden(id) && onCurrentDesktop(id);
+    };
+    PhosphorEngine::LayerSwitchSide floatingSide;
+    floatingSide.candidate = state->lastFloatingFocus();
+    floatingSide.fallbacks = state->floatingWindows();
+    floatingSide.isEligible = [state, isHidden, onCurrentDesktop](const QString& id) {
+        return state->isFloating(id) && !isHidden(id) && onCurrentDesktop(id);
+    };
+    // The resolver reads focusForFeedback from the SOURCE side only, and the
+    // source of this verb is always the live focus derived above — one value,
+    // no per-leg distinction.
+    snappedSide.focusForFeedback = currentFocus;
+    floatingSide.focusForFeedback = currentFocus;
+
+    // No eager bookkeeping precedes the activation (unlike scroll's echo
+    // queue): snap derives the focus side live and windowFocused's memory
+    // writes are side-effect free, so the compositor's answering report is
+    // all the state this verb needs.
+    auto result = PhosphorEngine::resolveLayerFocusSwitch(floatingHasFocus, snappedSide, floatingSide);
+    if (result.success && result.toTiled) {
+        // Snap's tiling side is the zone layer — say so in the OSD.
+        result.reason = QStringLiteral("snapped");
+    }
+    announceLayerSwitch(result, action, screen);
 }
 
 void SnapEngine::cycleFocus(bool forward, const NavigationContext& ctx)

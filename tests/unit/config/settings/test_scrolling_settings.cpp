@@ -209,7 +209,9 @@ private Q_SLOTS:
         QCOMPARE(ConfigDefaults::scrollingCenterVisibleColumnsShortcut(), QStringLiteral("Meta+Alt+Shift+C"));
         QCOMPARE(ConfigDefaults::scrollingFocusWindowTopShortcut(), QStringLiteral("Meta+Alt+V"));
         QCOMPARE(ConfigDefaults::scrollingFocusWindowBottomShortcut(), QStringLiteral("Meta+Alt+Shift+V"));
-        QCOMPARE(ConfigDefaults::scrollingSwitchFocusFloatTilingShortcut(), QStringLiteral("Meta+Alt+X"));
+        // Promoted to the mode-neutral shortcut group when every engine
+        // gained the verb; the chord itself is unchanged.
+        QCOMPARE(ConfigDefaults::switchFocusFloatTilingShortcut(), QStringLiteral("Meta+Alt+X"));
         QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthShortcut(), QStringLiteral("Meta+Alt+D"));
         QCOMPARE(ConfigDefaults::scrollingCycleColumnWidthBackShortcut(), QStringLiteral("Meta+Alt+Shift+D"));
         QCOMPARE(ConfigDefaults::autotileRetileShortcut(), QStringLiteral("Meta+Ctrl+T"));

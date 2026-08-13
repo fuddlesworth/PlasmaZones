@@ -729,6 +729,17 @@ public:
     /// Toggle the focused window between snapped and floating.
     void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
 
+    /// Jump focus between the float layer and the snapped layout (niri's
+    /// switch-focus-between-floating-and-tiling). Activates the last
+    /// focused window on the OTHER layer, falling back to a scan when the
+    /// memory is stale; windows the compositor has reported minimized are
+    /// skipped (an unreported state is treated as visible — a focus verb
+    /// must not refuse a window merely because its state is unknown).
+    /// Whether the float layer holds focus is derived live from the
+    /// navigation state provider's active window, not stored. Success
+    /// reports reason "snapped"/"floating"; refusals report "no_target".
+    void switchFocusBetweenFloatingAndTiling(const QString& screenId) override;
+
     /// Cycle keyboard focus forward/backward through managed windows in
     /// the active zone (or the layout cycle order if single-window per
     /// zone).

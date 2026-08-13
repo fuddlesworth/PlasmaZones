@@ -25,6 +25,25 @@ private Q_SLOTS:
         cleanupFixture();
     }
 
+    // ── Focus relay: windowActivated arms the snap layer-focus memory ──
+    void testWindowActivated_armsSnapLayerFocusMemory()
+    {
+        // windowActivated is the PRODUCTION entry point for
+        // SnapEngine::windowFocused (snap is deliberately not in the
+        // TilingAdaptor lifecycle vector), so this pins the wiring the
+        // engine-level switch suites bypass by calling windowFocused
+        // directly — the layer-switch candidate memories are dead in a live
+        // session if this relay is dropped.
+        const QString windowId = QStringLiteral("app|w1");
+        const QString screen = QStringLiteral("DP-1");
+        SnapState* state = m_snapEngine->stateForWindowOnScreen(windowId, screen);
+        state->assignWindowToZone(windowId, QStringLiteral("zone-1"), screen, 1);
+        QVERIFY(state->lastSnappedFocus().isEmpty());
+
+        m_wta->windowActivated(windowId, screen);
+        QCOMPARE(state->lastSnappedFocus(), windowId);
+    }
+
     // ── Open routing: RouteToScreen / RouteToDesktop rules ──
     void testApplyOpenRoutingForTiling_routesToAutotileScreenAndDesktop()
     {

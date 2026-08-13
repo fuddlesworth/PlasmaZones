@@ -605,8 +605,15 @@ void SnapEngine::windowClosed(const QString& windowId)
 
 void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 {
-    Q_UNUSED(windowId)
     m_lastActiveScreenId = screenId;
+    // Arm the owning store's layer-side focus memory (the switch verb's
+    // remembered targets). stateForWindow never returns null by
+    // construction (m_globals is built in the ctor and is the fallback), so
+    // unlike the m_globals assert-and-guard sites this call is direct — an
+    // untracked window resolves to m_globals, where noteFocused finds it on
+    // neither layer and takes neither branch: a no-op by classification,
+    // not by lookup failure.
+    stateForWindow(windowId)->noteFocused(windowId);
 }
 
 // toggleWindowFloat and setWindowFloat are implemented in snapengine/float.cpp

@@ -444,7 +444,6 @@ void appendScrollingShortcutsSchema(PhosphorConfig::Schema& schema)
         {CD::focusColumnRightKey(), CD::scrollingFocusColumnRightShortcut(), QMetaType::QString},
         {CD::focusColumnLeftOrLastKey(), CD::scrollingFocusColumnLeftOrLastShortcut(), QMetaType::QString},
         {CD::focusColumnRightOrFirstKey(), CD::scrollingFocusColumnRightOrFirstShortcut(), QMetaType::QString},
-        {CD::switchFocusFloatTilingKey(), CD::scrollingSwitchFocusFloatTilingShortcut(), QMetaType::QString},
         {CD::moveToFloatingKey(), CD::scrollingMoveToFloatingShortcut(), QMetaType::QString},
         {CD::moveToTilingKey(), CD::scrollingMoveToTilingShortcut(), QMetaType::QString},
     };

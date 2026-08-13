@@ -785,8 +785,16 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // The fullscreen action's reason is a resulting-state token ("on"/"off")
     // and its window rides sourceZoneId, so two DIFFERENT windows toggled to
     // the same state within the window are distinct events — key them apart.
-    // Other actions keep the plain key: their reasons discriminate the event
-    // and their sourceZoneId is a zone, not an identity.
+    // Other actions keep the plain key: their reasons discriminate the
+    // event. (The float-family actions carry WINDOW ids in the zone fields,
+    // but they stay on the plain key deliberately. On snap and autotile a
+    // key-auto-repeat switch re-resolves the same leg and target before the
+    // focus report lands, so suppressing the identical repeat OSD is the
+    // desired outcome. The scroll engine's eager floatingHasFocus clear
+    // flips the derivation on the float-to-tiled press only, and the return
+    // leg is armed by the genuine focus report — so scroll alternates legs
+    // when the report keeps up with the repeat rate, with distinct reasons
+    // shown, and otherwise dedups like its siblings.)
     QString actionKey = action + QLatin1Char(':') + reason;
     if (action == QLatin1String("fullscreen")) {
         actionKey += QLatin1Char(':') + sourceZoneId;

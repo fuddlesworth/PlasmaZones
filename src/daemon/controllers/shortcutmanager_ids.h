@@ -32,6 +32,12 @@ inline constexpr auto kIdFocusZoneDown = "focus_zone_down";
 inline constexpr auto kIdPushToEmptyZone = "push_to_empty_zone";
 inline constexpr auto kIdRestoreWindowSize = "restore_window_size";
 inline constexpr auto kIdToggleWindowFloat = "toggle_window_float";
+// The verb is mode-neutral since the promotion out of the Scrolling group,
+// but the on-disk id keeps its original scroll_-prefixed spelling: the id is
+// the kglobalshortcutsrc record key, so renaming it would orphan every user's
+// saved chord (same reasoning as toggle_autotile's label-only rename below —
+// the C++ constant is free to carry the mode-neutral name, the string is not).
+inline constexpr auto kIdSwitchFocusFloatTiling = "scroll_switch_focus_float_tiling";
 inline constexpr auto kIdSwapWindowLeft = "swap_window_left";
 inline constexpr auto kIdSwapWindowRight = "swap_window_right";
 inline constexpr auto kIdSwapWindowUp = "swap_window_up";
@@ -92,7 +98,6 @@ inline constexpr auto kIdScrollFocusColumnLeft = "scroll_focus_column_left";
 inline constexpr auto kIdScrollFocusColumnRight = "scroll_focus_column_right";
 inline constexpr auto kIdScrollFocusColumnLeftOrLast = "scroll_focus_column_left_or_last";
 inline constexpr auto kIdScrollFocusColumnRightOrFirst = "scroll_focus_column_right_or_first";
-inline constexpr auto kIdScrollSwitchFocusFloatTiling = "scroll_switch_focus_float_tiling";
 inline constexpr auto kIdScrollMoveToFloating = "scroll_move_to_floating";
 inline constexpr auto kIdScrollMoveToTiling = "scroll_move_to_tiling";
 

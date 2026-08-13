@@ -16,6 +16,8 @@
 
 namespace PhosphorEngine {
 
+struct LayerSwitchResult;
+
 /// Abstract base class for placement engines.
 ///
 /// Handles the universal mechanics every engine shares: settings injection and
@@ -76,6 +78,17 @@ public:
 
 protected:
     explicit PlacementEngineBase(QObject* parent = nullptr);
+
+    /// Emit the activation + navigationFeedback pair for a resolved layer
+    /// focus switch (resolveLayerFocusSwitch). Success: activation first,
+    /// then feedback with the result's reason/source/target. Failure:
+    /// feedback only, empty target. Precondition: a successful result
+    /// carries a non-empty target (the resolver guarantees it; callers that
+    /// mutate the result may only remap the reason token, never flip
+    /// success or blank the target). Engine-specific bookkeeping that must
+    /// precede the activation (the scroll engine's eager flag clear and
+    /// self-activation echo queue) happens BEFORE calling this.
+    void announceLayerSwitch(const LayerSwitchResult& result, const QString& action, const QString& screenId);
 
 Q_SIGNALS:
     void geometryRestoreRequested(const QString& windowId, const QRect& geometry, const QString& screenId);

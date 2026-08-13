@@ -99,7 +99,10 @@ struct CatalogMeta
     // Optional Templates-capability variant of `explanation`: shown instead
     // of it when the bound screen's engine consumes layouts as sizing
     // templates (a scrolling screen), where the same key picks a TEMPLATE
-    // rather than a placement layout. nullptr = `explanation` serves both.
+    // rather than a placement layout. The same slot also serves plain
+    // scrolling-screen wording for mode-neutral rows whose vocabulary
+    // shifts there (the layer-focus switch names columns instead of the
+    // placed layout). nullptr = `explanation` serves both.
     const char* templatesExplanation = nullptr;
 };
 
@@ -128,6 +131,19 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdOpenSettings, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleCheatsheet, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
         add(kIdToggleWindowFloat, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all");
+        // Mode-all row, so the label avoids "Tiled": snap users know their
+        // layer as "snapped" (the OSD splits the token for exactly that
+        // reason), and "placed" reads correctly in all three modes. The
+        // tooltip promises the remembered window only conditionally — the
+        // fallback scan is sorted, not recency-ordered.
+        add(kIdSwitchFocusFloatTiling, QT_TRANSLATE_NOOP("plasmazones", "General"), 0, "all", nullptr,
+            QT_TRANSLATE_NOOP("plasmazones", "Switch Floating and Placed Focus"),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus between the floating windows and the placed layout. It returns to "
+                              "the window that last had focus there when that window is still available."),
+            QT_TRANSLATE_NOOP("plasmazones",
+                              "Moves focus between the floating windows and the scrolling columns. It returns to "
+                              "the window that last had focus there when that window is still available."));
         // "all", not a per-mode tag, and deliberately not gated on how many
         // modes are enabled. The row advertises the mode CYCLE, which is a
         // hard no-op only in the one configuration where every mode but the
@@ -342,11 +358,6 @@ CatalogMeta catalogMetaForId(const QString& id)
             QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right (Wrap)"),
             QT_TRANSLATE_NOOP("plasmazones",
                               "Moves focus one column right, wrapping to the first column at the edge."));
-        add(kIdScrollSwitchFocusFloatTiling, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Switch Floating and Tiled Focus"),
-            QT_TRANSLATE_NOOP("plasmazones",
-                              "Moves focus between the floating windows and the tiled columns, returning to "
-                              "the most recent window on each side."));
         add(kIdScrollMoveToFloating, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Move to Floating"),
             QT_TRANSLATE_NOOP("plasmazones",

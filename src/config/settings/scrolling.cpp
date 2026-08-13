@@ -582,10 +582,6 @@ P_STORE_GET(QString, scrollingFocusColumnRightOrFirstShortcut, shortcutsScrollin
             QString)
 P_STORE_SET_STRING(setScrollingFocusColumnRightOrFirstShortcut, shortcutsScrollingGroup, focusColumnRightOrFirstKey,
                    scrollingFocusColumnRightOrFirstShortcutChanged)
-P_STORE_GET(QString, scrollingSwitchFocusFloatTilingShortcut, shortcutsScrollingGroup, switchFocusFloatTilingKey,
-            QString)
-P_STORE_SET_STRING(setScrollingSwitchFocusFloatTilingShortcut, shortcutsScrollingGroup, switchFocusFloatTilingKey,
-                   scrollingSwitchFocusFloatTilingShortcutChanged)
 P_STORE_GET(QString, scrollingMoveToFloatingShortcut, shortcutsScrollingGroup, moveToFloatingKey, QString)
 P_STORE_SET_STRING(setScrollingMoveToFloatingShortcut, shortcutsScrollingGroup, moveToFloatingKey,
                    scrollingMoveToFloatingShortcutChanged)

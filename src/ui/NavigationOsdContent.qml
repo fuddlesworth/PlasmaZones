@@ -37,16 +37,18 @@ Item {
     // "rotate_vs", "layout" ("layout" is failure-only by producer contract;
     // see failureMessage).
     property string action: ""
-    property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise) or travel ("left"/"right"/"up"/"down", optionally prefixed "screen:" or "desktop:" for a crossing), float state (floated/floating/tiled/unfloated/overflow), or windowed-fullscreen state ("on"/"off")
+    property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise) or travel ("left"/"right"/"up"/"down", optionally prefixed "screen:" or "desktop:" for a crossing), float state (floated/floating/tiled/snapped/unfloated/overflow), or windowed-fullscreen state ("on"/"off")
     property var zones: []
-    property var highlightedZoneIds: [] // Zone IDs involved (target zones)
-    property string sourceZoneId: "" // Source zone for move/swap operations
+    property var highlightedZoneIds: [] // Zone IDs involved (target zones; a WINDOW id for the float-family actions)
+    property string sourceZoneId: "" // Source zone for move/swap operations (a WINDOW id for the float-family actions)
     property int windowCount: 1 // Number of windows affected (for rotation)
-    // Auto-dismiss interval. Show/hide fade shapes are owned by the
-    // SurfaceAnimator's `osd.show` / `osd.pop` / `osd.hide` profile JSONs;
-    // tune the JSONs to adjust the appear/disappear feel rather than
-    // re-introducing per-window duration overrides here.
-    property int displayDuration: 1000
+    // Auto-dismiss interval — a local constant (readonly: no C++ path
+    // writes it and the shell does not forward it). Show/hide fade shapes
+    // are owned by the SurfaceAnimator's `osd.show` / `osd.pop` /
+    // `osd.hide` profile JSONs; tune the JSONs to adjust the
+    // appear/disappear feel rather than re-introducing per-window
+    // duration overrides here.
+    readonly property int displayDuration: 1000
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -186,10 +188,11 @@ Item {
             if (reason === "no_pre_float_zone")
                 return i18n("No zone to return to");
 
-            // Scrolling's floating/tiling focus switch and explicit float
-            // verb: the layer asked for has no window to take focus (the
-            // focused window is already there, or the other layer is
-            // empty). Exact copy for the two switch legs; approximate for
+            // The floating/tiling focus switch (all three engines) and
+            // scrolling's explicit float verb: the layer asked for has no
+            // window to take focus (the focused window is already there,
+            // or the other layer is empty).
+            // Exact copy for the two switch legs; approximate for
             // moveFocusedToFloating's already-floating refusal, where it is
             // still closer than "Floating is unavailable" was (a per-site
             // token would be the exact fix, at the cost of a producer
@@ -456,12 +459,25 @@ Item {
         } else if (action === "restore") {
             return i18nc("@info:status the window's previous position was restored", "Restored");
         } else if (action === "float") {
-            // Show different message based on float state from reason field
+            // Show different message based on float state from reason field.
+            // The "tiled" arm and the "Floating" fallthrough at the bottom
+            // serve BOTH the float toggle and the layer-focus switch (the
+            // fallthrough also absorbs the toggle's "floated" token): the
+            // producers do not distinguish switch-origin from toggle-origin
+            // on these tokens, and splitting the copy would need a producer
+            // token split (the same tradeoff the no_target comment above
+            // weighs and declines).
             if (reason === "tiled")
                 return i18nc("@info:status the window is now tiled (adjective, not a verb)", "Tiled");
 
             if (reason === "unfloated")
                 return i18nc("@info:status the window was snapped into a zone", "Snapped");
+
+            // The snap engine's floating/snapped focus switch: focus moved
+            // to the zone layer, which snap users know as "snapped", not
+            // "tiled".
+            if (reason === "snapped")
+                return i18nc("@info:status the snapped layer took focus", "Snapped");
 
             // Autotile auto-floats windows that overflow the layout; the
             // generic copy would read as a deliberate float of the focused
@@ -691,6 +707,14 @@ Item {
             text: root.messageText
             font.family: root.fontFamily.length > 0 ? root.fontFamily : Kirigami.Theme.defaultFont.family
             font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * root.messageFontScale * root.fontSizeScale)
+            // The nav card deliberately fixes its headline weight and takes
+            // only family/scale from the user's OSD font settings. C++ does
+            // write all six font fields onto the shared osdSlot; what stops
+            // the style flags (weight/italic/underline/strikeout) here is
+            // PassiveOverlayShell's navigationOsdComp, which forwards only
+            // family and scale. LayoutOsdContent forwards the flags to
+            // ZonePreview's zone-number labels while its own name label
+            // fixes Font.Medium the same way this one does.
             font.weight: Font.Medium
             color: (root.success || root.atClampBound) ? root.textColor : root.errorColor
             horizontalAlignment: Text.AlignHCenter

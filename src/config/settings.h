@@ -599,8 +599,6 @@ public:
                    setScrollingFocusColumnLeftOrLastShortcut NOTIFY scrollingFocusColumnLeftOrLastShortcutChanged)
     Q_PROPERTY(QString scrollingFocusColumnRightOrFirstShortcut READ scrollingFocusColumnRightOrFirstShortcut WRITE
                    setScrollingFocusColumnRightOrFirstShortcut NOTIFY scrollingFocusColumnRightOrFirstShortcutChanged)
-    Q_PROPERTY(QString scrollingSwitchFocusFloatTilingShortcut READ scrollingSwitchFocusFloatTilingShortcut WRITE
-                   setScrollingSwitchFocusFloatTilingShortcut NOTIFY scrollingSwitchFocusFloatTilingShortcutChanged)
     Q_PROPERTY(QString scrollingMoveToFloatingShortcut READ scrollingMoveToFloatingShortcut WRITE
                    setScrollingMoveToFloatingShortcut NOTIFY scrollingMoveToFloatingShortcutChanged)
     Q_PROPERTY(QString scrollingMoveToTilingShortcut READ scrollingMoveToTilingShortcut WRITE
@@ -686,6 +684,8 @@ public:
                    NOTIFY restoreWindowSizeShortcutChanged)
     Q_PROPERTY(QString toggleWindowFloatShortcut READ toggleWindowFloatShortcut WRITE setToggleWindowFloatShortcut
                    NOTIFY toggleWindowFloatShortcutChanged)
+    Q_PROPERTY(QString switchFocusFloatTilingShortcut READ switchFocusFloatTilingShortcut WRITE
+                   setSwitchFocusFloatTilingShortcut NOTIFY switchFocusFloatTilingShortcutChanged)
 
     // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
     Q_PROPERTY(QString swapWindowLeftShortcut READ swapWindowLeftShortcut WRITE setSwapWindowLeftShortcut NOTIFY
@@ -1425,8 +1425,6 @@ public:
     void setScrollingFocusColumnLeftOrLastShortcut(const QString& shortcut);
     QString scrollingFocusColumnRightOrFirstShortcut() const;
     void setScrollingFocusColumnRightOrFirstShortcut(const QString& shortcut);
-    QString scrollingSwitchFocusFloatTilingShortcut() const;
-    void setScrollingSwitchFocusFloatTilingShortcut(const QString& shortcut);
     QString scrollingMoveToFloatingShortcut() const;
     void setScrollingMoveToFloatingShortcut(const QString& shortcut);
     QString scrollingMoveToTilingShortcut() const;
@@ -1697,6 +1695,8 @@ public:
     void setRestoreWindowSizeShortcut(const QString& shortcut);
     QString toggleWindowFloatShortcut() const;
     void setToggleWindowFloatShortcut(const QString& shortcut);
+    QString switchFocusFloatTilingShortcut() const;
+    void setSwitchFocusFloatTilingShortcut(const QString& shortcut);
 
     QString swapWindowLeftShortcut() const;
     void setSwapWindowLeftShortcut(const QString& shortcut);

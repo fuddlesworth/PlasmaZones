@@ -176,6 +176,10 @@ public:
     void pushToEmptyZone(const PhosphorEngine::NavigationContext& ctx) override;
     void restoreFocusedWindow(const PhosphorEngine::NavigationContext& ctx) override;
     void toggleFocusedFloat(const PhosphorEngine::NavigationContext& ctx) override;
+    /// niri switch-focus-between-floating-and-tiling (IPlacementEngine
+    /// override — the daemon reaches it by virtual dispatch, not the
+    /// scroll-specific mode-check-and-cast route below).
+    void switchFocusBetweenFloatingAndTiling(const QString& screenId) override;
 
 private:
     /// Shared body of toggleFocusedFloat and restoreFocusedWindow: resolve
@@ -237,8 +241,6 @@ public:
     /// presses answer with no_target feedback.
     void moveFocusedToFloating(const QString& screenId);
     void moveFocusedToTiling(const QString& screenId);
-    /// niri switch-focus-between-floating-and-tiling.
-    void switchFocusBetweenFloatingAndTiling(const QString& screenId);
     /// Absolute width/height intents (niri set-column-width/set-window-height
     /// with an absolute value). D-Bus surface; no shortcut carries a value.
     void setColumnWidth(const ColumnWidth& width, const QString& screenId);

@@ -55,6 +55,9 @@ P_STORE_SET_STRING(setRestoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWi
 P_STORE_GET(QString, toggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey, QString)
 P_STORE_SET_STRING(setToggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey,
                    toggleWindowFloatShortcutChanged)
+P_STORE_GET(QString, switchFocusFloatTilingShortcut, shortcutsGlobalGroup, switchFocusFloatTilingKey, QString)
+P_STORE_SET_STRING(setSwitchFocusFloatTilingShortcut, shortcutsGlobalGroup, switchFocusFloatTilingKey,
+                   switchFocusFloatTilingShortcutChanged)
 P_STORE_GET(QString, swapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, QString)
 P_STORE_SET_STRING(setSwapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, swapWindowLeftShortcutChanged)
 P_STORE_GET(QString, swapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey, QString)
