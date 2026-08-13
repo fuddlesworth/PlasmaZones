@@ -104,7 +104,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // down: smart gaps is now a per-screen rule slot too, and its gate runs
     // before the rest of the effective* reads. One fetch still serves them
     // all — the later reads take this same map.
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    const QVariantMap overrides = overridesForScreen(screenId);
     // The Auto axis basis, captured BEFORE smart gaps may zero the outer
     // gaps. Smart-gap zeroing is CONTENT-driven — it reads the strip's live
     // column count — and folding it into the axis basis coupled the resolved
@@ -478,11 +478,26 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         state->clearLastAppliedViewOffset();
         // Same empty-strip reasoning applied to the template blueprint: the
         // cursor records which entries this strip's columns already stand
-        // for, and an empty strip has no columns to stand for any of them.
-        // A screen cleared out and repopulated therefore opens from the top
-        // of the blueprint again, which is the "template describes the
-        // starting shape" contract in ScrollState::blueprintCursor.
-        state->resetBlueprintCursor();
+        // for, and a strip with nothing left has no columns to stand for any
+        // of them. A screen cleared out and repopulated therefore opens from
+        // the top of the blueprint again, which is the "template describes
+        // the starting shape" contract in ScrollState::blueprintCursor.
+        //
+        // Gated on the STRIP being empty, not on this resolve being empty.
+        // The two differ whenever the columns are transiently unresolvable
+        // while still standing for their entries: every column minimized
+        // away (relayout skips a fully-minimized column), the last tiled
+        // window floated (floatWindowInternal re-applies synchronously), or
+        // the only window detached into a drag-insert preview. Resetting on
+        // the resolve handed those entries straight back out on the next
+        // open — the same refill the cursor was added to stop. Floating
+        // members and a live detached drag window both count as "the screen
+        // still holds something", because both return to the strip through
+        // paths that consume no blueprint entry.
+        const bool dragHoldsWindowHere = m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId;
+        if (state->strip().isEmpty() && state->floatingWindows().isEmpty() && !dragHoldsWindowHere) {
+            state->resetBlueprintCursor();
+        }
         clearTabStripsForScreen(screenId);
         if (anchorMoved) {
             Q_EMIT placementChanged(screenId);

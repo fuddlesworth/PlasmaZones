@@ -102,6 +102,17 @@ struct StashedStrip
     /// it is main-axis pixels, so replaying one captured on the other axis
     /// scrolls the restored strip to a nonsense position.
     PhosphorProtocol::ScrollAxis axis = PhosphorProtocol::ScrollAxis::Horizontal;
+    /// The strip's template blueprint cursor, carried across the round trip.
+    ///
+    /// Restoring the columns re-inserts them through paths that consume no
+    /// blueprint entry, so the far side would otherwise recover spent-ness
+    /// only as far as the qMax(cursor, columnCount) floor reaches — which is
+    /// the LIVE column count. A strip that had opened four columns and closed
+    /// two came back believing it had spent two, and handed entries 2 and 3
+    /// out for a second time. Travelling with the structure is what makes the
+    /// round trip lossless, exactly as focusedWindowId and viewAnchor do for
+    /// focus and view.
+    int blueprintCursor = 0;
     /// Monotonic stamp of when this entry was staged (mode exit or
     /// persistence load), from m_stashSequence. serializeStripState
     /// resolves a window listed by two DIFFERENT stash keys in favour of

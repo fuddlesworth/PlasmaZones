@@ -82,7 +82,7 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
     // out of this map below (sticky handling, default display, the
     // client-decides verdict and the insert position) plus the template
     // blueprint, and the screenId-taking wrappers would each rebuild it.
-    const QVariantMap screenOverrides = m_perScreenOverrides.value(screenId);
+    const QVariantMap screenOverrides = overridesForScreen(screenId);
 
     // Fixed-size / oversized windows cannot honour a column slot: float them
     // at their native size instead of forcing a tile (the min size is the
@@ -330,6 +330,17 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // blueprint; the blueprint outranks every default, including a
         // client-decides width already resolved into `width`.
         const auto blueprintIt = screenOverrides.constFind(ScrollPerScreenKeys::templateColumns());
+        // Blueprint-swap detection, here rather than on the override map's
+        // writes. The map is dropped and rebuilt on ordinary context changes
+        // that leave the template alone (a desktop switch does it twice), so
+        // reacting to the write restarted the seed for events the user never
+        // made. Comparing the VALUE the cursor is counting against restarts
+        // it exactly when the template really changed.
+        const QVariant blueprintNow = blueprintIt != screenOverrides.constEnd() ? *blueprintIt : QVariant();
+        if (state->blueprintIdentity() != blueprintNow) {
+            state->setBlueprintIdentity(blueprintNow);
+            state->resetBlueprintCursor();
+        }
         // The entry this column would take: the strip's consumption cursor,
         // floored at the live column count. ScrollState::blueprintCursor
         // carries the full contract for both halves — the cursor makes an

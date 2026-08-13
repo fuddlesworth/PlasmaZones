@@ -344,6 +344,9 @@ ScrollEngine::buildStashFromState(const ScrollState* state,
     out.axis = state->hasResolvedAxis() ? state->resolvedAxis().axis()
         : preResolvedFallbackAxis       ? *preResolvedFallbackAxis
                                         : stripAxisForScreen(state->screenId()).axis();
+    // Spent-ness travels with the structure; see StashedStrip::blueprintCursor
+    // for why the far side cannot rebuild it from the column count.
+    out.blueprintCursor = state->blueprintCursor();
     return out;
 }
 
@@ -570,6 +573,11 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
             state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
         }
     }
+    // Spent-ness comes back with the structure. Raised rather than assigned,
+    // for the same reason readers floor the cursor at the column count: this
+    // runs once per ARRIVAL, and a window that opened fresh alongside the
+    // restore has already advanced the cursor past what the stash recorded.
+    state->setBlueprintCursor(qMax(state->blueprintCursor(), stashStrip.blueprintCursor));
     const int total = stashStrip.tileCount();
     // The CLAIMED tile's per-tile lease resets too: it was just consumed, so
     // it is no longer persistence-pending, and serializeStripState must not
@@ -906,50 +914,49 @@ void ScrollEngine::refreshConfigFromSettings()
 
 void ScrollEngine::applyPerScreenConfig(const QString& screenId, const QVariantMap& overrides)
 {
-    const QVariantMap previous = m_perScreenOverrides.value(screenId);
+    // Keyed by the screen's CURRENT context: the producer resolved these
+    // overrides for (screen, desktop, activity), so storing them under the
+    // screen alone would let one desktop's template overwrite another's.
+    const PhosphorEngine::PlacementStateKey key = currentKeyForScreen(screenId);
+    const QVariantMap previous = m_perScreenOverrides.value(key);
     if (previous == overrides) {
         return;
     }
-    // Compared BEFORE the insert, and on the blueprint key alone: every other
-    // override in this map answers per-open (widths, presets, insert
-    // position) and re-reads itself on the next open, while the blueprint is
-    // the one key a live cursor points INTO. A gap edit or a preset tweak
-    // must not restart the seed.
-    const bool blueprintChanged = previous.value(ScrollPerScreenKeys::templateColumns())
-        != overrides.value(ScrollPerScreenKeys::templateColumns());
-    m_perScreenOverrides.insert(screenId, overrides);
-    if (blueprintChanged) {
-        resetBlueprintCursorsForScreen(screenId);
-    }
+    m_perScreenOverrides.insert(key, overrides);
+    // Deliberately no cursor reset here. A blueprint SWAP is noticed at the
+    // consumption site by comparing ScrollState::blueprintIdentity against
+    // the blueprint actually in force, which is the only place that can tell
+    // a genuine template change from this map merely being rewritten. Every
+    // desktop switch drops and re-pushes these overrides with the template
+    // unchanged, and resetting on the write made that ordinary event refill
+    // entries the strip's columns already stood for.
     scheduleRetileForScreen(screenId);
 }
 
 void ScrollEngine::clearPerScreenConfig(const QString& screenId)
 {
-    const bool hadBlueprint = m_perScreenOverrides.value(screenId).contains(ScrollPerScreenKeys::templateColumns());
-    if (m_perScreenOverrides.remove(screenId) > 0) {
-        // Dropping the blueprint is a blueprint change like any other: a
-        // template re-applied later has to seed from its own first entry
-        // rather than resume a cursor that counted the old one's.
-        if (hadBlueprint) {
-            resetBlueprintCursorsForScreen(screenId);
+    // Every context on the screen, not just the current one: the caller is
+    // telling us this screen has left scrolling entirely, so no context's
+    // overrides survive it.
+    bool removed = false;
+    for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
+        if (it.key().screenId == screenId) {
+            it = m_perScreenOverrides.erase(it);
+            removed = true;
+        } else {
+            ++it;
         }
-        scheduleRetileForScreen(screenId);
     }
-}
-
-void ScrollEngine::resetBlueprintCursorsForScreen(const QString& screenId)
-{
-    // EVERY state on the screen, not just the visible one: the override map
-    // is keyed by screen while states are per (screen, desktop, activity), so
-    // a template swap lands on all of them at once. A background desktop
-    // whose cursor kept counting the old blueprint would seed its next open
-    // from the wrong entry the moment you switched to it.
-    const auto& states = m_states.states();
-    for (auto it = states.cbegin(); it != states.cend(); ++it) {
-        if (it.key().screenId == screenId && it.value()) {
-            it.value()->resetBlueprintCursor();
-        }
+    if (removed) {
+        // Deliberately no cursor reset. The strips on this screen survive a
+        // trip out of scrolling — only the CURRENT context's state is torn
+        // down — so their columns still stand for the blueprint entries they
+        // took. Zeroing the cursor here meant a desktop switch away and back
+        // handed those entries out a second time, which is the exact refill
+        // the cursor exists to prevent. A template that genuinely changed
+        // while the screen was away is caught by the identity compare at the
+        // consumption site.
+        scheduleRetileForScreen(screenId);
     }
 }
 

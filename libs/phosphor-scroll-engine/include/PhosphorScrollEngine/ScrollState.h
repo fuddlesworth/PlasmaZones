@@ -210,17 +210,28 @@ public:
     /// when `i` columns already exist. While a strip only grows the two agree
     /// exactly, which is why growing a strip behaves as it always did.
     ///
-    /// TRANSIENT — deliberately not serialized, like the view-delta baseline
-    /// above. The floor makes a restored strip resolve correctly without any
-    /// stored cursor, so persisting one would add a migration and a staleness
-    /// class to buy nothing.
+    /// The floor is a lower bound on spent-ness, not a substitute for it: it
+    /// recovers only as many entries as there are live columns, so a strip
+    /// that LOST a column before travelling through a non-consuming path
+    /// comes back under-counted. That is why the cursor rides the strip stash
+    /// (StashedStrip::blueprintCursor) across a mode round trip rather than
+    /// being rebuilt from the column count on the far side.
     ///
-    /// Reset on exactly two events: the strip EMPTIES (applyLayout's empty
-    /// branch, beside clearLastAppliedViewOffset — a screen you cleared out starts
-    /// its next session from the top of the blueprint), and the screen's
-    /// blueprint CHANGES (applyPerScreenConfig — picking a new template is an
-    /// explicit act, and a cursor describing the old template's entries would
-    /// silently swallow the new one's opening columns).
+    /// Reset on exactly two events:
+    ///   - the strip genuinely EMPTIES — no columns, nothing floating, no
+    ///     detached drag window (applyLayout's empty branch, beside
+    ///     clearLastAppliedViewOffset). A screen you cleared out starts its
+    ///     next session from the top of the blueprint. The condition is the
+    ///     STRIP, not the resolve: an all-minimized or mid-drag strip
+    ///     resolves to no columns while still standing for its entries, and
+    ///     resetting there handed them straight back out again.
+    ///   - the blueprint itself CHANGES, noticed by comparing
+    ///     blueprintIdentity at the consumption site. Picking a new template
+    ///     is an explicit act, and a cursor describing the old template's
+    ///     entries would swallow the new one's opening columns. Comparing the
+    ///     VALUE rather than reacting to override-map writes is deliberate:
+    ///     the map is dropped and rebuilt on ordinary context changes that
+    ///     leave the template untouched.
     int blueprintCursor() const
     {
         return m_blueprintCursor;
@@ -232,6 +243,27 @@ public:
     void resetBlueprintCursor()
     {
         m_blueprintCursor = 0;
+    }
+
+    /// The blueprint value the cursor is counting against.
+    ///
+    /// The cursor indexes into one particular blueprint, so it is only
+    /// meaningful beside the blueprint that produced it. Holding the value
+    /// here lets the consumption site notice a swap by comparing, which is
+    /// what makes invalidation independent of the override map's lifecycle:
+    /// dropping and re-pushing the SAME template (every desktop switch away
+    /// from scrolling and back does exactly that) leaves the cursor standing,
+    /// while picking a different template restarts it. Keying the reset off
+    /// the map's writes instead meant a screen that merely left scrolling for
+    /// a moment came back with a cursor of 0 and refilled entries its columns
+    /// already stood for.
+    QVariant blueprintIdentity() const
+    {
+        return m_blueprintIdentity;
+    }
+    void setBlueprintIdentity(const QVariant& blueprint)
+    {
+        m_blueprintIdentity = blueprint;
     }
 
     // ── IPlacementState ─────────────────────────────────────────────────────
@@ -303,6 +335,7 @@ private:
     bool m_hasResolvedAxis = false;
     bool m_hasLastAppliedViewOffset = false;
     int m_blueprintCursor = 0;
+    QVariant m_blueprintIdentity;
 };
 
 } // namespace PhosphorScrollEngine

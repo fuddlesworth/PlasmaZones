@@ -118,6 +118,11 @@ pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
 pse_add_test(test_scrollengine_persistence test_scrollengine_persistence.cpp)
 pse_add_test(test_scrollengine_zonenumbers test_scrollengine_zonenumbers.cpp)
 pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrollstubsettings.h)
+# The template channel's seed blueprint and its consumption cursor, split out
+# of the per-screen suite once that file passed the size ceiling. Same stub,
+# different question: which blueprint ENTRY a column takes, and which events
+# leave an entry spent.
+pse_add_test(test_scrollengine_template test_scrollengine_template.cpp scrollstubsettings.h)
 # The behaviour suite is the only one that needs a window-tracking stub: the
 # sticky gate and the client-decides width both short-circuit on a null
 # tracker, so their per-screen resolution is unobservable without one.

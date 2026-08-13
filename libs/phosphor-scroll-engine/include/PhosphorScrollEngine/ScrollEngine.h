@@ -762,7 +762,7 @@ public:
     void clearPerScreenConfig(const QString& screenId) override;
     QVariantMap perScreenOverrides(const QString& screenId) const override
     {
-        return m_perScreenOverrides.value(screenId);
+        return overridesForScreen(screenId);
     }
 
 Q_SIGNALS:
@@ -801,6 +801,17 @@ private:
     {
         return m_context.currentKeyForScreen(screenId);
     }
+    /// The override map entry for @p screenId's CURRENT context.
+    ///
+    /// Every screenId-taking effective* reader goes through here, so the
+    /// map's per-context keying stays an implementation detail of this class
+    /// rather than something each reader has to know. A screen with no entry
+    /// for its current context answers an empty map, which is what every
+    /// reader already treats as "no override, use the configured value".
+    QVariantMap overridesForScreen(const QString& screenId) const
+    {
+        return m_perScreenOverrides.value(currentKeyForScreen(screenId));
+    }
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
     ScrollState* stateForWindow(const QString& canonicalId, PhosphorEngine::PlacementStateKey* outKey = nullptr) const;
     /// The screen the engine should operate on for a screen-hinted verb:
@@ -834,7 +845,6 @@ private:
     /// blueprint-changed arm of applyPerScreenConfig / clearPerScreenConfig.
     /// See ScrollState::blueprintCursor for what the cursor means and why a
     /// new blueprint must not resume the old one's count.
-    void resetBlueprintCursorsForScreen(const QString& screenId);
     // engine_context.cpp
     /// Shared per-window side-map sweep for the SILENT prune paths (desktop
     /// and activity teardown), which emit no windowsReleased and so have no
@@ -1283,7 +1293,16 @@ private:
     QList<qreal> effectivePresetColumnWidths(const QVariantMap& overrides) const;
     QList<qreal> effectivePresetWindowHeights(const QVariantMap& overrides) const;
 
-    QHash<QString, QVariantMap> m_perScreenOverrides;
+    /// Keyed per CONTEXT, not per screen, because that is how the producer
+    /// resolves them: the daemon asks scrollingTemplateForContext(screen,
+    /// desktop, activity) and pushes the answer for the context that is
+    /// current at the time. Keying by screen alone meant two desktops on one
+    /// monitor could not hold different templates at all — the last resolve
+    /// won for both, and switching between them reset each other's blueprint
+    /// cursor. Readers go through overridesForScreen(), which resolves the
+    /// screen's CURRENT context, so the public screenId-taking accessors are
+    /// unchanged.
+    QHash<PhosphorEngine::PlacementStateKey, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
     FloatPredicate m_floatPredicate;

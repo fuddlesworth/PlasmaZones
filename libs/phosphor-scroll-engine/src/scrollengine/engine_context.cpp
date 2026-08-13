@@ -567,10 +567,12 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         },
         [this, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
             releasedScreens.insert(state->screenId());
-            // Removed screen: the per-screen rule overrides go with the state
+            // Removed screen: the per-context rule overrides go with the state
             // too — this prune is their documented purger, and releaseScreenState
-            // does not touch them because a mode exit must keep them.
-            m_perScreenOverrides.remove(state->screenId());
+            // does not touch them because a mode exit must keep them. The
+            // removal itself is the standalone sweep further down, which walks
+            // every key on the dying output rather than only the contexts that
+            // happened to have built a state.
             // Through the FULL release, not a bare bookkeeping drop. The windows
             // are alive (only their output is gone), so the daemon's
             // windowsReleased handler below still reads each one's float marker
@@ -603,7 +605,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         }
     }
     for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
-        if (matches(it.key())) {
+        if (matches(it.key().screenId)) {
             it = m_perScreenOverrides.erase(it);
         } else {
             ++it;

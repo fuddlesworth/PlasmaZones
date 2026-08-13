@@ -139,7 +139,7 @@ QList<qreal> presetListFromOverride(const QVariantMap& overrides, const QString&
 
 CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QString& screenId) const
 {
-    return effectiveCenterFocusedColumn(m_perScreenOverrides.value(screenId));
+    return effectiveCenterFocusedColumn(overridesForScreen(screenId));
 }
 
 CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QVariantMap& overrides) const
@@ -217,8 +217,7 @@ bool ScrollEngine::effectiveFocusNewWindows(const QString& screenId) const
     if (auto* settings = qobject_cast<PhosphorEngine::IScrollSettings*>(engineSettings())) {
         fallback = settings->scrollingFocusNewWindows();
     }
-    return effectiveBoolOverride(m_perScreenOverrides.value(screenId), ScrollPerScreenKeys::focusNewWindows(),
-                                 fallback);
+    return effectiveBoolOverride(overridesForScreen(screenId), ScrollPerScreenKeys::focusNewWindows(), fallback);
 }
 
 bool ScrollEngine::effectiveSmartGaps(const QVariantMap& overrides) const
@@ -228,7 +227,7 @@ bool ScrollEngine::effectiveSmartGaps(const QVariantMap& overrides) const
 
 PhosphorEngine::StickyWindowHandling ScrollEngine::effectiveStickyWindowHandling(const QString& screenId) const
 {
-    return effectiveStickyWindowHandling(m_perScreenOverrides.value(screenId));
+    return effectiveStickyWindowHandling(overridesForScreen(screenId));
 }
 
 PhosphorEngine::StickyWindowHandling ScrollEngine::effectiveStickyWindowHandling(const QVariantMap& overrides) const
@@ -246,7 +245,7 @@ PhosphorEngine::StickyWindowHandling ScrollEngine::effectiveStickyWindowHandling
 
 QList<qreal> ScrollEngine::effectivePresetColumnWidths(const QString& screenId) const
 {
-    return effectivePresetColumnWidths(m_perScreenOverrides.value(screenId));
+    return effectivePresetColumnWidths(overridesForScreen(screenId));
 }
 
 QList<qreal> ScrollEngine::effectivePresetColumnWidths(const QVariantMap& overrides) const
@@ -257,7 +256,7 @@ QList<qreal> ScrollEngine::effectivePresetColumnWidths(const QVariantMap& overri
 
 QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId) const
 {
-    return effectivePresetWindowHeights(m_perScreenOverrides.value(screenId));
+    return effectivePresetWindowHeights(overridesForScreen(screenId));
 }
 
 QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QVariantMap& overrides) const
@@ -272,7 +271,7 @@ ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& 
     if (screenId.isEmpty()) {
         return progress;
     }
-    const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    const QVariantMap overrides = overridesForScreen(screenId);
     const auto blueprintIt = overrides.constFind(ScrollPerScreenKeys::templateColumns());
     if (blueprintIt == overrides.constEnd()) {
         return progress;
@@ -304,7 +303,7 @@ ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& 
 
 ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
 {
-    return effectiveDefaultColumnWidth(m_perScreenOverrides.value(screenId));
+    return effectiveDefaultColumnWidth(overridesForScreen(screenId));
 }
 
 ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrides) const
@@ -408,7 +407,7 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
 
 bool ScrollEngine::effectiveWidthClientDecides(const QString& screenId) const
 {
-    return effectiveWidthClientDecides(m_perScreenOverrides.value(screenId));
+    return effectiveWidthClientDecides(overridesForScreen(screenId));
 }
 
 bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) const
@@ -429,7 +428,7 @@ bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) con
 WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea,
                                                         StripAxis axis) const
 {
-    return effectiveDefaultWindowHeight(m_perScreenOverrides.value(screenId), workArea, axis);
+    return effectiveDefaultWindowHeight(overridesForScreen(screenId), workArea, axis);
 }
 
 WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
@@ -493,7 +492,7 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
 
 ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QString& screenId) const
 {
-    return effectiveInsertPosition(m_perScreenOverrides.value(screenId));
+    return effectiveInsertPosition(overridesForScreen(screenId));
 }
 
 ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QVariantMap& overrides) const
@@ -509,7 +508,7 @@ ScrollInsertPosition ScrollEngine::effectiveInsertPosition(const QVariantMap& ov
 
 ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QString& screenId) const
 {
-    return effectiveDefaultColumnDisplay(m_perScreenOverrides.value(screenId));
+    return effectiveDefaultColumnDisplay(overridesForScreen(screenId));
 }
 
 ColumnDisplay ScrollEngine::effectiveDefaultColumnDisplay(const QVariantMap& overrides) const
@@ -533,7 +532,7 @@ TabIndicatorParams ScrollEngine::tabIndicatorParamsForScreen(const QString& scre
 
 TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QString& screenId) const
 {
-    return effectiveTabIndicator(m_perScreenOverrides.value(screenId));
+    return effectiveTabIndicator(overridesForScreen(screenId));
 }
 
 TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QVariantMap& overrides) const
