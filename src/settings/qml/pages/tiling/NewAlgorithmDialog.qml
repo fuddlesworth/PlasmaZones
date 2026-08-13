@@ -504,7 +504,7 @@ Kirigami.Dialog {
     Connections {
         function onAlgorithmOperationFailed(reason) {
             // Only show inline error when the dialog is visible — otherwise
-            // LayoutsPage's toast handler will surface the error (avoids double reporting)
+            // LayoutBrowserPage's toast handler will surface the error (avoids double reporting)
             if (root.opened)
                 wizardFooter.errorText = reason;
         }

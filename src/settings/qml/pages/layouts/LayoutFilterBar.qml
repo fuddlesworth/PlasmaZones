@@ -9,13 +9,15 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Filter bar for layout/algorithm grid — group by, sort by, filters, and text search.
  *
- * Options change dynamically based on viewMode (0 = Snapping, 1 = Tiling,
- * 2 = Scrolling Templates).
+ * Options are selected by viewMode (0 = Snapping, 1 = Tiling, 2 = Scrolling
+ * Templates), fixed per LayoutBrowserPage instance. All three modes persist
+ * through the one shared Settings category below, each under its own key
+ * prefix.
  */
 RowLayout {
     id: root
 
-    property int viewMode: 0
+    required property int viewMode
     // ── Exposed state: group / sort ─────────────────────────────────────────
     property int groupByIndex: 0
     property int sortByIndex: 0
@@ -89,10 +91,9 @@ RowLayout {
     readonly property var templateSortModel: [i18n("Name"), i18n("Width Count")]
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
-    property int _previousViewMode: 0
     // Cached "a priority order exists for the current mode" — hasCustom*Order()
-    // is a non-reactive Q_INVOKABLE, so refresh it on completion, mode switch,
-    // and the staged-order signals. Drives the Priority sort option's availability
+    // is a non-reactive Q_INVOKABLE, so refresh it on completion and on the
+    // staged-order signals. Drives the Priority sort option's availability
     // in the GroupSortBar (its last sort entry).
     property bool _hasPriorityOrder: false
 
@@ -259,21 +260,7 @@ RowLayout {
             saveState(viewMode);
     }
     spacing: Kirigami.Units.smallSpacing
-    // Save current mode state, then load the new mode's persisted state.
-    // Guard: skip if called during _resetting to avoid saving partial state.
-    onViewModeChanged: {
-        if (_resetting)
-            return;
-
-        saveState(_previousViewMode);
-        _previousViewMode = viewMode;
-        loadState(viewMode);
-        // The new mode has its own priority order — refresh the Priority sort
-        // option's availability for the mode we just switched to.
-        _refreshHasPriorityOrder();
-    }
     Component.onCompleted: {
-        _previousViewMode = viewMode;
         loadState(viewMode);
         _refreshHasPriorityOrder();
     }

@@ -11,10 +11,12 @@ import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
 /**
- * @brief Layouts / tiling-algorithms listing page.
+ * @brief Shared layout/algorithm/template library browser.
  *
- * Uses the standardized card-container pattern (see ShaderBrowserPage /
- * RulesPage): a SettingsFlickable root whose content is the view switch,
+ * The body of the per-mode library pages: Snapping → Layouts, Tiling →
+ * Library, and Scrolling → Templates each instantiate this with their
+ * fixed `viewMode`. Uses the standardized card-container pattern (see
+ * ShaderBrowserPage / RulesPage): a SettingsFlickable root whose content is
  * the import card, the search row, the filter/group/sort bar, and one
  * collapsible SettingsCard per group, each hosting a responsive Flow of
  * LayoutGridDelegate cards. Rooting on
@@ -38,19 +40,9 @@ SettingsFlickable {
     readonly property real cardHeight: Kirigami.Units.gridUnit * 12
     readonly property real minCardWidth: Kirigami.Units.gridUnit * 14
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms,
-    // 2 = Scrolling Templates
-    property int viewMode: 0
-    // The view modes the switch offers, gated per family's master switch.
-    // Maps switch index → viewMode so hiding a middle tab cannot misroute
-    // the ones after it.
-    readonly property var availableViewModes: {
-        let modes = [0];
-        if (settingsBridge.autotileEnabled)
-            modes.push(1);
-        if (settingsBridge.scrollingEnabled)
-            modes.push(2);
-        return modes;
-    }
+    // 2 = Scrolling Templates. Fixed for the page instance's lifetime —
+    // each hosting page passes its own constant.
+    required property int viewMode
     // Selected layout id (tracked across group cards).
     property string selectedLayoutId: ""
     // Grouped, filtered, sorted layouts — `[{ label, items: [...] }]` from
@@ -296,30 +288,6 @@ SettingsFlickable {
         selectDefaultLayout(root.viewMode);
     }
 
-    // Reset to Snapping Layouts when the shown family's master switch
-    // turns off.
-    Connections {
-        function onAutotileEnabledChanged() {
-            if (!root.settingsBridge.autotileEnabled && root.viewMode === 1) {
-                root.viewMode = 0;
-                root.selectedLayoutId = "";
-                root.rebuildModel();
-                root.selectDefaultLayout(0);
-            }
-        }
-
-        function onScrollingEnabledChanged() {
-            if (!root.settingsBridge.scrollingEnabled && root.viewMode === 2) {
-                root.viewMode = 0;
-                root.selectedLayoutId = "";
-                root.rebuildModel();
-                root.selectDefaultLayout(0);
-            }
-        }
-
-        target: root.settingsBridge
-    }
-
     Connections {
         function onLayoutsChanged() {
             root.rebuildModel();
@@ -342,23 +310,6 @@ SettingsFlickable {
         // — matches the ShaderBrowserPage / RulesPage content rhythm so the
         // filter-row → first-section gap lines up with the other listing pages.
         spacing: Kirigami.Units.largeSpacing
-
-        // ─── View switch (Snapping / Tiling) — only when autotiling is on ──
-        // Centered monitor-switcher-style tiles (shared SegmentedViewSwitch).
-        SegmentedViewSwitch {
-            Layout.fillWidth: true
-            visible: root.availableViewModes.length > 1
-            modes: root.availableViewModes.map(vm => vm === 0 ? i18n("Snapping") : (vm === 1 ? i18n("Tiling") : i18n("Scrolling Templates")))
-            currentIndex: Math.max(0, root.availableViewModes.indexOf(root.viewMode))
-            onIndexChanged: index => {
-                const mode = root.availableViewModes[index];
-                root.viewMode = mode;
-                root.selectedLayoutId = "";
-                // rebuildModel() runs via filterBar.onViewModeChanged →
-                // loadState → filterSettingsChanged for every mode.
-                root.selectDefaultLayout(mode);
-            }
-        }
 
         // ─── Import / Open Folder card (shader-style, drop-zone) ───
         LayoutManageCard {
@@ -536,7 +487,7 @@ SettingsFlickable {
                                 cellHeight: cardFlow._cardWidth * (root.cardHeight / root.minCardWidth)
                                 viewMode: root.viewMode
                                 isSelected: String(modelData.id) === root.selectedLayoutId
-                                // When LayoutsPage is hosted outside Main.qml
+                                // When LayoutBrowserPage is hosted outside Main.qml
                                 // (KCM / future preview) `window.layoutContextMenu`
                                 // is undefined; suppress the right-button mask so a
                                 // missing menu doesn't pretend to exist.
@@ -686,7 +637,7 @@ SettingsFlickable {
             templateEditorDialog.openForEdit(templateId);
         }
 
-        // When LayoutsPage is hosted outside Main.qml (KCM / preview host),
+        // When LayoutBrowserPage is hosted outside Main.qml (KCM / preview host),
         // `window.layoutContextMenu` is undefined; an unguarded target would
         // emit a runtime warning on every signal fire. Disable entirely then.
         enabled: typeof window !== "undefined" && window && window.layoutContextMenu

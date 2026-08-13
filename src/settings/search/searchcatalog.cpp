@@ -87,13 +87,24 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("virtualscreens"),
                             {PhosphorI18n::tr("split"), PhosphorI18n::tr("subdivide"), PhosphorI18n::tr("region"),
                              PhosphorI18n::tr("monitor")});
-    search->setPageKeywords(QStringLiteral("layouts"),
+    // The three per-mode library pages (the old tabbed Layouts page, split).
+    // Each hosts the shared LayoutBrowserPage, whose LayoutManageCard
+    // (import / open folder) carries the manageLayouts anchor on every view.
+    search->setPageKeywords(QStringLiteral("snapping-layouts"),
                             {PhosphorI18n::tr("layout"), PhosphorI18n::tr("zone"), PhosphorI18n::tr("grid"),
-                             PhosphorI18n::tr("preset"), PhosphorI18n::tr("template"),
-                             PhosphorI18n::tr("aspect ratio")});
-    // The LayoutManageCard (import / open folder) carries this anchor on all
-    // three rotating views of the page: layouts, algorithms and templates.
-    addSection(search, QStringLiteral("layouts"), QStringLiteral("manageLayouts"), PhosphorI18n::tr("User layouts"));
+                             PhosphorI18n::tr("preset"), PhosphorI18n::tr("aspect ratio")});
+    addSection(search, QStringLiteral("snapping-layouts"), QStringLiteral("manageLayouts"),
+               PhosphorI18n::tr("User layouts"));
+    search->setPageKeywords(QStringLiteral("tiling-library"),
+                            {PhosphorI18n::tr("algorithm"), PhosphorI18n::tr("script"), PhosphorI18n::tr("luau"),
+                             PhosphorI18n::tr("autotile"), PhosphorI18n::tr("capability")});
+    addSection(search, QStringLiteral("tiling-library"), QStringLiteral("manageLayouts"),
+               PhosphorI18n::tr("User algorithms"));
+    search->setPageKeywords(QStringLiteral("scrolling-templates"),
+                            {PhosphorI18n::tr("template"), PhosphorI18n::tr("column"), PhosphorI18n::tr("width"),
+                             PhosphorI18n::tr("strip")});
+    addSection(search, QStringLiteral("scrolling-templates"), QStringLiteral("manageLayouts"),
+               PhosphorI18n::tr("Your templates"));
 
     // Snapping
     search->setPageKeywords(QStringLiteral("snapping-overlay-behavior"),

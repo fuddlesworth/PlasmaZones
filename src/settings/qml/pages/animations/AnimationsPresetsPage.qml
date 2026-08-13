@@ -100,7 +100,7 @@ SettingsFlickable {
     }
 
     /// ONE page-level dialog for both preset lists, opened with the target
-    /// name captured on `presetName` (the convention LayoutsPage /
+    /// name captured on `presetName` (the convention LayoutBrowserPage /
     /// ShaderSetsPage / ProfilesPage use). The previous shape — a
     /// PromptDialog INSIDE each Repeater delegate — meant any external write
     /// to the profiles dir rebuilt the model and destroyed a delegate with

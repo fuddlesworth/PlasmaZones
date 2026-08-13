@@ -31,7 +31,7 @@ PhosphorUi.SettingsAppWindow {
     // itself and it stays undefined (context properties sit at the bottom
     // of the lookup order). Wire such children from these names instead.
     // Same two names every page already uses for the same capture (see
-    // LayoutsPage / GeneralPage / TilingAlgorithmPage…), so there is one
+    // LayoutBrowserPage / GeneralPage / TilingAlgorithmPage…), so there is one
     // spelling for one idea across the settings tree.
     readonly property var controllerBridge: settingsController
     readonly property var settingsBridge: appSettings

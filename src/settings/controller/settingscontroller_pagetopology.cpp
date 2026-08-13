@@ -115,6 +115,11 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     // border / title-bar appearance moved to the shared top-level Window
     // Appearance page, so Snapping → Window is just the Behavior leaf now.
     static const QString kSnappingSimple = QStringLiteral("snapping-simple");
+    // The per-mode library pages (snapping-layouts / tiling-library /
+    // scrolling-templates) are in these sets only to mirror the registry
+    // topology — they manage a separate store with no staged config state,
+    // so they never contribute a dirty badge.
+    static const QString kSnappingLayouts = QStringLiteral("snapping-layouts");
     static const QString kSnappingZoneSelector = QStringLiteral("snapping-zoneselector");
     static const QString kSnappingWindowBehavior = QStringLiteral("snapping-window-behavior");
     static const QSet<QString> kSnappingConfigChildren{
@@ -123,12 +128,14 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("snapping-shaders"),
     };
     static const QSet<QString> kSnappingAllLeaves = kSnappingOverlayChildren
-        + QSet<QString>{kSnappingSimple, kSnappingZoneSelector, kSnappingWindowBehavior} + kSnappingConfigChildren;
+        + QSet<QString>{kSnappingSimple, kSnappingLayouts, kSnappingZoneSelector, kSnappingWindowBehavior}
+        + kSnappingConfigChildren;
     // Window (Behavior) and Algorithm are standalone top leaves under "tiling"
     // (no category), so they fold directly into the tiling/placement parent
     // sets below. The window border / title-bar appearance moved to the shared
     // top-level Window Appearance page.
     static const QString kTilingSimple = QStringLiteral("tiling-simple");
+    static const QString kTilingLibrary = QStringLiteral("tiling-library");
     static const QString kTilingBehavior = QStringLiteral("tiling-behavior");
     static const QString kTilingAlgorithm = QStringLiteral("tiling-algorithm");
     static const QSet<QString> kTilingConfigChildren{
@@ -136,15 +143,16 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("tiling-shortcuts"),
     };
     static const QSet<QString> kTilingAllLeaves =
-        QSet<QString>{kTilingSimple, kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
+        QSet<QString>{kTilingSimple, kTilingLibrary, kTilingBehavior, kTilingAlgorithm} + kTilingConfigChildren;
     // The scrolling section's leaves; the peer of the two sets above.
     static const QString kScrollingSimple = QStringLiteral("scrolling-simple");
+    static const QString kScrollingTemplates = QStringLiteral("scrolling-templates");
     static const QString kScrollingColumns = QStringLiteral("scrolling-columns");
     static const QString kScrollingTabs = QStringLiteral("scrolling-tabs");
     static const QString kScrollingWindow = QStringLiteral("scrolling-window");
     static const QString kScrollingShortcuts = QStringLiteral("scrolling-shortcuts");
-    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingColumns, kScrollingTabs,
-                                                   kScrollingWindow, kScrollingShortcuts};
+    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingTemplates, kScrollingColumns,
+                                                   kScrollingTabs,   kScrollingWindow,    kScrollingShortcuts};
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -172,7 +180,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         // sidebar's collapsed dirty badge stays cold even when a
         // child page is dirty. Mirrors the registry topology in
         // buildApplicationController() in the sibling _pageregistration.cpp.
-        {QStringLiteral("display"), {QStringLiteral("virtualscreens"), QStringLiteral("layouts")}},
+        {QStringLiteral("display"), {QStringLiteral("virtualscreens")}},
         // No "rules" entry — Rules is a top-level leaf so its
         // dirty state propagates without a parent-bucket intermediary.
     };
@@ -201,7 +209,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // stages reverts through whichever surface owns each key — the manifest
     // pages here, or their own staged machinery for the special surfaces,
     // e.g. animation, decoration, ordering, shortcuts and virtual screens),
-    // the layouts page (separate-store), the controller-mediated ordering/shortcuts
+    // the per-mode library pages (separate-store), the controller-mediated ordering/shortcuts
     // pages, the Animations tree, and the Decoration pages (whose three leaves
     // SHARE the one DecorationProfileTree key — the one-owner invariant above
     // forbids listing a shared key here) are deliberately absent because they
@@ -602,8 +610,8 @@ const QSet<QString>& SettingsController::validPageNames()
     // framework-driven PageHost Loader, keyed off the registry.)
     static const QSet<QString> pages{
         QStringLiteral("overview"),
-        QStringLiteral("layouts"),
         QStringLiteral("snapping-simple"),
+        QStringLiteral("snapping-layouts"),
         QStringLiteral("snapping-overlay-behavior"),
         QStringLiteral("snapping-overlay-appearance"),
         QStringLiteral("snapping-zoneselector"),
@@ -611,10 +619,12 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-shaders"),
         QStringLiteral("snapping-shortcuts"),
         QStringLiteral("tiling-simple"),
+        QStringLiteral("tiling-library"),
         QStringLiteral("tiling-behavior"),
         QStringLiteral("tiling-algorithm"),
         QStringLiteral("tiling-shortcuts"),
         QStringLiteral("scrolling-simple"),
+        QStringLiteral("scrolling-templates"),
         QStringLiteral("scrolling-columns"),
         QStringLiteral("scrolling-tabs"),
         QStringLiteral("scrolling-window"),
@@ -699,10 +709,10 @@ QString SettingsController::dirtyScopeFor(const QString& pageId) const
     // Only a CONDENSED surface hoists. A page that exists in both modes speaks
     // for itself in both, so widening its scope would badge it for edits it
     // cannot show and its own Reset/Discard cannot reach — which is the defect
-    // this function exists to remove, not to relocate. `layouts` is the case
-    // that proves it: in simple mode it is the only visible row under
-    // `display` (virtualscreens is AdvancedOnly), so an ungated walk would
-    // badge Layouts for staged virtual-screen edits it has no control over.
+    // this function exists to remove, not to relocate. `snapping-layouts` is
+    // the case that proves it: it is visible in simple mode alongside the
+    // condensed snapping page, and an ungated walk up to `snapping` would
+    // badge the library for staged snapping edits it has no control over.
     if (registry.entry(pageId).visibility != PhosphorControl::PageRegistry::PageVisibility::SimpleOnly) {
         return pageId;
     }
