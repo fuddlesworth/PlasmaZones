@@ -29,6 +29,10 @@ QVariantMap toVariant(const SearchEntry& e)
     m.insert(QStringLiteral("subtitle"), e.subtitle);
     m.insert(QStringLiteral("icon"), e.icon);
     m.insert(QStringLiteral("kind"), static_cast<int>(e.kind));
+    // 0 = both modes, 1 = simple-only, 2 = advanced-only. The UI badges
+    // non-zero results and switches the mode before navigating to one the
+    // live mode does not show.
+    m.insert(QStringLiteral("mode"), static_cast<int>(e.mode));
     m.insert(QStringLiteral("pageId"), e.pageId);
     m.insert(QStringLiteral("anchor"), e.anchor);
     m.insert(QStringLiteral("address"), e.address());
@@ -42,16 +46,17 @@ SearchController::SearchController(ApplicationController* app, QObject* parent)
     : QObject(parent)
     , m_app(app)
 {
-    // The index is tier-filtered at build time (see buildIndex), so a
-    // simple/advanced flip changes which entries belong in it. Without this
-    // the filter would be computed once and the index would stay stale for
-    // the rest of the session — search would keep returning the previous
-    // mode's set. Wired here rather than in each app because the filter
-    // itself lives in this library.
+    // The index tags every entry with its simple/advanced mode at build time
+    // (see buildIndex), derived from the registry's page tiers. Without this
+    // a setPageVisibility restamp would leave the cached tags stale for the
+    // rest of the session. Wired here rather than in each app because the
+    // classification itself lives in this library.
     if (m_app != nullptr && m_app->registry() != nullptr) {
-        // visibleSetChanged rather than showAdvancedChanged: it covers both a
-        // mode flip and a per-entry setPageVisibility restamp, which are the
-        // two things that change what the tier filter admits.
+        // visibleSetChanged covers both a mode flip and a per-entry
+        // setPageVisibility restamp. Only the restamp changes the tags —
+        // the index is mode-independent, so a plain flip rebuilds to an
+        // identical list and recompute()'s results comparison suppresses
+        // the emit.
         connect(m_app->registry(), &PageRegistry::visibleSetChanged, this, &SearchController::invalidate);
         // The index also derives its Page entries from the catalogue, which
         // GROWS at runtime (post-startup registerPage is a supported path),
@@ -148,11 +153,11 @@ QVector<SearchEntry> SearchController::buildIndex()
     if (m_app == nullptr || m_app->registry() == nullptr) {
         // Defensive fallback (unreachable in practice — the app is alive for the
         // controller's whole lifetime). Return NOTHING rather than the static
-        // entries: without the registry there is no tier filter, so the
-        // condensed simple pages' rows and their advanced twins would ALL
-        // surface at once, which is exactly the duplication the filter below
-        // exists to prevent. An empty result list is the honest answer when the
-        // registry that defines reachability is gone.
+        // entries: without the registry there is no tier information, so every
+        // entry's simple/advanced tag (and with it the UI's auto mode-switch)
+        // would be a guess, and the unregistered-page drop below could not run
+        // at all. An empty result list is the honest answer when the registry
+        // that defines reachability is gone.
         return entries;
     }
 
@@ -192,21 +197,33 @@ QVector<SearchEntry> SearchController::buildIndex()
         return crumbs.join(breadcrumbSeparator());
     };
 
+    // An entry's mode tag from its reachability in each mode. The index is
+    // deliberately NOT filtered by the live mode any more: a result the other
+    // mode owns stays listed, badged with its mode, and the UI switches the
+    // mode before navigating so the app's gate cannot redirect it away.
+    const auto modeFor = [](bool inSimple, bool inAdvanced) {
+        return (inSimple && inAdvanced) ? SearchEntry::Mode::Both
+                                        : (inSimple ? SearchEntry::Mode::SimpleOnly : SearchEntry::Mode::AdvancedOnly);
+    };
+
     for (const PageRegistry::Entry& e : pages) {
         // Only navigable leaves are search targets; category / drill parents
         // carry no QML and aren't a destination.
         if (e.qmlSource.isEmpty()) {
             continue;
         }
-        // Nor is a page the current simple/advanced tier hides: activating
-        // such a result sends the app's mode gate somewhere else entirely,
-        // so the user lands on an unrelated page with no reveal.
-        if (!m_app->registry()->pageAllowedInCurrentMode(e.id)) {
+        // Reachable in NEITHER mode (its own tier and an ancestor's tier
+        // contradict, or the ancestry is unverifiable): no mode switch can
+        // ever land on it, so it is not a destination.
+        const bool inSimple = m_app->registry()->allowedInMode(e.id, false);
+        const bool inAdvanced = m_app->registry()->allowedInMode(e.id, true);
+        if (!inSimple && !inAdvanced) {
             continue;
         }
 
         SearchEntry se;
         se.kind = SearchEntry::Kind::Page;
+        se.mode = modeFor(inSimple, inAdvanced);
         se.pageId = e.id;
         se.title = e.title;
         se.icon = e.iconSource;
@@ -222,18 +239,20 @@ QVector<SearchEntry> SearchController::buildIndex()
     // (e.g. a rule's match summary) is respected. Actions are excluded: they
     // are commands, not page-resident targets, so a page breadcrumb would
     // mislabel them (their pageId is empty anyway).
-    // Same tier gate as the page loop above, shared by the static and
-    // provider loops: a setting/section/entity entry whose host page the
-    // current mode hides is not reachable, and the condensed simple pages
-    // deliberately register rows that duplicate their advanced twins —
-    // without this filter BOTH show up in either mode and one of them
-    // navigates nowhere useful. Actions are dispatched by actionId rather
-    // than by page address (and carry no pageId), so they are always kept.
-    // An entry may also be advanced-only WITHIN a page both modes show (a row
-    // or card the page hides in simple mode). The page-level check cannot see
-    // that, so AND in the entry's own tier: otherwise simple mode offers a
-    // result whose reveal target is collapsed to zero height.
-    const auto tierAllows = [this](const SearchEntry& e) {
+    // Same mode classification as the page loop above, shared by the static
+    // and provider loops: a setting/section/entity entry inherits its host
+    // page's tiers, ANDed with its own `advancedOnly` flag — a row or card
+    // the page renders only in advanced mode must classify AdvancedOnly even
+    // though the page itself shows in both modes, or a simple-mode activation
+    // would skip the mode switch and reveal a row collapsed to zero height.
+    // Returns false to DROP the entry (unregistered / non-navigable page, or
+    // reachable in neither mode); otherwise stamps e.mode and keeps it. The
+    // condensed simple pages deliberately register rows that duplicate their
+    // advanced twins; both surface, distinguished by their mode badge, and
+    // either navigates correctly because the UI switches the mode first.
+    // Actions are dispatched by actionId rather than by page address (and
+    // carry no pageId), so they are always kept, tagged Both.
+    const auto classifyMode = [this, &modeFor](SearchEntry& e) {
         if (e.kind == SearchEntry::Kind::Action || e.pageId.isEmpty()) {
             return true;
         }
@@ -279,14 +298,21 @@ QVector<SearchEntry> SearchController::buildIndex()
             }
             return false;
         }
-        if (!m_app->registry()->pageAllowedInCurrentMode(e.pageId)) {
+        // An advancedOnly row can only be REACHED where its page shows in
+        // advanced mode, so it zeroes the simple leg. An advancedOnly entry
+        // on a SimpleOnly page is an authoring contradiction reachable in
+        // neither mode — dropped like an unreachable page.
+        const bool inSimple = m_app->registry()->allowedInMode(e.pageId, false) && !e.advancedOnly;
+        const bool inAdvanced = m_app->registry()->allowedInMode(e.pageId, true);
+        if (!inSimple && !inAdvanced) {
             return false;
         }
-        return !e.advancedOnly || m_app->registry()->showAdvanced();
+        e.mode = modeFor(inSimple, inAdvanced);
+        return true;
     };
 
     for (SearchEntry e : m_staticEntries) {
-        if (!tierAllows(e)) {
+        if (!classifyMode(e)) {
             continue;
         }
         if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page && e.kind != SearchEntry::Kind::Action) {
@@ -304,7 +330,7 @@ QVector<SearchEntry> SearchController::buildIndex()
         // QPointer. Provider lifetime stays the caller's contract.
         const QVector<SearchEntry> provided = provider->searchEntries();
         for (SearchEntry e : provided) {
-            if (!tierAllows(e)) {
+            if (!classifyMode(e)) {
                 continue;
             }
             if (e.subtitle.isEmpty() && e.kind != SearchEntry::Kind::Page && e.kind != SearchEntry::Kind::Action) {

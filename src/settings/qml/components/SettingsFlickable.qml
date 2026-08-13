@@ -314,10 +314,11 @@ Flickable {
             //     that is on screen — so scroll to and pulse the nearest
             //     ancestor card, whose header carries that toggle, rather than
             //     dead-ending at the top of the page. An advanced-only row
-            //     reached in simple mode also lands here; the search index
-            //     filters those by tier (SearchEntry.advancedOnly), so it is an
-            //     index/row disagreement, and the card is at least a real,
-            //     on-screen destination.
+            //     reached in simple mode also lands here; search switches the
+            //     mode before navigating (SearchEntry.advancedOnly tags the
+            //     result), so reaching one in simple mode is an index/row
+            //     disagreement, and the card is at least a real, on-screen
+            //     destination.
             //   - It has no ancestor card (a bare page-level row): there is
             //     nothing to show it inside, so fall back to the top of the
             //     page, which is at least a real destination.

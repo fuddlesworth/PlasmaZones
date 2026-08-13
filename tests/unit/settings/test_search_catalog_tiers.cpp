@@ -16,9 +16,10 @@
  * This test removes the drift: it parses the QML for anchors that sit inside an
  * advanced-gated block, parses the catalogue for the entries carrying
  * `advancedOnly=`, and fails when the two disagree in either direction. Getting
- * it wrong is user-visible both ways: a missing flag offers a simple-mode search
- * result that reveals a collapsed row, and a spurious one hides a setting the
- * user can actually reach.
+ * it wrong is user-visible both ways: a missing flag skips the search UI's
+ * automatic switch to advanced mode, so a simple-mode activation reveals a
+ * collapsed row; a spurious one badges the result Advanced and needlessly
+ * flips a simple-mode user into advanced mode for a row simple mode shows.
  *
  * Scope limit, stated honestly: attribution is per FILE. An anchor declared
  * inside a shared card component (WindowFilterCard's `windowFiltering`) whose
