@@ -341,5 +341,80 @@ SettingsFlickable {
                 }
             }
         }
+
+        // =================================================================
+        // Width and Height Presets Card
+        // =================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Width and height presets")
+            searchAnchor: "scrollingPresets"
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                // Template precedence note. Plain label rather than an
+                // InlineMessage: this is standing behavior, not a condition
+                // the page can detect (templates resolve per screen, desktop
+                // and activity, the lists here are app-wide).
+                Label {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    text: i18n("These are the steps the cycling shortcuts walk on a screen with no layout template. A screen using a template walks that template's own lists instead, and each list is replaced whole, so a template that carries widths but no heights leaves the heights here in play.")
+                    font: Kirigami.Theme.smallFont
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.Wrap
+                }
+
+                // Section header + full-width card grid, the Virtual Screens
+                // presets shape: the rows carry the titles, the editors get
+                // the card content width with the page's standard margins.
+                SettingsRow {
+                    title: i18n("Column widths")
+                    searchAnchor: "presetColumnWidths"
+                    description: i18n("Percentages of the work area width, cycled in this order by the preset shortcuts")
+                }
+
+                PresetListEditor {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    presets: appSettings.scrollingPresetColumnWidths
+                    cardName: i18nc("accessible name for one preset card, %1 is a percentage", "%1% column width preset")
+                    removeName: i18nc("accessible name for a preset card's remove button, %1 is a percentage", "Remove the %1% column width preset")
+                    addValueName: i18nc("accessible name for the add-preset percentage field", "New column width preset percentage")
+                    addName: i18nc("accessible name for the add-preset button", "Add a column width preset")
+                    commit: function (joined) {
+                        appSettings.scrollingPresetColumnWidths = joined;
+                    }
+                }
+
+                SettingsSeparator {}
+
+                SettingsRow {
+                    title: i18n("Window heights")
+                    searchAnchor: "presetWindowHeights"
+                    description: i18n("Percentages of the work area height, cycled in this order by the preset shortcuts")
+                }
+
+                PresetListEditor {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.bottomMargin: Kirigami.Units.largeSpacing
+                    presets: appSettings.scrollingPresetWindowHeights
+                    cardName: i18nc("accessible name for one preset card, %1 is a percentage", "%1% window height preset")
+                    removeName: i18nc("accessible name for a preset card's remove button, %1 is a percentage", "Remove the %1% window height preset")
+                    addValueName: i18nc("accessible name for the add-preset percentage field", "New window height preset percentage")
+                    addName: i18nc("accessible name for the add-preset button", "Add a window height preset")
+                    vertical: true
+                    commit: function (joined) {
+                        appSettings.scrollingPresetWindowHeights = joined;
+                    }
+                }
+            }
+        }
     }
 }
