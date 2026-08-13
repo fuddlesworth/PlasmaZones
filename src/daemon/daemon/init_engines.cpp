@@ -249,6 +249,14 @@ void Daemon::initEnginesAndWiring()
         return static_cast<int>(layoutSupportForScreen(screenId));
     });
 
+    // Drag-insert selector capability resolver: same router-based liveness
+    // rule as the layout-support resolver above (a disabled scrolling
+    // assignment downgrades and the popup reverts to zone layouts). Cleared
+    // alongside it in stop().
+    m_overlayService->setDragInsertSelectorResolver([this](const QString& screenId) {
+        return dragInsertSelectorForScreen(screenId);
+    });
+
     // Autotile provider. setContextGapProvider is derived-only
     // (AutotileEngine); m_autotileEngine is held as the base
     // PlacementEngineBase, so use the derived `autotileEngine` pointer

@@ -347,6 +347,17 @@ public:
     /// Aliased out of ScrollEngineTypes.h like VisibleTile above.
     using VisibleTileWithRect = ScrollVisibleTileWithRect;
 
+    /// Column-aware strip snapshot for the daemon's strip-mode drag popup.
+    /// One relayout pass, same cost discipline as visibleTilesWithRects.
+    /// Resolves against the drag-insert preview's CAPTURED context key when
+    /// a preview is live for @p screenId (same rule as
+    /// computeDragInsertTargetAtPoint), else the current context — so the
+    /// detached drag window is absent either way. @p excludeWindowId filters
+    /// a drag window that has NOT been detached yet; see the snapshot type's
+    /// index contract in ScrollEngineTypes.h. Implemented in
+    /// engine_snapshot.cpp.
+    ScrollStripSnapshot stripSnapshot(const QString& screenId, const QString& excludeWindowId = QString()) const;
+
     /// visibleTiles and visibleTileRectsRelative in a single resolve.
     ///
     /// Reading the two separately costs TWO layoutParamsForScreen calls and
@@ -370,6 +381,15 @@ public:
     LayoutSupport layoutSupport() const override
     {
         return LayoutSupport::Templates;
+    }
+
+    /// The strip renders in the daemon's drag popup as column cards speaking
+    /// the drag-insert vocabulary (new column in a gap, join on a card, tab
+    /// dock on a tabbed card). Explicit override — load-bearing for the
+    /// drag adaptor's selector gate, not an inherited absence.
+    bool providesDragInsertSelector() const override
+    {
+        return true;
     }
 
     /// Effective preset vocabulary for a screen: the per-screen TEMPLATE

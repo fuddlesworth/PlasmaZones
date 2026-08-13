@@ -840,6 +840,18 @@ public:
         return LayoutSupport::None;
     }
 
+    /// Whether the daemon's edge-triggered drag popup (the zone selector
+    /// surface) should render this engine's DRAG-INSERT vocabulary — strip
+    /// column cards whose gap / join / half targets translate into
+    /// DragInsertTarget — instead of zone layouts, on screens this engine
+    /// owns. Consumed by WindowDragAdaptor's trigger gate and OverlayService's
+    /// model selection. Default false: engine-owned screens suppress the
+    /// popup entirely (the pre-existing autotile behaviour).
+    virtual bool providesDragInsertSelector() const
+    {
+        return false;
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // OPTIONAL: Algorithm / mode identity (override if engine has switchable algorithms)
     // ═══════════════════════════════════════════════════════════════════════════

@@ -251,6 +251,16 @@ public:
     static constexpr int LayoutSupportNone = 0;
     static constexpr int LayoutSupportPlacement = 1;
     static constexpr int LayoutSupportTemplates = 2;
+    /// Whether the LIVE engine on a screen wants the drag popup to render
+    /// its drag-insert vocabulary (strip column cards) instead of zone
+    /// layouts. Mirrors IPlacementEngine::providesDragInsertSelector through
+    /// the router, like the layout-support resolver above. Same
+    /// clear-before-destroy contract.
+    using DragInsertSelectorResolver = std::function<bool(const QString& screenId)>;
+    void setDragInsertSelectorResolver(DragInsertSelectorResolver resolver)
+    {
+        m_dragInsertSelectorResolver = std::move(resolver);
+    }
     PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -972,6 +982,14 @@ private:
     QPointer<ISettings> m_settings;
     ScrollZonesProvider m_scrollZonesProvider;
     LayoutSupportResolver m_layoutSupportResolver;
+    DragInsertSelectorResolver m_dragInsertSelectorResolver;
+    /// Whether the drag popup on this screen renders strip cards (the live
+    /// engine claims providesDragInsertSelector) instead of zone layouts.
+    /// False whenever the resolver is unset — the pre-feature behaviour.
+    bool isStripSelectorScreen(const QString& screenId) const
+    {
+        return m_dragInsertSelectorResolver && m_dragInsertSelectorResolver(screenId);
+    }
     /// Borrowed from Daemon. stop() detaches this even when init never reached start().
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =

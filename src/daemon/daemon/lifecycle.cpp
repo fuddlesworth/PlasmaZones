@@ -727,6 +727,7 @@ void Daemon::stop()
         // Same contract: the layouts-provided resolver captures `this` and
         // reads the router, which is reset before the engines below.
         m_overlayService->setLayoutSupportResolver({});
+        m_overlayService->setDragInsertSelectorResolver({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
