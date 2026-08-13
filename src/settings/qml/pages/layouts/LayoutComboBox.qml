@@ -332,6 +332,16 @@ ComboBox {
     model: []
     onResolvedDefaultIdChanged: rebuildModel()
     onNoneTextChanged: rebuildModel()
+    // Every property _buildItems() reads needs a rebuild trigger, or a
+    // consumer that changes one after construction is left with a stale
+    // model — and, for the two leading rows, a stale updateSelection /
+    // clearSelection invariant, since both branch on which rows exist. The
+    // current consumers all set these once declaratively, so this is closing
+    // an asymmetric surface rather than a live bug.
+    onShowNoneOptionChanged: rebuildModel()
+    onShowExplicitNoneOptionChanged: rebuildModel()
+    onExplicitNoneTextChanged: rebuildModel()
+    onExplicitNoneValueChanged: rebuildModel()
     // Filter change (e.g., viewMode switch) completely replaces model content.
     // Rebuild the model synchronously, but do NOT call updateSelection() here.
     // Both layoutFilter and currentLayoutId depend on the same root property

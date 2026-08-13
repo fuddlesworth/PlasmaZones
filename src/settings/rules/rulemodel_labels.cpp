@@ -387,9 +387,18 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // layouts model behind the lookup carries the native template rows
         // under that same id, so one lookup resolves both.
         const QString layoutId = action.params.value(PhosphorRules::ActionParam::LayoutId).toString();
-        return layoutId.isEmpty()
-            ? PhosphorI18n::tr("Scrolling template")
-            : PhosphorI18n::tr("Scrolling template: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
+        if (layoutId.isEmpty()) {
+            return PhosphorI18n::tr("Scrolling template");
+        }
+        // The reserved "explicitly none" word is not an id the lookup can
+        // resolve, and the fallback renders an unresolvable value verbatim —
+        // which showed the user a template apparently named "none". Every
+        // Monitors-page and picker None pick writes exactly this action, so
+        // it is the common case rather than a malformed one.
+        if (layoutId == PhosphorZones::NoScrollingTemplate) {
+            return PhosphorI18n::tr("Scrolling template: none");
+        }
+        return PhosphorI18n::tr("Scrolling template: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
     if (action.type == ActionType::SetTilingAlgorithm) {
         const QString algo = action.params.value(PhosphorRules::ActionParam::Algorithm).toString();
