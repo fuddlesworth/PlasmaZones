@@ -9,15 +9,17 @@ import "../../js/PresetList.js" as PresetList
 
 /**
  * @brief Scrolling → Columns: what a fresh column and a fresh tile look like
- * (default width and height, display mode), plus the template a scrolling
- * screen falls back to when it has none assigned. One of the three advanced
+ * (default width and height, display mode). One of the three advanced
  * scrolling leaves (Columns / Tabs / Window).
  *
  * The New columns card is per-monitor overridable through its scope chip
- * (the Columns sub-domain of the per-screen scrolling map). The preset
- * vocabularies the cycling shortcuts step through live on templates now, so
- * this page only picks the default template and leaves editing them to the
- * Layouts page.
+ * (the Columns sub-domain of the per-screen scrolling map). Templates own
+ * both the preset vocabularies the cycling shortcuts step through and the
+ * DEFAULT template itself, so neither is edited here: a template is made
+ * default from its card's context menu on the Layouts page, beside the
+ * default zone layout and the default tiling algorithm. Every row on this
+ * page answers only for screens whose template does not override it, which
+ * is what the width and display descriptions say.
  *
  * This page decides WHICH columns open tabbed (the display row on the New
  * columns card). How a tabbed column's indicator is drawn is the Tabs leaf.
