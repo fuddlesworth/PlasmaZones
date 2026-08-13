@@ -339,6 +339,30 @@ private Q_SLOTS:
         QCOMPARE(reg.canonicalizeForLookup(QStringLiteral("renamed|u1")), QStringLiteral("renamed|u1"));
     }
 
+    void remove_subscriberUpsertsThenRemoves_cancelsTheQueuedReplay()
+    {
+        // A re-entrant remove() for an instance already mid-disappearance
+        // CANCELS its queued upsert rather than replaying it. Without that,
+        // a subscriber that re-announces and then immediately closes a window
+        // during one emit would resurrect the record it just asked to drop.
+        // The existing re-entrancy slots only reach this line with an empty
+        // pending map, where the cancel is a no-op and proves nothing.
+        WindowRegistry reg;
+        reg.upsert(QStringLiteral("u1"), make(QStringLiteral("firefox")));
+        QSignalSpy appeared(&reg, &WindowRegistry::windowAppeared);
+        connect(&reg, &WindowRegistry::windowDisappeared, &reg, [&](const QString& instanceId) {
+            reg.upsert(instanceId, make(QStringLiteral("firefox"))); // queues a replay
+            reg.remove(instanceId); // …and cancels it
+        });
+
+        reg.remove(QStringLiteral("u1"));
+
+        QCOMPARE(reg.size(), 0);
+        QVERIFY(!reg.contains(QStringLiteral("u1")));
+        // The cancelled replay never re-announced the window.
+        QCOMPARE(appeared.size(), 0);
+    }
+
     void remove_reannouncingSubscriber_keepsCanonicalOutsideClear()
     {
         // The non-clearing leg of the same gate: outside a bulk clear the
