@@ -98,7 +98,10 @@ private Q_SLOTS:
         SidebarRows rows;
         rows.setRegistry(&r);
         QVERIFY(reg(r, QStringLiteral("home"), {}, QStringLiteral("Home"), QStringLiteral("qrc:/H.qml")));
-        QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}));
+        // Collapsible: a CATEGORY header dissolves in the flat rail (a
+        // non-collapsible drill parent with two leaves keeps a header row —
+        // see flatKeepsAMultiLeafDrillParentAsAnExpandableHeader).
+        QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, /*collapsible=*/true));
         QVERIFY(
             reg(r, QStringLiteral("cat.a"), QStringLiteral("cat"), QStringLiteral("A"), QStringLiteral("qrc:/A.qml")));
         QVERIFY(
@@ -113,6 +116,50 @@ private Q_SLOTS:
             QVERIFY(!v.toMap().value(QStringLiteral("_isDrillParent")).toBool());
             QVERIFY(!v.toMap().value(QStringLiteral("_isCollapsibleHeader")).toBool());
         }
+    }
+
+    void flatKeepsAMultiLeafDrillParentAsAnExpandableHeader()
+    {
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        // A no-QML DRILL parent (non-collapsible) with two navigable leaves —
+        // the flat walk applies the tree walk's 0/1/2+ distinction, so this
+        // keeps a collapsible header row instead of dissolving into two
+        // orphaned sibling rows. A second drill parent with ONE leaf still
+        // dissolves and promotes the lone leaf.
+        QVERIFY(reg(r, QStringLiteral("mode"), {}, QStringLiteral("Mode"), {}));
+        QVERIFY(reg(r, QStringLiteral("mode.general"), QStringLiteral("mode"), QStringLiteral("General"),
+                    QStringLiteral("qrc:/G.qml")));
+        QVERIFY(reg(r, QStringLiteral("mode.library"), QStringLiteral("mode"), QStringLiteral("Library"),
+                    QStringLiteral("qrc:/L.qml")));
+        QVERIFY(reg(r, QStringLiteral("solo"), {}, QStringLiteral("Solo"), {}));
+        QVERIFY(reg(r, QStringLiteral("solo.only"), QStringLiteral("solo"), QStringLiteral("Only"),
+                    QStringLiteral("qrc:/O.qml")));
+
+        const QVariantList out = rows.build(true, QString(), QString(), {}, {});
+        QCOMPARE(idsOf(out),
+                 QStringList({QStringLiteral("mode"), QStringLiteral("mode.general"), QStringLiteral("mode.library"),
+                              QStringLiteral("solo.only")}));
+
+        const QVariantMap header = rowAt(out, 0);
+        QVERIFY(header.value(QStringLiteral("_isCollapsibleHeader")).toBool());
+        QVERIFY(header.value(QStringLiteral("_isExpanded")).toBool());
+        QVERIFY(!header.value(QStringLiteral("hasQmlSource")).toBool());
+        QCOMPARE(header.value(QStringLiteral("_depth")).toInt(), 0);
+        // Children indent one step under the kept header; the promoted lone
+        // leaf stays at the surrounding depth.
+        QCOMPARE(rowAt(out, 1).value(QStringLiteral("_depth")).toInt(), 1);
+        QCOMPARE(rowAt(out, 2).value(QStringLiteral("_depth")).toInt(), 1);
+        QCOMPARE(rowAt(out, 3).value(QStringLiteral("_depth")).toInt(), 0);
+
+        // Collapsing the header swallows its subtree, exactly like a tree
+        // category.
+        QVariantMap collapsed;
+        collapsed.insert(QStringLiteral("mode"), false);
+        const QVariantList closed = rows.build(true, QString(), QString(), collapsed, {});
+        QCOMPARE(idsOf(closed), QStringList({QStringLiteral("mode"), QStringLiteral("solo.only")}));
+        QVERIFY(!rowAt(closed, 0).value(QStringLiteral("_isExpanded")).toBool());
     }
 
     void flatAppliesTitleOverrides()
@@ -140,8 +187,10 @@ private Q_SLOTS:
         SidebarRows rows;
         rows.setRegistry(&r);
         // A top-level entry with a divider, whose seam must fire after the LAST
-        // row its subtree emitted (not immediately after itself).
-        QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, false, /*dividerAfter=*/true));
+        // row its subtree emitted (not immediately after itself). Collapsible,
+        // so it dissolves rather than keeping a drill-parent header row.
+        QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, /*collapsible=*/true,
+                    /*dividerAfter=*/true));
         QVERIFY(reg(r, QStringLiteral("cat.a"), QStringLiteral("cat"), QStringLiteral("A"),
                     QStringLiteral("qrc:/A.qml"), false, /*dividerAfter=*/true));
         QVERIFY(

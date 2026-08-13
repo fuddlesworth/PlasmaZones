@@ -168,11 +168,11 @@ void SettingsController::buildApplicationController()
                QStringLiteral("help-about"));
 
     // Placement children — the three placement modes. They keep their own
-    // drill-down behaviour (collapsible=false) and their inline enable toggles;
-    // only their parent changed from top-level to "placement". Main.qml's
-    // trailing delegate keys those toggles off SIX ids, each parent plus its
-    // "-simple" counterpart, because simple mode renders the condensed leaf's
-    // own pageId in the row the toggle has to stay on.
+    // drill-down behaviour (collapsible=false) and their inline enable
+    // toggles. In simple mode the flat rail keeps each mode as an expandable
+    // header row of its own (a multi-leaf drill parent no longer dissolves —
+    // see SidebarRows' flat walk), so Main.qml's trailing delegate keys the
+    // toggles off exactly these three ids in both modes.
     regVirtual(QStringLiteral("snapping"), QStringLiteral("placement"), PhosphorI18n::tr("Snapping"), QString(),
                QStringLiteral("view-split-left-right"));
     regVirtual(QStringLiteral("tiling"), QStringLiteral("placement"), PhosphorI18n::tr("Tiling"), QString(),
@@ -198,8 +198,10 @@ void SettingsController::buildApplicationController()
     // the everyday decisions (drag triggers + Snap Assist). In advanced mode
     // it is filtered out and the full per-subject tree shows instead; it and
     // Overlay → Behavior are counterparts so mode flips and deep links land
-    // sensibly.
-    regVirtual(QStringLiteral("snapping-simple"), QStringLiteral("snapping"), PhosphorI18n::tr("Snapping"),
+    // sensibly. Titled "General": the flat rail nests it under the mode's
+    // own expandable header row (which carries the mode name and the enable
+    // toggle), the same lead-page shape as animations-general.
+    regVirtual(QStringLiteral("snapping-simple"), QStringLiteral("snapping"), PhosphorI18n::tr("General"),
                QStringLiteral("pages/snapping/SnappingSimplePage.qml"), QStringLiteral("view-split-left-right"),
                /*collapsible=*/false, /*divider=*/true, PV::SimpleOnly, QStringLiteral("snapping-overlay-behavior"));
     // The snapping layout library — the browser formerly tabbed into
@@ -266,7 +268,7 @@ void SettingsController::buildApplicationController()
     // windows). In advanced mode it is filtered out and the full per-page tree
     // shows instead; it and the Algorithm page are counterparts so mode
     // flips and deep links land sensibly.
-    regVirtual(QStringLiteral("tiling-simple"), QStringLiteral("tiling"), PhosphorI18n::tr("Tiling"),
+    regVirtual(QStringLiteral("tiling-simple"), QStringLiteral("tiling"), PhosphorI18n::tr("General"),
                QStringLiteral("pages/tiling/TilingSimplePage.qml"), QStringLiteral("window-duplicate"),
                /*collapsible=*/false,
                /*divider=*/true, PV::SimpleOnly, QStringLiteral("tiling-algorithm"));
@@ -311,7 +313,7 @@ void SettingsController::buildApplicationController()
     // enable toggle). The SimpleOnly condensed page leads, mirroring its two
     // siblings; its advanced counterpart is the Columns page, the first of the
     // Columns / Window split described below.
-    regVirtual(QStringLiteral("scrolling-simple"), QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling"),
+    regVirtual(QStringLiteral("scrolling-simple"), QStringLiteral("scrolling"), PhosphorI18n::tr("General"),
                QStringLiteral("pages/scrolling/ScrollingSimplePage.qml"), QStringLiteral("distribute-horizontal-equal"),
                /*collapsible=*/false,
                /*divider=*/true, PV::SimpleOnly, QStringLiteral("scrolling-columns"));

@@ -190,7 +190,14 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
 
     // ── FLAT ────────────────────────────────────────────────────────────
     // One list of every visible navigable page, walked from the ROOT (drill
-    // scope is meaningless here), depth 0 throughout, in registration order. A
+    // scope is meaningless here), in registration order. Collapsible CATEGORY
+    // headers dissolve — their leaves hoist to the surrounding depth — but a
+    // no-QML DRILL parent applies the tree walk's own 0/1/2+ distinction
+    // (via the same firstTwoNavigableUnder): zero visible descendants emits
+    // nothing, exactly one promotes that lone leaf in the parent's place, and
+    // two or more keep the parent as a collapsible header row with its subtree
+    // indented one step under it. Dissolving those too used to strand sibling
+    // leaves as orphaned rows with no parent to bind them to their section. A
     // TOP-LEVEL entry's hasDividerAfter fires after the last row its SUBTREE
     // emitted, so the tree's section seams survive flattening; leaf-level flags
     // are ignored because they are tuned for the tree rail's within-category
@@ -200,7 +207,11 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
         QSet<QString> seen;
         seen.insert(QString());
 
-        const std::function<void(const QString&, int)> emitLeaves = [&](const QString& parentId, int depth) {
+        // `depth` bounds the registry walk; `rowDepth` is the emitted indent,
+        // which only steps under a kept drill-parent header (dissolved
+        // categories add registry depth but no visual depth).
+        const std::function<void(const QString&, int, int)> emitLeaves = [&](const QString& parentId, int depth,
+                                                                             int rowDepth) {
             if (depth > MaxWalkDepth) {
                 qWarning() << "SidebarRows: page tree nested deeper than" << MaxWalkDepth << "levels under id"
                            << parentId << "— rows below this point are omitted from the rail";
@@ -213,11 +224,25 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
                 }
                 seen.insert(child.id);
                 const int before = out.size();
-                if (!child.qmlSource.isEmpty()) {
-                    out.append(makeRow(child.id, flatTitleOf(child.id, child.title, flatTitleOverrides),
-                                       child.iconSource, true, 0, false, false, false, false));
+
+                bool asHeader = false;
+                if (child.qmlSource.isEmpty() && !child.isCollapsible) {
+                    asHeader = firstTwoNavigableUnder(m_registry, m_registry->visibleChildPages(child.id)).size() > 1;
                 }
-                emitLeaves(child.id, depth + 1);
+                if (asHeader) {
+                    const bool expanded = isExpanded(expandedCategories, child.id);
+                    out.append(makeRow(child.id, flatTitleOf(child.id, child.title, flatTitleOverrides),
+                                       child.iconSource, false, rowDepth, true, false, expanded, false));
+                    if (expanded) {
+                        emitLeaves(child.id, depth + 1, rowDepth + 1);
+                    }
+                } else {
+                    if (!child.qmlSource.isEmpty()) {
+                        out.append(makeRow(child.id, flatTitleOf(child.id, child.title, flatTitleOverrides),
+                                           child.iconSource, true, rowDepth, false, false, false, false));
+                    }
+                    emitLeaves(child.id, depth + 1, rowDepth);
+                }
 
                 const bool emittedAny = out.size() > before;
                 const bool lastIsDivider = !out.isEmpty() && rowIsDivider(out.last().toMap());
@@ -226,7 +251,7 @@ QVariantList SidebarRows::build(bool flattenTree, const QString& searchText, con
                 }
             }
         };
-        emitLeaves(QString(), 0);
+        emitLeaves(QString(), 0, 0);
 
         while (!out.isEmpty() && rowIsDivider(out.last().toMap())) {
             out.removeLast();

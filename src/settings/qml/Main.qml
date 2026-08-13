@@ -810,10 +810,13 @@ PhosphorUi.SettingsAppWindow {
     //      without having to drill in.
     //   2. Inline SettingsSwitch on the snapping / tiling rows so a
     //      whole feature can be disabled without drilling in.
-    // Simple mode gets a completely flat rail: every visible page as one
-    // top-level row, no category headers or drill-downs. Advanced mode
-    // keeps the full tree. The window-appearance leaf is registered as
-    // Decorations → "General"; standing alone it must read "Appearance".
+    // Simple mode gets a mostly flat rail: category headers dissolve and
+    // every visible page becomes a top-level row, except that a multi-leaf
+    // drill parent (the three placement modes, each showing General + its
+    // library leaf) keeps its own expandable header row with the enable
+    // toggle — see SidebarRows' flat walk. Advanced mode keeps the full
+    // tree. The window-appearance leaf is registered as Decorations →
+    // "General"; standing alone it must read "Appearance".
     //
     // The override titles are backed by a QtObject for the same reason
     // aspectRatioLabelsObject is: the map itself is a `property var` bound to
@@ -826,16 +829,6 @@ PhosphorUi.SettingsAppWindow {
         id: flatTitleLabelsObject
 
         readonly property string windowAppearance: i18n("Appearance")
-        // The per-mode library leaves read fine nested under their mode
-        // section, but in the flat rail a bare "Layouts" / "Library" /
-        // "Templates" row floats with no parent to bind it to its mode —
-        // qualify each with its mode name. "Tiling Algorithms" rather than
-        // "Tiling Library": the Library-vs-Algorithm disambiguation only
-        // matters beside the advanced-only Algorithm page, which the flat
-        // rail never shows.
-        readonly property string snappingLayouts: i18n("Snapping Layouts")
-        readonly property string tilingLibrary: i18n("Tiling Algorithms")
-        readonly property string scrollingTemplates: i18n("Scrolling Templates")
     }
 
     // Constant, so declarative alongside its siblings rather than an
@@ -843,10 +836,7 @@ PhosphorUi.SettingsAppWindow {
     sidebar.searchEnabled: false
     sidebar.flattenTree: !settingsController.advancedMode
     sidebar.flatTitleOverrides: ({
-            "window-appearance": flatTitleLabelsObject.windowAppearance,
-            "snapping-layouts": flatTitleLabelsObject.snappingLayouts,
-            "tiling-library": flatTitleLabelsObject.tilingLibrary,
-            "scrolling-templates": flatTitleLabelsObject.scrollingTemplates
+            "window-appearance": flatTitleLabelsObject.windowAppearance
         })
 
     // Simple/advanced mode toggle, pinned at the bottom of the sidebar — it
@@ -952,19 +942,14 @@ PhosphorUi.SettingsAppWindow {
             // "id" to "pageId" (the prior name shadowed the QML id:
             // directive); read `entry.pageId` accordingly.
             readonly property var entry: parent ? parent.modelData : null
-            // Match the drill-parent rows AND their simple-mode counterparts:
-            // simple mode builds the rail through SidebarRows' FLAT walk,
-            // which emits every visible leaf at depth 0, so there the
-            // "Snapping"/"Tiling" rows carry the simple leaf's own pageId.
-            // The inline enable toggles must stay with them.
-            readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
-            readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
-            // Scrolling fully mirrors its two siblings now: a SimpleOnly
-            // condensed leaf (scrolling-simple) in simple mode, and in
-            // advanced mode a real drill parent ("scrolling") over the
-            // View/Columns/Window leaves — the parent row carries the
-            // inline enable toggle, exactly like the snapping/tiling arms.
-            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || entry.pageId === "scrolling-simple")
+            // Match the three placement-mode parent rows. Both rails render
+            // them as rows of their own now — the advanced tree as drill
+            // parents, the simple flat rail as expandable multi-leaf headers
+            // (see SidebarRows' flat walk) — so the inline enable toggle
+            // keys off exactly these three ids in both modes.
+            readonly property bool isSnapping: entry && entry.pageId === "snapping"
+            readonly property bool isTiling: entry && entry.pageId === "tiling"
+            readonly property bool isScrolling: entry && entry.pageId === "scrolling"
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers
