@@ -917,6 +917,8 @@ private:
     /// zone, so the selector must keep showing there.
     bool isSnappingContextInactive(const QString& screenId) const;
     bool isSnappingContextDisabled(const QString& screenId) const;
+    /// Scrolling-axis twin, for the strip popup's refresh/destroy gates.
+    bool isScrollingContextDisabled(const QString& screenId) const;
 
     // PhosphorLayer infrastructure - owns the wlr-layer-shell binding, screen
     // enumeration, and Surface factory for all overlay-style windows. Members

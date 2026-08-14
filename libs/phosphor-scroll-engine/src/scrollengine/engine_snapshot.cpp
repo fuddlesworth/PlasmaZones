@@ -13,6 +13,8 @@
 
 #include <QHash>
 
+#include <utility>
+
 namespace PhosphorScrollEngine {
 
 ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const QString& excludeWindowId) const
@@ -119,18 +121,22 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
         if (!excluded.isEmpty()) {
             bool hasActive = false;
             for (const ScrollStripSnapshotTile& t : std::as_const(outColumn.tiles)) {
-                hasActive = hasActive || t.activeTab;
+                if (t.activeTab) {
+                    hasActive = true;
+                    break;
+                }
             }
-            if (!hasActive && !outColumn.tiles.isEmpty()) {
-                int promote = 0;
+            if (!hasActive) {
+                // First non-minimized survivor; when every survivor is
+                // minimized (embedder-only state), leave the flag unset —
+                // highlighting an invisible tile would be a lie.
                 for (int i = 0; i < outColumn.tiles.size(); ++i) {
                     if (!outColumn.tiles.at(i).minimized) {
-                        promote = i;
+                        outColumn.tiles[i].activeTab = true;
+                        outColumn.tiles[i].hidden = false;
                         break;
                     }
                 }
-                outColumn.tiles[promote].activeTab = true;
-                outColumn.tiles[promote].hidden = false;
             }
         }
         if (ci == state->strip().activeColumnIndex()) {

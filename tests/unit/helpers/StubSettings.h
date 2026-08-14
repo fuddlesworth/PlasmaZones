@@ -18,8 +18,9 @@ namespace PlasmaZones {
 /**
  * @brief Unified stub ISettings for unit tests
  *
- * FILE-SIZE EXCEPTION (sanctioned): one class implementing one very large
- * interface, override for override. It grows in lockstep with ISettings and
+ * FILE-SIZE EXCEPTION (declared by the 2026-08 PR #915 audit): one class
+ * implementing one very large interface, override for override. It grows in
+ * lockstep with ISettings and
  * splitting a stub across headers would buy nothing but a second place for
  * an override to be missing — the drift surface the per-family override
  * comments below exist to prevent.

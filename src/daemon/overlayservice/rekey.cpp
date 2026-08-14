@@ -185,6 +185,9 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     //  - m_scrollDropIndicatorHidePending is handled like its tab twin: the
     //    pending teardown is finished here rather than dropped, and
     //    m_scrollDropIndicatorHideGuard follows the same bump-the-old-key rule.
+    //  - m_stripCardCountCache is DROPPED for both keys rather than moved:
+    //    it is a memo the next trigger-edge probe rebuilds in one call, and
+    //    a stale entry under either key would mis-size the keep-visible band.
     // After the rekey the old key has no removal path of its own (the rekeyed
     // key never reaches unwirePassiveShellSlots, and the by-key clears in
     // updateScrollingScreens name the LIVE screen), so failing to move these
@@ -217,6 +220,8 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         m_scrollDropIndicatorOverrides.insert(newKey, dropOverrideIt.value());
         m_scrollDropIndicatorOverrides.remove(oldKey);
     }
+    m_stripCardCountCache.remove(oldKey);
+    m_stripCardCountCache.remove(newKey);
     // A hide in flight under oldKey cannot simply have its bit dropped. The
     // animator's track is keyed by {surface, item}, neither of which the rekey
     // touches, so the completion still fires — and it captured oldKey, whose

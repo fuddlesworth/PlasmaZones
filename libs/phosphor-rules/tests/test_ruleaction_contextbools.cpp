@@ -10,8 +10,6 @@
 // past the global toggle), so an explicit true read back as absent would
 // silently degrade the force-on half to "follow the globals".
 
-#include "RuleTestHelpers.h"
-
 #include <PhosphorRules/RuleAction.h>
 
 #include <QJsonObject>

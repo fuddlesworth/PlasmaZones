@@ -101,6 +101,11 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
     // shows; a flag flipped on with zero shells shown wedges the guard at
     // function entry (every later show early-returns "already visible").
     bool shownAny = false;
+    // Tracks whether ANY screen passed the enable/engine gates: with every
+    // screen legitimately disabled (both toggles off, no force-on rule) the
+    // silent return below is the expected outcome, not a fault worth a
+    // warning.
+    bool anyEligible = false;
     auto showOnScreen = [this, &shownAny](const QString& screenId, QScreen* physScreen, const QRect& targetGeom) {
         auto* state = ensurePassiveShellFor(screenId, physScreen);
         if (!state || !state->shell || !state->shell->shellSurface() || !state->zoneSelectorSlot()) {
@@ -167,6 +172,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             }
             const QRect geom = mgr->screenGeometry(screenId);
             const QRect targetGeom = geom.isValid() ? geom : physScreen->geometry();
+            anyEligible = true;
             showOnScreen(screenId, physScreen, targetGeom);
         }
     } else {
@@ -190,12 +196,15 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             auto* smgr = m_screenManager;
             QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
                                                                             : screen->geometry();
+            anyEligible = true;
             showOnScreen(screenId, screen, geom);
         }
     }
 
     if (!shownAny) {
-        qCWarning(lcOverlay) << "showZoneSelector: no screen could show the selector";
+        if (anyEligible) {
+            qCWarning(lcOverlay) << "showZoneSelector: no screen could show the selector";
+        }
         return;
     }
     m_zoneSelectorVisible = true;
@@ -282,7 +291,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             // Keep the C++ mirror in step with the blanked slot: a strip
             // target keyed to a screen whose highlight was just cleared
             // would otherwise survive invisibly and still win the drop.
-            if (it.key() == m_selectedStripScreenId) {
+            // screensMatch, not raw ==, per the drop guard's convention.
+            if (PhosphorScreens::ScreenIdentity::screensMatch(it.key(), m_selectedStripScreenId)) {
                 m_selectedStripTarget = {};
                 m_selectedStripScreenId.clear();
             }

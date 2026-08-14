@@ -115,8 +115,11 @@ struct ScrollStripSnapshotTile
     /// column, the trailing tiles lay out below the work area and the
     /// overflow stands (renderers clip). A tile can also resolve a
     /// zero-height rect (the overflow tail squeezed to nothing). Null for
-    /// minimized tiles (they resolve no rect) and for the hidden tabs of a
-    /// tabbed column (a renderer draws those as tabs, not stacked rects).
+    /// minimized tiles (they resolve no rect), for the hidden tabs of a
+    /// tabbed column (a renderer draws those as tabs, not stacked rects),
+    /// and for a tab the exclusion emulation promoted to activeTab (its rect
+    /// was resolved while it was hidden; tab renderers draw segments from
+    /// the flag, not the rect).
     QRectF relRect;
     bool minimized = false;
     /// Non-active tab of a tabbed column. The shipped renderer branches on

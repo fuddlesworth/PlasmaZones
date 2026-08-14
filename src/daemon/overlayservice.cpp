@@ -685,7 +685,12 @@ void OverlayService::updateSettings(ISettings* settings)
     if (m_zoneSelectorVisible && m_settings) {
         bool anyEnabled = false;
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.value().zoneSelectorSlot() && selectorEnabledForScreen(it.key())) {
+            // isVisible, not slot existence: slots are created once and never
+            // nulled on hide (only setVisible(false)), so "has a slot" means
+            // "has ever hosted the popup", which is not the question — same
+            // pairing destroyZoneSelectorWindow uses.
+            auto* slot = it.value().zoneSelectorSlot();
+            if (slot && slot->isVisible() && selectorEnabledForScreen(it.key())) {
                 anyEnabled = true;
                 break;
             }
@@ -735,6 +740,26 @@ bool OverlayService::isSnappingContextDisabled(const QString& screenId) const
     // provider stamp the screen's CURRENT mode would flip the check to the
     // autotile axis on a tiling screen.
     handle.mode = PhosphorZones::AssignmentEntry::Snapping;
+    return m_contextResolver->isDisabled(handle);
+}
+
+bool OverlayService::isScrollingContextDisabled(const QString& screenId) const
+{
+    // The scrolling-axis twin of isSnappingContextDisabled, for the STRIP
+    // popup's refresh/destroy gates: a strip screen is exempt from the
+    // snapping-axis gate (the popup IS the engine surface that gate
+    // protects), but a context the user disabled on the scrolling axis must
+    // still tear the popup down. Same fail-closed / fail-open branches as
+    // the snapping twin, same mirror-sourced handle.
+    if (!m_contextResolver) {
+        return true;
+    }
+    if (screenId.isEmpty()) {
+        return false;
+    }
+    PhosphorContext::ContextHandle handle =
+        m_contextResolver->handleForPersisted(screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity);
+    handle.mode = PhosphorZones::AssignmentEntry::Scrolling;
     return m_contextResolver->isDisabled(handle);
 }
 
@@ -874,8 +899,11 @@ void OverlayService::hideDisabledAndRefresh()
         // applies: isSnappingContextDisabled answers true for a live Templates
         // scrolling screen, but on a strip screen the popup IS the engine
         // surface that gate protects, so the refresh path must not destroy it
-        // on the snapping axis mid-drag.
-        const bool disabled = !isStripSelectorScreen(it.key()) && isSnappingContextDisabled(it.key());
+        // on the snapping axis mid-drag. They still gate on their OWN axis:
+        // a context disabled for scrolling tears the strip popup down here
+        // rather than leaving it to self-heal on the next cursor tick.
+        const bool disabled = isStripSelectorScreen(it.key()) ? isScrollingContextDisabled(it.key())
+                                                              : isSnappingContextDisabled(it.key());
         gates.insert(it.key(), {disabled, isSnappingContextInactive(it.key())});
     }
 
@@ -900,7 +928,8 @@ void OverlayService::hideDisabledAndRefresh()
         const auto gateIt = gates.constFind(screenId);
         const ContextGates g = (gateIt != gates.constEnd())
             ? gateIt.value()
-            : ContextGates{!isStripSelectorScreen(screenId) && isSnappingContextDisabled(screenId),
+            : ContextGates{isStripSelectorScreen(screenId) ? isScrollingContextDisabled(screenId)
+                                                           : isSnappingContextDisabled(screenId),
                            isSnappingContextInactive(screenId)};
         // Visibility-gated like refreshVisibleWindows and the settingsChanged
         // catch-all: showZoneSelector() runs updateZoneSelectorWindow itself
