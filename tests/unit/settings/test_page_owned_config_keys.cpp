@@ -20,10 +20,11 @@
  * to link the whole SettingsController topology TU. This file is that guard.
  * It is scoped to what can be checked cheaply and exactly: the one-owner rule
  * across the WHOLE manifest, and complete coverage of a swept subset of
- * schema groups. The swept set is the four scrolling groups (Scrolling,
- * Scrolling.Behavior, Scrolling.TabIndicator and Scrolling.DropIndicator,
- * whose page manifests are the newest and least exercised) plus Rendering,
- * whose Gpu key once shipped with no manifest owner.
+ * schema groups. The swept set is the five scrolling groups (Scrolling,
+ * Scrolling.Behavior, Scrolling.TabIndicator, Scrolling.DropIndicator and
+ * Scrolling.ZoneSelector, whose page manifests are the newest and least
+ * exercised) plus Rendering, whose Gpu key once shipped with no manifest
+ * owner.
  */
 
 #include <QSet>

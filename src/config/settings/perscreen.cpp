@@ -652,52 +652,11 @@ QStringList PerScreenDetail::perScreenKeyVariants(const QString& screenIdOrName)
 }
 
 using PerScreenDetail::applyPerScreenSetting;
+using PerScreenDetail::clearPerScreenKeySubset;
 using PerScreenDetail::findPerScreenEntry;
 using PerScreenDetail::findPerScreenEntryMutable;
+using PerScreenDetail::hasPerScreenKeySubset;
 using PerScreenDetail::removePerScreenEntry;
-
-// True if the screen's override map holds any key the predicate selects.
-// @p isSubsetKey classifies a key; @p wantMatch picks which side of that
-// classification counts — true for the keys it accepts, false for the
-// complement. Callers pass predicates for whichever sub-domain they own (the
-// gap dimensions, SmartGaps, the algorithm keys), so the parameter cannot be
-// named after any one of them.
-static bool hasPerScreenKeySubset(const QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
-                                  bool (*isSubsetKey)(const QString&), bool wantMatch)
-{
-    auto it = findPerScreenEntry(hash, screenIdOrName);
-    if (it == hash.constEnd())
-        return false;
-    for (auto k = it.value().constBegin(); k != it.value().constEnd(); ++k) {
-        if (isSubsetKey(k.key()) == wantMatch)
-            return true;
-    }
-    return false;
-}
-
-// Remove only the keys the predicate selects from the screen's override map,
-// dropping the whole entry once empty. @p isSubsetKey and @p clearMatch pair
-// exactly as in hasPerScreenKeySubset. Returns true if anything changed.
-static bool clearPerScreenKeySubset(QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
-                                    bool (*isSubsetKey)(const QString&), bool clearMatch)
-{
-    auto it = findPerScreenEntryMutable(hash, screenIdOrName);
-    if (it == hash.end())
-        return false;
-    QVariantMap& overrides = it.value();
-    bool changed = false;
-    for (auto k = overrides.begin(); k != overrides.end();) {
-        if (isSubsetKey(k.key()) == clearMatch) {
-            k = overrides.erase(k);
-            changed = true;
-        } else {
-            ++k;
-        }
-    }
-    if (overrides.isEmpty())
-        hash.erase(it);
-    return changed;
-}
 
 // ── Per-Screen Gap Overrides (config-backed) ─────────────────────────────────
 

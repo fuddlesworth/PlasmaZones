@@ -517,8 +517,8 @@ public:
     /// fails safe (a rule goes unapplied) rather than open (a negated rule
     /// fires everywhere), and a per-branch test cannot be done without
     /// evaluating the tree, which is the thing being avoided. The same applies
-    /// to the assignment / lock / overlay / default-assignment resolvers,
-    /// which are unconditionally mode-agnostic.
+    /// to the assignment / lock / overlay / default-assignment / osd /
+    /// drag-selector resolvers, which are unconditionally mode-agnostic.
     ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                           const QString& mode = QString()) const override;
 
@@ -620,8 +620,8 @@ public:
     /// Stamp the screen-orientation token onto @p query from
     /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
     /// returns nullopt). Used by the two UNCACHED param resolvers
-    /// (tiling-params, scrolling-params); the six cached resolvers (assignment,
-    /// gap, lock, default-assignment, osd, overlay) assign
+    /// (tiling-params, scrolling-params); the seven cached resolvers (assignment,
+    /// gap, lock, default-assignment, osd, drag-selector, overlay) assign
     /// @ref screenOrientationToken directly, because they must fold the very
     /// same token into their cache key and re-reading the provider could hand
     /// the query a token the key does not describe. Either way every
@@ -668,7 +668,7 @@ public:
     }
 
     /// Compose the extra cache-key token a daemon-facing context resolver (gap /
-    /// lock / overlay / default-assignment / osd) passes to
+    /// lock / overlay / default-assignment / osd / drag-selector) passes to
     /// @ref resolveCachedContext, folding in the placement @p modeToken (empty for
     /// every resolver but the gap one), the @p activeLayoutId, the
     /// @p orientationToken and the @p colorSchemeToken. All three of the active
@@ -1368,6 +1368,16 @@ private:
     /// revision. A @c std::nullopt value (no override rule) is cached too.
     mutable QHash<ContextResolveKey, std::optional<bool>> m_contextDefaultAssignmentCache;
     mutable quint64 m_contextDefaultAssignmentCacheRevision = 0;
+
+    /// Shared body of the single-slot boolean resolvers (OSD, drag selector):
+    /// the highest-priority matching context rule carrying @p actionType fills
+    /// the slot, with the lock resolver's structural exclusions and the
+    /// activeLayout / orientation / colour-scheme stamping.
+    /// Impl in layoutregistry_contextresolve.cpp.
+    std::optional<bool> resolveContextBoolSlot(QHash<ContextResolveKey, std::optional<bool>>& cache,
+                                               quint64& cacheRevision, QLatin1StringView actionType,
+                                               const QString& screenId, int virtualDesktop,
+                                               const QString& activity) const;
 
     /// Hot-path cache for @ref resolveContextOsdEnabled, keyed and
     /// revision-invalidated exactly like @c m_contextLockCache. Every OSD

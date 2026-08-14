@@ -213,8 +213,9 @@ void ActionRegistry::registerBuiltinsEngine()
     //    Seeds FALSE: the trigger toggles default ON, so the meaningful fresh
     //    rule is "suppress here" — DefaultLayoutAssignment's rationale.
     //    Category "overlay": it governs the overlay/OSD service surface, not
-    //    an engine. It carries NO tag, deliberately, and is the one action in
-    //    the overlay category without Tag::Overlay: that tag classifies the
+    //    an engine. It carries NO tag, deliberately, and is one of the two
+    //    actions in the overlay category without Tag::Overlay
+    //    (SetDragSelectorEnabled below is the other): that tag classifies the
     //    zone-overlay PROPERTY overrides the overlay service reads through
     //    LayoutRegistry::resolveContextOverlay, and this action is not one of
     //    them — it is read by the daemon's OSD gates through

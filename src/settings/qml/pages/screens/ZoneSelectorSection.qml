@@ -120,8 +120,8 @@ ColumnLayout {
         featureEnabled: root.appSettings.zoneSelectorEnabled
         effectivePosition: root.effectivePosition
         effectiveTriggerDistance: root.effectiveTriggerDistance
-        scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
-        scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
+        scopeHasOverridesMethod: "hasPerScreenZoneSelectorPositionSettings"
+        scopeClearerMethod: "clearPerScreenZoneSelectorPositionSettings"
         writePosition: function (v) {
             root.writeSetting("Position", v, function (gv) {
                 root.appSettings.zoneSelectorPosition = gv;
@@ -150,8 +150,8 @@ ColumnLayout {
             collapsible: true
             scopeEnabled: true
             scopeAppSettings: root.controller
-            scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
-            scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
+            scopeHasOverridesMethod: "hasPerScreenZoneSelectorArrangementSettings"
+            scopeClearerMethod: "clearPerScreenZoneSelectorArrangementSettings"
 
             contentItem: ColumnLayout {
                 spacing: Kirigami.Units.smallSpacing
@@ -254,8 +254,8 @@ ColumnLayout {
         effectivePreviewWidth: root.effectivePreviewWidth
         effectivePreviewHeight: root.effectivePreviewHeight
         scopeHelper: psHelper
-        scopeHasOverridesMethod: "hasPerScreenZoneSelectorSettings"
-        scopeClearerMethod: "clearPerScreenZoneSelectorSettings"
+        scopeHasOverridesMethod: "hasPerScreenZoneSelectorSizeSettings"
+        scopeClearerMethod: "clearPerScreenZoneSelectorSizeSettings"
         writeSizeMode: function (v) {
             root.writeSetting("SizeMode", v, function (gv) {
                 root.appSettings.zoneSelectorSizeMode = gv;

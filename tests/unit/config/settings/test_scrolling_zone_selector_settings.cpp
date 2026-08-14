@@ -201,6 +201,25 @@ private Q_SLOTS:
         QCOMPARE(lockSpy.count(), 1);
     }
 
+    /// The QML-facing *Int adapters silently drop an out-of-range write —
+    /// they are the Q_PROPERTY WRITE path, so a widened or inverted guard
+    /// would let an out-of-domain enum reach the store and the popup.
+    void intAdaptersDropOutOfRangeWrites()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+
+        const int position = settings.scrollingZoneSelectorPositionInt();
+        settings.setScrollingZoneSelectorPositionInt(-1);
+        settings.setScrollingZoneSelectorPositionInt(static_cast<int>(ZoneSelectorPosition::BottomRight) + 1);
+        QCOMPARE(settings.scrollingZoneSelectorPositionInt(), position);
+
+        const int sizeMode = settings.scrollingZoneSelectorSizeModeInt();
+        settings.setScrollingZoneSelectorSizeModeInt(-1);
+        settings.setScrollingZoneSelectorSizeModeInt(static_cast<int>(ZoneSelectorSizeMode::Manual) + 1);
+        QCOMPARE(settings.scrollingZoneSelectorSizeModeInt(), sizeMode);
+    }
+
     /// Writing this family must not disturb the snapping selector's keys: the
     /// two groups share every key spelling and differ only by group.
     void writesDoNotLeakIntoTheSnappingSelector()

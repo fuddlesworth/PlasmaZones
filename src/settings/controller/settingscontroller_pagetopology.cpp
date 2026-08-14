@@ -585,6 +585,9 @@ const QHash<QString, QStringList>& SettingsController::simplePageBackingPages()
     // They deliberately have NO pageOwnedConfigKeys
     // entry — the one-owner invariant there forbids listing a key twice —
     // so dirtiness, Reset, and Discard delegate through this map instead.
+    // Neither selector page (snapping-zoneselector, scrolling-zoneselector)
+    // backs a simple page ON PURPOSE: the drag popups are advanced-tier
+    // surfaces in both families, so Simple mode carries no card for them.
     // animations-simple is absent: it rides the shared animation staging
     // domain like every other animation leaf.
     //

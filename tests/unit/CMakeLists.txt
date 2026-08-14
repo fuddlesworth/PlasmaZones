@@ -530,23 +530,28 @@ add_executable(test_wayland_session_check daemon/test_wayland_session_check.cpp)
 target_link_libraries(test_wayland_session_check PRIVATE Qt6::Test Qt6::Core)
 add_test(NAME test_wayland_session_check COMMAND test_wayland_session_check)
 
+# Strip-mode zone selector: pure hit-test classification (header-only
+# helper, no QML scene) and the strip-card wire shape. The hit-test test
+# links Qt6::Test + Qt6::Core only, same convention as
+# test_wayland_session_check above (header-only logic needs the include
+# path, not plasmazones_core). The serializer test links
+# PhosphorScrollEngine explicitly for the snapshot value types — the
+# transitive pull through plasmazones_core is coincidental, per the macro
+# header's caveat.
+add_executable(test_strip_selector_hittest daemon/test_strip_selector_hittest.cpp)
+target_link_libraries(test_strip_selector_hittest PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_strip_selector_hittest COMMAND test_strip_selector_hittest)
+add_executable(test_stripcard_serialize daemon/test_stripcard_serialize.cpp)
+target_link_libraries(test_stripcard_serialize
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_stripcard_serialize COMMAND test_stripcard_serialize)
+
 # Phase-5 SurfaceAnimator scope-prefix policy. Pins down the
 # per-instance scope construction in osd.cpp / selector.cpp /
 # snapassist.cpp so a divergence from the PhosphorRoles base scopePrefix
 # doesn't silently fall back to the empty default config in release
 # builds. Replaces the debug-only Q_ASSERT_X in createZoneSelectorWindow
 # with a release-built check that covers every overlay role.
-# Strip-mode zone selector: pure hit-test classification (header-only
-# helper, no QML scene) and the strip-card wire shape. The serializer test
-# links PhosphorScrollEngine explicitly for the snapshot value types — the
-# transitive pull through plasmazones_core is coincidental, per the macro
-# header's caveat.
-p_add_test(test_strip_selector_hittest daemon/test_strip_selector_hittest.cpp)
-add_executable(test_stripcard_serialize daemon/test_stripcard_serialize.cpp)
-target_link_libraries(test_stripcard_serialize
-    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorScrollEngine::PhosphorScrollEngine)
-add_test(NAME test_stripcard_serialize COMMAND test_stripcard_serialize)
-
 add_executable(test_overlay_scope_prefixes daemon/test_overlay_scope_prefixes.cpp)
 target_link_libraries(test_overlay_scope_prefixes
     PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Quick PhosphorLayer::PhosphorLayer

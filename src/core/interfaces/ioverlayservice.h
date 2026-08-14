@@ -148,10 +148,12 @@ public:
 
     // Strip-mode selector selection tracking (scrolling screens whose engine
     // provides the drag-insert selector). The target is an int-only mirror
-    // of IPlacementEngine::DragInsertTarget — columnIndex/newColumn map to
-    // primary/newSlot, tileIndex to secondary (-1 appends) — kept engine-
-    // header-free like the rest of this interface. Exactly one of the zone
-    // triple and this target is ever set; clearSelectedZone clears both.
+    // of IPlacementEngine::DragInsertTarget's index fields — columnIndex/
+    // newColumn map to primary/newSlot, tileIndex to secondary (-1 appends);
+    // the presentation-only leadingEdge tag is deliberately not carried
+    // (commit ignores it) — kept engine-header-free like the rest of this
+    // interface. Exactly one of the zone triple and this target is ever set;
+    // clearSelectedZone clears both.
     // Default-implemented as "no strip selection" so implementations without
     // strip support stay source-compatible.
     struct SelectorStripTarget

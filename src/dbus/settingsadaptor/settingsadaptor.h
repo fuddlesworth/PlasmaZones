@@ -126,8 +126,8 @@ public Q_SLOTS:
 
     QStringList getSettingKeys();
 
-    // Per-screen settings (categories: "autotile", "snapping", "zoneSelector",
-    // "scrollingZoneSelector")
+    // Per-screen settings (categories: "autotile", "scrolling", "snapping",
+    // "zoneSelector", "scrollingZoneSelector")
     void setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                              const QDBusVariant& value);
     void clearPerScreenSettings(const QString& screenId, const QString& category);
@@ -151,9 +151,9 @@ public Q_SLOTS:
      * setSettings) — consistent with single-key behavior.
      *
      * @param screenId Virtual or physical screen identifier
-     * @param category "autotile" | "snapping" | "zoneSelector" | "scrollingZoneSelector". NOTE: "snapping" is
-     *                 READ-ONLY (it projects the config's per-monitor gaps), so a write to
-     *                 it is rejected and does nothing. Write those through "autotile".
+     * @param category "autotile" | "scrolling" | "snapping" | "zoneSelector" | "scrollingZoneSelector". NOTE:
+     * "snapping" is READ-ONLY (it projects the config's per-monitor gaps), so a write to it is rejected and does
+     * nothing. Write those through "autotile".
      * @param values   Map of key -> value. QDBusArgument-wrapped values
      *                 from the wire are unwrapped via DBusVariantUtils
      *                 before reaching the setter.

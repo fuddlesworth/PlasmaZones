@@ -284,4 +284,106 @@ bool Settings::hasPerScreenScrollingZoneSelectorSettings(const QString& screenId
         != m_perScreenScrollingZoneSelectorSettings.constEnd();
 }
 
+// ── Per-card sub-domains of the two selector stores ─────────────────────────
+// Each settings card's scope chip drives its OWN key subset (the invariant
+// the autotile Algorithm pair states: "the card's dot/reset only touches its
+// own keys"), so resetting the Position card cannot silently discard the
+// Preview Size card's overrides or the reverse. The three predicates
+// partition the nine-key vocabulary; the strip store simply never holds an
+// arrangement key.
+
+namespace {
+
+bool isSelectorPositionKey(const QString& key)
+{
+    namespace K = ZoneSelectorConfigKey;
+    return key == QLatin1String(K::Position) || key == QLatin1String(K::TriggerDistance);
+}
+
+bool isSelectorArrangementKey(const QString& key)
+{
+    namespace K = ZoneSelectorConfigKey;
+    return key == QLatin1String(K::LayoutMode) || key == QLatin1String(K::GridColumns)
+        || key == QLatin1String(K::MaxRows);
+}
+
+bool isSelectorSizeKey(const QString& key)
+{
+    namespace K = ZoneSelectorConfigKey;
+    return key == QLatin1String(K::SizeMode) || key == QLatin1String(K::PreviewWidth)
+        || key == QLatin1String(K::PreviewHeight) || key == QLatin1String(K::PreviewLockAspect);
+}
+
+} // namespace
+
+bool Settings::hasPerScreenZoneSelectorPositionSettings(const QString& screenIdOrName) const
+{
+    return PerScreenDetail::hasPerScreenKeySubset(m_perScreenZoneSelectorSettings, screenIdOrName,
+                                                  isSelectorPositionKey, /*wantMatch=*/true);
+}
+void Settings::clearPerScreenZoneSelectorPositionSettings(const QString& screenIdOrName)
+{
+    if (PerScreenDetail::clearPerScreenKeySubset(m_perScreenZoneSelectorSettings, screenIdOrName, isSelectorPositionKey,
+                                                 /*clearMatch=*/true)) {
+        Q_EMIT perScreenZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenZoneSelectorArrangementSettings(const QString& screenIdOrName) const
+{
+    return PerScreenDetail::hasPerScreenKeySubset(m_perScreenZoneSelectorSettings, screenIdOrName,
+                                                  isSelectorArrangementKey, /*wantMatch=*/true);
+}
+void Settings::clearPerScreenZoneSelectorArrangementSettings(const QString& screenIdOrName)
+{
+    if (PerScreenDetail::clearPerScreenKeySubset(m_perScreenZoneSelectorSettings, screenIdOrName,
+                                                 isSelectorArrangementKey, /*clearMatch=*/true)) {
+        Q_EMIT perScreenZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenZoneSelectorSizeSettings(const QString& screenIdOrName) const
+{
+    return PerScreenDetail::hasPerScreenKeySubset(m_perScreenZoneSelectorSettings, screenIdOrName, isSelectorSizeKey,
+                                                  /*wantMatch=*/true);
+}
+void Settings::clearPerScreenZoneSelectorSizeSettings(const QString& screenIdOrName)
+{
+    if (PerScreenDetail::clearPerScreenKeySubset(m_perScreenZoneSelectorSettings, screenIdOrName, isSelectorSizeKey,
+                                                 /*clearMatch=*/true)) {
+        Q_EMIT perScreenZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenScrollingZoneSelectorPositionSettings(const QString& screenIdOrName) const
+{
+    return PerScreenDetail::hasPerScreenKeySubset(m_perScreenScrollingZoneSelectorSettings, screenIdOrName,
+                                                  isSelectorPositionKey, /*wantMatch=*/true);
+}
+void Settings::clearPerScreenScrollingZoneSelectorPositionSettings(const QString& screenIdOrName)
+{
+    if (PerScreenDetail::clearPerScreenKeySubset(m_perScreenScrollingZoneSelectorSettings, screenIdOrName,
+                                                 isSelectorPositionKey, /*clearMatch=*/true)) {
+        Q_EMIT perScreenScrollingZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenScrollingZoneSelectorSizeSettings(const QString& screenIdOrName) const
+{
+    return PerScreenDetail::hasPerScreenKeySubset(m_perScreenScrollingZoneSelectorSettings, screenIdOrName,
+                                                  isSelectorSizeKey, /*wantMatch=*/true);
+}
+void Settings::clearPerScreenScrollingZoneSelectorSizeSettings(const QString& screenIdOrName)
+{
+    if (PerScreenDetail::clearPerScreenKeySubset(m_perScreenScrollingZoneSelectorSettings, screenIdOrName,
+                                                 isSelectorSizeKey, /*clearMatch=*/true)) {
+        Q_EMIT perScreenScrollingZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 } // namespace PlasmaZones

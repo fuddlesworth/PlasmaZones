@@ -140,6 +140,36 @@ bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenN
     return m_settings.hasPerScreenZoneSelectorSettings(screenName);
 }
 
+bool SettingsController::hasPerScreenZoneSelectorPositionSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenZoneSelectorPositionSettings(screenName);
+}
+
+void SettingsController::clearPerScreenZoneSelectorPositionSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenZoneSelectorPositionSettings(screenName);
+}
+
+bool SettingsController::hasPerScreenZoneSelectorArrangementSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenZoneSelectorArrangementSettings(screenName);
+}
+
+void SettingsController::clearPerScreenZoneSelectorArrangementSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenZoneSelectorArrangementSettings(screenName);
+}
+
+bool SettingsController::hasPerScreenZoneSelectorSizeSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenZoneSelectorSizeSettings(screenName);
+}
+
+void SettingsController::clearPerScreenZoneSelectorSizeSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenZoneSelectorSizeSettings(screenName);
+}
+
 // ── Per-screen strip selector overrides ──────────────────────────────────
 
 QVariantMap SettingsController::getPerScreenScrollingZoneSelectorSettings(const QString& screenName) const
@@ -161,6 +191,26 @@ void SettingsController::clearPerScreenScrollingZoneSelectorSettings(const QStri
 bool SettingsController::hasPerScreenScrollingZoneSelectorSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenScrollingZoneSelectorSettings(screenName);
+}
+
+bool SettingsController::hasPerScreenScrollingZoneSelectorPositionSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenScrollingZoneSelectorPositionSettings(screenName);
+}
+
+void SettingsController::clearPerScreenScrollingZoneSelectorPositionSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenScrollingZoneSelectorPositionSettings(screenName);
+}
+
+bool SettingsController::hasPerScreenScrollingZoneSelectorSizeSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenScrollingZoneSelectorSizeSettings(screenName);
+}
+
+void SettingsController::clearPerScreenScrollingZoneSelectorSizeSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenScrollingZoneSelectorSizeSettings(screenName);
 }
 
 } // namespace PlasmaZones

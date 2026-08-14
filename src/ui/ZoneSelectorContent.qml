@@ -428,6 +428,12 @@ Item {
                                 textColor: root.textColor
                                 activeOpacity: root.activeOpacity
                                 inactiveOpacity: root.inactiveOpacity
+                                fontFamily: root.fontFamily
+                                fontSizeScale: root.fontSizeScale
+                                fontWeight: root.fontWeight
+                                fontItalic: root.fontItalic
+                                fontUnderline: root.fontUnderline
+                                fontStrikeout: root.fontStrikeout
                                 selectedHalf: root.selectedStripColumn === index ? root.selectedStripHalf : -1
                             }
                         }
@@ -435,6 +441,13 @@ Item {
 
                     // Insert-bar highlight for the selected gap. Boundary i
                     // sits before card i; boundary N trails the last card.
+                    // LTR-ONLY BY DESIGN, like the rest of this layer (no
+                    // LayoutMirroring opt-in): the x arithmetic below is
+                    // index-based and would NOT mirror, while the Row and the
+                    // C++ objectName read-back would — enabling mirroring
+                    // without deriving each bar's x from the adjacent cards'
+                    // mapped rects would point the visible bar and the actual
+                    // drop target at DIFFERENT gaps.
                     Repeater {
                         model: root.stripMode ? root.stripColumns.length + 1 : 0
 
@@ -462,7 +475,7 @@ Item {
                         anchors.centerIn: parent
                         text: i18nc("@info strip selector empty state", "No columns yet. Drop here to start the strip.")
                         color: Kirigami.Theme.disabledTextColor
-                        visible: root.stripMode && root.stripColumns.length === 0
+                        visible: root.stripColumns.length === 0 // stripLayer already gates on stripMode
                     }
                 }
 

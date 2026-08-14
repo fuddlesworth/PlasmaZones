@@ -38,7 +38,8 @@ set(plasmazones_settings_SRCS
     controller/settingscontroller_session.cpp
     # Whole-config export/import + KZones import (split from _session).
     controller/settingscontroller_transfer.cpp
-    # Per-screen autotile/scrolling/zone-selector/gap override wrappers.
+    # Per-screen autotile/scrolling/zone-selector/strip-selector/gap
+    # override wrappers.
     controller/settingscontroller_perscreen.cpp
     controller/settingscontroller_ordering.cpp
     # Virtual-screen lifecycle methods (getVirtualScreenConfig +
@@ -313,7 +314,6 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/snapping/SnappingOverlayBehaviorPage.qml
         qml/pages/snapping/SnappingOverlayAppearancePage.qml
         qml/pages/snapping/SnappingZoneSelectorPage.qml
-        qml/pages/scrolling/ScrollingZoneSelectorPage.qml
         qml/pages/snapping/SnappingWindowBehaviorPage.qml
         qml/pages/tiling/TilingBehaviorPage.qml
         qml/pages/tiling/TilingAlgorithmPage.qml
@@ -327,9 +327,11 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/snapping/SnappingDragTriggerRow.qml
         qml/pages/tiling/TilingWindowHandlingCard.qml
         qml/pages/tiling/TilingFocusCard.qml
-        # Scrolling: the condensed simple page, the three advanced leaves
-        # (Columns / Tabs / Window), the quick-shortcuts page binding
-        # templates to the quick digits, and the cards both surfaces share.
+        # Scrolling: the condensed simple page, the advanced leaves
+        # (Columns / Tabs / Window / Strip Selector), the quick-shortcuts
+        # page binding templates to the quick digits, and the cards both
+        # surfaces share.
+        qml/pages/scrolling/ScrollingZoneSelectorPage.qml
         qml/pages/scrolling/ScrollingSimplePage.qml
         qml/pages/scrolling/ScrollingColumnsPage.qml
         qml/pages/scrolling/ScrollingTabsPage.qml

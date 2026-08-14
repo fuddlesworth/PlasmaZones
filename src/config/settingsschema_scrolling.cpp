@@ -12,6 +12,8 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
+#include "core/types/enums.h"
+
 #include "settingsschemachoices.h"
 #include "settingsschema_p.h"
 

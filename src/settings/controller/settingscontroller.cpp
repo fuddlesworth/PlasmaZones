@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): the SettingsController constructor and
+// destructor — one long, ordered wiring/teardown pair whose declaration-order
+// and disconnect-before-reset contracts reference each other in sequence
+// (see the in-body banners). Everything separable has already moved to the
+// settingscontroller_*.cpp siblings; the natural next split, the rule-label
+// resolver installation block, belongs in a _rulelabels.cpp when it is next
+// touched substantively.
+
 #include "settingscontroller.h"
 
 #include "settings/pages/editorpagecontroller.h"

@@ -99,8 +99,8 @@ ColumnLayout {
         featureEnabled: root.appSettings.scrollingZoneSelectorEnabled
         effectivePosition: root.effectivePosition
         effectiveTriggerDistance: root.effectiveTriggerDistance
-        scopeHasOverridesMethod: "hasPerScreenScrollingZoneSelectorSettings"
-        scopeClearerMethod: "clearPerScreenScrollingZoneSelectorSettings"
+        scopeHasOverridesMethod: "hasPerScreenScrollingZoneSelectorPositionSettings"
+        scopeClearerMethod: "clearPerScreenScrollingZoneSelectorPositionSettings"
         writePosition: function (v) {
             root.writeSetting("Position", v, function (gv) {
                 root.appSettings.scrollingZoneSelectorPosition = gv;
@@ -122,8 +122,8 @@ ColumnLayout {
         effectivePreviewWidth: root.effectivePreviewWidth
         effectivePreviewHeight: root.effectivePreviewHeight
         scopeHelper: psHelper
-        scopeHasOverridesMethod: "hasPerScreenScrollingZoneSelectorSettings"
-        scopeClearerMethod: "clearPerScreenScrollingZoneSelectorSettings"
+        scopeHasOverridesMethod: "hasPerScreenScrollingZoneSelectorSizeSettings"
+        scopeClearerMethod: "clearPerScreenScrollingZoneSelectorSizeSettings"
         writeSizeMode: function (v) {
             root.writeSetting("SizeMode", v, function (gv) {
                 root.appSettings.scrollingZoneSelectorSizeMode = gv;

@@ -15,12 +15,18 @@
 //   columnIndex i, half 0 → join column i at the TOP (tile index 0).
 //   columnIndex i, half 1 → join column i at the BOTTOM (append).
 //   columnIndex i, half 2 → whole-card join (tabbed column tab dock).
+//                  A distinct hit for highlight purposes only: the consumer
+//                  encodes it as the same append (-1) DragInsertTarget as
+//                  half 1, because appending to a Tabbed column IS the tab
+//                  dock — there is no separate verb.
 //
 // Gaps are checked FIRST and derived from the cards themselves — the QML
 // row renders no width-taking gap items, so the space between two adjacent
 // cards (inflated by `gapInflate` into each neighbour, so the thin spacing
 // strip is actually hittable) is the boundary band. The leading and
-// trailing boundaries inflate symmetrically around the outer card edges.
+// trailing boundaries band around the outer card edges (raw gapInflate on
+// the outside, the clamped per-card inflate on the inside — on a narrow
+// card the two widths differ on purpose, keeping the middle hittable).
 
 #include <QPointF>
 #include <QRectF>
@@ -43,10 +49,17 @@ struct StripSelectorHit
     }
 };
 
-/// @p cardRects is index-aligned with the snapshot's columns; a null/empty
-/// rect means QML has not laid that card out (scrolled out or first frame)
-/// and it can be neither hit nor used as a gap edge. @p tabbed is the
-/// per-card tabbed flag, same indexing. @p gapInflate is how far a gap band
+/// @p cardRects is index-aligned with the snapshot's columns, and the rects
+/// must be monotonically increasing in x — the interior-band math assumes
+/// index order is visual left-to-right order (rects out of order compute
+/// negative-width bands, which silently never match). A null/empty rect
+/// means QML has not laid that card out (scrolled out or first frame) and
+/// it can be neither hit nor used as a gap edge; an un-laid-out card in the
+/// MIDDLE of the row therefore silences both of its adjacent boundaries —
+/// latent by construction, since a horizontally scrolled row only ever
+/// un-lays the ends. @p tabbed is the per-card tabbed flag, same indexing
+/// (a shorter vector deliberately degrades the surplus cards to top/bottom
+/// halves rather than asserting). @p gapInflate is how far a gap band
 /// reaches into each neighbouring card (clamped so a card always keeps a
 /// hittable middle).
 inline StripSelectorHit classifyStripSelectorPoint(const QVector<QRectF>& cardRects, const QVector<bool>& tabbed,
@@ -80,8 +93,9 @@ inline StripSelectorHit classifyStripSelectorPoint(const QVector<QRectF>& cardRe
             return hit;
         }
     }
-    // Outer boundaries: symmetric bands around the first laid-out card's
-    // left edge and the last one's right edge.
+    // Outer boundaries: bands around the first laid-out card's left edge
+    // and the last one's right edge (raw gapInflate outside, clamped
+    // inflate inside — see the header note).
     int first = 0;
     while (first < count && !laidOut(first)) {
         ++first;

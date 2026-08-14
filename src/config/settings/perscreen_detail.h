@@ -119,6 +119,49 @@ inline bool applyPerScreenSetting(QHash<QString, QVariantMap>& hash, const QStri
     return true;
 }
 
+/// Whether the screen's override map holds any key the predicate selects
+/// (@p wantMatch true) or any key OUTSIDE the predicate (@p wantMatch false).
+/// The predicate answers a pure key-classification; callers pass whichever
+/// sub-domain they own, so the parameter cannot be named after any one of
+/// them. Hoisted from perscreen.cpp so the selector TU's sub-domain pairs
+/// share the one definition.
+inline bool hasPerScreenKeySubset(const QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
+                                  bool (*isSubsetKey)(const QString&), bool wantMatch)
+{
+    auto it = findPerScreenEntry(hash, screenIdOrName);
+    if (it == hash.constEnd())
+        return false;
+    for (auto k = it.value().constBegin(); k != it.value().constEnd(); ++k) {
+        if (isSubsetKey(k.key()) == wantMatch)
+            return true;
+    }
+    return false;
+}
+
+/// Remove only the keys the predicate selects from the screen's override map,
+/// dropping the whole entry once empty. @p isSubsetKey and @p clearMatch pair
+/// exactly as in hasPerScreenKeySubset. Returns true if anything changed.
+inline bool clearPerScreenKeySubset(QHash<QString, QVariantMap>& hash, const QString& screenIdOrName,
+                                    bool (*isSubsetKey)(const QString&), bool clearMatch)
+{
+    auto it = findPerScreenEntryMutable(hash, screenIdOrName);
+    if (it == hash.end())
+        return false;
+    QVariantMap& overrides = it.value();
+    bool changed = false;
+    for (auto k = overrides.begin(); k != overrides.end();) {
+        if (isSubsetKey(k.key()) == clearMatch) {
+            k = overrides.erase(k);
+            changed = true;
+        } else {
+            ++k;
+        }
+    }
+    if (overrides.isEmpty())
+        hash.erase(it);
+    return changed;
+}
+
 // ── Zone-selector families (perscreen_selector.cpp) ─────────────────────────
 // The load/save passes live in perscreen.cpp and drive loadPerScreenGroup with
 // these, so the tables and their validators are visible across the split.

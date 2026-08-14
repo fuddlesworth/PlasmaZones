@@ -464,15 +464,28 @@ ContextGapOverride LayoutRegistry::resolveContextGaps(const QString& screenId, i
             // qRound(toDouble()), not toInt(): QJsonValue::toInt() returns its
             // default for a non-whole number, so a hand-edited `"value": 8.5`
             // would silently resolve gap 0 while the load validator (a plain
-            // range check) accepts it.
+            // range check) accepts it. The isDouble()/isBool() gates are
+            // unreachable hardening, matching the overlay arm below: the
+            // store gates (RuleAction::fromJson and Rule::isValid run the
+            // descriptor validators) are the real guarantee that no
+            // malformed payload reaches here, and the correct degradation if
+            // one ever did is a DISENGAGED optional (fall through to the
+            // per-layout tier), never an engaged 0 or false at the top of
+            // the cascade.
             const auto readInt = [&winningAction](QLatin1StringView slot, std::optional<int>& out) {
                 if (const auto action = winningAction(slot)) {
-                    out = qRound(action->params.value(PWR::ActionParam::Value).toDouble());
+                    const QJsonValue v = action->params.value(PWR::ActionParam::Value);
+                    if (v.isDouble()) {
+                        out = qRound(v.toDouble());
+                    }
                 }
             };
             const auto readBool = [&winningAction](QLatin1StringView slot, std::optional<bool>& out) {
                 if (const auto action = winningAction(slot)) {
-                    out = action->params.value(PWR::ActionParam::Value).toBool();
+                    const QJsonValue v = action->params.value(PWR::ActionParam::Value);
+                    if (v.isBool()) {
+                        out = v.toBool();
+                    }
                 }
             };
             readInt(PWR::ActionSlot::InnerGap, gaps.innerGap);
@@ -543,7 +556,13 @@ bool LayoutRegistry::resolveContextLocked(const QString& screenId, int virtualDe
             }
             for (const PWR::RuleAction& action : rule->actions) {
                 if (action.type == QLatin1String(PWR::ActionType::LockContext)) {
-                    return action.params.value(PWR::ActionParam::Value).toBool();
+                    // isBool() gate: unreachable hardening (the store gates
+                    // validate the payload); the correct degradation for a
+                    // hypothetical malformed value is "no rule lock".
+                    const QJsonValue v = action.params.value(PWR::ActionParam::Value);
+                    if (v.isBool()) {
+                        return v.toBool();
+                    }
                 }
             }
             return false;
@@ -603,7 +622,78 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
             if (rule != nullptr) {
                 for (const PWR::RuleAction& action : rule->actions) {
                     if (action.type == QLatin1String(PWR::ActionType::DefaultLayoutAssignment)) {
-                        return action.params.value(PWR::ActionParam::Value).toBool();
+                        // isBool() gate: unreachable hardening (the store
+                        // gates validate the payload); a malformed value must
+                        // fall through to the global setting, not resolve an
+                        // engaged false.
+                        const QJsonValue v = action.params.value(PWR::ActionParam::Value);
+                        if (v.isBool()) {
+                            return v.toBool();
+                        }
+                    }
+                }
+            }
+            return std::nullopt;
+        });
+}
+
+std::optional<bool> LayoutRegistry::resolveContextBoolSlot(QHash<ContextResolveKey, std::optional<bool>>& cache,
+                                                           quint64& cacheRevision, QLatin1StringView actionType,
+                                                           const QString& screenId, int virtualDesktop,
+                                                           const QString& activity) const
+{
+    // Shared body of the single-slot boolean resolvers (OsdEnabled,
+    // DragSelectorEnabled — formerly two verbatim copies). A per-slot read
+    // off the evaluator, not the single-winner assignment walk: the slot is
+    // filled by the highest-priority matching context rule carrying
+    // @p actionType, and we report its boolean value. std::nullopt means
+    // "no override rule" — the caller follows the relevant global toggle.
+    //
+    // Unlike resolveContextDefaultAssignment, activeLayout IS stamped (and
+    // folded into the cache key): neither consumer runs inside the
+    // assignment cascade, so there is no recursion hazard, and a rule
+    // scoping on the active layout is legitimate.
+    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
+    const QString orientationToken = screenOrientationToken(screenId);
+    const QString schemeToken = colorSchemeToken();
+    return resolveCachedContext(
+        cache, cacheRevision, screenId, virtualDesktop, activity,
+        contextCacheKeyToken(QString(), activeLayoutId, orientationToken, schemeToken), [&]() -> std::optional<bool> {
+            PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
+            query.screenOrientation = orientationToken;
+            query.activeLayout = activeLayoutId;
+            query.colorScheme = schemeToken;
+            // Same structural exclusions as resolveContextLocked: Mode and
+            // TiledWindowCount are unstamped here, so a negated leaf on
+            // either would spuriously match every context; window-sourced
+            // fields carry the negation-scoped form of the same guard.
+            const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, [&actionType](const PWR::Rule& r) {
+                if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
+                    || r.match.negatesAnyField(PWR::windowSourcedFields())) {
+                    return false;
+                }
+                for (const PWR::RuleAction& action : r.actions) {
+                    if (action.type == actionType) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+            if (rule != nullptr) {
+                for (const PWR::RuleAction& action : rule->actions) {
+                    if (action.type == actionType) {
+                        // Type-gated as unreachable hardening: the store
+                        // gates (RuleAction::fromJson and Rule::isValid both
+                        // run the descriptor validators, which require a real
+                        // bool) are the actual guarantee that no malformed
+                        // payload reaches here. Without the gate a
+                        // hypothetical future ingress would read an engaged
+                        // false — an explicit "suppress" — where fall-through
+                        // to the global toggle is the correct degradation.
+                        const QJsonValue v = action.params.value(PWR::ActionParam::Value);
+                        if (v.isBool()) {
+                            return v.toBool();
+                        }
                     }
                 }
             }
@@ -614,99 +704,17 @@ std::optional<bool> LayoutRegistry::resolveContextDefaultAssignment(const QStrin
 std::optional<bool> LayoutRegistry::resolveContextOsdEnabled(const QString& screenId, int virtualDesktop,
                                                              const QString& activity) const
 {
-    // Mirror resolveContextLocked: a per-slot read off the evaluator, not the
-    // single-winner assignment walk. The OsdEnabled slot is filled by the
-    // highest-priority matching context rule carrying a SetOsdEnabled action;
-    // we report its boolean value. std::nullopt means "no override rule" —
-    // the caller follows the global OSD toggles.
-    //
-    // Unlike resolveContextDefaultAssignment, activeLayout IS stamped (and
-    // folded into the cache key): OSD resolution never runs inside the
-    // assignment cascade, so there is no recursion hazard, and a rule
-    // scoping OSD visibility on the active layout is legitimate.
-    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
-    const QString orientationToken = screenOrientationToken(screenId);
-    const QString schemeToken = colorSchemeToken();
-    return resolveCachedContext(
-        m_contextOsdCache, m_contextOsdCacheRevision, screenId, virtualDesktop, activity,
-        contextCacheKeyToken(QString(), activeLayoutId, orientationToken, schemeToken), [&]() -> std::optional<bool> {
-            PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-            query.screenOrientation = orientationToken;
-            query.activeLayout = activeLayoutId;
-            query.colorScheme = schemeToken;
-            // Same structural exclusions as resolveContextLocked: Mode and
-            // TiledWindowCount are unstamped here, so a negated leaf on
-            // either would spuriously match every context; window-sourced
-            // fields carry the negation-scoped form of the same guard.
-            const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
-                if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
-                    || r.match.negatesAnyField(PWR::windowSourcedFields())) {
-                    return false;
-                }
-                for (const PWR::RuleAction& action : r.actions) {
-                    if (action.type == QLatin1String(PWR::ActionType::SetOsdEnabled)) {
-                        return true;
-                    }
-                }
-                return false;
-            });
-            if (rule != nullptr) {
-                for (const PWR::RuleAction& action : rule->actions) {
-                    if (action.type == QLatin1String(PWR::ActionType::SetOsdEnabled)) {
-                        return action.params.value(PWR::ActionParam::Value).toBool();
-                    }
-                }
-            }
-            return std::nullopt;
-        });
+    return resolveContextBoolSlot(m_contextOsdCache, m_contextOsdCacheRevision,
+                                  QLatin1StringView(PWR::ActionType::SetOsdEnabled), screenId, virtualDesktop,
+                                  activity);
 }
 
 std::optional<bool> LayoutRegistry::resolveContextDragSelectorEnabled(const QString& screenId, int virtualDesktop,
                                                                       const QString& activity) const
 {
-    // Twin of resolveContextOsdEnabled, including the activeLayout /
-    // orientation / colour-scheme stamping: the DragSelectorEnabled slot is
-    // filled by the highest-priority matching context rule carrying a
-    // SetDragSelectorEnabled action, and we report its boolean value.
-    // std::nullopt means "no override rule" — the caller follows the global
-    // selector toggle. Like the OSD resolver this never runs inside the
-    // assignment cascade, so stamping the active layout carries no recursion
-    // hazard, and a rule scoping the popup on the active layout is legitimate.
-    const QString activeLayoutId = rulesVisibleActiveLayoutId(screenId, virtualDesktop, activity);
-    const QString orientationToken = screenOrientationToken(screenId);
-    const QString schemeToken = colorSchemeToken();
-    return resolveCachedContext(
-        m_contextDragSelectorCache, m_contextDragSelectorCacheRevision, screenId, virtualDesktop, activity,
-        contextCacheKeyToken(QString(), activeLayoutId, orientationToken, schemeToken), [&]() -> std::optional<bool> {
-            PWR::WindowQuery query = makeContextQuery(screenId, virtualDesktop, activity);
-            query.screenOrientation = orientationToken;
-            query.activeLayout = activeLayoutId;
-            query.colorScheme = schemeToken;
-            // Same structural exclusions as resolveContextOsdEnabled: Mode and
-            // TiledWindowCount are unstamped here, so a negated leaf on either
-            // would spuriously match every context; window-sourced fields carry
-            // the negation-scoped form of the same guard.
-            const PWR::Rule* rule = m_evaluator->highestPriorityMatch(query, [](const PWR::Rule& r) {
-                if (r.match.referencesAnyField({PWR::Field::Mode, PWR::Field::TiledWindowCount})
-                    || r.match.negatesAnyField(PWR::windowSourcedFields())) {
-                    return false;
-                }
-                for (const PWR::RuleAction& action : r.actions) {
-                    if (action.type == QLatin1String(PWR::ActionType::SetDragSelectorEnabled)) {
-                        return true;
-                    }
-                }
-                return false;
-            });
-            if (rule != nullptr) {
-                for (const PWR::RuleAction& action : rule->actions) {
-                    if (action.type == QLatin1String(PWR::ActionType::SetDragSelectorEnabled)) {
-                        return action.params.value(PWR::ActionParam::Value).toBool();
-                    }
-                }
-            }
-            return std::nullopt;
-        });
+    return resolveContextBoolSlot(m_contextDragSelectorCache, m_contextDragSelectorCacheRevision,
+                                  QLatin1StringView(PWR::ActionType::SetDragSelectorEnabled), screenId, virtualDesktop,
+                                  activity);
 }
 
 AssignmentEntry LayoutRegistry::resolveDefaultAssignmentEntryForContext(const QString& screenId, int virtualDesktop,

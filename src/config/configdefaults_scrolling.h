@@ -788,8 +788,8 @@ public:
     // shared triggerDistanceMin/Max and previewWidth/Height Min/Max accessors.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// On by default. Unlike the snapping selector this needs no user opt-in
-    /// to stay out of the way, because the engine capability gate
+    /// On by default, like the snapping selector, and it needs no user
+    /// opt-out to stay out of the way: the engine capability gate
     /// (providesDragInsertSelector) keeps it invisible on every screen that is
     /// not running the scrolling engine.
     static constexpr bool scrollingZoneSelectorEnabled()

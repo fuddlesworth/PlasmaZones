@@ -1127,5 +1127,18 @@ static_assert(ConfigDefaults::previewWidthSmall() >= ConfigDefaults::previewWidt
 static_assert(ConfigDefaults::previewWidthLarge() >= ConfigDefaults::previewWidthMin()
                   && ConfigDefaults::previewWidthLarge() <= ConfigDefaults::previewWidthMax(),
               "ConfigDefaults::previewWidthLarge() outside declared [min, max] range");
+// The strip selector's ranged defaults. Asserted HERE rather than in
+// configdefaults_scrolling.h because link 6 of that file's include chain
+// cannot see the shared Min/Max accessors (its own section banner says so) —
+// same placement rationale as the quick-size pair above.
+static_assert(ConfigDefaults::scrollingZoneSelectorTriggerDistance() >= ConfigDefaults::triggerDistanceMin()
+                  && ConfigDefaults::scrollingZoneSelectorTriggerDistance() <= ConfigDefaults::triggerDistanceMax(),
+              "ConfigDefaults::scrollingZoneSelectorTriggerDistance() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollingZoneSelectorPreviewWidth() >= ConfigDefaults::previewWidthMin()
+                  && ConfigDefaults::scrollingZoneSelectorPreviewWidth() <= ConfigDefaults::previewWidthMax(),
+              "ConfigDefaults::scrollingZoneSelectorPreviewWidth() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollingZoneSelectorPreviewHeight() >= ConfigDefaults::previewHeightMin()
+                  && ConfigDefaults::scrollingZoneSelectorPreviewHeight() <= ConfigDefaults::previewHeightMax(),
+              "ConfigDefaults::scrollingZoneSelectorPreviewHeight() outside declared [min, max] range");
 
 } // namespace PlasmaZones

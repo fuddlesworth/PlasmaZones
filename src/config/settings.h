@@ -1104,6 +1104,16 @@ public:
                                                      const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const override;
+    // Per-card sub-domains of the selector map (the autotile Algorithm pair's
+    // invariant: a card's scope-chip dot/reset only touches its own keys).
+    // Position = Position + TriggerDistance; Arrangement = LayoutMode +
+    // GridColumns + MaxRows; Size = SizeMode + Preview{Width,Height,LockAspect}.
+    bool hasPerScreenZoneSelectorPositionSettings(const QString& screenIdOrName) const;
+    void clearPerScreenZoneSelectorPositionSettings(const QString& screenIdOrName);
+    bool hasPerScreenZoneSelectorArrangementSettings(const QString& screenIdOrName) const;
+    void clearPerScreenZoneSelectorArrangementSettings(const QString& screenIdOrName);
+    bool hasPerScreenZoneSelectorSizeSettings(const QString& screenIdOrName) const;
+    void clearPerScreenZoneSelectorSizeSettings(const QString& screenIdOrName);
 
     // Strip-Mode Selector — PhosphorConfig::Store-backed.
     bool scrollingZoneSelectorEnabled() const override;
@@ -1132,6 +1142,12 @@ public:
                                                               const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override;
+    // Per-card sub-domains, mirroring the snapping selector's pairs above
+    // (the strip store never holds an arrangement key, so no third pair).
+    bool hasPerScreenScrollingZoneSelectorPositionSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingZoneSelectorPositionSettings(const QString& screenIdOrName);
+    bool hasPerScreenScrollingZoneSelectorSizeSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingZoneSelectorSizeSettings(const QString& screenIdOrName);
 
     // Per-screen autotile config (override > global fallback)
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const override;
@@ -2115,7 +2131,8 @@ private:
     //      prefixes are NOT re-spelled here — the resolver's mapping table is
     //      the one list, so a prefix added there is swept by reset() without
     //      touching this function. Today that covers ZoneSelector:*,
-    //      AutotileScreen:*, ScrollingScreen:*, and the legacy SnappingScreen:*
+    //      AutotileScreen:*, ScrollingScreen:*, ScrollingZoneSelector:*, and
+    //      the legacy SnappingScreen:*
     //      which is no longer written but is still swept to scrub any file an
     //      older build left behind.
     //   2. VirtualScreen:* groups, which are per-screen in the same sense but

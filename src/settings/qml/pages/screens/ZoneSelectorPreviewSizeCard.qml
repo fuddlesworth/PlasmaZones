@@ -156,6 +156,29 @@ Item {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: 0
 
+                // The same exclusive-group semantics SettingsButtonGroup and
+                // PositionPicker publish: without the roles below this row is
+                // five unrelated push buttons to a screen reader, with no way
+                // to tell which size is active or that the choice is
+                // exclusive. (Kept in place rather than ported to
+                // SettingsButtonGroup: the Custom-mode latch above owns
+                // selection state in a way that group's
+                // caller-owns-currentIndex contract does not model.)
+                Accessible.role: Accessible.Grouping
+                Accessible.name: i18n("Preview size")
+
+                // RTL-aware arrow walk between the options (children holds
+                // exactly the five Buttons; Connections are not Items).
+                function focusStep(delta) {
+                    const step = Qt.application.layoutDirection === Qt.RightToLeft ? -delta : delta;
+                    for (var i = 0; i < children.length; ++i) {
+                        if (children[i].activeFocus) {
+                            children[(i + step + children.length) % children.length].forceActiveFocus();
+                            return;
+                        }
+                    }
+                }
+
                 // Drop the explicit Custom selection when the newly resolved
                 // size no longer warrants it: a scope switch or an external
                 // width change can land on a preset width (or Auto mode), and
@@ -231,12 +254,19 @@ Item {
 
                 Button {
                     text: i18n("Auto")
-                    flat: parent.selectedSize !== 0
-                    highlighted: parent.selectedSize === 0
+                    flat: sizeButtonRow.selectedSize !== 0
+                    highlighted: sizeButtonRow.selectedSize === 0
                     onClicked: {
                         sizeButtonRow.customModeActive = false;
                         root.writeSizeMode(0);
                     }
+                    Accessible.role: Accessible.RadioButton
+                    Accessible.name: text
+                    Accessible.checkable: true
+                    Accessible.checked: highlighted
+                    Accessible.onPressAction: clicked()
+                    Keys.onLeftPressed: sizeButtonRow.focusStep(-1)
+                    Keys.onRightPressed: sizeButtonRow.focusStep(1)
                     ToolTip.visible: hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
                     ToolTip.text: i18n("Size scales automatically with your screen resolution")
@@ -244,13 +274,20 @@ Item {
 
                 Button {
                     text: i18n("Small")
-                    flat: parent.selectedSize !== 1
-                    highlighted: parent.selectedSize === 1
+                    flat: sizeButtonRow.selectedSize !== 1
+                    highlighted: sizeButtonRow.selectedSize === 1
                     onClicked: {
                         sizeButtonRow.customModeActive = false;
                         root.writeSizeMode(1);
                         root.writePreviewSize(root.constants.zoneSelectorPreviewSmall);
                     }
+                    Accessible.role: Accessible.RadioButton
+                    Accessible.name: text
+                    Accessible.checkable: true
+                    Accessible.checked: highlighted
+                    Accessible.onPressAction: clicked()
+                    Keys.onLeftPressed: sizeButtonRow.focusStep(-1)
+                    Keys.onRightPressed: sizeButtonRow.focusStep(1)
                     ToolTip.visible: hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
                     ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewSmall)
@@ -258,13 +295,20 @@ Item {
 
                 Button {
                     text: i18n("Medium")
-                    flat: parent.selectedSize !== 2
-                    highlighted: parent.selectedSize === 2
+                    flat: sizeButtonRow.selectedSize !== 2
+                    highlighted: sizeButtonRow.selectedSize === 2
                     onClicked: {
                         sizeButtonRow.customModeActive = false;
                         root.writeSizeMode(1);
                         root.writePreviewSize(root.constants.zoneSelectorPreviewMedium);
                     }
+                    Accessible.role: Accessible.RadioButton
+                    Accessible.name: text
+                    Accessible.checkable: true
+                    Accessible.checked: highlighted
+                    Accessible.onPressAction: clicked()
+                    Keys.onLeftPressed: sizeButtonRow.focusStep(-1)
+                    Keys.onRightPressed: sizeButtonRow.focusStep(1)
                     ToolTip.visible: hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
                     ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewMedium)
@@ -272,13 +316,20 @@ Item {
 
                 Button {
                     text: i18n("Large")
-                    flat: parent.selectedSize !== 3
-                    highlighted: parent.selectedSize === 3
+                    flat: sizeButtonRow.selectedSize !== 3
+                    highlighted: sizeButtonRow.selectedSize === 3
                     onClicked: {
                         sizeButtonRow.customModeActive = false;
                         root.writeSizeMode(1);
                         root.writePreviewSize(root.constants.zoneSelectorPreviewLarge);
                     }
+                    Accessible.role: Accessible.RadioButton
+                    Accessible.name: text
+                    Accessible.checkable: true
+                    Accessible.checked: highlighted
+                    Accessible.onPressAction: clicked()
+                    Keys.onLeftPressed: sizeButtonRow.focusStep(-1)
+                    Keys.onRightPressed: sizeButtonRow.focusStep(1)
                     ToolTip.visible: hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
                     ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewLarge)
@@ -286,8 +337,8 @@ Item {
 
                 Button {
                     text: i18n("Custom")
-                    flat: parent.selectedSize !== 4
-                    highlighted: parent.selectedSize === 4
+                    flat: sizeButtonRow.selectedSize !== 4
+                    highlighted: sizeButtonRow.selectedSize === 4
                     onClicked: {
                         // The flag outlives the width-changed reevaluation this
                         // write can queue (callLater runs in FIFO order), then
@@ -299,6 +350,13 @@ Item {
                             sizeButtonRow._selfWrite = false;
                         });
                     }
+                    Accessible.role: Accessible.RadioButton
+                    Accessible.name: text
+                    Accessible.checkable: true
+                    Accessible.checked: highlighted
+                    Accessible.onPressAction: clicked()
+                    Keys.onLeftPressed: sizeButtonRow.focusStep(-1)
+                    Keys.onRightPressed: sizeButtonRow.focusStep(1)
                     ToolTip.visible: hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
                     ToolTip.text: i18n("Custom size with slider")

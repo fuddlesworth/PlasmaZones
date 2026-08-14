@@ -437,9 +437,12 @@ private:
      * template picks while the actual scrolling lock went unread. Every
      * picker site must use this — the show path and the live lock re-push
      * disagreeing means a picker opens unlocked and then latches locked (or
-     * the reverse) on the next rule edit. The ZONE SELECTOR is deliberately
-     * NOT a caller: it stays on -1 because it shows the snap zone overlay,
-     * whose lock is the snapping one.
+     * the reverse) on the next rule edit. The LAYOUT-MODE zone selector is
+     * deliberately NOT a caller: it stays on -1 because it shows the snap
+     * zone overlay, whose lock is the snapping one. That premise expires on
+     * a STRIP-selector screen (the popup renders strip cards there) — no
+     * strip consumer reads the pushed lock today, but a strip lock
+     * affordance added later should route through here like the picker.
      */
     /// Values of the mode-lens axis consumed by isAnyModeLocked — a
     /// DIFFERENT vocabulary from the LayoutSupport* constants above, whose
@@ -645,9 +648,11 @@ public:
     /// show (toggle on) or an animated hide (toggle off). Needed because the
     /// engine's tabStripsChanged is change-latched and stays silent until the
     /// next structural change, so nothing else would repaint after the toggle
-    /// moves. Called from the scrollingTabIndicatorEnabledChanged hook and from
-    /// updateSettings, which covers the batch-setSettings case where the
-    /// per-key signal never fires.
+    /// moves. Called from the tab-indicator enable and paint-key hooks and
+    /// the overlay font-key hooks (the thirteen connects in
+    /// overlayservice/settings.cpp, each with its own rationale in place) and
+    /// from updateSettings, which covers the batch-setSettings case where the
+    /// per-key signals never fire.
     void replayScrollTabStrips();
 
     /// Forwarders to the active picker slot's QML moveSelection /

@@ -60,8 +60,8 @@ bool PerScreenPathResolver::isPerScreenPrefix(const QString& groupName)
 bool PerScreenPathResolver::isMalformedPerScreen(const QString& groupName)
 {
     // A bare prefix from the table above ("ZoneSelector:", "AutotileScreen:",
-    // "SnappingScreen:", "ScrollingScreen:") — the colon is present but no
-    // screen id follows. Without this check, toJsonPath
+    // "SnappingScreen:", "ScrollingScreen:", "ScrollingZoneSelector:") — the
+    // colon is present but no screen id follows. Without this check, toJsonPath
     // would decline (via isPerScreenPrefix returning false) and the backend
     // would fall back to dot-path, storing the name as an orphan top-level
     // key on disk.

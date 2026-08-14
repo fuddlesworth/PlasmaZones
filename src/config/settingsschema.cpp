@@ -153,9 +153,21 @@ QVariant canonicalTriggerList(const QVariant& v)
             continue;
         }
         const QVariantMap src = entry.toMap();
+        // Field-level ok-flags, for the same drop-malformed reason as the
+        // entry gate above: a partially-garbage entry ({modifier: "alt",
+        // mouseButton: 1}) used to coerce its bad field to 0, and modifier 0
+        // means "don't care" to the drag readers — silently widening a
+        // configured "Alt + Left" trigger to "Left button, any modifier".
+        bool modOk = false;
+        bool btnOk = false;
+        const int modifier = src.value(ConfigKeys::triggerModifierField(), 0).toInt(&modOk);
+        const int mouseButton = src.value(ConfigKeys::triggerMouseButtonField(), 0).toInt(&btnOk);
+        if (!modOk || !btnOk) {
+            continue;
+        }
         QVariantMap canon;
-        canon[ConfigKeys::triggerModifierField()] = src.value(ConfigKeys::triggerModifierField(), 0).toInt();
-        canon[ConfigKeys::triggerMouseButtonField()] = src.value(ConfigKeys::triggerMouseButtonField(), 0).toInt();
+        canon[ConfigKeys::triggerModifierField()] = modifier;
+        canon[ConfigKeys::triggerMouseButtonField()] = mouseButton;
         out.append(canon);
     }
     return QVariant(out);
@@ -569,9 +581,13 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
 
     auto modifierOr = [](int fallback) {
         return [fallback](const QVariant& v) -> QVariant {
-            const int raw = v.toInt();
+            // Ok-flag so a non-numeric payload takes the fallback instead of
+            // coercing to 0 == Qt::NoModifier, which the range check would
+            // accept as a deliberate "no modifier".
+            bool ok = false;
+            const int raw = v.toInt(&ok);
             constexpr int valid = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
-            if (raw == Qt::NoModifier || (raw & valid) == raw) {
+            if (ok && (raw == Qt::NoModifier || (raw & valid) == raw)) {
                 return QVariant(raw);
             }
             return QVariant(fallback);

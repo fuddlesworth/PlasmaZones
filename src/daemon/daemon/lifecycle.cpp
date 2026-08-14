@@ -1,6 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): the Daemon start/stop lifecycle. stop()
+// is one long, ORDERED teardown whose clear-before-reset contracts reference
+// each other in sequence; splitting it by subsystem would break the
+// top-to-bottom readability that makes the ordering auditable.
+
 #include "daemon/daemon.h"
 #include "helpers.h"
 
@@ -729,6 +734,10 @@ void Daemon::stop()
         m_overlayService->setLayoutSupportResolver({});
         m_overlayService->setDragInsertSelectorResolver({});
         m_overlayService->setStripCardsProvider({});
+        // Symmetric clear of the late-bound drag-exclusion id: a stop() that
+        // lands mid-drag never reaches the adaptor's resetDragState, and the
+        // overlay service outlives this teardown.
+        m_overlayService->setActiveDragWindowId({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.

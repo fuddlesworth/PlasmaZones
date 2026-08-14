@@ -50,6 +50,16 @@ Item {
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
 
+    // Font seeds (the user's configured zone-selector font, bound from
+    // ZoneSelectorContent's root — the layout-mode cards honour them, so the
+    // strip caption must too).
+    property string fontFamily: ""
+    property real fontSizeScale: 1
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
+
     /// -1 none, 0 top half, 1 bottom half, 2 whole card.
     property int selectedHalf: -1
     readonly property bool isTabbed: modelData.tabbed === true
@@ -175,7 +185,12 @@ Item {
         anchors.horizontalCenter: parent.horizontalCenter
         color: card.textColor
         opacity: 0.8
-        font.pointSize: Kirigami.Theme.defaultFont.pointSize * 0.85
+        font.family: card.fontFamily.length > 0 ? card.fontFamily : Kirigami.Theme.defaultFont.family
+        font.pointSize: Kirigami.Theme.defaultFont.pointSize * 0.85 * card.fontSizeScale
+        font.weight: card.fontWeight
+        font.italic: card.fontItalic
+        font.underline: card.fontUnderline
+        font.strikeout: card.fontStrikeout
         // Plural strings carry %n (this project's i18np substitutes only %n;
         // %1 renders literally — see PR #801).
         text: card.isTabbed ? i18ncp("@info:label tabbed column tab count", "%n tab", "%n tabs", card.tiles.length) : i18ncp("@info:label column window count", "%n window", "%n windows", card.tiles.length)

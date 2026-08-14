@@ -24,12 +24,13 @@
 #define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
 
 // Single definition point for the per-screen group prefix spellings.
-// All four are rows in PerScreenPathResolver's prefix→category mapping table,
+// All five are rows in PerScreenPathResolver's prefix→category mapping table,
 // which is what makes their groups resolve to a nested path under the
 // "PerScreen" container instead of falling back to a dot-path orphan at the
-// JSON root. Three of the four also carry a *GroupPrefix accessor below that
+// JSON root. Four of the five also carry a *GroupPrefix accessor below that
 // appends the ':' (zoneSelectorGroupPrefix, autotileScreenGroupPrefix,
-// scrollingScreenGroupPrefix); the snapping prefix has none, because
+// scrollingScreenGroupPrefix, scrollingZoneSelectorGroupPrefix); the
+// snapping prefix has none, because
 // per-monitor snapping state is unified into the autotile store and nothing
 // looks its group up by name — it stays in the resolver table so an older
 // build's leftover groups still resolve and can be swept. Defining the

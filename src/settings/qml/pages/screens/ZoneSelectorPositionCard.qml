@@ -59,7 +59,6 @@ Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
                     position: root.effectivePosition
-                    enabled: root.featureEnabled
                     onPositionSelected: function (newPosition) {
                         root.writePosition(newPosition);
                     }

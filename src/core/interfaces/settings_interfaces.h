@@ -122,7 +122,7 @@ inline constexpr const char DefaultWindowHeightPresetIndex[] = "DefaultWindowHei
 // Snap-assist and the zone-selector enable switch are global-only
 // (ISettings::setSnapAssistEnabled / setZoneSelectorEnabled); the per-screen
 // zone-selector config lives in its own map/group keyed by ZoneSelectorConfigKey
-// (see kPerScreenKeys in perscreen.cpp).
+// (see PerScreenDetail::kZoneSelectorKeys in perscreen_selector.cpp).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces

@@ -299,9 +299,14 @@ void OverlayService::refreshContextLockState()
         }
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int curDesktop = currentVirtualDesktopForScreen(it.key());
-        // Both-mode lens (-1) by design: the zone selector shows the SNAP
-        // zone overlay, so a snapping lock is exactly the lock it must
-        // reflect. Only the picker below takes the Templates lens.
+        // Both-mode lens (-1) by design for the LAYOUT-MODE popup: it shows
+        // the SNAP zone overlay, so a snapping lock is exactly the lock it
+        // must reflect. Only the picker below takes the Templates lens. NOTE
+        // for whoever adds a lock affordance to the STRIP popup: on a strip
+        // screen the premise expires (the popup renders strip cards, not the
+        // snap overlay), so that affordance should take the picker's
+        // Templates lens — today no strip consumer reads `locked`, so the
+        // both-mode value pushed there is inert.
         const bool locked = isAnyModeLocked(m_settings, m_layoutManager, it.key(), curDesktop, curActivity);
         writeQmlProperty(window, QStringLiteral("locked"), locked);
     }

@@ -18,6 +18,12 @@ namespace PlasmaZones {
 /**
  * @brief Unified stub ISettings for unit tests
  *
+ * FILE-SIZE EXCEPTION (sanctioned): one class implementing one very large
+ * interface, override for override. It grows in lockstep with ISettings and
+ * splitting a stub across headers would buy nothing but a second place for
+ * an override to be missing — the drift surface the per-family override
+ * comments below exist to prevent.
+ *
  * Provides sensible defaults for all ISettings pure virtual methods.
  * The defaultLayoutId is mutated via setDefaultLayoutId() (the
  * ISettings setter); tests should call that directly rather than a
@@ -2456,7 +2462,7 @@ public:
     // can be driven from the stub instead of silently taking the
     // defaulted-virtual "no override" arm. Mirrors production's emit-on-change
     // and empty-argument guards. DELIBERATE OMISSIONS, as for the siblings:
-    // no validatePerScreenValue rejection, no screen-identity alias matching,
+    // no validateZoneSelectorValue rejection, no screen-identity alias matching,
     // and the has* accessors test entry EMPTINESS where production tests
     // entry EXISTENCE (unreachable divergence: the setter never leaves an
     // empty entry behind) — a test needing any of those must use the real
