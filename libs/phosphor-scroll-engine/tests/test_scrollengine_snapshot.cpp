@@ -101,10 +101,12 @@ void TestScrollEngineSnapshot::columnsFollowStripOrder()
     QVERIFY(!snap.columns.at(0).tiles.at(0).hidden);
     QVERIFY(snap.columns.at(0).tiles.at(0).relRect.height() > 0.9);
     // Every resolved column carries its real work-area share for the
-    // preview scaling, in (0, 1].
+    // preview scaling. The engine default column width is proportion 0.5,
+    // so a freshly opened solo column must report exactly half — pinning
+    // the value (not just a range) catches a fraction that silently
+    // degrades to full width.
     for (const ScrollStripSnapshotColumn& column : snap.columns) {
-        QVERIFY(column.widthFraction > 0.0);
-        QVERIFY(column.widthFraction <= 1.0);
+        QCOMPARE(column.widthFraction, 0.5);
     }
     // The last-opened window's column is active.
     QCOMPARE(snap.activeColumnIndex, 2);
