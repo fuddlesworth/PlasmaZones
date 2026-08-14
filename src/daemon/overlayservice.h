@@ -345,6 +345,35 @@ public:
     QRect getSelectedZoneGeometry(const QString& screenId) const override;
     void clearSelectedZone() override;
 
+    // Strip-mode selector (scrolling screens) — see selector_strip.cpp.
+    bool hasSelectedStripTarget() const override
+    {
+        return m_selectedStripTarget.isValid();
+    }
+    SelectorStripTarget selectedStripTarget() const override
+    {
+        return m_selectedStripTarget;
+    }
+    QString selectedStripTargetScreenId() const override
+    {
+        return m_selectedStripScreenId;
+    }
+    void refreshStripSelector(const QString& screenId) override;
+    void setActiveDragWindowId(const QString& windowId) override
+    {
+        m_activeDragWindowId = windowId;
+    }
+    /// Provider of the SERIALIZED strip card list (the daemon injects
+    /// stripColumnsToVariantList over ScrollEngine::stripSnapshot).
+    /// Serialized at the seam on purpose: this header stays free of
+    /// engine types, same rule as the LayoutSupport int mirror above.
+    /// Same clear-before-destroy contract as the other injected closures.
+    using StripCardsProvider = std::function<QVariantList(const QString& screenId, const QString& excludeWindowId)>;
+    void setStripCardsProvider(StripCardsProvider provider)
+    {
+        m_stripCardsProvider = std::move(provider);
+    }
+
     // PhosphorZones::Layout OSD (visual preview when switching layouts)
     // screenId: target screen (empty = screen under cursor, fallback to primary)
     void showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
@@ -801,6 +830,22 @@ private:
     /// daemon wires it in initServices (setAlgorithmRegistry), before any popup
     /// can open, so this holds for every live caller.
     QVariantList buildLayoutsList(const QString& screenId = QString(), QSize autotilePreviewCanvas = {}) const;
+
+    /// Strip-mode popup model: the serialized strip card list for
+    /// @p screenId via the injected provider, excluding the live drag
+    /// window (m_activeDragWindowId). Empty when no provider is set or the
+    /// screen is not a strip-selector screen. Implemented in
+    /// selector_strip.cpp.
+    QVariantList buildStripList(const QString& screenId) const;
+    /// Card count for the trigger-edge sizing contract: visibleLayoutCount
+    /// answers with THIS on strip-selector screens so isNearTriggerEdge and
+    /// the rendered card row can never disagree.
+    int visibleStripCardCount(const QString& screenId) const;
+    /// Strip-mode arm of updateSelectorPosition: reads the rendered card
+    /// rects back (stripColumnCard by delegate index) and classifies the
+    /// cursor into a gap / half / whole-card target via
+    /// classifyStripSelectorPoint. Implemented in selector_strip.cpp.
+    void updateStripSelectorHit(QQuickItem* slot, int localX, int localY, const QString& screenId);
     /// Defined in overlayservice_types.h (hoisted with the other value
     /// types); aliased so existing OverlayService::LayoutIncludeFlags
     /// references keep working.
@@ -983,6 +1028,16 @@ private:
     ScrollZonesProvider m_scrollZonesProvider;
     LayoutSupportResolver m_layoutSupportResolver;
     DragInsertSelectorResolver m_dragInsertSelectorResolver;
+    StripCardsProvider m_stripCardsProvider;
+    /// Live drag window id (drag adaptor sets at drag start, clears at drag
+    /// end) — buildStripList excludes it so a not-yet-detached drag window
+    /// never appears as its own card.
+    QString m_activeDragWindowId;
+    /// Strip-mode selection twin of the zone triple below. Exactly one of
+    /// the two families is set (each hit-test arm clears the other on
+    /// write); clearSelectedZone clears both.
+    SelectorStripTarget m_selectedStripTarget;
+    QString m_selectedStripScreenId;
     /// Whether the drag popup on this screen renders strip cards (the live
     /// engine claims providesDragInsertSelector) instead of zone layouts.
     /// False whenever the resolver is unset — the pre-feature behaviour.

@@ -4,6 +4,7 @@
 #include "daemon/daemon.h"
 #include "helpers.h"
 #include "stripzones.h"
+#include "common/stripcardserialize.h"
 
 #include <QGuiApplication>
 #include <QFutureWatcher>
@@ -256,6 +257,18 @@ void Daemon::initEnginesAndWiring()
     m_overlayService->setDragInsertSelectorResolver([this](const QString& screenId) {
         return dragInsertSelectorForScreen(screenId);
     });
+
+    // Strip cards for the strip-mode selector popup, serialized at the seam
+    // (OverlayService stays engine-header-free). Cleared alongside the
+    // other providers in stop().
+    m_overlayService->setStripCardsProvider(
+        [this](const QString& screenId, const QString& excludeWindowId) -> QVariantList {
+            const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+            if (!scroll || !scroll->isActiveOnScreen(screenId)) {
+                return {};
+            }
+            return stripColumnsToVariantList(scroll->stripSnapshot(screenId, excludeWindowId));
+        });
 
     // Autotile provider. setContextGapProvider is derived-only
     // (AutotileEngine); m_autotileEngine is held as the base

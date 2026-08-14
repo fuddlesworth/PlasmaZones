@@ -728,6 +728,7 @@ void Daemon::stop()
         // reads the router, which is reset before the engines below.
         m_overlayService->setLayoutSupportResolver({});
         m_overlayService->setDragInsertSelectorResolver({});
+        m_overlayService->setStripCardsProvider({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.

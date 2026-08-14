@@ -134,6 +134,53 @@ public:
     virtual QRect getSelectedZoneGeometry(const QString& screenId) const = 0;
     virtual void clearSelectedZone() = 0;
 
+    // Strip-mode selector selection tracking (scrolling screens whose engine
+    // provides the drag-insert selector). The target is an int-only mirror
+    // of IPlacementEngine::DragInsertTarget — columnIndex/newColumn map to
+    // primary/newSlot, tileIndex to secondary (-1 appends) — kept engine-
+    // header-free like the rest of this interface. Exactly one of the zone
+    // triple and this target is ever set; clearSelectedZone clears both.
+    // Default-implemented as "no strip selection" so implementations without
+    // strip support stay source-compatible.
+    struct SelectorStripTarget
+    {
+        int columnIndex = -1;
+        int tileIndex = -1;
+        bool newColumn = false;
+
+        bool isValid() const
+        {
+            return columnIndex >= 0;
+        }
+    };
+    virtual bool hasSelectedStripTarget() const
+    {
+        return false;
+    }
+    virtual SelectorStripTarget selectedStripTarget() const
+    {
+        return {};
+    }
+    virtual QString selectedStripTargetScreenId() const
+    {
+        return {};
+    }
+    /// Rebuild the strip cards and drop the strip selection on @p screenId.
+    /// The drag adaptor calls this at the drag-insert preview begin/cancel
+    /// boundaries — the only moments the frozen (DETACH-ONCE) strip the
+    /// cards mirror can change shape mid-drag.
+    virtual void refreshStripSelector(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
+    /// The window id of the live drag, so the strip cards can exclude a
+    /// not-yet-detached drag window. Set at drag start, cleared (empty id)
+    /// at drag end.
+    virtual void setActiveDragWindowId(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
+
     // Shader preview overlay (editor dialog - dedicated window avoids multi-pass clear)
     virtual void showShaderPreview(int x, int y, int width, int height, const QString& screenId,
                                    const QString& shaderId, const QString& shaderParamsJson,

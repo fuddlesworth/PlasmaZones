@@ -1061,6 +1061,13 @@ void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
 
 int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
+    // Strip-selector screens: the popup renders strip cards, so the
+    // trigger-edge sizing must count THOSE (same row-for-row agreement the
+    // layout path keeps with buildLayoutsList below). Floor of 1 matches
+    // updateZoneSelectorWindow's empty-strip cell.
+    if (isStripSelectorScreen(screenId)) {
+        return std::max(1, visibleStripCardCount(screenId));
+    }
     // Mirror buildLayoutsList's per-screen include resolution. Pre-fix the
     // raw m_includeManualLayouts/m_includeAutotileLayouts flags were used
     // here - both default true - so on screens where the popup actually

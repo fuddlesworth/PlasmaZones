@@ -72,6 +72,8 @@ set(plasmazones_core_SRCS
     core/utils/unifiedlayoutlist.h
     common/layoutpreviewserialize.cpp
     common/layoutpreviewserialize.h
+    common/stripcardserialize.cpp
+    common/stripcardserialize.h
     common/screenidresolver.cpp
     common/screenidresolver.h
     common/layoutbundlebuilder.cpp
@@ -93,6 +95,7 @@ set(plasmazones_core_SRCS
     config/settings/loadsave.cpp
     config/settings/setters.cpp
     config/settings/perscreen.cpp
+    config/settings/perscreen_selector.cpp
     config/settings/animationprofile.cpp
     config/settings/profiletrees.cpp
     config/settings/disable.cpp
@@ -531,6 +534,7 @@ set(plasmazones_daemon_SRCS
     daemon/overlayservice/scrolldropindicator.cpp
     daemon/overlayservice/screens.cpp
     daemon/overlayservice/selector.cpp
+    daemon/overlayservice/selector_strip.cpp
     daemon/overlayservice/shellhost_bridge.cpp
     daemon/overlayservice/selector_update.cpp
     daemon/overlayservice/shader.cpp

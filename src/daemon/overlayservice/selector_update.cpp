@@ -147,9 +147,14 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
-    // Build resolved per-screen config
-    const ZoneSelectorConfig config =
-        m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
+    // Build resolved per-screen config. Strip-selector screens resolve the
+    // scrolling variant, whose resolver stamps LayoutMode = Horizontal so
+    // computeZoneSelectorLayout lays a single card row with zero changes.
+    const bool stripMode = isStripSelectorScreen(screenId);
+    const ZoneSelectorConfig config = m_settings
+        ? (stripMode ? m_settings->resolvedScrollingZoneSelectorConfig(screenId)
+                     : m_settings->resolvedZoneSelectorConfig(screenId))
+        : defaultZoneSelectorConfig();
 
     // Update settings-based properties
     if (m_settings) {
@@ -182,8 +187,19 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     writeQmlProperty(window, QStringLiteral("previewHeight"), config.previewHeight);
     writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
-    // Build and pass layout data (filtered per-screen mode)
-    QVariantList layouts = buildLayoutsList(screenId);
+    // Build and pass the popup model: strip cards on strip-selector
+    // screens, layouts everywhere else. Both lists are pushed every update
+    // (the inactive one empty) so a screen crossing a mode boundary never
+    // renders the previous mode's stale model.
+    QVariantList layouts;
+    QVariantList stripColumns;
+    if (stripMode) {
+        stripColumns = buildStripList(screenId);
+    } else {
+        layouts = buildLayoutsList(screenId);
+    }
+    writeQmlProperty(window, QStringLiteral("stripMode"), stripMode);
+    writeQmlProperty(window, QStringLiteral("stripColumns"), stripColumns);
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
     // Global "Auto-assign for all layouts" master toggle (#370) - when on, every
@@ -207,8 +223,11 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     }
     writeQmlProperty(window, QStringLiteral("locked"), locked);
 
-    // Compute layout for geometry updates using per-screen config
-    const int layoutCount = layouts.size();
+    // Compute layout for geometry updates using per-screen config. The
+    // strip's card count sizes the bar exactly like a layout count does; an
+    // empty strip keeps one cell so the bar retains a hittable "open the
+    // first column" body instead of collapsing.
+    const int layoutCount = stripMode ? std::max(1, static_cast<int>(stripColumns.size())) : layouts.size();
     const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount);
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
@@ -243,6 +262,10 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
         if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
             gridItem->polish();
             gridItem->update();
+        }
+        if (auto* stripRow = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorStripRow"))) {
+            stripRow->polish();
+            stripRow->update();
         }
         if (auto* containerItem = findQmlItemByName(contentRoot, QStringLiteral("shaderAnchor"))) {
             containerItem->polish();

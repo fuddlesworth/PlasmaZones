@@ -52,7 +52,16 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
         return;
     }
 
-    if (m_settings && !m_settings->zoneSelectorEnabled()) {
+    // Strip-selector screens are governed by the SCROLLING selector enable;
+    // everything else by the snapping one. With no explicit target the
+    // per-screen check in the show loop below decides screen by screen.
+    if (m_settings && !targetScreenId.isEmpty()) {
+        const bool enabled = isStripSelectorScreen(targetScreenId) ? m_settings->scrollingZoneSelectorEnabled()
+                                                                   : m_settings->zoneSelectorEnabled();
+        if (!enabled) {
+            return;
+        }
+    } else if (m_settings && !m_settings->zoneSelectorEnabled() && !m_settings->scrollingZoneSelectorEnabled()) {
         return;
     }
 
@@ -125,11 +134,27 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (!targetScreenId.isEmpty() && screenId != targetScreenId) {
                 continue;
             }
-            if (isSnappingContextDisabled(screenId)) {
-                continue;
-            }
-            if (m_excludedScreens.contains(screenId)) {
-                continue;
+            // Strip-selector screens are exempt from BOTH engine-screen
+            // gates: isSnappingContextDisabled answers true for a live
+            // Templates scrolling screen, and m_excludedScreens carries the
+            // engine-owned set — on a strip screen the popup is exactly the
+            // engine surface those gates exist to protect. They still gate
+            // per-screen enable though (the scrolling selector switch).
+            const bool stripScreen = isStripSelectorScreen(screenId);
+            if (stripScreen) {
+                if (m_settings && !m_settings->scrollingZoneSelectorEnabled()) {
+                    continue;
+                }
+            } else {
+                if (m_settings && !m_settings->zoneSelectorEnabled()) {
+                    continue;
+                }
+                if (isSnappingContextDisabled(screenId)) {
+                    continue;
+                }
+                if (m_excludedScreens.contains(screenId)) {
+                    continue;
+                }
             }
             const QRect geom = mgr->screenGeometry(screenId);
             const QRect targetGeom = geom.isValid() ? geom : physScreen->geometry();
@@ -141,11 +166,22 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-            if (isSnappingContextDisabled(screenId)) {
-                continue;
-            }
-            if (m_excludedScreens.contains(screenId)) {
-                continue;
+            // Same strip-screen exemption as the managed loop above.
+            const bool stripScreen = isStripSelectorScreen(screenId);
+            if (stripScreen) {
+                if (m_settings && !m_settings->scrollingZoneSelectorEnabled()) {
+                    continue;
+                }
+            } else {
+                if (m_settings && !m_settings->zoneSelectorEnabled()) {
+                    continue;
+                }
+                if (isSnappingContextDisabled(screenId)) {
+                    continue;
+                }
+                if (m_excludedScreens.contains(screenId)) {
+                    continue;
+                }
             }
             auto* smgr = m_screenManager;
             QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
@@ -215,8 +251,10 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     // Resolve to effective (virtual) screen ID if applicable
     QString cursorScreenId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), screen);
 
-    // Skip excluded screens (autotile-managed) - matches showZoneSelector exclusion
-    if (m_excludedScreens.contains(cursorScreenId)) {
+    // Skip excluded screens (autotile-managed) - matches showZoneSelector
+    // exclusion. Strip-selector screens are exempt for the same reason they
+    // are in the show path: the popup IS the engine surface there.
+    if (m_excludedScreens.contains(cursorScreenId) && !isStripSelectorScreen(cursorScreenId)) {
         return;
     }
 
@@ -226,6 +264,9 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         if (it.key() != cursorScreenId && it.value().zoneSelectorSlot()) {
             writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedLayoutId"), QString());
             writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedZoneIndex"), -1);
+            writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedStripColumn"), -1);
+            writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedStripGap"), -1);
+            writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedStripHalf"), -1);
         }
     }
 
@@ -261,6 +302,12 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
         writeQmlProperty(slot, QStringLiteral("cursorX"), localX);
         writeQmlProperty(slot, QStringLiteral("cursorY"), localY);
+
+        // Strip-mode screens speak the drag-insert vocabulary, not zones.
+        if (isStripSelectorScreen(cursorScreenId)) {
+            updateStripSelectorHit(slot, localX, localY, cursorScreenId);
+            return;
+        }
 
         QVariantList layouts = slot->property("layouts").toList();
         if (layouts.isEmpty()) {
@@ -605,6 +652,11 @@ void OverlayService::clearSelectedZone()
     m_selectedLayoutId.clear();
     m_selectedZoneIndex = -1;
     m_selectedZoneRelGeo = QRectF();
+    // Both selection families: every existing call site (screen hops, VS
+    // reconfigure, drop teardown) means "no selector selection survives",
+    // and a stale strip target is exactly as dangerous as a stale zone.
+    m_selectedStripTarget = {};
+    m_selectedStripScreenId.clear();
 }
 
 QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const

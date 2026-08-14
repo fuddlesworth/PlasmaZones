@@ -31,6 +31,17 @@ Item {
     property bool globalAutoAssign: false
     property string selectedLayoutId: ""
     property int selectedZoneIndex: -1
+    // Strip mode (scrolling screens): the popup renders the current strip's
+    // columns instead of layouts. Selection is written back from C++
+    // (selector_strip.cpp) exactly like selectedLayoutId/selectedZoneIndex:
+    // selectedStripGap names an insert boundary (0..columns), and
+    // selectedStripHalf is 0 = top half, 1 = bottom half, 2 = whole card
+    // (tabbed dock) on the selectedStripColumn card.
+    property bool stripMode: false
+    property var stripColumns: []
+    property int selectedStripColumn: -1
+    property int selectedStripGap: -1
+    property int selectedStripHalf: -1
     property int minZoneSize: 8
     property int cursorX: -1
     property int cursorY: -1
@@ -371,102 +382,188 @@ Item {
             ScrollBar.vertical.policy: root.needsScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
             ScrollBar.horizontal.policy: root.needsHorizontalScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
 
-            GridLayout {
-                id: contentGrid
+            Item {
+                id: scrollContentRoot
 
-                objectName: "zoneSelectorContentGrid"
                 width: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
                 height: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
-                columns: root.layoutColumns
-                rowSpacing: root.indicatorSpacing
-                columnSpacing: root.indicatorSpacing
 
-                Repeater {
-                    model: root.layouts
+                // Strip mode (scrolling screens): one uniform card per
+                // column in a plain Row. Uniform cell sizes on purpose —
+                // computeZoneSelectorLayout's bar/scroll math assumes one
+                // cell size per card, and the insert bars below position
+                // arithmetically off that same uniformity. The C++ hit-test
+                // reads the CARD rects back by objectName + index and
+                // derives gap targets from adjacent cards itself, so no
+                // width-taking gap items exist to skew the content width.
+                Item {
+                    id: stripLayer
 
-                    delegate: Item {
-                        id: indicator
+                    objectName: "zoneSelectorStripLayer"
+                    visible: root.stripMode
+                    anchors.fill: parent
+                    readonly property real cellWidth: root.indicatorWidth + root.cardSidePadding * 2
+                    readonly property real cellHeight: root.indicatorHeight + root.labelSpace + root.cardPadding
 
-                        required property var modelData
-                        required property int index
-                        property string layoutId: modelData.id || ""
-                        property bool isActive: layoutId === root.activeLayoutId
-                        property bool hasSelectedZone: root.selectedLayoutId === layoutId
+                    Row {
+                        id: stripRow
 
-                        width: root.indicatorWidth + root.cardSidePadding * 2
-                        height: root.indicatorHeight + root.labelSpace + root.cardPadding
-                        Layout.preferredWidth: width
-                        Layout.preferredHeight: height
+                        objectName: "zoneSelectorStripRow"
+                        spacing: root.indicatorSpacing
 
-                        QFZCommon.LayoutCard {
-                            anchors.fill: parent
-                            layoutData: indicator.modelData
-                            isActive: indicator.isActive
-                            isSelected: indicator.hasSelectedZone
-                            globalAutoAssign: root.globalAutoAssign
-                            previewWidth: root.indicatorWidth
-                            previewHeight: root.indicatorHeight
-                            showCardBackground: true
-                            // The zone-selector slot is input-transparent by design —
-                            // OverlayService::updateSelectorPosition pushes cursor coords from
-                            // the D-Bus drag stream and writes `selectedLayoutId` /
-                            // `selectedZoneIndex` back; the commit happens at drag-end in
-                            // WindowDragAdaptor's drop path (drop.cpp). ZonePreview carries no
-                            // pointer handlers at all (its hover machinery was removed), so
-                            // nothing here can switch the active layout on stray hover events.
-                            selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
-                            zonePadding: root.scaledPadding
-                            edgeGap: root.scaledPadding
-                            minZoneSize: root.minZoneSize
-                            zoneHighlightColor: root.highlightColor
-                            zoneInactiveColor: root.inactiveColor
-                            zoneBorderColor: root.borderColor
-                            inactiveOpacity: root.inactiveOpacity
-                            activeOpacity: root.activeOpacity
-                            highlightColor: root.highlightColor
-                            textColor: root.textColor
-                            backgroundColor: root.backgroundColor
-                            fontFamily: root.fontFamily
-                            fontSizeScale: root.fontSizeScale
-                            fontWeight: root.fontWeight
-                            fontItalic: root.fontItalic
-                            fontUnderline: root.fontUnderline
-                            fontStrikeout: root.fontStrikeout
-                            animationDuration: animationConstants.normalDuration
-                            shortAnimationDuration: animationConstants.shortDuration
-                            labelTopMargin: root.labelTopMargin
-                            // No hover handling: ZonePreview has no MouseAreas.
-                            // `selectedLayoutId` / `selectedZoneIndex` are written from C++
-                            // (selector.cpp::updateSelectorPosition) so the highlight still
-                            // tracks the cursor.
+                        Repeater {
+                            model: root.stripMode ? root.stripColumns : []
+
+                            delegate: ZoneSelectorStripCard {
+                                previewWidth: root.indicatorWidth
+                                previewHeight: root.indicatorHeight
+                                cardPadding: root.cardPadding
+                                cardSidePadding: root.cardSidePadding
+                                labelSpace: root.labelSpace
+                                zonePadding: root.scaledPadding
+                                highlightColor: root.highlightColor
+                                inactiveColor: root.inactiveColor
+                                zoneBorderColor: root.borderColor
+                                backgroundColor: root.backgroundColor
+                                textColor: root.textColor
+                                activeOpacity: root.activeOpacity
+                                inactiveOpacity: root.inactiveOpacity
+                                selectedHalf: root.selectedStripColumn === index ? root.selectedStripHalf : -1
+                            }
                         }
+                    }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            visible: root.locked && !indicator.isActive
-                            z: 100
-                            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
-                            radius: Kirigami.Units.largeSpacing
+                    // Insert-bar highlight for the selected gap. Boundary i
+                    // sits before card i; boundary N trails the last card.
+                    Repeater {
+                        model: root.stripMode ? root.stripColumns.length + 1 : 0
 
-                            Kirigami.Icon {
-                                anchors.centerIn: parent
-                                source: "object-locked"
-                                width: Math.min(parent.width, parent.height) * 0.3
-                                height: width
-                                color: Kirigami.Theme.textColor
+                        delegate: Rectangle {
+                            required property int index
+
+                            readonly property int cardCount: root.stripColumns.length
+                            width: 4
+                            height: stripLayer.cellHeight
+                            radius: 2
+                            z: 10
+                            color: root.highlightColor
+                            visible: root.selectedStripGap === index
+                            x: {
+                                if (index === 0)
+                                    return 0;
+                                if (index === cardCount)
+                                    return cardCount * stripLayer.cellWidth + (cardCount - 1) * root.indicatorSpacing - width;
+                                return index * (stripLayer.cellWidth + root.indicatorSpacing) - root.indicatorSpacing / 2 - width / 2;
+                            }
+                        }
+                    }
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: i18nc("@info strip selector empty state", "No columns yet. Drop here to start the strip.")
+                        color: Kirigami.Theme.disabledTextColor
+                        visible: root.stripMode && root.stripColumns.length === 0
+                    }
+                }
+
+                GridLayout {
+                    id: contentGrid
+
+                    visible: !root.stripMode
+                    objectName: "zoneSelectorContentGrid"
+                    width: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
+                    height: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
+                    columns: root.layoutColumns
+                    rowSpacing: root.indicatorSpacing
+                    columnSpacing: root.indicatorSpacing
+
+                    Repeater {
+                        model: root.layouts
+
+                        delegate: Item {
+                            id: indicator
+
+                            required property var modelData
+                            required property int index
+                            property string layoutId: modelData.id || ""
+                            property bool isActive: layoutId === root.activeLayoutId
+                            property bool hasSelectedZone: root.selectedLayoutId === layoutId
+
+                            width: root.indicatorWidth + root.cardSidePadding * 2
+                            height: root.indicatorHeight + root.labelSpace + root.cardPadding
+                            Layout.preferredWidth: width
+                            Layout.preferredHeight: height
+
+                            QFZCommon.LayoutCard {
+                                anchors.fill: parent
+                                layoutData: indicator.modelData
+                                isActive: indicator.isActive
+                                isSelected: indicator.hasSelectedZone
+                                globalAutoAssign: root.globalAutoAssign
+                                previewWidth: root.indicatorWidth
+                                previewHeight: root.indicatorHeight
+                                showCardBackground: true
+                                // The zone-selector slot is input-transparent by design —
+                                // OverlayService::updateSelectorPosition pushes cursor coords from
+                                // the D-Bus drag stream and writes `selectedLayoutId` /
+                                // `selectedZoneIndex` back; the commit happens at drag-end in
+                                // WindowDragAdaptor's drop path (drop.cpp). ZonePreview carries no
+                                // pointer handlers at all (its hover machinery was removed), so
+                                // nothing here can switch the active layout on stray hover events.
+                                selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
+                                zonePadding: root.scaledPadding
+                                edgeGap: root.scaledPadding
+                                minZoneSize: root.minZoneSize
+                                zoneHighlightColor: root.highlightColor
+                                zoneInactiveColor: root.inactiveColor
+                                zoneBorderColor: root.borderColor
+                                inactiveOpacity: root.inactiveOpacity
+                                activeOpacity: root.activeOpacity
+                                highlightColor: root.highlightColor
+                                textColor: root.textColor
+                                backgroundColor: root.backgroundColor
+                                fontFamily: root.fontFamily
+                                fontSizeScale: root.fontSizeScale
+                                fontWeight: root.fontWeight
+                                fontItalic: root.fontItalic
+                                fontUnderline: root.fontUnderline
+                                fontStrikeout: root.fontStrikeout
+                                animationDuration: animationConstants.normalDuration
+                                shortAnimationDuration: animationConstants.shortDuration
+                                labelTopMargin: root.labelTopMargin
+                                // No hover handling: ZonePreview has no MouseAreas.
+                                // `selectedLayoutId` / `selectedZoneIndex` are written from C++
+                                // (selector.cpp::updateSelectorPosition) so the highlight still
+                                // tracks the cursor.
                             }
 
-                            MouseArea {
+                            Rectangle {
                                 anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.ForbiddenCursor
-                                Accessible.role: Accessible.Button
-                                Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked. Switch to this layout before selecting a zone.")
-                                onClicked: function (mouse) {
-                                    mouse.accepted = true;
+                                visible: root.locked && !indicator.isActive
+                                z: 100
+                                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                                radius: Kirigami.Units.largeSpacing
+
+                                Kirigami.Icon {
+                                    anchors.centerIn: parent
+                                    source: "object-locked"
+                                    width: Math.min(parent.width, parent.height) * 0.3
+                                    height: width
+                                    color: Kirigami.Theme.textColor
                                 }
-                                onPressed: function (mouse) {
-                                    mouse.accepted = true;
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.ForbiddenCursor
+                                    Accessible.role: Accessible.Button
+                                    Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked. Switch to this layout before selecting a zone.")
+                                    onClicked: function (mouse) {
+                                        mouse.accepted = true;
+                                    }
+                                    onPressed: function (mouse) {
+                                        mouse.accepted = true;
+                                    }
                                 }
                             }
                         }
@@ -567,7 +664,7 @@ Item {
             anchors.centerIn: parent
             text: i18nc("@info zone selector empty state", "No layouts available")
             color: Kirigami.Theme.disabledTextColor
-            visible: root.layouts.length === 0
+            visible: !root.stripMode && root.layouts.length === 0
         }
     }
 }
