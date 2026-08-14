@@ -76,7 +76,7 @@ void SettingsController::buildApplicationController()
     // Top-level entries. The rail reads top → bottom as three blocks split by
     // two dividers: (1) top/global — Overview (status dashboard), Profiles
     // (which frames everything below it) + General (global settings);
-    // (2) per-feature configuration — Display, Placement, Appearance
+    // (2) per-feature configuration — Virtual Screens, Placement, Appearance
     // (which parents Decorations and Animations), Rules;
     // (3) tools & meta — Editor, About.
     // `divider` flags mark only those two seams (after General, after Rules)
@@ -99,17 +99,23 @@ void SettingsController::buildApplicationController()
             QStringLiteral("configure"), /*collapsible=*/false, /*divider=*/true);
 
     // ── Block 2: per-feature configuration ──
-    regVirtual(QStringLiteral("display"), QString(), PhosphorI18n::tr("Display"), QString(),
-               QStringLiteral("preferences-desktop-display"), /*collapsible=*/true);
+    // Virtual Screens is a top-level leaf. It used to sit under a "Display"
+    // category, but once the layout library moved into the placement modes
+    // that category held this single child, and a one-child dropdown is pure
+    // friction.
+    regVirtual(QStringLiteral("virtualscreens"), QString(), PhosphorI18n::tr("Virtual Screens"),
+               QStringLiteral("pages/screens/VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
     // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
-    // inline-collapsible category, matching Display. Divider after it (i.e.
-    // above Animations) sets the placement categories apart from the
-    // Animations / Rules pages that follow.
+    // inline-collapsible category. Divider after it (i.e.
+    // above Appearance) sets the placement categories apart from the
+    // Appearance / Rules pages that follow.
     regVirtual(QStringLiteral("placement"), QString(), PhosphorI18n::tr("Placement"), QString(),
                QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
     // Appearance groups the visual surfaces — the Animations tree and the
     // Decoration tree (which owns the window border / title-bar / gap page) — as an
-    // inline-collapsible category (matching Display / Placement). No QML of its
+    // inline-collapsible category (matching Placement). No QML of its
     // own; redirects to its first leaf.
     regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
                QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
@@ -133,7 +139,7 @@ void SettingsController::buildApplicationController()
     // but without claiming a sidebar/registry id of its own.
     m_app->registerDomain(m_decorationPage);
     // "animations" is a no-QML drill-down parent under Appearance — register it as
-    // a virtual navigation node (like display / placement / snapping / tiling),
+    // a virtual navigation node (like placement / snapping / tiling),
     // NOT as m_animationsPage's own id. The AnimationsPageController is the
     // staging controller for animation edits; it carries the distinct id
     // "animations-staging" and is wired into the framework's dirty/apply
@@ -162,11 +168,11 @@ void SettingsController::buildApplicationController()
                QStringLiteral("help-about"));
 
     // Placement children — the three placement modes. They keep their own
-    // drill-down behaviour (collapsible=false) and their inline enable toggles;
-    // only their parent changed from top-level to "placement". Main.qml's
-    // trailing delegate keys those toggles off SIX ids, each parent plus its
-    // "-simple" counterpart, because simple mode renders the condensed leaf's
-    // own pageId in the row the toggle has to stay on.
+    // drill-down behaviour (collapsible=false) and their inline enable
+    // toggles. In simple mode the flat rail keeps each mode as an expandable
+    // header row of its own (a multi-leaf drill parent no longer dissolves —
+    // see SidebarRows' flat walk), so Main.qml's trailing delegate keys the
+    // toggles off exactly these three ids in both modes.
     regVirtual(QStringLiteral("snapping"), QStringLiteral("placement"), PhosphorI18n::tr("Snapping"), QString(),
                QStringLiteral("view-split-left-right"));
     regVirtual(QStringLiteral("tiling"), QStringLiteral("placement"), PhosphorI18n::tr("Tiling"), QString(),
@@ -175,14 +181,6 @@ void SettingsController::buildApplicationController()
     // showing it twice reads as two views of the same thing.
     regVirtual(QStringLiteral("scrolling"), QStringLiteral("placement"), PhosphorI18n::tr("Scrolling"), QString(),
                QStringLiteral("distribute-horizontal-equal"));
-
-    // Display children
-    regVirtual(QStringLiteral("virtualscreens"), QStringLiteral("display"), PhosphorI18n::tr("Virtual Screens"),
-               QStringLiteral("pages/screens/VirtualScreensPage.qml"), QStringLiteral("virtual-desktops"),
-               /*collapsible=*/false,
-               /*divider=*/false, AdvancedOnly);
-    regVirtual(QStringLiteral("layouts"), QStringLiteral("display"), PhosphorI18n::tr("Layouts"),
-               QStringLiteral("pages/layouts/LayoutsPage.qml"), QStringLiteral("view-grid"));
 
     // Snapping children — organised by SUBJECT, each carrying its own Behavior
     // and Appearance pages: the drag Overlay, the edge Zone-Selector popup, and
@@ -200,10 +198,22 @@ void SettingsController::buildApplicationController()
     // the everyday decisions (drag triggers + Snap Assist). In advanced mode
     // it is filtered out and the full per-subject tree shows instead; it and
     // Overlay → Behavior are counterparts so mode flips and deep links land
-    // sensibly.
-    regVirtual(QStringLiteral("snapping-simple"), QStringLiteral("snapping"), PhosphorI18n::tr("Snapping"),
+    // sensibly. Titled "General": the flat rail nests it under the mode's
+    // own expandable header row (which carries the mode name and the enable
+    // toggle), the same lead-page shape as animations-general.
+    regVirtual(QStringLiteral("snapping-simple"), QStringLiteral("snapping"), PhosphorI18n::tr("General"),
                QStringLiteral("pages/snapping/SnappingSimplePage.qml"), QStringLiteral("view-split-left-right"),
                /*collapsible=*/false, /*divider=*/true, PV::SimpleOnly, QStringLiteral("snapping-overlay-behavior"));
+    // The snapping layout library — the browser formerly tabbed into
+    // Display → Layouts, now this mode's own leaf. Leads the section (it is
+    // the mode's primary artifact; the config tree follows) and stays
+    // visible in BOTH modes: it is the only surface where layouts are
+    // created, imported and deleted, and that is everyday activity, not
+    // power depth. Divider closes the content block before the Overlay
+    // category.
+    regVirtual(QStringLiteral("snapping-layouts"), QStringLiteral("snapping"), PhosphorI18n::tr("Layouts"),
+               QStringLiteral("pages/snapping/SnappingLayoutsPage.qml"), QStringLiteral("view-grid"),
+               /*collapsible=*/false, /*divider=*/true);
     regVirtual(QStringLiteral("snapping-overlay-cat"), QStringLiteral("snapping"), PhosphorI18n::tr("Overlay"),
                QString(), QStringLiteral("preferences-desktop-color"), /*collapsible=*/true, /*divider=*/true);
     // Advanced-only: its simple face used to be the Triggers card, now
@@ -258,10 +268,25 @@ void SettingsController::buildApplicationController()
     // windows). In advanced mode it is filtered out and the full per-page tree
     // shows instead; it and the Algorithm page are counterparts so mode
     // flips and deep links land sensibly.
-    regVirtual(QStringLiteral("tiling-simple"), QStringLiteral("tiling"), PhosphorI18n::tr("Tiling"),
+    regVirtual(QStringLiteral("tiling-simple"), QStringLiteral("tiling"), PhosphorI18n::tr("General"),
                QStringLiteral("pages/tiling/TilingSimplePage.qml"), QStringLiteral("window-duplicate"),
                /*collapsible=*/false,
                /*divider=*/true, PV::SimpleOnly, QStringLiteral("tiling-algorithm"));
+    // The tiling-algorithm library — the browser formerly tabbed into
+    // Display → Layouts, now this mode's own leaf. Manages the INSTALLED
+    // algorithms (import/create/delete/hide); the Algorithm page below
+    // configures the ACTIVE one. "Library" rather than "Algorithms" so the
+    // two rows don't read as near-duplicates, matching the
+    // Animations/Decorations Library precedent — and folder-open rather than
+    // view-grid for the same reason: the Algorithm page below carries
+    // view-grid, and one section showing the glyph twice reads as two views
+    // of the same thing (the rule the Snapping registration's icon note
+    // states). folder-open is what the Animations/Decorations Library rows
+    // use. Leads the section and stays visible in both modes, mirroring
+    // Snapping → Layouts.
+    regVirtual(QStringLiteral("tiling-library"), QStringLiteral("tiling"), PhosphorI18n::tr("Library"),
+               QStringLiteral("pages/tiling/TilingLibraryPage.qml"), QStringLiteral("folder-open"),
+               /*collapsible=*/false, /*divider=*/true);
     // Tiling → Window holds just the per-mode Behavior page now. The window
     // border / title-bar appearance moved to the shared, top-level Window
     // Appearance page (config-backed, shared, mode-neutral). Advanced-only:
@@ -271,8 +296,8 @@ void SettingsController::buildApplicationController()
             QStringLiteral("pages/tiling/TilingBehaviorPage.qml"), QStringLiteral("preferences-system-windows"),
             /*collapsible=*/false, /*divider=*/true, AdvancedOnly);
 
-    // Algorithm is a top-level leaf under Tiling (no snapping peer — snapping's
-    // layout equivalent lives under Display → Layouts). Divider after it sets the
+    // Algorithm is a top-level leaf under Tiling (no snapping peer — snapping
+    // has no active-algorithm concept, only the layout library above). Divider after it sets the
     // mode-specific algorithm apart from the shared Configuration block below.
     regPage(m_tilingAlgorithmPage.get(), QStringLiteral("tiling"), PhosphorI18n::tr("Algorithm"),
             QStringLiteral("pages/tiling/TilingAlgorithmPage.qml"), QStringLiteral("view-grid"), /*collapsible=*/false,
@@ -293,10 +318,17 @@ void SettingsController::buildApplicationController()
     // enable toggle). The SimpleOnly condensed page leads, mirroring its two
     // siblings; its advanced counterpart is the Columns page, the first of the
     // Columns / Window split described below.
-    regVirtual(QStringLiteral("scrolling-simple"), QStringLiteral("scrolling"), PhosphorI18n::tr("Scrolling"),
+    regVirtual(QStringLiteral("scrolling-simple"), QStringLiteral("scrolling"), PhosphorI18n::tr("General"),
                QStringLiteral("pages/scrolling/ScrollingSimplePage.qml"), QStringLiteral("distribute-horizontal-equal"),
                /*collapsible=*/false,
                /*divider=*/true, PV::SimpleOnly, QStringLiteral("scrolling-columns"));
+    // The scrolling-template library — the browser formerly tabbed into
+    // Display → Layouts, now this mode's own leaf. Leads the section and
+    // stays visible in both modes, mirroring Snapping → Layouts and
+    // Tiling → Library.
+    regVirtual(QStringLiteral("scrolling-templates"), QStringLiteral("scrolling"), PhosphorI18n::tr("Templates"),
+               QStringLiteral("pages/scrolling/ScrollingTemplatesPage.qml"), QStringLiteral("view-grid"),
+               /*collapsible=*/false, /*divider=*/true);
     // The advanced tree mirrors Tiling's per-concern split: Columns
     // (fresh-column/tile defaults + presets), Tabs (the tab indicator's own
     // thirteen-knob family), and Window (window handling plus the Focus and

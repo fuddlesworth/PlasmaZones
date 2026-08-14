@@ -42,6 +42,21 @@ bool isShortcutsPage(const QString& page)
         || page == QLatin1String("scrolling-shortcuts");
 }
 
+// The per-mode library pages. Their stores (layouts / algorithms / templates)
+// write immediately rather than staging, so the pages are never dirty — see the
+// header's note for how their set-as-default config write is attributed.
+bool isLibraryPage(const QString& page)
+{
+    return page == QLatin1String("snapping-layouts") || page == QLatin1String("tiling-library")
+        || page == QLatin1String("scrolling-templates");
+}
+
+// QML bridge for the predicate above; see the header note on the Q_INVOKABLE.
+bool SettingsController::isLibraryPage(const QString& page) const
+{
+    return PlasmaZones::isLibraryPage(page);
+}
+
 // Every animation leaf shares the single AnimationsPageController staging domain
 // AND the single ShaderProfileTree key, but Reset/Discard/dirty are NOT
 // whole-tree: each surface leaf (windows/osds/overlays/desktops/motion/dragging/

@@ -36,9 +36,11 @@ import "LoaderHelpers.js" as PhosphorLoaderHelpers
  *     rows in/out via ListView add/remove Transitions.
  *   - Navigable leaves (entry has a qmlSource) — taps set
  *     controller.currentPageId.
- *   - FLAT mode (`flattenTree`, see below) overrides all three: every
- *     visible navigable page renders at depth 0, category headers are not
- *     emitted, and drillInto / drillOut early-return. A reader of the three
+ *   - FLAT mode (`flattenTree`, see below) overrides all three: pages render
+ *     in one list with no drill scopes (drillInto / drillOut early-return).
+ *     Collapsible category headers dissolve, but a multi-leaf drill parent
+ *     stays as an expandable header row whose toggle routes through
+ *     `toggleCategory` like any accordion header. A reader of the three
  *     modes above will not otherwise learn a fourth one supersedes them.
  *
  * Slots for consumers:
@@ -109,9 +111,11 @@ ColumnLayout {
      *  `currentPageId`, so all three read it from here. */
     readonly property string _dividerPrefix: rowBuilder.dividerPrefix()
     /** When true the sidebar renders the visible page tree as ONE flat
-     *  list: every visible navigable page at depth 0 in registration
-     *  order, no category headers, no indentation, no drill-downs.
-     *  Section dividers still honour `hasDividerAfter`, but only on
+     *  list in registration order, with no drill-downs. Collapsible
+     *  category headers dissolve to depth 0; a no-QML drill parent with
+     *  two or more navigable descendants stays as an expandable header
+     *  row with its subtree indented one step under it (see SidebarRows'
+     *  flat walk). Section dividers still honour `hasDividerAfter`, but only on
      *  TOP-LEVEL entries — a top-level flag fires after the last row its
      *  subtree emitted; leaf-level flags are ignored, since they are tuned
      *  for the tree rail's within-category rhythm. Intended for a

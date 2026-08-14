@@ -207,8 +207,7 @@ Rectangle {
 
     // Focus toggles the width between 1 and 2 (see the binding above);
     // animating it alongside colour keeps the focus ring from popping while
-    // the colour is still mid-fade. Same motion profile as the sibling
-    // SegmentedViewSwitch's border behaviors.
+    // the colour is still mid-fade.
     Behavior on border.width {
         PhosphorMotionAnimation {
             profile: "widget.hover"
