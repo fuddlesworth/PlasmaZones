@@ -415,7 +415,6 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/screens/MonitorScopeChip.qml
         qml/pages/layouts/LayoutGridDelegate.qml
         qml/pages/layouts/LayoutManageCard.qml
-        qml/components/SegmentedViewSwitch.qml
         qml/pages/layouts/LayoutFilterBar.qml
         qml/js/LayoutFilterLogic.js
         # Shared group/sort infrastructure (Layouts + Rules pages)

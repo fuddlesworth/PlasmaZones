@@ -1127,7 +1127,7 @@ SettingsFlickable {
                     else if (stateView.scrollingTemplateName.length > 0)
                         template = i18n("This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.", stateView.scrollingTemplateName);
                     else
-                        template = i18n("This screen has no template of its own, so it follows the default template from the Layouts page.");
+                        template = i18n("This screen has no template of its own, so it follows the default template from Scrolling → Templates.");
                     if (stateView.blueprintTotal <= 0)
                         return strip + " " + template;
 

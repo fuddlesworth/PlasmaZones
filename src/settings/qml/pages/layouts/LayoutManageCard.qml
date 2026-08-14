@@ -7,7 +7,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Import / open-folder card for the Layouts page.
+ * @brief Import / open-folder card for the per-mode library pages.
  *
  * Mirrors the shader browser's "User shaders" card: a drop-zone for installing
  * by drag-and-drop plus an Open Folder action, with the explicit import sources
@@ -29,8 +29,10 @@ import org.kde.kirigami as Kirigami
 SettingsCard {
     id: root
 
-    // 0 = Snapping Layouts, 1 = Auto Tile Algorithms, 2 = Scrolling Templates
-    property int viewMode: 0
+    // 0 = Snapping Layouts, 1 = Auto Tile Algorithms, 2 = Scrolling Templates.
+    // Required, matching LayoutBrowserPage: a silent default would hand a
+    // forgetful future host the snapping strings and the KZones import menu.
+    required property int viewMode
 
     signal requestImportLayout
     signal requestImportFromKZones

@@ -339,12 +339,29 @@ Menu {
         icon.name: layoutContextMenu.isTemplate && defaultItem.isFamilyDefault ? "edit-clear" : "favorite"
         enabled: layoutContextMenu.layout && (layoutContextMenu.isTemplate || !defaultItem.isFamilyDefault)
         onTriggered: {
-            if (layoutContextMenu.isTemplate)
+            // The active page here is a library page, which is never dirty
+            // (its store writes immediately). Each family's default key is a
+            // staged config key owned by a settings page, so wrap the write in
+            // an external-edit envelope naming the owner: value-based
+            // dirtiness, the badge, and per-page Discard all land on the page
+            // that can actually revert it. The guard runs BEFORE the envelope
+            // opens: QML has no RAII, so a throw between begin and end would
+            // strand the external-edit stack for the rest of the session.
+            if (!layoutContextMenu.appSettings)
+                return;
+            if (layoutContextMenu.isTemplate) {
+                settingsController.beginExternalEdit("scrolling-columns");
                 layoutContextMenu.appSettings.defaultScrollingTemplate = defaultItem.isFamilyDefault ? "" : layoutContextMenu.layoutId;
-            else if (layoutContextMenu.isAutotile)
+                settingsController.endExternalEdit();
+            } else if (layoutContextMenu.isAutotile) {
+                settingsController.beginExternalEdit("tiling-algorithm");
                 layoutContextMenu.appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
-            else
+                settingsController.endExternalEdit();
+            } else {
+                settingsController.beginExternalEdit("snapping-window-behavior");
                 layoutContextMenu.appSettings.defaultLayoutId = layoutContextMenu.layoutId;
+                settingsController.endExternalEdit();
+            }
         }
     }
 

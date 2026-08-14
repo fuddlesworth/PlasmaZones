@@ -218,10 +218,16 @@ void SettingsController::resetPage(const QString& page)
         const auto ownedIt = manifest.constFind(page);
         if (ownedIt != manifest.constEnd()) {
             // The mode enable switches are manifest-owned (for dirty/save/
-            // discard) but a page Reset must not flip the mode itself, so
-            // strip them before handing the list to resetKeys.
+            // discard) but a page Reset must not flip the mode itself, and
+            // the two cross-page default selections are manifest-owned the
+            // same way but set from the library pages, which the owner page
+            // shows no row for — strip both exemption lists before handing
+            // the list to resetKeys.
             Settings::ConfigKeyList keys = *ownedIt;
             for (const Settings::ConfigKey& exempt : resetExemptModeEnableKeys()) {
+                keys.removeAll(exempt);
+            }
+            for (const Settings::ConfigKey& exempt : resetExemptDefaultSelectionKeys()) {
                 keys.removeAll(exempt);
             }
             // Suppress onSettingsPropertyChanged for the reset's NOTIFY storm;

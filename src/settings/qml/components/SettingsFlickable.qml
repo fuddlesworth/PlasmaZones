@@ -90,7 +90,7 @@ Flickable {
     // A listing page that swaps its group model (LayoutBrowserPage.rebuildModel and
     // friends) destroys every card delegate and rebuilds them over the
     // following frames. For that window the page's natural height collapses to
-    // the chrome alone — measured on the Layouts page: 4091 → 671 with a 694 px
+    // the chrome alone — measured on the layout browser: 4091 → 671 with a 694 px
     // viewport — so Flickable sees nothing scrollable, clamps `contentY` to the
     // top, and the cards then re-materialise around a scroll offset that is
     // gone for good. Any edit made while scrolled down (toggling a layout's

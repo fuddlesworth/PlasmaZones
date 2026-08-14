@@ -219,7 +219,7 @@ Kirigami.Dialog {
                                 // render" contract: no lookup, no empty-result
                                 // retry. Two things want it here. There is no
                                 // blank.luau to preview. And this dialog is
-                                // built with the Layouts page rather than on
+                                // built with each library page rather than on
                                 // demand, so without the `opened` gate all eight
                                 // template previews would run their Luau tile
                                 // pass on every page load, for a wizard the user

@@ -146,6 +146,10 @@ private Q_SLOTS:
         QVERIFY(header.value(QStringLiteral("_isCollapsibleHeader")).toBool());
         QVERIFY(header.value(QStringLiteral("_isExpanded")).toBool());
         QVERIFY(!header.value(QStringLiteral("hasQmlSource")).toBool());
+        // Not a drill parent: SidebarRow routes clicks on _isCollapsibleHeader
+        // first, but the chevron branch and any future consumer read this flag
+        // independently, so a header wrongly carrying it would mis-render.
+        QVERIFY(!header.value(QStringLiteral("_isDrillParent")).toBool());
         QCOMPARE(header.value(QStringLiteral("_depth")).toInt(), 0);
         // Children indent one step under the kept header; the promoted lone
         // leaf stays at the surrounding depth.
@@ -179,6 +183,94 @@ private Q_SLOTS:
         // Without the override the registered (tree-context) title stands.
         const QVariantList bare = rows.build(true, QString(), QString(), {}, {});
         QCOMPARE(rowAt(bare, 0).value(QStringLiteral("title")).toString(), QStringLiteral("General"));
+    }
+
+    void flatAppliesATitleOverrideToAKeptHeaderRow()
+    {
+        // An override keyed on a multi-leaf drill parent retitles its HEADER
+        // row. Since the per-mode split retired the leaf overrides, a parent
+        // override is the only remaining way to retitle a mode header, and
+        // the header row goes through the same flatTitleOf lookup as a leaf.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("mode"), {}, QStringLiteral("Mode"), {}));
+        QVERIFY(reg(r, QStringLiteral("mode.a"), QStringLiteral("mode"), QStringLiteral("A"),
+                    QStringLiteral("qrc:/A.qml")));
+        QVERIFY(reg(r, QStringLiteral("mode.b"), QStringLiteral("mode"), QStringLiteral("B"),
+                    QStringLiteral("qrc:/B.qml")));
+
+        const QVariantMap overrides{{QStringLiteral("mode"), QStringLiteral("Renamed")}};
+        const QVariantList out = rows.build(true, QString(), QString(), {}, overrides);
+        QVERIFY(!out.isEmpty());
+        const QVariantMap header = rowAt(out, 0);
+        QVERIFY(header.value(QStringLiteral("_isCollapsibleHeader")).toBool());
+        QCOMPARE(header.value(QStringLiteral("title")).toString(), QStringLiteral("Renamed"));
+    }
+
+    void flatNestsAKeptHeaderInsideAnotherKeptHeader()
+    {
+        // Two stacked no-QML drill parents, the inner with two leaves. The
+        // recursion carries TWO counters — `depth` bounds the registry walk
+        // and gates the top-level seam, `rowDepth` is the emitted indent —
+        // and this is the shape that drives them apart by more than one step:
+        // outer header at rowDepth 0, inner header at 1, leaves at 2.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("outer"), {}, QStringLiteral("Outer"), {}));
+        QVERIFY(reg(r, QStringLiteral("outer.inner"), QStringLiteral("outer"), QStringLiteral("Inner"), {}));
+        QVERIFY(reg(r, QStringLiteral("outer.inner.a"), QStringLiteral("outer.inner"), QStringLiteral("A"),
+                    QStringLiteral("qrc:/A.qml")));
+        QVERIFY(reg(r, QStringLiteral("outer.inner.b"), QStringLiteral("outer.inner"), QStringLiteral("B"),
+                    QStringLiteral("qrc:/B.qml")));
+
+        const QVariantList out = rows.build(true, QString(), QString(), {}, {});
+        QCOMPARE(idsOf(out),
+                 QStringList({QStringLiteral("outer"), QStringLiteral("outer.inner"), QStringLiteral("outer.inner.a"),
+                              QStringLiteral("outer.inner.b")}));
+        QVERIFY(rowAt(out, 0).value(QStringLiteral("_isCollapsibleHeader")).toBool());
+        QCOMPARE(rowAt(out, 0).value(QStringLiteral("_depth")).toInt(), 0);
+        QVERIFY(rowAt(out, 1).value(QStringLiteral("_isCollapsibleHeader")).toBool());
+        QCOMPARE(rowAt(out, 1).value(QStringLiteral("_depth")).toInt(), 1);
+        QCOMPARE(rowAt(out, 2).value(QStringLiteral("_depth")).toInt(), 2);
+        QCOMPARE(rowAt(out, 3).value(QStringLiteral("_depth")).toInt(), 2);
+
+        // Collapsing the OUTER header removes the inner header and its leaves.
+        QVariantMap collapsed;
+        collapsed.insert(QStringLiteral("outer"), false);
+        const QVariantList closed = rows.build(true, QString(), QString(), collapsed, {});
+        QCOMPARE(idsOf(closed), QStringList({QStringLiteral("outer")}));
+    }
+
+    void flatPutsAKeptHeadersSeamAfterItsSubtreeAndAfterTheHeaderWhenCollapsed()
+    {
+        // A top-level kept header carrying hasDividerAfter: expanded, the seam
+        // fires after the last row its subtree emitted; collapsed, the header
+        // row itself satisfies the `out.size() > before` seam condition, so
+        // the seam lands directly after the header rather than vanishing and
+        // gluing sections together.
+        PageRegistry r;
+        SidebarRows rows;
+        rows.setRegistry(&r);
+        QVERIFY(reg(r, QStringLiteral("mode"), {}, QStringLiteral("Mode"), {}, /*collapsible=*/false,
+                    /*dividerAfter=*/true));
+        QVERIFY(reg(r, QStringLiteral("mode.a"), QStringLiteral("mode"), QStringLiteral("A"),
+                    QStringLiteral("qrc:/A.qml")));
+        QVERIFY(reg(r, QStringLiteral("mode.b"), QStringLiteral("mode"), QStringLiteral("B"),
+                    QStringLiteral("qrc:/B.qml")));
+        QVERIFY(reg(r, QStringLiteral("last"), {}, QStringLiteral("Last"), QStringLiteral("qrc:/L.qml")));
+
+        const QString seam = SidebarRows::dividerPrefix() + QStringLiteral("flat/mode");
+        const QVariantList open = rows.build(true, QString(), QString(), {}, {});
+        QCOMPARE(idsOf(open),
+                 QStringList({QStringLiteral("mode"), QStringLiteral("mode.a"), QStringLiteral("mode.b"), seam,
+                              QStringLiteral("last")}));
+
+        QVariantMap collapsed;
+        collapsed.insert(QStringLiteral("mode"), false);
+        const QVariantList closed = rows.build(true, QString(), QString(), collapsed, {});
+        QCOMPARE(idsOf(closed), QStringList({QStringLiteral("mode"), seam, QStringLiteral("last")}));
     }
 
     void flatHonoursOnlyTopLevelDividersAndTrimsTheTrailingOne()
@@ -304,8 +396,13 @@ private Q_SLOTS:
 
     void treeSkipsADrillCategoryThatLeadsNowhere()
     {
-        // Its only leaf is filtered out, so drilling in would show a Back
-        // button and nothing else. The row must not be offered at all.
+        // Its only leaf is filtered out, so the row must not appear. What
+        // actually drops it is the REGISTRY's visibility rule: isEntryVisible
+        // hides a virtual node with no visible navigable descendant, so `cat`
+        // never reaches build()'s descendant count at all (that count's zero
+        // case is reachable only through depth truncation — see
+        // firstTwoNavigableUnder's doc). The assertion pins the user-visible
+        // behaviour either way.
         PageRegistry r;
         SidebarRows rows;
         rows.setRegistry(&r);
@@ -348,7 +445,10 @@ private Q_SLOTS:
         // every navigable page beneath it is hidden. Two advanced leaves, so
         // the pre-state is a genuine drill target (build() flattens a
         // one-descendant category rather than offering it), and simple mode
-        // then removes both.
+        // then removes both. Mechanically the rejection happens at the
+        // kids.isEmpty() guard — the registry's visibility rule hides the
+        // intermediate `cat.sub` once both its leaves filter out — not at the
+        // descendant count; the assertion pins the behaviour either way.
         PageRegistry r;
         SidebarRows rows;
         rows.setRegistry(&r);
@@ -457,7 +557,10 @@ private Q_SLOTS:
 
         const QVariantMap data = rows.flatPageData(QStringLiteral("cat.general"), overrides);
         QCOMPARE(data.value(QStringLiteral("title")).toString(), QStringLiteral("Window Appearance"));
-        QCOMPARE(data.value(QStringLiteral("pageId")).toString().isEmpty(), true); // registry dict uses "id"
+        // Absence, not empty-string read-back: the registry dict uses "id",
+        // and a `pageId` key holding an EMPTY value would have passed the old
+        // form of this assertion.
+        QVERIFY(!data.contains(QStringLiteral("pageId")));
         QCOMPARE(data.value(QStringLiteral("id")).toString(), QStringLiteral("cat.general"));
 
         // Same id, same override, via the rail: titles must match.
@@ -616,6 +719,14 @@ private Q_SLOTS:
         QVERIFY(reg(r, QStringLiteral("cat"), {}, QStringLiteral("Cat"), {}, true, /*dividerAfter=*/true));
         QVERIFY(
             reg(r, QStringLiteral("cat.a"), QStringLiteral("cat"), QStringLiteral("A"), QStringLiteral("qrc:/A.qml")));
+        // A non-collapsible two-leaf drill parent so the FLAT pass emits its
+        // kept-header row shape too — with only the collapsible `cat`, that
+        // shape dissolved and the flat loop only ever checked leaf rows.
+        QVERIFY(reg(r, QStringLiteral("drill"), {}, QStringLiteral("Drill"), {}));
+        QVERIFY(reg(r, QStringLiteral("drill.a"), QStringLiteral("drill"), QStringLiteral("DA"),
+                    QStringLiteral("qrc:/DA.qml")));
+        QVERIFY(reg(r, QStringLiteral("drill.b"), QStringLiteral("drill"), QStringLiteral("DB"),
+                    QStringLiteral("qrc:/DB.qml")));
         QVERIFY(reg(r, QStringLiteral("z"), {}, QStringLiteral("Z"), QStringLiteral("qrc:/Z.qml")));
 
         const QStringList expected{
@@ -665,7 +776,14 @@ private Q_SLOTS:
             {QStringLiteral("a"), {}, QStringLiteral("A"), {}, QUrl(QStringLiteral("qrc:/A.qml")), page}));
         QVERIFY(!rows.build(false, QString(), QString(), {}, {}).isEmpty());
 
+        // The destroyed()→registryChanged relay must fire on the delete: the
+        // QPointer self-nulls SILENTLY, so without the relay a QML binding on
+        // `registry` would keep the stale non-null value while build() had
+        // already begun returning an empty list. This spy is the only thing
+        // in the suite that would fail if the relay connection were removed.
+        QSignalSpy relaySpy(&rows, &SidebarRows::registryChanged);
         delete reg;
+        QCOMPARE(relaySpy.count(), 1);
 
         QCOMPARE(rows.registry(), nullptr);
         QVERIFY(rows.build(false, QString(), QString(), {}, {}).isEmpty());

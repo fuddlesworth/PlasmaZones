@@ -102,12 +102,14 @@ RowLayout {
         _hasPriorityOrder = viewMode === 2 ? false : (viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder());
     }
 
-    // The state map for @p mode — the one authority every save/load/reset
-    // walk uses, so a third view mode cannot be missed by one of them.
-    function _stateMapFor(mode) {
-        if (mode === 2)
+    // The state map for this instance's fixed view mode — the one authority
+    // every save/load/reset walk uses, so a third view mode cannot be missed
+    // by one of them. Parameterless since the per-mode page split: viewMode is
+    // a required property fixed for the instance's lifetime.
+    function _stateMap() {
+        if (viewMode === 2)
             return _templateStateMap;
-        return mode === 0 ? _snappingStateMap : _tilingStateMap;
+        return viewMode === 0 ? _snappingStateMap : _tilingStateMap;
     }
     // Property-name maps for data-driven save/load.
     // Each entry: [rootPropertyName, persistedStatePropertyName].
@@ -212,8 +214,8 @@ RowLayout {
         searchDebounce.stop();
         searchCleared();
         filterText = "";
-        // Only reset properties relevant to the current view mode
-        let map = _stateMapFor(viewMode);
+        // Only reset properties relevant to this instance's view mode
+        let map = _stateMap();
         for (let i = 0; i < map.length; i++) {
             let prop = map[i][0];
             if (prop in _defaultValues)
@@ -223,21 +225,21 @@ RowLayout {
         filterSettingsChanged();
     }
 
-    function saveState(mode) {
-        let map = _stateMapFor(mode);
+    function saveState() {
+        let map = _stateMap();
         for (let i = 0; i < map.length; i++)
             persistedState[map[i][1]] = root[map[i][0]];
     }
 
-    function loadState(mode) {
+    function loadState() {
         _resetting = true;
         // filterText is intentionally not persisted — always start with empty search
         searchDebounce.stop();
         searchCleared();
         filterText = "";
-        let map = _stateMapFor(mode);
-        let maxGroup = (mode === 2 ? templateGroupModel : (mode === 0 ? snappingGroupModel : tilingGroupModel)).length - 1;
-        let maxSort = (mode === 2 ? templateSortModel : (mode === 0 ? snappingSortModel : tilingSortModel)).length - 1;
+        let map = _stateMap();
+        let maxGroup = (viewMode === 2 ? templateGroupModel : (viewMode === 0 ? snappingGroupModel : tilingGroupModel)).length - 1;
+        let maxSort = (viewMode === 2 ? templateSortModel : (viewMode === 0 ? snappingSortModel : tilingSortModel)).length - 1;
         for (let i = 0; i < map.length; i++) {
             let prop = map[i][0];
             let val = persistedState[map[i][1]];
@@ -257,11 +259,11 @@ RowLayout {
 
     onFilterSettingsChanged: {
         if (!_resetting)
-            saveState(viewMode);
+            saveState();
     }
     spacing: Kirigami.Units.smallSpacing
     Component.onCompleted: {
-        loadState(viewMode);
+        loadState();
         _refreshHasPriorityOrder();
     }
 
@@ -272,15 +274,25 @@ RowLayout {
     // effectiveTilingOrder), which only reruns on filterSettingsChanged, so
     // emit that too or a staged reorder leaves the cards in the stale order
     // while Priority sort is active. Not folded into _refreshHasPriorityOrder:
-    // its other two callers (Component.onCompleted, onViewModeChanged) already
-    // sit next to a loadState() that emits, and would rebuild twice.
+    // its other caller (Component.onCompleted) already sits next to a
+    // loadState() that emits, and would rebuild twice.
+    //
+    // Each handler is gated on this instance's mode: all three live library
+    // pages hear both signals, and an ungated handler rebuilt every group
+    // model (and rewrote every Settings block) for a reorder that only one
+    // mode's cards can even sort by. Templates have no priority order at all,
+    // so the viewMode 2 instance ignores both.
     Connections {
         function onStagedSnappingOrderChanged() {
+            if (root.viewMode !== 0)
+                return;
             root._refreshHasPriorityOrder();
             root.filterSettingsChanged();
         }
 
         function onStagedTilingOrderChanged() {
+            if (root.viewMode !== 1)
+                return;
             root._refreshHasPriorityOrder();
             root.filterSettingsChanged();
         }

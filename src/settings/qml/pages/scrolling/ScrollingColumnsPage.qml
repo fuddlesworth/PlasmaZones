@@ -222,7 +222,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset width")
                     searchAnchor: "defaultColumnWidthPresetIndex"
-                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.")
+                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in width steps apply. Columns opened this way follow later changes to the list they came from.")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindPreset
                     visible: true
 
@@ -316,7 +316,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset height")
                     searchAnchor: "defaultWindowHeightPresetIndex"
-                    description: i18n("Which height a new window opens at, counted from 1 into the heights of the screen's layout template. Screens with no template of their own use the default template from the Layouts page, and with no template at all the built-in height steps apply.")
+                    description: i18n("Which height a new window opens at, counted from 1 into the heights of the screen's layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in height steps apply.")
                     enabled: newColumnsCard.effectiveHeightKind === root.heightKindPreset
                     visible: true
 

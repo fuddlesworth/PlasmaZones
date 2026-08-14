@@ -109,13 +109,13 @@ void SettingsController::buildApplicationController()
                /*divider=*/false, AdvancedOnly);
     // Placement groups the three placement modes (Snapping / Tiling / Scrolling) as an
     // inline-collapsible category. Divider after it (i.e.
-    // above Animations) sets the placement categories apart from the
-    // Animations / Rules pages that follow.
+    // above Appearance) sets the placement categories apart from the
+    // Appearance / Rules pages that follow.
     regVirtual(QStringLiteral("placement"), QString(), PhosphorI18n::tr("Placement"), QString(),
                QStringLiteral("preferences-system-windows"), /*collapsible=*/true, /*divider=*/true);
     // Appearance groups the visual surfaces — the Animations tree and the
     // Decoration tree (which owns the window border / title-bar / gap page) — as an
-    // inline-collapsible category (matching Display / Placement). No QML of its
+    // inline-collapsible category (matching Placement). No QML of its
     // own; redirects to its first leaf.
     regVirtual(QStringLiteral("appearance"), QString(), PhosphorI18n::tr("Appearance"), QString(),
                QStringLiteral("preferences-desktop-theme"), /*collapsible=*/true);
@@ -139,7 +139,7 @@ void SettingsController::buildApplicationController()
     // but without claiming a sidebar/registry id of its own.
     m_app->registerDomain(m_decorationPage);
     // "animations" is a no-QML drill-down parent under Appearance — register it as
-    // a virtual navigation node (like display / placement / snapping / tiling),
+    // a virtual navigation node (like placement / snapping / tiling),
     // NOT as m_animationsPage's own id. The AnimationsPageController is the
     // staging controller for animation edits; it carries the distinct id
     // "animations-staging" and is wired into the framework's dirty/apply
@@ -277,10 +277,15 @@ void SettingsController::buildApplicationController()
     // algorithms (import/create/delete/hide); the Algorithm page below
     // configures the ACTIVE one. "Library" rather than "Algorithms" so the
     // two rows don't read as near-duplicates, matching the
-    // Animations/Decorations Library precedent. Leads the section and stays
-    // visible in both modes, mirroring Snapping → Layouts.
+    // Animations/Decorations Library precedent — and folder-open rather than
+    // view-grid for the same reason: the Algorithm page below carries
+    // view-grid, and one section showing the glyph twice reads as two views
+    // of the same thing (the rule the Snapping registration's icon note
+    // states). folder-open is what the Animations/Decorations Library rows
+    // use. Leads the section and stays visible in both modes, mirroring
+    // Snapping → Layouts.
     regVirtual(QStringLiteral("tiling-library"), QStringLiteral("tiling"), PhosphorI18n::tr("Library"),
-               QStringLiteral("pages/tiling/TilingLibraryPage.qml"), QStringLiteral("view-grid"),
+               QStringLiteral("pages/tiling/TilingLibraryPage.qml"), QStringLiteral("folder-open"),
                /*collapsible=*/false, /*divider=*/true);
     // Tiling → Window holds just the per-mode Behavior page now. The window
     // border / title-bar appearance moved to the shared, top-level Window

@@ -38,7 +38,7 @@ import org.kde.kirigami as Kirigami
  *     "Open Folder" button.
  *   • Search row — text search + a multi-select filter button (source
  *     toggles, one checkbox per capability type when the catalogue spans
- *     more than one, and one per category), modeled on the Layouts page.
+ *     more than one, and one per category), modeled on the library pages.
  *   • Group / sort row — a GroupSortBar to group (Category / Type / Source
  *     / None) and sort (Name / Category / Type) the catalogue.
  *   • Grouped sections — each group renders as a collapsible card of shader
@@ -82,7 +82,7 @@ SettingsFlickable {
     // ── Filter state ────────────────────────────────────────────────────
     property string filterText: ""
     // Source + category filters are multi-select checkboxes in the filter
-    // button (modeled on the Layouts page). These derive its unchecked-key set
+    // button (modeled on the library pages). These derive its unchecked-key set
     // into the booleans / predicate the effect filter below consumes:
     //   "src:builtin" / "src:user" gate source; "cat:<name>" gate a category.
     readonly property bool showBuiltIn: !shaderFilterButton.isExcluded("src:builtin")
@@ -495,7 +495,7 @@ SettingsFlickable {
             }
 
             // One multi-select filter button (source + categories), modeled on
-            // the Layouts page. Source toggles come first, then one checkbox per
+            // the library pages. Source toggles come first, then one checkbox per
             // discovered category; the button's `excluded` set drives showBuiltIn
             // / showUser and the per-category predicate above. Reset lives in the
             // menu; the search field clears via its own affordance.
@@ -541,7 +541,7 @@ SettingsFlickable {
         }
 
         // ── Group / sort row ────────────────────────────────────────────
-        // On its own row beneath the search field, matching the Layouts page.
+        // On its own row beneath the search field, matching the library pages.
         // The host owns the selection and its persistence (see the Settings
         // block below); after loading persisted state we call syncFromState()
         // to re-point the combos.

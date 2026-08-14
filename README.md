@@ -140,7 +140,7 @@ Settings live in `~/.config/plasmazones/config.json`. Layouts live in `~/.local/
 
 ```bash
 plasmazones-settings                           # overview
-plasmazones-settings -p layouts                # jump straight to layouts
+plasmazones-settings -p snapping-layouts       # jump straight to the snapping layout library
 plasmazones-settings --page tiling-behavior
 ```
 

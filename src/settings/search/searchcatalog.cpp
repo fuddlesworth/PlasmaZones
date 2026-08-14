@@ -90,21 +90,28 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     // The three per-mode library pages (the old tabbed Layouts page, split).
     // Each hosts the shared LayoutBrowserPage, whose LayoutManageCard
     // (import / open folder) carries the manageLayouts anchor on every view.
+    // Each list carries its own mode's words: every other leaf of a mode
+    // section does, so without them a "snapping" / "tiling" / "scrolling"
+    // query reached the mode's config pages but never its library.
     search->setPageKeywords(QStringLiteral("snapping-layouts"),
                             {PhosphorI18n::tr("layout"), PhosphorI18n::tr("zone"), PhosphorI18n::tr("grid"),
-                             PhosphorI18n::tr("preset"), PhosphorI18n::tr("aspect ratio")});
+                             PhosphorI18n::tr("preset"), PhosphorI18n::tr("aspect ratio"), PhosphorI18n::tr("snap"),
+                             PhosphorI18n::tr("snapping")});
     addSection(search, QStringLiteral("snapping-layouts"), QStringLiteral("manageLayouts"),
                PhosphorI18n::tr("User layouts"));
     search->setPageKeywords(QStringLiteral("tiling-library"),
                             {PhosphorI18n::tr("algorithm"), PhosphorI18n::tr("script"), PhosphorI18n::tr("luau"),
-                             PhosphorI18n::tr("autotile"), PhosphorI18n::tr("capability")});
+                             PhosphorI18n::tr("autotile"), PhosphorI18n::tr("capability"), PhosphorI18n::tr("tile"),
+                             PhosphorI18n::tr("tiling"), PhosphorI18n::tr("library")});
     addSection(search, QStringLiteral("tiling-library"), QStringLiteral("manageLayouts"),
                PhosphorI18n::tr("User algorithms"));
     search->setPageKeywords(QStringLiteral("scrolling-templates"),
                             {PhosphorI18n::tr("template"), PhosphorI18n::tr("column"), PhosphorI18n::tr("width"),
-                             PhosphorI18n::tr("strip")});
+                             PhosphorI18n::tr("strip"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling")});
+    // "User templates", matching the card title in LayoutManageCard.qml — the
+    // catalog's own rule keeps section titles identical to the QML they open.
     addSection(search, QStringLiteral("scrolling-templates"), QStringLiteral("manageLayouts"),
-               PhosphorI18n::tr("Your templates"));
+               PhosphorI18n::tr("User templates"));
 
     // Snapping
     search->setPageKeywords(QStringLiteral("snapping-overlay-behavior"),

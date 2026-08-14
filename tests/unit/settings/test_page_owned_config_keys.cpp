@@ -63,14 +63,14 @@ const QSet<QString>& deliberatelyUnowned()
         // cycling shortcuts walk on a screen with no template — reachable
         // now that a screen can be set to no template explicitly. An editor
         // means an owner, so they moved into that page's manifest.
-        // The default template, on the other hand, is unowned:
-        // the Columns page's editor row went away, and a template is made
-        // default from the Layouts page's own context menu now, beside the
-        // default layout and the default algorithm. The Layouts page is not
-        // part of the per-page dirty/Reset/Discard manifest at all (it writes
-        // its settings immediately), so no page can own this key without
-        // giving a Reset the power to rewrite a value that page never edits.
-        qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultTemplateKey()),
+        // The default template is NOT here any more either: a template is
+        // made default from its card's context menu on Scrolling → Templates,
+        // and the library pages are never dirty (isLibraryPage), so the
+        // context menu attributes the write to scrolling-columns — the owner
+        // of the rest of the Scrolling group — through an external-edit
+        // envelope, and the key moved into that page's manifest with it.
+        // The set is empty today; it stays so a future genuinely-unowned key
+        // has a place to be declared rather than failing the sweep.
     };
     return kSet;
 }
@@ -241,14 +241,60 @@ private Q_SLOTS:
         const auto& exempt = SettingsController::resetExemptModeEnableKeys();
         QCOMPARE(exempt.size(), 3);
         QSet<QString> exemptQualified;
+        // Collect-then-assert, matching the rest of this file: a single
+        // dangling exemption must not hide the state of the other two.
+        QStringList dangling;
         for (const auto& gk : exempt) {
             const QString qualified = qualify(gk.first, gk.second);
             exemptQualified.insert(qualified);
-            QVERIFY2(owned.contains(qualified), qPrintable(qualified));
+            if (!owned.contains(qualified)) {
+                dangling.append(qualified);
+            }
         }
+        dangling.sort();
+        QVERIFY2(dangling.isEmpty(), qPrintable(dangling.join(QLatin1String("; "))));
         QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::snappingGroup(), ConfigDefaults::enabledKey())));
         QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::tilingGroup(), ConfigDefaults::enabledKey())));
         QVERIFY(exemptQualified.contains(qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::enabledKey())));
+    }
+
+    /// Same contract for the cross-page default selections: both keys must be
+    /// manifest-owned (a dangling exemption means the dirty attribution
+    /// regressed back to unowned), and both defaults set from the library
+    /// pages' context menus must be exempt (an entry missing here would let a
+    /// Reset on the owner page silently clear a selection the page never
+    /// shows an editor row for).
+    void resetExemptDefaultSelectionKeysAreOwnedAndComplete()
+    {
+        QSet<QString> owned;
+        const auto& manifest = SettingsController::pageOwnedConfigKeys();
+        for (auto it = manifest.constBegin(); it != manifest.constEnd(); ++it) {
+            for (const auto& gk : it.value()) {
+                owned.insert(qualify(gk.first, gk.second));
+            }
+        }
+
+        const auto& exempt = SettingsController::resetExemptDefaultSelectionKeys();
+        QCOMPARE(exempt.size(), 2);
+        QSet<QString> exemptQualified;
+        QStringList dangling;
+        for (const auto& gk : exempt) {
+            const QString qualified = qualify(gk.first, gk.second);
+            exemptQualified.insert(qualified);
+            if (!owned.contains(qualified)) {
+                dangling.append(qualified);
+            }
+        }
+        dangling.sort();
+        QVERIFY2(dangling.isEmpty(), qPrintable(dangling.join(QLatin1String("; "))));
+        QVERIFY(exemptQualified.contains(
+            qualify(ConfigDefaults::snappingBehaviorWindowHandlingGroup(), ConfigDefaults::defaultLayoutIdKey())));
+        QVERIFY(
+            exemptQualified.contains(qualify(ConfigDefaults::scrollingGroup(), ConfigDefaults::defaultTemplateKey())));
+        // The tiling default is deliberately absent: the Algorithm page
+        // carries a real picker for it, so its Reset is honest.
+        QVERIFY(
+            !exemptQualified.contains(qualify(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::defaultKey())));
     }
 };
 
