@@ -115,9 +115,10 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
         // Excluding the active tile leaves the survivors with no activeTab
         // (the model index comparison above ran before the drop); the real
         // detach re-points activeTileIdx to a surviving tile, so promote one
-        // the same way — first non-minimized, else the first. Only an
-        // exclusion can strip the flag: the model's activeTileIdx always
-        // names a live tile (setWindowMinimized re-points it).
+        // the same way — the first non-minimized survivor, or none when
+        // every survivor is minimized. Only an exclusion can strip the
+        // flag: the model's activeTileIdx always names a live tile
+        // (setWindowMinimized re-points it).
         if (!excluded.isEmpty()) {
             bool hasActive = false;
             for (const ScrollStripSnapshotTile& t : std::as_const(outColumn.tiles)) {
