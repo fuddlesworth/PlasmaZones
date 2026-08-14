@@ -451,6 +451,7 @@ add_test(NAME test_settings_perscreen_scrolling COMMAND test_settings_perscreen_
 add_executable(test_page_owned_config_keys
     settings/test_page_owned_config_keys.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/controller/settingscontroller_pagetopology.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/controller/settingscontroller_pagekeys.cpp
 )
 target_link_libraries(test_page_owned_config_keys PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
     PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
