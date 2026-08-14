@@ -219,7 +219,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return m_settings->scrollingTabIndicatorStyle();
     };
     m_setters[QStringLiteral("scrollingTabIndicatorStyle")] = [this](const QVariant& v) {
-        const int style = v.toInt();
+        bool styleOk = false;
+        const int style = v.toInt(&styleOk);
+        if (!styleOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
         if (!ConfigDefaults::isValidScrollingTabIndicatorStyle(style)) {
             return false;
         }
@@ -282,7 +286,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return static_cast<int>(m_settings->scrollingZoneSelectorPosition());
     };
     m_setters[QStringLiteral("scrollingZoneSelectorPosition")] = [this](const QVariant& v) {
-        int val = v.toInt();
+        bool valOk = false;
+        const int val = v.toInt(&valOk);
+        if (!valOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
         if (val >= static_cast<int>(ZoneSelectorPosition::TopLeft)
             && val <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
             m_settings->setScrollingZoneSelectorPosition(static_cast<ZoneSelectorPosition>(val));
@@ -296,7 +304,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return static_cast<int>(m_settings->scrollingZoneSelectorSizeMode());
     };
     m_setters[QStringLiteral("scrollingZoneSelectorSizeMode")] = [this](const QVariant& v) {
-        int val = v.toInt();
+        bool valOk = false;
+        const int val = v.toInt(&valOk);
+        if (!valOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
         if (val >= static_cast<int>(ZoneSelectorSizeMode::Auto)
             && val <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
             m_settings->setScrollingZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(val));
@@ -345,7 +357,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingCenterFocusedColumn();
         };
         m_setters[QStringLiteral("scrollingCenterFocusedColumn")] = [concrete](const QVariant& v) {
-            const int mode = v.toInt();
+            bool modeOk = false;
+            const int mode = v.toInt(&modeOk);
+            if (!modeOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingCenterFocusedColumn(mode)) {
                 return false;
             }
@@ -361,7 +377,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingDefaultColumnWidthKind();
         };
         m_setters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete](const QVariant& v) {
-            const int kind = v.toInt();
+            bool kindOk = false;
+            const int kind = v.toInt(&kindOk);
+            if (!kindOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingWidthKind(kind)) {
                 return false;
             }
@@ -376,7 +396,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingDefaultColumnDisplay();
         };
         m_setters[QStringLiteral("scrollingDefaultColumnDisplay")] = [concrete](const QVariant& v) {
-            const int display = v.toInt();
+            bool displayOk = false;
+            const int display = v.toInt(&displayOk);
+            if (!displayOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingColumnDisplay(display)) {
                 return false;
             }
@@ -396,7 +420,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingDefaultWindowHeightKind();
         };
         m_setters[QStringLiteral("scrollingDefaultWindowHeightKind")] = [concrete](const QVariant& v) {
-            const int kind = v.toInt();
+            bool kindOk = false;
+            const int kind = v.toInt(&kindOk);
+            if (!kindOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingHeightKind(kind)) {
                 return false;
             }
@@ -425,7 +453,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingTabIndicatorPosition();
         };
         m_setters[QStringLiteral("scrollingTabIndicatorPosition")] = [concrete](const QVariant& v) {
-            const int position = v.toInt();
+            bool positionOk = false;
+            const int position = v.toInt(&positionOk);
+            if (!positionOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingTabIndicatorPosition(position)) {
                 return false;
             }
@@ -459,7 +491,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingInsertPosition();
         };
         m_setters[QStringLiteral("scrollingInsertPosition")] = [concrete](const QVariant& v) {
-            const int position = v.toInt();
+            bool positionOk = false;
+            const int position = v.toInt(&positionOk);
+            if (!positionOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingInsertPosition(position)) {
                 return false;
             }
@@ -474,7 +510,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingStickyWindowHandling();
         };
         m_setters[QStringLiteral("scrollingStickyWindowHandling")] = [concrete](const QVariant& v) {
-            const int handling = v.toInt();
+            bool handlingOk = false;
+            const int handling = v.toInt(&handlingOk);
+            if (!handlingOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingStickyWindowHandling(handling)) {
                 return false;
             }

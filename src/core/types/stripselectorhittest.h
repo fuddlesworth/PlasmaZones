@@ -26,6 +26,8 @@
 #include <QRectF>
 #include <QVector>
 
+#include <algorithm>
+
 namespace PlasmaZones {
 
 struct StripSelectorHit

@@ -556,9 +556,12 @@ SettingsController::SettingsController(QObject* parent)
     // above never wires their change signals. Connect them explicitly. The
     // Settings layer emits these ONLY when an override actually changes — a
     // no-op write (same value) or a rejected key early-returns without
-    // emitting — so routing them through onSettingsPropertyChanged() gives
-    // correct change-only dirty tracking (and load() populates the maps
-    // directly, never via the setters, so this stays quiet during load).
+    // emitting — so routing them through onValueBlindSettingsChanged() gives
+    // change-only dirty tracking while SUSPENDING the value-based reconcile:
+    // per-screen values live outside every page manifest, so the reconcile
+    // would otherwise clear a page whose edit is real but invisible to it
+    // (load() populates the maps directly, never via the setters, so this
+    // stays quiet during load).
     // Re-emitting perScreenOverridesChanged() refreshes the scope-chip
     // override dots and the bound per-screen card values. The Q_INVOKABLE
     // wrappers in settingscontroller_perscreen.cpp therefore do NOT mark

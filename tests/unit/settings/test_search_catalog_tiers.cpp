@@ -966,6 +966,80 @@ private Q_SLOTS:
                            .arg(QStringList(unregistered.cbegin(), unregistered.cend()).join(QLatin1String(", ")))));
     }
 
+    /// The OTHER direction of the registration/validPageNames contract: every
+    /// registration that renders a QML page (a regVirtual with a non-empty
+    /// qmlFile, or a regPage) must have its id in validPageNames(). Both
+    /// files spell the two-way sync rule out in prose and nothing else
+    /// enforces it — a page registered but missing from the set is
+    /// UNREACHABLE (setActivePage rejects it at debug level and the sidebar
+    /// snap-back undoes the click), which is exactly how the strip-selector
+    /// page shipped invisible.
+    void everyRegisteredLeafPageIsNavigable()
+    {
+        const QString registration = stripLineComments(
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp")));
+        const QString topology =
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp"));
+        QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
+        QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
+
+        const int bodyStart = topology.indexOf(QStringLiteral("SettingsController::validPageNames()"));
+        QVERIFY2(bodyStart >= 0, "validPageNames() definition not found in pagetopology");
+        const int braceStart = topology.indexOf(QLatin1Char('{'), bodyStart);
+        const int bodyEnd = topology.indexOf(QStringLiteral("};"), braceStart);
+        QVERIFY2(braceStart >= 0 && bodyEnd > braceStart, "could not slice validPageNames() body");
+        const QString validBody = topology.mid(braceStart, bodyEnd - braceStart);
+        QSet<QString> valid;
+        static const QRegularExpression kValid(QStringLiteral("QStringLiteral\\(\"([a-z0-9-]+)\"\\)"));
+        auto vit = kValid.globalMatch(validBody);
+        while (vit.hasNext()) {
+            valid.insert(vit.next().captured(1));
+        }
+        QVERIFY2(valid.size() > 20,
+                 qPrintable(QStringLiteral("validPageNames slice yielded only %1 ids").arg(valid.size())));
+
+        QStringList unreachable;
+        int leafCount = 0;
+        const QList<QStringList> virtualCalls = callArgLists(registration, QStringLiteral("regVirtual"));
+        for (const QStringList& args : virtualCalls) {
+            if (args.size() < 4) {
+                continue;
+            }
+            const QString id = stringLiteralIn(args.at(0));
+            const QString file = stringLiteralIn(args.at(3));
+            if (id.isEmpty() || file.isEmpty()) {
+                continue; // category header, not a rendered leaf
+            }
+            ++leafCount;
+            if (!valid.contains(id)) {
+                unreachable << id;
+            }
+        }
+        const QList<QStringList> pageCalls = callArgLists(registration, QStringLiteral("regPage"));
+        for (const QStringList& args : pageCalls) {
+            if (args.size() < 4) {
+                continue;
+            }
+            static const QRegularExpression kMember(QStringLiteral("\\b(m_\\w+)"));
+            const auto m = kMember.match(args.at(0));
+            const QString id = regPageMemberToPageId().value(m.hasMatch() ? m.captured(1) : QString());
+            if (id.isEmpty()) {
+                continue; // the coverage of that map is pinned elsewhere
+            }
+            ++leafCount;
+            if (!valid.contains(id)) {
+                unreachable << id;
+            }
+        }
+        // Vacuity guard, same rationale as the sibling slots.
+        QVERIFY2(leafCount > 30,
+                 qPrintable(QStringLiteral("registration parse yielded only %1 leaf pages").arg(leafCount)));
+        unreachable.sort();
+        QVERIFY2(unreachable.isEmpty(),
+                 qPrintable(QStringLiteral("registered pages missing from validPageNames(): %1")
+                                .arg(unreachable.join(QLatin1String(", ")))));
+    }
+
 private:
     QString m_qmlDir;
     QString m_catalog;

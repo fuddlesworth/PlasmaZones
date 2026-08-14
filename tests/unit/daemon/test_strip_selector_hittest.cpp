@@ -98,7 +98,10 @@ private Q_SLOTS:
         cards[1] = QRectF();
         const QVector<bool> tabbed{false, false, false};
         StripSelectorHit hit = classifyStripSelectorPoint(cards, tabbed, QPointF(320, 50), kInflate);
-        QVERIFY(hit.columnIndex != 1);
+        // A full miss, not merely "not card 1": both interior boundaries lose
+        // their un-laid-out neighbour, the outer bands cover only the
+        // laid-out ends, and no card body contains the point.
+        QVERIFY(!hit.isValid());
         // The laid-out neighbours still answer their own bodies.
         hit = classifyStripSelectorPoint(cards, tabbed, QPointF(100, 20), kInflate);
         QCOMPARE(hit.columnIndex, 0);

@@ -310,7 +310,9 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
         || k == PerScreenKeys::OuterGapLeft || k == PerScreenKeys::OuterGapRight)
         return boundedInt(value, ConfigDefaults::outerGapMin(), ConfigDefaults::outerGapMax());
     if (k == PerScreenKeys::UsePerSideOuterGap)
-        return QVariant(value.toBool());
+        // Type-gated like the numeric arms (see the strip selector's
+        // PreviewLockAspect for the rationale).
+        return value.typeId() == QMetaType::Bool ? QVariant(value.toBool()) : QVariant();
     if (k == PerScreenKeys::MaxWindows)
         return boundedInt(value, ConfigDefaults::autotileMaxWindowsMin(), ConfigDefaults::autotileMaxWindowsMax());
     if (k == PerScreenKeys::InsertPosition)
@@ -328,7 +330,7 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
         return value.toString().isEmpty() ? QVariant() : QVariant(value.toString());
     if (k == PerScreenKeys::FocusNewWindows || k == PerScreenKeys::SmartGaps || k == PerScreenKeys::FocusFollowsMouse
         || k == PerScreenKeys::RespectMinimumSize || k == PerScreenKeys::AnimationsEnabled)
-        return QVariant(value.toBool());
+        return value.typeId() == QMetaType::Bool ? QVariant(value.toBool()) : QVariant();
     if (k == PerScreenKeys::AnimationDuration)
         return boundedInt(value, ConfigDefaults::animationDurationMin(), ConfigDefaults::animationDurationMax());
     return QVariant();

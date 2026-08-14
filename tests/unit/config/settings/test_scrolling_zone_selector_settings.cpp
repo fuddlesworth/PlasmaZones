@@ -89,6 +89,10 @@ private Q_SLOTS:
 
         const auto* sizeMode = findKey(schema, group, ConfigDefaults::sizeModeKey());
         QVERIFY(sizeMode);
+        // The value assertion alone cannot catch a MISSING defaultValue: the
+        // SizeMode default is Auto = 0, exactly what an absent QVariant
+        // coerces to, so pin validity first.
+        QVERIFY(sizeMode->defaultValue.isValid());
         QCOMPARE(sizeMode->defaultValue.toInt(), ConfigDefaults::scrollingZoneSelectorSizeMode());
 
         const auto* previewWidth = findKey(schema, group, ConfigDefaults::previewWidthKey());
@@ -177,11 +181,15 @@ private Q_SLOTS:
         settings.setScrollingZoneSelectorPreviewWidth(ConfigDefaults::previewWidthSmall());
         QCOMPARE(settings.scrollingZoneSelectorPreviewWidth(), ConfigDefaults::previewWidthSmall());
         QCOMPARE(widthSpy.count(), 1);
+        settings.setScrollingZoneSelectorPreviewWidth(ConfigDefaults::previewWidthSmall());
+        QCOMPARE(widthSpy.count(), 1);
 
         QSignalSpy heightSpy(&settings, &Settings::scrollingZoneSelectorPreviewHeightChanged);
         settings.setScrollingZoneSelectorPreviewHeight(ConfigDefaults::scrollingZoneSelectorPreviewHeight() + 20);
         QCOMPARE(settings.scrollingZoneSelectorPreviewHeight(),
                  ConfigDefaults::scrollingZoneSelectorPreviewHeight() + 20);
+        QCOMPARE(heightSpy.count(), 1);
+        settings.setScrollingZoneSelectorPreviewHeight(ConfigDefaults::scrollingZoneSelectorPreviewHeight() + 20);
         QCOMPARE(heightSpy.count(), 1);
 
         QSignalSpy lockSpy(&settings, &Settings::scrollingZoneSelectorPreviewLockAspectChanged);
@@ -228,8 +236,13 @@ private Q_SLOTS:
         QCOMPARE(config.position, static_cast<int>(ZoneSelectorPosition::Bottom));
         QCOMPARE(config.sizeMode, static_cast<int>(ZoneSelectorSizeMode::Manual));
         QCOMPARE(config.previewWidth, ConfigDefaults::previewWidthLarge());
+        QCOMPARE(config.previewHeight, settings.scrollingZoneSelectorPreviewHeight());
         QCOMPARE(config.triggerDistance, 77);
         QCOMPARE(config.previewLockAspect, settings.scrollingZoneSelectorPreviewLockAspect());
+        // The interface promises the two grid fields stay at the struct
+        // defaults under Horizontal (a single row consults neither).
+        QCOMPARE(config.maxRows, ZoneSelectorConfig{}.maxRows);
+        QCOMPARE(config.gridColumns, ZoneSelectorConfig{}.gridColumns);
     }
 
     /// A per-screen override wins over the global value, and clearing it
@@ -240,7 +253,10 @@ private Q_SLOTS:
         Settings settings;
 
         const QString screen = QStringLiteral("test-screen-1");
-        settings.setScrollingZoneSelectorPosition(ZoneSelectorPosition::Top);
+        // A NON-default global (the default position is Top), so the
+        // restores-the-global assertions below cannot pass against a
+        // resolver that ignored the stored global entirely.
+        settings.setScrollingZoneSelectorPosition(ZoneSelectorPosition::Left);
         const int globalTrigger = settings.scrollingZoneSelectorTriggerDistance();
 
         QVERIFY(!settings.hasPerScreenScrollingZoneSelectorSettings(screen));
@@ -262,13 +278,26 @@ private Q_SLOTS:
 
         // Another screen is untouched by the override.
         QCOMPARE(settings.resolvedScrollingZoneSelectorConfig(QStringLiteral("test-screen-2")).position,
-                 static_cast<int>(ZoneSelectorPosition::Top));
+                 static_cast<int>(ZoneSelectorPosition::Left));
 
         settings.clearPerScreenScrollingZoneSelectorSettings(screen);
         QCOMPARE(spy.count(), 2);
         QVERIFY(!settings.hasPerScreenScrollingZoneSelectorSettings(screen));
         QCOMPARE(settings.resolvedScrollingZoneSelectorConfig(screen).position,
-                 static_cast<int>(ZoneSelectorPosition::Top));
+                 static_cast<int>(ZoneSelectorPosition::Left));
+
+        // The two per-screen keys no other slot drives: SizeMode and
+        // PreviewHeight are admitted members of kStripSelectorKeys with their
+        // own validator and merge arms, so a subset-table typo dropping
+        // either would silently downgrade them to global-only.
+        settings.setPerScreenScrollingZoneSelectorSetting(screen, QString::fromLatin1(ZoneSelectorConfigKey::SizeMode),
+                                                          static_cast<int>(ZoneSelectorSizeMode::Manual));
+        settings.setPerScreenScrollingZoneSelectorSetting(screen,
+                                                          QString::fromLatin1(ZoneSelectorConfigKey::PreviewHeight),
+                                                          ConfigDefaults::scrollingZoneSelectorPreviewHeight() + 30);
+        const ZoneSelectorConfig overridden = settings.resolvedScrollingZoneSelectorConfig(screen);
+        QCOMPARE(overridden.sizeMode, static_cast<int>(ZoneSelectorSizeMode::Manual));
+        QCOMPARE(overridden.previewHeight, ConfigDefaults::scrollingZoneSelectorPreviewHeight() + 30);
     }
 
     /// An override stored on the physical monitor resolves for its virtual

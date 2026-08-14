@@ -80,7 +80,10 @@ QVariant validateZoneSelectorValue(const QString& key, const QVariant& value)
     if (key == QLatin1String(K::PreviewHeight))
         return boundedInt(value, ConfigDefaults::previewHeightMin(), ConfigDefaults::previewHeightMax());
     if (key == QLatin1String(K::PreviewLockAspect))
-        return QVariant(value.toBool());
+        // Type-gated like every sibling arm: bare toBool() would convert ANY
+        // payload type, making this the one key a malformed D-Bus write
+        // silently "succeeds" on.
+        return value.typeId() == QMetaType::Bool ? QVariant(value.toBool()) : QVariant();
     if (key == QLatin1String(K::GridColumns))
         return boundedInt(value, ConfigDefaults::gridColumnsMin(), ConfigDefaults::gridColumnsMax());
     if (key == QLatin1String(K::TriggerDistance))
@@ -267,6 +270,14 @@ void Settings::clearPerScreenScrollingZoneSelectorSettings(const QString& screen
     }
 }
 
+// DELIBERATE ASYMMETRY, shared with the zone-selector twin and the gap
+// overrides: has/clear do NOT carry the resolved accessor's virtual→physical
+// fallback. On a virtual sub-screen an override inherited from the physical
+// parent therefore APPLIES (the resolver falls back) while has() reports no
+// override of the sub-screen's OWN and clear() removes nothing — because a
+// clear that fell back would delete the PARENT's override and change every
+// sibling sub-screen. Changing this is a both-families design decision, not a
+// per-store fix.
 bool Settings::hasPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const
 {
     return findPerScreenEntry(m_perScreenScrollingZoneSelectorSettings, screenIdOrName)

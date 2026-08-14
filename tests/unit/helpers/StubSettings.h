@@ -2491,6 +2491,41 @@ public:
         }
     }
 
+    // Per-screen STRIP-SELECTOR overrides — the scrolling zone selector's
+    // quartet, hash-backed for the same reason as the snapping twin above:
+    // a stub falling through to the defaulted ISettings virtuals passes any
+    // consumer test vacuously (empty map, swallowed writes). Same deliberate
+    // omissions as the twin.
+    QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override
+    {
+        return m_perScreenScrollingZoneSelector.value(screenIdOrName);
+    }
+    void setPerScreenScrollingZoneSelectorSetting(const QString& screenIdOrName, const QString& key,
+                                                  const QVariant& value) override
+    {
+        if (screenIdOrName.isEmpty() || key.isEmpty()) {
+            return;
+        }
+        QVariantMap& entry = m_perScreenScrollingZoneSelector[screenIdOrName];
+        if (entry.value(key) == value) {
+            return;
+        }
+        entry[key] = value;
+        Q_EMIT perScreenScrollingZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool hasPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override
+    {
+        return !m_perScreenScrollingZoneSelector.value(screenIdOrName).isEmpty();
+    }
+    void clearPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) override
+    {
+        if (m_perScreenScrollingZoneSelector.remove(screenIdOrName) > 0) {
+            Q_EMIT perScreenScrollingZoneSelectorSettingsChanged();
+            Q_EMIT settingsChanged();
+        }
+    }
+
     // Persistence (ISettings)
     void load() override
     {
@@ -2513,6 +2548,7 @@ private:
     QHash<QString, QVariantMap> m_perScreenAutotile;
     QHash<QString, QVariantMap> m_perScreenScrolling;
     QHash<QString, QVariantMap> m_perScreenZoneSelector;
+    QHash<QString, QVariantMap> m_perScreenScrollingZoneSelector;
     QString m_defaultLayoutId;
     bool m_suppressDefaultLayoutAssignment = ConfigDefaults::suppressDefaultLayoutAssignment();
     QString m_renderingBackend = ConfigDefaults::renderingBackend();

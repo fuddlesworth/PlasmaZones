@@ -16,6 +16,8 @@
 #include <QQuickItem>
 #include <QVector>
 
+#include <algorithm>
+
 namespace PlasmaZones {
 
 QVariantList OverlayService::buildStripList(const QString& screenId) const

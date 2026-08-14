@@ -9,7 +9,9 @@
 // Dirty tracking and the perScreenOverridesChanged() refresh are NOT done
 // here: Settings emits perScreen{Autotile,Scrolling,ZoneSelector,ScrollingZoneSelector}SettingsChanged
 // only when an override actually changes, and the controller constructor
-// wires those signals to onSettingsPropertyChanged() (dirty) and
+// wires those signals to onValueBlindSettingsChanged() (dirty, with the
+// value-blind latch — per-screen values are manifest-invisible, so the
+// value-based reconcile is suspended rather than run) and
 // perScreenOverridesChanged() (UI refresh). Emitting from these wrappers
 // would mark the page dirty even for no-op or rejected writes.
 //

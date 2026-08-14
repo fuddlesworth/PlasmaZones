@@ -537,8 +537,14 @@ void SettingsController::buildApplicationController()
         setActivePage(id);
         // setActivePage rejects unknown ids (e.g. a stale CLI
         // --page=exclusions invocation after the page was folded
-        // out) with a warning and returns early — m_activePage
-        // stays at previousActive. The framework's m_app side has
+        // out) with a DEBUG-level trace (deliberately not a warning:
+        // the id is caller-supplied over D-Bus, see the choice's
+        // rationale at the reject site) and returns early —
+        // m_activePage stays at previousActive. A registered page
+        // missing from validPageNames() therefore has NO production
+        // symptom beyond the sidebar row doing nothing; the
+        // registration/validPageNames parity test is the guard for
+        // that case. The framework's m_app side has
         // ALREADY accepted the invalid id from its own setter, so
         // without a snap-back the two would diverge silently
         // (m_app->currentPageId() == "exclusions" while

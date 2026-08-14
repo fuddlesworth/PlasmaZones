@@ -85,7 +85,11 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return static_cast<int>(m_settings->zoneSpanModifier());
     };
     m_setters[QStringLiteral("zoneSpanModifier")] = [this](const QVariant& v) {
-        int mod = v.toInt();
+        bool modOk = false;
+        const int mod = v.toInt(&modOk);
+        if (!modOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
         if (mod >= 0 && mod <= static_cast<int>(DragModifier::CtrlAltMeta)) {
             m_settings->setZoneSpanModifier(static_cast<DragModifier>(mod));
             return true;
@@ -127,7 +131,11 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return static_cast<int>(m_settings->snappingStickyWindowHandling());
     };
     m_setters[QStringLiteral("snappingStickyWindowHandling")] = [this](const QVariant& v) {
-        int val = v.toInt();
+        bool valOk = false;
+        const int val = v.toInt(&valOk);
+        if (!valOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
         if (val >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
             && val <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
             m_settings->setSnappingStickyWindowHandling(static_cast<StickyWindowHandling>(val));
@@ -172,7 +180,11 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return static_cast<int>(m_settings->zoneSelectorPosition());
     };
     m_setters[QStringLiteral("zoneSelectorPosition")] = [this](const QVariant& v) {
-        int val = v.toInt();
+        bool valOk = false;
+        const int val = v.toInt(&valOk);
+        if (!valOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
         if (val >= static_cast<int>(ZoneSelectorPosition::TopLeft)
             && val <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
             m_settings->setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(val));
@@ -186,7 +198,11 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return static_cast<int>(m_settings->zoneSelectorLayoutMode());
     };
     m_setters[QStringLiteral("zoneSelectorLayoutMode")] = [this](const QVariant& v) {
-        int val = v.toInt();
+        bool valOk = false;
+        const int val = v.toInt(&valOk);
+        if (!valOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
         if (val >= static_cast<int>(ZoneSelectorLayoutMode::Grid)
             && val <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
             m_settings->setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(val));
@@ -200,7 +216,11 @@ void SettingsAdaptor::initializeRegistrySnapping()
         return static_cast<int>(m_settings->zoneSelectorSizeMode());
     };
     m_setters[QStringLiteral("zoneSelectorSizeMode")] = [this](const QVariant& v) {
-        int val = v.toInt();
+        bool valOk = false;
+        const int val = v.toInt(&valOk);
+        if (!valOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
         if (val >= static_cast<int>(ZoneSelectorSizeMode::Auto)
             && val <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
             m_settings->setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(val));
