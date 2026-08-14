@@ -114,6 +114,10 @@ void ScrollingTemplateStore::loadTemplates()
             }
             templ.isSystem = !isUserDir;
             templ.sourcePath = dir.absoluteFilePath(fileName);
+            // System directories load first, so at a user file's insertion
+            // the map already holds any bundled entry it shadows — that is
+            // the whole hasSystemOrigin signal.
+            templ.hasSystemOrigin = isUserDir && loaded.contains(templ.id) && loaded.value(templ.id).isSystem;
             // Later directories override earlier ones by id (user shadows
             // system). Within one directory the name-sorted file order makes
             // any same-id collision deterministic.
@@ -159,9 +163,12 @@ QUuid ScrollingTemplateStore::saveTemplate(ScrollingTemplate templ)
         return QUuid();
     }
     // A save always produces a USER file, whatever the source of the
-    // in-memory entry was — editing a bundled template shadows it.
-    templ.isSystem = false;
+    // in-memory entry was — editing a bundled template shadows it, and the
+    // shadow keeps its system-origin mark so the UI can say the built-in
+    // one still exists underneath.
     const auto existing = m_templates.constFind(templ.id);
+    templ.hasSystemOrigin = existing != m_templates.constEnd() && (existing->isSystem || existing->hasSystemOrigin);
+    templ.isSystem = false;
     templ.sourcePath = userTemplateFilePath(templ.id);
     // Only emit when the value actually changed. The settings pages re-save on
     // every field commit, and an unchanged save otherwise rewrote the file and

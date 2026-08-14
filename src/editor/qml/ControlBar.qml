@@ -201,29 +201,44 @@ ToolBar {
 
         // ═══════════════════════════════════════════════════════════════
         // TEMPLATE COLUMN SECTION - template mode's counterpart of Add Zone.
-        // The canvas also offers a trailing add stub, but that sits after
-        // the last band and scrolls off screen once the columns fill the
-        // strip, so the bar carries the always-visible affordance.
+        // The canvas offers Add Column only in its zero-column placeholder,
+        // so for every non-empty strip the bar carries the sole, always-
+        // visible affordance.
         // ═══════════════════════════════════════════════════════════════
         RowLayout {
             id: templateColumnSection
 
             readonly property var templateModel: controlBar.editorController ? controlBar.editorController.scrollingTemplate : null
             readonly property int columnCount: templateModel ? templateModel.columns.length : 0
+            // The 16 mirrors PhosphorZones::MaxTemplateColumns for the
+            // teardown window where templateModel reads null.
             readonly property int columnLimit: templateModel ? templateModel.scrollingConstants().maxTemplateColumns : 16
 
             visible: controlBar.templateMode && !controlBar.previewMode
             spacing: Kirigami.Units.gridUnit
 
             Button {
+                readonly property bool atLimit: templateColumnSection.columnCount >= templateColumnSection.columnLimit
+
                 text: i18nc("@action:button", "Add Column")
                 icon.name: "list-add"
-                enabled: templateColumnSection.templateModel !== null && templateColumnSection.columnCount < templateColumnSection.columnLimit
+                // Kept ENABLED at the limit, greyed instead: a disabled
+                // control receives no hover events, so the explanatory
+                // at-limit tooltip could never show (the GroupSortBar
+                // unavailable-delegate precedent). The click no-ops there.
+                enabled: templateColumnSection.templateModel !== null
+                opacity: atLimit ? 0.5 : 1
                 Accessible.name: text
-                Accessible.description: i18nc("@info", "Add a starting column to the template")
+                // The at-limit refusal reaches assistive tech through the
+                // description, since the button stays enabled (see above)
+                // and grey is visual-only.
+                Accessible.description: atLimit ? i18ncp("@info", "A template can start at most %n column", "A template can start at most %n columns", templateColumnSection.columnLimit) : i18nc("@info", "Add a starting column to the template")
                 ToolTip.visible: hovered
-                ToolTip.text: templateColumnSection.columnCount < templateColumnSection.columnLimit ? i18nc("@tooltip", "Add a starting column at the end of the strip") : i18nc("@tooltip", "A template can start at most %1 columns", templateColumnSection.columnLimit)
-                onClicked: templateColumnSection.templateModel.addColumn()
+                ToolTip.text: atLimit ? i18ncp("@tooltip", "A template can start at most %n column", "A template can start at most %n columns", templateColumnSection.columnLimit) : i18nc("@tooltip", "Add a starting column at the end of the strip")
+                onClicked: {
+                    if (!atLimit)
+                        templateColumnSection.templateModel.addColumn();
+                }
             }
 
             Label {
@@ -237,10 +252,19 @@ ToolBar {
             }
 
             Label {
-                text: i18nc("@info", "Drag a column's right edge to resize it. Click a column for reorder, tabs, and remove.")
+                text: i18nc("@info", "Drag a column's right edge to resize it. Click a column to reorder it, switch it to tabs, or remove it.")
                 color: Kirigami.Theme.disabledTextColor
                 elide: Text.ElideRight
                 Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+                // The hint is the strip's only on-screen gesture doc; a
+                // narrow window or long translation elides it, so the full
+                // text stays reachable on hover.
+                ToolTip.visible: hintHover.hovered && truncated
+                ToolTip.text: text
+
+                HoverHandler {
+                    id: hintHover
+                }
             }
         }
 
@@ -542,7 +566,7 @@ ToolBar {
                 highlighted: true
                 enabled: editorController ? (editorController.hasUnsavedChanges || false) : false
                 Accessible.name: text
-                Accessible.description: i18nc("@info", "Save layout and close editor")
+                Accessible.description: controlBar.templateMode ? i18nc("@info", "Save template and close editor") : i18nc("@info", "Save layout and close editor")
                 // Close only once the save has actually landed, mirroring the
                 // unsaved-changes dialogs: a refused save leaves the layout
                 // dirty and emits layoutSaveFailed, and closing anyway would

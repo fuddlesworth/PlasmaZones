@@ -122,21 +122,33 @@ QVariantList EditorController::screenModel() const
 }
 
 // Carry out a screen switch: swap the target, then load whatever layout that
-// screen is assigned. Both entry points (setTargetScreen when nothing is
-// unsaved, confirmPendingTargetScreen once the user has answered the prompt)
-// land here so the switch itself is written once.
-void EditorController::applyTargetScreen(const QString& screenName)
+// screen is assigned. All entry points (setTargetScreen when nothing is
+// unsaved, confirmPendingTargetScreen once the user has answered the prompt,
+// the forced plain-screen launch shape) land here so the switch itself is
+// written once.
+void EditorController::applyTargetScreen(const QString& screenName, bool forceLayoutMode)
 {
-    // Templates are screen-portable: a screen switch in template mode moves
-    // the window without loading that screen's layout over the template.
-    // The screen selector is hidden in template mode, so this is a guard for
-    // programmatic switches (forwarded launches naming only a screen resolve
-    // through applyLaunch, which flips the mode first).
-    if (m_editorMode == ModeScrollingTemplate) {
+    if (forceLayoutMode) {
+        // The forwarded plain-screen launch edits the screen's assigned
+        // LAYOUT: the mode and preview flips happen here, at the moment the
+        // switch actually applies, so a parked-and-cancelled request leaves
+        // a template or preview session untouched.
+        setEditorModeInternal(ModeLayout);
+        setPreviewMode(false);
+    } else if (m_editorMode == ModeScrollingTemplate) {
+        // Templates are screen-portable: a screen switch in template mode
+        // moves the window without loading that screen's layout over the
+        // template. The screen selector is hidden in template mode, so this
+        // guards programmatic switches that did not opt into forceLayoutMode.
         setTargetScreenDirect(screenName);
         return;
     }
 
+    // Captured BEFORE the swap: the deferred publishers below take their own
+    // prev capture AFTER it, so their change guards can never see a plain
+    // screen-size difference — the bottom of this function publishes that
+    // case (see the final emit).
+    const QSize sizeBeforeSwitch = targetScreenSize();
     const QString previousLayout = m_layoutId;
     m_targetScreen = screenName;
 
@@ -159,7 +171,16 @@ void EditorController::applyTargetScreen(const QString& screenName)
         qCDebug(lcEditor) << "applyTargetScreen:" << screenName << "daemon returned layoutId:" << layoutId
                           << "current layoutId:" << previousLayout;
         if (!layoutId.isEmpty()) {
-            loadLayout(layoutId);
+            // This caller mutated screen state BEFORE the load, and the size
+            // publication is deferred to the load — a failed load (a
+            // daemon-assigned id that no longer resolves) must not leave the
+            // old zones on the new screen with a stale reference size, so it
+            // falls through to a fresh layout, which publishes both.
+            if (!loadLayout(layoutId)) {
+                qCWarning(lcEditor) << "applyTargetScreen: assigned layout" << layoutId
+                                    << "failed to load - creating new layout";
+                createNewLayout();
+            }
         } else {
             qCInfo(lcEditor) << "No layout assigned to screen" << screenName << "- creating new layout";
             createNewLayout();
@@ -168,6 +189,16 @@ void EditorController::applyTargetScreen(const QString& screenName)
         // No layout will be loaded — publish the new size now.
         Q_EMIT targetScreenSizeChanged();
         m_zoneManager->setReferenceScreenSize(targetScreenSize());
+        return;
+    }
+
+    // Publish a plain screen-size change the loaders' own guards cannot see
+    // (their prev capture happens after the swap above, so switching between
+    // differently sized screens with no fixed-zone override fires nothing).
+    // A duplicate emit when the loader already published is a harmless
+    // re-notify.
+    if (targetScreenSize() != sizeBeforeSwitch) {
+        Q_EMIT targetScreenSizeChanged();
     }
 }
 
@@ -183,7 +214,11 @@ void EditorController::setTargetScreen(const QString& screenName)
     // screen until the answer arrives, which is what holds the screen-selector
     // binding on the current screen while the prompt is up.
     if (m_hasUnsavedChanges) {
+        // A fresh ordinary park deliberately supersedes any earlier parked
+        // launch, intent included: the user's newest request wins, and the
+        // prompt describes the newest screen.
         m_pendingTargetScreen = screenName;
+        m_pendingTargetEditsLayout = false;
         Q_EMIT targetScreenChangeRequiresConfirmation(screenName);
         return;
     }
@@ -201,15 +236,19 @@ void EditorController::confirmPendingTargetScreen()
     // enough of the controller that leaving the pending screen set would let a
     // second confirm apply it twice.
     const QString screenName = *std::exchange(m_pendingTargetScreen, std::nullopt);
-    if (screenName == m_targetScreen) {
+    const bool editsLayout = std::exchange(m_pendingTargetEditsLayout, false);
+    // A same-screen confirm is only a no-op for an ordinary switch; the
+    // forced launch shape still has a mode flip and a load to perform.
+    if (screenName == m_targetScreen && !editsLayout) {
         return;
     }
-    applyTargetScreen(screenName);
+    applyTargetScreen(screenName, editsLayout);
 }
 
 void EditorController::cancelPendingTargetScreen()
 {
     m_pendingTargetScreen.reset();
+    m_pendingTargetEditsLayout = false;
 }
 
 void EditorController::applyLaunch(const PendingLaunch& launch)
@@ -230,6 +269,22 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
         }
     };
 
+    // Restore the screen context a failed load stranded: the switch ran
+    // before the load (the load needs the target screen for per-screen
+    // geometry), so on failure the still-loaded previous session gets its
+    // screen, bounds override and reference size back.
+    const auto restoreScreenOnFailure = [this](const QString& prevScreen, const QSize& prevBounds) {
+        if (m_targetScreen == prevScreen) {
+            return;
+        }
+        setTargetScreenDirect(prevScreen);
+        if (prevBounds.isValid() && prevBounds != m_layoutBoundsOverride) {
+            m_layoutBoundsOverride = prevBounds;
+            Q_EMIT targetScreenSizeChanged();
+            m_zoneManager->setReferenceScreenSize(targetScreenSize());
+        }
+    };
+
     if (launch.newTemplate) {
         // Template shapes first: they never carry preview (templates have no
         // read-only rendering) and switch screens without loading a layout.
@@ -237,33 +292,72 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
         createNewScrollingTemplate();
     } else if (!launch.templateId.isEmpty()) {
-        setPreviewMode(false);
+        // Preview drops only once the template actually loaded, matching
+        // the layoutId branch's failed-load-leaves-the-session contract.
+        const QString prevScreen = m_targetScreen;
+        const QSize prevBounds = m_layoutBoundsOverride;
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
-        loadScrollingTemplate(launch.templateId);
+        if (loadScrollingTemplate(launch.templateId)) {
+            setPreviewMode(false);
+        } else {
+            if (m_layoutId.isEmpty()) {
+                // Initial launch named a template that no longer exists, and
+                // the failure signal has no receiver yet (the QML engine
+                // loads after applyLaunchArgs) — without a fallback the user
+                // gets a blank layout-mode editor. Open the target screen's
+                // assigned layout instead.
+                applyTargetScreen(m_targetScreen, /*forceLayoutMode*/ true);
+            } else {
+                // A live session survives the failed load; put its screen
+                // context back.
+                restoreScreenOnFailure(prevScreen, prevBounds);
+            }
+        }
     } else if (launch.createNew) {
-        setEditorModeInternal(ModeLayout);
+        // createNewLayout flips the mode itself once it starts replacing
+        // state; no eager flip here, so nothing changes if a future guard
+        // makes it refuse.
         setPreviewMode(false);
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
         createNewLayout();
     } else if (!launch.layoutId.isEmpty()) {
         // Switch screen first (direct, no auto-load) so loadLayout resolves
         // per-screen geometry and virtual-screen context against the target
-        // screen rather than whatever was current before the forward.
-        setEditorModeInternal(ModeLayout);
+        // screen rather than whatever was current before the forward. The
+        // mode flip lives inside loadLayout (after its payload resolves) and
+        // preview follows only a successful load, so a launch naming a
+        // deleted or malformed layout leaves the current session's mode,
+        // preview and — via the restore — screen context untouched.
+        const QString prevScreen = m_targetScreen;
+        const QSize prevBounds = m_layoutBoundsOverride;
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
-        setPreviewMode(launch.preview || PhosphorLayout::LayoutId::isAutotile(launch.layoutId));
-        loadLayout(launch.layoutId);
+        if (loadLayout(launch.layoutId)) {
+            setPreviewMode(launch.preview || PhosphorLayout::LayoutId::isAutotile(launch.layoutId));
+        } else {
+            restoreScreenOnFailure(prevScreen, prevBounds);
+        }
     } else {
-        // Plain screen shape edits that screen's assigned LAYOUT, so leave
-        // template mode before the switch or applyTargetScreen's template
-        // guard would skip the load.
-        setEditorModeInternal(ModeLayout);
-        setPreviewMode(false);
-        // No layout named, so follow the screen's assigned layout. This is the
-        // one path that routes through setTargetScreen, and setTargetScreen
-        // runs its own unsaved-changes confirmation — which is why requestLaunch
-        // deliberately does NOT park this shape as well. See the note there.
-        switchScreen(launch.screenId, /*loadAssignedLayout*/ true);
+        // Plain screen shape edits that screen's assigned LAYOUT. The mode
+        // and preview flips happen inside applyTargetScreen at the moment
+        // the switch applies (forceLayoutMode), so a parked-and-cancelled
+        // switch leaves a template session intact — and a same-screen
+        // relaunch still loads rather than being swallowed by a no-op
+        // switch. With unsaved edits the request parks on the screen prompt;
+        // requestLaunch deliberately does NOT park this shape as well (see
+        // the note there).
+        const QString target = launch.screenId.isEmpty() ? m_targetScreen : launch.screenId;
+        const bool leavesSpecialMode = m_editorMode == ModeScrollingTemplate || m_previewMode;
+        if (target.isEmpty() || (target == m_targetScreen && !leavesSpecialMode)) {
+            // Already editing this screen's layout; nothing to change.
+            return;
+        }
+        if (m_hasUnsavedChanges) {
+            m_pendingTargetScreen = target;
+            m_pendingTargetEditsLayout = true;
+            Q_EMIT targetScreenChangeRequiresConfirmation(target);
+            return;
+        }
+        applyTargetScreen(target, /*forceLayoutMode*/ true);
     }
 }
 
@@ -277,11 +371,11 @@ void EditorController::requestLaunch(const QString& screenId, const QString& lay
     // destroy the user's work. Those two shapes get parked and the UI asks.
     //
     // The remaining shape (a screen with no layout named) is deliberately NOT
-    // parked here. It defers to setTargetScreen, which already parks on its own
-    // for the same reason, and double-gating it would prompt twice: the answer
-    // to this prompt reaches applyLaunch with the edits still unsaved — Discard
-    // here means "go anyway", not "revert the layout" — so setTargetScreen
-    // would see a dirty controller and park a second time.
+    // parked here. Its applyLaunch branch parks on the screen prompt itself
+    // when edits are in flight, and double-gating it would prompt twice: the
+    // answer to this prompt reaches applyLaunch with the edits still unsaved
+    // — Discard here means "go anyway", not "revert the layout" — so that
+    // branch would see a dirty controller and park a second time.
     // The template shapes replace the loaded object outright too, so they
     // take the same parking gate.
     const bool replacesLayoutOutright = createNew || !layoutId.isEmpty() || newTemplate || !templateId.isEmpty();
@@ -455,6 +549,16 @@ void EditorController::createNewLayout()
     // Editing a layout, whatever mode the editor was in before.
     setEditorModeInternal(ModeLayout);
 
+    // Drop any commands from the previous session: this call commonly runs
+    // with the mode ALREADY ModeLayout (the new-layout button, the
+    // no-assigned-layout branch), so the flip above cannot be relied on to
+    // have discarded anything, and a stale template or layout command would
+    // apply invisible state onto the fresh layout on Ctrl+Z. loadLayout
+    // clears identically once its payload resolves.
+    if (m_undoController) {
+        m_undoController->clear();
+    }
+
     // A fresh layout has no fixed-zone bounding box to reference. Drop any
     // override from the previous layout so QML normalizes against the
     // screen geometry that setTargetScreen already cached — no D-Bus
@@ -514,16 +618,16 @@ void EditorController::createNewLayout()
     Q_EMIT aspectRatioClassChanged();
 }
 
-void EditorController::loadLayout(const QString& layoutId)
+bool EditorController::loadLayout(const QString& layoutId)
 {
     if (layoutId.isEmpty()) {
         Q_EMIT layoutLoadFailed(PhosphorI18n::tr("Layout ID cannot be empty"));
-        return;
+        return false;
     }
 
     if (!m_layoutService) {
         Q_EMIT layoutLoadFailed(PhosphorI18n::tr("Layout service not initialized"));
-        return;
+        return false;
     }
 
     // Try the in-process PhosphorZones::LayoutRegistry first — opens the editor instantly
@@ -547,18 +651,20 @@ void EditorController::loadLayout(const QString& layoutId)
     }
     if (jsonLayout.isEmpty()) {
         // Error signal already emitted by service
-        return;
+        return false;
     }
 
     QJsonDocument doc = QJsonDocument::fromJson(jsonLayout.toUtf8());
     if (doc.isNull() || !doc.isObject()) {
         Q_EMIT layoutLoadFailed(PhosphorI18n::tr("Invalid layout data format"));
         qCWarning(lcEditor) << "Invalid JSON for layout" << layoutId;
-        return;
+        return false;
     }
 
     // Only flip modes once the payload resolved — a failed load leaves the
-    // current editing session (template or layout) untouched.
+    // current editing MODE (template or layout) untouched. Screen context a
+    // launch switched before calling in is the caller's to restore; see
+    // applyLaunch's restoreScreenOnFailure.
     setEditorModeInternal(ModeLayout);
 
     QJsonObject layoutObj = doc.object();
@@ -829,6 +935,7 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT virtualDesktopNamesChanged();
     Q_EMIT activitiesAvailableChanged();
     Q_EMIT availableActivitiesChanged();
+    return true;
 }
 
 /**
@@ -1021,6 +1128,10 @@ bool EditorController::saveLayout()
  */
 void EditorController::discardChanges()
 {
+    // The reload results are deliberately ignored: the user asked to
+    // discard, so a reload that fails (the object was deleted in another
+    // process) changes nothing about the close — the edits were forfeit
+    // either way.
     if (!m_isNewLayout && !m_layoutId.isEmpty()) {
         if (m_editorMode == ModeScrollingTemplate) {
             loadScrollingTemplate(m_layoutId);

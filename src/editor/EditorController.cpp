@@ -5,7 +5,6 @@
 
 #include "EditorGapsModel.h"
 #include "EditorTemplateModel.h"
-#include "../config/configbackends.h"
 #include "../config/configdefaults.h"
 #include "services/ILayoutService.h"
 #include "services/DBusLayoutService.h"

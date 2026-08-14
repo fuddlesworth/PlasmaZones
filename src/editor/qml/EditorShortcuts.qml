@@ -70,12 +70,15 @@ Item {
         }
     }
 
-    // Save shortcut (StandardKey.Save - respects KDE/Qt system shortcuts)
+    // Save shortcut (StandardKey.Save - respects KDE/Qt system shortcuts).
+    // Disabled in preview mode: preview is the read-only autotile view and
+    // saveLayout carries no preview guard of its own. Template mode stays
+    // enabled — saving the template is the whole point.
     Shortcut {
         id: saveShortcut
 
         sequences: [StandardKey.Save]
-        enabled: editorController !== null
+        enabled: !shortcuts.previewMode && editorController !== null
         onActivated: {
             if (editorController)
                 editorController.saveLayout();

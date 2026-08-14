@@ -7,6 +7,8 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QDBusVariant>
+#include <QJsonObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -338,7 +340,10 @@ Q_SIGNALS:
      *
      * Emitted by @c updateLayout (the editor's save path) and by active-layout
      * switches, where the client genuinely needs the whole serialized layout.
-     * Carries the complete JSON payload (5–20 KB in prod).
+     * Usually carries the complete layout JSON (5–20 KB in prod); when the
+     * update targeted an AUTOTILE entry the payload is the caller's raw
+     * autotile-override object (id "autotile:&lt;algorithmId&gt;", not a
+     * serialized layout), so subscribers must not blindly parse it as one.
      *
      * @c createLayoutFromJson does NOT emit this — a new layout announces
      * itself with @c layoutCreated(id) instead. An active-layout switch is not
@@ -561,10 +566,10 @@ private:
     /// getLayoutPreview* D-Bus output).
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
 
-    // Suppress screenLayoutChanged D-Bus signal while a KCM-driven batch is
-    // in flight (armed via setSuppressScreenLayoutSignal around any of the
-    // assignment writers) — the KCM initiated the change and doesn't need
-    // the echo back.
+    // Suppress screenLayoutChanged D-Bus signal while a settings-driven save
+    // batch is in flight (armed via the setSaveBatchMode slot around a batch
+    // of assignment writes) — the settings app initiated the change and
+    // doesn't need the echo back.
     bool m_suppressScreenLayoutSignal = false;
 
     // Track which screens had assignments modified during the current batch.

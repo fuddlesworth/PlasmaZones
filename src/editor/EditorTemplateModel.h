@@ -106,14 +106,17 @@ public:
     Q_INVOKABLE void moveColumn(int from, int to);
     /**
      * @brief Set one blueprint column's width fraction.
-     * @param interactive true during a drag: consecutive updates within the
-     * same gesture (see beginWidthDrag) merge into one undo entry.
+     * @param interactive true for held-key autorepeat (the only interactive
+     * caller): consecutive updates within the same gesture (see
+     * beginWidthDrag) merge into one undo entry. The mouse drag commits once
+     * on release with interactive=false and never merges.
      */
     Q_INVOKABLE void setColumnWidth(int index, qreal width, bool interactive = false);
     Q_INVOKABLE void setColumnDisplay(int index, int display);
-    /// Start a new width-drag gesture. Bumps the merge token so the next
-    /// interactive width update opens a fresh undo entry instead of merging
-    /// into the previous drag's.
+    /// Start a new editing gesture. Bumps the merge token shared by the
+    /// interactive width paths (held-key column resize, the default-width
+    /// spin's focus session) so the next update opens a fresh undo entry
+    /// instead of merging into the previous gesture's.
     Q_INVOKABLE void beginWidthDrag();
 
     /**
@@ -121,7 +124,8 @@ public:
      *
      * The editor-process sibling of SettingsController::scrollingConstants(),
      * trimmed to the keys the template canvas and panel read. Same key
-     * spellings so the settings dialog's form logic ported across unchanged.
+     * spellings as the settings-side map so form logic stays portable
+     * between the two processes.
      */
     Q_INVOKABLE QVariantMap scrollingConstants() const;
 
@@ -155,22 +159,29 @@ Q_SIGNALS:
     void isSystemChanged();
 
 private:
-    /// Push an UpdateTemplateCommand transitioning to @p newState.
-    void pushCommand(const QString& label, const QVariantMap& newState, const QString& mergeKey = QString());
+    /// Push an UpdateTemplateCommand transitioning @p oldState -> @p newState.
+    /// The caller supplies the pre-mutation snapshot it already took, so a
+    /// mutation costs one snapshot rather than two.
+    void pushCommand(const QString& label, const QVariantMap& oldState, const QVariantMap& newState,
+                     const QString& mergeKey = QString());
 
     EditorController* m_controller; ///< Non-owning parent; undo stack + dirty flag.
     QString m_description;
     QVariantList m_columns; // maps: {"width": qreal, "display": int}
-    int m_defaultWidthKind = 3; // DefaultWidthKindPreset
-    qreal m_defaultWidthValue = 0.5;
-    int m_defaultPresetIndex = 1;
+    // The four defaults are seeded in the constructor from a
+    // default-constructed ScrollingTemplate so they cannot drift from the
+    // struct's own; every load path resetStates over them before QML reads.
+    int m_defaultWidthKind = 0;
+    qreal m_defaultWidthValue = 0.0;
+    int m_defaultPresetIndex = 0;
     int m_defaultDisplay = 0;
     QVariantList m_presetWidths;
     QVariantList m_presetHeights;
     bool m_isSystem = false;
-    /// Merge token for interactive width drags: bumped by beginWidthDrag so
-    /// each drag gesture coalesces into one undo entry without bleeding into
-    /// the next gesture's.
+    /// Merge token for interactive edit gestures (held-key column resize,
+    /// the default-width spin's focus session): bumped by beginWidthDrag so
+    /// each gesture coalesces into one undo entry without bleeding into the
+    /// next gesture's.
     int m_gesture = 0;
 };
 

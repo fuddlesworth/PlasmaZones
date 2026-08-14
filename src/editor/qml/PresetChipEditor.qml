@@ -82,7 +82,9 @@ ColumnLayout {
                 radius: height / 2
                 color: chip.editing ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.15) : Theme.withAlpha(Kirigami.Theme.alternateBackgroundColor, 0.8)
                 border.width: 1
-                border.color: chip.editing ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
+                // Keyboard focus on the label lights the chip border, so a
+                // Tab stop is visible the way a focused field is.
+                border.color: (chip.editing || chipLabel.activeFocus) ? Kirigami.Theme.focusColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
 
                 RowLayout {
                     id: chipContent
@@ -91,23 +93,37 @@ ColumnLayout {
                     spacing: 0
 
                     Label {
+                        id: chipLabel
+
+                        function startEdit() {
+                            editField.text = String(Math.round(chip.modelData * 100));
+                            chip.editing = true;
+                            editField.forceActiveFocus();
+                            editField.selectAll();
+                        }
+
                         visible: !chip.editing
-                        text: i18n("%1%", Math.round(chip.modelData * 100))
+                        text: i18nc("@info preset percentage", "%1%", Math.round(chip.modelData * 100))
                         leftPadding: Kirigami.Units.smallSpacing
+                        // Keyboard and assistive-tech route into edit mode:
+                        // without these the chip's value is mouse-only and
+                        // the sole recourse is delete-and-re-add.
+                        activeFocusOnTab: true
+                        Accessible.role: Accessible.Button
+                        Accessible.name: i18nc("@action:button", "Edit the %1% preset in %2", Math.round(chip.modelData * 100), chipEditor.accessibleLabel)
+                        Accessible.onPressAction: chipLabel.startEdit()
+                        Keys.onReturnPressed: chipLabel.startEdit()
+                        Keys.onEnterPressed: chipLabel.startEdit()
+                        Keys.onSpacePressed: chipLabel.startEdit()
 
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.IBeamCursor
-                            onClicked: {
-                                editField.text = String(Math.round(chip.modelData * 100));
-                                chip.editing = true;
-                                editField.forceActiveFocus();
-                                editField.selectAll();
-                            }
+                            onClicked: chipLabel.startEdit()
                         }
 
                         ToolTip.visible: chipHover.hovered
-                        ToolTip.text: i18n("Click to edit this preset")
+                        ToolTip.text: i18nc("@info:tooltip", "Click to edit this preset")
 
                         HoverHandler {
                             id: chipHover
@@ -124,15 +140,21 @@ ColumnLayout {
                             bottom: chipEditor.minPercent
                             top: 100
                         }
-                        Accessible.name: i18n("Edit preset percentage in %1", chipEditor.accessibleLabel)
+                        Accessible.name: i18nc("@label:textbox", "Edit preset percentage in %1", chipEditor.accessibleLabel)
                         // Escape cancels without committing; Enter and
                         // focus-out both commit (commitEdit latches on
-                        // chip.editing so the pair cannot double-fire).
+                        // chip.editing so the pair cannot double-fire, and
+                        // Qt.callLater de-dupes by function reference).
+                        // BOTH commits defer a tick, like the overlay catcher
+                        // below: the commit triggers the delegate rebuild,
+                        // and tearing this item down synchronously inside its
+                        // own signal handler is the UAF shape the overlay
+                        // comment describes.
                         Keys.onEscapePressed: chip.editing = false
-                        onAccepted: chip.commitEdit()
+                        onAccepted: Qt.callLater(chip.commitEdit)
                         onActiveFocusChanged: {
                             if (!activeFocus)
-                                chip.commitEdit();
+                                Qt.callLater(chip.commitEdit);
                         }
                     }
 
@@ -168,9 +190,9 @@ ColumnLayout {
                         icon.name: "window-close-symbolic"
                         icon.width: Kirigami.Units.iconSizes.small * 0.75
                         icon.height: Kirigami.Units.iconSizes.small * 0.75
-                        Accessible.name: i18n("Remove %1% from %2", Math.round(chip.modelData * 100), chipEditor.accessibleLabel)
+                        Accessible.name: i18nc("@action:button", "Remove %1% from %2", Math.round(chip.modelData * 100), chipEditor.accessibleLabel)
                         ToolTip.visible: hovered
-                        ToolTip.text: i18n("Remove this preset")
+                        ToolTip.text: i18nc("@info:tooltip", "Remove this preset")
                         onClicked: {
                             const next = chipEditor.values.slice();
                             next.splice(chip.index, 1);
@@ -193,18 +215,43 @@ ColumnLayout {
                 value: 50
                 editable: true
                 enabled: !chipEditor.full
-                textFromValue: (value, locale) => i18n("%1%", value)
+                textFromValue: (value, locale) => i18nc("@info preset percentage", "%1%", value)
                 valueFromText: (text, locale) => parseInt(text)
-                Accessible.name: i18n("New preset percentage for %1", chipEditor.accessibleLabel)
+                Accessible.name: i18nc("@label:spinbox", "New preset percentage for %1", chipEditor.accessibleLabel)
             }
 
             ToolButton {
+                // Surfacing the dedupe refusal up front, instead of a click
+                // that silently does nothing.
+                readonly property bool duplicate: {
+                    const fraction = addSpin.value / 100;
+                    const list = chipEditor.values || [];
+                    for (let i = 0; i < list.length; i++) {
+                        if (Math.abs(list[i] - fraction) < chipEditor.dedupeEpsilon)
+                            return true;
+                    }
+                    return false;
+                }
+
                 icon.name: "list-add"
-                enabled: !chipEditor.full
-                Accessible.name: i18n("Add preset to %1", chipEditor.accessibleLabel)
+                // Kept ENABLED when refusing (full list, duplicate size),
+                // greyed instead: a disabled control receives no hover, so
+                // the tooltips explaining the refusal could never show (the
+                // GroupSortBar precedent). The click no-ops in those states.
+                opacity: (chipEditor.full || duplicate) ? 0.5 : 1
+                Accessible.name: i18nc("@action:button", "Add preset to %1", chipEditor.accessibleLabel)
                 ToolTip.visible: hovered
-                ToolTip.text: chipEditor.full ? i18n("This list can hold at most %1 presets", chipEditor.maxCount) : i18n("Add this size as a preset")
+                ToolTip.text: {
+                    if (chipEditor.full)
+                        return i18np("This list can hold at most %n preset", "This list can hold at most %n presets", chipEditor.maxCount);
+                    if (duplicate)
+                        return i18nc("@info:tooltip", "This size is already a preset");
+                    return i18nc("@info:tooltip", "Add this size as a preset");
+                }
                 onClicked: {
+                    if (chipEditor.full)
+                        return;
+
                     const fraction = addSpin.value / 100;
                     const next = chipEditor.values.slice();
                     for (let i = 0; i < next.length; i++) {
@@ -225,6 +272,6 @@ ColumnLayout {
         wrapMode: Text.WordWrap
         opacity: 0.7
         font: Kirigami.Theme.smallFont
-        text: i18n("No presets yet. Pick a size and add it.")
+        text: i18nc("@info:placeholder", "No presets yet. Pick a size and add it.")
     }
 }

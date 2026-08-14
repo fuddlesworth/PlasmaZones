@@ -4,7 +4,7 @@
 <context>
     <name>plasmazones</name>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="75"/>
+        <location filename="../src/editor/controller/settings.cpp" line="90"/>
         <source>A zone with this name already exists</source>
         <translation>ზონა ამ სახელით უკვე არსებობს</translation>
     </message>
@@ -1022,17 +1022,17 @@
         <translation>წიბოს დაშორების გადაფარვის გასუფთავება</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="175"/>
+        <location filename="../src/editor/main.cpp" line="179"/>
         <source>Create new layout</source>
         <translation>ახალი განლაგების შექმნა</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="178"/>
+        <location filename="../src/editor/main.cpp" line="182"/>
         <source>Scrolling template ID to edit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="180"/>
+        <location filename="../src/editor/main.cpp" line="184"/>
         <source>Create new scrolling template</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1074,56 +1074,56 @@
         <translation>ზონის შევსება</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="555"/>
+        <location filename="../src/editor/controller/layout.cpp" line="659"/>
         <source>Invalid layout data format</source>
         <translation>არასწორი განლაგების მონაცემების ფორმატი</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1041"/>
-        <location filename="../src/editor/controller/layout.cpp" line="1079"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1152"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1190"/>
         <source>File path cannot be empty</source>
         <translation>ფაილის ბილიკი ცარიელი ვერ იქნება</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1048"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="636"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1159"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="661"/>
         <source>Failed to import layout: %1</source>
         <translation>განლაგების შემოტანა ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1059"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="643"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1170"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="668"/>
         <source>That file is not a layout this app can read.</source>
         <translation>ეს ფაილი არაა განლაგება, რომლის წაკითხვაც ამ აპს შეუძლია.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1102"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="447"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="453"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="688"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1213"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="471"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="477"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="713"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="184"/>
         <source>Could not write the export. Check that the folder is writable.</source>
         <translation>გატანის ჩაწერა ვერ მოხერხდა. გადაამოწმეთ, რომ საქაღალდე ჩაწერადია.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1084"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1195"/>
         <source>No layout loaded to export</source>
         <translation>გასატანად განლაგება ჩატვირთული არაა</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1091"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="679"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1202"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="704"/>
         <source>Failed to export layout: %1</source>
         <translation>განლაგების გატანა ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="520"/>
+        <location filename="../src/editor/controller/layout.cpp" line="624"/>
         <location filename="../src/editor/services/DBusLayoutService.cpp" line="40"/>
         <source>Layout ID cannot be empty</source>
         <translation>განლაგების ID ცარიელი ვერ იქნება</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="171"/>
+        <location filename="../src/editor/main.cpp" line="175"/>
         <source>Layout ID to edit</source>
         <translation>განლაგების ID ჩასასწორებლად</translation>
     </message>
@@ -1172,7 +1172,7 @@
         <translation>მალსახმობების ცნობარის დახურვა</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="525"/>
+        <location filename="../src/editor/controller/layout.cpp" line="629"/>
         <source>Layout service not initialized</source>
         <translation>განლაგების სერვისი ინიციალიზებული არაა</translation>
     </message>
@@ -1195,15 +1195,15 @@
         <translation>ზონის გადატანა</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="466"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="274"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="282"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
+        <location filename="../src/editor/controller/layout.cpp" line="570"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="277"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="285"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
         <source>New Layout</source>
         <translation>ახალი განლაგება</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="176"/>
+        <location filename="../src/editor/main.cpp" line="180"/>
         <source>Open in read-only preview mode</source>
         <translation>გახსნა მხოლოდ-წაკითხვადი გადახედვის რეჟიმში</translation>
     </message>
@@ -1284,7 +1284,7 @@
         <translation>უკან გადაგზავნა</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="856"/>
+        <location filename="../src/editor/controller/layout.cpp" line="963"/>
         <source>Services not initialized</source>
         <translation>სერვისები ინიციალიზებული არაა</translation>
     </message>
@@ -1313,7 +1313,7 @@
         <translation>შეიდერის ეფექტის გადართვა</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="173"/>
+        <location filename="../src/editor/main.cpp" line="177"/>
         <source>Target screen name</source>
         <translation>სამიზნე ეკრანის სახელი</translation>
     </message>
@@ -1354,7 +1354,7 @@
         <translation>ფერის განახლება %1 ზონისთვის</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="166"/>
+        <location filename="../src/editor/main.cpp" line="170"/>
         <source>Visual layout editor for PlasmaZones</source>
         <translation>ვიზუალური განლაგების რედაქტორი PlasmaZones-ისთვის</translation>
     </message>
@@ -1366,7 +1366,7 @@
         <translation>ზონების მმართველი ინიციალიზებული არაა</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="63"/>
+        <location filename="../src/editor/controller/settings.cpp" line="78"/>
         <source>Zone name contains invalid characters: &lt; &gt; &quot; &apos; \</source>
         <translation>ზონის სახელი შეიცავს დაუშვებელ სიმბოლოებს: &lt; &gt; &quot; &apos; \</translation>
     </message>
@@ -1380,22 +1380,22 @@
         <translation>ზონა აღმოჩენილი არაა</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="117"/>
+        <location filename="../src/editor/controller/settings.cpp" line="132"/>
         <source>Zone number %1 is already in use</source>
         <translation>ზონის ნომერი %1 უკვე გამოიყენება</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="97"/>
+        <location filename="../src/editor/controller/settings.cpp" line="112"/>
         <source>Zone number cannot exceed 99</source>
         <translation>ზონის ნომერი არ შეიძლება, 99-ზე მეტი იყოს</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="54"/>
+        <location filename="../src/editor/controller/settings.cpp" line="69"/>
         <source>Zone name cannot exceed %1 characters</source>
         <translation>ზონის სახელი %1 სიმბოლოს ვერ გადააჭარბებს</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="94"/>
+        <location filename="../src/editor/controller/settings.cpp" line="109"/>
         <source>Zone number must be at least 1</source>
         <translation>ზონის ნომერი, სულ ცოტა, 1-ს უნდა უდრიდეს</translation>
     </message>
@@ -1762,7 +1762,7 @@
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="97"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="48"/>
         <location filename="../src/settings/rules/ruleauthoring_actions.cpp" line="158"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="247"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="272"/>
         <source>Other</source>
         <translation>სხვა</translation>
     </message>
@@ -3149,7 +3149,7 @@
     </message>
     <message>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="256"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="289"/>
         <source>Unknown</source>
         <translation>უცნობი</translation>
     </message>
@@ -3493,7 +3493,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="114"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="268"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="293"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="385"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="256"/>
         <source>Auto</source>
@@ -3501,7 +3501,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="115"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="268"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="293"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="389"/>
         <source>Manual</source>
         <translation>ხელით</translation>
@@ -3726,8 +3726,6 @@
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="215"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="414"/>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="36"/>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="297"/>
         <source>Tabbed</source>
         <translation>ჩანართებიანი</translation>
     </message>
@@ -7852,8 +7850,8 @@
     <message>
         <location filename="../src/settings/search/searchcatalog_animations.cpp" line="39"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsOsdsPage.qml.cpp" line="35"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="255"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="276"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="280"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="301"/>
         <source>Hidden</source>
         <translation>დამალული</translation>
     </message>
@@ -8872,129 +8870,142 @@
     </message>
     <message>
         <location filename="../src/daemon/controllers/shortcutmanager_catalog.cpp" line="559"/>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="847"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="834"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="417"/>
         <location filename=".qml-stubs/src/ui/NavigationOsdContent.qml.cpp" line="456"/>
         <source>Zone %1</source>
         <translation>ზონა %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller.cpp" line="849"/>
+        <location filename="../src/settings/controller/settingscontroller.cpp" line="836"/>
         <source>%1 — %2</source>
         <translation>%1 — %2</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="306"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="309"/>
         <source>Layout created, but aspect-ratio class could not be applied: %1</source>
         <translation>განლაგება შეიქმნა, მაგრამ თანაფარდობის კლასის გადატარება ვერ მოხერხდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="320"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="323"/>
         <source>Could not create the layout. The daemon returned an empty layout ID.</source>
         <translation>განლაგების შექმნა ვერ მოხერხდა. დემონმა ცარიელი განლაგების ID დააბრუნა.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="328"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="331"/>
         <source>Could not create the layout. The daemon may not be running.</source>
         <translation>განლაგების შექმნა ვერ მოხერხდა. შესაძლოა, დემონი გაშვებული არ არის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="347"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="351"/>
         <source>Could not delete layout: %1</source>
         <translation>განლაგების წაშლა ვერ მოხერხდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="363"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="372"/>
         <source>Could not duplicate layout: %1</source>
         <translation>განლაგების დუბლირება ვერ მოხერხდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="393"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="410"/>
         <source>Could not read the template file.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="402"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="408"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="405"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="419"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="425"/>
         <source>That file is not a scrolling template this app can read.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="439"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="463"/>
         <source>That template no longer exists.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="142"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="525"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="175"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="521"/>
         <source>The daemon refused the template. Check that it has a name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="151"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="188"/>
         <source>Could not save the template.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="527"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="201"/>
+        <source>Could not save the template. Check that it has a name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="523"/>
         <source>Could not save the template: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="541"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="543"/>
         <source>Could not delete the template: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="548"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="550"/>
         <source>Could not delete the template.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="560"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="562"/>
         <source>Could not duplicate the template: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="864"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="889"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="118"/>
         <source>Scrolling (no template)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="388"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="625"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="774"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="397"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="650"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="799"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="204"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="597"/>
         <source>That file path is not allowed.</source>
         <translation>ეს ფაილის ბილიკი დაშვებული არ არის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="434"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="657"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="832"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="458"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="682"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="857"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="152"/>
         <source>That export path is not allowed.</source>
         <translation>ეს გატანის ბილიკი დაშვებული არ არის.</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="570"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="572"/>
         <source>Could not duplicate the template.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="702"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="603"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="616"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="627"/>
+        <source>Could not open the editor. The daemon may not be running.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="727"/>
         <source>Failed to update layout visibility: %1</source>
         <translation>განლაგების ხილვადობის განახლება ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="715"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="740"/>
         <source>Failed to update auto-assign: %1</source>
         <translation>ავტომატური მინიჭების განახლება ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="729"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="754"/>
         <source>Failed to update aspect ratio: %1</source>
         <translation>თანაფარდობის განახლება ჩავარდა: %1</translation>
     </message>
@@ -10022,201 +10033,220 @@
         <translation>წინასწარგანსაზღვრული განლაგების ნიმუშის გადატარება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="219"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="199"/>
         <source>Add Column</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="223"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="235"/>
         <source>Add a starting column to the template</source>
         <comment>@info</comment>
         <translation type="unfinished"></translation>
     </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="225"/>
-        <source>Add a starting column at the end of the strip</source>
-        <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="225"/>
-        <source>A template can start at most %1 columns</source>
-        <comment>@tooltip</comment>
-        <translation type="unfinished"></translation>
-    </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="230"/>
-        <source>%n column</source>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="235"/>
+        <source>A template can start at most %n column</source>
+        <comment>@info</comment>
         <translation type="unfinished">
             <numerusform></numerusform>
             <numerusform></numerusform>
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="240"/>
-        <source>Drag a column&apos;s right edge to resize it. Click a column for reorder, tabs, and remove.</source>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="237"/>
+        <source>Add a starting column at the end of the strip</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="245"/>
+        <source>%n column</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="237"/>
+        <source>A template can start at most %n column</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="255"/>
+        <source>Drag a column&apos;s right edge to resize it. Click a column to reorder it, switch it to tabs, or remove it.</source>
         <comment>@info</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="267"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="291"/>
         <source>Snap to Edges</source>
         <comment>@action:button</comment>
         <translation>წიბოებთან მიმაგრება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="274"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="298"/>
         <source>Toggle edge snapping. Zones will align with edges of other zones when enabled.</source>
         <comment>@info</comment>
         <translation>წიბოებთან მიმაგრების გადართვა. ჩართვისას ზონები სხვა ზონების წიბოებთან გასწორდება.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="276"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="300"/>
         <source>Edge snapping enabled. Zones align to edges of other zones. Click to disable.</source>
         <comment>@tooltip</comment>
         <translation>წიბოებთან მიმაგრება ჩართულია. ზონები სხვა ზონების წიბოებთან სწორდება. დააწკაპუნეთ გასათიშად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="276"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="300"/>
         <source>Edge snapping disabled. Click to enable. Zones will align to edges of other zones.</source>
         <comment>@tooltip</comment>
         <translation>წიბოებთან მიმაგრება გამორთულია. დააწკაპუნეთ ჩასართავად. ზონები სხვა ზონების წიბოებთან გასწორდება.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="299"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="323"/>
         <source>Snap to Grid</source>
         <comment>@action:button</comment>
         <translation>ბადესთან მიმაგრება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="305"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="329"/>
         <source>Toggle grid snapping. Zones will align to a grid when enabled. Use the sliders to change horizontal and vertical grid sizes.</source>
         <comment>@info</comment>
         <translation>ბადესთან მიმაგრების გადართვა. ჩართვისას ზონები ბადესთან გასწორდება. ჰორიზონტალური და ვერტიკალური ბადის ზომების შესაცვლელად გამოიყენეთ ცოცია.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="307"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="331"/>
         <source>Grid snapping enabled (H:%1% V:%2%). Zones align to grid lines. Click to disable.</source>
         <comment>@tooltip</comment>
         <translation>ბადესთან მიმაგრება ჩართულია (H:%1% V:%2%). ზონები ბადის ხაზებთან სწორდება. დააწკაპუნეთ გასათიშად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="307"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="331"/>
         <source>Grid snapping disabled. Click to enable. Zones will align to grid lines.</source>
         <comment>@tooltip</comment>
         <translation>ბადესთან მიმაგრება გამორთულია. დააწკაპუნეთ ჩასართავად. ზონები ბადის ხაზებთან გასწორდება.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="334"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="358"/>
         <source>H:</source>
         <comment>@label</comment>
         <translation>H:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="335"/>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="347"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="359"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="371"/>
         <source>Horizontal grid interval</source>
         <comment>@label</comment>
         <translation>ჰორიზონტალური ბადის ინტერვალი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="348"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="372"/>
         <source>Adjust horizontal grid interval (1% to 50%)</source>
         <comment>@info</comment>
         <translation>ჰორიზონტალური ბადის ინტერვალის დარეგულირება (1%-დან 50%-მდე)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="367"/>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="391"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="432"/>
         <source>%1%</source>
         <comment>@info grid interval percentage</comment>
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="370"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="394"/>
         <source>Horizontal interval: %1%</source>
         <comment>@info</comment>
         <translation>ჰორიზონტალური ინტერვალი: %1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="374"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="398"/>
         <source>V:</source>
         <comment>@label</comment>
         <translation>V:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="376"/>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="388"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="400"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="412"/>
         <source>Vertical grid interval</source>
         <comment>@label</comment>
         <translation>ვერტიკალური ბადის ინტერვალი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="389"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="413"/>
         <source>Adjust vertical grid interval (1% to 50%)</source>
         <comment>@info</comment>
         <translation>ვერტიკალური ბადის ინტერვალის დარეგულირება (1%-დან 50%-მდე)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="411"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="435"/>
         <source>Vertical interval: %1%</source>
         <comment>@info</comment>
         <translation>ვერტიკალური ინტერვალი: %1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="420"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="444"/>
         <source>Show Grid</source>
         <comment>@action:button</comment>
         <translation>ბადის ჩვენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="426"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="450"/>
         <source>Toggle grid overlay visibility. Shows or hides the visual grid lines on the canvas.</source>
         <comment>@info</comment>
         <translation>ბადის გადადების ხილვადობის გადართვა. აჩვენებს ან მალავს ტილოზე ბადის ვიზუალურ ხაზებს.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="428"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="452"/>
         <source>Grid overlay visible. Click to hide grid lines.</source>
         <comment>@tooltip</comment>
         <translation>ბადის გადადება ხილულია. დააწკაპუნეთ ბადის ხაზების დასამალად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="428"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="452"/>
         <source>Grid overlay hidden. Click to show grid lines.</source>
         <comment>@tooltip</comment>
         <translation>ბადის გადადება დამალულია. დააწკაპუნეთ ბადის ხაზების საჩვენებლად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="480"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="504"/>
         <source>Unsaved changes</source>
         <comment>@info</comment>
         <translation>შეუნახავი ცვლილებები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="525"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="549"/>
         <source>Cancel</source>
         <comment>@action:button</comment>
         <translation>გაუქმება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="527"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="551"/>
         <source>Discard changes and close editor</source>
         <comment>@info</comment>
         <translation>ცვლილებების მოცილება და რედაქტორის დახურვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="540"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="564"/>
         <source>Save</source>
         <comment>@action:button</comment>
         <translation>შენახვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="545"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="569"/>
         <source>Save layout and close editor</source>
         <comment>@info</comment>
         <translation>განლაგების შენახვა და რედაქტორის დახურვა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="569"/>
+        <source>Save template and close editor</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/editor/qml/DimensionTooltip.qml.cpp" line="64"/>
@@ -10321,57 +10351,57 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="767"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="780"/>
         <source>Exit fullscreen</source>
         <comment>@action:button</comment>
         <translation>სრული ეკრანიდან გასვლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="790"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="803"/>
         <source>Exit Fullscreen (F11)</source>
         <translation>სრული ეკრანიდან გასვლა (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="818"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="850"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="896"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="831"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="863"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="909"/>
         <source>Unsaved Changes</source>
         <comment>@title:window</comment>
         <translation>შეუნახავი ცვლილებები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="819"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="832"/>
         <source>You have unsaved changes. What would you like to do?</source>
         <comment>@info</comment>
         <translation>გაქვთ შეუნახავი ცვლილებები. რა გნებავთ, გააკეთოთ?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="851"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="864"/>
         <source>Switching to %1 will load that screen&apos;s layout. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>%1-ზე გადართვა ჩატვირთავს იმ ეკრანის განლაგებას. რა გნებავთ, გააკეთოთ შეუნახავ ცვლილებებთან?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="897"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="910"/>
         <source>Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>სხვა განლაგების გახსნა შეცვლის იმას, რომელსაც ასწორებთ. რა გნებავთ, გააკეთოთ შეუნახავ ცვლილებებთან?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="897"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="910"/>
         <source>Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="924"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="937"/>
         <source>Import Layout</source>
         <comment>@title:window</comment>
         <translation>განლაგების შემოტანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="925"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="937"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="938"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="950"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="964"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="993"/>
         <source>JSON files (*.json)</source>
@@ -10379,7 +10409,7 @@
         <translation>JSON ფაილები (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="925"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="938"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="944"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="964"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="993"/>
@@ -10388,37 +10418,49 @@
         <translation>ყველა ფაილი (*)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="936"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="949"/>
         <source>Export Layout</source>
         <comment>@title:window</comment>
         <translation>განლაგების გატანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="964"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="977"/>
         <source>Layout Editor Help</source>
         <comment>@title:window</comment>
         <translation>განლაგების რედაქტორის დახმარება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1007"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="977"/>
+        <source>Template Editor Help</source>
+        <comment>@title:window</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1024"/>
         <source>Layout saved successfully</source>
         <comment>@info</comment>
         <translation>განლაგება წარმატებით შენახულია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1011"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1024"/>
+        <source>Template saved</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1028"/>
         <source>Layout exported</source>
         <comment>@info</comment>
         <translation>განლაგება გატანილია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1016"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1035"/>
         <source>Failed to load layout: %1</source>
         <comment>@info</comment>
         <translation>განლაგების ჩატვირთვა ჩავარდა: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1021"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1039"/>
         <source>Failed to save layout: %1</source>
         <comment>@info</comment>
         <translation>განლაგების შენახვა ჩავარდა: %1</translation>
@@ -10448,260 +10490,355 @@
         <translation>ზონა. პოზიცია: %1%, %2%, ზომა: %3% × %4%. დააწკაპუნეთ მოსანიშნად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="41"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="44"/>
         <source>Keyboard Shortcuts</source>
         <comment>@title:group</comment>
         <translation>კლავიატურის მალსახმობები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="54"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="57"/>
         <source>File &amp; Window</source>
         <comment>@title:group</comment>
         <translation>ფაილი &amp; ფანჯარა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="59"/>
-        <source>Save layout</source>
-        <translation>განლაგების შენახვა</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="64"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="67"/>
         <source>Close editor</source>
         <translation>რედაქტორის დახურვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="69"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="72"/>
         <source>Toggle fullscreen</source>
         <translation>სრული ეკრანის გადართვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="74"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="77"/>
         <source>Show help</source>
         <translation>დახმარების ჩვენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="80"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="83"/>
         <source>Edit</source>
         <comment>@title:group</comment>
         <translation>ჩასწორება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="86"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="89"/>
         <source>Undo</source>
         <translation>დაბრუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="91"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="94"/>
         <source>Redo</source>
         <translation>გამეორება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="96"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="100"/>
         <source>Delete zone(s)</source>
         <translation>ზონ(ებ)ის წაშლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="101"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="106"/>
         <source>Select all</source>
         <translation>ყველას მონიშვნა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="106"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="407"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="441"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="112"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="417"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="451"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="199"/>
         <source>Duplicate</source>
         <translation>დუბლირება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="111"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="118"/>
         <source>Copy</source>
         <translation>კოპირება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="116"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="124"/>
         <source>Cut</source>
         <translation>ამოჭრა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="121"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="130"/>
         <source>Paste</source>
         <translation>ჩასმა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="126"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="136"/>
         <source>Paste offset</source>
         <translation>ჩასმა წანაცვლებით</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="132"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="143"/>
         <source>Zone Operations</source>
         <comment>@title:group</comment>
         <translation>ზონის ოპერაციები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="138"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="150"/>
         <source>Split horizontal</source>
         <translation>ჰორიზონტალურად გაყოფა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="143"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="156"/>
         <source>Split vertical</source>
         <translation>ვერტიკალურად გაყოფა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="148"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="162"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="97"/>
         <location filename=".qml-stubs/src/settings/qml/EditorPage.qml.cpp" line="103"/>
         <source>Fill space</source>
         <translation>სივრცის შევსება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="154"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="201"/>
         <source>Navigation</source>
         <comment>@title:group</comment>
         <translation>ნავიგაცია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="160"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="208"/>
         <source>Move zone 1%</source>
         <translation>ზონის 1%-ით გადატანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="161"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="177"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="209"/>
         <source>Arrow keys</source>
         <translation>ისრიანი კლავიშები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="165"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="214"/>
         <source>Resize zone 1%</source>
         <translation>ზონის ზომის 1%-ით შეცვლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="166"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="183"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="215"/>
         <source>Shift+Arrows</source>
         <translation>Shift+ისრები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="170"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="62"/>
+        <source>Save template</source>
+        <comment>@action</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="62"/>
+        <source>Save layout</source>
+        <comment>@action</comment>
+        <translation type="unfinished">განლაგების შენახვა</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="169"/>
+        <source>Template Columns</source>
+        <comment>@title:group</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="176"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="284"/>
+        <source>Select column</source>
+        <comment>@action</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="182"/>
+        <source>Resize column 1%</source>
+        <comment>@action</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="188"/>
+        <source>Reorder column</source>
+        <comment>@action</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="189"/>
+        <source>Ctrl+Arrows</source>
+        <comment>@shortcut</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="194"/>
+        <source>Remove column</source>
+        <comment>@action</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="220"/>
         <source>Next zone</source>
         <translation>შემდეგი ზონა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="175"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="226"/>
         <source>Previous zone</source>
         <translation>წინა ზონა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="184"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="235"/>
         <source>Mouse Actions</source>
         <comment>@title:group</comment>
         <translation>მაუსის ქმედებები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="196"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="248"/>
         <source>Create zone</source>
         <translation>ზონის შექმნა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="197"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="249"/>
         <source>Double-click</source>
         <translation>ორმაგი დაწკაპუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="254"/>
         <source>Select zone</source>
         <translation>ზონის მონიშვნა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="202"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="255"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="285"/>
         <source>Click</source>
         <translation>დაწკაპუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="206"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="260"/>
         <source>Multi-select</source>
         <translation>მრავლობითი მონიშვნა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="207"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="261"/>
         <source>Ctrl+Click</source>
         <translation>Ctrl+დაწკაპუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="211"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="266"/>
         <source>Move zone</source>
         <translation>ზონის გადატანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="212"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="267"/>
         <source>Drag</source>
         <translation>გადათრევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="216"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="272"/>
         <source>Resize zone</source>
         <translation>ზონის ზომის შეცვლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="217"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="273"/>
         <source>Drag edge</source>
         <translation>წიბოს გადათრევა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="221"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="278"/>
         <source>Context menu</source>
         <translation>კონტექსტური მენიუ</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="222"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="279"/>
         <source>Right-click</source>
         <translation>მარჯვენა ღილაკით დაწკაპუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="230"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="290"/>
+        <source>Resize column</source>
+        <comment>@action</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="291"/>
+        <source>Drag its right divider</source>
+        <comment>@info mouse gesture</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="296"/>
+        <source>Deselect</source>
+        <comment>@action</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="297"/>
+        <source>Click empty space</source>
+        <comment>@info mouse gesture</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="305"/>
         <source>Tips</source>
         <comment>@title:group</comment>
         <translation>რჩევები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="240"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="316"/>
         <source>Hover a selected zone to reveal action buttons</source>
         <translation>გადაატარეთ კურსორი მონიშნულ ზონაზე ქმედების ღილაკების გამოსაჩენად</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="244"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="321"/>
         <source>Use Templates dropdown for common layouts</source>
         <translation>გამოიყენეთ ნიმუშების ჩამოსაშლელი სია გავრცელებული განლაგებებისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="248"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="326"/>
         <source>Enable grid snapping for precise alignment</source>
         <translation>ჩართეთ ბადესთან მიმაგრება ზუსტი გასწორებისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="252"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="331"/>
         <source>Per-layout gaps in layout settings (top bar)</source>
         <translation>თითოეული განლაგების დაშორებები განლაგების პარამეტრებში (ზედა ზოლი)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="256"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="336"/>
         <source>Zones can overlap for multi-zone snapping</source>
         <translation>ზონებს შეუძლიათ გადაფარვა მრავალზონიანი მიმაგრებისთვის</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="264"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="341"/>
+        <source>Hover or select a column to reveal its action buttons</source>
+        <comment>@info tip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="346"/>
+        <source>Add columns from the bottom bar</source>
+        <comment>@info tip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="351"/>
+        <source>Presets are the sizes the width and height cycling shortcuts step through</source>
+        <comment>@info tip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="359"/>
         <source>Accessibility</source>
         <comment>@title:group</comment>
         <translation>წვდომადობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="271"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="366"/>
         <source>Zone info announced to screen readers. Tab navigates UI, Ctrl+Tab navigates zones.</source>
         <translation>ზონის ინფორმაცია ეცნობება ეკრანის წამკითხველებს. Tab გადაადგილდება ინტერფეისში, Ctrl+Tab გადაადგილდება ზონებში.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="310"/>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="366"/>
+        <source>Column info announced to screen readers. Tab navigates UI, arrow keys navigate columns.</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/HelpDialogContent.qml.cpp" line="405"/>
         <source>• %1</source>
         <comment>@item:inlistbox Bullet list item, %1 is the tip</comment>
         <translation>• %1</translation>
@@ -11778,217 +11915,229 @@
         <translation>განლაგების სახელი</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="205"/>
+        <source>Template name</source>
+        <comment>@label</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
         <source>Enter name for the layout</source>
         <comment>@info</comment>
         <translation>შეიყვანეთ განლაგების სახელი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="234"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
+        <source>Enter name for the template</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="242"/>
         <source>%1/%2</source>
         <comment>@info</comment>
         <translation>%1/%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="238"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="246"/>
         <source>Character count: %1 of %2</source>
         <comment>@info</comment>
         <translation>სიმბოლოების რაოდენობა: %1 %2-დან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="239"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="247"/>
         <source>Shows how many characters are used in the layout name</source>
         <comment>@info</comment>
         <translation>აჩვენებს, რამდენი სიმბოლოა გამოყენებული განლაგების სახელში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="341"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="349"/>
         <source>Undo: %1</source>
         <comment>@action:tooltip</comment>
         <translation>დაბრუნება: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="341"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="349"/>
         <source>Undo</source>
         <comment>@action:tooltip</comment>
         <translation>დაბრუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="343"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="351"/>
         <source>Undo</source>
         <comment>@action</comment>
         <translation>დაბრუნება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="358"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="366"/>
         <source>Redo: %1</source>
         <comment>@action:tooltip</comment>
         <translation>გამეორება: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="358"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="366"/>
         <source>Redo</source>
         <comment>@action:tooltip</comment>
         <translation>გამეორება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="360"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="368"/>
         <source>Redo</source>
         <comment>@action</comment>
         <translation>გამეორება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="382"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="390"/>
         <source>Layout-specific settings (gaps)</source>
         <comment>@tooltip</comment>
         <translation>განლაგებისთვის სპეციფიკური პარამეტრები (დაშორებები)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="392"/>
         <source>Layout Settings</source>
         <comment>@action</comment>
         <translation>განლაგების პარამეტრები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="385"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="393"/>
         <source>Configure per-layout gap overrides</source>
         <comment>@info</comment>
         <translation>დააკონფიგურირეთ თითოეული განლაგების დაშორების გადაფარვები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="406"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="414"/>
         <source>Layout visibility (per monitor/desktop/activity)</source>
         <comment>@tooltip</comment>
         <translation>განლაგების ხილვადობა (მონიტორის/სამუშაო მაგიდის/აქტივობის მიხედვით)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="408"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="416"/>
         <source>Layout Visibility</source>
         <comment>@action</comment>
         <translation>განლაგების ხილვადობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="409"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="417"/>
         <source>Configure where this layout appears in the zone selector</source>
         <comment>@info</comment>
         <translation>დააკონფიგურირეთ, სად გამოჩნდება ეს განლაგება ზონის ამომრჩევში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="422"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="430"/>
         <source>Shader effect settings</source>
         <comment>@tooltip</comment>
         <translation>შეიდერის ეფექტის პარამეტრები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="424"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="432"/>
         <source>Shader Settings</source>
         <comment>@action</comment>
         <translation>შეიდერის პარამეტრები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="425"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="433"/>
         <source>Configure visual shader effects for zones</source>
         <comment>@info</comment>
         <translation>დააკონფიგურირეთ ზონების ვიზუალური შეიდერის ეფექტები</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="449"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="457"/>
         <source>Import layout from file</source>
         <comment>@tooltip</comment>
         <translation>განლაგების შემოტანა ფაილიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="451"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="459"/>
         <source>Import Layout</source>
         <comment>@action</comment>
         <translation>განლაგების შემოტანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="452"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="460"/>
         <source>Import a layout from a JSON file</source>
         <comment>@info</comment>
         <translation>შემოიტანეთ განლაგება JSON ფაილიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="461"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="469"/>
         <source>Export layout to file</source>
         <comment>@tooltip</comment>
         <translation>განლაგების გატანა ფაილში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="463"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="471"/>
         <source>Export Layout</source>
         <comment>@action</comment>
         <translation>განლაგების გატანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="464"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="472"/>
         <source>Export the current layout to a JSON file</source>
         <comment>@info</comment>
         <translation>გაიტანეთ მიმდინარე განლაგება JSON ფაილში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="478"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="486"/>
         <source>Exit fullscreen mode (F11)</source>
         <comment>@tooltip</comment>
         <translation>სრული ეკრანის რეჟიმიდან გასვლა (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="478"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="486"/>
         <source>Enter fullscreen mode (F11)</source>
         <comment>@tooltip</comment>
         <translation>სრული ეკრანის რეჟიმში შესვლა (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="481"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="489"/>
         <source>Exit Fullscreen</source>
         <comment>@action</comment>
         <translation>სრული ეკრანიდან გასვლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="481"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="489"/>
         <source>Fullscreen</source>
         <comment>@action</comment>
         <translation>სრული ეკრანი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="482"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="490"/>
         <source>Toggle fullscreen editing mode</source>
         <comment>@info</comment>
         <translation>სრული ეკრანის ჩასწორების რეჟიმის გადართვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="489"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="497"/>
         <source>Quick reference guide (F1)</source>
         <comment>@tooltip</comment>
         <translation>სწრაფი ცნობარი (F1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="491"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="499"/>
         <source>Help</source>
         <comment>@action</comment>
         <translation>დახმარება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="492"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="500"/>
         <source>Open quick reference guide</source>
         <comment>@info</comment>
         <translation>სწრაფი ცნობარის გახსნა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="504"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="512"/>
         <source>Close editor</source>
         <comment>@tooltip</comment>
         <translation>რედაქტორის დახურვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="506"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="514"/>
         <source>Close</source>
         <comment>@action</comment>
         <translation>დახურვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="507"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="515"/>
         <source>Close the layout editor</source>
         <comment>@info</comment>
         <translation>განლაგების რედაქტორის დახურვა</translation>
@@ -12559,10 +12708,10 @@
     <message>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="630"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="645"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="562"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="589"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="605"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="631"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="587"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="614"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="630"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="656"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="397"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="410"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetCard.qml.cpp" line="346"/>
@@ -12710,9 +12859,9 @@
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/OrderingPage.qml.cpp" line="327"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="263"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="288"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="648"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="448"/>
         <source>%n zone</source>
         <translation>
             <numerusform>%n ზონა</numerusform>
@@ -12768,28 +12917,28 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/FilterMenuButton.qml.cpp" line="153"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="392"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="417"/>
         <source>Filter (active)</source>
         <comment>@action:button</comment>
         <translation>ფილტრი (აქტიური)</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/FilterMenuButton.qml.cpp" line="153"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="392"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="417"/>
         <source>Filter</source>
         <comment>@action:button</comment>
         <translation>ფილტრი</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/FilterMenuButton.qml.cpp" line="156"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="395"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="420"/>
         <source>Filters active. Click to change</source>
         <comment>@info:tooltip</comment>
         <translation>ფილტრები აქტიურია. დააწკაპუნეთ შესაცვლელად</translation>
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/components/FilterMenuButton.qml.cpp" line="156"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="395"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="420"/>
         <source>Filter</source>
         <comment>@info:tooltip</comment>
         <translation>ფილტრი</translation>
@@ -13086,7 +13235,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="111"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="167"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="827"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="850"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="467"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
@@ -14789,7 +14938,7 @@
     </message>
     <message numerus="yes">
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutComboBox.qml.cpp" line="648"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="448"/>
         <source>%n width</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -14809,66 +14958,66 @@
         <translation>გვერდების თანაფარდობა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="231"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="228"/>
         <source>Edit</source>
         <translation>ჩასწორება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="268"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="278"/>
         <source>Edit on %1</source>
         <translation>ჩასწორება %1-ზე</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="299"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="309"/>
         <source>Open in Text Editor</source>
         <translation>გახსნა ტექსტურ რედაქტორში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="348"/>
         <source>Set as Default</source>
         <translation>ნაგულისხმევად დაყენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="348"/>
         <source>Clear Default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="369"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="379"/>
         <source>Show in Zone Selector</source>
         <translation>ჩვენება ზონის ამომრჩევში</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="369"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="379"/>
         <source>Hide from Zone Selector</source>
         <translation>დამალვა ზონის ამომრჩევიდან</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="379"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="389"/>
         <source>Auto-assign forced on (global setting)</source>
         <translation>ავტომატური მინიჭება იძულებით ჩართულია (გლობალური პარამეტრი)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="379"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="389"/>
         <source>Disable Auto-assign</source>
         <translation>ავტომატური მინიჭების გამორთვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="379"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="389"/>
         <source>Enable Auto-assign</source>
         <translation>ავტომატური მინიჭების ჩართვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="419"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="448"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="429"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="458"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="217"/>
         <source>Export</source>
         <translation>გატანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="809"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="430"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="459"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="832"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="440"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="469"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="226"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="378"/>
         <source>Delete</source>
@@ -14927,9 +15076,9 @@
         <translation>განლაგებების გაფილტვრა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="242"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="251"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="272"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="267"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="276"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="297"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="355"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="416"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="442"/>
@@ -14937,7 +15086,7 @@
         <translation>ჩაშენებული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="272"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="297"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="359"/>
         <source>User Layouts</source>
         <translation>მომხმარებლის განლაგებები</translation>
@@ -14958,7 +15107,7 @@
         <translation>ალგორითმების გაფილტვრა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="251"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="276"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="446"/>
         <source>User Scripts</source>
         <translation>მომხმარებლის სკრიპტები</translation>
@@ -15024,12 +15173,22 @@
         <translation>დამალული ალგორითმების ჩვენება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="106"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
         <source>Unnamed Layout</source>
         <translation>უსახელო განლაგება</translation>
     </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
+        <source>Unnamed Template</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="111"/>
+        <source>Unnamed Algorithm</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="107"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="112"/>
         <source>Layout with %n zone</source>
         <translation>
             <numerusform>განლაგება %n ზონით</numerusform>
@@ -15037,7 +15196,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="107"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="112"/>
         <source>Template with %n width</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -15045,77 +15204,82 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="281"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="295"/>
         <source>Default scrolling template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="284"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="298"/>
         <source>Default autotile algorithm</source>
         <translation>ნაგულისხმევი ავტოფილირების ალგორითმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="286"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="300"/>
         <source>Default layout</source>
         <translation>ნაგულისხმევი განლაგება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="308"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="322"/>
         <source>Built-in template. Editing stores your own copy.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="311"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="325"/>
         <source>Bundled algorithm</source>
         <translation>თანდართული ალგორითმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="314"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="328"/>
         <source>System layout (read-only)</source>
         <translation>სისტემური განლაგება (მხოლოდ წასაკითხი)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="316"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="331"/>
+        <source>Edited copy of a built-in template. Deleting it brings the built-in one back.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="333"/>
         <source>Modified system layout</source>
         <translation>შეცვლილი სისტემური განლაგება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="342"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="359"/>
         <source>This layout is restricted to specific screens, desktops, or activities</source>
         <translation>ეს განლაგება შეზღუდულია კონკრეტული ეკრანებით, სამუშაო მაგიდებით ან აქტივობებით</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="379"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="396"/>
         <source>Auto-assign is forced on for all layouts by the global setting (Snapping → Behavior → Window Handling). Turn that off to control this layout individually.</source>
         <translation>ავტომატური მინიჭება ყველა განლაგებისთვის იძულებით ჩართულია გლობალური პარამეტრით (მიმაგრება → ქცევა → ფანჯრების დამუშავება). გამორთეთ ეს ამ განლაგების ინდივიდუალურად სამართავად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="382"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="399"/>
         <source>Auto-assign is on, so new windows fill empty zones. Click to disable.</source>
         <translation>ავტომატური მინიჭება ჩართულია, ამიტომ ახალი ფანჯრები ავსებენ ცარიელ ზონებს. დააწკაპუნეთ გამოსართავად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="401"/>
         <source>Click to auto-assign new windows to empty zones</source>
         <translation>დააწკაპუნეთ ახალი ფანჯრების ცარიელ ზონებზე ავტომატურად მისანიჭებლად</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="397"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="414"/>
         <source>Auto-assign layout</source>
         <translation>განლაგების ავტომატური მინიჭება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="413"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="430"/>
         <source>Toggle layout visibility</source>
         <translation>განლაგების ხილვადობის გადართვა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="415"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="432"/>
         <source>Hidden from zone selector. Click to show.</source>
         <translation>დამალულია ზონის ამომრჩევიდან. დააწკაპუნეთ საჩვენებლად.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="415"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutGridDelegate.qml.cpp" line="432"/>
         <source>Visible in zone selector. Click to hide.</source>
         <translation>ხილულია ზონის ამომრჩევში. დააწკაპუნეთ დასამალად.</translation>
     </message>
@@ -15177,7 +15341,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="596"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="621"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutManageCard.qml.cpp" line="89"/>
         <source>Algorithm imported</source>
         <translation>ალგორითმი შემოტანილია</translation>
@@ -15231,29 +15395,29 @@
         <translation>უსახელო</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="242"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="267"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutFilterBar.qml.cpp" line="420"/>
         <source>Your Templates</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="243"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="268"/>
         <source>All templates</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="255"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="276"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="280"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="301"/>
         <source>Visible</source>
         <translation>ხილული</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="256"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="281"/>
         <source>All algorithms</source>
         <translation>ყველა ალგორითმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="277"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="302"/>
         <source>All layouts</source>
         <translation>ყველა განლაგება</translation>
     </message>
@@ -15264,109 +15428,109 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="374"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
         <source>Search layouts…</source>
         <translation>განლაგებების ძიება…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="374"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
         <source>Search algorithms…</source>
         <translation>ალგორითმების ძიება…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="374"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
         <source>Search templates…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
         <source>New Algorithm</source>
         <translation>ახალი ალგორითმი</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="54"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="108"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="424"/>
         <source>New Template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="429"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="454"/>
         <source>No matching templates</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="429"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="454"/>
         <source>No scrolling templates available</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="456"/>
         <source>No matching algorithms</source>
         <translation>შესაბამისი ალგორითმები არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="456"/>
         <source>No matching layouts</source>
         <translation>შესაბამისი განლაგებები არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="433"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="458"/>
         <source>No autotile algorithms available</source>
         <translation>ავტოფილირების ალგორითმები ხელმისაწვდომი არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="433"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="458"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOrderingPage.qml.cpp" line="15"/>
         <source>No layouts available</source>
         <translation>განლაგებები ხელმისაწვდომი არაა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="439"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="464"/>
         <source>Both Built-in and User layout sources are hidden</source>
         <translation>როგორც ჩაშენებული, ისე მომხმარებლის განლაგებების წყაროები დამალულია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="467"/>
         <source>Both Auto and Manual layout types are hidden</source>
         <translation>როგორც ავტომატური, ისე ხელით ტიპის განლაგებები დამალულია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="445"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="470"/>
         <source>Both Built-in and User algorithm sources are hidden</source>
         <translation>როგორც ჩაშენებული, ისე მომხმარებლის ალგორითმების წყაროები დამალულია</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="448"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="473"/>
         <source>Both Built-in and Your Templates sources are hidden</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="450"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="475"/>
         <source>Try adjusting your filters or search terms</source>
         <translation>სცადეთ ფილტრების ან საძიებო სიტყვების შეცვლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="456"/>
-        <source>Create a new template or import one</source>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="481"/>
+        <source>Start the PlasmaZones daemon to create a template, or import one</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="460"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="485"/>
         <source>Start the PlasmaZones daemon or add a tiling algorithm</source>
         <translation>გაუშვით PlasmaZones-ის დემონი ან დაამატეთ ფილებად დაწყობის ალგორითმი</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="460"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="485"/>
         <source>Start the PlasmaZones daemon or create a new layout</source>
         <translation>გაუშვით PlasmaZones-ის დემონი ან შექმენით ახალი განლაგება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="465"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="490"/>
         <source>Reset Filters</source>
         <translation>ფილტრების ჩამოყრა</translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="486"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="511"/>
         <source>%n algorithm</source>
         <translation>
             <numerusform>%n ალგორითმი</numerusform>
@@ -15374,7 +15538,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="486"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="511"/>
         <source>%n layout</source>
         <translation>
             <numerusform>%n განლაგება</numerusform>
@@ -15382,7 +15546,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="486"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="511"/>
         <source>%n template</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -15390,72 +15554,72 @@
         </translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="561"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="586"/>
         <source>Import Layout</source>
         <translation>განლაგების შემოტანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="562"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="576"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="605"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="618"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="631"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="587"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="601"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="630"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="643"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="656"/>
         <source>JSON files (*.json)</source>
         <translation>JSON ფაილები (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="575"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="600"/>
         <source>Export Layout</source>
         <translation>განლაგების გატანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="588"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="613"/>
         <source>Import Tiling Algorithm</source>
         <translation>ფილების ალგორითმის შემოტანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="589"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="786"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="614"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="809"/>
         <source>Luau files (*.luau)</source>
         <translation>Luau ფაილები (*.luau)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="604"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="629"/>
         <source>Import Scrolling Template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="617"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="642"/>
         <source>Export Scrolling Template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="630"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="655"/>
         <source>Import KZones Layout File</source>
         <translation>KZones-ის განლაგების ფაილის შემოტანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="785"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="808"/>
         <source>Export Algorithm</source>
         <translation>ალგორითმის გატანა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="802"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="825"/>
         <source>Delete Algorithm</source>
         <translation>ალგორითმის წაშლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="802"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="825"/>
         <source>Delete Layout</source>
         <translation>განლაგების წაშლა</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="802"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="825"/>
         <source>Delete Template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="803"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="826"/>
         <source>Are you sure you want to delete &quot;%1&quot;?</source>
         <translation>დარწმუნებული ხართ, რომ გსურთ „%1“-ის წაშლა?</translation>
     </message>
@@ -15517,7 +15681,6 @@
         <translation>ახალი განლაგება</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="119"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="260"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="160"/>
         <source>Template</source>
@@ -16319,20 +16482,9 @@
         <translation>აირჩიეთ განლაგება…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="36"/>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="297"/>
-        <source>Stacked</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="79"/>
-        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="106"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="116"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="146"/>
         <source>That template is no longer available.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="110"/>
-        <source>This is a built-in template. Saving stores your own copy, and deleting that copy brings the built-in one back.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -16341,355 +16493,201 @@
         <translation>სახელი:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="126"/>
-        <source>Description:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="127"/>
-        <source>Template description</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="128"/>
-        <source>Optional description</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="141"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="195"/>
         <source>This template starts no columns</source>
+        <comment>@info:placeholder</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="142"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="196"/>
         <source>The first windows you open form the starting columns, left to right. Later windows use the default width from the panel. A template without starting columns only sets the width presets.</source>
+        <comment>@info:placeholder</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="229"/>
-        <source>Column %1, %2% wide, tabbed</source>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="301"/>
+        <source>Column %1, %2% wide, %3</source>
+        <comment>@info accessible column summary; %3 is Stacked or Tabbed</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="229"/>
-        <source>Column %1, %2% wide, stacked</source>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="382"/>
+        <source>Tabbed</source>
+        <comment>@info column display</comment>
+        <translation type="unfinished">ჩანართებიანი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="301"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="382"/>
+        <source>Stacked</source>
+        <comment>@info column display</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="291"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="369"/>
+        <source>%1%</source>
+        <comment>@info column width percentage</comment>
+        <translation type="unfinished">%1%</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="376"/>
         <source>Column %1</source>
+        <comment>@info column caption</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="339"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="424"/>
         <source>Move column left</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="340"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="425"/>
         <source>Swap this column with the one to its left</source>
         <comment>@info:tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="341"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="426"/>
         <source>Move left</source>
         <comment>@tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="355"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="440"/>
         <source>Show windows stacked</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="355"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="440"/>
         <source>Show windows as tabs</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="356"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="441"/>
         <source>Switch this column between stacked windows and tabs</source>
         <comment>@info:tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="357"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="442"/>
         <source>Show windows stacked</source>
         <comment>@tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="357"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="442"/>
         <source>Show windows as tabs</source>
         <comment>@tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="366"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="451"/>
         <source>Move column right</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="367"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="452"/>
         <source>Swap this column with the one to its right</source>
         <comment>@info:tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="368"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="453"/>
         <source>Move right</source>
         <comment>@tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="381"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="466"/>
         <source>Remove column</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="382"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="467"/>
         <source>Remove this column from the template</source>
         <comment>@info:tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="383"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="468"/>
         <source>Remove column</source>
         <comment>@tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="494"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="579"/>
         <source>Column width divider</source>
         <comment>@action:button</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="495"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="580"/>
         <source>Drag horizontally to resize this column</source>
         <comment>@info:tooltip</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="551"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="653"/>
         <source>Screen edge</source>
+        <comment>@info marker caption</comment>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="95"/>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="171"/>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="182"/>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="284"/>
-        <source>%1%</source>
-        <translation type="unfinished">%1%</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="110"/>
-        <source>Click to edit this preset</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="127"/>
-        <source>Edit preset percentage in %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="146"/>
-        <source>Remove %1% from %2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="173"/>
-        <source>New preset percentage for %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="179"/>
-        <source>Add preset to %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="181"/>
-        <source>This list can hold at most %1 presets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="181"/>
-        <source>Add this size as a preset</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="203"/>
-        <source>No presets yet. Pick a size and add it.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="215"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="271"/>
         <source>Change Description</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="225"/>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="235"/>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="245"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="306"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="320"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="339"/>
         <source>Change Default Width</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="255"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="354"/>
         <source>Change Default Display</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="265"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="377"/>
         <source>Change Width Presets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="275"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="390"/>
         <source>Change Height Presets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="290"/>
-        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="145"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="411"/>
         <source>Add Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="302"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="424"/>
         <source>Remove Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="314"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="437"/>
         <source>Move Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="337"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="464"/>
         <source>Resize Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/editor/EditorTemplateModel.cpp" line="354"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="486"/>
         <source>Change Column Display</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="137"/>
-        <source>Later columns</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="144"/>
-        <source>Default width:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="150"/>
-        <source>Fraction of the screen</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="154"/>
-        <source>Fixed pixels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="158"/>
-        <source>The window decides</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="162"/>
-        <source>Width preset</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="177"/>
-        <source>Width in pixels:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="177"/>
-        <source>Width:</source>
-        <translation type="unfinished">სიგანე:</translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="178"/>
-        <source>Default column width in pixels</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="196"/>
-        <source>Start at preset:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="197"/>
-        <source>Default width preset</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="200"/>
-        <source>No width presets yet</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="201"/>
-        <source>Preset %1 (%2%)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="226"/>
-        <source>Widths:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="241"/>
-        <source>Heights:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="211"/>
-        <source>Show windows as:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="212"/>
-        <source>Show windows as</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="221"/>
-        <source>Size presets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="229"/>
-        <source>Width presets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="244"/>
-        <source>Height presets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="262"/>
-        <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the screen instead.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="271"/>
-        <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -19796,8 +19794,6 @@
         <translation>რამდენად განიერია სვეტი პირველი გახსნისას</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="145"/>
-        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="178"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="149"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="121"/>
         <source>Default column width</source>
@@ -20777,7 +20773,6 @@
         <translation type="unfinished">%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="166"/>
         <source>Remove this preset</source>
         <translation type="unfinished"></translation>
@@ -20841,6 +20836,273 @@
             <numerusform></numerusform>
             <numerusform></numerusform>
         </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="106"/>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="218"/>
+        <source>%1%</source>
+        <comment>@info preset percentage</comment>
+        <translation type="unfinished">%1%</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="113"/>
+        <source>Edit the %1% preset in %2</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="126"/>
+        <source>Click to edit this preset</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="143"/>
+        <source>Edit preset percentage in %1</source>
+        <comment>@label:textbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="193"/>
+        <source>Remove %1% from %2</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="195"/>
+        <source>Remove this preset</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="220"/>
+        <source>New preset percentage for %1</source>
+        <comment>@label:spinbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="242"/>
+        <source>Add preset to %1</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="246"/>
+        <source>This list can hold at most %n preset</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="248"/>
+        <source>This size is already a preset</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="249"/>
+        <source>Add this size as a preset</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="275"/>
+        <source>No presets yet. Pick a size and add it.</source>
+        <comment>@info:placeholder</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="122"/>
+        <source>This is a built-in template. Saving stores your own copy, and deleting that copy brings the built-in one back.</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="131"/>
+        <source>Template</source>
+        <comment>@title:group</comment>
+        <translation type="unfinished">ნიმუში</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="138"/>
+        <source>Description:</source>
+        <comment>@label:textbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="139"/>
+        <source>Template description</source>
+        <comment>@label:textbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="140"/>
+        <source>Optional description</source>
+        <comment>@info:placeholder</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="173"/>
+        <source>Later columns</source>
+        <comment>@title:group</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="180"/>
+        <source>Default width:</source>
+        <comment>@label:listbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="181"/>
+        <source>Default column width</source>
+        <comment>@label:listbox</comment>
+        <translation type="unfinished">ნაგულისხმევი სვეტის სიგანე</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="186"/>
+        <source>Fraction of the screen</source>
+        <comment>@item:inlistbox default width kind</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="190"/>
+        <source>Fixed pixels</source>
+        <comment>@item:inlistbox default width kind</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="194"/>
+        <source>The window decides</source>
+        <comment>@item:inlistbox default width kind</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="198"/>
+        <source>Width preset</source>
+        <comment>@item:inlistbox default width kind</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="214"/>
+        <source>Width in pixels:</source>
+        <comment>@label:spinbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="214"/>
+        <source>Width:</source>
+        <comment>@label:spinbox</comment>
+        <translation type="unfinished">სიგანე:</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="215"/>
+        <source>Default column width in pixels</source>
+        <comment>@label:spinbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="215"/>
+        <source>Default column width</source>
+        <comment>@label:spinbox</comment>
+        <translation type="unfinished">ნაგულისხმევი სვეტის სიგანე</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="220"/>
+        <source>%1%</source>
+        <comment>@info:spinbox width percentage</comment>
+        <translation type="unfinished">%1%</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="242"/>
+        <source>Start at preset:</source>
+        <comment>@label:listbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="243"/>
+        <source>Default width preset</source>
+        <comment>@label:listbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="247"/>
+        <source>No width presets yet</source>
+        <comment>@info:placeholder</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="248"/>
+        <source>Preset %1 (%2%)</source>
+        <comment>@item:inlistbox preset number and percentage</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="258"/>
+        <source>Show windows as:</source>
+        <comment>@label:listbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="259"/>
+        <source>Show windows as</source>
+        <comment>@label:listbox</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="267"/>
+        <source>Stacked</source>
+        <comment>@item:inlistbox column display</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="271"/>
+        <source>Tabbed</source>
+        <comment>@item:inlistbox column display</comment>
+        <translation type="unfinished">ჩანართებიანი</translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="282"/>
+        <source>Size presets</source>
+        <comment>@title:group</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="287"/>
+        <source>Widths:</source>
+        <comment>@label</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="290"/>
+        <source>Width presets</source>
+        <comment>@label</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="302"/>
+        <source>Heights:</source>
+        <comment>@label</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="305"/>
+        <source>Height presets</source>
+        <comment>@label</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="323"/>
+        <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the screen instead.</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="332"/>
+        <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

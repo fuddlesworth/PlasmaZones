@@ -15,23 +15,38 @@
 #include "../../config/configdefaults.h"
 #include "../../config/configmigration.h"
 #include "../../config/configbackends.h"
+#include <QKeySequence>
 #include <QRegularExpression>
 
 namespace PlasmaZones {
 
 namespace {
 
-/// Load a shortcut from config with validation: an empty stored value falls
-/// back to the default, and the member only updates (and the signal only
-/// fires) when the value actually changes. Lives here rather than in the
-/// header because loadEditorSettings below is its only caller.
+/// Load a shortcut from config with validation: an empty or unparseable
+/// stored value falls back to the default, and the member only updates (and
+/// the signal only fires) when the value actually changes. Lives here
+/// rather than in the header because loadEditorSettings is its only caller.
 template<typename F>
 void loadShortcutSetting(PhosphorConfig::IGroup& group, const QString& key, const QString& defaultValue,
                          QString& member, F emitSignal)
 {
+    // An empty or unparseable stored value is INVALID rather than
+    // "disabled" (the capture field offers no clear affordance, so such a
+    // value only appears via a hand-edited config). The in-memory fallback
+    // to the default is deliberate, and the next settings flush writing that
+    // default back over the broken value is accepted — a broken shortcut
+    // entry has nothing worth preserving.
+    // QKeySequence::fromString does not answer "unparseable" with an empty
+    // sequence — garbage parses to an entry holding Qt::Key_unknown — so the
+    // gate checks every chord for that sentinel explicitly.
     QString value = group.readString(key, defaultValue);
-    if (value.isEmpty()) {
-        qCWarning(lcEditor) << "Invalid editor shortcut" << key << "(empty), using default";
+    const QKeySequence parsed = QKeySequence::fromString(value, QKeySequence::PortableText);
+    bool invalid = value.isEmpty() || parsed.isEmpty();
+    for (int i = 0; !invalid && i < parsed.count(); ++i) {
+        invalid = parsed[i].key() == Qt::Key_unknown;
+    }
+    if (invalid) {
+        qCWarning(lcEditor) << "Invalid editor shortcut" << key << value << "- using default";
         value = defaultValue;
     }
     if (member != value) {
@@ -57,8 +72,8 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
     // Check for invalid characters (allow alphanumeric, spaces, hyphens, underscores)
     // But be lenient - allow most characters for internationalization
     // Only block characters that could break JSON or filenames
-    QRegularExpression invalidChars(QStringLiteral("[<>\"'\\\\]"));
-    QRegularExpressionMatch match = invalidChars.match(name);
+    static const QRegularExpression invalidChars(QStringLiteral("[<>\"'\\\\]"));
+    const QRegularExpressionMatch match = invalidChars.match(name);
     if (match.hasMatch()) {
         return PhosphorI18n::tr("Zone name contains invalid characters: < > \" ' \\");
     }
@@ -68,9 +83,9 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
         QVariantList zones = m_zoneManager->zones();
         for (const QVariant& zoneVar : zones) {
             QVariantMap zone = zoneVar.toMap();
-            QString otherZoneId = zone.value(QStringLiteral("id")).toString();
+            QString otherZoneId = zone.value(::PhosphorZones::ZoneJsonKeys::Id).toString();
             if (otherZoneId != zoneId) {
-                QString otherName = zone.value(QStringLiteral("name")).toString();
+                QString otherName = zone.value(::PhosphorZones::ZoneJsonKeys::Name).toString();
                 if (otherName == name) {
                     return PhosphorI18n::tr("A zone with this name already exists");
                 }

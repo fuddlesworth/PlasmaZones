@@ -32,6 +32,10 @@ namespace PlasmaZones {
 
 void LayoutAdaptor::launchEditor(const QStringList& args, const QString& description)
 {
+    // Resolved once for the daemon's lifetime, deliberately: the fallback is
+    // the bare name, which QProcess re-resolves against PATH at every spawn,
+    // so an editor installed after daemon start still launches. Only a
+    // package move to a different prefix goes stale until a daemon restart.
     static const QString editor = []() {
         QString found = QStandardPaths::findExecutable(QStringLiteral("plasmazones-editor"));
         if (!found.isEmpty()) {
@@ -300,81 +304,22 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
 
     const auto zonesArray = obj[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
     for (const auto& zoneVal : zonesArray) {
-        QJsonObject zoneObj = zoneVal.toObject();
-        auto* zone = new PhosphorZones::Zone(layout);
-
-        zone->setName(clampName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString()));
-        zone->setZoneNumber(zoneObj[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt());
-
-        QJsonObject relGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::RelativeGeometry].toObject();
-        zone->setRelativeGeometry(QRectF(relGeo[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
-                                         relGeo[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
-                                         relGeo[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
-                                         relGeo[::PhosphorZones::ZoneJsonKeys::Height].toDouble()));
-
-        // Per-zone geometry mode
-        zone->setGeometryModeInt(zoneObj[::PhosphorZones::ZoneJsonKeys::GeometryMode].toInt(0));
-        // fixedGeometry is the one geometry key the schema gate above does not
-        // cover — the schema describes relativeGeometry and never mentions it.
-        // This is also the more exposed of the two ingresses that accept it
-        // (any session process can reach the bus, where a file has to be
-        // imported), so it takes the same normalization Zone::fromJson applies
-        // to the file side. Without it a negative width or a NaN lands verbatim
-        // and the daemon then persists a layout it will refuse to load.
-        if (zoneObj.contains(::PhosphorZones::ZoneJsonKeys::FixedGeometry)) {
-            QJsonObject fixedGeo = zoneObj[::PhosphorZones::ZoneJsonKeys::FixedGeometry].toObject();
-            zone->setFixedGeometry(PhosphorZones::Zone::sanitizeFixedGeometry(
-                QRectF(fixedGeo[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
-                       fixedGeo[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
-                       fixedGeo[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
-                       fixedGeo[::PhosphorZones::ZoneJsonKeys::Height].toDouble())));
-        }
-        // Same fallback the file ingress applies: a Fixed zone with no usable
-        // pixel payload renders from its authored relativeGeometry instead of
-        // becoming an invisible snap-target sink.
-        if (zone->isFixedGeometry() && zone->fixedGeometry().isEmpty()) {
-            qCWarning(lcDbusLayout) << "updateLayout: zone" << zone->name()
-                                    << "declares Fixed geometry with no usable fixedGeometry payload"
-                                    << "— downgrading to Relative";
-            zone->setGeometryMode(PhosphorZones::ZoneGeometryMode::Relative);
-        }
-
-        QJsonObject appearance = zoneObj[::PhosphorZones::ZoneJsonKeys::Appearance].toObject();
-        if (!appearance.isEmpty()) {
-            zone->setHighlightColor(QColor(appearance[::PhosphorZones::ZoneJsonKeys::HighlightColor].toString()));
-            zone->setInactiveColor(QColor(appearance[::PhosphorZones::ZoneJsonKeys::InactiveColor].toString()));
-            zone->setBorderColor(QColor(appearance[::PhosphorZones::ZoneJsonKeys::BorderColor].toString()));
-
-            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::ActiveOpacity)) {
-                zone->setActiveOpacity(appearance[::PhosphorZones::ZoneJsonKeys::ActiveOpacity].toDouble());
-            }
-            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::InactiveOpacity)) {
-                zone->setInactiveOpacity(appearance[::PhosphorZones::ZoneJsonKeys::InactiveOpacity].toDouble());
-            }
-            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::BorderWidth)) {
-                zone->setBorderWidth(appearance[::PhosphorZones::ZoneJsonKeys::BorderWidth].toInt());
-            }
-            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::BorderRadius)) {
-                zone->setBorderRadius(appearance[::PhosphorZones::ZoneJsonKeys::BorderRadius].toInt());
-            }
-            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::UseCustomColors)) {
-                zone->setUseCustomColors(appearance[::PhosphorZones::ZoneJsonKeys::UseCustomColors].toBool());
-            }
-            if (appearance.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)) {
-                zone->setOverlayDisplayMode(appearance[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode].toInt(-1));
-            }
-        }
-
+        const QJsonObject zoneObj = zoneVal.toObject();
+        // Route through Zone::fromJson, the same ingress the file path uses:
+        // it PRESERVES the zone's UUID (identity is by QUuid everywhere, so a
+        // re-minted id would orphan anything keyed on it — live snap
+        // assignments most of all), clamps relative geometry, sanitizes
+        // fixedGeometry with the Fixed-no-payload downgrade, and applies the
+        // appearance fallbacks. The D-Bus boundary adds only the name clamp
+        // on top, exactly as it does for the create path.
+        auto* zone = PhosphorZones::Zone::fromJson(zoneObj, layout);
+        zone->setName(clampName(zone->name()));
         layout->addZone(zone);
     }
 
     // endBatchModify() is called by batchGuard (RAII) when the function returns
 
-    m_cachedLayoutJson.remove(layoutId);
-    if (m_cachedActiveLayoutId == layoutId) {
-        m_cachedActiveLayoutId = QUuid();
-        m_cachedActiveLayoutJson.clear();
-    }
+    invalidateLayoutJsonCacheFor(layoutId);
 
     Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
     return true;
@@ -458,6 +403,12 @@ void LayoutAdaptor::openEditorForScreen(const QString& screenId)
 
 void LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId)
 {
+    // Validate the bus-supplied id before spawning a process: an autotile
+    // preview id is a legal non-UUID shape, everything else must parse.
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && QUuid::fromString(layoutId).isNull()) {
+        qCWarning(lcDbusLayout) << "openEditorForLayoutOnScreen: rejecting malformed layout id" << layoutId;
+        return;
+    }
     QStringList args{QStringLiteral("--layout"), layoutId};
     if (!screenId.isEmpty()) {
         args << QStringLiteral("--screen") << screenId;
@@ -467,8 +418,23 @@ void LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const Q
 
 void LayoutAdaptor::openEditorForScrollingTemplate(const QString& templateId)
 {
+    // An EMPTY id is the documented "create a new template" shape. A
+    // NON-EMPTY id must parse as a UUID and name a template the store
+    // actually holds (the same store gate delete/duplicate apply), so a
+    // caller bug spawns a warning here instead of an editor showing
+    // "no longer available".
     if (templateId.isEmpty()) {
         launchEditor({QStringLiteral("--new-scrolling-template")}, QStringLiteral("for a new scrolling template"));
+        return;
+    }
+    const QUuid parsed = QUuid::fromString(templateId);
+    if (parsed.isNull()) {
+        qCWarning(lcDbusLayout) << "openEditorForScrollingTemplate: rejecting malformed template id" << templateId;
+        return;
+    }
+    const auto* store = m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr;
+    if (!store || !store->templateById(parsed).isValid()) {
+        qCWarning(lcDbusLayout) << "openEditorForScrollingTemplate: unknown template" << templateId;
         return;
     }
     launchEditor({QStringLiteral("--scrolling-template"), templateId},

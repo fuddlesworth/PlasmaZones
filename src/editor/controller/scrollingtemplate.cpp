@@ -5,12 +5,14 @@
 #include "../EditorTemplateModel.h"
 #include "../undo/UndoController.h"
 #include "core/platform/logging.h"
+#include "core/types/constants.h"
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorZones/ScrollingTemplate.h>
 #include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include "phosphor_i18n.h"
+#include <QDBusError>
 #include <QDBusMessage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -30,8 +32,26 @@ void EditorController::setEditorModeInternal(int mode)
     }
     m_editorMode = mode;
     // Zone selection is meaningless outside layout mode, and stale selection
-    // state would leak into shortcut enablement gates.
+    // state would leak into shortcut enablement gates. A multi-zone drag
+    // interrupted by a forwarded launch must end too, or its active flag and
+    // captured positions outlive the canvas that owned them (the primary
+    // zone's own restore is the QML handler's half and is covered by the
+    // zone reload every route back into layout mode performs).
     setSelectedZoneIdsDirect({});
+    if (m_multiZoneDragActive) {
+        endMultiZoneDrag(/*commit*/ false);
+    }
+    // A parked screen switch answers a question about the PREVIOUS edited
+    // object; once the mode changed, applying it later could save or discard
+    // the wrong one. Drop it — the prompt's dialog acts on a cleared park as
+    // a no-op.
+    m_pendingTargetScreen.reset();
+    m_pendingTargetEditsLayout = false;
+    // The rest of the layout session (zones, shader, gap overrides, bounds)
+    // deliberately stays loaded when entering template mode: QML gates every
+    // reader on the mode, and each route back into layout mode
+    // (createNewLayout, loadLayout, the forced plain-screen launch) rebuilds
+    // it before anything renders or saves.
     Q_EMIT editorModeChanged();
 }
 
@@ -46,38 +66,55 @@ void EditorController::reloadLocalTemplates()
 // Template lifecycle
 // ---------------------------------------------------------------------------
 
-void EditorController::createNewScrollingTemplate()
+// Shared session-begin tail for the two template entry points, so the reset
+// work and the signal contract are written once.
+//
+// Signal order is load-bearing: layoutIdChanged fires BEFORE the model reset
+// because the strip canvas latches its reload handling (contentX rewind,
+// selection clear) on it, and must observe the new identity before the
+// columnsChanged the reset emits — otherwise a template loaded over an open
+// canvas is mistaken for a column append. The id/name/dirty emissions are
+// deliberately unconditional: layoutIdChanged doubles as the reload beacon,
+// and a discard that re-loads the SAME id still needs the canvas to rewind.
+void EditorController::beginTemplateSession(const QString& id, const QString& name, bool isNew,
+                                            const QVariantMap& state, bool isSystem)
 {
     setEditorModeInternal(ModeScrollingTemplate);
 
-    m_layoutId = QUuid::createUuid().toString();
-    m_layoutName = PhosphorI18n::tr("New Template");
-    m_isNewLayout = true;
-    m_hasUnsavedChanges = true;
-
-    // Same starting shape the settings dialog seeded: no blueprint columns,
-    // width-preset default pointing at the middle stop of a thirds/half/two-
-    // thirds vocabulary.
-    PhosphorZones::ScrollingTemplate templ;
-    templ.presetColumnWidths = {1.0 / 3.0, 0.5, 2.0 / 3.0};
-    templ.presetWindowHeights = {1.0 / 3.0, 0.5, 2.0 / 3.0};
-    m_scrollingTemplate->resetState(EditorTemplateModel::stateFromTemplate(templ), /*isSystem*/ false);
-
-    if (m_undoController) {
-        m_undoController->clear();
-    }
+    m_layoutId = id;
+    m_layoutName = name;
+    m_isNewLayout = isNew;
+    m_hasUnsavedChanges = isNew;
 
     Q_EMIT layoutIdChanged();
     Q_EMIT layoutNameChanged();
     Q_EMIT hasUnsavedChangesChanged();
+
+    m_scrollingTemplate->resetState(state, isSystem);
+
+    if (m_undoController) {
+        m_undoController->clear();
+    }
 }
 
-void EditorController::loadScrollingTemplate(const QString& templateId)
+void EditorController::createNewScrollingTemplate()
+{
+    // Same starting shape the deleted settings-app form seeded: no blueprint
+    // columns, width-preset default pointing at the middle stop of a thirds/
+    // half/two-thirds vocabulary.
+    PhosphorZones::ScrollingTemplate templ;
+    templ.presetColumnWidths = {1.0 / 3.0, 0.5, 2.0 / 3.0};
+    templ.presetWindowHeights = {1.0 / 3.0, 0.5, 2.0 / 3.0};
+    beginTemplateSession(QUuid::createUuid().toString(), PhosphorI18n::tr("New Template"), /*isNew*/ true,
+                         EditorTemplateModel::stateFromTemplate(templ), /*isSystem*/ false);
+}
+
+bool EditorController::loadScrollingTemplate(const QString& templateId)
 {
     const QUuid id = QUuid::fromString(templateId);
     if (id.isNull()) {
         Q_EMIT layoutLoadFailed(PhosphorI18n::tr("That template is no longer available."));
-        return;
+        return false;
     }
 
     PhosphorZones::ScrollingTemplate templ;
@@ -85,8 +122,11 @@ void EditorController::loadScrollingTemplate(const QString& templateId)
         templ = m_templateStore->templateById(id);
     }
     if (!templ.isValid()) {
-        // Local read view can be behind a just-saved daemon write; ask the
-        // daemon for the full list and pick the id out of it.
+        // Absent from the local read view (a template created in another
+        // process since our last rescan); ask the daemon for the full list
+        // and pick the id out of it. A stale-but-present local entry wins
+        // without a round-trip — the scrollingTemplatesChanged reload keeps
+        // that window small.
         const QDBusMessage reply = PhosphorProtocol::ClientHelpers::syncCall(
             PhosphorProtocol::Service::Interface::LayoutRegistry, QStringLiteral("getScrollingTemplates"), {});
         if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
@@ -104,31 +144,24 @@ void EditorController::loadScrollingTemplate(const QString& templateId)
     if (!templ.isValid()) {
         qCWarning(lcEditor) << "loadScrollingTemplate: unknown template" << templateId;
         Q_EMIT layoutLoadFailed(PhosphorI18n::tr("That template is no longer available."));
-        return;
+        return false;
     }
 
-    setEditorModeInternal(ModeScrollingTemplate);
-
-    m_layoutId = templ.id.toString();
-    m_layoutName = templ.name;
-    m_isNewLayout = false;
-    m_hasUnsavedChanges = false;
-    m_scrollingTemplate->resetState(EditorTemplateModel::stateFromTemplate(templ), templ.isSystem);
-
-    if (m_undoController) {
-        m_undoController->clear();
-    }
-
-    Q_EMIT layoutIdChanged();
-    Q_EMIT layoutNameChanged();
-    Q_EMIT hasUnsavedChangesChanged();
+    beginTemplateSession(templ.id.toString(), templ.name, /*isNew*/ false,
+                         EditorTemplateModel::stateFromTemplate(templ), templ.isSystem);
+    return true;
 }
 
 bool EditorController::saveScrollingTemplateNow()
 {
-    // The daemon clamps name/description and normalizes fractions at its
-    // boundary; the local-store fallback normalizes too.
-    const QJsonObject payload = m_scrollingTemplate->toWirePayload(m_layoutId, m_layoutName);
+    // Clamp the name before building the payload so BOTH persistence paths
+    // (daemon boundary and the offline local store) write the same clamped
+    // spelling; the daemon re-applies the identical clamp at its boundary.
+    // Saving also deliberately recreates a template another process deleted
+    // while this editor held it — the same semantics as saving a file whose
+    // on-disk copy was removed underneath the editor.
+    const QString saveName = clampName(m_layoutName);
+    const QJsonObject payload = m_scrollingTemplate->toWirePayload(m_layoutId, saveName);
 
     QString savedId;
     const QString payloadStr = QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
@@ -143,12 +176,29 @@ bool EditorController::saveScrollingTemplateNow()
             return false;
         }
     } else {
-        // Daemon unreachable — fall back to the local store so the editor
-        // works standalone, mirroring loadLayout's local-registry fast path.
+        // Only genuinely-unreachable errors take the offline fallback: a
+        // reachable daemon that ERRORED must surface as a failure, not be
+        // papered over with a local write the daemon's registry never learns
+        // about (nothing watches the template directory).
+        const QDBusError error(reply);
+        const bool unreachable = error.type() == QDBusError::ServiceUnknown || error.type() == QDBusError::NoReply
+            || error.type() == QDBusError::Timeout || error.type() == QDBusError::Disconnected;
+        if (!unreachable) {
+            qCWarning(lcEditor) << "saveScrollingTemplate: daemon error" << error.name() << error.message();
+            Q_EMIT layoutSaveFailed(PhosphorI18n::tr("Could not save the template."));
+            return false;
+        }
+        // Daemon unreachable — write the local store so the editor works
+        // standalone (daemon first, local store as the offline fallback).
+        // saveTemplate normalizes the same way the daemon does. A settings
+        // app open at this moment does not learn of the write (no broadcast
+        // without the daemon, and nothing watches the directory); its read
+        // view catches up on the daemon's next start-up rescan. Accepted for
+        // this deliberately narrow offline case.
         PhosphorZones::ScrollingTemplate templ = PhosphorZones::ScrollingTemplate::fromJson(payload);
         const QUuid storedId = m_templateStore ? m_templateStore->saveTemplate(templ) : QUuid();
         if (storedId.isNull()) {
-            Q_EMIT layoutSaveFailed(PhosphorI18n::tr("Could not save the template."));
+            Q_EMIT layoutSaveFailed(PhosphorI18n::tr("Could not save the template. Check that it has a name."));
             return false;
         }
         savedId = storedId.toString();
@@ -158,11 +208,20 @@ bool EditorController::saveScrollingTemplateNow()
         m_layoutId = savedId;
         Q_EMIT layoutIdChanged();
     }
+    if (m_layoutName != saveName) {
+        m_layoutName = saveName;
+        Q_EMIT layoutNameChanged();
+    }
     m_isNewLayout = false;
     m_hasUnsavedChanges = false;
-    // The save wrote a user copy that shadows the bundled file, so the loaded
-    // template is no longer the read-only system entry.
-    m_scrollingTemplate->clearSystemFlag();
+    // Reconcile the model with what actually persisted: both paths normalize
+    // (drop degenerate columns, sort/dedupe/cap presets, demote an
+    // unusable Preset default), and fromJson applies the identical
+    // normalization, so parsing our own payload yields the stored shape
+    // without a re-read round-trip. resetState also drops the system flag —
+    // the save wrote a user copy that shadows any bundled file.
+    PhosphorZones::ScrollingTemplate stored = PhosphorZones::ScrollingTemplate::fromJson(payload);
+    m_scrollingTemplate->resetState(EditorTemplateModel::stateFromTemplate(stored), /*isSystem*/ false);
     if (m_undoController) {
         m_undoController->setClean();
     }

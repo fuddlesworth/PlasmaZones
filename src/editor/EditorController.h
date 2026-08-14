@@ -44,7 +44,6 @@ class ShaderPreviewController;
 class SnappingService;
 class TemplateService;
 class EditorGapsModel;
-class EditorTemplateModel;
 
 /**
  * @brief Controller for the layout editor
@@ -179,9 +178,10 @@ class EditorController : public QObject, public IShaderPreviewBackend
     Q_PROPERTY(bool previewMode READ previewMode NOTIFY previewModeChanged)
 
     // Editing mode: which domain object the editor is editing, orthogonal to
-    // previewMode. 0 = ModeLayout, 1 = ModeScrollingTemplate. Set only by
-    // launch args, so a mode change always rides a launch request and
-    // inherits its unsaved-changes gating.
+    // previewMode. 0 = ModeLayout, 1 = ModeScrollingTemplate. The mode
+    // follows whichever object last loaded or was created (launch shapes,
+    // createNewLayout / loadLayout, the template pair); a failed load never
+    // flips it.
     Q_PROPERTY(int editorMode READ editorMode NOTIFY editorModeChanged)
 
     // Scrolling-template edit state sub-model (see EditorTemplateModel for
@@ -202,9 +202,9 @@ public:
     bool previewMode() const;
     void setPreviewMode(bool preview);
 
-    // Editing mode values for the editorMode property. Not a Q_ENUM: the
-    // controller reaches QML as a context property, where enum types are not
-    // resolvable — QML compares against these documented ints instead.
+    // Editing mode values for the editorMode property. Deliberately not a
+    // Q_ENUM: the controller is a context property and its type is never
+    // QML-registered, so QML compares against these documented ints.
     static constexpr int ModeLayout = 0;
     static constexpr int ModeScrollingTemplate = 1;
 
@@ -528,28 +528,24 @@ public:
     Q_INVOKABLE void stopAudioCapture();
 
 public Q_SLOTS:
-    // PhosphorZones::Layout operations
+    // PhosphorZones::Layout operations; loadLayout's bool = payload
+    // resolved (false leaves the session, mode included, intact).
     void createNewLayout();
-    void loadLayout(const QString& layoutId);
+    bool loadLayout(const QString& layoutId);
 
-    // Scrolling-template operations. Both flip the editor into template
-    // mode; saveLayout() dispatches to the template save path while that
-    // mode is active.
-    void loadScrollingTemplate(const QString& templateId);
+    // Scrolling-template operations. Both flip into template mode;
+    // saveLayout() then dispatches to the template save path, and
+    // loadScrollingTemplate's bool follows loadLayout's contract.
+    bool loadScrollingTemplate(const QString& templateId);
     void createNewScrollingTemplate();
 
-    // D-Bus subscriber slot for the daemon's scrollingTemplatesChanged
-    // signal, the template sibling of reloadLocalLayouts(): the store
-    // watches nothing, so this reload is the only way another process's
-    // template write reaches the editor's local read view.
+    // Daemon scrollingTemplatesChanged subscriber: the store watches
+    // nothing, so this reload is how other-process writes reach us.
     void reloadLocalTemplates();
-    /// Persist the current layout. Returns false when the save did not land —
-    /// the daemon refused the payload, or the services are not up — in which
-    /// case layoutSaveFailed carries the reason and the unsaved-changes flag
-    /// stays set. Callers that follow a save with an action that REPLACES the
-    /// loaded layout (a screen switch, closing the window) must gate that
-    /// action on the return value or they discard the work the user just
-    /// pressed Save to keep.
+    /// Persist the current layout. False = the save did not land
+    /// (layoutSaveFailed carries the reason, the unsaved flag stays set); a
+    /// caller chaining a layout-replacing action (screen switch, close)
+    /// must gate on it or it discards the work the user just saved.
     bool saveLayout();
     void discardChanges();
 
@@ -874,9 +870,10 @@ private:
     QVariant audioSpectrumVariant() const;
     void markUnsaved();
     void cacheVirtualScreenGeometry(const QString& screenName);
-    /// Carry out the screen switch setTargetScreen / confirmPendingTargetScreen
-    /// gate on. Caller has already decided the outgoing layout may be replaced.
-    void applyTargetScreen(const QString& screenName);
+    /// Carry out the gated screen switch (caller cleared the replace
+    /// decision). forceLayoutMode = the plain-screen launch shape: flips out
+    /// of template/preview mode at apply time and loads even same-screen.
+    void applyTargetScreen(const QString& screenName, bool forceLayoutMode = false);
     void applyUsableAreaInsets(const QRect& fullGeom, const QRect& availGeom);
     void setInsets(int left, int top, int right, int bottom);
 
@@ -1059,13 +1056,16 @@ private:
     std::optional<PendingLaunch> m_pendingLaunch;
     /// Apply a launch request outright, replacing whatever is loaded.
     void applyLaunch(const PendingLaunch& launch);
+    /// Shared template session-begin tail (signal-order contract on the definition).
+    void beginTemplateSession(const QString& id, const QString& name, bool isNew, const QVariantMap& state,
+                              bool isSystem);
 
-    /// Screen parked by setTargetScreen() while unsaved edits are pending.
-    /// nullopt when nothing is awaiting confirmation. Optional rather than an
-    /// empty string because "" is a legitimate parked value (it is what
-    /// targetScreen() reports before a screen is resolved), so the two states
-    /// need to stay distinguishable even though no caller parks one today.
+    /// Screen parked by setTargetScreen() / a plain-screen launch while
+    /// unsaved edits are pending (optional: "" is a legitimate value). The
+    /// bool is the launch shape's intent — confirm then also leaves
+    /// template/preview mode and loads. Both reset on any mode change.
     std::optional<QString> m_pendingTargetScreen;
+    bool m_pendingTargetEditsLayout = false;
     QSize m_virtualScreenSize; ///< Cached VS geometry size (valid when m_targetScreen is virtual)
     QRect m_virtualScreenRect; ///< Cached VS absolute geometry (position within physical monitor)
     /// Layout-derived reference-size override. When valid, takes precedence

@@ -19,6 +19,7 @@
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 #include "core/platform/logging.h"
 #include "core/interfaces/shaderregistry.h"
@@ -330,7 +331,14 @@ QStringList LayoutAdaptor::getLayoutList()
         // LayoutPreview doesn't carry (hasSystemOrigin, hiddenFromSelector,
         // defaultOrder, allow-lists).
         auto uuidOpt = Utils::parseUuid(entry.id);
-        if (uuidOpt) {
+        if (uuidOpt && entry.isScrollingTemplate) {
+            // Template entries share the bare-UUID id form with layouts but
+            // have no Layout object; their one enrichment is the shadow mark
+            // (a user copy of a bundled template), read from the store.
+            if (const auto* store = m_layoutManager->scrollingTemplateStore()) {
+                json[PhosphorZones::ZoneJsonKeys::HasSystemOrigin] = store->templateById(*uuidOpt).hasSystemOrigin;
+            }
+        } else if (uuidOpt) {
             PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
             if (layout) {
                 json[PhosphorZones::ZoneJsonKeys::HasSystemOrigin] = layout->hasSystemOrigin();

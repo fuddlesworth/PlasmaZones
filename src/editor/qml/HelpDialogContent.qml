@@ -18,6 +18,9 @@ ScrollView {
 
     required property var editorController
     required property var editorWindow
+    // Template mode swaps the zone-only groups for the strip's own bindings;
+    // the always-live groups (save, undo, fullscreen, help) stay.
+    property bool templateMode: false
 
     clip: true
     contentWidth: availableWidth
@@ -56,7 +59,7 @@ ScrollView {
                 }
 
                 ShortcutLabel {
-                    action: i18n("Save layout")
+                    action: helpContent.templateMode ? i18nc("@action", "Save template") : i18nc("@action", "Save layout")
                     shortcut: "Ctrl+S"
                 }
 
@@ -93,85 +96,133 @@ ScrollView {
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Delete zone(s)")
                     shortcut: "Delete"
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Select all")
                     shortcut: "Ctrl+A"
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Duplicate")
                     shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorDuplicateShortcut : "Ctrl+D")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Copy")
                     shortcut: "Ctrl+C"
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Cut")
                     shortcut: "Ctrl+X"
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Paste")
                     shortcut: "Ctrl+V"
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Paste offset")
                     shortcut: "Ctrl+Shift+V"
                 }
 
                 // Zone Operations
                 SubsectionHeader {
+                    visible: !helpContent.templateMode
                     title: i18nc("@title:group", "Zone Operations")
                     Layout.columnSpan: 2
                     Layout.topMargin: Kirigami.Units.mediumSpacing
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Split horizontal")
                     shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorSplitHorizontalShortcut : "Ctrl+Shift+H")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Split vertical")
                     shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorSplitVerticalShortcut : "Ctrl+Alt+V")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Fill space")
                     shortcut: helpContent.editorWindow.formatShortcut(editorController ? editorController.editorFillShortcut : "Ctrl+Shift+F")
                 }
 
+                // Template Columns - the strip canvas bindings
+                SubsectionHeader {
+                    visible: helpContent.templateMode
+                    title: i18nc("@title:group", "Template Columns")
+                    Layout.columnSpan: 2
+                    Layout.topMargin: Kirigami.Units.mediumSpacing
+                }
+
+                ShortcutLabel {
+                    visible: helpContent.templateMode
+                    action: i18nc("@action", "Select column")
+                    shortcut: i18n("Arrow keys")
+                }
+
+                ShortcutLabel {
+                    visible: helpContent.templateMode
+                    action: i18nc("@action", "Resize column 1%")
+                    shortcut: i18n("Shift+Arrows")
+                }
+
+                ShortcutLabel {
+                    visible: helpContent.templateMode
+                    action: i18nc("@action", "Reorder column")
+                    shortcut: i18nc("@shortcut", "Ctrl+Arrows")
+                }
+
+                ShortcutLabel {
+                    visible: helpContent.templateMode
+                    action: i18nc("@action", "Remove column")
+                    shortcut: "Delete"
+                }
+
                 // Navigation
                 SubsectionHeader {
+                    visible: !helpContent.templateMode
                     title: i18nc("@title:group", "Navigation")
                     Layout.columnSpan: 2
                     Layout.topMargin: Kirigami.Units.mediumSpacing
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Move zone 1%")
                     shortcut: i18n("Arrow keys")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Resize zone 1%")
                     shortcut: i18n("Shift+Arrows")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Next zone")
                     shortcut: "Ctrl+Tab"
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Previous zone")
                     shortcut: "Ctrl+Shift+Tab"
                 }
@@ -193,33 +244,57 @@ ScrollView {
                 Layout.leftMargin: Kirigami.Units.gridUnit
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Create zone")
                     shortcut: i18n("Double-click")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Select zone")
                     shortcut: i18n("Click")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Multi-select")
                     shortcut: i18n("Ctrl+Click")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Move zone")
                     shortcut: i18n("Drag")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Resize zone")
                     shortcut: i18n("Drag edge")
                 }
 
                 ShortcutLabel {
+                    visible: !helpContent.templateMode
                     action: i18n("Context menu")
                     shortcut: i18n("Right-click")
+                }
+
+                ShortcutLabel {
+                    visible: helpContent.templateMode
+                    action: i18nc("@action", "Select column")
+                    shortcut: i18n("Click")
+                }
+
+                ShortcutLabel {
+                    visible: helpContent.templateMode
+                    action: i18nc("@action", "Resize column")
+                    shortcut: i18nc("@info mouse gesture", "Drag its right divider")
+                }
+
+                ShortcutLabel {
+                    visible: helpContent.templateMode
+                    action: i18nc("@action", "Deselect")
+                    shortcut: i18nc("@info mouse gesture", "Click empty space")
                 }
             }
 
@@ -237,23 +312,43 @@ ScrollView {
                 spacing: Kirigami.Units.smallSpacing
 
                 TipLabel {
+                    visible: !helpContent.templateMode
                     tipText: i18n("Hover a selected zone to reveal action buttons")
                 }
 
                 TipLabel {
+                    visible: !helpContent.templateMode
                     tipText: i18n("Use Templates dropdown for common layouts")
                 }
 
                 TipLabel {
+                    visible: !helpContent.templateMode
                     tipText: i18n("Enable grid snapping for precise alignment")
                 }
 
                 TipLabel {
+                    visible: !helpContent.templateMode
                     tipText: i18n("Per-layout gaps in layout settings (top bar)")
                 }
 
                 TipLabel {
+                    visible: !helpContent.templateMode
                     tipText: i18n("Zones can overlap for multi-zone snapping")
+                }
+
+                TipLabel {
+                    visible: helpContent.templateMode
+                    tipText: i18nc("@info tip", "Hover or select a column to reveal its action buttons")
+                }
+
+                TipLabel {
+                    visible: helpContent.templateMode
+                    tipText: i18nc("@info tip", "Add columns from the bottom bar")
+                }
+
+                TipLabel {
+                    visible: helpContent.templateMode
+                    tipText: i18nc("@info tip", "Presets are the sizes the width and height cycling shortcuts step through")
                 }
             }
 
@@ -268,7 +363,7 @@ ScrollView {
             Label {
                 Layout.fillWidth: true
                 Layout.leftMargin: Kirigami.Units.gridUnit
-                text: i18n("Zone info announced to screen readers. Tab navigates UI, Ctrl+Tab navigates zones.")
+                text: helpContent.templateMode ? i18nc("@info", "Column info announced to screen readers. Tab navigates UI, arrow keys navigate columns.") : i18n("Zone info announced to screen readers. Tab navigates UI, Ctrl+Tab navigates zones.")
                 wrapMode: Text.WordWrap
                 opacity: 0.8
             }

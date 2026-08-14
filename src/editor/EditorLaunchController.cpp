@@ -40,15 +40,30 @@ bool EditorLaunchController::registerDBusService()
 void EditorLaunchController::applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew,
                                              bool preview, const QString& templateId, bool newTemplate)
 {
-    // Translation only — the controller owns what the args MEAN and whether
-    // they can be applied right now. A forwarded launch can land on an editor
-    // holding unsaved edits, and every object-naming shape (`--new`,
-    // `--layout <id>`, `--scrolling-template <id>`, `--new-scrolling-template`)
+    // Normalize conflicting shapes with the SAME precedence the CLI parser
+    // enforces (main.cpp warns and strips): the interface XML documents the
+    // template shapes as mutually exclusive with the layout shapes, and this
+    // is the one chokepoint both the CLI and the bus path cross, so a direct
+    // bus caller cannot smuggle a combination the contract forbids.
+    const bool effectiveNewTemplate = newTemplate;
+    const QString effectiveTemplateId = newTemplate ? QString() : templateId;
+    const bool templateLaunch = effectiveNewTemplate || !effectiveTemplateId.isEmpty();
+    const bool effectiveCreateNew = !templateLaunch && createNew;
+    const QString effectiveLayoutId = (templateLaunch || effectiveCreateNew) ? QString() : layoutId;
+    const bool effectivePreview = preview && !templateLaunch && !effectiveCreateNew;
+    if (templateLaunch && (!layoutId.isEmpty() || createNew)) {
+        qCWarning(lcEditor) << "Launch combined template and layout shapes; the template shape wins";
+    }
+
+    // Beyond that, translation only — the controller owns what the args MEAN
+    // and whether they can be applied right now. A forwarded launch can land
+    // on an editor holding unsaved edits, and every object-naming shape
     // replaces the loaded object, so requestLaunch parks the request and has
     // the UI ask rather than destroying the work. An initial launch has a
     // freshly constructed controller with nothing unsaved, so it applies
     // immediately.
-    m_controller->requestLaunch(screenId, layoutId, createNew, preview, templateId, newTemplate);
+    m_controller->requestLaunch(screenId, effectiveLayoutId, effectiveCreateNew, effectivePreview, effectiveTemplateId,
+                                effectiveNewTemplate);
 }
 
 void EditorLaunchController::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,

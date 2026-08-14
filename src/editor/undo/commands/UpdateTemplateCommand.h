@@ -24,10 +24,13 @@ class EditorTemplateModel;
  * signals that actually change.
  *
  * Merging: commands with a non-empty, equal mergeKey coalesce (QUndoStack
- * calls mergeWith on consecutive same-id commands). The width-drag path keys
- * this as "columnWidth:<column>:<gesture>" so one drag is one undo entry and
- * two separate drags on the same column stay two entries. Commands with an
- * empty mergeKey never merge.
+ * calls mergeWith on consecutive same-id commands). Held-key autorepeat
+ * column resizes key this as "columnWidth:<column>:<gesture>" and the
+ * default-width spin as "defaultWidthValue:<gesture>", so one gesture is one
+ * undo entry and two separate gestures stay two entries (the mouse drag
+ * commits once on release with no key and never merges). A merge whose
+ * result is a no-op (new state equals the origin) marks itself obsolete so
+ * push() drops the entry. Commands with an empty mergeKey never merge.
  */
 class UpdateTemplateCommand : public QUndoCommand
 {

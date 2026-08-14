@@ -929,10 +929,11 @@ QString LayoutAdaptor::saveScrollingTemplate(const QString& templateJson)
     }
     PhosphorZones::ScrollingTemplate templ = PhosphorZones::ScrollingTemplate::fromJson(doc.object());
     // D-Bus boundary clamp, same as createLayout / updateLayout apply to
-    // layout names. The editor dialog mirrors these caps client-side via
-    // maximumLength; this boundary clamp is the enforcement, since a direct
-    // D-Bus caller never goes through the dialog and maximumLength truncates by
-    // UTF-16 code units anyway.
+    // layout names. The editor mirrors these caps client-side (TopBar.qml's
+    // name field, TemplatePropertyPanel.qml's description maximumLength);
+    // this boundary clamp is the enforcement, since a direct D-Bus caller
+    // never goes through the editor and maximumLength truncates by UTF-16
+    // code units anyway.
     templ.name = clampName(templ.name);
     // The description is free text with no name-length counterpart, so it needs
     // its own cap at the same boundary. clampName is the right tool for it too:

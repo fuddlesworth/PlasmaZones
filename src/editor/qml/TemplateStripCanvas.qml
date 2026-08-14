@@ -24,6 +24,11 @@ Item {
     id: stripCanvas
 
     required property var editorController
+    // The key-handling surface (EditorWindow's drawingArea). Every pointer
+    // interaction on the strip hands focus back to it, the same contract
+    // CanvasMouseHandler keeps for the zone canvas — without it, focus left
+    // in a panel text field silently kills every keyboard column operation.
+    required property Item keyFocusTarget
     // The scrolling-template sub-model (editorController.scrollingTemplate)
     readonly property var templateModel: editorController ? editorController.scrollingTemplate : null
 
@@ -47,19 +52,32 @@ Item {
     // removal or reload; -1 means "next change is a reload, never a grow".
     property int _lastColumnCount: -1
     // Set when an append should scroll the tail into view; consumed by
-    // onContentWidthChanged (which fires after the Row has repolished, so
-    // the scroll target is not one band stale) with a callLater fallback
-    // for appends that do not change contentWidth.
+    // onContentWidthChanged, which fires after the Row has repolished, so
+    // the scroll target is not one band stale. An append that never moves
+    // contentWidth needs no scroll (the strip fits), so there is no
+    // tick-timed fallback on purpose.
     property bool _revealTailPending: false
 
     Component.onCompleted: _lastColumnCount = columnCount
 
-    // A different template was loaded over this canvas: rewind the viewport
-    // and make sure the count change is not mistaken for an append.
+    // A different template was loaded over this canvas (the controller emits
+    // layoutIdChanged BEFORE the model reset precisely so this runs first):
+    // rewind the viewport, clear the selection — a band index picked in the
+    // old template means nothing in the new one — and make sure the count
+    // change is not mistaken for an append.
     Connections {
         function onLayoutIdChanged() {
             stripCanvas._lastColumnCount = -1;
+            stripCanvas.selectedColumn = -1;
             stripFlickable.contentX = 0;
+            // Re-stamp after the model reset lands (this handler runs BEFORE
+            // it by design): if the new template happens to carry the same
+            // column count, onColumnCountChanged never fires and the -1
+            // would otherwise latch, swallowing the next append's
+            // select-and-reveal.
+            Qt.callLater(function () {
+                stripCanvas._lastColumnCount = stripCanvas.columnCount;
+            });
         }
 
         target: stripCanvas.editorController
@@ -74,13 +92,23 @@ Item {
         if (selectedColumn >= columnCount)
             selectedColumn = columnCount - 1;
         if (_lastColumnCount >= 0 && columnCount > _lastColumnCount) {
+            // Select the appended column so both add affordances (the
+            // ControlBar button and the empty-state action) behave the same.
+            // A grow is ASSUMED to be an append: undoing a middle-column
+            // removal also lands here and selects/reveals the tail, which is
+            // accepted — the model does not expose the inserted index.
+            selectedColumn = columnCount - 1;
+            // onContentWidthChanged consumes this once the Row has
+            // repolished. An append that does NOT move contentWidth needs no
+            // scroll at all (the strip fits, contentX is already clamped to
+            // 0), so no tick-timed fallback exists — the one residual is a
+            // flag from such an append being consumed by a LATER overflow
+            // crossing, which the non-grow retire below bounds.
             _revealTailPending = true;
-            Qt.callLater(function () {
-                if (stripCanvas._revealTailPending) {
-                    stripCanvas._revealTailPending = false;
-                    stripFlickable.contentX = Math.max(0, stripFlickable.contentWidth - stripFlickable.width);
-                }
-            });
+        } else {
+            // Any non-grow change retires a stale reveal so a removal or
+            // reload cannot inherit an earlier append's tail scroll.
+            _revealTailPending = false;
         }
         _lastColumnCount = columnCount;
     }
@@ -89,46 +117,72 @@ Item {
         selectedColumn = (index >= 0 && index < columnCount) ? index : -1;
     }
 
+    // Keep the selected band inside the viewport: keyboard selection and
+    // resize can walk or grow a column past the visible edge on an
+    // overflowing strip. Band pitch in content space is fraction * canvas
+    // width (each band gives up one gap, the Row spacing gives it back).
+    function revealColumn(index) {
+        if (index < 0 || index >= columnCount)
+            return;
+
+        let x = 0;
+        for (let i = 0; i < index; i++)
+            x += columns[i].width * stripCanvas.width;
+        const right = x + columns[index].width * stripCanvas.width;
+        if (x < stripFlickable.contentX)
+            stripFlickable.contentX = Math.max(0, x);
+        else if (right > stripFlickable.contentX + stripFlickable.width)
+            stripFlickable.contentX = Math.max(0, Math.min(right - stripFlickable.width, stripFlickable.contentWidth - stripFlickable.width));
+    }
+
     // Keyboard handling, called from EditorWindow's canvas key handler while
     // template mode is active. Left/Right select, Shift+Left/Right resize,
-    // Ctrl+Left/Right reorder, Delete removes.
+    // Ctrl+Left/Right reorder, Delete removes. Only keys that actually act
+    // are accepted; an arrow with nothing selected (or an empty strip) falls
+    // through instead of being swallowed as a no-op.
     function handleKeyPress(event) {
         if (!templateModel)
             return false;
 
-        const step = 0.01;
+        const step = constants.keyboardResizeStep || 0.01;
         if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
             const dir = event.key === Qt.Key_Right ? 1 : -1;
-            event.accepted = true;
             if (event.modifiers & Qt.ShiftModifier) {
                 if (selectedColumn >= 0) {
+                    event.accepted = true;
                     // One undo entry per held key: the first press opens a
                     // gesture, autorepeat merges into it.
                     if (!event.isAutoRepeat)
                         templateModel.beginWidthDrag();
                     const current = columns[selectedColumn].width;
                     templateModel.setColumnWidth(selectedColumn, current + dir * step, true);
+                    revealColumn(selectedColumn);
+                    return true;
                 }
             } else if (event.modifiers & Qt.ControlModifier) {
                 if (selectedColumn >= 0) {
                     const target = selectedColumn + dir;
                     if (target >= 0 && target < columnCount) {
+                        event.accepted = true;
                         templateModel.moveColumn(selectedColumn, target);
                         selectedColumn = target;
+                        revealColumn(target);
+                        return true;
                     }
                 }
-            } else {
-                if (columnCount > 0)
-                    selectedColumn = Math.max(0, Math.min(columnCount - 1, selectedColumn < 0 ? 0 : selectedColumn + dir));
+            } else if (columnCount > 0) {
+                event.accepted = true;
+                selectedColumn = Math.max(0, Math.min(columnCount - 1, selectedColumn < 0 ? 0 : selectedColumn + dir));
+                revealColumn(selectedColumn);
+                return true;
             }
-            return true;
+            return false;
         }
         if (event.key === Qt.Key_Delete && selectedColumn >= 0) {
             event.accepted = true;
             templateModel.removeColumn(selectedColumn);
             return true;
         }
-        event.accepted = false;
         return false;
     }
 
@@ -138,11 +192,11 @@ Item {
         width: parent.width - Kirigami.Units.gridUnit * 8
         visible: stripCanvas.columnCount === 0
         icon.name: "view-split-left-right"
-        text: i18n("This template starts no columns")
-        explanation: i18n("The first windows you open form the starting columns, left to right. Later windows use the default width from the panel. A template without starting columns only sets the width presets.")
+        text: i18nc("@info:placeholder", "This template starts no columns")
+        explanation: i18nc("@info:placeholder", "The first windows you open form the starting columns, left to right. Later windows use the default width from the panel. A template without starting columns only sets the width presets.")
 
         helpfulAction: Kirigami.Action {
-            text: i18n("Add Column")
+            text: i18nc("@action:button", "Add Column")
             icon.name: "list-add"
             enabled: stripCanvas.templateModel !== null
             onTriggered: {
@@ -181,9 +235,14 @@ Item {
             policy: ScrollBar.AsNeeded
         }
 
-        // Deselect on a click that lands between or past the bands.
+        // Deselect on a click that lands between or past the bands, and hand
+        // key focus back to the drawing area (the CanvasMouseHandler
+        // contract, applied to the mode that replaced it).
         TapHandler {
-            onTapped: stripCanvas.selectedColumn = -1
+            onTapped: {
+                stripCanvas.selectedColumn = -1;
+                stripCanvas.keyFocusTarget.forceActiveFocus();
+            }
         }
 
         Row {
@@ -218,7 +277,16 @@ Item {
                     property real dragFraction: 0
                     readonly property real displayFraction: resizing ? dragFraction : widthFraction
 
-                    width: Math.max(displayFraction * stripCanvas.width - stripCanvas.bandSpacing, Kirigami.Units.gridUnit * 3)
+                    // No width floor: the rendered edge must stay exactly at
+                    // fraction * canvas width or the drag math and the
+                    // screen-edge marker both lie. A 5%-minimum band on a
+                    // narrow canvas renders small and clips its caption; that
+                    // is the honest rendering.
+                    // NO clip here: the drag handle is a child positioned
+                    // OUTSIDE the band's bounds (in the gap after it), and a
+                    // clipping band would erase it and its hit area. The
+                    // caption clips inside the content column instead.
+                    width: Math.max(displayFraction * stripCanvas.width - stripCanvas.bandSpacing, 0)
                     height: parent.height
                     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                     color: isSelected ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.25) : Theme.withAlpha(Kirigami.Theme.alternateBackgroundColor, 0.6)
@@ -226,7 +294,17 @@ Item {
                     border.color: isSelected ? Kirigami.Theme.highlightColor : stripCanvas.frameBorderColor
 
                     Accessible.role: Accessible.Button
-                    Accessible.name: band.isTabbed ? i18n("Column %1, %2% wide, tabbed", index + 1, Math.round(band.displayFraction * 100)) : i18n("Column %1, %2% wide, stacked", index + 1, Math.round(band.displayFraction * 100))
+                    // One msgid with the display mode substituted, so
+                    // translators translate the sentence once; selection is
+                    // exposed as checked state (the TopBar screen-button
+                    // precedent) because every action and key operates on it.
+                    Accessible.name: i18nc("@info accessible column summary; %3 is Stacked or Tabbed", "Column %1, %2% wide, %3", index + 1, Math.round(band.displayFraction * 100), band.isTabbed ? i18nc("@info column display", "Tabbed") : i18nc("@info column display", "Stacked"))
+                    Accessible.checkable: true
+                    Accessible.checked: band.isSelected
+                    Accessible.onPressAction: {
+                        stripCanvas.selectColumn(band.index);
+                        stripCanvas.keyFocusTarget.forceActiveFocus();
+                    }
 
                     MouseArea {
                         id: bandArea
@@ -237,7 +315,10 @@ Item {
                         // strip the Flickable may turn a press-and-move into
                         // a pan, and a pan must not also change the
                         // selection.
-                        onClicked: stripCanvas.selectColumn(band.index)
+                        onClicked: {
+                            stripCanvas.selectColumn(band.index);
+                            stripCanvas.keyFocusTarget.forceActiveFocus();
+                        }
                     }
 
                     // Display-mode sketch: tabbed columns show one window with
@@ -247,6 +328,10 @@ Item {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.largeSpacing
                         spacing: Kirigami.Units.smallSpacing
+                        // The caption must not overflow a narrow band now
+                        // that the width floor is gone; the clip lives here
+                        // so the out-of-bounds drag handle stays untouched.
+                        clip: true
 
                         RowLayout {
                             Layout.fillWidth: true
@@ -281,20 +366,20 @@ Item {
 
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: i18n("%1%", Math.round(band.displayFraction * 100))
+                                    text: i18nc("@info column width percentage", "%1%", Math.round(band.displayFraction * 100))
                                     font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.6
                                     font.weight: Font.DemiBold
                                 }
 
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: i18n("Column %1", band.index + 1)
+                                    text: i18nc("@info column caption", "Column %1", band.index + 1)
                                     color: Kirigami.Theme.disabledTextColor
                                 }
 
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: band.isTabbed ? i18n("Tabbed") : i18n("Stacked")
+                                    text: band.isTabbed ? i18nc("@info column display", "Tabbed") : i18nc("@info column display", "Stacked")
                                     color: Kirigami.Theme.disabledTextColor
                                     font: Kirigami.Theme.smallFont
                                 }
@@ -404,7 +489,7 @@ Item {
                         width: handleThickness
                         height: parent.height - stripCanvas.bandSpacing
                         radius: width / 2
-                        color: (handleArea.containsMouse || dragHandle.isDragging) ? Qt.alpha(Kirigami.Theme.highlightColor, dragHandle.isDragging ? 0.4 : 0.25) : Qt.alpha(Kirigami.Theme.backgroundColor, 0.3)
+                        color: (handleArea.containsMouse || dragHandle.isDragging) ? Theme.withAlpha(Kirigami.Theme.highlightColor, dragHandle.isDragging ? 0.4 : 0.25) : Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.3)
                         border.color: (handleArea.containsMouse || dragHandle.isDragging) ? Kirigami.Theme.highlightColor : stripCanvas.frameBorderColor
                         border.width: dragHandle.isDragging ? 2 : (handleArea.containsMouse ? 1 : 0)
                         z: 3
@@ -501,6 +586,7 @@ Item {
                             // delta.
                             onPressed: mouse => {
                                 stripCanvas.selectColumn(band.index);
+                                stripCanvas.keyFocusTarget.forceActiveFocus();
                                 startX = mapToItem(stripRow, mouse.x, mouse.y).x;
                                 startFraction = band.widthFraction;
                                 band.dragFraction = startFraction;
@@ -516,7 +602,16 @@ Item {
                             }
                             // The one model write of the gesture, after the
                             // grab has ended — see the invariant note on the
-                            // band's drag properties.
+                            // band's drag properties. Synchronous on purpose,
+                            // unlike PresetChipEditor's deferred commits:
+                            // onReleased runs after the grab ended and Qt
+                            // releases delegates via deleteLater, whereas the
+                            // chip commits fire INSIDE active focus/accepted
+                            // signal emissions, which is the UAF shape. A
+                            // CANCELLED grab (window deactivation stealing
+                            // it) deliberately commits nothing: the band
+                            // snaps back to its stored width, the same
+                            // discard a cancelled zone drag performs.
                             onReleased: {
                                 if (!band.resizing)
                                     return;
@@ -538,17 +633,24 @@ Item {
     // band gives up one gap), and the caption sits LEFT of the line so it
     // stays on the canvas instead of under the property panel.
     Rectangle {
+        // Sits OUTSIDE the clipped Flickable, so it must hide itself once
+        // scrolling would carry it past the canvas's left edge — its x goes
+        // negative there and it would otherwise paint over the inset margins.
         x: stripCanvas.width - stripCanvas.bandSpacing - stripFlickable.contentX - 1
         width: 2
         height: parent.height
-        visible: stripFlickable.visible && stripFlickable.contentWidth > stripFlickable.width
+        visible: stripFlickable.visible && stripFlickable.contentWidth > stripFlickable.width && x >= 0
         color: Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5)
 
         Label {
             anchors.top: parent.top
             anchors.right: parent.left
             anchors.margins: Kirigami.Units.smallSpacing
-            text: i18n("Screen edge")
+            // The caption hangs LEFT of the line, so it needs its own gate:
+            // for small positive marker x it would otherwise paint past the
+            // canvas edge into the inset margins.
+            visible: parent.x >= implicitWidth + Kirigami.Units.smallSpacing
+            text: i18nc("@info marker caption", "Screen edge")
             color: Kirigami.Theme.negativeTextColor
             font: Kirigami.Theme.smallFont
         }

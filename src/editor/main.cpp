@@ -43,12 +43,16 @@ constexpr PlasmaZones::SingleInstanceIds kEditorIds{PhosphorProtocol::Service::A
 /// Try to forward a launch request to an already-running editor instance.
 /// Returns true if the running instance accepted the request (caller should exit).
 ///
-/// The running instance applies the forwarded args (layout / screen / preview)
-/// but deliberately does not attempt to raise its window — see the comment on
-/// EditorController::handleLaunchRequest for why.
+/// The running instance applies the forwarded args (layout / screen /
+/// preview / create-new / scrolling-template / new-template) but deliberately
+/// does not attempt to raise its window — see the comment on
+/// EditorLaunchController::handleLaunchRequest for why.
 bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
                              const QString& templateId, bool newTemplate)
 {
+    // Hand-maintained trio: this arg list, EditorAppAdaptor::handleLaunchRequest,
+    // and dbus/org.plasmazones.EditorApp.xml must agree (the contract test
+    // documents that XML as out of scope). Change all three together.
     return PlasmaZones::SingleInstanceService::forward(
         kEditorIds, QStringLiteral("handleLaunchRequest"),
         {screenId, layoutId, createNew, preview, templateId, newTemplate});
@@ -205,19 +209,22 @@ int main(int argc, char* argv[])
 
     // Warn about mutually exclusive flags
     if (parser.isSet(previewOption) && parser.isSet(newLayoutOption)) {
-        qWarning() << "--preview and --new are mutually exclusive; ignoring --preview";
+        qCWarning(lcEditor) << "--preview and --new are mutually exclusive; ignoring --preview";
+    }
+    if (parser.isSet(previewOption) && (parser.isSet(templateIdOption) || parser.isSet(newTemplateOption))) {
+        qCWarning(lcEditor) << "--preview does not apply to scrolling-template launches; ignoring --preview";
     }
     if (parser.isSet(newLayoutOption) && parser.isSet(layoutIdOption)) {
-        qWarning() << "--new and --layout are mutually exclusive; ignoring --layout";
+        qCWarning(lcEditor) << "--new and --layout are mutually exclusive; ignoring --layout";
     }
     if ((parser.isSet(templateIdOption) || parser.isSet(newTemplateOption))
         && (parser.isSet(layoutIdOption) || parser.isSet(newLayoutOption))) {
-        qWarning() << "The scrolling-template flags are mutually exclusive with --layout/--new;"
-                   << "ignoring the layout flags";
+        qCWarning(lcEditor) << "The scrolling-template flags are mutually exclusive with --layout/--new;"
+                            << "ignoring the layout flags";
     }
     if (parser.isSet(newTemplateOption) && parser.isSet(templateIdOption)) {
-        qWarning() << "--new-scrolling-template and --scrolling-template are mutually exclusive;"
-                   << "ignoring --scrolling-template";
+        qCWarning(lcEditor) << "--new-scrolling-template and --scrolling-template are mutually exclusive;"
+                            << "ignoring --scrolling-template";
     }
 
     const bool newTemplateArg = parser.isSet(newTemplateOption);
@@ -293,8 +300,9 @@ int main(int argc, char* argv[])
             return 0;
         }
         qCCritical(lcEditor) << "Editor D-Bus name" << PhosphorProtocol::Service::Apps::Editor::ServiceName
-                             << "is held by an unreachable instance. The existing editor may be hung —"
-                             << "kill the stale plasmazones-editor process and try again.";
+                             << "is held by an unreachable instance. The existing editor may be hung, or it"
+                             << "may be an older build whose launch-request signature no longer matches"
+                             << "(in-place upgrade) — kill the stale plasmazones-editor process and try again.";
         return 1;
     }
 

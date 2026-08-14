@@ -431,7 +431,7 @@ Window {
 
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredWidth: parent.width - (propertiesPanel.visible ? propertiesPanel.width : 0) - (templatePanel.visible ? templatePanel.Layout.preferredWidth : 0)
+            Layout.preferredWidth: parent.width - (propertiesPanel.visible ? propertiesPanel.width : 0) - (templatePanelLoader.visible ? templatePanelLoader.width : 0)
             Layout.minimumWidth: Kirigami.Units.gridUnit * 22
 
             // Actual drawing area (zones handle their own gaps via edgeGap and zoneSpacing)
@@ -493,6 +493,7 @@ Window {
 
                     sourceComponent: TemplateStripCanvas {
                         editorController: editorWindow._editorController
+                        keyFocusTarget: drawingArea
                     }
                 }
 
@@ -707,12 +708,24 @@ Window {
         }
 
         // Template-mode replacement for the zone property panel: description,
-        // later-column defaults, and the preset vocabularies.
-        TemplatePropertyPanel {
-            id: templatePanel
+        // later-column defaults, and the preset vocabularies. A Loader for
+        // the same reason the strip canvas uses one — layout mode pays
+        // nothing for the form, its combos, or its chip editors.
+        Loader {
+            id: templatePanelLoader
 
-            chromeVisible: editorWindow.templateMode && !editorWindow.fullscreenMode
-            editorController: editorWindow._editorController
+            readonly property bool chromeVisible: editorWindow.templateMode && !editorWindow.fullscreenMode
+
+            active: editorWindow.templateMode
+            visible: active && chromeVisible
+            Layout.preferredWidth: chromeVisible ? Kirigami.Units.gridUnit * 20 : 0
+            Layout.maximumWidth: Layout.preferredWidth
+            Layout.fillHeight: true
+
+            sourceComponent: TemplatePropertyPanel {
+                chromeVisible: templatePanelLoader.chromeVisible
+                editorController: editorWindow._editorController
+            }
         }
     }
 
@@ -961,13 +974,14 @@ Window {
     Kirigami.Dialog {
         id: helpDialog
 
-        title: i18nc("@title:window", "Layout Editor Help")
+        title: editorWindow.templateMode ? i18nc("@title:window", "Template Editor Help") : i18nc("@title:window", "Layout Editor Help")
         standardButtons: Kirigami.Dialog.Close
         preferredWidth: Kirigami.Units.gridUnit * 32
 
         HelpDialogContent {
             editorController: editorWindow._editorController
             editorWindow: editorWindow
+            templateMode: editorWindow.templateMode
         }
     }
 
@@ -1003,22 +1017,26 @@ Window {
         // Layout name changed - TopBar Connections should handle this
         // Note: Shortcut sequence change handlers moved to EditorShortcuts.qml
 
+        // The controller reuses the layout signals for template operations
+        // by design, so the MODE picks the noun the user reads — a template
+        // save must not announce "Layout saved".
         function onLayoutSaved() {
-            notifications.showSuccess(i18nc("@info", "Layout saved successfully"));
+            notifications.showSuccess(editorWindow.templateMode ? i18nc("@info", "Template saved") : i18nc("@info", "Layout saved successfully"));
         }
 
         function onLayoutExported() {
             notifications.showSuccess(i18nc("@info", "Layout exported"));
         }
 
+        // The template paths emit self-contained sentences ("That template
+        // is no longer available."), so they show verbatim; the layout paths
+        // emit fragments that need the prefix.
         function onLayoutLoadFailed(error) {
-            // Show error notification
-            notifications.showError(i18nc("@info", "Failed to load layout: %1", error));
+            notifications.showError(editorWindow.templateMode ? error : i18nc("@info", "Failed to load layout: %1", error));
         }
 
         function onLayoutSaveFailed(error) {
-            // Show error notification
-            notifications.showError(i18nc("@info", "Failed to save layout: %1", error));
+            notifications.showError(editorWindow.templateMode ? error : i18nc("@info", "Failed to save layout: %1", error));
         }
 
         function onEditorClosed() {

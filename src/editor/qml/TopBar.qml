@@ -202,8 +202,8 @@ ToolBar {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 readOnly: topBar.previewMode
                 enabled: editorController !== null && editorController !== undefined
-                Accessible.name: i18nc("@label", "Layout name")
-                Accessible.description: i18nc("@info", "Enter name for the layout")
+                Accessible.name: topBar.templateMode ? i18nc("@label", "Template name") : i18nc("@label", "Layout name")
+                Accessible.description: topBar.templateMode ? i18nc("@info", "Enter name for the template") : i18nc("@info", "Enter name for the layout")
                 // Add right padding when counter is visible to prevent text overlap
                 rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : Kirigami.Units.smallSpacing
                 // textEdited fires only on user input, never on a programmatic write.
@@ -215,6 +215,14 @@ ToolBar {
                         return;
 
                     layoutNameField.userEdited = false;
+                    // An empty or whitespace-only name is refused here, at
+                    // the UI gate the save paths rely on: the field restores
+                    // the last committed name instead of handing the
+                    // controller a name the daemon would reject at save.
+                    if (text.trim().length === 0) {
+                        layoutNameField.text = layoutNameField.committedName;
+                        return;
+                    }
                     if (editorController && text !== layoutNameField.committedName)
                         editorController.layoutName = text;
                 }
@@ -304,7 +312,7 @@ ToolBar {
             property string redoText: undoController ? undoController.redoText : ""
 
             spacing: Kirigami.Units.smallSpacing // Use theme spacing (4px - between buttons)
-            visible: editorController && undoController !== null
+            visible: editorController !== null && editorController !== undefined && undoController !== null
 
             // Reactive updates when undoController properties change
             Connections {
