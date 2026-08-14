@@ -313,6 +313,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/snapping/SnappingOverlayBehaviorPage.qml
         qml/pages/snapping/SnappingOverlayAppearancePage.qml
         qml/pages/snapping/SnappingZoneSelectorPage.qml
+        qml/pages/scrolling/ScrollingZoneSelectorPage.qml
         qml/pages/snapping/SnappingWindowBehaviorPage.qml
         qml/pages/tiling/TilingBehaviorPage.qml
         qml/pages/tiling/TilingAlgorithmPage.qml
@@ -418,6 +419,9 @@ qt_add_qml_module(plasmazones-settings
         # Shared theme-font construction (whole-group `font:` bindings)
         qml/js/FontUtils.js
         qml/pages/screens/ZoneSelectorSection.qml
+        qml/pages/screens/ZoneSelectorPositionCard.qml
+        qml/pages/screens/ZoneSelectorPreviewSizeCard.qml
+        qml/pages/screens/ScrollingZoneSelectorSection.qml
         qml/pages/animations/EasingPreview.qml
         # Animations page — Phase 1+2 salvage from PR #291. Standalone
         # widgets + JS helpers; sub-pages and per-event cards land in

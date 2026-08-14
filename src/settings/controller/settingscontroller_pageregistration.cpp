@@ -319,6 +319,14 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/scrolling/ScrollingWindowPage.qml"), QStringLiteral("preferences-system-windows"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    // Strip Selector — the drag popup's scrolling twin, a single top leaf
+    // like Snapping's Zone Selector (enable + trigger + position + preview
+    // size; no arrangement page, the strip popup is one horizontal row).
+    regVirtual(QStringLiteral("scrolling-zoneselector"), QStringLiteral("scrolling"),
+               PhosphorI18n::tr("Strip Selector"), QStringLiteral("pages/scrolling/ScrollingZoneSelectorPage.qml"),
+               QStringLiteral("view-choose"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("scrolling-shortcuts"), QStringLiteral("scrolling"), PhosphorI18n::tr("Quick Shortcuts"),
                QStringLiteral("pages/scrolling/ScrollingQuickShortcutsPage.qml"), QStringLiteral("bookmark"),
                /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
