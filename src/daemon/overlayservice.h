@@ -251,6 +251,16 @@ public:
     static constexpr int LayoutSupportNone = 0;
     static constexpr int LayoutSupportPlacement = 1;
     static constexpr int LayoutSupportTemplates = 2;
+    /// Whether the LIVE engine on a screen wants the drag popup to render
+    /// its drag-insert vocabulary (strip column cards) instead of zone
+    /// layouts. Mirrors IPlacementEngine::providesDragInsertSelector through
+    /// the router, like the layout-support resolver above. Same
+    /// clear-before-destroy contract.
+    using DragInsertSelectorResolver = std::function<bool(const QString& screenId)>;
+    void setDragInsertSelectorResolver(DragInsertSelectorResolver resolver)
+    {
+        m_dragInsertSelectorResolver = std::move(resolver);
+    }
     PhosphorScreens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -318,8 +328,15 @@ public:
     // Mouse position for shader effects
     void updateMousePosition(int cursorX, int cursorY) override;
 
-    // Filtered layout count for trigger edge computation
+    // Filtered layout count (layout/template vocabulary — the shortcut gates'
+    // emptiness test; never strip cards)
     int visibleLayoutCount(const QString& screenId) const override;
+    // Popup cell count for trigger edge computation (strip cards on strip
+    // screens, layouts elsewhere)
+    int selectorCardCount(const QString& screenId) const override;
+    // Per-card work-area width shares for the variable-width strip row
+    // (empty on non-strip screens); trigger-edge bar-width parity
+    QList<qreal> selectorStripFractions(const QString& screenId) const override;
 
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;
@@ -334,6 +351,40 @@ public:
     QRect getSelectedZoneGeometry(QScreen* screen) const override;
     QRect getSelectedZoneGeometry(const QString& screenId) const override;
     void clearSelectedZone() override;
+
+    // Strip-mode selector (scrolling screens) — see selector_strip.cpp.
+    bool hasSelectedStripTarget() const override
+    {
+        return m_selectedStripTarget.isValid();
+    }
+    SelectorStripTarget selectedStripTarget() const override
+    {
+        return m_selectedStripTarget;
+    }
+    QString selectedStripTargetScreenId() const override
+    {
+        return m_selectedStripScreenId;
+    }
+    void refreshStripSelector(const QString& screenId) override;
+    void setActiveDragWindowId(const QString& windowId) override
+    {
+        if (m_activeDragWindowId != windowId) {
+            m_activeDragWindowId = windowId;
+            // The exclusion id keys the card list, so cached counts built
+            // under the previous id are wrong by construction.
+            m_stripCardFractionsCache.clear();
+        }
+    }
+    /// Provider of the SERIALIZED strip card list (the daemon injects
+    /// stripColumnsToVariantList over ScrollEngine::stripSnapshot).
+    /// Serialized at the seam on purpose: this header stays free of
+    /// engine types, same rule as the LayoutSupport int mirror above.
+    /// Same clear-before-destroy contract as the other injected closures.
+    using StripCardsProvider = std::function<QVariantList(const QString& screenId, const QString& excludeWindowId)>;
+    void setStripCardsProvider(StripCardsProvider provider)
+    {
+        m_stripCardsProvider = std::move(provider);
+    }
 
     // PhosphorZones::Layout OSD (visual preview when switching layouts)
     // screenId: target screen (empty = screen under cursor, fallback to primary)
@@ -389,9 +440,12 @@ private:
      * template picks while the actual scrolling lock went unread. Every
      * picker site must use this — the show path and the live lock re-push
      * disagreeing means a picker opens unlocked and then latches locked (or
-     * the reverse) on the next rule edit. The ZONE SELECTOR is deliberately
-     * NOT a caller: it stays on -1 because it shows the snap zone overlay,
-     * whose lock is the snapping one.
+     * the reverse) on the next rule edit. The LAYOUT-MODE zone selector is
+     * deliberately NOT a caller: it stays on -1 because it shows the snap
+     * zone overlay, whose lock is the snapping one. That premise expires on
+     * a STRIP-selector screen (the popup renders strip cards there) — no
+     * strip consumer reads the pushed lock today, but a strip lock
+     * affordance added later should route through here like the picker.
      */
     /// Values of the mode-lens axis consumed by isAnyModeLocked — a
     /// DIFFERENT vocabulary from the LayoutSupport* constants above, whose
@@ -597,9 +651,11 @@ public:
     /// show (toggle on) or an animated hide (toggle off). Needed because the
     /// engine's tabStripsChanged is change-latched and stays silent until the
     /// next structural change, so nothing else would repaint after the toggle
-    /// moves. Called from the scrollingTabIndicatorEnabledChanged hook and from
-    /// updateSettings, which covers the batch-setSettings case where the
-    /// per-key signal never fires.
+    /// moves. Called from the tab-indicator enable and paint-key hooks and
+    /// the overlay font-key hooks (the thirteen connects in
+    /// overlayservice/settings.cpp, each with its own rationale in place) and
+    /// from updateSettings, which covers the batch-setSettings case where the
+    /// per-key signals never fire.
     void replayScrollTabStrips();
 
     /// Forwarders to the active picker slot's QML moveSelection /
@@ -791,6 +847,28 @@ private:
     /// daemon wires it in initServices (setAlgorithmRegistry), before any popup
     /// can open, so this holds for every live caller.
     QVariantList buildLayoutsList(const QString& screenId = QString(), QSize autotilePreviewCanvas = {}) const;
+
+    /// Strip-mode popup model: the serialized strip card list for
+    /// @p screenId via the injected provider, excluding the live drag
+    /// window (m_activeDragWindowId). Empty when no provider is set or the
+    /// screen is not a strip-selector screen. Implemented in
+    /// selector_strip.cpp.
+    QVariantList buildStripList(const QString& screenId) const;
+    /// Memoized per-card width fractions for the trigger-edge sizing
+    /// contract: selectorCardCount / selectorStripFractions answer from THIS
+    /// on strip-selector screens so isNearTriggerEdge and the rendered card
+    /// row can never disagree. Counting and measuring through buildStripList
+    /// (not a separate engine query) keeps the row-for-row agreement with
+    /// the rendered card list.
+    QList<qreal> stripCardFractions(const QString& screenId) const;
+    /// The fraction list's size — the card count selectorCardCount's
+    /// empty-strip floor consults (its only caller).
+    int visibleStripCardCount(const QString& screenId) const;
+    /// Strip-mode arm of updateSelectorPosition: reads the rendered card
+    /// rects back (stripColumnCard by delegate index) and classifies the
+    /// cursor into a gap / half / whole-card target via
+    /// classifyStripSelectorPoint. Implemented in selector_strip.cpp.
+    void updateStripSelectorHit(QQuickItem* slot, int localX, int localY, const QString& screenId);
     /// Defined in overlayservice_types.h (hoisted with the other value
     /// types); aliased so existing OverlayService::LayoutIncludeFlags
     /// references keep working.
@@ -848,6 +926,8 @@ private:
     /// zone, so the selector must keep showing there.
     bool isSnappingContextInactive(const QString& screenId) const;
     bool isSnappingContextDisabled(const QString& screenId) const;
+    /// Scrolling-axis twin, for the strip popup's refresh/destroy gates.
+    bool isScrollingContextDisabled(const QString& screenId) const;
 
     // PhosphorLayer infrastructure - owns the wlr-layer-shell binding, screen
     // enumeration, and Surface factory for all overlay-style windows. Members
@@ -972,6 +1052,40 @@ private:
     QPointer<ISettings> m_settings;
     ScrollZonesProvider m_scrollZonesProvider;
     LayoutSupportResolver m_layoutSupportResolver;
+    DragInsertSelectorResolver m_dragInsertSelectorResolver;
+    StripCardsProvider m_stripCardsProvider;
+    /// Live drag window id (drag adaptor sets at drag start, clears at drag
+    /// end) — buildStripList excludes it so a not-yet-detached drag window
+    /// never appears as its own card.
+    QString m_activeDragWindowId;
+    /// Per-screen memo of stripCardFractions. isNearTriggerEdge consults
+    /// the fractions on EVERY drag cursor tick, and an uncached answer costs
+    /// a full engine strip snapshot plus QVariant serialization per tick.
+    /// Invalidated wherever the card list can change shape or share: the
+    /// exclusion id (setActiveDragWindowId), the preview boundaries and
+    /// structural strip changes (refreshStripSelector), and the
+    /// desktop/activity/exclusion/settings refresh (hideDisabledAndRefresh).
+    mutable QHash<QString, QList<qreal>> m_stripCardFractionsCache;
+    /// Strip-mode selection twin of the zone triple below. Exactly one of
+    /// the two families is set (each hit-test arm clears the other on
+    /// write); clearSelectedZone clears both.
+    SelectorStripTarget m_selectedStripTarget;
+    QString m_selectedStripScreenId;
+    /// Whether the drag popup on this screen renders strip cards (the live
+    /// engine claims providesDragInsertSelector) instead of zone layouts.
+    /// False whenever the resolver is unset — the pre-feature behaviour.
+    bool isStripSelectorScreen(const QString& screenId) const
+    {
+        return m_dragInsertSelectorResolver && m_dragInsertSelectorResolver(screenId);
+    }
+    /// The folded per-screen selector-enable verdict: a SetDragSelectorEnabled
+    /// rule outranks the global toggle in either direction, matching the drag
+    /// adaptor's checkZoneSelectorTrigger fold. Strip-selector screens read the
+    /// scrolling toggle, everything else the snapping one. Resolved against
+    /// this class's own desktop/activity mirrors (never the drag adaptor's
+    /// context handle) so the verdict cannot transiently disagree with the
+    /// cards drawn from the same mirrors.
+    bool selectorEnabledForScreen(const QString& screenId) const;
     /// Borrowed from Daemon. stop() detaches this even when init never reached start().
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =

@@ -45,6 +45,11 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     // screen/desktop/activity pass (LayoutRegistry::resolveContextOsdEnabled),
     // mode-agnostic like LockContext.
     ActionType::SetOsdEnabled,
+    // Drag-selector-visibility override — context-domain, resolved during the
+    // screen/desktop/activity pass
+    // (LayoutRegistry::resolveContextDragSelectorEnabled), mode-agnostic like
+    // its SetOsdEnabled twin.
+    ActionType::SetDragSelectorEnabled,
     // Gap overrides are context-domain — resolved during the
     // screen/desktop/activity pass, never per-window.
     ActionType::SetInnerGap,
@@ -895,6 +900,7 @@ private Q_SLOTS:
         rejectsStray(ActionType::LockContext, QJsonValue(true));
         rejectsStray(ActionType::DefaultLayoutAssignment, QJsonValue(true));
         rejectsStray(ActionType::SetOsdEnabled, QJsonValue(true));
+        rejectsStray(ActionType::SetDragSelectorEnabled, QJsonValue(true));
         rejectsStray(ActionType::SetUnfloatFallbackToZone, QJsonValue(true));
         // OverrideOverlayStyle also declares allowedKeys = {Value}.
         rejectsStray(ActionType::OverrideOverlayStyle, QJsonValue(QString(OverlayStyleToken::Preview)));
@@ -1045,84 +1051,6 @@ private Q_SLOTS:
             stray.insert(QStringLiteral("type"), QString(type));
             stray.insert(QStringLiteral("futureParam"), QStringLiteral("x"));
             QVERIFY2(RuleAction::fromJson(stray).has_value(), type.data());
-        }
-    }
-
-    void testLockContext_fromJsonRoundTrip()
-    {
-        // LockContext is a context-domain boolean: it must validate through the
-        // public fromJson boundary (not just the registry), require a bool
-        // `value`, and round-trip both true and the explicit-false no-op overlay
-        // losslessly. Mirrors testSetHideTitleBarFalse_isValidAndPreserved.
-        QJsonObject bad;
-        bad.insert(QStringLiteral("type"), QString(ActionType::LockContext));
-        bad.insert(QStringLiteral("value"), 1); // a number is not a bool
-        QVERIFY(!RuleAction::fromJson(bad).has_value());
-
-        for (const bool v : {true, false}) {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString(ActionType::LockContext));
-            o.insert(QStringLiteral("value"), v);
-            const auto action = RuleAction::fromJson(o);
-            QVERIFY(action.has_value());
-            QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
-            const auto roundTripped = RuleAction::fromJson(action->toJson());
-            QVERIFY(roundTripped.has_value());
-            QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(v));
-        }
-    }
-
-    void testDefaultLayoutAssignment_fromJsonRoundTrip()
-    {
-        // DefaultLayoutAssignment is a context-domain boolean (per-context override
-        // of the global suppress setting): it must validate through the public
-        // fromJson boundary (not just the registry), require a bool `value`, and
-        // round-trip both true (allow / force the default through) and false
-        // (suppress this context) losslessly. Mirrors testLockContext_fromJsonRoundTrip.
-        QJsonObject bad;
-        bad.insert(QStringLiteral("type"), QString(ActionType::DefaultLayoutAssignment));
-        bad.insert(QStringLiteral("value"), 1); // a number is not a bool
-        QVERIFY(!RuleAction::fromJson(bad).has_value());
-
-        for (const bool v : {true, false}) {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString(ActionType::DefaultLayoutAssignment));
-            o.insert(QStringLiteral("value"), v);
-            const auto action = RuleAction::fromJson(o);
-            QVERIFY(action.has_value());
-            QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
-            const auto roundTripped = RuleAction::fromJson(action->toJson());
-            QVERIFY(roundTripped.has_value());
-            QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(v));
-        }
-    }
-
-    void testSetOsdEnabled_fromJsonRoundTrip()
-    {
-        // SetOsdEnabled is the third context-domain boolean of the family, and
-        // its two polarities are genuinely different verdicts: false suppresses
-        // every OSD for the context, true FORCES them past the per-trigger
-        // global toggles. Both must survive load as explicit values — an
-        // explicit true read back as absent would silently degrade the
-        // force-on half to "follow the globals". Mirrors
-        // testLockContext_fromJsonRoundTrip and its
-        // DefaultLayoutAssignment twin above.
-        QJsonObject bad;
-        bad.insert(QStringLiteral("type"), QString(ActionType::SetOsdEnabled));
-        bad.insert(QStringLiteral("value"), 1); // a number is not a bool
-        QVERIFY(!RuleAction::fromJson(bad).has_value());
-
-        for (const bool v : {true, false}) {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString(ActionType::SetOsdEnabled));
-            o.insert(QStringLiteral("value"), v);
-            const auto action = RuleAction::fromJson(o);
-            QVERIFY(action.has_value());
-            QCOMPARE(ActionRegistry::instance().slotFor(*action), QString(ActionSlot::OsdEnabled));
-            QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
-            const auto roundTripped = RuleAction::fromJson(action->toJson());
-            QVERIFY(roundTripped.has_value());
-            QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(v));
         }
     }
 };

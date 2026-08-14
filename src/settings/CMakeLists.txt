@@ -22,6 +22,7 @@ set(plasmazones_settings_SRCS
     search/searchcatalog_p.h
     search/searchcatalog.cpp
     search/searchcatalog_animations.cpp
+    search/searchcatalog_simple.cpp
     search/searchproviders.h
     search/searchproviders.cpp
     utils/registryshaderpreviewbackend.h
@@ -38,7 +39,8 @@ set(plasmazones_settings_SRCS
     controller/settingscontroller_session.cpp
     # Whole-config export/import + KZones import (split from _session).
     controller/settingscontroller_transfer.cpp
-    # Per-screen autotile/scrolling/zone-selector/gap override wrappers.
+    # Per-screen autotile/scrolling/zone-selector/strip-selector/gap
+    # override wrappers.
     controller/settingscontroller_perscreen.cpp
     controller/settingscontroller_ordering.cpp
     # Virtual-screen lifecycle methods (getVirtualScreenConfig +
@@ -326,9 +328,11 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/snapping/SnappingDragTriggerRow.qml
         qml/pages/tiling/TilingWindowHandlingCard.qml
         qml/pages/tiling/TilingFocusCard.qml
-        # Scrolling: the condensed simple page, the three advanced leaves
-        # (Columns / Tabs / Window), the quick-shortcuts page binding
-        # templates to the quick digits, and the cards both surfaces share.
+        # Scrolling: the condensed simple page, the advanced leaves
+        # (Columns / Tabs / Window / Strip Selector), the quick-shortcuts
+        # page binding templates to the quick digits, and the cards both
+        # surfaces share.
+        qml/pages/scrolling/ScrollingZoneSelectorPage.qml
         qml/pages/scrolling/ScrollingSimplePage.qml
         qml/pages/scrolling/ScrollingColumnsPage.qml
         qml/pages/scrolling/ScrollingTabsPage.qml
@@ -423,6 +427,9 @@ qt_add_qml_module(plasmazones-settings
         # Shared theme-font construction (whole-group `font:` bindings)
         qml/js/FontUtils.js
         qml/pages/screens/ZoneSelectorSection.qml
+        qml/pages/screens/ZoneSelectorPositionCard.qml
+        qml/pages/screens/ZoneSelectorPreviewSizeCard.qml
+        qml/pages/screens/ScrollingZoneSelectorSection.qml
         qml/pages/animations/EasingPreview.qml
         # Animations page — Phase 1+2 salvage from PR #291. Standalone
         # widgets + JS helpers; sub-pages and per-event cards land in

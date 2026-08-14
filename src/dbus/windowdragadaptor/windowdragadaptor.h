@@ -582,6 +582,11 @@ private:
     // Cleared alongside the windowId/screenId pair in cancelSnap and the
     // pending-clear sites.
     int m_snapAssistPendingDesktop = 0;
+    // Activity snapshot, same rationale as the desktop one: the suppression
+    // gate and the layout resolve in the deferred compute would otherwise
+    // read the LIVE activity and could pair the new activity's layout with
+    // the drop activity's occupancy. Cleared wherever the desktop is.
+    QString m_snapAssistPendingActivity;
 
     // Current drag state
     QString m_draggedWindowId;
@@ -674,6 +679,16 @@ private:
     // must not re-arm reorder for this drag, or the fallback survives
     // exactly one tick. Cleared at beginDrag and in resetDragState.
     bool m_dragReorderAbandoned = false;
+    // The dragged window matches an Exclude / ExcludePlacement rule (or the
+    // minimum-window-size floor). Evaluated ONCE per drag (dragStarted, and
+    // beginDrag's bypass and pending twins) through
+    // SnapEngine::isWindowExcluded — the shared placement Exclude rules
+    // (mode-neutral; the scroll side enforces the same rules effect-side
+    // before a strip ever adopts such a window) plus the snap minimum-size
+    // floor. So on either variant, a window whose placement would be
+    // refused never sees the popup (the pre-existing gap where the trigger
+    // check had only cursor coords). Cleared in resetDragState.
+    bool m_dragWindowExcludedFromSelector = false;
     bool m_overlayShown = false;
     // Overlay was blanked mid-drag via IOverlayService::setIdleForDragPause()
     // (trigger released, but the drag is still live). Windows stay alive;
@@ -772,7 +787,19 @@ private:
     /// when no preview is live) and returns false. Shared by the two drop
     /// entry points (drop.cpp's dragStopped and drag_protocol.cpp's
     /// engine-owned bypass), which differ only in how they finalize.
-    bool settleDragInsertPreviewAt(int cursorX, int cursorY);
+    ///
+    /// A valid strip-popup selection for the release screen outranks the
+    /// cursor-derived target at commit: the last hit-test the user saw on
+    /// the popup is the drop they meant. When no preview is live at all
+    /// (hold-mode trigger never held) but the popup holds a valid target,
+    /// the settle runs the full begin → update → commit itself; @p windowId
+    /// is only consumed by that arm.
+    bool settleDragInsertPreviewAt(int cursorX, int cursorY, const QString& windowId = QString());
+
+    /// Whether the scroll engine owns @p screenId AND asks the drag popup
+    /// to render its drag-insert vocabulary there (the strip-mode selector).
+    /// The one capability read every selector gate in this class shares.
+    bool scrollSelectorScreen(const QString& screenId) const;
 
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;

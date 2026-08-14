@@ -408,7 +408,8 @@ struct PerScreenDispatch
 /// Resolve the per-screen @p category wire token to its ISettings accessors.
 ///
 /// The category vocabulary is CLOSED and lives in the table below: "autotile",
-/// "scrolling", "snapping" (read-only) and "zoneSelector". Anything else is
+/// "scrolling", "snapping" (read-only), "zoneSelector" and
+/// "scrollingZoneSelector". Anything else is
 /// nullopt, and every caller reports it as an unknown category. Adding a
 /// per-screen family means one more table row plus the ISettings accessor
 /// triple it names.
@@ -437,6 +438,9 @@ std::optional<PerScreenDispatch> dispatchFor(const QString& category)
         {QLatin1StringView("zoneSelector"),
          {&ISettings::getPerScreenZoneSelectorSettings, &ISettings::setPerScreenZoneSelectorSetting,
           &ISettings::clearPerScreenZoneSelectorSettings}},
+        {QLatin1StringView("scrollingZoneSelector"),
+         {&ISettings::getPerScreenScrollingZoneSelectorSettings, &ISettings::setPerScreenScrollingZoneSelectorSetting,
+          &ISettings::clearPerScreenScrollingZoneSelectorSettings}},
     };
     for (const Row& row : kRows) {
         if (category == row.category) {

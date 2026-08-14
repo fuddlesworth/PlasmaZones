@@ -28,8 +28,9 @@ inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 /// Context-domain layout-lock slot — filled by `ActionType::LockContext`.
 /// A single boolean: a winning rule with `value == true` locks the context.
 ///
-/// NOTE, as for `DefaultAssignment` and `OsdEnabled` below: the slot id itself
-/// has no reader. `LayoutRegistry::resolveContextLocked` scans the matched
+/// NOTE, as for `DefaultAssignment`, `OsdEnabled` and `DragSelectorEnabled`
+/// below: the slot id itself has no reader.
+/// `LayoutRegistry::resolveContextLocked` scans the matched
 /// rules for the action TYPE and reads its `value` param directly, so the id
 /// exists to satisfy the registry invariant that every non-terminal descriptor
 /// resolves a non-empty slot (`ActionRegistry::validate` rejects an action
@@ -53,6 +54,14 @@ inline constexpr QLatin1StringView DefaultAssignment{"default-assignment"};
 /// above — scans for the action TYPE rather than this slot id; see the
 /// `Locked` note for why the id still exists.
 inline constexpr QLatin1StringView OsdEnabled{"osd-enabled"};
+/// Context-domain drag-selector-visibility override slot — filled by
+/// `ActionType::SetDragSelectorEnabled`. A single boolean (first-matching-rule-
+/// wins): `false` suppresses the drag selector popup for the context, `true`
+/// forces it past the global selector toggle. Read by the drag adaptor's
+/// selector gate via `LayoutRegistry::resolveContextDragSelectorEnabled`,
+/// which — like the three resolvers above — scans for the action TYPE rather
+/// than this slot id; see the `Locked` note for why the id still exists.
+inline constexpr QLatin1StringView DragSelectorEnabled{"drag-selector-enabled"};
 inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Window-scoped open-placement slot — filled by `ActionType::SnapToZone`. A

@@ -12,6 +12,7 @@
 
 #include "windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/interfaces/interfaces.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -188,8 +189,8 @@ bool WindowDragAdaptor::isActiveLayoutSuppressedForScreen(const QString& screenI
     // Per-drag memo: this sits on the ~30 Hz dragMoved path (twice per tick —
     // the policy recompute and prepareHandlerContext), and the underlying
     // isContextActiveLayoutSuppressed runs up to six rule-evaluator resolves
-    // per call. Keyed on (screen, desktop) because BOTH axes can change
-    // mid-drag: the cursor crosses monitors, and a virtual-desktop switch
+    // per call. Keyed on (screen, desktop, activity) because every axis can
+    // change mid-drag: the cursor crosses monitors, and a virtual-desktop switch
     // during a drag is a supported flow (the snap-assist path snapshots the
     // drop-time desktop for exactly that reason). The desktop read is cheap;
     // only the rule resolves are elided. beginDrag clears the memo, and
@@ -214,9 +215,10 @@ bool WindowDragAdaptor::isActiveLayoutSuppressedForScreen(const QString& screenI
 
 bool WindowDragAdaptor::isActiveLayoutSuppressedForScreen(const QString& screenId, int virtualDesktop) const
 {
-    // Uncached desktop-explicit form, for callers that must evaluate against
-    // a SNAPSHOT desktop rather than a live read (the deferred snap-assist
-    // build). Mirrors OverlayService::isSnappingContextInactive's suppress
+    // Uncached desktop-explicit form. Its remaining caller is the one-arg
+    // memo wrapper above; the deferred snap-assist build now calls the
+    // registry directly with its snapshot activity as well as desktop.
+    // Mirrors OverlayService::isSnappingContextInactive's suppress
     // leg — same predicate, same activity axis — so the drag pipeline and the
     // overlay layer agree about whether a screen has zones (#724). Residual
     // divergence window: this reads the registry's live currentActivity()
@@ -348,6 +350,17 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         // last-emitted rect from the previous drag.
         resetDragState();
         m_draggedWindowId = windowId;
+        // Bypass twin of dragStarted's card exclusion: this path never runs
+        // dragStarted, and the strip popup can show on the very first tick.
+        // AFTER resetDragState, which clears it.
+        if (m_overlayService) {
+            m_overlayService->setActiveDragWindowId(windowId);
+        }
+        // Bypass twin of dragStarted's excluded-window selector suppression.
+        {
+            auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
+            m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
+        }
         m_originalGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
         m_snapCancelled = false;
         m_wasSnapped = false;
@@ -427,6 +440,23 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     resetDragState();
     m_prevTriggerHeld = true;
     m_pendingSnapDragWindowId = windowId;
+    // Pending twin of the bypass branch's card exclusion (AFTER resetDragState,
+    // which clears it): a pending snap drag whose cursor crosses onto a strip
+    // screen probes the trigger edge before dragStarted runs, and without the
+    // id the band is sized for a card list that still contains the dragged
+    // window (N+1 cards for a popup that will render N).
+    if (m_overlayService) {
+        m_overlayService->setActiveDragWindowId(windowId);
+    }
+    // Pending twin of the bypass branch's excluded-window suppression (AFTER
+    // resetDragState, which clears it): the edge-hover promotion in
+    // activateSnapDragIfNeeded consults it, so an Exclude-ruled window's
+    // pending drag is not pointlessly promoted for a popup the very next
+    // tick would refuse.
+    {
+        auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
+        m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
+    }
     m_pendingSnapDragGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
     m_pendingSnapDragWasSnapped = m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty();
     Q_UNUSED(
@@ -461,7 +491,9 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     // appeared. Repro: drag a window, don't hold the modifier, hover an
     // edge — nothing happens.
     bool edgeActivation = false;
-    if (!triggerHeld && !toggleMode && m_settings && m_settings->zoneSelectorEnabled()) {
+    // The exclusion gate mirrors checkZoneSelectorTrigger's: an edge hover
+    // must not promote a drag whose popup the very next tick refuses.
+    if (!triggerHeld && !toggleMode && !m_dragWindowExcludedFromSelector && m_settings) {
         auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
         // Live-mode disable check — `handleFor` not `handleForMode(Snapping)`.
         // The user may have flipped the screen's mode between beginDrag
@@ -477,10 +509,33 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
         // A missing resolver means "gate off", matching computeDragPolicy and
         // prepareHandlerContext — requiring it non-null made this the one
         // sibling that failed CLOSED pre-wiring.
+        // Strip screens are exempt from the suppression gate for the same
+        // reason checkZoneSelectorTrigger exempts them: their commit path is
+        // the settle, not dragStopped, and a mode-only Scrolling pin
+        // legitimately carries no assignment id.
         if (resolved.qscreen
             && !(m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(resolved.screenId)))
-            && !isActiveLayoutSuppressedForScreen(resolved.screenId)) {
-            edgeActivation = isNearTriggerEdge(resolved.qscreen, cursorX, cursorY, resolved.screenId);
+            && (scrollSelectorScreen(resolved.screenId) || !isActiveLayoutSuppressedForScreen(resolved.screenId))) {
+            // Variant-aware enable, resolved AFTER the screen is known — a
+            // strip-selector screen reads the SCROLLING selector toggle, and a
+            // SetDragSelectorEnabled rule outranks either toggle in both
+            // directions, the same fold checkZoneSelectorTrigger applies.
+            // Gating on the snapping toggle alone killed the rule's force-on
+            // half one tier before the rule was even resolved, and read the
+            // wrong toggle when a pending snap drag crossed onto a strip
+            // screen.
+            const std::optional<bool> selectorRule = (m_contextResolver && m_layoutManager) ? [&] {
+                const PhosphorContext::ContextHandle ctx = m_contextResolver->handleFor(resolved.screenId);
+                return m_layoutManager->resolveContextDragSelectorEnabled(resolved.screenId, ctx.virtualDesktop,
+                                                                          ctx.activity);
+            }()
+                                                                                            : std::nullopt;
+            const bool selectorToggle = scrollSelectorScreen(resolved.screenId)
+                ? m_settings->scrollingZoneSelectorEnabled()
+                : m_settings->zoneSelectorEnabled();
+            if (selectorRule.value_or(selectorToggle)) {
+                edgeActivation = isNearTriggerEdge(resolved.qscreen, cursorX, cursorY, resolved.screenId);
+            }
         }
     }
 
@@ -514,6 +569,14 @@ void WindowDragAdaptor::clearPendingSnapDragState()
     m_pendingSnapDragGeometry = QRect();
     m_pendingSnapDragWasSnapped = false;
     m_dragReorderActive = false;
+    // The strip popup's card exclusion belongs to the pending drag too:
+    // beginDrag's pending branch sets it, and the exits that end a pending
+    // drag (endDrag's pending branch, handleWindowClosed) route here without
+    // resetDragState — left set, the next popup show would silently drop a
+    // bystander's card.
+    if (m_overlayService) {
+        m_overlayService->setActiveDragWindowId(QString());
+    }
     // Any drag-insert preview left over from an incomplete previous drag
     // (daemon lost track, client disconnect, snapping-disabled flip, etc.)
     // must be cleared too — its referenced window may no longer exist.
@@ -578,8 +641,12 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         // clearing, and then the sweep must be complete: the policy, the
         // reorder latch, any leftover preview, AND the scroll engine's
         // interactive-drag mark (a leftover mark silently exempts a window
-        // from layout until the next beginDrag).
-        if (m_draggedWindowId.isEmpty()) {
+        // from layout until the next beginDrag). A PENDING drag counts as
+        // live here: its compositor move is still running with the mark set
+        // for the whole gesture (cancelSnap re-sets it for the same reason),
+        // so the sweep must not fire off a stray endDrag for a different
+        // window while one is pending.
+        if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId.isEmpty()) {
             m_currentDragPolicy = {};
             m_dragReorderActive = false;
             cancelDragInsertIfActive();
@@ -672,7 +739,7 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         // slot on the next retile. The owning engine controls final
         // geometry; no float outcome needed (see the drop.cpp twin, which
         // shares the screen gate through this helper).
-        if (settleDragInsertPreviewAt(cursorX, cursorY)) {
+        if (settleDragInsertPreviewAt(cursorX, cursorY, windowId)) {
             outcome.action = PhosphorProtocol::DragOutcome::NoOp;
             hideOverlayAndSelector();
             resetDragState();
@@ -782,7 +849,13 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     // Pending snap-path drag: try to activate if the trigger is now held
     // or the cursor has reached an edge-trigger region. If it's still
     // pending after the check, return — the daemon does no overlay work
-    // until the user commits to zone selection.
+    // until the user commits to zone selection. This return also FREEZES
+    // the drag policy for the whole never-activated phase (the flip block
+    // below never runs), which is deliberate and safe: a pending drag
+    // exercises none of the policy-driven activation behaviors, its endDrag
+    // takes the pending NoOp branch, and a window the compositor move lands
+    // on another screen is adopted or unsnapped by the WTA's
+    // windowScreenChanged handoff independently of the policy.
     if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId == windowId) {
         if (!activateSnapDragIfNeeded(modifiers, mouseButtons, cursorX, cursorY)) {
             return;
@@ -892,13 +965,23 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
                 m_isMultiZoneMode = false;
                 m_currentMultiZoneGeometry = QRect();
                 m_paintedZoneIds.clear();
+                // Symmetric with cancelSnap and resetDragState, which clear
+                // these two beside the zone block: the last-emitted rect
+                // suppresses the next geometry emit by compare, and the
+                // restore latch gates the free-size leg.
+                m_lastEmittedZoneGeometry = QRect();
+                m_restoreSizeEmittedDuringDrag = false;
                 // The selector popup too: once a drag-insert preview goes
                 // live, dragMoved's preview block returns before the
                 // selector-dismiss gates on every tick, so a popup shown on
                 // the pre-crossing snap screen has no other surviving hide
                 // path (endDrag's bypass exits tear visibility down only at
                 // release; this keeps it from lingering the whole hold).
-                if (m_zoneSelectorShown && m_overlayService) {
+                // EXCEPT when the destination engine provides the drag-insert
+                // selector: there the popup is the engine's own drop surface
+                // and dragMoved's preview block keeps it fed per tick.
+                if (m_zoneSelectorShown && m_overlayService
+                    && !(cursorEngine && cursorEngine->providesDragInsertSelector())) {
                     m_zoneSelectorShown = false;
                     m_zoneSelectorShownOn.clear();
                     m_overlayService->hideZoneSelector();

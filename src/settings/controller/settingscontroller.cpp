@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): the SettingsController constructor and
+// destructor — one long, ordered wiring/teardown pair whose declaration-order
+// and disconnect-before-reset contracts reference each other in sequence
+// (see the in-body banners). Everything separable has already moved to the
+// settingscontroller_*.cpp siblings; the natural next split, the rule-label
+// resolver installation block, belongs in a _rulelabels.cpp when it is next
+// touched substantively.
+
 #include "settingscontroller.h"
 
 #include "settings/pages/editorpagecontroller.h"
@@ -556,9 +564,12 @@ SettingsController::SettingsController(QObject* parent)
     // above never wires their change signals. Connect them explicitly. The
     // Settings layer emits these ONLY when an override actually changes — a
     // no-op write (same value) or a rejected key early-returns without
-    // emitting — so routing them through onSettingsPropertyChanged() gives
-    // correct change-only dirty tracking (and load() populates the maps
-    // directly, never via the setters, so this stays quiet during load).
+    // emitting — so routing them through onValueBlindSettingsChanged() gives
+    // change-only dirty tracking while SUSPENDING the value-based reconcile:
+    // per-screen values live outside every page manifest, so the reconcile
+    // would otherwise clear a page whose edit is real but invisible to it
+    // (load() populates the maps directly, never via the setters, so this
+    // stays quiet during load).
     // Re-emitting perScreenOverridesChanged() refreshes the scope-chip
     // override dots and the bound per-screen card values. The Q_INVOKABLE
     // wrappers in settingscontroller_perscreen.cpp therefore do NOT mark
@@ -572,6 +583,7 @@ SettingsController::SettingsController(QObject* parent)
     wirePerScreenOverrideSignal(&Settings::perScreenAutotileSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenSnappingSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenZoneSelectorSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenScrollingZoneSelectorSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenScrollingSettingsChanged);
 
     // An external config reload parks while the user has unsaved edits, so it

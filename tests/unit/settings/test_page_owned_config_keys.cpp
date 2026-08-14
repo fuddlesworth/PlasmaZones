@@ -20,10 +20,11 @@
  * to link the whole SettingsController topology TU. This file is that guard.
  * It is scoped to what can be checked cheaply and exactly: the one-owner rule
  * across the WHOLE manifest, and complete coverage of a swept subset of
- * schema groups. The swept set is the four scrolling groups (Scrolling,
- * Scrolling.Behavior, Scrolling.TabIndicator and Scrolling.DropIndicator,
- * whose page manifests are the newest and least exercised) plus Rendering,
- * whose Gpu key once shipped with no manifest owner.
+ * schema groups. The swept set is the five scrolling groups (Scrolling,
+ * Scrolling.Behavior, Scrolling.TabIndicator, Scrolling.DropIndicator and
+ * Scrolling.ZoneSelector, whose page manifests are the newest and least
+ * exercised) plus Rendering, whose Gpu key once shipped with no manifest
+ * owner.
  */
 
 #include <QSet>
@@ -144,8 +145,9 @@ private Q_SLOTS:
 
     /// The other direction, over the swept groups: every key the schema
     /// declares under Scrolling, Scrolling.Behavior, Scrolling.TabIndicator,
-    /// Scrolling.DropIndicator or Rendering must be owned by exactly one
-    /// page, except the entries listed in deliberatelyUnowned().
+    /// Scrolling.DropIndicator, Scrolling.ZoneSelector or Rendering must be
+    /// owned by exactly one page, except the entries listed in
+    /// deliberatelyUnowned().
     ///
     /// The scrolling pages also SHOW two settings they deliberately do not
     /// own — Tiling.Gaps/SmartGaps, forwarded from the shared gaps group and
@@ -169,7 +171,7 @@ private Q_SLOTS:
 
         QStringList unowned;
         int checked = 0;
-        // All FOUR scrolling schema groups. The two indicator groups were
+        // All FIVE scrolling schema groups. The two indicator groups were
         // outside this sweep, so a key added to either could drop out of
         // per-page Reset with nothing failing — which is the exact class of
         // regression this file exists to catch, and the DropIndicator group
@@ -177,9 +179,10 @@ private Q_SLOTS:
         // same reason: its Gpu key shipped without a manifest owner (no
         // dirty mark, per-page Reset and Discard silently skipped it)
         // precisely because this sweep did not cover the group.
-        for (const QString& group : {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
-                                     ConfigDefaults::scrollingTabIndicatorGroup(),
-                                     ConfigDefaults::scrollingDropIndicatorGroup(), ConfigDefaults::renderingGroup()}) {
+        for (const QString& group :
+             {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
+              ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
+              ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::renderingGroup()}) {
             const auto it = schema.groups.constFind(group);
             QVERIFY2(it != schema.groups.constEnd(), qPrintable(group));
             for (const PhosphorConfig::KeyDef& def : *it) {

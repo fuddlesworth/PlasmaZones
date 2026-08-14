@@ -3,14 +3,16 @@
 
 // SANCTIONED FILE-SIZE EXCEPTION. This TU sits just past the 1150-line
 // ceiling and stays whole deliberately: it is a flat sequence of one
-// appendXxxSchema function per config domain plus the file-local validator
-// helpers several of them share (canonicalCommaList,
-// sanitizePerAlgorithmSettings, the colour canonicalizer). The two domains
-// big enough to carry their own weight are already split
-// (settingsschema_scrolling.cpp); each remaining function is well under a
-// hundred lines, and moving one out drags its shared helpers into a header
-// for a single consumer. When a domain grows past that, split it the way
-// scrolling was — do not grow this banner's scope instead.
+// appendXxxSchema function per config domain plus the validator helpers
+// several of them share — most file-local (canonicalCommaList,
+// sanitizePerAlgorithmSettings, validStringOr), two at namespace scope
+// because the scrolling TU shares them too (canonicalThemeFallbackColor,
+// canonicalTriggerList). The three domains big enough to carry their own
+// weight are already split (settingsschema_scrolling.cpp's three entry
+// points); each remaining function is well under a hundred lines, and moving
+// one out drags its shared helpers into a header for a single consumer. When
+// a domain grows past that, split it the way scrolling was — do not grow
+// this banner's scope instead.
 
 #include "settingsschema.h"
 
@@ -58,6 +60,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendBehaviorSchema(s);
     appendAutotilingSchema(s);
     appendScrollingSchema(s);
+    appendScrollingZoneSelectorSchema(s);
     appendWindowsSchema(s);
     appendGapsSchema(s);
     appendDecorationsSchema(s);
@@ -152,9 +155,34 @@ QVariant canonicalTriggerList(const QVariant& v)
             continue;
         }
         const QVariantMap src = entry.toMap();
+        // Field-level ok-flags, for the same drop-malformed reason as the
+        // entry gate above: a partially-garbage entry ({modifier: "alt",
+        // mouseButton: 1}) used to coerce its bad field to 0, and modifier 0
+        // means "don't care" to the drag readers — silently widening a
+        // configured "Alt + Left" trigger to "Left button, any modifier".
+        bool modOk = false;
+        bool btnOk = false;
+        const int modifier = src.value(ConfigKeys::triggerModifierField(), 0).toInt(&modOk);
+        const int mouseButton = src.value(ConfigKeys::triggerMouseButtonField(), 0).toInt(&btnOk);
+        // Range half of the hardening, one step past the type (ok-flag)
+        // half, in each field's OWN vocabulary: `modifier` is a DragModifier
+        // ENUMERATOR (the drag readers switch on it), not a Qt modifier
+        // mask, and `mouseButton` is a Qt::MouseButtons bitmask (matched
+        // with `&`). A numeric-but-impossible field is dropped like a
+        // malformed type instead of being persisted verbatim as a trigger
+        // no event can ever match.
+        // Qt::AllButtons, NOT Qt::MouseButtonMask: the mask is 0xffffffff,
+        // whose int cast is -1, and `x & ~(-1)` is always 0 — a check that
+        // rejects nothing. AllButtons is the real any-valid-button set, and
+        // a negative int's sign bit lies outside it, so negatives fail too.
+        if (!modOk || !btnOk || modifier < static_cast<int>(DragModifier::Disabled)
+            || modifier > static_cast<int>(DragModifier::CtrlAltMeta)
+            || (mouseButton & ~static_cast<int>(Qt::AllButtons)) != 0) {
+            continue;
+        }
         QVariantMap canon;
-        canon[ConfigKeys::triggerModifierField()] = src.value(ConfigKeys::triggerModifierField(), 0).toInt();
-        canon[ConfigKeys::triggerMouseButtonField()] = src.value(ConfigKeys::triggerMouseButtonField(), 0).toInt();
+        canon[ConfigKeys::triggerModifierField()] = modifier;
+        canon[ConfigKeys::triggerMouseButtonField()] = mouseButton;
         out.append(canon);
     }
     return QVariant(out);
@@ -568,9 +596,13 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
 
     auto modifierOr = [](int fallback) {
         return [fallback](const QVariant& v) -> QVariant {
-            const int raw = v.toInt();
+            // Ok-flag so a non-numeric payload takes the fallback instead of
+            // coercing to 0 == Qt::NoModifier, which the range check would
+            // accept as a deliberate "no modifier".
+            bool ok = false;
+            const int raw = v.toInt(&ok);
             constexpr int valid = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
-            if (raw == Qt::NoModifier || (raw & valid) == raw) {
+            if (ok && (raw == Qt::NoModifier || (raw & valid) == raw)) {
                 return QVariant(raw);
             }
             return QVariant(fallback);

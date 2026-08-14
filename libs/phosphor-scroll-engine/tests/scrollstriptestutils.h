@@ -4,7 +4,7 @@
 #pragma once
 
 // Shared fixture helpers for the whole PhosphorScrollEngine test suite — the
-// two strip-model files and the seven engine files. One definition of the
+// two strip-model files and the nine engine files. One definition of the
 // 1200x800 geometry, because a work area that drifts between files quietly
 // changes what every hardcoded pixel expectation means, and one definition
 // of the headless engine fixture, because its two geometry providers are
@@ -57,11 +57,9 @@ inline PhosphorScrollEngine::ScrollLayoutParams defaultParams()
 inline constexpr int kEngineInnerGap = 6;
 
 /// Params matching a makeGappedProviderEngine engine, for a test that
-/// hand-computes gap-dependent pixel expectations at the strip level. The
-/// current gapped-engine tests assert on payloads read back from the engine
-/// instead, so nothing uses this yet — it exists so the first test that DOES
-/// derive expectations by hand has one definition of the gap to derive them
-/// from. The plain engineParams()/makeProviderEngine pair runs at gap 0,
+/// hand-computes gap-dependent pixel expectations at the strip level (the
+/// snapshot suite's gapsShareTheColumnHeight drives its strip mutations with
+/// it). The plain engineParams()/makeProviderEngine pair runs at gap 0,
 /// which CANNOT observe a gap-dependent defect: a layout that omits the gap
 /// term entirely still matches. That blind spot hid a real drop-indicator
 /// bug.

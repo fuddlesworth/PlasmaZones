@@ -84,6 +84,7 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneGeometrySettings,
                                      public IWindowExclusionSettings,
                                      public IZoneSelectorSettings,
+                                     public IScrollingZoneSelectorSettings,
                                      public IWindowBehaviorSettings,
                                      public IDefaultLayoutSettings,
                                      public IOrderingSettings,
@@ -105,6 +106,7 @@ public:
     //   - IZoneGeometrySettings: padding, gaps, thresholds, performance
     //   - IWindowExclusionSettings: transient windows, size filters
     //   - IZoneSelectorSettings: zone selector UI configuration
+    //   - IScrollingZoneSelectorSettings: strip-mode drag selector UI configuration
     //   - IWindowBehaviorSettings: snap restore, sticky handling
     //   - IDefaultLayoutSettings: default layout ID
     //   - IOrderingSettings: manual layout/algorithm ordering
@@ -542,6 +544,26 @@ public:
         return false;
     }
 
+    // Strip-mode selector overrides. Separate store from the zone-selector
+    // pair above (own group prefix, own map) but the same key vocabulary —
+    // see the note on resolvedScrollingZoneSelectorConfig in
+    // settings_interfaces.h.
+    virtual QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
+    virtual void setPerScreenScrollingZoneSelectorSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
+                                                          const QVariant& /*value*/)
+    {
+    }
+    virtual void clearPerScreenScrollingZoneSelectorSettings(const QString& /*screenIdOrName*/)
+    {
+    }
+    virtual bool hasPerScreenScrollingZoneSelectorSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
+
     // NOTE: snapping exposes only the getter — `getPerScreenSnappingSettings`
     // is the lone snapping accessor declared on
     // PhosphorEngine::IGeometrySettings (consumed by the geometry
@@ -549,8 +571,8 @@ public:
     // unification the per-monitor gap dimensions are config-backed and live in
     // the per-screen AUTOTILE map (one value per monitor drives both snap and
     // tile), and this getter surfaces that map's gap subset. Hence no
-    // set/clear/has triplet, unlike the autotile, scrolling and zone-selector
-    // blocks above:
+    // set/clear/has triplet, unlike the autotile, scrolling, zone-selector
+    // and strip-selector blocks above:
     // writes go through setPerScreenAutotileSetting and the perScreenGap*
     // accessors, and a snapping-side writer would just be a second door onto
     // the same keys.
@@ -700,6 +722,14 @@ Q_SIGNALS:
     void zoneSelectorSizeModeChanged();
     void zoneSelectorMaxRowsChanged();
     void perScreenZoneSelectorSettingsChanged();
+    void scrollingZoneSelectorEnabledChanged();
+    void scrollingZoneSelectorTriggerDistanceChanged();
+    void scrollingZoneSelectorPositionChanged();
+    void scrollingZoneSelectorSizeModeChanged();
+    void scrollingZoneSelectorPreviewWidthChanged();
+    void scrollingZoneSelectorPreviewHeightChanged();
+    void scrollingZoneSelectorPreviewLockAspectChanged();
+    void perScreenScrollingZoneSelectorSettingsChanged();
     void perScreenAutotileSettingsChanged();
     void perScreenSnappingSettingsChanged();
     void perScreenScrollingSettingsChanged();

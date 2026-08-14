@@ -126,7 +126,8 @@ public Q_SLOTS:
 
     QStringList getSettingKeys();
 
-    // Per-screen settings (categories: "autotile", "snapping", "zoneSelector")
+    // Per-screen settings (categories: "autotile", "scrolling", "snapping",
+    // "zoneSelector", "scrollingZoneSelector")
     void setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                              const QDBusVariant& value);
     void clearPerScreenSettings(const QString& screenId, const QString& category);
@@ -150,9 +151,9 @@ public Q_SLOTS:
      * setSettings) — consistent with single-key behavior.
      *
      * @param screenId Virtual or physical screen identifier
-     * @param category "autotile" | "snapping" | "zoneSelector". NOTE: "snapping" is
-     *                 READ-ONLY (it projects the config's per-monitor gaps), so a write to
-     *                 it is rejected and does nothing. Write those through "autotile".
+     * @param category "autotile" | "scrolling" | "snapping" | "zoneSelector" | "scrollingZoneSelector". NOTE:
+     * "snapping" is READ-ONLY (it projects the config's per-monitor gaps), so a write to it is rejected and does
+     * nothing. Write those through "autotile".
      * @param values   Map of key -> value. QDBusArgument-wrapped values
      *                 from the wire are unwrapped via DBusVariantUtils
      *                 before reaching the setter.
@@ -246,7 +247,7 @@ public Q_SLOTS:
     /**
      * @brief Get metadata for a single setting
      * @param key Setting key name
-     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"stringlist"|"map"
+     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"themeColor"|"stringlist"|"map"
      */
     QString getSettingSchema(const QString& key);
 
@@ -349,7 +350,8 @@ private:
 
     QHash<QString, Getter> m_getters;
     QHash<QString, Setter> m_setters;
-    QHash<QString, QString> m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"stringlist"|"map")
+    QHash<QString, QString>
+        m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"themeColor"|"stringlist"|"map")
 
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;

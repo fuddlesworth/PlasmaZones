@@ -114,6 +114,16 @@ private Q_SLOTS:
         QCOMPARE(engine.layoutSupport(), IPlacementEngine::LayoutSupport::None);
     }
 
+    void testProvidesDragInsertSelector_defaultsToFalse()
+    {
+        // Same opt-in discipline as layoutSupport: the drag popup renders an
+        // engine's drag-insert vocabulary only when the engine claims it.
+        // WindowDragAdaptor's trigger gate reads this to keep the popup off
+        // engine-owned screens by default (autotile relies on that).
+        MinimalEngine engine;
+        QVERIFY(!engine.providesDragInsertSelector());
+    }
+
     void testCapabilityDefaults_areInert()
     {
         MinimalEngine engine;

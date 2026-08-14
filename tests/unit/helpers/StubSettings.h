@@ -18,6 +18,12 @@ namespace PlasmaZones {
 /**
  * @brief Unified stub ISettings for unit tests
  *
+ * FILE-SIZE EXCEPTION (declared by the 2026-08 PR #915 audit): one class
+ * implementing one very large interface, override for override. It grows
+ * in lockstep with ISettings, and splitting a stub across headers would
+ * buy nothing but a second place for an override to be missing — the
+ * drift surface the per-family override comments below exist to prevent.
+ *
  * Provides sensible defaults for all ISettings pure virtual methods.
  * The defaultLayoutId is mutated via setDefaultLayoutId() (the
  * ISettings setter); tests should call that directly rather than a
@@ -1351,6 +1357,99 @@ public:
         Q_EMIT settingsChanged();
     }
 
+    // IScrollingZoneSelectorSettings
+    bool scrollingZoneSelectorEnabled() const override
+    {
+        return m_scrollingZoneSelectorEnabled;
+    }
+    void setScrollingZoneSelectorEnabled(bool value) override
+    {
+        if (m_scrollingZoneSelectorEnabled == value) {
+            return;
+        }
+        m_scrollingZoneSelectorEnabled = value;
+        Q_EMIT scrollingZoneSelectorEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingZoneSelectorTriggerDistance() const override
+    {
+        return m_scrollingZoneSelectorTriggerDistance;
+    }
+    void setScrollingZoneSelectorTriggerDistance(int value) override
+    {
+        if (m_scrollingZoneSelectorTriggerDistance == value) {
+            return;
+        }
+        m_scrollingZoneSelectorTriggerDistance = value;
+        Q_EMIT scrollingZoneSelectorTriggerDistanceChanged();
+        Q_EMIT settingsChanged();
+    }
+    ZoneSelectorPosition scrollingZoneSelectorPosition() const override
+    {
+        return m_scrollingZoneSelectorPosition;
+    }
+    void setScrollingZoneSelectorPosition(ZoneSelectorPosition value) override
+    {
+        if (m_scrollingZoneSelectorPosition == value) {
+            return;
+        }
+        m_scrollingZoneSelectorPosition = value;
+        Q_EMIT scrollingZoneSelectorPositionChanged();
+        Q_EMIT settingsChanged();
+    }
+    ZoneSelectorSizeMode scrollingZoneSelectorSizeMode() const override
+    {
+        return m_scrollingZoneSelectorSizeMode;
+    }
+    void setScrollingZoneSelectorSizeMode(ZoneSelectorSizeMode value) override
+    {
+        if (m_scrollingZoneSelectorSizeMode == value) {
+            return;
+        }
+        m_scrollingZoneSelectorSizeMode = value;
+        Q_EMIT scrollingZoneSelectorSizeModeChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingZoneSelectorPreviewWidth() const override
+    {
+        return m_scrollingZoneSelectorPreviewWidth;
+    }
+    void setScrollingZoneSelectorPreviewWidth(int value) override
+    {
+        if (m_scrollingZoneSelectorPreviewWidth == value) {
+            return;
+        }
+        m_scrollingZoneSelectorPreviewWidth = value;
+        Q_EMIT scrollingZoneSelectorPreviewWidthChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingZoneSelectorPreviewHeight() const override
+    {
+        return m_scrollingZoneSelectorPreviewHeight;
+    }
+    void setScrollingZoneSelectorPreviewHeight(int value) override
+    {
+        if (m_scrollingZoneSelectorPreviewHeight == value) {
+            return;
+        }
+        m_scrollingZoneSelectorPreviewHeight = value;
+        Q_EMIT scrollingZoneSelectorPreviewHeightChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool scrollingZoneSelectorPreviewLockAspect() const override
+    {
+        return m_scrollingZoneSelectorPreviewLockAspect;
+    }
+    void setScrollingZoneSelectorPreviewLockAspect(bool value) override
+    {
+        if (m_scrollingZoneSelectorPreviewLockAspect == value) {
+            return;
+        }
+        m_scrollingZoneSelectorPreviewLockAspect = value;
+        Q_EMIT scrollingZoneSelectorPreviewLockAspectChanged();
+        Q_EMIT settingsChanged();
+    }
+
     // IWindowBehaviorSettings
     bool keepWindowsInZonesOnResolutionChange() const override
     {
@@ -2363,7 +2462,7 @@ public:
     // can be driven from the stub instead of silently taking the
     // defaulted-virtual "no override" arm. Mirrors production's emit-on-change
     // and empty-argument guards. DELIBERATE OMISSIONS, as for the siblings:
-    // no validatePerScreenValue rejection, no screen-identity alias matching,
+    // no validateZoneSelectorValue rejection, no screen-identity alias matching,
     // and the has* accessors test entry EMPTINESS where production tests
     // entry EXISTENCE (unreachable divergence: the setter never leaves an
     // empty entry behind) — a test needing any of those must use the real
@@ -2398,6 +2497,70 @@ public:
         }
     }
 
+    // Per-screen STRIP-SELECTOR overrides — the scrolling zone selector's
+    // quartet, hash-backed for the same reason as the snapping twin above:
+    // a stub falling through to the defaulted ISettings virtuals passes any
+    // consumer test vacuously (empty map, swallowed writes). Same deliberate
+    // omissions as the twin, plus one MORE than the twin has: production's
+    // strip setter refuses keys outside the six-key kStripSelectorKeys
+    // subset (LayoutMode / GridColumns / MaxRows), while this stub stores
+    // any key verbatim — the resolver override below simply never reads the
+    // non-subset keys, so they sit inert rather than being rejected.
+    QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override
+    {
+        return m_perScreenScrollingZoneSelector.value(screenIdOrName);
+    }
+    void setPerScreenScrollingZoneSelectorSetting(const QString& screenIdOrName, const QString& key,
+                                                  const QVariant& value) override
+    {
+        if (screenIdOrName.isEmpty() || key.isEmpty()) {
+            return;
+        }
+        QVariantMap& entry = m_perScreenScrollingZoneSelector[screenIdOrName];
+        if (entry.value(key) == value) {
+            return;
+        }
+        entry[key] = value;
+        Q_EMIT perScreenScrollingZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool hasPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override
+    {
+        return !m_perScreenScrollingZoneSelector.value(screenIdOrName).isEmpty();
+    }
+    void clearPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) override
+    {
+        if (m_perScreenScrollingZoneSelector.remove(screenIdOrName) > 0) {
+            Q_EMIT perScreenScrollingZoneSelectorSettingsChanged();
+            Q_EMIT settingsChanged();
+        }
+    }
+
+    // The RESOLVE half of the contract the two store comments above promise.
+    // Without these overrides the defaulted interface resolvers read only
+    // the global getters, so a consumer test that wrote a per-screen
+    // override got the GLOBAL value back with no warning — exactly the
+    // vacuity the hash-backed stores exist to prevent. The merge is coercing
+    // and unvalidated, per the stub's deliberate omissions; the strip arm
+    // reads only production's six-key subset (see the note on its store).
+    // TWO further omissions vs production's resolvers: the lookup is by
+    // EXACT key (no connector/EDID key variants) and there is no
+    // virtual→physical sub-screen fallback — a test driving either needs
+    // the real Settings.
+    ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& screenIdOrName) const override
+    {
+        ZoneSelectorConfig config = IZoneSelectorSettings::resolvedZoneSelectorConfig(screenIdOrName);
+        applyStubSelectorOverrides(config, m_perScreenZoneSelector.value(screenIdOrName), /*stripSubset=*/false);
+        return config;
+    }
+    ZoneSelectorConfig resolvedScrollingZoneSelectorConfig(const QString& screenIdOrName) const override
+    {
+        ZoneSelectorConfig config = IScrollingZoneSelectorSettings::resolvedScrollingZoneSelectorConfig(screenIdOrName);
+        applyStubSelectorOverrides(config, m_perScreenScrollingZoneSelector.value(screenIdOrName),
+                                   /*stripSubset=*/true);
+        return config;
+    }
+
     // Persistence (ISettings)
     void load() override
     {
@@ -2420,6 +2583,34 @@ private:
     QHash<QString, QVariantMap> m_perScreenAutotile;
     QHash<QString, QVariantMap> m_perScreenScrolling;
     QHash<QString, QVariantMap> m_perScreenZoneSelector;
+    QHash<QString, QVariantMap> m_perScreenScrollingZoneSelector;
+
+    // Shared merge body of the two resolver overrides above. Coercing and
+    // unvalidated on purpose (stub omission); the strip arm admits only the
+    // six-key subset production's write path enforces.
+    static void applyStubSelectorOverrides(ZoneSelectorConfig& config, const QVariantMap& overrides, bool stripSubset)
+    {
+        namespace K = ZoneSelectorConfigKey;
+        const auto applyInt = [&overrides](const char* key, int& field) {
+            const auto it = overrides.constFind(QLatin1String(key));
+            if (it != overrides.constEnd()) {
+                field = it->toInt();
+            }
+        };
+        applyInt(K::Position, config.position);
+        applyInt(K::SizeMode, config.sizeMode);
+        applyInt(K::PreviewWidth, config.previewWidth);
+        applyInt(K::PreviewHeight, config.previewHeight);
+        applyInt(K::TriggerDistance, config.triggerDistance);
+        if (const auto it = overrides.constFind(QLatin1String(K::PreviewLockAspect)); it != overrides.constEnd()) {
+            config.previewLockAspect = it->toBool();
+        }
+        if (!stripSubset) {
+            applyInt(K::LayoutMode, config.layoutMode);
+            applyInt(K::MaxRows, config.maxRows);
+            applyInt(K::GridColumns, config.gridColumns);
+        }
+    }
     QString m_defaultLayoutId;
     bool m_suppressDefaultLayoutAssignment = ConfigDefaults::suppressDefaultLayoutAssignment();
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
@@ -2491,6 +2682,15 @@ private:
     ZoneSelectorLayoutMode m_zoneSelectorLayoutMode = static_cast<ZoneSelectorLayoutMode>(ConfigDefaults::layoutMode());
     ZoneSelectorPosition m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(ConfigDefaults::position());
     ZoneSelectorSizeMode m_zoneSelectorSizeMode = static_cast<ZoneSelectorSizeMode>(ConfigDefaults::sizeMode());
+    ZoneSelectorPosition m_scrollingZoneSelectorPosition =
+        static_cast<ZoneSelectorPosition>(ConfigDefaults::scrollingZoneSelectorPosition());
+    ZoneSelectorSizeMode m_scrollingZoneSelectorSizeMode =
+        static_cast<ZoneSelectorSizeMode>(ConfigDefaults::scrollingZoneSelectorSizeMode());
+    bool m_scrollingZoneSelectorEnabled = ConfigDefaults::scrollingZoneSelectorEnabled();
+    bool m_scrollingZoneSelectorPreviewLockAspect = ConfigDefaults::scrollingZoneSelectorPreviewLockAspect();
+    int m_scrollingZoneSelectorTriggerDistance = ConfigDefaults::scrollingZoneSelectorTriggerDistance();
+    int m_scrollingZoneSelectorPreviewWidth = ConfigDefaults::scrollingZoneSelectorPreviewWidth();
+    int m_scrollingZoneSelectorPreviewHeight = ConfigDefaults::scrollingZoneSelectorPreviewHeight();
     bool m_animationsEnabled = ConfigDefaults::animationsEnabled();
     bool m_audioAutosens = ConfigDefaults::audioAutosens();
     bool m_audioMonstercat = ConfigDefaults::audioMonstercat();

@@ -322,8 +322,8 @@ public:
      *
      * The token is stamped onto every windowless context WindowQuery this
      * registry builds (assignment, gap, lock, overlay, default-assignment,
-     * osd, tiling-params, scrolling-params), so an orientation rule can drive any
-     * context slot — for example a different
+     * osd, drag-selector, tiling-params, scrolling-params), so an orientation
+     * rule can drive any context slot — for example a different
      * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
      * screen geometry alone, independent of the resolved layout, so it carries no
      * recursion risk (unlike an active-layout query). The daemon wires this to
@@ -517,8 +517,8 @@ public:
     /// fails safe (a rule goes unapplied) rather than open (a negated rule
     /// fires everywhere), and a per-branch test cannot be done without
     /// evaluating the tree, which is the thing being avoided. The same applies
-    /// to the assignment / lock / overlay / default-assignment resolvers,
-    /// which are unconditionally mode-agnostic.
+    /// to the assignment / lock / overlay / default-assignment / osd /
+    /// drag-selector resolvers, which are unconditionally mode-agnostic.
     ContextGapOverride resolveContextGaps(const QString& screenId, int virtualDesktop, const QString& activity,
                                           const QString& mode = QString()) const override;
 
@@ -555,6 +555,26 @@ public:
     /// registry.
     std::optional<bool> resolveContextOsdEnabled(const QString& screenId, int virtualDesktop,
                                                  const QString& activity) const;
+
+    /// Resolve a per-context override of the drag selector popup — the
+    /// edge-triggered zone / strip picker offered during a window drag — for
+    /// the (screen, desktop, activity) context by evaluating a windowless
+    /// WindowQuery and reading the `ActionSlot::DragSelectorEnabled` slot.
+    /// Per-slot read, the exact twin of @ref resolveContextOsdEnabled
+    /// (including the activeLayout + orientation stamping, and the same
+    /// absence of a recursion hazard). One deliberate asymmetry: this one is
+    /// an IZoneLayoutRegistry virtual (its consumer, the drag adaptor via
+    /// OverlayService, holds the interface) while the OSD twin is
+    /// concrete-only (its sole consumer holds the concrete registry) — so a
+    /// stub registry can suppress the drag selector but not OSDs. Returns
+    /// the winning
+    /// `SetDragSelectorEnabled` action's boolean `value` (true = force the
+    /// popup on past the global selector toggle, false = suppress it), or
+    /// @c std::nullopt when no matching rule fills the slot (the context then
+    /// follows the global toggle). Same owner-thread affinity as the rest of
+    /// the registry.
+    std::optional<bool> resolveContextDragSelectorEnabled(const QString& screenId, int virtualDesktop,
+                                                          const QString& activity) const override;
 
     /// Resolve the per-context overlay-property override (shader / style)
     /// for (screen, desktop, activity) by evaluating a windowless WindowQuery and
@@ -605,8 +625,8 @@ public:
     /// Stamp the screen-orientation token onto @p query from
     /// @ref m_screenOrientationProvider (a no-op when the provider is unset or
     /// returns nullopt). Used by the two UNCACHED param resolvers
-    /// (tiling-params, scrolling-params); the six cached resolvers (assignment,
-    /// gap, lock, default-assignment, osd, overlay) assign
+    /// (tiling-params, scrolling-params); the seven cached resolvers (assignment,
+    /// gap, lock, default-assignment, osd, drag-selector, overlay) assign
     /// @ref screenOrientationToken directly, because they must fold the very
     /// same token into their cache key and re-reading the provider could hand
     /// the query a token the key does not describe. Either way every
@@ -653,7 +673,7 @@ public:
     }
 
     /// Compose the extra cache-key token a daemon-facing context resolver (gap /
-    /// lock / overlay / default-assignment / osd) passes to
+    /// lock / overlay / default-assignment / osd / drag-selector) passes to
     /// @ref resolveCachedContext, folding in the placement @p modeToken (empty for
     /// every resolver but the gap one), the @p activeLayoutId, the
     /// @p orientationToken and the @p colorSchemeToken. All three of the active
@@ -1253,10 +1273,11 @@ private:
     /// its own qHash); the alias keeps existing qualified uses compiling.
     using ContextResolveKey = PhosphorZones::ContextResolveKey;
 
-    /// Shared revision-invalidated memoization for the six cached context
+    /// Shared revision-invalidated memoization for the seven cached context
     /// resolvers (@ref resolveAssignmentEntry, @ref resolveContextGaps,
     /// @ref resolveContextLocked, @ref resolveContextDefaultAssignment,
-    /// @ref resolveContextOsdEnabled, @ref resolveContextOverlay). The two
+    /// @ref resolveContextOsdEnabled, @ref resolveContextDragSelectorEnabled,
+    /// @ref resolveContextOverlay). The two
     /// per-engine param resolvers (@ref resolveContextTilingParams,
     /// @ref resolveContextScrollingParams) are deliberately uncached.
     /// Drops @p cache wholesale whenever the rule
@@ -1353,6 +1374,19 @@ private:
     mutable QHash<ContextResolveKey, std::optional<bool>> m_contextDefaultAssignmentCache;
     mutable quint64 m_contextDefaultAssignmentCacheRevision = 0;
 
+    /// Shared body of the single-slot boolean resolvers (OSD, drag selector):
+    /// the highest-priority matching context rule carrying @p actionType fills
+    /// the slot, with the lock resolver's structural exclusions and the
+    /// activeLayout / orientation / colour-scheme stamping.
+    /// Impl in layoutregistry_contextresolve.cpp. Declared HERE, inside the
+    /// member run, on purpose: it sits beside the two cache/revision pairs
+    /// it is handed, which is the ownership the file-order convention
+    /// encodes — do not "fix" it into the method block above.
+    std::optional<bool> resolveContextBoolSlot(QHash<ContextResolveKey, std::optional<bool>>& cache,
+                                               quint64& cacheRevision, QLatin1StringView actionType,
+                                               const QString& screenId, int virtualDesktop,
+                                               const QString& activity) const;
+
     /// Hot-path cache for @ref resolveContextOsdEnabled, keyed and
     /// revision-invalidated exactly like @c m_contextLockCache. Every OSD
     /// show gate consults the override (navigation feedback fires per verb),
@@ -1361,6 +1395,15 @@ private:
     /// cached too.
     mutable QHash<ContextResolveKey, std::optional<bool>> m_contextOsdCache;
     mutable quint64 m_contextOsdCacheRevision = 0;
+
+    /// Hot-path cache for @ref resolveContextDragSelectorEnabled, keyed and
+    /// revision-invalidated exactly like @c m_contextOsdCache. The drag
+    /// adaptor consults the override on every cursor tick of a drag, which is
+    /// the hottest of the context resolvers' call sites, so memoizing the
+    /// per-slot walk collapses those repeats to one walk per rule-set
+    /// revision. A @c std::nullopt value (no override rule) is cached too.
+    mutable QHash<ContextResolveKey, std::optional<bool>> m_contextDragSelectorCache;
+    mutable quint64 m_contextDragSelectorCacheRevision = 0;
 
     /// Hot-path cache for @ref resolveContextOverlay, keyed and
     /// revision-invalidated exactly like @c m_contextGapCache. The overlay

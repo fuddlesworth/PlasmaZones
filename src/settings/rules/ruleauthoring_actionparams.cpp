@@ -226,6 +226,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetOsdEnabled && key == ActionParam::Value) {
         return PhosphorI18n::tr("Show on-screen displays here (off = hide them)");
     }
+    if (type == ActionType::SetDragSelectorEnabled && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Show the drag selector here (off = hide it)");
+    }
     // Border / title-bar overrides (all single-value, keyed ActionParam::Value).
     // SetHideTitleBar is tri-state at the effect: rule absent = mode decides,
     // ON = hide, OFF = force the title bar visible even where the mode hides

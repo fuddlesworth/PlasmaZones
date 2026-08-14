@@ -422,6 +422,17 @@ add_executable(test_scrolling_settings config/settings/test_scrolling_settings.c
 target_link_libraries(test_scrolling_settings PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_scrolling_settings COMMAND test_scrolling_settings)
 
+# Scrolling.ZoneSelector, the strip-mode drag popup: schema defaults, the
+# stamped Horizontal layout mode, and the per-screen store's subset guard.
+# A sibling of test_scrolling_settings rather than part of it (that file is a
+# sanctioned size exception and says so); same explicit Qt6::Gui link, and for
+# the same reason.
+add_executable(test_scrolling_zone_selector_settings
+               config/settings/test_scrolling_zone_selector_settings.cpp)
+target_link_libraries(test_scrolling_zone_selector_settings
+                      PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_scrolling_zone_selector_settings COMMAND test_scrolling_zone_selector_settings)
+
 # Per-monitor scrolling overrides: the settings-store half of the channel
 # (validator, kind/value joint repair on both the setter and the load path,
 # save/load round trip, clear/has). Same explicit Qt6::Gui link as
@@ -440,6 +451,7 @@ add_test(NAME test_settings_perscreen_scrolling COMMAND test_settings_perscreen_
 add_executable(test_page_owned_config_keys
     settings/test_page_owned_config_keys.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/controller/settingscontroller_pagetopology.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/controller/settingscontroller_pagekeys.cpp
 )
 target_link_libraries(test_page_owned_config_keys PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
     PhosphorControl::PhosphorControl PhosphorRules::PhosphorRules)
@@ -517,6 +529,22 @@ add_test(NAME test_animation_profile_publication COMMAND test_animation_profile_
 add_executable(test_wayland_session_check daemon/test_wayland_session_check.cpp)
 target_link_libraries(test_wayland_session_check PRIVATE Qt6::Test Qt6::Core)
 add_test(NAME test_wayland_session_check COMMAND test_wayland_session_check)
+
+# Strip-mode zone selector: pure hit-test classification (header-only
+# helper, no QML scene) and the strip-card wire shape. The hit-test test
+# links Qt6::Test + Qt6::Core only, same convention as
+# test_wayland_session_check above (header-only logic needs the include
+# path, not plasmazones_core). The serializer test links
+# PhosphorScrollEngine explicitly for the snapshot value types — the
+# transitive pull through plasmazones_core is coincidental, per the macro
+# header's caveat.
+add_executable(test_strip_selector_hittest daemon/test_strip_selector_hittest.cpp)
+target_link_libraries(test_strip_selector_hittest PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME test_strip_selector_hittest COMMAND test_strip_selector_hittest)
+add_executable(test_stripcard_serialize daemon/test_stripcard_serialize.cpp)
+target_link_libraries(test_stripcard_serialize
+    PRIVATE Qt6::Test Qt6::Core plasmazones_core PhosphorScrollEngine::PhosphorScrollEngine)
+add_test(NAME test_stripcard_serialize COMMAND test_stripcard_serialize)
 
 # Phase-5 SurfaceAnimator scope-prefix policy. Pins down the
 # per-instance scope construction in osd.cpp / selector.cpp /

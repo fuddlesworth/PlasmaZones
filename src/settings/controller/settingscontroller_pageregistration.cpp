@@ -329,26 +329,39 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("scrolling-templates"), QStringLiteral("scrolling"), PhosphorI18n::tr("Templates"),
                QStringLiteral("pages/scrolling/ScrollingTemplatesPage.qml"), QStringLiteral("view-grid"),
                /*collapsible=*/false, /*divider=*/true);
-    // The advanced tree mirrors Tiling's per-concern split: Columns
-    // (fresh-column/tile defaults + presets), Tabs (the tab indicator's own
-    // thirteen-knob family), and Window (window handling plus the Focus and
-    // view card, which carries viewport centering and the Meta+wheel gesture —
-    // those follow focus, so they sit with it rather than on a View leaf of
-    // their own). Columns is the simple page's counterpart, like
+    // The advanced tree mirrors Tiling's per-concern split, five leaves:
+    // Columns (fresh-column/tile defaults + presets), Tabs (the tab
+    // indicator's own thirteen-knob family), Window (window handling plus
+    // the Focus and view card, which carries viewport centering and the
+    // Meta+wheel gesture — those follow focus, so they sit with it rather
+    // than on a View leaf of their own), Strip Selector (the drag popup)
+    // and Quick Shortcuts. Columns is the simple page's counterpart, like
     // tiling-simple ↔ tiling-algorithm.
     regVirtual(QStringLiteral("scrolling-columns"), QStringLiteral("scrolling"), PhosphorI18n::tr("Columns"),
                QStringLiteral("pages/scrolling/ScrollingColumnsPage.qml"), QStringLiteral("view-file-columns"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly, QStringLiteral("scrolling-simple"));
-    // Ordered between Columns and Window because that is the order the three
-    // read in: which columns are tabbed (Columns), how a tabbed one is marked
-    // (Tabs), how the strip treats windows generally (Window).
+    // Ordered between Columns and Window because that is the order they
+    // read in: which columns are tabbed (Columns), how a tabbed one is
+    // marked (Tabs), how the strip treats windows generally (Window) — with
+    // Strip Selector and Quick Shortcuts trailing as the interaction leaves.
     regVirtual(QStringLiteral("scrolling-tabs"), QStringLiteral("scrolling"), PhosphorI18n::tr("Tabs"),
                QStringLiteral("pages/scrolling/ScrollingTabsPage.qml"), QStringLiteral("tab-detach"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("scrolling-window"), QStringLiteral("scrolling"), PhosphorI18n::tr("Window"),
                QStringLiteral("pages/scrolling/ScrollingWindowPage.qml"), QStringLiteral("preferences-system-windows"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    // Strip Selector — the drag popup's scrolling twin, a single top leaf
+    // like Snapping's Zone Selector (enable + trigger + position + preview
+    // size; no arrangement page, the strip popup is one horizontal row).
+    // Unlike that twin it carries NO divider: Snapping's rail seam separates
+    // its selector from a config-cat header that Scrolling does not have,
+    // so the advanced run reads as one undivided block here on purpose.
+    regVirtual(QStringLiteral("scrolling-zoneselector"), QStringLiteral("scrolling"),
+               PhosphorI18n::tr("Strip Selector"), QStringLiteral("pages/scrolling/ScrollingZoneSelectorPage.qml"),
+               QStringLiteral("view-choose"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("scrolling-shortcuts"), QStringLiteral("scrolling"), PhosphorI18n::tr("Quick Shortcuts"),
@@ -529,8 +542,14 @@ void SettingsController::buildApplicationController()
         setActivePage(id);
         // setActivePage rejects unknown ids (e.g. a stale CLI
         // --page=exclusions invocation after the page was folded
-        // out) with a warning and returns early — m_activePage
-        // stays at previousActive. The framework's m_app side has
+        // out) with a DEBUG-level trace (deliberately not a warning:
+        // the id is caller-supplied over D-Bus, see the choice's
+        // rationale at the reject site) and returns early —
+        // m_activePage stays at previousActive. A registered page
+        // missing from validPageNames() therefore has NO production
+        // symptom beyond the sidebar row doing nothing; the
+        // registration/validPageNames parity test is the guard for
+        // that case. The framework's m_app side has
         // ALREADY accepted the invalid id from its own setter, so
         // without a snap-back the two would diverge silently
         // (m_app->currentPageId() == "exclusions" while

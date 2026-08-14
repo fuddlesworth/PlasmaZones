@@ -601,12 +601,28 @@ private Q_SLOTS:
         QVariantList mixed;
         mixed.append(QStringLiteral("garbage"));
         QVariantMap real;
-        real[ConfigDefaults::triggerModifierField()] = 42;
+        real[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::CtrlAlt);
         real[ConfigDefaults::triggerMouseButtonField()] = 1;
         mixed.append(real);
+        // Range-checked too, not only type-checked: a numeric modifier
+        // outside the DragModifier closed set (or a button mask with
+        // impossible bits) is dropped like a malformed type, because a
+        // trigger no event can ever match must not persist.
+        QVariantMap outOfRange;
+        outOfRange[ConfigDefaults::triggerModifierField()] = 42;
+        outOfRange[ConfigDefaults::triggerMouseButtonField()] = 1;
+        mixed.append(outOfRange);
+        // The BUTTON arm independently: -1 has every bit set, including the
+        // sign bit outside Qt::AllButtons, and would otherwise persist as a
+        // trigger that matches every mouse button.
+        QVariantMap badButton;
+        badButton[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::Shift);
+        badButton[ConfigDefaults::triggerMouseButtonField()] = -1;
+        mixed.append(badButton);
         const QVariantList canon = triggers->validator(mixed).toList();
         QCOMPARE(canon.size(), 1);
-        QCOMPARE(canon.at(0).toMap().value(ConfigDefaults::triggerModifierField()).toInt(), 42);
+        QCOMPARE(canon.at(0).toMap().value(ConfigDefaults::triggerModifierField()).toInt(),
+                 static_cast<int>(DragModifier::CtrlAlt));
         QCOMPARE(canon.at(0).toMap().value(ConfigDefaults::triggerMouseButtonField()).toInt(), 1);
     }
 

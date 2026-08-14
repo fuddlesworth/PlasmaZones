@@ -62,6 +62,8 @@ private Q_SLOTS:
         QVERIFY(reg.isRegistered(QString(ActionType::RestorePosition)));
         QVERIFY(reg.isRegistered(QString(ActionType::LockContext)));
         QVERIFY(reg.isRegistered(QString(ActionType::DefaultLayoutAssignment)));
+        QVERIFY(reg.isRegistered(QString(ActionType::SetOsdEnabled)));
+        QVERIFY(reg.isRegistered(QString(ActionType::SetDragSelectorEnabled)));
     }
 
     void testSlots()
@@ -287,6 +289,63 @@ private Q_SLOTS:
         QJsonObject notBool;
         notBool.insert(QStringLiteral("value"), 1);
         QVERIFY2(!reg.validate(makeAction(ActionType::DefaultLayoutAssignment, notBool)), "non-bool value must fail");
+    }
+
+    void testSetDragSelectorEnabledAction()
+    {
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QVERIFY(reg.isRegistered(QString(ActionType::SetDragSelectorEnabled)));
+
+        QJsonObject show;
+        show.insert(QStringLiteral("value"), true);
+        QJsonObject hide;
+        hide.insert(QStringLiteral("value"), false);
+
+        // Context-domain boolean action filling its own dedicated slot.
+        // Non-terminal: a selector-only context rule composes with the other
+        // context slots rather than short-circuiting (mirrors SetOsdEnabled).
+        QCOMPARE(reg.slotFor(makeAction(ActionType::SetDragSelectorEnabled, show)),
+                 QString(ActionSlot::DragSelectorEnabled));
+        // Its OWN slot, not the OSD one it was modelled on. The two overrides
+        // are independent verdicts, so a copy-pasted constantSlot would make
+        // an OSD rule and a selector rule clobber each other.
+        QCOMPARE(reg.slotFor(makeAction(ActionType::SetOsdEnabled, show)), QString(ActionSlot::OsdEnabled));
+        QVERIFY(reg.slotFor(makeAction(ActionType::SetDragSelectorEnabled, show))
+                != reg.slotFor(makeAction(ActionType::SetOsdEnabled, show)));
+        QCOMPARE(reg.domainFor(makeAction(ActionType::SetDragSelectorEnabled, show)), ActionDomain::Context);
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::SetDragSelectorEnabled, show)));
+
+        // Requires a boolean `value`; both true (force the popup on) and false
+        // (suppress it) are well-formed.
+        QVERIFY(reg.validate(makeAction(ActionType::SetDragSelectorEnabled, show)));
+        QVERIFY(reg.validate(makeAction(ActionType::SetDragSelectorEnabled, hide)));
+        QVERIFY2(!reg.validate(makeAction(ActionType::SetDragSelectorEnabled)), "missing value must fail validation");
+        QJsonObject notBool;
+        notBool.insert(QStringLiteral("value"), 1);
+        QVERIFY2(!reg.validate(makeAction(ActionType::SetDragSelectorEnabled, notBool)), "non-bool value must fail");
+    }
+
+    void testDisplayOrderUniqueWithinCategory()
+    {
+        // No consumer reads displayOrder today (the shipped picker sorts by
+        // label), but the field exists for one, and two of the twelve overlay
+        // orders come from loop tables — a collision would be silent until a
+        // consumer appears and the rule editor reordered under it. Pin
+        // (category, displayOrder) uniqueness across every registered type.
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QHash<QString, QString> seen; // "category|order" -> first type
+        for (const QString& type : reg.registeredTypes()) {
+            const auto desc = reg.descriptor(type);
+            QVERIFY2(desc.has_value(), qPrintable(type));
+            const QString key = desc->category + QLatin1Char('|') + QString::number(desc->displayOrder);
+            QVERIFY2(!seen.contains(key),
+                     qPrintable(QStringLiteral("(%1, %2) collides: %3 vs %4")
+                                    .arg(desc->category)
+                                    .arg(desc->displayOrder)
+                                    .arg(seen.value(key), type)));
+            seen.insert(key, type);
+        }
+        QVERIFY2(seen.size() > 10, "The scan itself is broken (almost nothing registered).");
     }
 
     void testRegisterCustomAction()

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "configdefaults_scrolling.h"
+#include "configdefaults_scrolling_shortcuts.h"
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -21,7 +21,7 @@ namespace PlasmaZones {
  *   int cols = ConfigDefaults::gridColumns();  // Returns 5
  *   int rows = ConfigDefaults::maxRows();      // Returns 4
  */
-class ConfigDefaults : public ConfigDefaultsScrolling
+class ConfigDefaults : public ConfigDefaultsScrollingShortcuts
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -285,7 +285,10 @@ public:
     }
     // Zone-selector preview-size presets (Small / Large). Medium reuses the
     // default previewWidth() (180). Used by the Small/Medium/Large quick-size
-    // buttons so the widths aren't hard-coded in QML.
+    // buttons of BOTH selector pages — the strip page reuses them through the
+    // snapping bounds bridge, which its page header declares as UI bounds,
+    // not values bound to either config group (so the strip's own stored
+    // default, scrollingZoneSelectorPreviewWidth(), is free to diverge).
     static constexpr int previewWidthSmall()
     {
         return 120;
@@ -1127,5 +1130,18 @@ static_assert(ConfigDefaults::previewWidthSmall() >= ConfigDefaults::previewWidt
 static_assert(ConfigDefaults::previewWidthLarge() >= ConfigDefaults::previewWidthMin()
                   && ConfigDefaults::previewWidthLarge() <= ConfigDefaults::previewWidthMax(),
               "ConfigDefaults::previewWidthLarge() outside declared [min, max] range");
+// The strip selector's ranged defaults. Asserted HERE rather than in
+// configdefaults_scrolling.h because link 6 of that file's include chain
+// cannot see the shared Min/Max accessors (its own section banner says so) —
+// same placement rationale as the quick-size pair above.
+static_assert(ConfigDefaults::scrollingZoneSelectorTriggerDistance() >= ConfigDefaults::triggerDistanceMin()
+                  && ConfigDefaults::scrollingZoneSelectorTriggerDistance() <= ConfigDefaults::triggerDistanceMax(),
+              "ConfigDefaults::scrollingZoneSelectorTriggerDistance() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollingZoneSelectorPreviewWidth() >= ConfigDefaults::previewWidthMin()
+                  && ConfigDefaults::scrollingZoneSelectorPreviewWidth() <= ConfigDefaults::previewWidthMax(),
+              "ConfigDefaults::scrollingZoneSelectorPreviewWidth() outside declared [min, max] range");
+static_assert(ConfigDefaults::scrollingZoneSelectorPreviewHeight() >= ConfigDefaults::previewHeightMin()
+                  && ConfigDefaults::scrollingZoneSelectorPreviewHeight() <= ConfigDefaults::previewHeightMax(),
+              "ConfigDefaults::scrollingZoneSelectorPreviewHeight() outside declared [min, max] range");
 
 } // namespace PlasmaZones

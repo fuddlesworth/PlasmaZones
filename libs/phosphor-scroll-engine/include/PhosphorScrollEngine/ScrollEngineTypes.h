@@ -17,6 +17,7 @@
 #include <QRect>
 #include <QRectF>
 #include <QString>
+#include <QVector>
 
 #include <optional>
 
@@ -96,6 +97,83 @@ struct ScrollVisibleTileWithRect
     ScrollVisibleTile tile;
     /// Same basis and fallback as ScrollEngine::visibleTileRectsRelative.
     QRectF relativeRect;
+};
+
+/// One tile of a strip snapshot (see ScrollEngine::stripSnapshot). Unlike
+/// ResolvedTile this keeps MINIMIZED tiles, because the snapshot's tile
+/// positions must stay valid DragInsertTarget.secondary indices — the same
+/// model-order rule computeDragInsertTargetAtPoint enforces by mapping
+/// resolved hits back through Column::indexOfWindow. Note the minimized flag
+/// serves embedders that deliver a real minimize signal
+/// (ScrollStrip::setWindowMinimized); the PlasmaZones daemon reports minimize
+/// as a float, so its own snapshots never carry a minimized tile.
+struct ScrollStripSnapshotTile
+{
+    QString windowId;
+    /// Rect relative to the owning column's resolved bounds, 0..1 on x. On y
+    /// it MAY exceed 1.0: when even the min-height floors overflow the
+    /// column, the trailing tiles lay out below the work area and the
+    /// overflow stands (renderers clip). A tile can also resolve a
+    /// zero-height rect (the overflow tail squeezed to nothing). Null for
+    /// minimized tiles (they resolve no rect), for the hidden tabs of a
+    /// tabbed column (a renderer draws those as tabs, not stacked rects),
+    /// and for a tab the exclusion emulation promoted to activeTab (its rect
+    /// was resolved while it was hidden; tab renderers draw segments from
+    /// the flag, not the rect).
+    QRectF relRect;
+    bool minimized = false;
+    /// Non-active tab of a tabbed column. The shipped renderer branches on
+    /// the column's tabbed flag instead; carried for direct consumers.
+    bool hidden = false;
+    /// The column's active tile (for a tabbed column: the visible tab).
+    bool activeTab = false;
+};
+
+/// One column of a strip snapshot, in strip order. Popup cards render
+/// VARIABLE-WIDTH off @c widthFraction — each card is its column at preview
+/// scale (a half-screen column is a half-width card) — and the bar width
+/// sums the same fractions. Tile relRects are column-relative, so without
+/// the fraction every column would render as a full-width mini-screen
+/// regardless of its actual width.
+struct ScrollStripSnapshotColumn
+{
+    bool tabbed = false;
+    /// Resolved column width as a fraction of the work-area width, clamped
+    /// to (0, 1]. 0 when the column resolves no rect (fully minimized) —
+    /// renderers fall back to a full-width preview for that case.
+    qreal widthFraction = 0.0;
+    /// MODEL tile order, minimized tiles included.
+    QVector<ScrollStripSnapshotTile> tiles;
+};
+
+/// A column-aware strip snapshot for drag-popup renderers. INDEX CONTRACT:
+/// column positions in @c columns and tile positions in each column are the
+/// indices a DragInsertTarget built from this snapshot must carry — they
+/// name slots in the strip AS A COMMIT WILL SEE IT (the dragged window
+/// detached). When a drag-insert preview is live the resolve already runs
+/// against the preview's detached strip; when it is not, the accessor's
+/// excludeWindowId emulates the detach (tile removed, an emptied column
+/// dropped, later positions renumbered). GEOMETRY is pre-detach on the
+/// emulated path: widthFraction and the relRects come from the strip's
+/// relayout WITH the drag window still in it (its column previews the
+/// survivor at half height, siblings keep pre-detach widths) — the honest
+/// "what you are dragging out of" picture; only STRUCTURE (indices) is
+/// post-detach. The shipped consumer builds targets only from the column
+/// endpoints (tile 0 / append -1); per-tile indices are carried so richer
+/// targets stay expressible.
+struct ScrollStripSnapshot
+{
+    QVector<ScrollStripSnapshotColumn> columns;
+    /// Snapshot position of the strip's active column. When the exclusion
+    /// empties the active column, this re-points to the column that takes
+    /// its place (the right neighbour, or the new last column), matching the
+    /// real detach; -1 only when the snapshot ends up with no columns.
+    int activeColumnIndex = -1;
+    /// False when the screen has no strip state or no valid work area —
+    /// distinct from a valid, empty strip (zero columns). A test /
+    /// introspection seam: the daemon's serializer collapses both states to
+    /// an empty card list, which the popup renders identically on purpose.
+    bool valid = false;
 };
 
 } // namespace PhosphorScrollEngine

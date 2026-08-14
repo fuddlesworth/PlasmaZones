@@ -1,9 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): the engine-initialization phase of the
+// Daemon composition root — every engine's construction, provider wiring and
+// signal fan-out in the one place the ordering contract between them can be
+// read top to bottom. Splitting by engine would scatter the cross-engine
+// defer/reciprocity wiring this file exists to keep adjacent.
+
 #include "daemon/daemon.h"
 #include "helpers.h"
 #include "stripzones.h"
+#include "common/stripcardserialize.h"
 
 #include <QGuiApplication>
 #include <QFutureWatcher>
@@ -248,6 +255,26 @@ void Daemon::initEnginesAndWiring()
         // isSnappingContextInactive).
         return static_cast<int>(layoutSupportForScreen(screenId));
     });
+
+    // Drag-insert selector capability resolver: same router-based liveness
+    // rule as the layout-support resolver above (a disabled scrolling
+    // assignment downgrades and the popup reverts to zone layouts). Cleared
+    // alongside it in stop().
+    m_overlayService->setDragInsertSelectorResolver([this](const QString& screenId) {
+        return dragInsertSelectorForScreen(screenId);
+    });
+
+    // Strip cards for the strip-mode selector popup, serialized at the seam
+    // (OverlayService stays engine-header-free). Cleared alongside the
+    // other providers in stop().
+    m_overlayService->setStripCardsProvider(
+        [this](const QString& screenId, const QString& excludeWindowId) -> QVariantList {
+            const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+            if (!scroll || !scroll->isActiveOnScreen(screenId)) {
+                return {};
+            }
+            return stripColumnsToVariantList(scroll->stripSnapshot(screenId, excludeWindowId));
+        });
 
     // Autotile provider. setContextGapProvider is derived-only
     // (AutotileEngine); m_autotileEngine is held as the base
@@ -960,6 +987,30 @@ void Daemon::initEnginesAndWiring()
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this,
             [this, onTiledCountChanged](const QString& screenId) {
                 onTiledCountChanged(m_scrollEngine, screenId);
+            });
+    // Strip-popup invalidation on structural strip change. Deliberately a
+    // SIBLING connect, not a call inside onTiledCountChanged: that lambda
+    // early-returns when the (engine, tiledWindowCount) pair is unchanged,
+    // which is exactly the column-move case (structure changes, count does
+    // not). Every structural strip change (insert, consume/expel, tab toggle,
+    // resize, window close) ends in a relayout that emits placementChanged,
+    // so a popup rendered from the pre-change card list re-pushes its model
+    // and drops its (renumbered, now-stale) selection. The converse does NOT
+    // hold — the engine also emits placementChanged on non-structural
+    // changes (a pure view-anchor move in applyLayout, two early-exit
+    // emits), and those fires drop a live popup pick spuriously; that is
+    // accepted as self-healing — the next cursor tick re-selects under the
+    // unchanged list — rather than taught to the engine (distinguishing the
+    // anchor-only emit would need a new signal contract).
+    // During a live drag-insert preview the strip is frozen (detach-once), so
+    // this cannot fight the preview. Without it, a window closing on the
+    // strip mid-popup left the cards stale and the popup-only drop arm
+    // committed indices against a renumbered strip.
+    connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this,
+            [this](const QString& screenId) {
+                if (m_overlayService) {
+                    m_overlayService->refreshStripSelector(screenId);
+                }
             });
 
     // Live-mode resolver for snap's capture gate: the router's

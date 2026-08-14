@@ -68,6 +68,19 @@ PhosphorEngine::IPlacementEngine::LayoutSupport Daemon::layoutSupportForScreen(c
     return PhosphorEngine::IPlacementEngine::LayoutSupport::Placement;
 }
 
+bool Daemon::dragInsertSelectorForScreen(const QString& screenId) const
+{
+    if (m_screenModeRouter) {
+        if (const auto* engine = m_screenModeRouter->engineFor(screenId)) {
+            return engine->providesDragInsertSelector();
+        }
+    }
+    // Null-router shutdown window only (see layoutSupportForScreen above).
+    // False is the safe default: the drag popup falls back to zone-layout
+    // semantics rather than offering strip targets no engine will commit.
+    return false;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation handlers — single code path per operation, dispatched through
 // ScreenModeRouter::engineFor() so there's no mode-branching in the daemon

@@ -10,8 +10,9 @@
  * file passed the 1150-line ceiling. Covers the overlay shader / style
  * per-slot composition, the overlay APPEARANCE colour and opacity overrides,
  * context locks (resolution, slot-conflict, and composition with an
- * assignment), the OSD override (resolution, structural field exclusions and
- * the single-slot priority contest), the per-mode gap routing through the
+ * assignment), the OSD and drag-selector overrides (resolution, structural
+ * field exclusions and the single-slot priority contest, shared driver), the
+ * per-mode gap routing through the
  * context `Mode` field, the window-field negation-polarity guard that keeps
  * `none{AppId == x}` rules off windowless context queries, the
  * per-monitor-beats-per-mode specificity order, the colour-scheme cache-key
@@ -31,6 +32,8 @@
 #include <QString>
 #include <QTest>
 #include <QUuid>
+
+#include <functional>
 
 #include "RuleCascadeFixture.h"
 
@@ -308,6 +311,61 @@ private Q_SLOTS:
         QVERIFY(f.store->setAllRules({disabled, forceDesktop}));
         QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
         QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("HDMI-2"), 2, QString()),
+                 std::optional<bool>(true));
+    }
+
+    // ─── Context drag-selector override — resolution ─────────────────────
+    // resolveContextDragSelectorEnabled is the twin of the OSD resolver above,
+    // reading the boolean DragSelectorEnabled slot off a matching context rule.
+    // Same tri-state: nullopt with no rule (follow the global selector
+    // toggle), explicit true forces the popup on, explicit false suppresses it.
+
+    void testContextDragSelector_resolution()
+    {
+        const auto selectorRule = [](const QString& name, PWR::Field field, const QVariant& value, bool enabled) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::SetDragSelectorEnabled);
+            a.params.insert(QString(PWR::ActionParam::Value), enabled);
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 400;
+            r.match = PWR::MatchExpression::makeLeaf(field, PWR::Operator::Equals, value);
+            r.actions = {a};
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        const PWR::Rule hideMonitor =
+            selectorRule(QStringLiteral("hide on DP-1"), PWR::Field::ScreenId, QStringLiteral("DP-1"), false);
+        const PWR::Rule forceDesktop =
+            selectorRule(QStringLiteral("force on desktop 2"), PWR::Field::VirtualDesktop, 2, true);
+        QVERIFY(f.store->setAllRules({hideMonitor, forceDesktop}));
+
+        // DP-1 resolves an explicit false (suppress) regardless of activity.
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("DP-1"), 0, QString()),
+                 std::optional<bool>(false));
+        // Desktop 2 resolves an explicit true (force) on any other screen.
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("HDMI-2"), 2, QString()),
+                 std::optional<bool>(true));
+        // A context no rule pins resolves nullopt — follow the global toggle.
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("HDMI-1"), 0, QString()), std::nullopt);
+
+        // The two overrides are INDEPENDENT slots: neither resolver may read
+        // the other's action. A shared slot id (the copy-paste failure this
+        // verb's descriptor is most exposed to) would show up here as an OSD
+        // verdict leaking out of the selector resolver.
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("HDMI-2"), 2, QString()), std::nullopt);
+
+        // Revision invalidation: disabling the suppress rule drops the primed
+        // false verdict, while the force rule survives the cache rebuild.
+        PWR::Rule disabled = hideMonitor;
+        disabled.enabled = false;
+        QVERIFY(f.store->setAllRules({disabled, forceDesktop}));
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("HDMI-2"), 2, QString()),
                  std::optional<bool>(true));
     }
 
@@ -731,11 +789,11 @@ private Q_SLOTS:
 
     // ─── ColorScheme key-fold across EVERY cached resolver ────────────────
     // testContextLock_colorSchemeRuleFollowsProviderFlips proves the fold for
-    // ONE of the six cached resolvers. The scheme token is a non-rule-set
+    // ONE of the seven cached resolvers. The scheme token is a non-rule-set
     // input, so each cache that omitted it from its key would latch the first
     // verdict and never re-resolve on a palette switch — a per-resolver bug
     // the lock test cannot see. Drive the same provider flip through the other
-    // five (assignment, gaps, default-assignment, OSD, overlay).
+    // six (assignment, gaps, default-assignment, OSD, overlay, drag selector).
     void testColorSchemeKeyFold_appliesToEveryCachedResolver()
     {
         const auto darkRule = [](const QString& name, const QList<PWR::RuleAction>& actions) {
@@ -770,6 +828,7 @@ private Q_SLOTS:
         QVERIFY(f.store->setAllRules({
             darkRule(QStringLiteral("dark gap"), {valueAction(PWR::ActionType::SetInnerGap, 21)}),
             darkRule(QStringLiteral("dark osd"), {valueAction(PWR::ActionType::SetOsdEnabled, false)}),
+            darkRule(QStringLiteral("dark selector"), {valueAction(PWR::ActionType::SetDragSelectorEnabled, false)}),
             darkRule(QStringLiteral("dark default"), {valueAction(PWR::ActionType::DefaultLayoutAssignment, false)}),
             darkRule(QStringLiteral("dark overlay"), {shader}),
             darkRule(QStringLiteral("dark layout"), {darkLayout}),
@@ -784,6 +843,7 @@ private Q_SLOTS:
         QVERIFY(!f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"))
                      .innerGap.has_value());
         QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
         QCOMPARE(f.registry->resolveContextDefaultAssignment(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
         QVERIFY(!f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString()).shaderId.has_value());
         QVERIFY(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout
@@ -796,6 +856,8 @@ private Q_SLOTS:
             f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"));
         QVERIFY2(gaps.innerGap.has_value() && *gaps.innerGap == 21, "the gap cache must fold the colour-scheme token");
         QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()),
+                 std::optional<bool>(false));
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("DP-1"), 0, QString()),
                  std::optional<bool>(false));
         QCOMPARE(f.registry->resolveContextDefaultAssignment(QStringLiteral("DP-1"), 0, QString()),
                  std::optional<bool>(false));
@@ -812,27 +874,33 @@ private Q_SLOTS:
         QVERIFY(!f.registry->resolveContextGaps(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("snapping"))
                      .innerGap.has_value());
         QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
         QCOMPARE(f.registry->resolveContextDefaultAssignment(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
         QVERIFY(!f.registry->resolveContextOverlay(QStringLiteral("DP-1"), 0, QString()).shaderId.has_value());
         QVERIFY(f.registry->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QString()).snappingLayout
                 != QStringLiteral("{dark-layout}"));
     }
 
-    // ─── OSD resolver: the guards its siblings already have proven ────────
-    // The OSD resolver carries the same structural exclusions as the lock
-    // resolver (Mode and TiledWindowCount unstamped, window-sourced fields
-    // negation-guarded) and the same single-slot priority contest. Neither had
-    // a test, so a dropped field in that predicate would let one negated leaf
-    // gate the OSD on every context and nothing would fail.
-    void testContextOsd_structuralExclusionsAndPriority()
+    // ─── Single-slot bool resolvers: structural exclusions + priority ─────
+    // The OSD and drag-selector resolvers carry the same structural
+    // exclusions as the lock resolver (Mode and TiledWindowCount unstamped,
+    // window-sourced fields negation-guarded) and the same single-slot
+    // priority contest. Without this driver a dropped field in either
+    // predicate would let one negated leaf gate the popup on every context
+    // and nothing would fail. Shared driver (plain member — it takes
+    // parameters, so it must not be a test slot), one slot per resolver below.
+private:
+    void runContextBoolStructuralContract(
+        QLatin1StringView actionType,
+        const std::function<std::optional<bool>(RegistryFixture&, const QString&)>& resolve)
     {
-        const auto osdAction = [](bool enabled) {
+        const auto boolAction = [&actionType](bool enabled) {
             PWR::RuleAction a;
-            a.type = QString(PWR::ActionType::SetOsdEnabled);
+            a.type = QString(actionType);
             a.params.insert(QString(PWR::ActionParam::Value), enabled);
             return a;
         };
-        const auto negatedRule = [&osdAction](const QString& name, PWR::Field field, const QVariant& value) {
+        const auto negatedRule = [&boolAction](const QString& name, PWR::Field field, const QVariant& value) {
             PWR::Rule r;
             r.id = QUuid::createUuid();
             r.name = name;
@@ -840,45 +908,45 @@ private Q_SLOTS:
             r.priority = 900;
             r.match =
                 PWR::MatchExpression::makeNone({PWR::MatchExpression::makeLeaf(field, PWR::Operator::Equals, value)});
-            r.actions = {osdAction(false)};
+            r.actions = {boolAction(false)};
             return r;
         };
 
         RegistryFixture f = makeRegistryFixture();
 
-        // None{Mode == "tiling"}: mode is unstamped on an OSD query and reads
+        // None{Mode == "tiling"}: mode is unstamped on this resolver's query and reads
         // back as an ENGAGED empty string, so the inner leaf is false and the
         // None matches EVERY context. Excluded structurally, so no verdict.
         QVERIFY(f.store->setAllRules(
             {negatedRule(QStringLiteral("not tiling"), PWR::Field::Mode, QStringLiteral("tiling"))}));
-        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(resolve(f, QStringLiteral("DP-1")), std::nullopt);
 
         // None{TiledWindowCount == 0}: the count is stamped only on the
         // assignment query, so the same inversion applies here.
         QVERIFY(f.store->setAllRules({negatedRule(QStringLiteral("not zero tiled"), PWR::Field::TiledWindowCount, 0)}));
-        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(resolve(f, QStringLiteral("DP-1")), std::nullopt);
 
         // None{AppId == firefox}: the window-sourced negation guard.
         QVERIFY(f.store->setAllRules(
             {negatedRule(QStringLiteral("not firefox"), PWR::Field::AppId, QStringLiteral("firefox"))}));
-        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(resolve(f, QStringLiteral("DP-1")), std::nullopt);
 
         // Positive control: a plain ScreenId rule on the same fixture DOES
         // resolve, so the three nullopts above are the guards and not a dead
         // resolver.
-        const auto screenRule = [&osdAction](const QString& name, const QString& screenId, bool enabled, int priority) {
+        const auto screenRule = [&boolAction](const QString& name, const QString& screenId, bool enabled,
+                                              int priority) {
             PWR::Rule r;
             r.id = QUuid::createUuid();
             r.name = name;
             r.enabled = true;
             r.priority = priority;
             r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
-            r.actions = {osdAction(enabled)};
+            r.actions = {boolAction(enabled)};
             return r;
         };
         QVERIFY(f.store->setAllRules({screenRule(QStringLiteral("plain"), QStringLiteral("DP-1"), false, 400)}));
-        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()),
-                 std::optional<bool>(false));
+        QCOMPARE(resolve(f, QStringLiteral("DP-1")), std::optional<bool>(false));
 
         // Single-slot priority contest, run in BOTH directions so the winner is
         // proven to be the priority and not a bias toward either value.
@@ -888,10 +956,25 @@ private Q_SLOTS:
             screenRule(QStringLiteral("dp21 high off"), QStringLiteral("DP-21"), false, 500),
             screenRule(QStringLiteral("dp21 low on"), QStringLiteral("DP-21"), true, 400),
         }));
-        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-20"), 0, QString()),
-                 std::optional<bool>(true));
-        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-21"), 0, QString()),
-                 std::optional<bool>(false));
+        QCOMPARE(resolve(f, QStringLiteral("DP-20")), std::optional<bool>(true));
+        QCOMPARE(resolve(f, QStringLiteral("DP-21")), std::optional<bool>(false));
+    }
+
+private Q_SLOTS:
+    void testContextOsd_structuralExclusionsAndPriority()
+    {
+        runContextBoolStructuralContract(PWR::ActionType::SetOsdEnabled,
+                                         [](RegistryFixture& f, const QString& screenId) {
+                                             return f.registry->resolveContextOsdEnabled(screenId, 0, QString());
+                                         });
+    }
+
+    void testContextDragSelector_structuralExclusionsAndPriority()
+    {
+        runContextBoolStructuralContract(
+            PWR::ActionType::SetDragSelectorEnabled, [](RegistryFixture& f, const QString& screenId) {
+                return f.registry->resolveContextDragSelectorEnabled(screenId, 0, QString());
+            });
     }
 
     // ─── A terminal Exclude must not drop unrelated context overrides ─────
@@ -975,10 +1058,17 @@ private Q_SLOTS:
 
     // ─── Tiling-param payload type gates ──────────────────────────────────
     // maxWindows / masterCount / splitRatio REJECT AND FALL THROUGH on a
-    // payload of the wrong JSON type, and round a fractional int rather than
-    // reading QJsonValue::toInt()'s zero default. A hand-edited rules.json is
-    // the only way to author these, and applying them would mean a maxWindows
-    // of 0 or a split ratio of 0.0 the user never wrote.
+    // payload of the wrong JSON type, and a fractional int likewise falls
+    // through rather than being rounded or read as QJsonValue::toInt()'s zero
+    // default (the body's own comment explains why rounding would be wrong).
+    // A hand-edited rules.json is the only way to author these, and applying
+    // them would mean a maxWindows of 0 or a split ratio of 0.0 the user
+    // never wrote. Note the fall-throughs asserted here are produced by the
+    // STORE gate, not the resolver: setAllRules returns save()'s bool, and
+    // RuleSet::setRules drops a rule whose action fails its descriptor
+    // validator, so the malformed rules never reach the resolver at all.
+    // That is the real (and sufficient) guarantee; the resolver's own reads
+    // are unreachable hardening behind it.
     void testContextTilingParams_payloadTypeGates()
     {
         const auto paramRule = [](const QString& name, QLatin1StringView type, const QJsonValue& value) {

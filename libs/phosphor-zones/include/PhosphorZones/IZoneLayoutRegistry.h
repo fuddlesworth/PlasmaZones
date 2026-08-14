@@ -34,6 +34,8 @@
 #include <QUuid>
 #include <QVector>
 
+#include <optional>
+
 namespace PhosphorZones {
 
 class ScrollingTemplateStore;
@@ -274,6 +276,23 @@ public:
         Q_UNUSED(virtualDesktop);
         Q_UNUSED(activity);
         return false;
+    }
+
+    /// Resolve a per-context override of the drag selector popup — the
+    /// edge-triggered zone / strip picker offered during a window drag — for
+    /// the (@p screenId, @p virtualDesktop, @p activity) context. An engaged
+    /// true forces the popup on past the global selector toggle, an engaged
+    /// false suppresses it, and @c std::nullopt means no rule fills the slot
+    /// and the context follows the global toggle. The default returns
+    /// @c std::nullopt; a registry that does not model context rules — e.g.
+    /// a fixture stub — keeps the toggle-only behaviour.
+    virtual std::optional<bool> resolveContextDragSelectorEnabled(const QString& screenId, int virtualDesktop,
+                                                                  const QString& activity) const
+    {
+        Q_UNUSED(screenId);
+        Q_UNUSED(virtualDesktop);
+        Q_UNUSED(activity);
+        return std::nullopt;
     }
 
     /// True iff the (@p screenId, @p virtualDesktop, @p activity) context has no

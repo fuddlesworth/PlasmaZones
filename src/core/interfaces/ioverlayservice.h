@@ -15,6 +15,7 @@
 
 #include <PhosphorProtocol/ZoneTypes.h>
 
+#include <QList>
 #include <QObject>
 #include <QRect>
 #include <QString>
@@ -123,8 +124,28 @@ public:
     // Mouse position for shader effects (updated during window drag)
     virtual void updateMousePosition(int cursorX, int cursorY) = 0;
 
-    // Filtered layout count (matches what the zone selector actually displays)
+    // Filtered layout count in the LAYOUT/TEMPLATE vocabulary — the candidate
+    // list the picker and cycle shortcuts consult (their empty-list gates test
+    // this against zero). Never answers strip cards; selectorCardCount is the
+    // popup-sizing question.
     virtual int visibleLayoutCount(const QString& screenId) const = 0;
+
+    // Number of cells the drag-selector popup renders on @p screenId — strip
+    // cards (floored at 1 for the empty-strip cell) on strip-selector screens,
+    // the filtered layout count everywhere else. The trigger-edge sizing
+    // contract: isNearTriggerEdge consults this so the keep-visible band and
+    // the rendered popup can never disagree. Deliberately a separate virtual
+    // from visibleLayoutCount — folding the strip answer into that one made
+    // the shortcut gates' zero test unreachable on scrolling screens.
+    virtual int selectorCardCount(const QString& screenId) const = 0;
+
+    // Strip-selector screens only: one work-area width share per rendered
+    // strip card, in card order (empty everywhere else, and for an empty
+    // strip). The other half of the trigger-edge sizing contract above:
+    // strip cards render variable-width, so isNearTriggerEdge needs the
+    // fractions, not just the count, for its computeZoneSelectorLayout call
+    // to reproduce the real bar width.
+    virtual QList<qreal> selectorStripFractions(const QString& screenId) const = 0;
 
     // PhosphorZones::Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;
@@ -133,6 +154,55 @@ public:
     virtual QRect getSelectedZoneGeometry(QScreen* screen) const = 0;
     virtual QRect getSelectedZoneGeometry(const QString& screenId) const = 0;
     virtual void clearSelectedZone() = 0;
+
+    // Strip-mode selector selection tracking (scrolling screens whose engine
+    // provides the drag-insert selector). The target is an int-only mirror
+    // of IPlacementEngine::DragInsertTarget's index fields — columnIndex/
+    // newColumn map to primary/newSlot, tileIndex to secondary (-1 appends);
+    // the presentation-only leadingEdge tag is deliberately not carried
+    // (commit ignores it) — kept engine-header-free like the rest of this
+    // interface. Exactly one of the zone triple and this target is ever set;
+    // clearSelectedZone clears both.
+    // Default-implemented as "no strip selection" so implementations without
+    // strip support stay source-compatible.
+    struct SelectorStripTarget
+    {
+        int columnIndex = -1;
+        int tileIndex = -1;
+        bool newColumn = false;
+
+        bool isValid() const
+        {
+            return columnIndex >= 0;
+        }
+    };
+    virtual bool hasSelectedStripTarget() const
+    {
+        return false;
+    }
+    virtual SelectorStripTarget selectedStripTarget() const
+    {
+        return {};
+    }
+    virtual QString selectedStripTargetScreenId() const
+    {
+        return {};
+    }
+    /// Rebuild the strip cards and drop the strip selection on @p screenId.
+    /// The drag adaptor calls this at the drag-insert preview begin/cancel
+    /// boundaries — the only moments the frozen (DETACH-ONCE) strip the
+    /// cards mirror can change shape mid-drag.
+    virtual void refreshStripSelector(const QString& screenId)
+    {
+        Q_UNUSED(screenId)
+    }
+    /// The window id of the live drag, so the strip cards can exclude a
+    /// not-yet-detached drag window. Set at drag start, cleared (empty id)
+    /// at drag end.
+    virtual void setActiveDragWindowId(const QString& windowId)
+    {
+        Q_UNUSED(windowId)
+    }
 
     // Shader preview overlay (editor dialog - dedicated window avoids multi-pass clear)
     virtual void showShaderPreview(int x, int y, int width, int height, const QString& screenId,

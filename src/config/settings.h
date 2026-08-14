@@ -328,6 +328,24 @@ public:
     Q_PROPERTY(int zoneSelectorGridColumns READ zoneSelectorGridColumns WRITE setZoneSelectorGridColumns NOTIFY
                    zoneSelectorGridColumnsChanged)
 
+    // Strip-Mode Selector — the Scrolling.ZoneSelector peer of the block
+    // above, minus LayoutMode / GridColumns / MaxRows (the strip popup is one
+    // horizontal card row, so it has no grid to arrange).
+    Q_PROPERTY(bool scrollingZoneSelectorEnabled READ scrollingZoneSelectorEnabled WRITE setScrollingZoneSelectorEnabled
+                   NOTIFY scrollingZoneSelectorEnabledChanged)
+    Q_PROPERTY(int scrollingZoneSelectorTriggerDistance READ scrollingZoneSelectorTriggerDistance WRITE
+                   setScrollingZoneSelectorTriggerDistance NOTIFY scrollingZoneSelectorTriggerDistanceChanged)
+    Q_PROPERTY(int scrollingZoneSelectorPosition READ scrollingZoneSelectorPositionInt WRITE
+                   setScrollingZoneSelectorPositionInt NOTIFY scrollingZoneSelectorPositionChanged)
+    Q_PROPERTY(int scrollingZoneSelectorSizeMode READ scrollingZoneSelectorSizeModeInt WRITE
+                   setScrollingZoneSelectorSizeModeInt NOTIFY scrollingZoneSelectorSizeModeChanged)
+    Q_PROPERTY(int scrollingZoneSelectorPreviewWidth READ scrollingZoneSelectorPreviewWidth WRITE
+                   setScrollingZoneSelectorPreviewWidth NOTIFY scrollingZoneSelectorPreviewWidthChanged)
+    Q_PROPERTY(int scrollingZoneSelectorPreviewHeight READ scrollingZoneSelectorPreviewHeight WRITE
+                   setScrollingZoneSelectorPreviewHeight NOTIFY scrollingZoneSelectorPreviewHeightChanged)
+    Q_PROPERTY(bool scrollingZoneSelectorPreviewLockAspect READ scrollingZoneSelectorPreviewLockAspect WRITE
+                   setScrollingZoneSelectorPreviewLockAspect NOTIFY scrollingZoneSelectorPreviewLockAspectChanged)
+
     // Autotiling Settings
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
     Q_PROPERTY(QString defaultAutotileAlgorithm READ defaultAutotileAlgorithm WRITE setDefaultAutotileAlgorithm NOTIFY
@@ -1086,6 +1104,50 @@ public:
                                                      const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const override;
+    // Per-card sub-domains of the selector map (the autotile Algorithm pair's
+    // invariant: a card's scope-chip dot/reset only touches its own keys).
+    // Position = Position + TriggerDistance; Arrangement = LayoutMode +
+    // GridColumns + MaxRows; Size = SizeMode + Preview{Width,Height,LockAspect}.
+    bool hasPerScreenZoneSelectorPositionSettings(const QString& screenIdOrName) const;
+    void clearPerScreenZoneSelectorPositionSettings(const QString& screenIdOrName);
+    bool hasPerScreenZoneSelectorArrangementSettings(const QString& screenIdOrName) const;
+    void clearPerScreenZoneSelectorArrangementSettings(const QString& screenIdOrName);
+    bool hasPerScreenZoneSelectorSizeSettings(const QString& screenIdOrName) const;
+    void clearPerScreenZoneSelectorSizeSettings(const QString& screenIdOrName);
+
+    // Strip-Mode Selector — PhosphorConfig::Store-backed.
+    bool scrollingZoneSelectorEnabled() const override;
+    void setScrollingZoneSelectorEnabled(bool enabled) override;
+    int scrollingZoneSelectorTriggerDistance() const override;
+    void setScrollingZoneSelectorTriggerDistance(int distance) override;
+    ZoneSelectorPosition scrollingZoneSelectorPosition() const override;
+    void setScrollingZoneSelectorPosition(ZoneSelectorPosition position) override;
+    int scrollingZoneSelectorPositionInt() const;
+    void setScrollingZoneSelectorPositionInt(int position);
+    ZoneSelectorSizeMode scrollingZoneSelectorSizeMode() const override;
+    void setScrollingZoneSelectorSizeMode(ZoneSelectorSizeMode mode) override;
+    int scrollingZoneSelectorSizeModeInt() const;
+    void setScrollingZoneSelectorSizeModeInt(int mode);
+    int scrollingZoneSelectorPreviewWidth() const override;
+    void setScrollingZoneSelectorPreviewWidth(int width) override;
+    int scrollingZoneSelectorPreviewHeight() const override;
+    void setScrollingZoneSelectorPreviewHeight(int height) override;
+    bool scrollingZoneSelectorPreviewLockAspect() const override;
+    void setScrollingZoneSelectorPreviewLockAspect(bool locked) override;
+
+    // Per-screen strip selector config (override > global fallback)
+    ZoneSelectorConfig resolvedScrollingZoneSelectorConfig(const QString& screenIdOrName) const override;
+    Q_INVOKABLE QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override;
+    Q_INVOKABLE void setPerScreenScrollingZoneSelectorSetting(const QString& screenIdOrName, const QString& key,
+                                                              const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) override;
+    Q_INVOKABLE bool hasPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override;
+    // Per-card sub-domains, mirroring the snapping selector's pairs above
+    // (the strip store never holds an arrangement key, so no third pair).
+    bool hasPerScreenScrollingZoneSelectorPositionSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingZoneSelectorPositionSettings(const QString& screenIdOrName);
+    bool hasPerScreenScrollingZoneSelectorSizeSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingZoneSelectorSizeSettings(const QString& screenIdOrName);
 
     // Per-screen autotile config (override > global fallback)
     Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const override;
@@ -1111,8 +1173,8 @@ public:
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so
     // this is the sole accessor; writes go through setPerScreenAutotileSetting /
     // the perScreenGap* helpers. ISettings carries no set/clear/has snapping
-    // triplet at all, unlike the autotile, scrolling and zone-selector blocks
-    // — see the note above the getter in isettings.h.
+    // triplet at all, unlike the autotile, scrolling, zone-selector and
+    // strip-selector blocks — see the note above the getter in isettings.h.
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
     // Per-monitor gap overrides (config-backed, unified — one value per monitor
@@ -2069,7 +2131,8 @@ private:
     //      prefixes are NOT re-spelled here — the resolver's mapping table is
     //      the one list, so a prefix added there is swept by reset() without
     //      touching this function. Today that covers ZoneSelector:*,
-    //      AutotileScreen:*, ScrollingScreen:*, and the legacy SnappingScreen:*
+    //      AutotileScreen:*, ScrollingScreen:*, ScrollingZoneSelector:*, and
+    //      the legacy SnappingScreen:*
     //      which is no longer written but is still swept to scrub any file an
     //      older build left behind.
     //   2. VirtualScreen:* groups, which are per-screen in the same sense but
@@ -2256,6 +2319,9 @@ private:
 
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;
+
+    // Per-screen strip selector overrides (screenIdOrName -> settings map)
+    QHash<QString, QVariantMap> m_perScreenScrollingZoneSelectorSettings;
 
     // Per-screen autotile overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;

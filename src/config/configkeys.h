@@ -24,12 +24,13 @@
 #define P_CONFIG_GROUP(name, str) P_CONFIG_KEY(name, str)
 
 // Single definition point for the per-screen group prefix spellings.
-// All four are rows in PerScreenPathResolver's prefix→category mapping table,
+// All five are rows in PerScreenPathResolver's prefix→category mapping table,
 // which is what makes their groups resolve to a nested path under the
 // "PerScreen" container instead of falling back to a dot-path orphan at the
-// JSON root. Three of the four also carry a *GroupPrefix accessor below that
+// JSON root. Four of the five also carry a *GroupPrefix accessor below that
 // appends the ':' (zoneSelectorGroupPrefix, autotileScreenGroupPrefix,
-// scrollingScreenGroupPrefix); the snapping prefix has none, because
+// scrollingScreenGroupPrefix, scrollingZoneSelectorGroupPrefix); the
+// snapping prefix has none, because
 // per-monitor snapping state is unified into the autotile store and nothing
 // looks its group up by name — it stays in the resolver table so an older
 // build's leftover groups still resolve and can be swept. Defining the
@@ -47,6 +48,7 @@
 #define P_PER_SCREEN_PREFIX_AUTOTILE "AutotileScreen"
 #define P_PER_SCREEN_PREFIX_SNAPPING "SnappingScreen"
 #define P_PER_SCREEN_PREFIX_SCROLLING "ScrollingScreen"
+#define P_PER_SCREEN_PREFIX_SCROLLING_ZONE_SELECTOR "ScrollingZoneSelector"
 
 namespace PlasmaZones {
 
@@ -142,6 +144,11 @@ public:
     // settings page, the per-page reset manifest and any later rule slots all
     // address one subtree.
     P_CONFIG_GROUP(scrollingDropIndicatorGroup, "Scrolling.DropIndicator")
+    // Scrolling.ZoneSelector — the strip-mode drag popup on scrolling
+    // screens. Mirrors Snapping.ZoneSelector minus the grid-arrangement
+    // keys (LayoutMode / GridColumns / MaxRows): the strip popup is a
+    // single horizontal card row by construction.
+    P_CONFIG_GROUP(scrollingZoneSelectorGroup, "Scrolling.ZoneSelector")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -336,9 +343,15 @@ public:
     P_CONFIG_KEY(overlayDisplayModeKey, "OverlayDisplayMode")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.ZoneSelector
+    // Config Keys — Snapping.ZoneSelector / Scrolling.ZoneSelector
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // SHARED leaves: Scrolling.ZoneSelector (the strip selector) reuses
+    // enabledKey, triggerDistanceKey, positionKey, sizeModeKey,
+    // previewWidthKey, previewHeightKey and previewLockAspectKey from this
+    // block, disambiguated by group — renaming one here renames it for BOTH
+    // families. Only layoutModeKey / maxRowsKey / gridColumnsKey are
+    // snapping-only (the strip popup has no grid arrangement).
     // (uses enabledKey)
     P_CONFIG_KEY(triggerDistanceKey, "TriggerDistance")
     P_CONFIG_KEY(positionKey, "Position")
@@ -733,6 +746,7 @@ public:
     P_CONFIG_GROUP(zoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_ZONE_SELECTOR ":")
     P_CONFIG_GROUP(autotileScreenGroupPrefix, P_PER_SCREEN_PREFIX_AUTOTILE ":")
     P_CONFIG_GROUP(scrollingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING ":")
+    P_CONFIG_GROUP(scrollingZoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING_ZONE_SELECTOR ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1/v2/v3/v4 accessors — for migration code, plus the two

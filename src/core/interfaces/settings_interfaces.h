@@ -30,11 +30,17 @@ struct ZoneSelectorConfig
     // zone-selector default accessors — position(), layoutMode(),
     // maxRows(), … (unprefixed; core interface headers must not depend on
     // the config layer, so the values are duplicated rather than included).
-    // They matter only for BARE default construction — every production
-    // path (Settings::resolvedZoneSelectorConfig and the ISettings default
-    // implementation) populates from the accessors, so a retuned
-    // ConfigDefaults value diverges here only for default-constructed
-    // instances no resolver touched.
+    // They matter mostly for BARE default construction — the zone-selector
+    // production paths (Settings::resolvedZoneSelectorConfig and the
+    // ISettings default implementation) populate every field from the
+    // accessors. ONE production exception: the strip resolver
+    // (resolvedScrollingZoneSelectorConfig below) deliberately leaves
+    // maxRows and gridColumns at these struct literals, which is inert —
+    // it stamps layoutMode Horizontal, and computeZoneSelectorLayout
+    // consults both fields only under the Grid branch. A retuned
+    // ConfigDefaults maxRows()/gridColumns() therefore still cannot change
+    // strip behaviour, only default-constructed instances no resolver
+    // touched.
     int position = 1; // ZoneSelectorPosition enum value (Top)
     int layoutMode = 0; // ZoneSelectorLayoutMode enum value (Grid)
     int sizeMode = 0; // ZoneSelectorSizeMode enum value (Auto)
@@ -119,10 +125,12 @@ inline constexpr const char DefaultWindowHeightPresetIndex[] = "DefaultWindowHei
 
 // Per-screen snapping overrides carry only the gap keys, spelled by the shared
 // PhosphorEngine::PerScreenKeys namespace (InnerGap / OuterGap / per-side).
-// Snap-assist and the zone-selector enable switch are global-only
-// (ISettings::setSnapAssistEnabled / setZoneSelectorEnabled); the per-screen
-// zone-selector config lives in its own map/group keyed by ZoneSelectorConfigKey
-// (see kPerScreenKeys in perscreen.cpp).
+// Snap-assist and the selector enable switches are global-only
+// (ISettings::setSnapAssistEnabled / setZoneSelectorEnabled /
+// setScrollingZoneSelectorEnabled); the per-screen selector configs live in
+// their own maps/groups — TWO stores sharing the ZoneSelectorConfigKey
+// vocabulary (see PerScreenDetail::kZoneSelectorKeys and the strip subset
+// kStripSelectorKeys in perscreen_selector.cpp).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
@@ -398,6 +406,63 @@ public:
                 zoneSelectorPreviewLockAspect(),
                 zoneSelectorGridColumns(),
                 zoneSelectorTriggerDistance()};
+    }
+};
+
+/**
+ * @brief Settings for the strip-mode drag selector popup
+ *
+ * The scrolling engine's peer of IZoneSelectorSettings, stored under
+ * Scrolling.ZoneSelector. It carries no LayoutMode / GridColumns / MaxRows:
+ * the strip popup renders one horizontal row of column cards, so the
+ * grid-arrangement knobs have nothing to arrange.
+ *
+ * Used by: KWin Effect, KCM, Overlay Service
+ */
+class PLASMAZONES_EXPORT IScrollingZoneSelectorSettings
+{
+public:
+    virtual ~IScrollingZoneSelectorSettings() = default;
+
+    virtual bool scrollingZoneSelectorEnabled() const = 0;
+    virtual void setScrollingZoneSelectorEnabled(bool enabled) = 0;
+    virtual int scrollingZoneSelectorTriggerDistance() const = 0;
+    virtual void setScrollingZoneSelectorTriggerDistance(int distance) = 0;
+    virtual ZoneSelectorPosition scrollingZoneSelectorPosition() const = 0;
+    virtual void setScrollingZoneSelectorPosition(ZoneSelectorPosition position) = 0;
+    virtual ZoneSelectorSizeMode scrollingZoneSelectorSizeMode() const = 0;
+    virtual void setScrollingZoneSelectorSizeMode(ZoneSelectorSizeMode mode) = 0;
+    virtual int scrollingZoneSelectorPreviewWidth() const = 0;
+    virtual void setScrollingZoneSelectorPreviewWidth(int width) = 0;
+    virtual int scrollingZoneSelectorPreviewHeight() const = 0;
+    virtual void setScrollingZoneSelectorPreviewHeight(int height) = 0;
+    virtual bool scrollingZoneSelectorPreviewLockAspect() const = 0;
+    virtual void setScrollingZoneSelectorPreviewLockAspect(bool locked) = 0;
+
+    // Per-screen strip selector config resolution.
+    //
+    // The resolved value is a ZoneSelectorConfig, the SAME struct the snapping
+    // selector resolves to, because both popups are laid out by the one
+    // computeZoneSelectorLayout. layoutMode is stamped to Horizontal rather
+    // than read from a key: the strip popup is one horizontal card row and has
+    // no Grid or Vertical form to select. maxRows and gridColumns stay at the
+    // struct defaults for the same reason — a single row consults neither.
+    //
+    // Per-screen override keys REUSE the ZoneSelectorConfigKey constants (the
+    // Position / SizeMode / PreviewWidth / PreviewHeight / PreviewLockAspect /
+    // TriggerDistance subset). There is no second key namespace; the
+    // "ScrollingZoneSelector:" group prefix is what separates the two stores.
+    virtual ZoneSelectorConfig resolvedScrollingZoneSelectorConfig(const QString& /*screenIdOrName*/) const
+    {
+        ZoneSelectorConfig config;
+        config.position = static_cast<int>(scrollingZoneSelectorPosition());
+        config.layoutMode = static_cast<int>(ZoneSelectorLayoutMode::Horizontal);
+        config.sizeMode = static_cast<int>(scrollingZoneSelectorSizeMode());
+        config.previewWidth = scrollingZoneSelectorPreviewWidth();
+        config.previewHeight = scrollingZoneSelectorPreviewHeight();
+        config.previewLockAspect = scrollingZoneSelectorPreviewLockAspect();
+        config.triggerDistance = scrollingZoneSelectorTriggerDistance();
+        return config;
     }
 };
 

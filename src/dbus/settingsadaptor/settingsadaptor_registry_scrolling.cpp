@@ -219,7 +219,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return m_settings->scrollingTabIndicatorStyle();
     };
     m_setters[QStringLiteral("scrollingTabIndicatorStyle")] = [this](const QVariant& v) {
-        const int style = v.toInt();
+        bool styleOk = false;
+        const int style = v.toInt(&styleOk);
+        if (!styleOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
         if (!ConfigDefaults::isValidScrollingTabIndicatorStyle(style)) {
             return false;
         }
@@ -270,6 +274,64 @@ void SettingsAdaptor::initializeRegistryScrolling()
     REGISTER_INT_SETTING("scrollingDropIndicatorBorderRadius", scrollingDropIndicatorBorderRadius,
                          setScrollingDropIndicatorBorderRadius)
 
+    // Strip-mode selector settings. PURE ISettings virtuals (every backend
+    // must implement them — a stricter contract than the indicator PAINT
+    // keys above, whose getter+no-op-setter default pairs exist so a
+    // non-Settings backend keeps the keys), so they register through the
+    // interface rather than in the concrete block below. No LayoutMode /
+    // GridColumns / MaxRows twin: the strip popup is one horizontal card
+    // row. The int/bool keys keep the shared macros' coercing setters ON
+    // PURPOSE (the macros are frozen boilerplate across four registry TUs,
+    // and the config schema's clampInt one layer down bounds anything a
+    // coerced 0 could write); only the two ENUM keys need the hand-written
+    // refuse-non-numeric form, because a coerced 0 IS a meaningful member
+    // there.
+    REGISTER_BOOL_SETTING("scrollingZoneSelectorEnabled", scrollingZoneSelectorEnabled, setScrollingZoneSelectorEnabled)
+    REGISTER_INT_SETTING("scrollingZoneSelectorTriggerDistance", scrollingZoneSelectorTriggerDistance,
+                         setScrollingZoneSelectorTriggerDistance)
+    // scrollingZoneSelectorPosition: enum (0=TopLeft .. 8=BottomRight)
+    m_getters[QStringLiteral("scrollingZoneSelectorPosition")] = [this]() {
+        return static_cast<int>(m_settings->scrollingZoneSelectorPosition());
+    };
+    m_setters[QStringLiteral("scrollingZoneSelectorPosition")] = [this](const QVariant& v) {
+        bool valOk = false;
+        const int val = v.toInt(&valOk);
+        if (!valOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
+        if (val >= static_cast<int>(ZoneSelectorPosition::TopLeft)
+            && val <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
+            m_settings->setScrollingZoneSelectorPosition(static_cast<ZoneSelectorPosition>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("scrollingZoneSelectorPosition")] = QStringLiteral("int");
+    // scrollingZoneSelectorSizeMode: enum (0=Auto, 1=Manual)
+    m_getters[QStringLiteral("scrollingZoneSelectorSizeMode")] = [this]() {
+        return static_cast<int>(m_settings->scrollingZoneSelectorSizeMode());
+    };
+    m_setters[QStringLiteral("scrollingZoneSelectorSizeMode")] = [this](const QVariant& v) {
+        bool valOk = false;
+        const int val = v.toInt(&valOk);
+        if (!valOk) {
+            return false; // non-numeric payload: refuse, do not coerce to the zero member
+        }
+        if (val >= static_cast<int>(ZoneSelectorSizeMode::Auto)
+            && val <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
+            m_settings->setScrollingZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("scrollingZoneSelectorSizeMode")] = QStringLiteral("int");
+    REGISTER_INT_SETTING("scrollingZoneSelectorPreviewWidth", scrollingZoneSelectorPreviewWidth,
+                         setScrollingZoneSelectorPreviewWidth)
+    REGISTER_INT_SETTING("scrollingZoneSelectorPreviewHeight", scrollingZoneSelectorPreviewHeight,
+                         setScrollingZoneSelectorPreviewHeight)
+    REGISTER_BOOL_SETTING("scrollingZoneSelectorPreviewLockAspect", scrollingZoneSelectorPreviewLockAspect,
+                          setScrollingZoneSelectorPreviewLockAspect)
+
     // Scrolling settings (concrete Settings only)
     if (concrete) {
         REGISTER_CONCRETE_BOOL("scrollingEnabled", scrollingEnabled, setScrollingEnabled)
@@ -303,7 +365,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingCenterFocusedColumn();
         };
         m_setters[QStringLiteral("scrollingCenterFocusedColumn")] = [concrete](const QVariant& v) {
-            const int mode = v.toInt();
+            bool modeOk = false;
+            const int mode = v.toInt(&modeOk);
+            if (!modeOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingCenterFocusedColumn(mode)) {
                 return false;
             }
@@ -319,7 +385,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingDefaultColumnWidthKind();
         };
         m_setters[QStringLiteral("scrollingDefaultColumnWidthKind")] = [concrete](const QVariant& v) {
-            const int kind = v.toInt();
+            bool kindOk = false;
+            const int kind = v.toInt(&kindOk);
+            if (!kindOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingWidthKind(kind)) {
                 return false;
             }
@@ -334,7 +404,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingDefaultColumnDisplay();
         };
         m_setters[QStringLiteral("scrollingDefaultColumnDisplay")] = [concrete](const QVariant& v) {
-            const int display = v.toInt();
+            bool displayOk = false;
+            const int display = v.toInt(&displayOk);
+            if (!displayOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingColumnDisplay(display)) {
                 return false;
             }
@@ -354,7 +428,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingDefaultWindowHeightKind();
         };
         m_setters[QStringLiteral("scrollingDefaultWindowHeightKind")] = [concrete](const QVariant& v) {
-            const int kind = v.toInt();
+            bool kindOk = false;
+            const int kind = v.toInt(&kindOk);
+            if (!kindOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingHeightKind(kind)) {
                 return false;
             }
@@ -367,23 +445,30 @@ void SettingsAdaptor::initializeRegistryScrolling()
         REGISTER_CONCRETE_INT("scrollingDefaultWindowHeightPresetIndex", scrollingDefaultWindowHeightPresetIndex,
                               setScrollingDefaultWindowHeightPresetIndex)
         // ── Scrolling.TabIndicator ──
-        // scrollingTabIndicatorEnabled is registered in the ISettings section
-        // above; the other twelve live here so the whole family
-        // sits in one block. EVERY key of the group must be present: this
-        // generic surface is the ONLY channel the settings app has to the
-        // daemon, so an unregistered key is a control that writes the settings
-        // app's own store and never reaches the engine or the overlay — it
-        // looks wired and does nothing.
+        // scrollingTabIndicatorEnabled and the PAINT keys (style, spacing,
+        // radius, colours) register through the ISettings section above; the
+        // six GEOMETRY keys live here, per the split the trailing comment of
+        // this block states. EVERY key of the group must be present
+        // somewhere: this generic surface is the ONLY channel the settings
+        // app has to the daemon, so an unregistered key is a control that
+        // writes the settings app's own store and never reaches the engine
+        // or the overlay — it looks wired and does nothing.
         //
-        // The two enums get validated setters (the isValidScrollingTabIndicator*
-        // closed sets, same shape as scrollingDefaultColumnDisplay above) rather
-        // than a bare int, so a garbage wire value is refused instead of being
-        // cast into a nonexistent style or edge.
+        // The one enum in THIS block (Position) gets a validated setter (the
+        // isValidScrollingTabIndicator* closed set, same shape as
+        // scrollingDefaultColumnDisplay above) rather than a bare int, so a
+        // garbage wire value is refused instead of being cast into a
+        // nonexistent edge; the other enum of the family (Style) is
+        // validated in the ISettings section.
         m_getters[QStringLiteral("scrollingTabIndicatorPosition")] = [concrete]() {
             return concrete->scrollingTabIndicatorPosition();
         };
         m_setters[QStringLiteral("scrollingTabIndicatorPosition")] = [concrete](const QVariant& v) {
-            const int position = v.toInt();
+            bool positionOk = false;
+            const int position = v.toInt(&positionOk);
+            if (!positionOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingTabIndicatorPosition(position)) {
                 return false;
             }
@@ -417,7 +502,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingInsertPosition();
         };
         m_setters[QStringLiteral("scrollingInsertPosition")] = [concrete](const QVariant& v) {
-            const int position = v.toInt();
+            bool positionOk = false;
+            const int position = v.toInt(&positionOk);
+            if (!positionOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingInsertPosition(position)) {
                 return false;
             }
@@ -432,7 +521,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return concrete->scrollingStickyWindowHandling();
         };
         m_setters[QStringLiteral("scrollingStickyWindowHandling")] = [concrete](const QVariant& v) {
-            const int handling = v.toInt();
+            bool handlingOk = false;
+            const int handling = v.toInt(&handlingOk);
+            if (!handlingOk) {
+                return false; // non-numeric payload: refuse, do not coerce to the zero member
+            }
             if (!ConfigDefaults::isValidScrollingStickyWindowHandling(handling)) {
                 return false;
             }

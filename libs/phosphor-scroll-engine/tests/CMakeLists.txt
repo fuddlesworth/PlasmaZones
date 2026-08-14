@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
 # PhosphorScrollEngine unit tests. Headless throughout: two files exercise
-# the pure strip model, eight drive the engine through null (or stubbed)
+# the pure strip model, nine drive the engine through null (or stubbed)
 # daemon dependencies and the geometry-provider seam. None needs a QPA platform, so
 # by convention the strip tests run APPLESS and the engine tests GUILESS
 # (they need an event dispatcher for the coalesced retile and the prunes'
@@ -54,5 +54,6 @@ pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrolls
 # tracker, so their per-screen resolution is unobservable without one.
 pse_add_test(test_scrollengine_behaviour test_scrollengine_behaviour.cpp scrollstubsettings.h scrollstubtracking.h)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
+pse_add_test(test_scrollengine_snapshot test_scrollengine_snapshot.cpp)
 pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)

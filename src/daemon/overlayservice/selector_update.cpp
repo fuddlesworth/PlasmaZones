@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
+#include "common/stripcardserialize.h"
 #include "core/platform/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -78,12 +79,12 @@ void applyZoneSelectorLayout(QObject* window, const ZoneSelectorLayout& layout)
     writeQmlProperty(window, QStringLiteral("indicatorWidth"), layout.indicatorWidth);
     writeQmlProperty(window, QStringLiteral("indicatorHeight"), layout.indicatorHeight);
     writeQmlProperty(window, QStringLiteral("indicatorSpacing"), layout.indicatorSpacing);
-    writeQmlProperty(window, QStringLiteral("containerPadding"), layout.containerPadding);
-    writeQmlProperty(window, QStringLiteral("containerPaddingSide"), layout.paddingSide);
+    // containerPadding / paddingSide / labelHeight are NOT pushed: they feed
+    // the C++ bar math only, and their QML forward chain was dead end to end
+    // (declared, forwarded, read by nothing).
     writeQmlProperty(window, QStringLiteral("containerTopMargin"), layout.containerTopMargin);
     writeQmlProperty(window, QStringLiteral("containerSideMargin"), layout.containerSideMargin);
     writeQmlProperty(window, QStringLiteral("labelTopMargin"), layout.labelTopMargin);
-    writeQmlProperty(window, QStringLiteral("labelHeight"), layout.labelHeight);
     writeQmlProperty(window, QStringLiteral("labelSpace"), layout.labelSpace);
     writeQmlProperty(window, QStringLiteral("cardPadding"), layout.cardPadding);
     writeQmlProperty(window, QStringLiteral("cardSidePadding"), layout.cardSidePadding);
@@ -147,9 +148,14 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
-    // Build resolved per-screen config
-    const ZoneSelectorConfig config =
-        m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
+    // Build resolved per-screen config. Strip-selector screens resolve the
+    // scrolling variant, whose resolver stamps LayoutMode = Horizontal so
+    // computeZoneSelectorLayout lays a single card row with zero changes.
+    const bool stripMode = isStripSelectorScreen(screenId);
+    const ZoneSelectorConfig config = m_settings
+        ? (stripMode ? m_settings->resolvedScrollingZoneSelectorConfig(screenId)
+                     : m_settings->resolvedZoneSelectorConfig(screenId))
+        : defaultZoneSelectorConfig();
 
     // Update settings-based properties
     if (m_settings) {
@@ -182,8 +188,25 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     writeQmlProperty(window, QStringLiteral("previewHeight"), config.previewHeight);
     writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
-    // Build and pass layout data (filtered per-screen mode)
-    QVariantList layouts = buildLayoutsList(screenId);
+    // Build and pass the popup model: strip cards on strip-selector
+    // screens, layouts everywhere else. Both lists are pushed every update
+    // (the inactive one empty) so a screen crossing a mode boundary never
+    // renders the previous mode's stale model.
+    QVariantList layouts;
+    QVariantList stripColumns;
+    QList<qreal> stripFractions;
+    if (stripMode) {
+        stripColumns = buildStripList(screenId);
+        stripFractions = stripFractionsFromColumns(stripColumns);
+        // Write-through: this is a fresh build of the authoritative list, so
+        // refresh the trigger-edge memo rather than letting the next probe
+        // pay for a second identical build.
+        m_stripCardFractionsCache.insert(screenId, stripFractions);
+    } else {
+        layouts = buildLayoutsList(screenId);
+    }
+    writeQmlProperty(window, QStringLiteral("stripMode"), stripMode);
+    writeQmlProperty(window, QStringLiteral("stripColumns"), stripColumns);
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
     // Global "Auto-assign for all layouts" master toggle (#370) - when on, every
@@ -202,14 +225,21 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     bool locked = false;
     if (m_settings && m_layoutManager) {
         int curDesktop = currentVirtualDesktopForScreen(screenId);
-        QString curActivity = m_layoutManager->currentActivity();
-        locked = isAnyModeLocked(m_settings, m_layoutManager, screenId, curDesktop, curActivity);
+        // m_currentActivity, not m_layoutManager->currentActivity(): the
+        // hit-test that ENFORCES this badge (selector.cpp) reads the mirror,
+        // and mixing sources lets the painted badge transiently disagree
+        // with what a click does.
+        locked = isAnyModeLocked(m_settings, m_layoutManager, screenId, curDesktop, m_currentActivity);
     }
     writeQmlProperty(window, QStringLiteral("locked"), locked);
 
-    // Compute layout for geometry updates using per-screen config
-    const int layoutCount = layouts.size();
-    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount);
+    // Compute layout for geometry updates using per-screen config. Strip
+    // cards are variable-width (each column's real work-area share), so the
+    // fractions drive the bar width; an empty strip keeps one uniform cell
+    // (empty fraction list) so the bar retains a hittable "open the first
+    // column" body instead of collapsing.
+    const int layoutCount = stripMode ? std::max(1, static_cast<int>(stripColumns.size())) : layouts.size();
+    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions);
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
     // containerWidth/Height, so it has to be correct before we apply the layout.
@@ -244,6 +274,10 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
             gridItem->polish();
             gridItem->update();
         }
+        if (auto* stripRow = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorStripRow"))) {
+            stripRow->polish();
+            stripRow->update();
+        }
         if (auto* containerItem = findQmlItemByName(contentRoot, QStringLiteral("shaderAnchor"))) {
             containerItem->polish();
             containerItem->update();
@@ -262,7 +296,9 @@ void OverlayService::refreshContextLockState()
     if (!m_settings || !m_layoutManager) {
         return;
     }
-    const QString curActivity = m_layoutManager->currentActivity();
+    // Mirror, not registry — same single-source rule as the `locked` write in
+    // updateZoneSelectorWindow and the hit-test in selector.cpp.
+    const QString curActivity = m_currentActivity;
 
     // Open zone selectors: one entry per screen with a live slot.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
@@ -272,9 +308,14 @@ void OverlayService::refreshContextLockState()
         }
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int curDesktop = currentVirtualDesktopForScreen(it.key());
-        // Both-mode lens (-1) by design: the zone selector shows the SNAP
-        // zone overlay, so a snapping lock is exactly the lock it must
-        // reflect. Only the picker below takes the Templates lens.
+        // Both-mode lens (-1) by design for the LAYOUT-MODE popup: it shows
+        // the SNAP zone overlay, so a snapping lock is exactly the lock it
+        // must reflect. Only the picker below takes the Templates lens. NOTE
+        // for whoever adds a lock affordance to the STRIP popup: on a strip
+        // screen the premise expires (the popup renders strip cards, not the
+        // snap overlay), so that affordance should take the picker's
+        // Templates lens — today no strip consumer reads `locked`, so the
+        // both-mode value pushed there is inert.
         const bool locked = isAnyModeLocked(m_settings, m_layoutManager, it.key(), curDesktop, curActivity);
         writeQmlProperty(window, QStringLiteral("locked"), locked);
     }

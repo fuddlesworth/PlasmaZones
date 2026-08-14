@@ -491,6 +491,87 @@ P_STORE_GET(int, scrollingWindowHeightStepPercent, scrollingBehaviorGroup, windo
 P_STORE_SET_INT(setScrollingWindowHeightStepPercent, scrollingBehaviorGroup, windowHeightStepPercentKey,
                 scrollingWindowHeightStepPercentChanged)
 
+// ── Strip-mode selector (Scrolling.ZoneSelector) ────────────────────────────
+// The snapping selector's twin, whose accessors live in settings/uienums.cpp.
+// This family sits here instead, with the rest of the scrolling settings,
+// because the split across these TUs is by feature.
+
+P_STORE_GET(bool, scrollingZoneSelectorEnabled, scrollingZoneSelectorGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setScrollingZoneSelectorEnabled, scrollingZoneSelectorGroup, enabledKey,
+                 scrollingZoneSelectorEnabledChanged)
+P_STORE_GET(int, scrollingZoneSelectorTriggerDistance, scrollingZoneSelectorGroup, triggerDistanceKey, int)
+P_STORE_SET_INT(setScrollingZoneSelectorTriggerDistance, scrollingZoneSelectorGroup, triggerDistanceKey,
+                scrollingZoneSelectorTriggerDistanceChanged)
+P_STORE_GET(int, scrollingZoneSelectorPreviewWidth, scrollingZoneSelectorGroup, previewWidthKey, int)
+P_STORE_SET_INT(setScrollingZoneSelectorPreviewWidth, scrollingZoneSelectorGroup, previewWidthKey,
+                scrollingZoneSelectorPreviewWidthChanged)
+P_STORE_GET(int, scrollingZoneSelectorPreviewHeight, scrollingZoneSelectorGroup, previewHeightKey, int)
+P_STORE_SET_INT(setScrollingZoneSelectorPreviewHeight, scrollingZoneSelectorGroup, previewHeightKey,
+                scrollingZoneSelectorPreviewHeightChanged)
+P_STORE_GET(bool, scrollingZoneSelectorPreviewLockAspect, scrollingZoneSelectorGroup, previewLockAspectKey, bool)
+P_STORE_SET_BOOL(setScrollingZoneSelectorPreviewLockAspect, scrollingZoneSelectorGroup, previewLockAspectKey,
+                 scrollingZoneSelectorPreviewLockAspectChanged)
+
+// Position and SizeMode are stored as ints and exposed through both the
+// enum-typed accessors and the int adapters QML binds, exactly like the
+// snapping twins.
+
+ZoneSelectorPosition Settings::scrollingZoneSelectorPosition() const
+{
+    return static_cast<ZoneSelectorPosition>(
+        m_store->read<int>(ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::positionKey()));
+}
+int Settings::scrollingZoneSelectorPositionInt() const
+{
+    return static_cast<int>(scrollingZoneSelectorPosition());
+}
+void Settings::setScrollingZoneSelectorPosition(ZoneSelectorPosition value)
+{
+    const int before = m_store->read<int>(ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::positionKey());
+    m_store->write(ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::positionKey(),
+                   static_cast<int>(value));
+    const int after = m_store->read<int>(ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::positionKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT scrollingZoneSelectorPositionChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setScrollingZoneSelectorPositionInt(int value)
+{
+    if (value >= 0 && value <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
+        setScrollingZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
+    }
+}
+
+ZoneSelectorSizeMode Settings::scrollingZoneSelectorSizeMode() const
+{
+    return static_cast<ZoneSelectorSizeMode>(
+        m_store->read<int>(ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::sizeModeKey()));
+}
+int Settings::scrollingZoneSelectorSizeModeInt() const
+{
+    return static_cast<int>(scrollingZoneSelectorSizeMode());
+}
+void Settings::setScrollingZoneSelectorSizeMode(ZoneSelectorSizeMode value)
+{
+    const int before = m_store->read<int>(ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::sizeModeKey());
+    m_store->write(ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::sizeModeKey(),
+                   static_cast<int>(value));
+    const int after = m_store->read<int>(ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::sizeModeKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT scrollingZoneSelectorSizeModeChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setScrollingZoneSelectorSizeModeInt(int value)
+{
+    if (value >= 0 && value <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
+        setScrollingZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(value));
+    }
+}
+
 // ── Scrolling shortcuts ─────────────────────────────────────────────────────
 
 P_STORE_GET(QString, scrollingFocusColumnFirstShortcut, shortcutsScrollingGroup, focusColumnFirstKey, QString)

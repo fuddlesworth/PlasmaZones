@@ -7,7 +7,7 @@
 // into page-scoped sub-controllers (EditorPageController, …) hung off this
 // class via child Q_PROPERTYs so QML reads `settingsController.<page>.<prop>`.
 //
-// FILE-SIZE EXCEPTION (sanctioned), CEILING 1215 LINES: what remains here after
+// FILE-SIZE EXCEPTION (sanctioned), CEILING 1300 LINES: what remains here after
 // that split is the root object QML binds to. Its Q_PROPERTY surface IS the QML
 // contract, so moving another group of properties out means either a new child
 // controller every page URL and binding has to be rewritten for, or a second
@@ -21,9 +21,13 @@
 // license a comment block — those belong on the definition in the matching
 // settingscontroller_*.cpp when they will not fit here.
 //
-// The 1215 above supersedes the general 1150 hard ceiling in CLAUDE.md for this
+// The 1300 above supersedes the general 1150 hard ceiling in CLAUDE.md for this
 // file, the same way the repo's other sanctioned file-size exceptions do, so
-// sitting between the two figures is not a review finding here.
+// sitting between the two figures is not a review finding here. (Raised from
+// 1215 when the per-screen selector stores grew their per-card sub-domain
+// has/clear pairs — chip-invoked Q_INVOKABLEs that belong on the root the
+// scope chips call by method name; the drift before that raise is
+// acknowledged, not licensed.)
 
 #pragma once
 
@@ -702,6 +706,32 @@ public:
                                                      const QVariant& value);
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
+    // Per-card sub-domains (Position / Arrangement / Size) so each selector
+    // card's scope chip only reports and resets its own keys — the autotile
+    // Algorithm pair's invariant, applied to the selector stores.
+    Q_INVOKABLE bool hasPerScreenZoneSelectorPositionSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenZoneSelectorPositionSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenZoneSelectorArrangementSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenZoneSelectorArrangementSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenZoneSelectorSizeSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenZoneSelectorSizeSettings(const QString& screenName);
+
+    // ── Per-screen strip selector overrides ──────────────────────────────────
+    // Same per-card sub-domain contract as the snapping block above, minus
+    // the Arrangement pair — the strip popup is a single horizontal card row
+    // and has no arrangement card, so do not add one for symmetry. The
+    // whole-domain has/clear pair is kept for API symmetry with the snapping
+    // twin even though the scope chips call only the per-card pairs (the
+    // Settings-level members behind both are live via the D-Bus category).
+    Q_INVOKABLE QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenScrollingZoneSelectorSetting(const QString& screenName, const QString& key,
+                                                              const QVariant& value);
+    Q_INVOKABLE void clearPerScreenScrollingZoneSelectorSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingZoneSelectorSettings(const QString& screenName) const;
+    Q_INVOKABLE bool hasPerScreenScrollingZoneSelectorPositionSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenScrollingZoneSelectorPositionSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingZoneSelectorSizeSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenScrollingZoneSelectorSizeSettings(const QString& screenName);
 
     Q_INVOKABLE QVariantMap loadWindowGeometry() const;
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height);

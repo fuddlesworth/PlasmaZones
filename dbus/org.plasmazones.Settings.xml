@@ -42,7 +42,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setSetting">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a single setting by key. Returns true if the setting now holds the supplied value — a same-value write is a no-op but still returns true (the value-equality guard suppresses the redundant write without reporting failure). One carve-out: the resolving color keys (the zone colors and the window border/tint colors) accept the empty string or the legacy accent token to put the color back on the color scheme; the write succeeds, but reading the key back returns the RESOLVED concrete color, never the sentinel — read the matching *Raw key for the stored follow-or-pinned state. The normalizing token-enum keys (renderingBackend, audioChannelMode, audioInputMethod) accept any case and surrounding whitespace their option set recognizes and store the canonical lowercase spelling; the window scope keys require their exact lowercase token."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set a single setting by key. Returns true if the setting now holds the supplied value — a same-value write is a no-op but still returns true (the value-equality guard suppresses the redundant write without reporting failure). One carve-out: the resolving color keys (the zone colors and the window border/tint colors) accept the empty string or the legacy accent token to put the color back on the color scheme; the write succeeds, but reading the key back returns the RESOLVED concrete color, never the sentinel — read the matching *Raw key for the stored follow-or-pinned state. The normalizing token-enum keys (renderingBackend, audioChannelMode, audioInputMethod) accept any case and surrounding whitespace their option set recognizes and store the canonical lowercase spelling; the window scope keys require their exact lowercase token. Range-clamped numeric keys are a second carve-out: an out-of-range value is clamped by the config schema on write and the call still returns true, so reading the key back may return the clamped bound rather than the supplied value."/>
             <arg name="key" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
             </arg>
@@ -166,26 +166,26 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Reload all shaders from disk."/>
         </method>
 
-        <!-- Per-screen settings. Categories: 'autotile' | 'snapping' | 'zoneSelector'. -->
+        <!-- Per-screen settings. Categories: 'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'. -->
         <method name="getPerScreenSettings">
             <annotation name="org.gtk.GDBus.DocString" value="Get all per-screen settings for a screen and category."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
             </arg>
             <arg name="category" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'."/>
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'."/>
             </arg>
             <arg name="values" type="a{sv}" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of per-screen setting key to value."/>
             </arg>
         </method>
         <method name="setPerScreenSetting">
-            <annotation name="org.gtk.GDBus.DocString" value="Set a single per-screen setting and schedule a debounced save."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set a single per-screen setting and schedule a debounced save. Rejections are LOUD, not silent: an implausible screen id or setting key, an unknown category, the read-only 'snapping' category, or a missing settings backend answers with an org.freedesktop.DBus.Error.InvalidArgs error reply rather than a no-op."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
             </arg>
             <arg name="category" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): a write to it is rejected and does nothing."/>
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): the two void methods reject a write to it with an InvalidArgs error reply, and the batch setter skips it returning false."/>
             </arg>
             <arg name="key" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Per-screen setting key name."/>
@@ -195,12 +195,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="clearPerScreenSettings">
-            <annotation name="org.gtk.GDBus.DocString" value="Clear all per-screen overrides for a screen and category, reverting to global defaults."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Clear all per-screen overrides for a screen and category, reverting to global defaults. Rejections are LOUD, like setPerScreenSetting's: an implausible screen id, an unknown category, the read-only 'snapping' category, or a missing settings backend answers with an org.freedesktop.DBus.Error.InvalidArgs error reply rather than a no-op."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
             </arg>
             <arg name="category" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): a write to it is rejected and does nothing."/>
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): the two void methods reject a write to it with an InvalidArgs error reply, and the batch setter skips it returning false."/>
             </arg>
         </method>
 
@@ -214,7 +214,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
             </arg>
             <arg name="category" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): a write to it is rejected and does nothing."/>
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'scrolling' | 'snapping' | 'zoneSelector' | 'scrollingZoneSelector'. 'snapping' is READ-ONLY (a projection of the config per-monitor gaps): the two void methods reject a write to it with an InvalidArgs error reply, and the batch setter skips it returning false."/>
             </arg>
             <arg name="values" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of per-screen setting key -> value."/>

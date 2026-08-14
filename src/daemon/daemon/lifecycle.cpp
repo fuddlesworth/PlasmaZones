@@ -1,6 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): the Daemon start/stop lifecycle. stop()
+// is one long, ORDERED teardown whose clear-before-reset contracts reference
+// each other in sequence; splitting it by subsystem would break the
+// top-to-bottom readability that makes the ordering auditable.
+
 #include "daemon/daemon.h"
 #include "helpers.h"
 
@@ -727,6 +732,12 @@ void Daemon::stop()
         // Same contract: the layouts-provided resolver captures `this` and
         // reads the router, which is reset before the engines below.
         m_overlayService->setLayoutSupportResolver({});
+        m_overlayService->setDragInsertSelectorResolver({});
+        m_overlayService->setStripCardsProvider({});
+        // Symmetric clear of the late-bound drag-exclusion id: a stop() that
+        // lands mid-drag never reaches the adaptor's resetDragState, and the
+        // overlay service outlives this teardown.
+        m_overlayService->setActiveDragWindowId({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
@@ -1004,6 +1015,17 @@ void Daemon::stop()
         m_overlayService->hideLayoutPicker();
         m_overlayService->hideSnapAssist();
         m_overlayService->hideCheatsheet();
+        // The zone selector has the same no-way-out problem: OverlayService
+        // outlives stop(), the drag adaptor's engine borrows are already
+        // nulled and the bus unregisters below, so no drag-end can ever hide
+        // a selector left showing — and the latched m_zoneSelectorVisible
+        // would make showZoneSelector's entry guard refuse every show for
+        // the whole next session.
+        m_overlayService->hideZoneSelector();
+        // hideZoneSelector deliberately keeps the zone triple for the
+        // drag-end snap path; no drag-end follows a stop(), so clear both
+        // selection families explicitly.
+        m_overlayService->clearSelectedZone();
     }
 
     // Save state

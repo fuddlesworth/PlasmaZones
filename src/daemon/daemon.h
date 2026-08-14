@@ -391,6 +391,17 @@ private:
     LayoutSupport layoutSupportForScreen(const QString& screenId) const;
 
     /**
+     * @brief Whether the LIVE engine on @p screenId asks the drag popup to
+     * render its drag-insert vocabulary (IPlacementEngine::
+     * providesDragInsertSelector) — strip column cards — instead of zone
+     * layouts. Feeds the OverlayService's injected
+     * DragInsertSelectorResolver. Router-resolved like layoutSupportForScreen
+     * so a disabled scrolling assignment downgrades to false; the null-router
+     * fallback is false (popup keeps zone-layout semantics).
+     */
+    bool dragInsertSelectorForScreen(const QString& screenId) const;
+
+    /**
      * @brief Failure OSD for a layout-selection shortcut pressed on a screen
      * whose engine does not provide layouts. Gated by navigationOsdAllowed
      * like the navigationFeedback relay in signals.cpp, so the per-context
