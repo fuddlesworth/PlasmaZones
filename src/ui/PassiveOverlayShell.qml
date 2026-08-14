@@ -491,6 +491,17 @@ Window {
         property bool globalAutoAssign: false
         property string selectedLayoutId: ""
         property int selectedZoneIndex: -1
+        // Strip-mode selector state (scrolling screens). Same
+        // declare-and-forward contract as decorationChain below: C++ writes
+        // these with setProperty (selector_update.cpp pushes stripMode /
+        // stripColumns per update; selector_strip.cpp writes the selectedStrip*
+        // triple per hit-test), so an undeclared name would silently become a
+        // dead dynamic property and the content would never leave layout mode.
+        property bool stripMode: false
+        property var stripColumns: []
+        property int selectedStripColumn: -1
+        property int selectedStripGap: -1
+        property int selectedStripHalf: -1
         property int minZoneSize: 8
         property int cursorX: -1
         property int cursorY: -1
@@ -622,6 +633,11 @@ Window {
                 globalAutoAssign: zoneSelectorSlot.globalAutoAssign
                 selectedLayoutId: zoneSelectorSlot.selectedLayoutId
                 selectedZoneIndex: zoneSelectorSlot.selectedZoneIndex
+                stripMode: zoneSelectorSlot.stripMode
+                stripColumns: zoneSelectorSlot.stripColumns
+                selectedStripColumn: zoneSelectorSlot.selectedStripColumn
+                selectedStripGap: zoneSelectorSlot.selectedStripGap
+                selectedStripHalf: zoneSelectorSlot.selectedStripHalf
                 minZoneSize: zoneSelectorSlot.minZoneSize
                 cursorX: zoneSelectorSlot.cursorX
                 cursorY: zoneSelectorSlot.cursorY
