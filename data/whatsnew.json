@@ -29,6 +29,13 @@
             ]
         },
         {
+            "version": "3.3.7",
+            "date": "2026-08-14",
+            "highlights": [
+                "Fixed: the panel query PlasmaZones sends to plasmashell could crash the whole Plasma desktop while a monitor was waking from sleep or reconnecting (#917)"
+            ]
+        },
+        {
             "version": "3.3.5",
             "date": "2026-08-04",
             "highlights": [
