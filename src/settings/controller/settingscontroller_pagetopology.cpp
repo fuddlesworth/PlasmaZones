@@ -150,8 +150,9 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QString kScrollingTabs = QStringLiteral("scrolling-tabs");
     static const QString kScrollingWindow = QStringLiteral("scrolling-window");
     static const QString kScrollingShortcuts = QStringLiteral("scrolling-shortcuts");
-    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingColumns, kScrollingTabs,
-                                                   kScrollingWindow, kScrollingShortcuts};
+    static const QString kScrollingZoneSelector = QStringLiteral("scrolling-zoneselector");
+    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingColumns,   kScrollingTabs,
+                                                   kScrollingWindow, kScrollingShortcuts, kScrollingZoneSelector};
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -322,6 +323,19 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // hand), but it belongs to this page's group, so per-page
              // Reset/Discard must cover it rather than walking past it.
              {CD::snappingZoneSelectorGroup(), CD::previewLockAspectKey()},
+         }},
+        {QStringLiteral("scrolling-zoneselector"),
+         {
+             {CD::scrollingZoneSelectorGroup(), CD::enabledKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::triggerDistanceKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::positionKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::sizeModeKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::previewWidthKey()},
+             {CD::scrollingZoneSelectorGroup(), CD::previewHeightKey()},
+             // No editor row exists for this key (it is set over D-Bus or by
+             // hand), but it belongs to this page's group, so per-page
+             // Reset/Discard must cover it rather than walking past it.
+             {CD::scrollingZoneSelectorGroup(), CD::previewLockAspectKey()},
          }},
         {QStringLiteral("snapping-window-behavior"),
          {
@@ -661,6 +675,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("scrolling-tabs"),
         QStringLiteral("scrolling-window"),
         QStringLiteral("scrolling-shortcuts"),
+        QStringLiteral("scrolling-zoneselector"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("window-appearance"),

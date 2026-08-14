@@ -569,7 +569,7 @@ public:
     /// follows the global toggle). Same owner-thread affinity as the rest of
     /// the registry.
     std::optional<bool> resolveContextDragSelectorEnabled(const QString& screenId, int virtualDesktop,
-                                                          const QString& activity) const;
+                                                          const QString& activity) const override;
 
     /// Resolve the per-context overlay-property override (shader / style)
     /// for (screen, desktop, activity) by evaluating a windowless WindowQuery and

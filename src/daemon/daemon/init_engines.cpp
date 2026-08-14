@@ -982,6 +982,25 @@ void Daemon::initEnginesAndWiring()
             [this, onTiledCountChanged](const QString& screenId) {
                 onTiledCountChanged(m_scrollEngine, screenId);
             });
+    // Strip-popup invalidation on structural strip change. Deliberately a
+    // SIBLING connect, not a call inside onTiledCountChanged: that lambda
+    // early-returns when the (engine, tiledWindowCount) pair is unchanged,
+    // which is exactly the column-move case (structure changes, count does
+    // not). Every structural strip change (insert, consume/expel, tab toggle,
+    // resize, window close) ends in a relayout that emits placementChanged,
+    // so a popup rendered from the pre-change card list re-pushes its model
+    // and drops its (renumbered, now-stale) selection; a spurious fire is
+    // self-healing — the next cursor tick re-selects under the new list.
+    // During a live drag-insert preview the strip is frozen (detach-once), so
+    // this cannot fight the preview. Without it, a window closing on the
+    // strip mid-popup left the cards stale and the popup-only drop arm
+    // committed indices against a renumbered strip.
+    connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, this,
+            [this](const QString& screenId) {
+                if (m_overlayService) {
+                    m_overlayService->refreshStripSelector(screenId);
+                }
+            });
 
     // Live-mode resolver for snap's capture gate: the router's
     // live-set-first answer lets a presave capture a screen the cascade

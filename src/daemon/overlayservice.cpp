@@ -677,9 +677,22 @@ void OverlayService::updateSettings(ISettings* settings)
     // then refresh remaining (non-disabled) windows with the new settings.
     hideDisabledAndRefresh();
 
-    // If the selector was visible but got disabled via settings, hide it immediately.
-    if (m_zoneSelectorVisible && m_settings && !m_settings->zoneSelectorEnabled()) {
-        hideZoneSelector();
+    // If the selector was visible but every showing screen is now disabled,
+    // hide it immediately. Per-screen and rule-aware: a strip popup is
+    // governed by the scrolling toggle, and a SetDragSelectorEnabled rule
+    // outranks either toggle, so a live save must not tear down a popup a
+    // force-on rule put up (or spare one the scrolling switch turned off).
+    if (m_zoneSelectorVisible && m_settings) {
+        bool anyEnabled = false;
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            if (it.value().zoneSelectorSlot() && selectorEnabledForScreen(it.key())) {
+                anyEnabled = true;
+                break;
+            }
+        }
+        if (!anyEnabled) {
+            hideZoneSelector();
+        }
     }
 }
 
@@ -850,10 +863,20 @@ void OverlayService::hideDisabledAndRefresh()
         bool disabled = false;
         bool inactive = false;
     };
+    // The events that route through here (desktop/activity switch, exclusion
+    // recompute, settings save) are exactly the ones that can reshape a
+    // screen's strip, so drop every memoized card count up front.
+    m_stripCardCountCache.clear();
     QHash<QString, ContextGates> gates;
     gates.reserve(m_screenStates.size());
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        gates.insert(it.key(), {isSnappingContextDisabled(it.key()), isSnappingContextInactive(it.key())});
+        // Strip-selector screens carry the same exemption showZoneSelector
+        // applies: isSnappingContextDisabled answers true for a live Templates
+        // scrolling screen, but on a strip screen the popup IS the engine
+        // surface that gate protects, so the refresh path must not destroy it
+        // on the snapping axis mid-drag.
+        const bool disabled = !isStripSelectorScreen(it.key()) && isSnappingContextDisabled(it.key());
+        gates.insert(it.key(), {disabled, isSnappingContextInactive(it.key())});
     }
 
     const QStringList screenIds = m_screenStates.keys();
@@ -877,8 +900,15 @@ void OverlayService::hideDisabledAndRefresh()
         const auto gateIt = gates.constFind(screenId);
         const ContextGates g = (gateIt != gates.constEnd())
             ? gateIt.value()
-            : ContextGates{isSnappingContextDisabled(screenId), isSnappingContextInactive(screenId)};
-        if (!g.disabled && it.value().zoneSelectorSlot()) {
+            : ContextGates{!isStripSelectorScreen(screenId) && isSnappingContextDisabled(screenId),
+                           isSnappingContextInactive(screenId)};
+        // Visibility-gated like refreshVisibleWindows and the settingsChanged
+        // catch-all: showZoneSelector() runs updateZoneSelectorWindow itself
+        // before showing, so a hidden selector needs no live re-push — and on
+        // a strip screen the re-push now costs a full strip snapshot +
+        // serialization, which a desktop switch must not pay for a popup that
+        // is not on screen.
+        if (m_zoneSelectorVisible && !g.disabled && it.value().zoneSelectorSlot()) {
             updateZoneSelectorWindow(screenId);
         }
         if (!g.inactive && m_visible && it.value().overlayPhysScreen) {
@@ -1059,15 +1089,23 @@ void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
     hideDisabledAndRefresh();
 }
 
-int OverlayService::visibleLayoutCount(const QString& screenId) const
+int OverlayService::selectorCardCount(const QString& screenId) const
 {
     // Strip-selector screens: the popup renders strip cards, so the
     // trigger-edge sizing must count THOSE (same row-for-row agreement the
     // layout path keeps with buildLayoutsList below). Floor of 1 matches
-    // updateZoneSelectorWindow's empty-strip cell.
+    // updateZoneSelectorWindow's empty-strip cell. Kept OUT of
+    // visibleLayoutCount: the picker/cycle shortcut gates read that one as
+    // "is the template store empty", and this floor made their zero test
+    // unreachable on exactly the screens the Templates arm describes.
     if (isStripSelectorScreen(screenId)) {
         return std::max(1, visibleStripCardCount(screenId));
     }
+    return visibleLayoutCount(screenId);
+}
+
+int OverlayService::visibleLayoutCount(const QString& screenId) const
+{
     // Mirror buildLayoutsList's per-screen include resolution. Pre-fix the
     // raw m_includeManualLayouts/m_includeAutotileLayouts flags were used
     // here - both default true - so on screens where the popup actually

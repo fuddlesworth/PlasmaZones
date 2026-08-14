@@ -740,7 +740,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // cards, handing ownership straight back to the bands.
                 PhosphorEngine::IPlacementEngine::DragInsertTarget target;
                 if (stripSelector && m_overlayService && m_overlayService->hasSelectedStripTarget()
-                    && m_overlayService->selectedStripTargetScreenId() == insertScreenId) {
+                    && PhosphorScreens::ScreenIdentity::screensMatch(m_overlayService->selectedStripTargetScreenId(),
+                                                                     insertScreenId)) {
                     const auto strip = m_overlayService->selectedStripTarget();
                     target.primary = strip.columnIndex;
                     target.secondary = strip.tileIndex;

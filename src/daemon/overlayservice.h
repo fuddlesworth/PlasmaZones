@@ -328,8 +328,12 @@ public:
     // Mouse position for shader effects
     void updateMousePosition(int cursorX, int cursorY) override;
 
-    // Filtered layout count for trigger edge computation
+    // Filtered layout count (layout/template vocabulary — the shortcut gates'
+    // emptiness test; never strip cards)
     int visibleLayoutCount(const QString& screenId) const override;
+    // Popup cell count for trigger edge computation (strip cards on strip
+    // screens, layouts elsewhere)
+    int selectorCardCount(const QString& screenId) const override;
 
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;
@@ -361,7 +365,12 @@ public:
     void refreshStripSelector(const QString& screenId) override;
     void setActiveDragWindowId(const QString& windowId) override
     {
-        m_activeDragWindowId = windowId;
+        if (m_activeDragWindowId != windowId) {
+            m_activeDragWindowId = windowId;
+            // The exclusion id keys the card list, so cached counts built
+            // under the previous id are wrong by construction.
+            m_stripCardCountCache.clear();
+        }
     }
     /// Provider of the SERIALIZED strip card list (the daemon injects
     /// stripColumnsToVariantList over ScrollEngine::stripSnapshot).
@@ -837,7 +846,7 @@ private:
     /// screen is not a strip-selector screen. Implemented in
     /// selector_strip.cpp.
     QVariantList buildStripList(const QString& screenId) const;
-    /// Card count for the trigger-edge sizing contract: visibleLayoutCount
+    /// Card count for the trigger-edge sizing contract: selectorCardCount
     /// answers with THIS on strip-selector screens so isNearTriggerEdge and
     /// the rendered card row can never disagree.
     int visibleStripCardCount(const QString& screenId) const;
@@ -1033,6 +1042,14 @@ private:
     /// end) — buildStripList excludes it so a not-yet-detached drag window
     /// never appears as its own card.
     QString m_activeDragWindowId;
+    /// Per-screen memo of visibleStripCardCount. isNearTriggerEdge consults
+    /// the count on EVERY drag cursor tick, and an uncached answer costs a
+    /// full engine strip snapshot plus QVariant serialization per tick just
+    /// to read a .size(). Invalidated wherever the card list can change
+    /// shape: the exclusion id (setActiveDragWindowId), the preview
+    /// boundaries and structural strip changes (refreshStripSelector), and
+    /// the desktop/activity/exclusion/settings refresh (hideDisabledAndRefresh).
+    mutable QHash<QString, int> m_stripCardCountCache;
     /// Strip-mode selection twin of the zone triple below. Exactly one of
     /// the two families is set (each hit-test arm clears the other on
     /// write); clearSelectedZone clears both.
@@ -1045,6 +1062,14 @@ private:
     {
         return m_dragInsertSelectorResolver && m_dragInsertSelectorResolver(screenId);
     }
+    /// The folded per-screen selector-enable verdict: a SetDragSelectorEnabled
+    /// rule outranks the global toggle in either direction, matching the drag
+    /// adaptor's checkZoneSelectorTrigger fold. Strip-selector screens read the
+    /// scrolling toggle, everything else the snapping one. Resolved against
+    /// this class's own desktop/activity mirrors (never the drag adaptor's
+    /// context handle) so the verdict cannot transiently disagree with the
+    /// cards drawn from the same mirrors.
+    bool selectorEnabledForScreen(const QString& screenId) const;
     /// Borrowed from Daemon. stop() detaches this even when init never reached start().
     PhosphorContext::IContextResolver* m_contextResolver = nullptr;
     PhosphorZones::IZoneLayoutRegistry* m_layoutManager =

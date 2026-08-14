@@ -123,8 +123,20 @@ public:
     // Mouse position for shader effects (updated during window drag)
     virtual void updateMousePosition(int cursorX, int cursorY) = 0;
 
-    // Filtered layout count (matches what the zone selector actually displays)
+    // Filtered layout count in the LAYOUT/TEMPLATE vocabulary — the candidate
+    // list the picker and cycle shortcuts consult (their empty-list gates test
+    // this against zero). Never answers strip cards; selectorCardCount is the
+    // popup-sizing question.
     virtual int visibleLayoutCount(const QString& screenId) const = 0;
+
+    // Number of cells the drag-selector popup renders on @p screenId — strip
+    // cards (floored at 1 for the empty-strip cell) on strip-selector screens,
+    // the filtered layout count everywhere else. The trigger-edge sizing
+    // contract: isNearTriggerEdge consults this so the keep-visible band and
+    // the rendered popup can never disagree. Deliberately a separate virtual
+    // from visibleLayoutCount — folding the strip answer into that one made
+    // the shortcut gates' zero test unreachable on scrolling screens.
+    virtual int selectorCardCount(const QString& screenId) const = 0;
 
     // PhosphorZones::Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;

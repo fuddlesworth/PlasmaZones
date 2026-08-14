@@ -195,6 +195,10 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     QVariantList stripColumns;
     if (stripMode) {
         stripColumns = buildStripList(screenId);
+        // Write-through: this is a fresh build of the authoritative list, so
+        // refresh the trigger-edge memo rather than letting the next probe
+        // pay for a second identical build.
+        m_stripCardCountCache.insert(screenId, static_cast<int>(stripColumns.size()));
     } else {
         layouts = buildLayoutsList(screenId);
     }

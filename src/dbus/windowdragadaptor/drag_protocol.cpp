@@ -439,6 +439,14 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
     resetDragState();
     m_prevTriggerHeld = true;
     m_pendingSnapDragWindowId = windowId;
+    // Pending twin of the bypass branch's card exclusion (AFTER resetDragState,
+    // which clears it): a pending snap drag whose cursor crosses onto a strip
+    // screen probes the trigger edge before dragStarted runs, and without the
+    // id the band is sized for a card list that still contains the dragged
+    // window (N+1 cards for a popup that will render N).
+    if (m_overlayService) {
+        m_overlayService->setActiveDragWindowId(windowId);
+    }
     m_pendingSnapDragGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
     m_pendingSnapDragWasSnapped = m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty();
     Q_UNUSED(
@@ -473,7 +481,7 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     // appeared. Repro: drag a window, don't hold the modifier, hover an
     // edge — nothing happens.
     bool edgeActivation = false;
-    if (!triggerHeld && !toggleMode && m_settings && m_settings->zoneSelectorEnabled()) {
+    if (!triggerHeld && !toggleMode && m_settings) {
         auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
         // Live-mode disable check — `handleFor` not `handleForMode(Snapping)`.
         // The user may have flipped the screen's mode between beginDrag
@@ -492,7 +500,26 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
         if (resolved.qscreen
             && !(m_contextResolver && m_contextResolver->isDisabled(m_contextResolver->handleFor(resolved.screenId)))
             && !isActiveLayoutSuppressedForScreen(resolved.screenId)) {
-            edgeActivation = isNearTriggerEdge(resolved.qscreen, cursorX, cursorY, resolved.screenId);
+            // Variant-aware enable, resolved AFTER the screen is known — a
+            // strip-selector screen reads the SCROLLING selector toggle, and a
+            // SetDragSelectorEnabled rule outranks either toggle in both
+            // directions, the same fold checkZoneSelectorTrigger applies.
+            // Gating on the snapping toggle alone killed the rule's force-on
+            // half one tier before the rule was even resolved, and read the
+            // wrong toggle when a pending snap drag crossed onto a strip
+            // screen.
+            const std::optional<bool> selectorRule = (m_contextResolver && m_layoutManager) ? [&] {
+                const PhosphorContext::ContextHandle ctx = m_contextResolver->handleFor(resolved.screenId);
+                return m_layoutManager->resolveContextDragSelectorEnabled(resolved.screenId, ctx.virtualDesktop,
+                                                                          ctx.activity);
+            }()
+                                                                                            : std::nullopt;
+            const bool selectorToggle = scrollSelectorScreen(resolved.screenId)
+                ? m_settings->scrollingZoneSelectorEnabled()
+                : m_settings->zoneSelectorEnabled();
+            if (selectorRule.value_or(selectorToggle)) {
+                edgeActivation = isNearTriggerEdge(resolved.qscreen, cursorX, cursorY, resolved.screenId);
+            }
         }
     }
 

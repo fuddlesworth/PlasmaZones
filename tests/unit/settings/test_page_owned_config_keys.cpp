@@ -169,7 +169,7 @@ private Q_SLOTS:
 
         QStringList unowned;
         int checked = 0;
-        // All FOUR scrolling schema groups. The two indicator groups were
+        // All FIVE scrolling schema groups. The two indicator groups were
         // outside this sweep, so a key added to either could drop out of
         // per-page Reset with nothing failing — which is the exact class of
         // regression this file exists to catch, and the DropIndicator group
@@ -177,9 +177,10 @@ private Q_SLOTS:
         // same reason: its Gpu key shipped without a manifest owner (no
         // dirty mark, per-page Reset and Discard silently skipped it)
         // precisely because this sweep did not cover the group.
-        for (const QString& group : {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
-                                     ConfigDefaults::scrollingTabIndicatorGroup(),
-                                     ConfigDefaults::scrollingDropIndicatorGroup(), ConfigDefaults::renderingGroup()}) {
+        for (const QString& group :
+             {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
+              ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
+              ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::renderingGroup()}) {
             const auto it = schema.groups.constFind(group);
             QVERIFY2(it != schema.groups.constEnd(), qPrintable(group));
             for (const PhosphorConfig::KeyDef& def : *it) {

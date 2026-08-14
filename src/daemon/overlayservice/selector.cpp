@@ -46,22 +46,34 @@ struct LaidOutCard
 
 } // namespace
 
+bool OverlayService::selectorEnabledForScreen(const QString& screenId) const
+{
+    // Strip-selector screens are governed by the SCROLLING selector enable;
+    // everything else by the snapping one.
+    const bool toggle = !m_settings
+        || (isStripSelectorScreen(screenId) ? m_settings->scrollingZoneSelectorEnabled()
+                                            : m_settings->zoneSelectorEnabled());
+    if (!m_layoutManager) {
+        return toggle;
+    }
+    // A SetDragSelectorEnabled rule overrides the toggle in either direction;
+    // no rule filling the slot means the toggle decides.
+    return m_layoutManager
+        ->resolveContextDragSelectorEnabled(screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity)
+        .value_or(toggle);
+}
+
 void OverlayService::showZoneSelector(const QString& targetScreenId)
 {
     if (m_zoneSelectorVisible) {
         return;
     }
 
-    // Strip-selector screens are governed by the SCROLLING selector enable;
-    // everything else by the snapping one. With no explicit target the
-    // per-screen check in the show loop below decides screen by screen.
-    if (m_settings && !targetScreenId.isEmpty()) {
-        const bool enabled = isStripSelectorScreen(targetScreenId) ? m_settings->scrollingZoneSelectorEnabled()
-                                                                   : m_settings->zoneSelectorEnabled();
-        if (!enabled) {
-            return;
-        }
-    } else if (m_settings && !m_settings->zoneSelectorEnabled() && !m_settings->scrollingZoneSelectorEnabled()) {
+    // With an explicit target the folded verdict (rule over toggle) gates
+    // here; with no target the per-screen check in the show loops below
+    // decides screen by screen, so a force-on rule can still show a popup
+    // while both global toggles are off.
+    if (!targetScreenId.isEmpty() && !selectorEnabledForScreen(targetScreenId)) {
         return;
     }
 
@@ -139,16 +151,13 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             // Templates scrolling screen, and m_excludedScreens carries the
             // engine-owned set — on a strip screen the popup is exactly the
             // engine surface those gates exist to protect. They still gate
-            // per-screen enable though (the scrolling selector switch).
-            const bool stripScreen = isStripSelectorScreen(screenId);
-            if (stripScreen) {
-                if (m_settings && !m_settings->scrollingZoneSelectorEnabled()) {
-                    continue;
-                }
-            } else {
-                if (m_settings && !m_settings->zoneSelectorEnabled()) {
-                    continue;
-                }
+            // per-screen enable via the folded rule-over-toggle verdict; the
+            // engine-screen gates stay outside that fold (a rule cannot
+            // override a gate that exists because a pick could not commit).
+            if (!selectorEnabledForScreen(screenId)) {
+                continue;
+            }
+            if (!isStripSelectorScreen(screenId)) {
                 if (isSnappingContextDisabled(screenId)) {
                     continue;
                 }
@@ -166,16 +175,11 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             QString screenId = PhosphorScreens::ScreenIdentity::identifierFor(screen);
-            // Same strip-screen exemption as the managed loop above.
-            const bool stripScreen = isStripSelectorScreen(screenId);
-            if (stripScreen) {
-                if (m_settings && !m_settings->scrollingZoneSelectorEnabled()) {
-                    continue;
-                }
-            } else {
-                if (m_settings && !m_settings->zoneSelectorEnabled()) {
-                    continue;
-                }
+            // Same strip-screen exemption and rule fold as the managed loop above.
+            if (!selectorEnabledForScreen(screenId)) {
+                continue;
+            }
+            if (!isStripSelectorScreen(screenId)) {
                 if (isSnappingContextDisabled(screenId)) {
                     continue;
                 }
@@ -207,6 +211,14 @@ void OverlayService::hideZoneSelector()
     m_zoneSelectorVisible = false;
 
     // Selected zone NOT cleared here - drag-end snap path needs it.
+    // The STRIP target IS cleared: once the popup is hidden no hit-test
+    // updates it, and the drag adaptor's settle path prefers a stored strip
+    // pick over the cursor-derived bands — so a target surviving a mid-drag
+    // hide (a toggle/rule flip, a desktop switch) would keep driving the
+    // preview and the drop against a card list nobody can see. Ownership
+    // hands back to the drop bands, which is the documented contract.
+    m_selectedStripTarget = {};
+    m_selectedStripScreenId.clear();
     //
     // Snapshot keys before iterating so the completion lambda
     // (potentially fired synchronously by ShellHost::hideSlot on a
@@ -267,6 +279,13 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedStripColumn"), -1);
             writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedStripGap"), -1);
             writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedStripHalf"), -1);
+            // Keep the C++ mirror in step with the blanked slot: a strip
+            // target keyed to a screen whose highlight was just cleared
+            // would otherwise survive invisibly and still win the drop.
+            if (it.key() == m_selectedStripScreenId) {
+                m_selectedStripTarget = {};
+                m_selectedStripScreenId.clear();
+            }
         }
     }
 
@@ -477,6 +496,11 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                         m_selectedLayoutId = layoutId;
                         m_selectedZoneIndex = z;
                         m_selectedZoneRelGeo = QRectF(rx, ry, rw, rh);
+                        // Exactly one selection family at a time: a zone write
+                        // invalidates any strip target a cross-screen hop left
+                        // behind (the mirror of the strip arm's zone clear).
+                        m_selectedStripTarget = {};
+                        m_selectedStripScreenId.clear();
                         writeQmlProperty(slot, QStringLiteral("selectedLayoutId"), layoutId);
                         writeQmlProperty(slot, QStringLiteral("selectedZoneIndex"), z);
                     }

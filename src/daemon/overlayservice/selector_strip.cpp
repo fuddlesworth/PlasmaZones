@@ -28,26 +28,52 @@ QVariantList OverlayService::buildStripList(const QString& screenId) const
 
 int OverlayService::visibleStripCardCount(const QString& screenId) const
 {
-    return buildStripList(screenId).size();
+    // Memoized: the trigger-edge probe asks per cursor tick, and the answer
+    // only changes at the invalidation points listed on the cache member.
+    // Counting through buildStripList (not a separate engine count) keeps
+    // the row-for-row agreement with the rendered card list.
+    const auto cached = m_stripCardCountCache.constFind(screenId);
+    if (cached != m_stripCardCountCache.constEnd()) {
+        return cached.value();
+    }
+    const int count = static_cast<int>(buildStripList(screenId).size());
+    m_stripCardCountCache.insert(screenId, count);
+    return count;
 }
 
 void OverlayService::refreshStripSelector(const QString& screenId)
 {
+    // The reshaped strip renumbers targets, so a stored selection keyed to
+    // THIS screen is stale by construction and is dropped even when the popup
+    // is hidden — a hidden popup gets no hit-test updates, so nothing else
+    // would ever invalidate it, and the settle path would still prefer it at
+    // drop. Selections keyed to a different screen describe a strip this
+    // reshape did not touch and survive. The next cursor tick re-selects
+    // under the new list.
+    if (PhosphorScreens::ScreenIdentity::screensMatch(m_selectedStripScreenId, screenId)) {
+        m_selectedStripTarget = {};
+        m_selectedStripScreenId.clear();
+    }
+    // The strip changed shape, so any memoized card count for it is stale.
+    m_stripCardCountCache.remove(screenId);
     if (!m_zoneSelectorVisible) {
         return;
     }
-    const auto it = m_screenStates.constFind(screenId);
-    if (it == m_screenStates.constEnd() || !it->zoneSelectorSlot()) {
+    if (const auto preIt = m_screenStates.constFind(screenId);
+        preIt == m_screenStates.constEnd() || !preIt->zoneSelectorSlot()) {
         return;
     }
     // Full property re-push: the card list, the bar geometry sized off the
     // new card count, and the scroll math all shift together when the strip
     // gains or loses the drag window's column at a preview boundary.
     updateZoneSelectorWindow(screenId);
-    // The rebuilt cards renumber targets, so the stored selection is stale
-    // by construction. The next cursor tick re-selects under the new list.
-    m_selectedStripTarget = {};
-    m_selectedStripScreenId.clear();
+    // Re-find after the update: updateZoneSelectorWindow writes the screen
+    // state through non-const operator[], so an iterator held across it is
+    // the detach hazard hideZoneSelector's comment warns about.
+    const auto it = m_screenStates.constFind(screenId);
+    if (it == m_screenStates.constEnd() || !it->zoneSelectorSlot()) {
+        return;
+    }
     auto* slot = it->zoneSelectorSlot();
     writeQmlProperty(slot, QStringLiteral("selectedStripColumn"), -1);
     writeQmlProperty(slot, QStringLiteral("selectedStripGap"), -1);

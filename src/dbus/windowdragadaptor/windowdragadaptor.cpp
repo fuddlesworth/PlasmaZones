@@ -833,10 +833,15 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     }
 
     if (nearEdge && !m_zoneSelectorShown) {
-        // Show zone selector on the cursor's screen only
-        m_zoneSelectorShown = true;
-        m_zoneSelectorShownOn = selectorScreenId;
+        // Show zone selector on the cursor's screen only. Latch the shown
+        // flag from the service's actual visibility, not from intent:
+        // showZoneSelector can silently refuse (no showable slot, recreation
+        // pending), and a latched-true flag against a refused show blocks
+        // the re-show arm above until the cursor leaves and re-enters the
+        // edge, while updateSelectorPosition polls a popup that never was.
         m_overlayService->showZoneSelector(selectorScreenId);
+        m_zoneSelectorShown = m_overlayService->isZoneSelectorVisible();
+        m_zoneSelectorShownOn = m_zoneSelectorShown ? selectorScreenId : QString();
     } else if (!nearEdge && m_zoneSelectorShown) {
         // Hide zone selector when cursor moves away from edge
         m_zoneSelectorShown = false;
@@ -874,9 +879,10 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     QRect vsGeom = smgr ? smgr->screenGeometry(effectiveId) : QRect();
     const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
 
-    // Use filtered layout count (matches what the zone selector popup actually displays)
-    // so the keep-visible zone matches the real popup dimensions
-    const int layoutCount = m_overlayService ? m_overlayService->visibleLayoutCount(effectiveId)
+    // Use the selector card count (matches what the popup actually displays,
+    // strip cards included) so the keep-visible zone matches the real popup
+    // dimensions.
+    const int layoutCount = m_overlayService ? m_overlayService->selectorCardCount(effectiveId)
                                              : (m_layoutManager ? m_layoutManager->layouts().size() : 0);
 
     // Use shared layout computation (same code as OverlayService)
