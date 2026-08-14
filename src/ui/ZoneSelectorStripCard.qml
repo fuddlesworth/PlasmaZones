@@ -7,8 +7,8 @@ import org.kde.kirigami as Kirigami
 /**
  * One column of the strip-mode zone selector: a card representing a
  * scrolling column, its tiles stacked by their resolved fractions (or a
- * tab strip when the column is tabbed), plus a badge row for minimized
- * tiles. Rendering only — the C++ hit-test (selector_strip.cpp) reads this
+ * tab strip when the column is tabbed), with a window/tab count caption.
+ * Rendering only — the C++ hit-test (selector_strip.cpp) reads this
  * card's rendered rect back by objectName + `index` and computes the
  * gap / half / whole-card targets itself, so this file carries no pointer
  * handling, mirroring LayoutCard's role in the layout-mode popup.
@@ -18,6 +18,12 @@ import org.kde.kirigami as Kirigami
  * insert-bar overlays in ZoneSelectorContent.qml position arithmetically
  * off the same uniformity. Column proportion is conveyed by the tile
  * geometry inside the preview, not by the card's footprint.
+ *
+ * PRODUCER CONTRACT: every tile map carries numeric x/y/width/height and a
+ * boolean activeTab (stripcardserialize.cpp inserts all of them
+ * unconditionally). The geometry bindings below rely on that — a missing
+ * field would propagate as NaN into item geometry with no diagnostic — so
+ * any second producer must honour the same shape.
  */
 Item {
     id: card
@@ -49,14 +55,6 @@ Item {
     readonly property bool isTabbed: modelData.tabbed === true
     readonly property bool isActiveColumn: modelData.active === true
     readonly property var tiles: modelData.tiles || []
-    readonly property int minimizedCount: {
-        var n = 0;
-        for (var i = 0; i < tiles.length; ++i) {
-            if (tiles[i].minimized)
-                n++;
-        }
-        return n;
-    }
 
     width: previewWidth + cardSidePadding * 2
     height: previewHeight + labelSpace + cardPadding
@@ -79,8 +77,12 @@ Item {
         anchors.topMargin: Kirigami.Units.gridUnit
         width: card.previewWidth
         height: card.previewHeight
+        // A min-height-overflowing stack legitimately resolves tail tiles
+        // past the column (relRect y > 1); clip so they cannot paint over
+        // the caption or a neighbouring card.
+        clip: true
 
-        // Tab strip for a tabbed column: one segment per non-minimized tile.
+        // Tab strip for a tabbed column: one segment per tab.
         Row {
             id: tabStrip
 
@@ -97,12 +99,11 @@ Item {
                 delegate: Rectangle {
                     required property var modelData
 
-                    visible: !modelData.minimized
-                    width: visible ? Math.max(4, (tabStrip.width - tabStrip.spacing * Math.max(0, card.tiles.length - card.minimizedCount - 1)) / Math.max(1, card.tiles.length - card.minimizedCount)) : 0
+                    width: Math.max(4, (tabStrip.width - tabStrip.spacing * Math.max(0, card.tiles.length - 1)) / Math.max(1, card.tiles.length))
                     height: tabStrip.height
                     radius: 2
                     color: modelData.activeTab ? card.highlightColor : card.inactiveColor
-                    opacity: modelData.activeTab ? card.activeOpacity + 0.2 : card.inactiveOpacity
+                    opacity: modelData.activeTab ? card.activeOpacity : card.inactiveOpacity
                     border.width: 1
                     border.color: card.zoneBorderColor
                 }
@@ -125,14 +126,18 @@ Item {
             border.color: card.zoneBorderColor
         }
 
-        // Normal column: tiles stacked by their resolved fractions.
+        // Normal column: tiles stacked by their resolved fractions. The
+        // width/height gates double as the guard against a producer that
+        // omitted a geometry field (see the PRODUCER CONTRACT above): a
+        // missing field compares false and hides the tile instead of
+        // silently mispositioning it with NaN geometry.
         Repeater {
             model: card.isTabbed ? [] : card.tiles
 
             delegate: Rectangle {
                 required property var modelData
 
-                visible: !modelData.minimized && !modelData.hidden && modelData.height > 0
+                visible: modelData.width > 0 && modelData.height > 0
                 x: modelData.x * preview.width
                 y: modelData.y * preview.height
                 width: Math.max(0, modelData.width * preview.width - card.zonePadding)
@@ -144,23 +149,26 @@ Item {
                 border.color: card.zoneBorderColor
             }
         }
-
-        // Half-target highlight for a normal column; whole-card for tabbed.
-        Rectangle {
-            visible: card.selectedHalf >= 0
-            x: 0
-            y: card.selectedHalf === 1 ? parent.height / 2 : 0
-            width: parent.width
-            height: card.selectedHalf === 2 ? parent.height : parent.height / 2
-            radius: 3
-            color: card.highlightColor
-            opacity: card.activeOpacity
-            border.width: 2
-            border.color: card.highlightColor
-        }
     }
 
-    // Caption: window count, with a minimized-count hint when present.
+    // Half-target highlight: top / bottom half of the preview for a normal
+    // column, the WHOLE CARD for the tabbed dock (half 2) — the C++ commit
+    // treats half 2 as docking onto the entire column, so the highlight
+    // footprint matches that semantic rather than stopping at the preview.
+    Rectangle {
+        visible: card.selectedHalf >= 0
+        x: card.selectedHalf === 2 ? 0 : preview.x
+        y: card.selectedHalf === 2 ? 0 : (card.selectedHalf === 1 ? preview.y + preview.height / 2 : preview.y)
+        width: card.selectedHalf === 2 ? card.width : preview.width
+        height: card.selectedHalf === 2 ? card.height : preview.height / 2
+        radius: card.selectedHalf === 2 ? cardBackground.radius : 3
+        color: card.highlightColor
+        opacity: card.activeOpacity
+        border.width: 2
+        border.color: card.highlightColor
+    }
+
+    // Caption: window / tab count.
     Text {
         anchors.top: preview.bottom
         anchors.topMargin: Kirigami.Units.smallSpacing
@@ -170,12 +178,6 @@ Item {
         font.pointSize: Kirigami.Theme.defaultFont.pointSize * 0.85
         // Plural strings carry %n (this project's i18np substitutes only %n;
         // %1 renders literally — see PR #801).
-        text: {
-            var visibleCount = Math.max(1, card.tiles.length - card.minimizedCount);
-            var label = card.isTabbed ? i18ncp("@info:label tabbed column tab count", "%n tab", "%n tabs", visibleCount) : i18ncp("@info:label column window count", "%n window", "%n windows", visibleCount);
-            if (card.minimizedCount > 0)
-                label = i18nc("@info:label column caption with minimized count", "%1 (%2)", label, i18ncp("@info:label minimized window count", "%n minimized", "%n minimized", card.minimizedCount));
-            return label;
-        }
+        text: card.isTabbed ? i18ncp("@info:label tabbed column tab count", "%n tab", "%n tabs", card.tiles.length) : i18ncp("@info:label column window count", "%n window", "%n windows", card.tiles.length)
     }
 }

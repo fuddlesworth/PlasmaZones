@@ -7,6 +7,26 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+// ─── Keys ─────────────────────────────────────────────────────────────────
+// QLatin1String instances referenced from every insert so there is exactly
+// one place each wire spelling lives — same shape as layoutpreviewserialize.
+// These keys are read BY NAME in ZoneSelectorStripCard.qml, so a typo here
+// is a silent runtime miss, not a compile error.
+namespace K {
+constexpr QLatin1String X{"x"};
+constexpr QLatin1String Y{"y"};
+constexpr QLatin1String Width{"width"};
+constexpr QLatin1String Height{"height"};
+constexpr QLatin1String ActiveTab{"activeTab"};
+constexpr QLatin1String Tabbed{"tabbed"};
+constexpr QLatin1String Active{"active"};
+constexpr QLatin1String Tiles{"tiles"};
+} // namespace K
+
+} // namespace
+
 QVariantList stripColumnsToVariantList(const PhosphorScrollEngine::ScrollStripSnapshot& snapshot)
 {
     QVariantList columns;
@@ -17,22 +37,17 @@ QVariantList stripColumnsToVariantList(const PhosphorScrollEngine::ScrollStripSn
         tiles.reserve(column.tiles.size());
         for (const PhosphorScrollEngine::ScrollStripSnapshotTile& tile : column.tiles) {
             QVariantMap tileMap;
-            tileMap.insert(QStringLiteral("windowId"), tile.windowId);
-            tileMap.insert(QStringLiteral("x"), tile.relRect.x());
-            tileMap.insert(QStringLiteral("y"), tile.relRect.y());
-            tileMap.insert(QStringLiteral("width"), tile.relRect.width());
-            tileMap.insert(QStringLiteral("height"), tile.relRect.height());
-            tileMap.insert(QStringLiteral("minimized"), tile.minimized);
-            tileMap.insert(QStringLiteral("hidden"), tile.hidden);
-            tileMap.insert(QStringLiteral("activeTab"), tile.activeTab);
+            tileMap.insert(K::X, tile.relRect.x());
+            tileMap.insert(K::Y, tile.relRect.y());
+            tileMap.insert(K::Width, tile.relRect.width());
+            tileMap.insert(K::Height, tile.relRect.height());
+            tileMap.insert(K::ActiveTab, tile.activeTab);
             tiles.append(tileMap);
         }
         QVariantMap columnMap;
-        columnMap.insert(QStringLiteral("tabbed"), column.tabbed);
-        columnMap.insert(QStringLiteral("active"), ci == snapshot.activeColumnIndex);
-        columnMap.insert(QStringLiteral("relWidth"), column.relWidth);
-        columnMap.insert(QStringLiteral("relHeight"), column.relHeight);
-        columnMap.insert(QStringLiteral("tiles"), tiles);
+        columnMap.insert(K::Tabbed, column.tabbed);
+        columnMap.insert(K::Active, ci == snapshot.activeColumnIndex);
+        columnMap.insert(K::Tiles, tiles);
         columns.append(columnMap);
     }
     return columns;

@@ -30,8 +30,12 @@ private Q_SLOTS:
     void columnsFollowStripOrder();
     void tabbedColumnMarksTabs();
     void minimizedTileKeptWithNullRect();
+    void fullyMinimizedColumnStillEmitted();
     void excludeRemovesTileAndRenumbers();
     void excludeDropsEmptiedColumn();
+    void excludeActiveSoloColumnRepointsActive();
+    void excludeActiveTilePromotesSurvivor();
+    void gapsShareTheColumnHeight();
     void livePreviewOmitsDraggedWindow();
 
 private:
@@ -95,8 +99,6 @@ void TestScrollEngineSnapshot::columnsFollowStripOrder()
     // Solo tiles are their column's active tile and fill their column.
     QVERIFY(snap.columns.at(0).tiles.at(0).activeTab);
     QVERIFY(!snap.columns.at(0).tiles.at(0).hidden);
-    QVERIFY(snap.columns.at(0).relWidth > 0.0);
-    QVERIFY(snap.columns.at(0).relHeight > 0.0);
     QVERIFY(snap.columns.at(0).tiles.at(0).relRect.height() > 0.9);
     // The last-opened window's column is active.
     QCOMPARE(snap.activeColumnIndex, 2);
@@ -159,6 +161,27 @@ void TestScrollEngineSnapshot::minimizedTileKeptWithNullRect()
     QVERIFY(!column.tiles.at(1).relRect.isNull());
 }
 
+void TestScrollEngineSnapshot::fullyMinimizedColumnStillEmitted()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    // Minimize b's SOLE tile: relayout emits no entry for the column, but
+    // the snapshot must keep it (with its tile, rect-less) — dropping it
+    // would renumber c against the model the target indices name.
+    QVERIFY(state->strip().setWindowMinimized(QStringLiteral("b"), true, engineParams()));
+
+    const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"));
+    QVERIFY(snap.valid);
+    QCOMPARE(snap.columns.size(), 3);
+    QCOMPARE(snap.columns.at(1).tiles.size(), 1);
+    QVERIFY(snap.columns.at(1).tiles.at(0).minimized);
+    QVERIFY(snap.columns.at(1).tiles.at(0).relRect.isNull());
+    QCOMPARE(snap.columns.at(2).tiles.at(0).windowId, QStringLiteral("c"));
+}
+
 void TestScrollEngineSnapshot::excludeRemovesTileAndRenumbers()
 {
     QObject owner;
@@ -192,6 +215,76 @@ void TestScrollEngineSnapshot::excludeDropsEmptiedColumn()
     QCOMPARE(snap.columns.size(), 2);
     QCOMPARE(snap.columns.at(0).tiles.at(0).windowId, QStringLiteral("a"));
     QCOMPARE(snap.columns.at(1).tiles.at(0).windowId, QStringLiteral("c"));
+    // c was the active column (last opened, model index 2); after b's column
+    // drops, the active index renumbers with it.
+    QCOMPARE(snap.activeColumnIndex, 1);
+}
+
+void TestScrollEngineSnapshot::excludeActiveSoloColumnRepointsActive()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+
+    // c is the active column AND the excluded window (the common
+    // drag-a-solo-window case). The real detach re-points the active index
+    // to qMin(colIdx, size - 1) — the new last column — and the emulation
+    // must agree, or the popup shows no active-column highlight until the
+    // trigger is held and the real detach runs.
+    const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+    QVERIFY(snap.valid);
+    QCOMPARE(snap.columns.size(), 2);
+    QCOMPARE(snap.activeColumnIndex, 1);
+}
+
+void TestScrollEngineSnapshot::excludeActiveTilePromotesSurvivor()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    stackUnder(state, 1, 1, QStringLiteral("c"));
+
+    // c is column 1's ACTIVE tile after the re-insert. Excluding it leaves b
+    // with no activeTab from the model comparison (b's model index is 0, the
+    // active index was 1); the snapshot promotes the survivor the way the
+    // real detach re-points activeTileIdx.
+    const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+    QVERIFY(snap.valid);
+    QCOMPARE(snap.columns.size(), 2);
+    QCOMPARE(snap.columns.at(1).tiles.size(), 1);
+    QCOMPARE(snap.columns.at(1).tiles.at(0).windowId, QStringLiteral("b"));
+    QVERIFY(snap.columns.at(1).tiles.at(0).activeTab);
+    QVERIFY(!snap.columns.at(1).tiles.at(0).hidden);
+}
+
+void TestScrollEngineSnapshot::gapsShareTheColumnHeight()
+{
+    // The zero-gap fixture cannot observe a gap-dependent defect (its own
+    // header says so, and that blind spot hid a real drop-indicator bug), so
+    // pin the rel math under a NON-ZERO gap: two stacked tiles must NOT sum
+    // to the full column height — the gap between them takes its share.
+    QObject owner;
+    ScrollEngine* engine = ScrollTestUtils::makeGappedProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(state->strip().takeWindow(QStringLiteral("c"), ScrollTestUtils::gappedEngineParams()));
+    QVERIFY(state->strip().insertWindowIntoColumnAt(1, 1, QStringLiteral("c"), ScrollTestUtils::gappedEngineParams()));
+
+    const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"));
+    QVERIFY(snap.valid);
+    QCOMPARE(snap.columns.size(), 2);
+    const ScrollStripSnapshotColumn& stacked = snap.columns.at(1);
+    QCOMPARE(stacked.tiles.size(), 2);
+    const qreal topHeight = stacked.tiles.at(0).relRect.height();
+    const qreal bottomHeight = stacked.tiles.at(1).relRect.height();
+    QVERIFY(topHeight > 0.0);
+    QVERIFY(bottomHeight > 0.0);
+    QVERIFY2(topHeight + bottomHeight < 1.0, "the inner gap must take its share of the column height");
+    // And the second tile starts BELOW the first plus the gap, not flush.
+    QVERIFY(stacked.tiles.at(1).relRect.y() > topHeight);
 }
 
 void TestScrollEngineSnapshot::livePreviewOmitsDraggedWindow()

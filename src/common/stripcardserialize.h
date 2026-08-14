@@ -5,14 +5,20 @@
 
 // Canonical serialisation of a ScrollStripSnapshot to the QML wire shape
 // consumed by ZoneSelectorContent.qml's strip layer (the `stripColumns`
-// property). One shape, one producer (OverlayService::buildStripList) —
-// mirrors layoutpreviewserialize's role for the layout-mode popup.
+// property). One shape, one producer — the strip-cards provider Daemon's
+// initEngines installs, consumed through OverlayService::buildStripList —
+// mirroring layoutpreviewserialize's role for the layout-mode popup.
 //
-// Column map: { tabbed: bool, active: bool, relWidth: real, relHeight: real,
-//               tiles: [ { windowId, x, y, width, height, minimized,
-//                          hidden, activeTab } ] }
+// Column map: { tabbed: bool, active: bool,
+//               tiles: [ { x, y, width, height, activeTab } ] }
 // Tile x/y/width/height are the snapshot's column-relative fractions
-// (0 for minimized / hidden tiles, which resolve no rect).
+// (0 for tiles that resolve no rect, e.g. the hidden tabs of a tabbed
+// column). Every key here has a reader in ZoneSelectorStripCard.qml; the
+// snapshot's windowId, minimized and hidden flags and the valid flag
+// deliberately have no wire representation (identity is unused by the card,
+// minimize is a float in this daemon so the flag can never be true here,
+// hidden is derivable from tabbed + activeTab, and the popup renders "no
+// strip data" and "empty strip" the same way on purpose).
 //
 // POSITION CONTRACT: the list index of each column, and of each tile inside
 // its column, IS the DragInsertTarget index the hit-test will emit — see

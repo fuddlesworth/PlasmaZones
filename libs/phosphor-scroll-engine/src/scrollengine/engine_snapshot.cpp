@@ -57,6 +57,7 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
 
     const QVector<Column>& modelColumns = state->strip().columns();
     snap.columns.reserve(modelColumns.size());
+    int activeColumnDroppedAt = -1;
     for (int ci = 0; ci < modelColumns.size(); ++ci) {
         const Column& modelColumn = modelColumns.at(ci);
         ScrollStripSnapshotColumn outColumn;
@@ -64,10 +65,6 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
 
         const ResolvedColumn* resolvedColumn = resolvedByIndex.value(ci, nullptr);
         const QRect columnRect = resolvedColumn ? resolvedColumn->rect : QRect();
-        if (columnRect.isValid() && !columnRect.isEmpty()) {
-            outColumn.relWidth = static_cast<qreal>(columnRect.width()) / params.workArea.width();
-            outColumn.relHeight = static_cast<qreal>(columnRect.height()) / params.workArea.height();
-        }
 
         for (int ti = 0; ti < modelColumn.tiles.size(); ++ti) {
             const Tile& modelTile = modelColumn.tiles.at(ti);
@@ -100,14 +97,51 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
         // A column emptied by the exclusion is dropped WITH renumbering —
         // that is the detach a commit will have performed (takeWindow removes
         // the emptied column), so keeping a placeholder would offset every
-        // later card's index against the strip the target indices name.
+        // later card's index against the strip the target indices name. When
+        // the dropped column WAS the active one, remember where it stood in
+        // the output: the real detach re-points the active index to the
+        // column that takes its place (removeWindowInternal's
+        // qMin(colIdx, size - 1)), and the emulation must agree or the popup
+        // shows no active-column highlight for the common drag-a-solo-window
+        // case until the trigger is held.
         if (outColumn.tiles.isEmpty()) {
+            if (ci == state->strip().activeColumnIndex()) {
+                activeColumnDroppedAt = snap.columns.size();
+            }
             continue;
+        }
+        // Excluding the active tile leaves the survivors with no activeTab
+        // (the model index comparison above ran before the drop); the real
+        // detach re-points activeTileIdx to a surviving tile, so promote one
+        // the same way — first non-minimized, else the first. Only an
+        // exclusion can strip the flag: the model's activeTileIdx always
+        // names a live tile (setWindowMinimized re-points it).
+        if (!excluded.isEmpty()) {
+            bool hasActive = false;
+            for (const ScrollStripSnapshotTile& t : std::as_const(outColumn.tiles)) {
+                hasActive = hasActive || t.activeTab;
+            }
+            if (!hasActive && !outColumn.tiles.isEmpty()) {
+                int promote = 0;
+                for (int i = 0; i < outColumn.tiles.size(); ++i) {
+                    if (!outColumn.tiles.at(i).minimized) {
+                        promote = i;
+                        break;
+                    }
+                }
+                outColumn.tiles[promote].activeTab = true;
+                outColumn.tiles[promote].hidden = false;
+            }
         }
         if (ci == state->strip().activeColumnIndex()) {
             snap.activeColumnIndex = snap.columns.size();
         }
         snap.columns.append(outColumn);
+    }
+    // Post-loop fixup for the dropped-active-column case: the final column
+    // count is not known at the point the drop happens.
+    if (activeColumnDroppedAt >= 0 && !snap.columns.isEmpty()) {
+        snap.activeColumnIndex = qMin(activeColumnDroppedAt, static_cast<int>(snap.columns.size()) - 1);
     }
     return snap;
 }

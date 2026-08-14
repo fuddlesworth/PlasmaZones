@@ -103,32 +103,36 @@ struct ScrollVisibleTileWithRect
 /// ResolvedTile this keeps MINIMIZED tiles, because the snapshot's tile
 /// positions must stay valid DragInsertTarget.secondary indices — the same
 /// model-order rule computeDragInsertTargetAtPoint enforces by mapping
-/// resolved hits back through Column::indexOfWindow.
+/// resolved hits back through Column::indexOfWindow. Note the minimized flag
+/// serves embedders that deliver a real minimize signal
+/// (ScrollStrip::setWindowMinimized); the PlasmaZones daemon reports minimize
+/// as a float, so its own snapshots never carry a minimized tile.
 struct ScrollStripSnapshotTile
 {
     QString windowId;
-    /// Rect relative to the owning column's resolved bounds (0..1 on both
-    /// axes). Null for minimized tiles (they resolve no rect) and for the
-    /// hidden tabs of a tabbed column (a renderer draws those as tabs, not
-    /// stacked rects).
+    /// Rect relative to the owning column's resolved bounds, 0..1 on x. On y
+    /// it MAY exceed 1.0: when even the min-height floors overflow the
+    /// column, the trailing tiles lay out below the work area and the
+    /// overflow stands (renderers clip). A tile can also resolve a
+    /// zero-height rect (the overflow tail squeezed to nothing). Null for
+    /// minimized tiles (they resolve no rect) and for the hidden tabs of a
+    /// tabbed column (a renderer draws those as tabs, not stacked rects).
     QRectF relRect;
     bool minimized = false;
-    /// Non-active tab of a tabbed column.
+    /// Non-active tab of a tabbed column. The shipped renderer branches on
+    /// the column's tabbed flag instead; carried for direct consumers.
     bool hidden = false;
     /// The column's active tile (for a tabbed column: the visible tab).
     bool activeTab = false;
 };
 
-/// One column of a strip snapshot, in strip order.
+/// One column of a strip snapshot, in strip order. Deliberately carries no
+/// per-column footprint: the shipped popup renders uniform-width cards by
+/// design and conveys column proportion through the tile geometry inside the
+/// preview, so a resolved-width fraction here would be produced-and-unread.
 struct ScrollStripSnapshotColumn
 {
     bool tabbed = false;
-    /// Resolved column width as a fraction of the work-area width. 0 when
-    /// the column resolves no rect (every tile minimized) — renderers clamp
-    /// to their own minimum card width.
-    qreal relWidth = 0.0;
-    /// Resolved column height as a fraction of the work-area height.
-    qreal relHeight = 0.0;
     /// MODEL tile order, minimized tiles included.
     QVector<ScrollStripSnapshotTile> tiles;
 };
@@ -140,15 +144,21 @@ struct ScrollStripSnapshotColumn
 /// detached). When a drag-insert preview is live the resolve already runs
 /// against the preview's detached strip; when it is not, the accessor's
 /// excludeWindowId emulates the detach (tile removed, an emptied column
-/// dropped, later positions renumbered).
+/// dropped, later positions renumbered). The shipped consumer builds targets
+/// only from the column endpoints (tile 0 / append -1); per-tile indices are
+/// carried so richer targets stay expressible.
 struct ScrollStripSnapshot
 {
     QVector<ScrollStripSnapshotColumn> columns;
-    /// Snapshot position of the strip's active column, -1 when it was
-    /// excluded or the strip is empty.
+    /// Snapshot position of the strip's active column. When the exclusion
+    /// empties the active column, this re-points to the column that takes
+    /// its place (the right neighbour, or the new last column), matching the
+    /// real detach; -1 only when the snapshot ends up with no columns.
     int activeColumnIndex = -1;
     /// False when the screen has no strip state or no valid work area —
-    /// distinct from a valid, empty strip (zero columns).
+    /// distinct from a valid, empty strip (zero columns). A test /
+    /// introspection seam: the daemon's serializer collapses both states to
+    /// an empty card list, which the popup renders identically on purpose.
     bool valid = false;
 };
 

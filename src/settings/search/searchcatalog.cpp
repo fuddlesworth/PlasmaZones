@@ -154,6 +154,10 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              // Proper noun, deliberately untranslated (see the
                              // scrolling-window keywords).
                              QStringLiteral("niri")});
+    search->setPageKeywords(QStringLiteral("scrolling-zoneselector"),
+                            {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("strip"),
+                             PhosphorI18n::tr("selector"), PhosphorI18n::tr("picker"), PhosphorI18n::tr("popup"),
+                             PhosphorI18n::tr("drag")});
     search->setPageKeywords(QStringLiteral("scrolling-window"),
                             {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("window"),
                              PhosphorI18n::tr("strip"), PhosphorI18n::tr("focus"), PhosphorI18n::tr("center"),
@@ -1092,6 +1096,23 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Max visible rows"),
                {PhosphorI18n::tr("rows"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("visible")});
     addSection(search, QStringLiteral("snapping-zoneselector"), QStringLiteral("previewSize"),
+               PhosphorI18n::tr("Preview size"));
+
+    // Scrolling › Strip Selector. The positionTrigger / triggerDistance /
+    // previewSize anchors are DELIBERATELY declared for both selector pages:
+    // the cards are shared components hosted by two genuinely distinct
+    // settings surfaces, so a search hit navigates to whichever page the user
+    // needs. No arrangement/grid/rows entries — the strip popup is a single
+    // horizontal row by design.
+    addSetting(search, QStringLiteral("scrolling-zoneselector"), QStringLiteral("scrollingZoneSelectorEnabled"),
+               PhosphorI18n::tr("Strip selector popup"),
+               {PhosphorI18n::tr("enable"), PhosphorI18n::tr("toggle"), PhosphorI18n::tr("picker")});
+    addSection(search, QStringLiteral("scrolling-zoneselector"), QStringLiteral("positionTrigger"),
+               PhosphorI18n::tr("Position and trigger"));
+    addSetting(search, QStringLiteral("scrolling-zoneselector"), QStringLiteral("triggerDistance"),
+               PhosphorI18n::tr("Trigger distance"),
+               {PhosphorI18n::tr("edge"), PhosphorI18n::tr("distance"), PhosphorI18n::tr("proximity")});
+    addSection(search, QStringLiteral("scrolling-zoneselector"), QStringLiteral("previewSize"),
                PhosphorI18n::tr("Preview size"));
 
     // Ordering (shared OrderingPage) + Quick shortcuts (shared QuickLayoutSlotsCard)
