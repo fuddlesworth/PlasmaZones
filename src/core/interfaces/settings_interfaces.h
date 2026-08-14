@@ -402,6 +402,63 @@ public:
 };
 
 /**
+ * @brief Settings for the strip-mode drag selector popup
+ *
+ * The scrolling engine's peer of IZoneSelectorSettings, stored under
+ * Scrolling.ZoneSelector. It carries no LayoutMode / GridColumns / MaxRows:
+ * the strip popup renders one horizontal row of column cards, so the
+ * grid-arrangement knobs have nothing to arrange.
+ *
+ * Used by: KWin Effect, KCM, Overlay Service
+ */
+class PLASMAZONES_EXPORT IScrollingZoneSelectorSettings
+{
+public:
+    virtual ~IScrollingZoneSelectorSettings() = default;
+
+    virtual bool scrollingZoneSelectorEnabled() const = 0;
+    virtual void setScrollingZoneSelectorEnabled(bool enabled) = 0;
+    virtual int scrollingZoneSelectorTriggerDistance() const = 0;
+    virtual void setScrollingZoneSelectorTriggerDistance(int distance) = 0;
+    virtual ZoneSelectorPosition scrollingZoneSelectorPosition() const = 0;
+    virtual void setScrollingZoneSelectorPosition(ZoneSelectorPosition position) = 0;
+    virtual ZoneSelectorSizeMode scrollingZoneSelectorSizeMode() const = 0;
+    virtual void setScrollingZoneSelectorSizeMode(ZoneSelectorSizeMode mode) = 0;
+    virtual int scrollingZoneSelectorPreviewWidth() const = 0;
+    virtual void setScrollingZoneSelectorPreviewWidth(int width) = 0;
+    virtual int scrollingZoneSelectorPreviewHeight() const = 0;
+    virtual void setScrollingZoneSelectorPreviewHeight(int height) = 0;
+    virtual bool scrollingZoneSelectorPreviewLockAspect() const = 0;
+    virtual void setScrollingZoneSelectorPreviewLockAspect(bool locked) = 0;
+
+    // Per-screen strip selector config resolution.
+    //
+    // The resolved value is a ZoneSelectorConfig, the SAME struct the snapping
+    // selector resolves to, because both popups are laid out by the one
+    // computeZoneSelectorLayout. layoutMode is stamped to Horizontal rather
+    // than read from a key: the strip popup is one horizontal card row and has
+    // no Grid or Vertical form to select. maxRows and gridColumns stay at the
+    // struct defaults for the same reason — a single row consults neither.
+    //
+    // Per-screen override keys REUSE the ZoneSelectorConfigKey constants (the
+    // Position / SizeMode / PreviewWidth / PreviewHeight / PreviewLockAspect /
+    // TriggerDistance subset). There is no second key namespace; the
+    // "ScrollingZoneSelector:" group prefix is what separates the two stores.
+    virtual ZoneSelectorConfig resolvedScrollingZoneSelectorConfig(const QString& /*screenIdOrName*/) const
+    {
+        ZoneSelectorConfig config;
+        config.position = static_cast<int>(scrollingZoneSelectorPosition());
+        config.layoutMode = static_cast<int>(ZoneSelectorLayoutMode::Horizontal);
+        config.sizeMode = static_cast<int>(scrollingZoneSelectorSizeMode());
+        config.previewWidth = scrollingZoneSelectorPreviewWidth();
+        config.previewHeight = scrollingZoneSelectorPreviewHeight();
+        config.previewLockAspect = scrollingZoneSelectorPreviewLockAspect();
+        config.triggerDistance = scrollingZoneSelectorTriggerDistance();
+        return config;
+    }
+};
+
+/**
  * @brief Settings related to window behavior (snap restore, sticky handling)
  *
  * Used by: KWin Effect, KCM, Window Tracking Service

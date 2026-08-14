@@ -25,6 +25,7 @@ constexpr PerScreenMapping kPerScreenMappings[] = {
     {P_PER_SCREEN_PREFIX_AUTOTILE, "Autotile"},
     {P_PER_SCREEN_PREFIX_SNAPPING, "Snapping"},
     {P_PER_SCREEN_PREFIX_SCROLLING, "Scrolling"},
+    {P_PER_SCREEN_PREFIX_SCROLLING_ZONE_SELECTOR, "ScrollingZoneSelector"},
 };
 } // namespace
 

@@ -47,6 +47,7 @@
 #define P_PER_SCREEN_PREFIX_AUTOTILE "AutotileScreen"
 #define P_PER_SCREEN_PREFIX_SNAPPING "SnappingScreen"
 #define P_PER_SCREEN_PREFIX_SCROLLING "ScrollingScreen"
+#define P_PER_SCREEN_PREFIX_SCROLLING_ZONE_SELECTOR "ScrollingZoneSelector"
 
 namespace PlasmaZones {
 
@@ -142,6 +143,11 @@ public:
     // settings page, the per-page reset manifest and any later rule slots all
     // address one subtree.
     P_CONFIG_GROUP(scrollingDropIndicatorGroup, "Scrolling.DropIndicator")
+    // Scrolling.ZoneSelector — the strip-mode drag popup on scrolling
+    // screens. Mirrors Snapping.ZoneSelector minus the grid-arrangement
+    // keys (LayoutMode / GridColumns / MaxRows): the strip popup is a
+    // single horizontal card row by construction.
+    P_CONFIG_GROUP(scrollingZoneSelectorGroup, "Scrolling.ZoneSelector")
 
     // Decorations — per-surface decoration tree (DecorationProfileTree:
     // shader-pack chain + per-pack parameters, keyed on a dot-path surface
@@ -733,6 +739,7 @@ public:
     P_CONFIG_GROUP(zoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_ZONE_SELECTOR ":")
     P_CONFIG_GROUP(autotileScreenGroupPrefix, P_PER_SCREEN_PREFIX_AUTOTILE ":")
     P_CONFIG_GROUP(scrollingScreenGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING ":")
+    P_CONFIG_GROUP(scrollingZoneSelectorGroupPrefix, P_PER_SCREEN_PREFIX_SCROLLING_ZONE_SELECTOR ":")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1/v2/v3/v4 accessors — for migration code, plus the two

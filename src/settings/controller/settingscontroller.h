@@ -690,6 +690,13 @@ public:
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
 
+    // ── Per-screen strip selector overrides ──────────────────────────────────
+    Q_INVOKABLE QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenScrollingZoneSelectorSetting(const QString& screenName, const QString& key,
+                                                              const QVariant& value);
+    Q_INVOKABLE void clearPerScreenScrollingZoneSelectorSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingZoneSelectorSettings(const QString& screenName) const;
+
     Q_INVOKABLE QVariantMap loadWindowGeometry() const;
     Q_INVOKABLE void saveWindowGeometry(int x, int y, int width, int height);
 

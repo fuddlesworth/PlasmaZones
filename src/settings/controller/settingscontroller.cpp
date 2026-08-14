@@ -572,6 +572,7 @@ SettingsController::SettingsController(QObject* parent)
     wirePerScreenOverrideSignal(&Settings::perScreenAutotileSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenSnappingSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenZoneSelectorSettingsChanged);
+    wirePerScreenOverrideSignal(&Settings::perScreenScrollingZoneSelectorSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenScrollingSettingsChanged);
 
     // An external config reload parks while the user has unsaved edits, so it

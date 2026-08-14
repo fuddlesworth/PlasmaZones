@@ -84,6 +84,7 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneGeometrySettings,
                                      public IWindowExclusionSettings,
                                      public IZoneSelectorSettings,
+                                     public IScrollingZoneSelectorSettings,
                                      public IWindowBehaviorSettings,
                                      public IDefaultLayoutSettings,
                                      public IOrderingSettings,
@@ -105,6 +106,7 @@ public:
     //   - IZoneGeometrySettings: padding, gaps, thresholds, performance
     //   - IWindowExclusionSettings: transient windows, size filters
     //   - IZoneSelectorSettings: zone selector UI configuration
+    //   - IScrollingZoneSelectorSettings: strip-mode drag selector UI configuration
     //   - IWindowBehaviorSettings: snap restore, sticky handling
     //   - IDefaultLayoutSettings: default layout ID
     //   - IOrderingSettings: manual layout/algorithm ordering
@@ -542,6 +544,25 @@ public:
         return false;
     }
 
+    // Strip-mode selector overrides. Separate store from the zone-selector
+    // pair above (own group prefix, own map) but the same key vocabulary —
+    // see the note on resolvedScrollingZoneSelectorConfig.
+    virtual QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
+    virtual void setPerScreenScrollingZoneSelectorSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
+                                                          const QVariant& /*value*/)
+    {
+    }
+    virtual void clearPerScreenScrollingZoneSelectorSettings(const QString& /*screenIdOrName*/)
+    {
+    }
+    virtual bool hasPerScreenScrollingZoneSelectorSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
+
     // NOTE: snapping exposes only the getter — `getPerScreenSnappingSettings`
     // is the lone snapping accessor declared on
     // PhosphorEngine::IGeometrySettings (consumed by the geometry
@@ -700,6 +721,14 @@ Q_SIGNALS:
     void zoneSelectorSizeModeChanged();
     void zoneSelectorMaxRowsChanged();
     void perScreenZoneSelectorSettingsChanged();
+    void scrollingZoneSelectorEnabledChanged();
+    void scrollingZoneSelectorTriggerDistanceChanged();
+    void scrollingZoneSelectorPositionChanged();
+    void scrollingZoneSelectorSizeModeChanged();
+    void scrollingZoneSelectorPreviewWidthChanged();
+    void scrollingZoneSelectorPreviewHeightChanged();
+    void scrollingZoneSelectorPreviewLockAspectChanged();
+    void perScreenScrollingZoneSelectorSettingsChanged();
     void perScreenAutotileSettingsChanged();
     void perScreenSnappingSettingsChanged();
     void perScreenScrollingSettingsChanged();

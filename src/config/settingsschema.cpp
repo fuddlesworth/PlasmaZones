@@ -58,6 +58,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendBehaviorSchema(s);
     appendAutotilingSchema(s);
     appendScrollingSchema(s);
+    appendScrollingZoneSelectorSchema(s);
     appendWindowsSchema(s);
     appendGapsSchema(s);
     appendDecorationsSchema(s);

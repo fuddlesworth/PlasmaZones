@@ -118,6 +118,12 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                      {QStringLiteral("auto"), PhosphorI18n::tr("Auto")},
                      {QStringLiteral("manual"), PhosphorI18n::tr("Manual")},
                  });
+        // The strip selector twin reuses the same vocabularies (no
+        // LayoutMode: the strip popup is a single horizontal card row).
+        t.insert(pairKey(CD::scrollingZoneSelectorGroup(), CD::positionKey()),
+                 t.value(pairKey(CD::snappingZoneSelectorGroup(), CD::positionKey())));
+        t.insert(pairKey(CD::scrollingZoneSelectorGroup(), CD::sizeModeKey()),
+                 t.value(pairKey(CD::snappingZoneSelectorGroup(), CD::sizeModeKey())));
 
         // ── Drag modifiers. No settings page exposes these, so the enumerator
         //    names are the only prior art for the wording. ──────────────────

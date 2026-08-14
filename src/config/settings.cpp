@@ -240,6 +240,7 @@ void Settings::load()
     // daemon reloads the maps but its settingsChanged-driven retile never runs,
     // so per-monitor gaps never take effect on save (discussion #661).
     const QHash<QString, QVariantMap> perScreenZoneSelectorBefore = m_perScreenZoneSelectorSettings;
+    const QHash<QString, QVariantMap> perScreenScrollingZoneSelectorBefore = m_perScreenScrollingZoneSelectorSettings;
     const QHash<QString, QVariantMap> perScreenAutotileBefore = m_perScreenAutotileSettings;
     const QHash<QString, QVariantMap> perScreenScrollingBefore = m_perScreenScrollingSettings;
 
@@ -247,6 +248,8 @@ void Settings::load()
     loadVirtualScreenConfigs(m_configBackend);
 
     const bool perScreenZoneSelectorChanged = perScreenZoneSelectorBefore != m_perScreenZoneSelectorSettings;
+    const bool perScreenScrollingZoneSelectorChanged =
+        perScreenScrollingZoneSelectorBefore != m_perScreenScrollingZoneSelectorSettings;
     const bool perScreenAutotileChanged = perScreenAutotileBefore != m_perScreenAutotileSettings;
     const bool perScreenScrollingChanged = perScreenScrollingBefore != m_perScreenScrollingSettings;
     // Per-monitor gaps are config-backed and live in the per-screen autotile store.
@@ -257,7 +260,8 @@ void Settings::load()
     // gap resnap.
     const bool perScreenGapChanged =
         Settings::perScreenGapDimensionsDiffer(perScreenAutotileBefore, m_perScreenAutotileSettings);
-    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenAutotileChanged || perScreenScrollingChanged;
+    const bool perScreenChanged = perScreenZoneSelectorChanged || perScreenScrollingZoneSelectorChanged
+        || perScreenAutotileChanged || perScreenScrollingChanged;
 
     qCInfo(lcConfig) << "Settings loaded";
 
@@ -300,6 +304,8 @@ void Settings::load()
     // on reloads that left the maps untouched.
     if (perScreenZoneSelectorChanged)
         Q_EMIT perScreenZoneSelectorSettingsChanged();
+    if (perScreenScrollingZoneSelectorChanged)
+        Q_EMIT perScreenScrollingZoneSelectorSettingsChanged();
     if (perScreenAutotileChanged)
         Q_EMIT perScreenAutotileSettingsChanged();
     if (perScreenScrollingChanged)

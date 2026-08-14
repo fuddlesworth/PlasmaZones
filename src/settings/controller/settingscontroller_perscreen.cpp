@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Per-screen override accessors for SettingsController: the autotile,
-// scrolling and zone-selector maps plus the gap-override pair. The actual
+// scrolling, zone-selector and strip-selector maps plus the gap-override pair. The actual
 // storage lives in Settings; this file's Q_INVOKABLE wrappers thin-forward to
 // it. There is no snapping wrapper here — that one is a Q_INVOKABLE on
 // Settings itself, which QML reaches directly.
 // Dirty tracking and the perScreenOverridesChanged() refresh are NOT done
-// here: Settings emits perScreen{Autotile,Scrolling,ZoneSelector}SettingsChanged
+// here: Settings emits perScreen{Autotile,Scrolling,ZoneSelector,ScrollingZoneSelector}SettingsChanged
 // only when an override actually changes, and the controller constructor
 // wires those signals to onSettingsPropertyChanged() (dirty) and
 // perScreenOverridesChanged() (UI refresh). Emitting from these wrappers
@@ -136,6 +136,29 @@ void SettingsController::clearPerScreenZoneSelectorSettings(const QString& scree
 bool SettingsController::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenZoneSelectorSettings(screenName);
+}
+
+// ── Per-screen strip selector overrides ──────────────────────────────────
+
+QVariantMap SettingsController::getPerScreenScrollingZoneSelectorSettings(const QString& screenName) const
+{
+    return m_settings.getPerScreenScrollingZoneSelectorSettings(screenName);
+}
+
+void SettingsController::setPerScreenScrollingZoneSelectorSetting(const QString& screenName, const QString& key,
+                                                                  const QVariant& value)
+{
+    m_settings.setPerScreenScrollingZoneSelectorSetting(screenName, key, value);
+}
+
+void SettingsController::clearPerScreenScrollingZoneSelectorSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenScrollingZoneSelectorSettings(screenName);
+}
+
+bool SettingsController::hasPerScreenScrollingZoneSelectorSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenScrollingZoneSelectorSettings(screenName);
 }
 
 } // namespace PlasmaZones

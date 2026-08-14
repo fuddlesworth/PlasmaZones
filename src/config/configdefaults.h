@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "configdefaults_scrolling.h"
+#include "configdefaults_scrolling_shortcuts.h"
 
 namespace PhosphorAnimation {
 class CurveRegistry;
@@ -21,7 +21,7 @@ namespace PlasmaZones {
  *   int cols = ConfigDefaults::gridColumns();  // Returns 5
  *   int rows = ConfigDefaults::maxRows();      // Returns 4
  */
-class ConfigDefaults : public ConfigDefaultsScrolling
+class ConfigDefaults : public ConfigDefaultsScrollingShortcuts
 {
 public:
     // ═══════════════════════════════════════════════════════════════════════════

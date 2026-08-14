@@ -1351,6 +1351,99 @@ public:
         Q_EMIT settingsChanged();
     }
 
+    // IScrollingZoneSelectorSettings
+    bool scrollingZoneSelectorEnabled() const override
+    {
+        return m_scrollingZoneSelectorEnabled;
+    }
+    void setScrollingZoneSelectorEnabled(bool value) override
+    {
+        if (m_scrollingZoneSelectorEnabled == value) {
+            return;
+        }
+        m_scrollingZoneSelectorEnabled = value;
+        Q_EMIT scrollingZoneSelectorEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingZoneSelectorTriggerDistance() const override
+    {
+        return m_scrollingZoneSelectorTriggerDistance;
+    }
+    void setScrollingZoneSelectorTriggerDistance(int value) override
+    {
+        if (m_scrollingZoneSelectorTriggerDistance == value) {
+            return;
+        }
+        m_scrollingZoneSelectorTriggerDistance = value;
+        Q_EMIT scrollingZoneSelectorTriggerDistanceChanged();
+        Q_EMIT settingsChanged();
+    }
+    ZoneSelectorPosition scrollingZoneSelectorPosition() const override
+    {
+        return m_scrollingZoneSelectorPosition;
+    }
+    void setScrollingZoneSelectorPosition(ZoneSelectorPosition value) override
+    {
+        if (m_scrollingZoneSelectorPosition == value) {
+            return;
+        }
+        m_scrollingZoneSelectorPosition = value;
+        Q_EMIT scrollingZoneSelectorPositionChanged();
+        Q_EMIT settingsChanged();
+    }
+    ZoneSelectorSizeMode scrollingZoneSelectorSizeMode() const override
+    {
+        return m_scrollingZoneSelectorSizeMode;
+    }
+    void setScrollingZoneSelectorSizeMode(ZoneSelectorSizeMode value) override
+    {
+        if (m_scrollingZoneSelectorSizeMode == value) {
+            return;
+        }
+        m_scrollingZoneSelectorSizeMode = value;
+        Q_EMIT scrollingZoneSelectorSizeModeChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingZoneSelectorPreviewWidth() const override
+    {
+        return m_scrollingZoneSelectorPreviewWidth;
+    }
+    void setScrollingZoneSelectorPreviewWidth(int value) override
+    {
+        if (m_scrollingZoneSelectorPreviewWidth == value) {
+            return;
+        }
+        m_scrollingZoneSelectorPreviewWidth = value;
+        Q_EMIT scrollingZoneSelectorPreviewWidthChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingZoneSelectorPreviewHeight() const override
+    {
+        return m_scrollingZoneSelectorPreviewHeight;
+    }
+    void setScrollingZoneSelectorPreviewHeight(int value) override
+    {
+        if (m_scrollingZoneSelectorPreviewHeight == value) {
+            return;
+        }
+        m_scrollingZoneSelectorPreviewHeight = value;
+        Q_EMIT scrollingZoneSelectorPreviewHeightChanged();
+        Q_EMIT settingsChanged();
+    }
+    bool scrollingZoneSelectorPreviewLockAspect() const override
+    {
+        return m_scrollingZoneSelectorPreviewLockAspect;
+    }
+    void setScrollingZoneSelectorPreviewLockAspect(bool value) override
+    {
+        if (m_scrollingZoneSelectorPreviewLockAspect == value) {
+            return;
+        }
+        m_scrollingZoneSelectorPreviewLockAspect = value;
+        Q_EMIT scrollingZoneSelectorPreviewLockAspectChanged();
+        Q_EMIT settingsChanged();
+    }
+
     // IWindowBehaviorSettings
     bool keepWindowsInZonesOnResolutionChange() const override
     {
@@ -2491,6 +2584,15 @@ private:
     ZoneSelectorLayoutMode m_zoneSelectorLayoutMode = static_cast<ZoneSelectorLayoutMode>(ConfigDefaults::layoutMode());
     ZoneSelectorPosition m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(ConfigDefaults::position());
     ZoneSelectorSizeMode m_zoneSelectorSizeMode = static_cast<ZoneSelectorSizeMode>(ConfigDefaults::sizeMode());
+    ZoneSelectorPosition m_scrollingZoneSelectorPosition =
+        static_cast<ZoneSelectorPosition>(ConfigDefaults::scrollingZoneSelectorPosition());
+    ZoneSelectorSizeMode m_scrollingZoneSelectorSizeMode =
+        static_cast<ZoneSelectorSizeMode>(ConfigDefaults::scrollingZoneSelectorSizeMode());
+    bool m_scrollingZoneSelectorEnabled = ConfigDefaults::scrollingZoneSelectorEnabled();
+    bool m_scrollingZoneSelectorPreviewLockAspect = ConfigDefaults::scrollingZoneSelectorPreviewLockAspect();
+    int m_scrollingZoneSelectorTriggerDistance = ConfigDefaults::scrollingZoneSelectorTriggerDistance();
+    int m_scrollingZoneSelectorPreviewWidth = ConfigDefaults::scrollingZoneSelectorPreviewWidth();
+    int m_scrollingZoneSelectorPreviewHeight = ConfigDefaults::scrollingZoneSelectorPreviewHeight();
     bool m_animationsEnabled = ConfigDefaults::animationsEnabled();
     bool m_audioAutosens = ConfigDefaults::audioAutosens();
     bool m_audioMonstercat = ConfigDefaults::audioMonstercat();

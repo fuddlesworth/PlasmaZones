@@ -270,6 +270,48 @@ void SettingsAdaptor::initializeRegistryScrolling()
     REGISTER_INT_SETTING("scrollingDropIndicatorBorderRadius", scrollingDropIndicatorBorderRadius,
                          setScrollingDropIndicatorBorderRadius)
 
+    // Strip-mode selector settings. ISettings virtuals like the indicator
+    // keys above, so they register through the interface rather than in the
+    // concrete block below. No LayoutMode / GridColumns / MaxRows twin: the
+    // strip popup is one horizontal card row.
+    REGISTER_BOOL_SETTING("scrollingZoneSelectorEnabled", scrollingZoneSelectorEnabled, setScrollingZoneSelectorEnabled)
+    REGISTER_INT_SETTING("scrollingZoneSelectorTriggerDistance", scrollingZoneSelectorTriggerDistance,
+                         setScrollingZoneSelectorTriggerDistance)
+    // scrollingZoneSelectorPosition: enum (0=TopLeft .. 8=BottomRight)
+    m_getters[QStringLiteral("scrollingZoneSelectorPosition")] = [this]() {
+        return static_cast<int>(m_settings->scrollingZoneSelectorPosition());
+    };
+    m_setters[QStringLiteral("scrollingZoneSelectorPosition")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= static_cast<int>(ZoneSelectorPosition::TopLeft)
+            && val <= static_cast<int>(ZoneSelectorPosition::BottomRight)) {
+            m_settings->setScrollingZoneSelectorPosition(static_cast<ZoneSelectorPosition>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("scrollingZoneSelectorPosition")] = QStringLiteral("int");
+    // scrollingZoneSelectorSizeMode: enum (0=Auto, 1=Manual)
+    m_getters[QStringLiteral("scrollingZoneSelectorSizeMode")] = [this]() {
+        return static_cast<int>(m_settings->scrollingZoneSelectorSizeMode());
+    };
+    m_setters[QStringLiteral("scrollingZoneSelectorSizeMode")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= static_cast<int>(ZoneSelectorSizeMode::Auto)
+            && val <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
+            m_settings->setScrollingZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("scrollingZoneSelectorSizeMode")] = QStringLiteral("int");
+    REGISTER_INT_SETTING("scrollingZoneSelectorPreviewWidth", scrollingZoneSelectorPreviewWidth,
+                         setScrollingZoneSelectorPreviewWidth)
+    REGISTER_INT_SETTING("scrollingZoneSelectorPreviewHeight", scrollingZoneSelectorPreviewHeight,
+                         setScrollingZoneSelectorPreviewHeight)
+    REGISTER_BOOL_SETTING("scrollingZoneSelectorPreviewLockAspect", scrollingZoneSelectorPreviewLockAspect,
+                          setScrollingZoneSelectorPreviewLockAspect)
+
     // Scrolling settings (concrete Settings only)
     if (concrete) {
         REGISTER_CONCRETE_BOOL("scrollingEnabled", scrollingEnabled, setScrollingEnabled)
