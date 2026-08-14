@@ -53,6 +53,14 @@ inline constexpr QLatin1StringView DefaultAssignment{"default-assignment"};
 /// above — scans for the action TYPE rather than this slot id; see the
 /// `Locked` note for why the id still exists.
 inline constexpr QLatin1StringView OsdEnabled{"osd-enabled"};
+/// Context-domain drag-selector-visibility override slot — filled by
+/// `ActionType::SetDragSelectorEnabled`. A single boolean (first-matching-rule-
+/// wins): `false` suppresses the drag selector popup for the context, `true`
+/// forces it past the global selector toggle. Read by the drag adaptor's
+/// selector gate via `LayoutRegistry::resolveContextDragSelectorEnabled`,
+/// which — like the three resolvers above — scans for the action TYPE rather
+/// than this slot id; see the `Locked` note for why the id still exists.
+inline constexpr QLatin1StringView DragSelectorEnabled{"drag-selector-enabled"};
 inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Window-scoped open-placement slot — filled by `ActionType::SnapToZone`. A

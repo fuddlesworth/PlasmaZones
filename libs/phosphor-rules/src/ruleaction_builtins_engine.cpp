@@ -236,6 +236,38 @@ void ActionRegistry::registerBuiltinsEngine()
         .displayOrder = 10,
     });
 
+    // ── drag-selector-enabled slot — context-domain override of the drag
+    //    selector popup, the edge-triggered picker offered while a window is
+    //    dragged. A matched context rule shows or hides it for its
+    //    screen/desktop/activity: value == false suppresses it there,
+    //    value == true forces it past the global selector toggle. One action
+    //    covers both variants of the popup (the classic zone selector and the
+    //    scrolling strip selector) because the user-level intent is "no drag
+    //    picker on this monitor", which does not depend on which engine the
+    //    screen runs. It does NOT disable the engine, and it does not override
+    //    the gates that exist because a pick could not be committed. Live-
+    //    resolved via LayoutRegistry::resolveContextDragSelectorEnabled,
+    //    mirroring SetOsdEnabled. Seeds FALSE for the same reason: the global
+    //    selector toggle defaults ON, so the meaningful fresh rule is
+    //    "suppress here". Category "overlay" and NO tag, exactly as
+    //    SetOsdEnabled — Tag::Overlay classifies the zone-overlay PROPERTY
+    //    overrides read through resolveContextOverlay, and a popup visibility
+    //    switch is not one of them.
+    registerAction(ActionDescriptor{
+        .type = QString(ActionType::SetDragSelectorEnabled),
+        .slotFor = constantSlot(ActionSlot::DragSelectorEnabled),
+        .validate =
+            [](const QJsonObject& p) {
+                return hasBool(p, ActionParam::Value);
+            },
+        .terminal = false,
+        .allowedKeys = {QString(ActionParam::Value)},
+        .domain = ActionDomain::Context,
+        .params = {P{.key = QString(ActionParam::Value), .kind = QStringLiteral("bool"), .defaultDisplay = 0.0}},
+        .category = QStringLiteral("overlay"),
+        .displayOrder = 11,
+    });
+
     // ── manage slot — terminal. Exclude is intentionally free-form: an empty
     //    `allowedKeys` opts out of the strict-key check so a future Exclude
     //    reason/scope param can be added without a schema bump. ──

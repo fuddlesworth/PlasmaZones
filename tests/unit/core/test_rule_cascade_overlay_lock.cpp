@@ -311,6 +311,61 @@ private Q_SLOTS:
                  std::optional<bool>(true));
     }
 
+    // ─── Context drag-selector override — resolution ─────────────────────
+    // resolveContextDragSelectorEnabled is the twin of the OSD resolver above,
+    // reading the boolean DragSelectorEnabled slot off a matching context rule.
+    // Same tri-state: nullopt with no rule (follow the global selector
+    // toggle), explicit true forces the popup on, explicit false suppresses it.
+
+    void testContextDragSelector_resolution()
+    {
+        const auto selectorRule = [](const QString& name, PWR::Field field, const QVariant& value, bool enabled) {
+            PWR::RuleAction a;
+            a.type = QString(PWR::ActionType::SetDragSelectorEnabled);
+            a.params.insert(QString(PWR::ActionParam::Value), enabled);
+            PWR::Rule r;
+            r.id = QUuid::createUuid();
+            r.name = name;
+            r.enabled = true;
+            r.priority = 400;
+            r.match = PWR::MatchExpression::makeLeaf(field, PWR::Operator::Equals, value);
+            r.actions = {a};
+            return r;
+        };
+
+        RegistryFixture f = makeRegistryFixture();
+        const PWR::Rule hideMonitor =
+            selectorRule(QStringLiteral("hide on DP-1"), PWR::Field::ScreenId, QStringLiteral("DP-1"), false);
+        const PWR::Rule forceDesktop =
+            selectorRule(QStringLiteral("force on desktop 2"), PWR::Field::VirtualDesktop, 2, true);
+        QVERIFY(f.store->setAllRules({hideMonitor, forceDesktop}));
+
+        // DP-1 resolves an explicit false (suppress) regardless of activity.
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("DP-1"), 0, QString()),
+                 std::optional<bool>(false));
+        // Desktop 2 resolves an explicit true (force) on any other screen.
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("HDMI-2"), 2, QString()),
+                 std::optional<bool>(true));
+        // A context no rule pins resolves nullopt — follow the global toggle.
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("HDMI-1"), 0, QString()), std::nullopt);
+
+        // The two overrides are INDEPENDENT slots: neither resolver may read
+        // the other's action. A shared slot id (the copy-paste failure this
+        // verb's descriptor is most exposed to) would show up here as an OSD
+        // verdict leaking out of the selector resolver.
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(f.registry->resolveContextOsdEnabled(QStringLiteral("HDMI-2"), 2, QString()), std::nullopt);
+
+        // Revision invalidation: disabling the suppress rule drops the primed
+        // false verdict, while the force rule survives the cache rebuild.
+        PWR::Rule disabled = hideMonitor;
+        disabled.enabled = false;
+        QVERIFY(f.store->setAllRules({disabled, forceDesktop}));
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("DP-1"), 0, QString()), std::nullopt);
+        QCOMPARE(f.registry->resolveContextDragSelectorEnabled(QStringLiteral("HDMI-2"), 2, QString()),
+                 std::optional<bool>(true));
+    }
+
     // ─── ColorScheme match field — provider stamping + key self-heal ──────
     // A context rule matching Field::ColorScheme resolves against the
     // registry's colour-scheme provider, and a provider FLIP re-resolves

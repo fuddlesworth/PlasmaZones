@@ -385,6 +385,9 @@ QString actionTypeLabelImpl(const QString& type)
     if (type == ActionType::SetOsdEnabled) {
         return PhosphorI18n::tr("Show on-screen displays");
     }
+    if (type == ActionType::SetDragSelectorEnabled) {
+        return PhosphorI18n::tr("Show the drag selector");
+    }
     if (type == ActionType::OverrideAnimationShader) {
         return PhosphorI18n::tr("Override animation shader");
     }
@@ -546,6 +549,12 @@ QString boolActionStateLabel(const QString& type, bool on)
         // On is a force, not an absence: it shows the popups here even when
         // the global toggles are off, so both phrases name outcomes.
         return on ? PhosphorI18n::tr("Show on-screen displays here") : PhosphorI18n::tr("Hide on-screen displays here");
+    }
+    if (type == ActionType::SetDragSelectorEnabled) {
+        // On is a force like its OSD sibling: it offers the popup here even
+        // when the global selector toggle is off, so both phrases name
+        // outcomes.
+        return on ? PhosphorI18n::tr("Show the drag selector here") : PhosphorI18n::tr("Hide the drag selector here");
     }
     if (type == ActionType::OpenTabbed) {
         // Off is not inert: it forces a normal column even where the context

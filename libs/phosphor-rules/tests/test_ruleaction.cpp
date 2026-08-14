@@ -45,6 +45,11 @@ const QList<QLatin1StringView> kContextDomainTypes = {
     // screen/desktop/activity pass (LayoutRegistry::resolveContextOsdEnabled),
     // mode-agnostic like LockContext.
     ActionType::SetOsdEnabled,
+    // Drag-selector-visibility override — context-domain, resolved during the
+    // screen/desktop/activity pass
+    // (LayoutRegistry::resolveContextDragSelectorEnabled), mode-agnostic like
+    // its SetOsdEnabled twin.
+    ActionType::SetDragSelectorEnabled,
     // Gap overrides are context-domain — resolved during the
     // screen/desktop/activity pass, never per-window.
     ActionType::SetInnerGap,
@@ -895,6 +900,7 @@ private Q_SLOTS:
         rejectsStray(ActionType::LockContext, QJsonValue(true));
         rejectsStray(ActionType::DefaultLayoutAssignment, QJsonValue(true));
         rejectsStray(ActionType::SetOsdEnabled, QJsonValue(true));
+        rejectsStray(ActionType::SetDragSelectorEnabled, QJsonValue(true));
         rejectsStray(ActionType::SetUnfloatFallbackToZone, QJsonValue(true));
         // OverrideOverlayStyle also declares allowedKeys = {Value}.
         rejectsStray(ActionType::OverrideOverlayStyle, QJsonValue(QString(OverlayStyleToken::Preview)));
@@ -1119,6 +1125,36 @@ private Q_SLOTS:
             const auto action = RuleAction::fromJson(o);
             QVERIFY(action.has_value());
             QCOMPARE(ActionRegistry::instance().slotFor(*action), QString(ActionSlot::OsdEnabled));
+            QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
+            const auto roundTripped = RuleAction::fromJson(action->toJson());
+            QVERIFY(roundTripped.has_value());
+            QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(v));
+        }
+    }
+
+    void testSetDragSelectorEnabled_fromJsonRoundTrip()
+    {
+        // The fourth context-domain boolean, and the same two-polarity
+        // argument as SetOsdEnabled directly above: false suppresses the drag
+        // selector popup for the context, true FORCES it past the global
+        // selector toggle. An explicit true read back as absent would degrade
+        // the force-on half to "follow the toggle", so both polarities have to
+        // survive load as explicit values.
+        QJsonObject bad;
+        bad.insert(QStringLiteral("type"), QString(ActionType::SetDragSelectorEnabled));
+        bad.insert(QStringLiteral("value"), 1); // a number is not a bool
+        QVERIFY(!RuleAction::fromJson(bad).has_value());
+
+        for (const bool v : {true, false}) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::SetDragSelectorEnabled));
+            o.insert(QStringLiteral("value"), v);
+            const auto action = RuleAction::fromJson(o);
+            QVERIFY(action.has_value());
+            QCOMPARE(ActionRegistry::instance().slotFor(*action), QString(ActionSlot::DragSelectorEnabled));
+            // Its own slot, never the OSD one — a copy-pasted constantSlot
+            // would silently make the two actions fight over one slot.
+            QVERIFY(ActionRegistry::instance().slotFor(*action) != QString(ActionSlot::OsdEnabled));
             QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
             const auto roundTripped = RuleAction::fromJson(action->toJson());
             QVERIFY(roundTripped.has_value());

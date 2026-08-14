@@ -556,6 +556,21 @@ public:
     std::optional<bool> resolveContextOsdEnabled(const QString& screenId, int virtualDesktop,
                                                  const QString& activity) const;
 
+    /// Resolve a per-context override of the drag selector popup — the
+    /// edge-triggered zone / strip picker offered during a window drag — for
+    /// the (screen, desktop, activity) context by evaluating a windowless
+    /// WindowQuery and reading the `ActionSlot::DragSelectorEnabled` slot.
+    /// Per-slot read, the exact twin of @ref resolveContextOsdEnabled
+    /// (including the activeLayout + orientation stamping, and the same
+    /// absence of a recursion hazard): returns the winning
+    /// `SetDragSelectorEnabled` action's boolean `value` (true = force the
+    /// popup on past the global selector toggle, false = suppress it), or
+    /// @c std::nullopt when no matching rule fills the slot (the context then
+    /// follows the global toggle). Same owner-thread affinity as the rest of
+    /// the registry.
+    std::optional<bool> resolveContextDragSelectorEnabled(const QString& screenId, int virtualDesktop,
+                                                          const QString& activity) const;
+
     /// Resolve the per-context overlay-property override (shader / style)
     /// for (screen, desktop, activity) by evaluating a windowless WindowQuery and
     /// reading the OverlayShader / OverlayStyle slots. Per-slot
@@ -1253,10 +1268,11 @@ private:
     /// its own qHash); the alias keeps existing qualified uses compiling.
     using ContextResolveKey = PhosphorZones::ContextResolveKey;
 
-    /// Shared revision-invalidated memoization for the six cached context
+    /// Shared revision-invalidated memoization for the seven cached context
     /// resolvers (@ref resolveAssignmentEntry, @ref resolveContextGaps,
     /// @ref resolveContextLocked, @ref resolveContextDefaultAssignment,
-    /// @ref resolveContextOsdEnabled, @ref resolveContextOverlay). The two
+    /// @ref resolveContextOsdEnabled, @ref resolveContextDragSelectorEnabled,
+    /// @ref resolveContextOverlay). The two
     /// per-engine param resolvers (@ref resolveContextTilingParams,
     /// @ref resolveContextScrollingParams) are deliberately uncached.
     /// Drops @p cache wholesale whenever the rule
@@ -1361,6 +1377,15 @@ private:
     /// cached too.
     mutable QHash<ContextResolveKey, std::optional<bool>> m_contextOsdCache;
     mutable quint64 m_contextOsdCacheRevision = 0;
+
+    /// Hot-path cache for @ref resolveContextDragSelectorEnabled, keyed and
+    /// revision-invalidated exactly like @c m_contextOsdCache. The drag
+    /// adaptor consults the override on every cursor tick of a drag, which is
+    /// the hottest of the context resolvers' call sites, so memoizing the
+    /// per-slot walk collapses those repeats to one walk per rule-set
+    /// revision. A @c std::nullopt value (no override rule) is cached too.
+    mutable QHash<ContextResolveKey, std::optional<bool>> m_contextDragSelectorCache;
+    mutable quint64 m_contextDragSelectorCacheRevision = 0;
 
     /// Hot-path cache for @ref resolveContextOverlay, keyed and
     /// revision-invalidated exactly like @c m_contextGapCache. The overlay

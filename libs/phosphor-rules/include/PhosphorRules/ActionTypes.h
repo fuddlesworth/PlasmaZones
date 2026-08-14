@@ -60,6 +60,20 @@ inline constexpr QLatin1StringView DefaultLayoutAssignment{"defaultLayoutAssignm
 /// follows the global toggles. Live-resolved daemon-side via
 /// `LayoutRegistry::resolveContextOsdEnabled`, mirroring `LockContext`.
 inline constexpr QLatin1StringView SetOsdEnabled{"setOsdEnabled"};
+/// Per-context override of the drag selector popup — the edge-triggered
+/// zone / strip picker offered while a window is dragged — for the matched
+/// screen/desktop/activity context. Context domain; boolean `value`: false
+/// SUPPRESSES the popup for the context, true FORCES it past the global
+/// selector toggle. With no such rule the context follows the global toggle
+/// for whichever variant the screen hosts (the classic zone selector, or the
+/// scrolling strip selector). The rule governs only whether the popup is
+/// OFFERED, so it never turns an engine off, and it never overrides the gates
+/// that exist because a pick could not be committed (an excluded dragged
+/// window, a layout-suppressed or disabled context, an engine-owned screen
+/// without the strip capability). Live-resolved daemon-side via
+/// `LayoutRegistry::resolveContextDragSelectorEnabled` and consumed by
+/// `WindowDragAdaptor::checkZoneSelectorTrigger`, mirroring `SetOsdEnabled`.
+inline constexpr QLatin1StringView SetDragSelectorEnabled{"setDragSelectorEnabled"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
 /// Exclude a matched window from the placement engines ONLY — snapping,
 /// autotile and scrolling all treat it as unmanaged (open path, drag gate,
