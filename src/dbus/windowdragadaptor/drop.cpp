@@ -57,7 +57,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // finalize it: commit the reorder so the dragged window's final geometry
     // is applied on the next retile. Snapping logic is skipped entirely — the
     // window's place in the layout IS the drop.
-    if (settleDragInsertPreviewAt(cursorX, cursorY)) {
+    if (settleDragInsertPreviewAt(cursorX, cursorY, windowId)) {
         hideOverlayAndSelector();
         resetDragState();
         return;

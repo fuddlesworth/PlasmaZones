@@ -7,6 +7,7 @@
 #include <QScreen>
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include "phosphor_i18n.h"
 #include "config/configdefaults.h"
 #include <PhosphorShortcuts/IAdhocRegistrar.h>
@@ -374,10 +375,48 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
     }
 }
 
-bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
+bool WindowDragAdaptor::scrollSelectorScreen(const QString& screenId) const
+{
+    return m_scrollEngine && m_scrollEngine->isActiveOnScreen(screenId) && m_scrollEngine->providesDragInsertSelector();
+}
+
+bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, const QString& windowId)
 {
     PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
+    const QString releaseScreenId = resolveScreenAt(QPointF(cursorX, cursorY)).screenId;
+
+    // The strip popup's stored target, when it names the RELEASE screen. It
+    // outranks the cursor-derived target: the popup highlight was the last
+    // feedback the user saw for this drop. Cleared below on every commit
+    // arm; the non-commit arms leave it for the shared drop teardown
+    // (hideOverlayAndSelector's clearSelectedZone).
+    PhosphorEngine::IPlacementEngine::DragInsertTarget popupTarget;
+    bool popupOwns = false;
+    if (m_overlayService && m_overlayService->hasSelectedStripTarget()
+        && PhosphorScreens::ScreenIdentity::screensMatch(m_overlayService->selectedStripTargetScreenId(),
+                                                         releaseScreenId)) {
+        const auto strip = m_overlayService->selectedStripTarget();
+        popupTarget.primary = strip.columnIndex;
+        popupTarget.secondary = strip.tileIndex;
+        popupTarget.newSlot = strip.newColumn;
+        popupOwns = popupTarget.isValid();
+    }
+
     if (!engine) {
+        // Popup-only drop: hold-mode insert with the trigger never held has
+        // no live preview, but a valid popup pick is still a committable
+        // intent. Run the whole begin → update → commit here. The popup's
+        // indices were computed against the detach-emulated snapshot, so
+        // they are valid against the strip begin just produced. A failed
+        // begin falls through to the caller's float-drop.
+        if (popupOwns && !windowId.isEmpty() && scrollSelectorScreen(releaseScreenId)
+            && m_scrollEngine->beginDragInsertPreview(windowId, releaseScreenId)) {
+            m_scrollEngine->updateDragInsertPreview(popupTarget);
+            m_scrollEngine->commitDragInsertPreview();
+            m_overlayService->clearSelectedZone();
+            clearScrollDropIndicator();
+            return true;
+        }
         // No preview to settle — but the drag is ENDING here, so this is a
         // teardown path like the two below it. The engine may have dropped its
         // own preview after the last push (five engine-side self-cancel sites
@@ -388,13 +427,18 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY)
     // Screen-matched: a fast drop can land on another screen before any
     // dragMoved tick cancelled the departed preview, and committing then would
     // reorder the WRONG screen and swallow the real drop outcome.
-    if (!PhosphorScreens::ScreenIdentity::screensMatch(engine->dragInsertPreviewScreenId(),
-                                                       resolveScreenAt(QPointF(cursorX, cursorY)).screenId)) {
+    if (!PhosphorScreens::ScreenIdentity::screensMatch(engine->dragInsertPreviewScreenId(), releaseScreenId)) {
         engine->cancelDragInsertPreview();
         clearScrollDropIndicator();
         return false;
     }
+    if (popupOwns && engine->providesDragInsertSelector()) {
+        engine->updateDragInsertPreview(popupTarget);
+    }
     engine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
+    if (m_overlayService) {
+        m_overlayService->clearSelectedZone();
+    }
     clearScrollDropIndicator();
     return true;
 }
@@ -637,19 +681,26 @@ void WindowDragAdaptor::releaseLayoutPickerNavShortcuts()
 
 void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
 {
-    // Check if zone selector feature is enabled
-    if (!m_settings || !m_settings->zoneSelectorEnabled()) {
+    if (!m_settings) {
         return;
     }
+    // Deliberately NO toggles-off early-out here. A SetDragSelectorEnabled
+    // context rule outranks the selector toggle in BOTH directions, so a
+    // return taken before the cursor screen — and with it the rule's context —
+    // is known would make the rule's force-ON half unreachable on a user who
+    // has both global toggles off. The per-screen gate below is the single
+    // place the toggle and the rule are folded.
 
-    // ...and that snapping is on at all. The selector is a "pick a zone
-    // layout" UI whose pick is committed inside dragStopped, which a
-    // snapping-disabled drag never reaches (endDrag returns NoOp), so offering
-    // it would discard the choice on release — the same reasoning the
-    // layout-suppressed note below gives. This gate pairs with the one added
-    // to prepareHandlerContext; without both, holding the activation trigger
-    // with snapping off produced overlay AND popup for a drag that cannot snap.
-    if (!m_settings->snappingEnabled()) {
+    // A rule-excluded dragged window never sees the popup: its drop would
+    // be refused downstream (Exclude / ExcludePlacement), so offering
+    // targets would discard the pick on release — the same reasoning as
+    // the snapping-disabled gate below. Evaluated once at drag start.
+    if (m_dragWindowExcludedFromSelector) {
+        if (m_zoneSelectorShown) {
+            m_zoneSelectorShown = false;
+            m_zoneSelectorShownOn.clear();
+            m_overlayService->hideZoneSelector();
+        }
         return;
     }
 
@@ -666,16 +717,58 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
     QString selectorScreenId = resolved.screenId;
     QScreen* screen = resolved.qscreen;
+
+    // Per-screen enable pick: a strip-selector screen is governed by the
+    // SCROLLING selector switch; everywhere else the snapping one applies,
+    // together with the snapping master switch — the classic selector is a
+    // "pick a zone" UI whose pick is committed inside dragStopped, which a
+    // snapping-disabled drag never reaches (endDrag returns NoOp), so
+    // offering it would discard the choice on release. The strip popup is
+    // exempt from the snapping master switch: its drop commits through the
+    // scroll engine, not a snap. Both arms hide an already-shown popup on a
+    // disable flip mid-drag rather than bare-returning, so the popup cannot
+    // strand when the cursor crosses onto a screen whose variant is off.
+    const bool cursorOnStripSelectorScreen = scrollSelectorScreen(selectorScreenId);
+    // ONE context snapshot for both the rule resolve here and the disable gate
+    // below, so the (desktop, activity) axes the two read cannot decouple
+    // across a virtual-desktop switch mid-tick — the split-snapshot hazard the
+    // disable gate's own comment describes.
+    const PhosphorContext::ContextHandle selectorCtx =
+        m_contextResolver ? m_contextResolver->handleFor(selectorScreenId) : PhosphorContext::ContextHandle{};
+    // A SetDragSelectorEnabled context rule layers over the SELECTOR toggle of
+    // whichever variant the screen hosts, and outranks it in both directions:
+    // false hides the popup here even with the toggle on, true offers it even
+    // with the toggle off. That is the daemon's navigationOsdAllowed layering
+    // for SetOsdEnabled (`rule.value_or(setting)`), applied verbatim. The
+    // snapping master switch is NOT something the rule can override: it is one
+    // of the "a pick here could not be committed" gates, like the exclusion
+    // check above, so it stays ANDed onto the classic arm.
+    const std::optional<bool> selectorRule = (m_contextResolver && m_layoutManager)
+        ? m_layoutManager->resolveContextDragSelectorEnabled(selectorScreenId, selectorCtx.virtualDesktop,
+                                                             selectorCtx.activity)
+        : std::nullopt;
+    const bool selectorToggle =
+        cursorOnStripSelectorScreen ? m_settings->scrollingZoneSelectorEnabled() : m_settings->zoneSelectorEnabled();
+    const bool variantEnabled =
+        selectorRule.value_or(selectorToggle) && (cursorOnStripSelectorScreen || m_settings->snappingEnabled());
+    if (!variantEnabled) {
+        if (m_zoneSelectorShown) {
+            m_zoneSelectorShown = false;
+            m_zoneSelectorShownOn.clear();
+            m_overlayService->hideZoneSelector();
+        }
+        return;
+    }
     // Disable gate via single resolver snapshot, mirroring the Pass 4
     // pattern in drop.cpp's zone-selector and layout-activation gates.
     // The legacy `isContextDisabled(..., AssignmentEntry::Snapping, ...)` had
     // two issues: (a) split-snapshot race — the (desktop, activity) reads
     // were independent of the mode lookup, so a virtual-desktop switch
     // between them decoupled them; (b) hard-coded `Snapping` consulted the
-    // wrong disable list when the screen's live mode was autotile. Take
-    // one `handleFor` snapshot so all three axes agree, override the mode
-    // in place via the layout manager's per-(desktop, activity) lookup,
-    // then gate via `isDisabled`.
+    // wrong disable list when the screen's live mode was autotile. Reuse the
+    // one `selectorCtx` snapshot taken above so all three axes agree (the rule
+    // resolve reads the same one), override the mode on a copy via the layout
+    // manager's per-(desktop, activity) lookup, then gate via `isDisabled`.
     // Suppression is evaluated on its own, NOT nested in the resolver-dependent
     // block below: a wired layout manager with no context resolver would
     // otherwise skip the whole gate and show the selector on a screen that
@@ -684,10 +777,9 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     if (screen && (selectorSuppressed || (m_contextResolver && m_layoutManager))) {
         bool refuse = selectorSuppressed;
         if (!refuse && m_contextResolver && m_layoutManager) {
-            PhosphorContext::ContextHandle selectorCtx = m_contextResolver->handleFor(selectorScreenId);
-            selectorCtx.mode =
-                m_layoutManager->modeForScreen(selectorScreenId, selectorCtx.virtualDesktop, selectorCtx.activity);
-            refuse = m_contextResolver->isDisabled(selectorCtx);
+            PhosphorContext::ContextHandle modeCtx = selectorCtx;
+            modeCtx.mode = m_layoutManager->modeForScreen(selectorScreenId, modeCtx.virtualDesktop, modeCtx.activity);
+            refuse = m_contextResolver->isDisabled(modeCtx);
         }
         if (refuse) {
             if (m_zoneSelectorShown) {
@@ -709,7 +801,11 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     // with no further cursor ticks to hide it. Mirrors drop.cpp's useOverlayZone.
     const bool engineOwnsSelectorScreen = (m_autotileEngine && m_autotileEngine->isActiveOnScreen(selectorScreenId))
         || (m_scrollEngine && m_scrollEngine->isActiveOnScreen(selectorScreenId));
-    if (engineOwnsSelectorScreen) {
+    // Capability carve-out: a scroll screen whose engine provides the
+    // drag-insert selector renders the STRIP popup here — the popup is the
+    // engine surface, not a competitor to it. Autotile screens (and scroll
+    // screens without the capability) keep the historical force-hide.
+    if (engineOwnsSelectorScreen && !cursorOnStripSelectorScreen) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
             m_zoneSelectorShownOn.clear();
@@ -763,8 +859,13 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     // Use virtual-aware screen ID for config lookups (falls back to physical ID)
     const QString effectiveId = screenId.isEmpty() ? PhosphorScreens::ScreenIdentity::identifierFor(screen) : screenId;
 
-    // Use per-screen resolved config (per-screen override > global default)
-    const ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(effectiveId);
+    // Use per-screen resolved config (per-screen override > global default).
+    // Strip-selector screens resolve the scrolling variant — the same pick
+    // OverlayService::updateZoneSelectorWindow makes, so the edge math and
+    // the rendered bar agree on position/size.
+    const ZoneSelectorConfig config = scrollSelectorScreen(effectiveId)
+        ? m_settings->resolvedScrollingZoneSelectorConfig(effectiveId)
+        : m_settings->resolvedZoneSelectorConfig(effectiveId);
     const int triggerDistance = config.triggerDistance;
     const auto position = static_cast<ZoneSelectorPosition>(config.position);
 
@@ -958,6 +1059,10 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // an empty map only if it runs.
     if (m_overlayService) {
         m_overlayService->setScrollDropIndicatorWindowOverrides({});
+        // The strip popup's card exclusion dies with the drag too — left
+        // set, the next popup show (layout picker path, or a fresh drag of
+        // a DIFFERENT window) would silently drop a bystander's card.
+        m_overlayService->setActiveDragWindowId(QString());
     }
     if (!keepEscapeShortcut) {
         // Drag-end: drop the shared Escape grab only if no picker / snap assist
@@ -986,6 +1091,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     // early-return branches that don't route through resetDragState.
     m_dragReorderActive = false;
     m_dragReorderAbandoned = false;
+    m_dragWindowExcludedFromSelector = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     // m_overlayIdled is intentionally NOT cleared here. Each drag-end

@@ -11,6 +11,7 @@
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include "core/interfaces/interfaces.h"
 #include <PhosphorContext/ContextResolver.h>
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
 #include <PhosphorZones/Layout.h>
@@ -108,6 +109,17 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // the next tick will recreate it fresh.
     m_zoneSelectorShown = false;
     m_zoneSelectorShownOn.clear();
+    // Strip popup card exclusion: the popup must never render the window
+    // being dragged as its own card. Cleared in resetDragState.
+    if (m_overlayService) {
+        m_overlayService->setActiveDragWindowId(windowId);
+    }
+    // Selector suppression for rule-excluded windows, evaluated once per
+    // drag (see the member's comment).
+    {
+        auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
+        m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
+    }
 
     // Note: KWin Quick Tile override is now handled permanently by Daemon
     // (using kwriteconfig6 + KWin.reconfigure()) instead of per-drag toggling
@@ -700,11 +712,42 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     // outer branch was taken. A rect pushed on an earlier tick
                     // would stay painted for the rest of the drag.
                     clearScrollDropIndicator();
+                } else if (insertEngine->providesDragInsertSelector() && m_overlayService) {
+                    // The begin detached the drag window; a visible strip
+                    // popup is now rendering a strip that no longer exists
+                    // (its exclusion emulated the detach, but the column set
+                    // can differ when the engine healed residue at begin).
+                    // Re-snapshot at the boundary — the ONLY mid-drag moment
+                    // the frozen strip changes shape (DETACH-ONCE).
+                    m_overlayService->refreshStripSelector(insertScreenId);
                 }
             }
             if (insertEngine->hasDragInsertPreview() && insertEngine->dragInsertPreviewScreenId() == insertScreenId) {
-                const PhosphorEngine::IPlacementEngine::DragInsertTarget target =
-                    insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
+                // Strip popup keep-alive: the early return below starves the
+                // per-tick selector check for the whole preview, which is
+                // fine on autotile screens (no popup there) but would freeze
+                // the strip popup's show/hide/hit-test the moment a preview
+                // begins. Runs BEFORE the target resolve so a hit stored
+                // this tick feeds this tick's preview.
+                const bool stripSelector = insertEngine->providesDragInsertSelector();
+                if (stripSelector) {
+                    checkZoneSelectorTrigger(cursorX, cursorY);
+                }
+                // Per-tick preview ownership: while the popup holds a valid
+                // strip target for THIS screen the popup's pick drives the
+                // preview (and the in-strip indicator paints its slot); the
+                // popup clears its target the moment the cursor leaves the
+                // cards, handing ownership straight back to the bands.
+                PhosphorEngine::IPlacementEngine::DragInsertTarget target;
+                if (stripSelector && m_overlayService && m_overlayService->hasSelectedStripTarget()
+                    && m_overlayService->selectedStripTargetScreenId() == insertScreenId) {
+                    const auto strip = m_overlayService->selectedStripTarget();
+                    target.primary = strip.columnIndex;
+                    target.secondary = strip.tileIndex;
+                    target.newSlot = strip.newColumn;
+                } else {
+                    target = insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
+                }
                 if (target.isValid()) {
                     insertEngine->updateDragInsertPreview(target);
                 }
@@ -746,8 +789,16 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             qCDebug(lcDbusWindow) << "drag-insert cancel:" << windowId << "screen=" << insertScreenId
                                   << "engineResolved=" << (insertEngine != nullptr) << "held=" << insertHeld
                                   << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons;
+            // Captured before the cancel empties it: the strip popup on the
+            // preview's screen must re-snapshot at this boundary (the cancel
+            // re-attaches the drag window, changing the strip's shape).
+            const QString cancelledScreenId = previewEngine->dragInsertPreviewScreenId();
+            const bool cancelledStripSelector = previewEngine->providesDragInsertSelector();
             previewEngine->cancelDragInsertPreview();
             clearScrollDropIndicator();
+            if (cancelledStripSelector && m_overlayService && !cancelledScreenId.isEmpty()) {
+                m_overlayService->refreshStripSelector(cancelledScreenId);
+            }
         }
     }
 

@@ -12,6 +12,7 @@
 
 #include "windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
+#include <PhosphorSnapEngine/SnapEngine.h>
 #include "core/interfaces/interfaces.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -348,6 +349,17 @@ PhosphorProtocol::DragPolicy WindowDragAdaptor::beginDrag(const QString& windowI
         // last-emitted rect from the previous drag.
         resetDragState();
         m_draggedWindowId = windowId;
+        // Bypass twin of dragStarted's card exclusion: this path never runs
+        // dragStarted, and the strip popup can show on the very first tick.
+        // AFTER resetDragState, which clears it.
+        if (m_overlayService) {
+            m_overlayService->setActiveDragWindowId(windowId);
+        }
+        // Bypass twin of dragStarted's excluded-window selector suppression.
+        {
+            auto* snapEngine = m_windowTracking ? m_windowTracking->snapEngine() : nullptr;
+            m_dragWindowExcludedFromSelector = snapEngine && snapEngine->isWindowExcluded(windowId);
+        }
         m_originalGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
         m_snapCancelled = false;
         m_wasSnapped = false;
@@ -672,7 +684,7 @@ PhosphorProtocol::DragOutcome WindowDragAdaptor::endDrag(const QString& windowId
         // slot on the next retile. The owning engine controls final
         // geometry; no float outcome needed (see the drop.cpp twin, which
         // shares the screen gate through this helper).
-        if (settleDragInsertPreviewAt(cursorX, cursorY)) {
+        if (settleDragInsertPreviewAt(cursorX, cursorY, windowId)) {
             outcome.action = PhosphorProtocol::DragOutcome::NoOp;
             hideOverlayAndSelector();
             resetDragState();
@@ -898,7 +910,11 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
                 // the pre-crossing snap screen has no other surviving hide
                 // path (endDrag's bypass exits tear visibility down only at
                 // release; this keeps it from lingering the whole hold).
-                if (m_zoneSelectorShown && m_overlayService) {
+                // EXCEPT when the destination engine provides the drag-insert
+                // selector: there the popup is the engine's own drop surface
+                // and dragMoved's preview block keeps it fed per tick.
+                if (m_zoneSelectorShown && m_overlayService
+                    && !(cursorEngine && cursorEngine->providesDragInsertSelector())) {
                     m_zoneSelectorShown = false;
                     m_zoneSelectorShownOn.clear();
                     m_overlayService->hideZoneSelector();
