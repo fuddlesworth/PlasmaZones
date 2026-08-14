@@ -61,7 +61,9 @@ struct StripSelectorHit
 /// (a shorter vector deliberately degrades the surplus cards to top/bottom
 /// halves rather than asserting). @p gapInflate is how far a gap band
 /// reaches into each neighbouring card (clamped so a card always keeps a
-/// hittable middle).
+/// hittable middle). An EMPTY @p cardRects yields no hit at all: the
+/// empty-strip "whole bar opens the first column" target is the CALLER's
+/// branch (selector_strip.cpp), not this function's.
 inline StripSelectorHit classifyStripSelectorPoint(const QVector<QRectF>& cardRects, const QVector<bool>& tabbed,
                                                    const QPointF& pos, qreal gapInflate)
 {

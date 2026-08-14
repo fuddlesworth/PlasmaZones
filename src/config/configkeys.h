@@ -343,9 +343,15 @@ public:
     P_CONFIG_KEY(overlayDisplayModeKey, "OverlayDisplayMode")
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Config Keys — Snapping.ZoneSelector
+    // Config Keys — Snapping.ZoneSelector / Scrolling.ZoneSelector
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // SHARED leaves: Scrolling.ZoneSelector (the strip selector) reuses
+    // enabledKey, triggerDistanceKey, positionKey, sizeModeKey,
+    // previewWidthKey, previewHeightKey and previewLockAspectKey from this
+    // block, disambiguated by group — renaming one here renames it for BOTH
+    // families. Only layoutModeKey / maxRowsKey / gridColumnsKey are
+    // snapping-only (the strip popup has no grid arrangement).
     // (uses enabledKey)
     P_CONFIG_KEY(triggerDistanceKey, "TriggerDistance")
     P_CONFIG_KEY(positionKey, "Position")

@@ -685,12 +685,20 @@ void OverlayService::updateSettings(ISettings* settings)
     if (m_zoneSelectorVisible && m_settings) {
         bool anyEnabled = false;
         for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            // isVisible, not slot existence: slots are created once and never
-            // nulled on hide (only setVisible(false)), so "has a slot" means
-            // "has ever hosted the popup", which is not the question — same
-            // pairing destroyZoneSelectorWindow uses.
+            // "Showing" includes logically-visible-but-temporarily-slot-hidden:
+            // a modal (snap-assist, the picker) hides the slot WITHOUT touching
+            // m_zoneSelectorVisible, and restoreZoneSelectorAfterHide re-shows
+            // off the captured (physScreen, geometry) pair — so that pair, not
+            // raw slot visibility, is what "still hosting the popup" means.
+            // Raw visibility alone let a mid-modal settings save tear down the
+            // live selector (every slot hidden -> anyEnabled false). Bare slot
+            // EXISTENCE is still not enough ("has a slot" means "has ever
+            // hosted the popup"), hence the captured-pair test.
             auto* slot = it.value().zoneSelectorSlot();
-            if (slot && slot->isVisible() && selectorEnabledForScreen(it.key())) {
+            const bool hosting = slot
+                && (slot->isVisible()
+                    || (it.value().zoneSelectorPhysScreen && it.value().zoneSelectorGeometry.isValid()));
+            if (hosting && selectorEnabledForScreen(it.key())) {
                 anyEnabled = true;
                 break;
             }
@@ -938,7 +946,17 @@ void OverlayService::hideDisabledAndRefresh()
         // serialization, which a desktop switch must not pay for a popup that
         // is not on screen.
         if (m_zoneSelectorVisible && !g.disabled && it.value().zoneSelectorSlot()) {
-            updateZoneSelectorWindow(screenId);
+            if (isStripSelectorScreen(screenId)) {
+                // A desktop/activity switch re-keys the engine state this
+                // screen's strip mirrors, so the model AND any stored popup
+                // pick both belong to the old context. refreshStripSelector
+                // drops the pick and blanks the highlight before re-pushing;
+                // a bare updateZoneSelectorWindow would re-push the new list
+                // while the old context's indices stay armed for the drop.
+                refreshStripSelector(screenId);
+            } else {
+                updateZoneSelectorWindow(screenId);
+            }
         }
         if (!g.inactive && m_visible && it.value().overlayPhysScreen) {
             updateOverlayWindow(screenId, it.value().overlayPhysScreen);

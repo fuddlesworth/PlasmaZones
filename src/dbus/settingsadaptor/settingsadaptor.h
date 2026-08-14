@@ -247,7 +247,7 @@ public Q_SLOTS:
     /**
      * @brief Get metadata for a single setting
      * @param key Setting key name
-     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"stringlist"|"map"
+     * @return JSON: {key, type} — type is "bool"|"int"|"double"|"string"|"color"|"themeColor"|"stringlist"|"map"
      */
     QString getSettingSchema(const QString& key);
 
@@ -350,7 +350,8 @@ private:
 
     QHash<QString, Getter> m_getters;
     QHash<QString, Setter> m_setters;
-    QHash<QString, QString> m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"stringlist"|"map")
+    QHash<QString, QString>
+        m_schemas; // key -> type ("bool"|"int"|"double"|"string"|"color"|"themeColor"|"stringlist"|"map")
 
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;

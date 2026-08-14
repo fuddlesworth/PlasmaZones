@@ -79,12 +79,12 @@ void applyZoneSelectorLayout(QObject* window, const ZoneSelectorLayout& layout)
     writeQmlProperty(window, QStringLiteral("indicatorWidth"), layout.indicatorWidth);
     writeQmlProperty(window, QStringLiteral("indicatorHeight"), layout.indicatorHeight);
     writeQmlProperty(window, QStringLiteral("indicatorSpacing"), layout.indicatorSpacing);
-    writeQmlProperty(window, QStringLiteral("containerPadding"), layout.containerPadding);
-    writeQmlProperty(window, QStringLiteral("containerPaddingSide"), layout.paddingSide);
+    // containerPadding / paddingSide / labelHeight are NOT pushed: they feed
+    // the C++ bar math only, and their QML forward chain was dead end to end
+    // (declared, forwarded, read by nothing).
     writeQmlProperty(window, QStringLiteral("containerTopMargin"), layout.containerTopMargin);
     writeQmlProperty(window, QStringLiteral("containerSideMargin"), layout.containerSideMargin);
     writeQmlProperty(window, QStringLiteral("labelTopMargin"), layout.labelTopMargin);
-    writeQmlProperty(window, QStringLiteral("labelHeight"), layout.labelHeight);
     writeQmlProperty(window, QStringLiteral("labelSpace"), layout.labelSpace);
     writeQmlProperty(window, QStringLiteral("cardPadding"), layout.cardPadding);
     writeQmlProperty(window, QStringLiteral("cardSidePadding"), layout.cardSidePadding);
@@ -225,8 +225,11 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     bool locked = false;
     if (m_settings && m_layoutManager) {
         int curDesktop = currentVirtualDesktopForScreen(screenId);
-        QString curActivity = m_layoutManager->currentActivity();
-        locked = isAnyModeLocked(m_settings, m_layoutManager, screenId, curDesktop, curActivity);
+        // m_currentActivity, not m_layoutManager->currentActivity(): the
+        // hit-test that ENFORCES this badge (selector.cpp) reads the mirror,
+        // and mixing sources lets the painted badge transiently disagree
+        // with what a click does.
+        locked = isAnyModeLocked(m_settings, m_layoutManager, screenId, curDesktop, m_currentActivity);
     }
     writeQmlProperty(window, QStringLiteral("locked"), locked);
 
@@ -293,7 +296,9 @@ void OverlayService::refreshContextLockState()
     if (!m_settings || !m_layoutManager) {
         return;
     }
-    const QString curActivity = m_layoutManager->currentActivity();
+    // Mirror, not registry — same single-source rule as the `locked` write in
+    // updateZoneSelectorWindow and the hit-test in selector.cpp.
+    const QString curActivity = m_currentActivity;
 
     // Open zone selectors: one entry per screen with a live slot.
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {

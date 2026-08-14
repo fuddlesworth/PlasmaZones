@@ -29,23 +29,34 @@ private:
     /// actions fight over one slot.
     void runContextBoolRoundTrip(QLatin1StringView type, const QString& expectedSlot)
     {
+        // qPrintable(QString(type)) rather than type.data(): a
+        // QLatin1StringView's data is not contractually NUL-terminated (it
+        // happens to be today only because every ActionType constant is
+        // built from a string literal).
         QJsonObject bad;
         bad.insert(QStringLiteral("type"), QString(type));
         bad.insert(QStringLiteral("value"), 1); // a number is not a bool
-        QVERIFY2(!RuleAction::fromJson(bad).has_value(), type.data());
+        QVERIFY2(!RuleAction::fromJson(bad).has_value(), qPrintable(QString(type)));
+
+        // A MISSING `value` is refused through the same public boundary —
+        // the hasBool validator's other half, pinned per family member
+        // rather than only for one type at the registry tier.
+        QJsonObject missing;
+        missing.insert(QStringLiteral("type"), QString(type));
+        QVERIFY2(!RuleAction::fromJson(missing).has_value(), qPrintable(QString(type)));
 
         for (const bool v : {true, false}) {
             QJsonObject o;
             o.insert(QStringLiteral("type"), QString(type));
             o.insert(QStringLiteral("value"), v);
             const auto action = RuleAction::fromJson(o);
-            QVERIFY2(action.has_value(), type.data());
+            QVERIFY2(action.has_value(), qPrintable(QString(type)));
             if (!expectedSlot.isEmpty()) {
                 QCOMPARE(ActionRegistry::instance().slotFor(*action), expectedSlot);
             }
             QCOMPARE(action->params.value(QStringLiteral("value")), QJsonValue(v));
             const auto roundTripped = RuleAction::fromJson(action->toJson());
-            QVERIFY2(roundTripped.has_value(), type.data());
+            QVERIFY2(roundTripped.has_value(), qPrintable(QString(type)));
             QCOMPARE(roundTripped->params.value(QStringLiteral("value")), QJsonValue(v));
         }
     }

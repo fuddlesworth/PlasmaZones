@@ -20,14 +20,14 @@
 
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include <QJsonValue>
+
 #include <algorithm>
 #include <iterator>
 
 namespace PlasmaZones {
 
 using PerScreenDetail::applyPerScreenSetting;
-using PerScreenDetail::boundedInt;
-using PerScreenDetail::enumInRange;
 using PerScreenDetail::findPerScreenEntry;
 using PerScreenDetail::removePerScreenEntry;
 
@@ -56,9 +56,23 @@ const QLatin1String kStripSelectorKeys[6] = {
 QVariant readZoneSelectorEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = ZoneSelectorConfigKey;
-    if (key == QLatin1String(K::PreviewLockAspect))
-        return QVariant(group.readBool(key, ConfigDefaults::previewLockAspect()));
-    return QVariant(group.readInt(key, 0));
+    // Type-probe through the native JSON node instead of the coercing
+    // readInt/readBool: those return their DEFAULT for a malformed payload
+    // with no way to tell "malformed" from "legitimately that value", so a
+    // hand-edited `"Position": "garbage"` became a REAL stored override of 0
+    // (TopLeft) that the next save persisted — the exact hole the write-side
+    // enum/type guards close on the D-Bus path, left open on load. Returning
+    // an invalid QVariant makes loadPerScreenGroup drop the key, so the
+    // screen falls back to the global default, which is the correct
+    // degradation. Serving BOTH selector stores, the reader takes no
+    // per-family default at all — the type probe removed the only use one
+    // had (and the snapping default it used to hardcode was wrong for the
+    // strip store anyway).
+    const QJsonValue raw = group.readJson(key);
+    if (key == QLatin1String(K::PreviewLockAspect)) {
+        return raw.isBool() ? QVariant(raw.toBool()) : QVariant();
+    }
+    return raw.isDouble() ? QVariant(group.readInt(key, 0)) : QVariant();
 }
 
 QVariant validateZoneSelectorValue(const QString& key, const QVariant& value)
@@ -271,8 +285,8 @@ void Settings::clearPerScreenScrollingZoneSelectorSettings(const QString& screen
 }
 
 // DELIBERATE ASYMMETRY, shared with the zone-selector twin and the gap
-// overrides: has/clear do NOT carry the resolved accessor's virtual→physical
-// fallback. On a virtual sub-screen an override inherited from the physical
+// overrides: the raw getter and the has/clear accessors do NOT carry the
+// resolved accessor's virtual→physical fallback. On a virtual sub-screen an override inherited from the physical
 // parent therefore APPLIES (the resolver falls back) while has() reports no
 // override of the sub-screen's OWN and clear() removes nothing — because a
 // clear that fell back would delete the PARENT's override and change every

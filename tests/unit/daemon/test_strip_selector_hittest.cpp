@@ -68,6 +68,53 @@ private Q_SLOTS:
         hit = classifyStripSelectorPoint(threeCards(), tabbed, QPointF(320, 80), kInflate);
         QCOMPARE(hit.columnIndex, 1);
         QCOMPARE(hit.half, 1);
+        // The midline itself belongs to the TOP half (<=, not <): pin the
+        // boundary the slot is named for, so a comparator flip cannot pass.
+        hit = classifyStripSelectorPoint(threeCards(), tabbed, QPointF(320, 50), kInflate);
+        QCOMPARE(hit.columnIndex, 1);
+        QCOMPARE(hit.half, 0);
+    }
+
+    void gapBandCoversTheNeighboursYUnion()
+    {
+        // Card 1 is taller and offset (y 10..130) while card 0 is y 0..100:
+        // the boundary band between them spans the UNION (0..130), so a
+        // probe below card 0's extent but inside card 1's must still answer
+        // the gap. A band derived from the left card alone would miss it.
+        const QVector<QRectF> cards{QRectF(0, 0, 200, 100), QRectF(220, 10, 200, 120), QRectF(440, 0, 200, 100)};
+        const QVector<bool> tabbed{false, false, false};
+        const StripSelectorHit hit = classifyStripSelectorPoint(cards, tabbed, QPointF(210, 120), kInflate);
+        QCOMPARE(hit.gapIndex, 1);
+    }
+
+    void shortTabbedVectorDegradesToHalves()
+    {
+        // The tabbed vector deliberately covers only card 0: the surplus
+        // cards degrade to plain top/bottom halves rather than asserting.
+        const QVector<bool> tabbed{true};
+        StripSelectorHit hit = classifyStripSelectorPoint(threeCards(), tabbed, QPointF(560, 20), kInflate);
+        QCOMPARE(hit.columnIndex, 2);
+        QCOMPARE(hit.half, 0);
+        hit = classifyStripSelectorPoint(threeCards(), tabbed, QPointF(560, 80), kInflate);
+        QCOMPARE(hit.columnIndex, 2);
+        QCOMPARE(hit.half, 1);
+        // The one covered card still answers whole-card.
+        hit = classifyStripSelectorPoint(threeCards(), tabbed, QPointF(100, 50), kInflate);
+        QCOMPARE(hit.columnIndex, 0);
+        QCOMPARE(hit.half, 2);
+    }
+
+    void zeroInflateKeepsTheBareSpacingStrip()
+    {
+        // gapInflate 0: the bands stop reaching into the cards (5px inside a
+        // card answers the card), while the bare spacing strip between two
+        // cards is still a gap.
+        const QVector<bool> tabbed{false, false, false};
+        StripSelectorHit hit = classifyStripSelectorPoint(threeCards(), tabbed, QPointF(225, 20), 0.0);
+        QCOMPARE(hit.gapIndex, -1);
+        QCOMPARE(hit.columnIndex, 1);
+        hit = classifyStripSelectorPoint(threeCards(), tabbed, QPointF(210, 50), 0.0);
+        QCOMPARE(hit.gapIndex, 1);
     }
 
     void tabbedCardIsOneWholeTarget()
@@ -110,14 +157,44 @@ private Q_SLOTS:
 
     void singleNarrowCardKeepsAHittableMiddle()
     {
-        // A 24px-wide card with 10px inflation: the clamp (width/3) keeps
-        // the middle 8px answering the card, not a boundary.
-        const QVector<QRectF> cards{QRectF(0, 0, 24, 100)};
+        // A 12px-wide card with 10px inflation: the clamp (width/3 = 4)
+        // keeps the middle 4px answering the card. The width is chosen BELOW
+        // 2 * gapInflate on purpose — with the clamp deleted outright the
+        // two bands ([-10, 10] and [2, 22]) would cover the whole card and
+        // this probe would answer a boundary, so the fixture fails on the
+        // no-clamp mutation, not only on a divisor change.
+        const QVector<QRectF> cards{QRectF(0, 0, 12, 100)};
         const QVector<bool> tabbed{false};
-        const StripSelectorHit hit = classifyStripSelectorPoint(cards, tabbed, QPointF(12, 20), kInflate);
+        const StripSelectorHit hit = classifyStripSelectorPoint(cards, tabbed, QPointF(6, 20), kInflate);
         QCOMPARE(hit.gapIndex, -1);
         QCOMPARE(hit.columnIndex, 0);
         QCOMPARE(hit.half, 0);
+    }
+
+    void unlaidEndsRenumberTheOuterBands()
+    {
+        // The REALISTIC un-laid-out case (a horizontally scrolled row only
+        // ever un-lays the ends): the outer bands anchor on the first / last
+        // LAID-OUT card and carry its renumbered gap index, not 0 / count.
+        const QVector<bool> tabbed{false, false, false};
+        QVector<QRectF> cards = threeCards();
+        cards[0] = QRectF();
+        StripSelectorHit hit = classifyStripSelectorPoint(cards, tabbed, QPointF(215, 50), kInflate);
+        QCOMPARE(hit.gapIndex, 1);
+        cards = threeCards();
+        cards[2] = QRectF();
+        hit = classifyStripSelectorPoint(cards, tabbed, QPointF(425, 50), kInflate);
+        QCOMPARE(hit.gapIndex, 2);
+    }
+
+    void allUnlaidAnswersInvalid()
+    {
+        // Every rect null (nothing laid out yet): no band may anchor on a
+        // missing card, and nothing may read past the empty scan.
+        const QVector<QRectF> cards{QRectF(), QRectF(), QRectF()};
+        const QVector<bool> tabbed{false, false, false};
+        const StripSelectorHit hit = classifyStripSelectorPoint(cards, tabbed, QPointF(100, 50), kInflate);
+        QVERIFY(!hit.isValid());
     }
 
     void emptyListAnswersInvalid()

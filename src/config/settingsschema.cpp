@@ -3,14 +3,16 @@
 
 // SANCTIONED FILE-SIZE EXCEPTION. This TU sits just past the 1150-line
 // ceiling and stays whole deliberately: it is a flat sequence of one
-// appendXxxSchema function per config domain plus the file-local validator
-// helpers several of them share (canonicalCommaList,
-// sanitizePerAlgorithmSettings, the colour canonicalizer). The two domains
-// big enough to carry their own weight are already split
-// (settingsschema_scrolling.cpp); each remaining function is well under a
-// hundred lines, and moving one out drags its shared helpers into a header
-// for a single consumer. When a domain grows past that, split it the way
-// scrolling was — do not grow this banner's scope instead.
+// appendXxxSchema function per config domain plus the validator helpers
+// several of them share — most file-local (canonicalCommaList,
+// sanitizePerAlgorithmSettings, validStringOr), two at namespace scope
+// because the scrolling TU shares them too (canonicalThemeFallbackColor,
+// canonicalTriggerList). The three domains big enough to carry their own
+// weight are already split (settingsschema_scrolling.cpp's three entry
+// points); each remaining function is well under a hundred lines, and moving
+// one out drags its shared helpers into a header for a single consumer. When
+// a domain grows past that, split it the way scrolling was — do not grow
+// this banner's scope instead.
 
 #include "settingsschema.h"
 
@@ -162,7 +164,20 @@ QVariant canonicalTriggerList(const QVariant& v)
         bool btnOk = false;
         const int modifier = src.value(ConfigKeys::triggerModifierField(), 0).toInt(&modOk);
         const int mouseButton = src.value(ConfigKeys::triggerMouseButtonField(), 0).toInt(&btnOk);
-        if (!modOk || !btnOk) {
+        // Range half of the hardening, one step past the type (ok-flag)
+        // half, in each field's OWN vocabulary: `modifier` is a DragModifier
+        // ENUMERATOR (the drag readers switch on it), not a Qt modifier
+        // mask, and `mouseButton` is a Qt::MouseButtons bitmask (matched
+        // with `&`). A numeric-but-impossible field is dropped like a
+        // malformed type instead of being persisted verbatim as a trigger
+        // no event can ever match.
+        // Qt::AllButtons, NOT Qt::MouseButtonMask: the mask is 0xffffffff,
+        // whose int cast is -1, and `x & ~(-1)` is always 0 — a check that
+        // rejects nothing. AllButtons is the real any-valid-button set, and
+        // a negative int's sign bit lies outside it, so negatives fail too.
+        if (!modOk || !btnOk || modifier < static_cast<int>(DragModifier::Disabled)
+            || modifier > static_cast<int>(DragModifier::CtrlAltMeta)
+            || (mouseButton & ~static_cast<int>(Qt::AllButtons)) != 0) {
             continue;
         }
         QVariantMap canon;

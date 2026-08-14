@@ -861,8 +861,8 @@ private:
     /// (not a separate engine query) keeps the row-for-row agreement with
     /// the rendered card list.
     QList<qreal> stripCardFractions(const QString& screenId) const;
-    /// The fraction list's size — the card count the empty-strip floor and
-    /// the hide loops consult.
+    /// The fraction list's size — the card count selectorCardCount's
+    /// empty-strip floor consults (its only caller).
     int visibleStripCardCount(const QString& screenId) const;
     /// Strip-mode arm of updateSelectorPosition: reads the rendered card
     /// rects back (stripColumnCard by delegate index) and classifies the

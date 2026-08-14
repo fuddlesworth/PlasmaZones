@@ -322,8 +322,8 @@ public:
      *
      * The token is stamped onto every windowless context WindowQuery this
      * registry builds (assignment, gap, lock, overlay, default-assignment,
-     * osd, tiling-params, scrolling-params), so an orientation rule can drive any
-     * context slot — for example a different
+     * osd, drag-selector, tiling-params, scrolling-params), so an orientation
+     * rule can drive any context slot — for example a different
      * tiling algorithm on a rotated (portrait) monitor. Orientation derives from
      * screen geometry alone, independent of the resolved layout, so it carries no
      * recursion risk (unlike an active-layout query). The daemon wires this to
@@ -562,7 +562,12 @@ public:
     /// WindowQuery and reading the `ActionSlot::DragSelectorEnabled` slot.
     /// Per-slot read, the exact twin of @ref resolveContextOsdEnabled
     /// (including the activeLayout + orientation stamping, and the same
-    /// absence of a recursion hazard): returns the winning
+    /// absence of a recursion hazard). One deliberate asymmetry: this one is
+    /// an IZoneLayoutRegistry virtual (its consumer, the drag adaptor via
+    /// OverlayService, holds the interface) while the OSD twin is
+    /// concrete-only (its sole consumer holds the concrete registry) — so a
+    /// stub registry can suppress the drag selector but not OSDs. Returns
+    /// the winning
     /// `SetDragSelectorEnabled` action's boolean `value` (true = force the
     /// popup on past the global selector toggle, false = suppress it), or
     /// @c std::nullopt when no matching rule fills the slot (the context then
@@ -1373,7 +1378,10 @@ private:
     /// the highest-priority matching context rule carrying @p actionType fills
     /// the slot, with the lock resolver's structural exclusions and the
     /// activeLayout / orientation / colour-scheme stamping.
-    /// Impl in layoutregistry_contextresolve.cpp.
+    /// Impl in layoutregistry_contextresolve.cpp. Declared HERE, inside the
+    /// member run, on purpose: it sits beside the two cache/revision pairs
+    /// it is handed, which is the ownership the file-order convention
+    /// encodes — do not "fix" it into the method block above.
     std::optional<bool> resolveContextBoolSlot(QHash<ContextResolveKey, std::optional<bool>>& cache,
                                                quint64& cacheRevision, QLatin1StringView actionType,
                                                const QString& screenId, int virtualDesktop,

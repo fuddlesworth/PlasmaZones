@@ -12,12 +12,10 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
-#include "core/types/enums.h"
-
-#include "settingsschemachoices.h"
-#include "settingsschema_p.h"
-
 #include "configdefaults.h"
+#include "core/types/enums.h"
+#include "settingsschema_p.h"
+#include "settingsschemachoices.h"
 
 using namespace Qt::StringLiterals;
 
@@ -38,6 +36,14 @@ using SchemaValidators::validIntOr;
 // is Preset. The enum the engine actually static_casts the config value into
 // is DefaultWidthKind, which IS an exact 1:1 match, so it gets the same
 // lockstep asserts as its siblings below.
+// The strip selector's two enum-valued defaults are the same class of
+// hand-duplicated wire value; without the pins a reordering of
+// ZoneSelectorPosition / ZoneSelectorSizeMode would silently retarget the
+// popup's default corner with a build that still succeeds.
+static_assert(ConfigDefaults::scrollingZoneSelectorPosition() == static_cast<int>(ZoneSelectorPosition::Top),
+              "strip-selector default position drifted from ZoneSelectorPosition::Top");
+static_assert(ConfigDefaults::scrollingZoneSelectorSizeMode() == static_cast<int>(ZoneSelectorSizeMode::Auto),
+              "strip-selector default size mode drifted from ZoneSelectorSizeMode::Auto");
 static_assert(ConfigDefaults::scrollingCenterFocusedColumnNever()
                   == static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never),
               "CenterFocusedColumn::Never wire value drifted from ConfigDefaults");

@@ -45,6 +45,13 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
     // live preview). Once a preview detached it, the strip resolved below no
     // longer contains it and a second removal would be a no-op by id anyway;
     // skipping the canonicalization keeps the common per-show path cheap.
+    // PRECONDITION this rests on: callers pass only the window the live
+    // preview detached (the daemon passes its active-drag id) — the drop is
+    // unconditional on WHICH id arrives while a preview owns the screen.
+    // TEST SEAM NOTE: the snapshot suite's fixtures run with a null window
+    // registry, where canonicalizeForLookup returns its argument verbatim,
+    // so the canonicalization itself is exercised only by the daemon's real
+    // ids, not by these tests.
     const QString excluded =
         (!previewOwnsScreen && !excludeWindowId.isEmpty()) ? canonicalizeForLookup(excludeWindowId) : QString();
 
@@ -67,17 +74,25 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
 
         const ResolvedColumn* resolvedColumn = resolvedByIndex.value(ci, nullptr);
         const QRect columnRect = resolvedColumn ? resolvedColumn->rect : QRect();
-        // Real on-screen share, for the preview inside the uniform card. A
-        // column wider than the work area (over-wide preset) clamps to 1 —
-        // the preview shows the visible share, matching the committed clip.
+        // Real on-screen share, driving the VARIABLE-WIDTH card that IS its
+        // column at preview scale. A column wider than the work area
+        // (over-wide preset) clamps to 1 — the preview shows the visible
+        // share, matching the committed clip.
         if (!columnRect.isEmpty() && params.workArea.width() > 0) {
             outColumn.widthFraction =
                 qBound(0.0, static_cast<qreal>(columnRect.width()) / params.workArea.width(), 1.0);
         }
 
+        // Output position the excluded ACTIVE tile would have occupied, for
+        // the position-faithful promotion below. -1 = the exclusion did not
+        // remove this column's active tile.
+        int excludedActiveOutPos = -1;
         for (int ti = 0; ti < modelColumn.tiles.size(); ++ti) {
             const Tile& modelTile = modelColumn.tiles.at(ti);
             if (!excluded.isEmpty() && modelTile.windowId == excluded) {
+                if (ti == modelColumn.activeTileIdx) {
+                    excludedActiveOutPos = static_cast<int>(outColumn.tiles.size());
+                }
                 continue;
             }
             ScrollStripSnapshotTile outTile;
@@ -120,29 +135,53 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
             continue;
         }
         // Excluding the active tile leaves the survivors with no activeTab
-        // (the model index comparison above ran before the drop); the real
-        // detach re-points activeTileIdx to a surviving tile, so promote one
-        // the same way — the first non-minimized survivor, or none when
-        // every survivor is minimized. Only an exclusion can strip the
-        // flag: the model's activeTileIdx always names a live tile
-        // (setWindowMinimized re-points it).
-        if (!excluded.isEmpty()) {
-            bool hasActive = false;
-            for (const ScrollStripSnapshotTile& t : std::as_const(outColumn.tiles)) {
-                if (t.activeTab) {
-                    hasActive = true;
+        // (the model index comparison above ran before the drop). Promote by
+        // POSITION, the way the real detach does: removeWindowInternal keeps
+        // activeTileIdx's numeric value, so the next tile DOWN inherits the
+        // slot, and only a last-tile removal decrements — a first-survivor
+        // scan disagreed with the real strip whenever the active tile was
+        // not tile 0. The minimized skip (forward, then backward) is a
+        // DELIBERATE divergence from the real detach, which does no such
+        // skip: a preview highlighting an invisible tile would be a lie, so
+        // when the inheriting slot is minimized the promotion moves to the
+        // nearest visible survivor, and when every survivor is minimized
+        // (embedder-only state) the flag stays unset. Gated on THIS column
+        // having lost its active tile, so untouched columns pay nothing and
+        // the model's own invariant (activeTileIdx always names a live tile
+        // — setWindowMinimized re-points it) is never second-guessed.
+        if (excludedActiveOutPos >= 0 && !outColumn.tiles.isEmpty()) {
+            const int start = qMin(excludedActiveOutPos, static_cast<int>(outColumn.tiles.size()) - 1);
+            int promoted = -1;
+            for (int i = start; i < outColumn.tiles.size(); ++i) {
+                if (!outColumn.tiles.at(i).minimized) {
+                    promoted = i;
                     break;
                 }
             }
-            if (!hasActive) {
-                // First non-minimized survivor; when every survivor is
-                // minimized (embedder-only state), leave the flag unset —
-                // highlighting an invisible tile would be a lie.
-                for (int i = 0; i < outColumn.tiles.size(); ++i) {
-                    if (!outColumn.tiles.at(i).minimized) {
-                        outColumn.tiles[i].activeTab = true;
-                        outColumn.tiles[i].hidden = false;
-                        break;
+            for (int i = start - 1; promoted < 0 && i >= 0; --i) {
+                if (!outColumn.tiles.at(i).minimized) {
+                    promoted = i;
+                }
+            }
+            if (promoted >= 0) {
+                ScrollStripSnapshotTile& tile = outColumn.tiles[promoted];
+                tile.activeTab = true;
+                tile.hidden = false;
+                // A promoted HIDDEN TAB skipped the rect walk above (it ran
+                // while the tile was still hidden). Back-fill from the
+                // resolve so the tile is not handed to renderers visible but
+                // rect-less; for a tabbed column the resolved rect is the
+                // active tile's, which is exactly what the promotion means.
+                if (tile.relRect.isNull() && resolvedColumn && !columnRect.isEmpty()) {
+                    for (const ResolvedTile& resolvedTile : resolvedColumn->tiles) {
+                        if (resolvedTile.windowId == tile.windowId) {
+                            const QRect& r = resolvedTile.rect;
+                            tile.relRect = QRectF(static_cast<qreal>(r.x() - columnRect.x()) / columnRect.width(),
+                                                  static_cast<qreal>(r.y() - columnRect.y()) / columnRect.height(),
+                                                  static_cast<qreal>(r.width()) / columnRect.width(),
+                                                  static_cast<qreal>(r.height()) / columnRect.height());
+                            break;
+                        }
                     }
                 }
             }

@@ -46,9 +46,12 @@ bool PerScreenPathResolver::isPerScreenPrefix(const QString& groupName)
         const auto prefixLen = static_cast<int>(qstrlen(m.prefix));
         // Require strictly more than prefixLen+1 chars so the colon is present
         // AND followed by at least one screen-id character. A bare
-        // "ZoneSelector:" is rejected here so purgeStaleKeys can clean it up
-        // instead of letting the resolver short-circuit it as malformed-but-
-        // per-screen and skip the purge.
+        // "ZoneSelector:" is rejected here so the BACKEND refuses reads and
+        // writes to it (toJsonPath maps the malformed name to an empty path,
+        // which deleteGroup/read guards drop) instead of storing an orphan
+        // top-level key. Such a husk is only removable by reset()'s whole
+        // PerScreen-container delete — purgeStaleKeys' per-name deleteGroup
+        // is refused by the same empty-path guard.
         if (groupName.size() > prefixLen + 1 && groupName.startsWith(QLatin1String(m.prefix))
             && groupName.at(prefixLen) == QLatin1Char(':')) {
             return true;

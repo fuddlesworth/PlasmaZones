@@ -45,7 +45,9 @@ set(plasmazones_core_SRCS
     core/interfaces/isettings.h
     core/interfaces/settings_interfaces.h
     core/types/animationshadersupportedpaths.h
+    core/types/stripselectorhittest.h
     core/types/types.h
+    core/types/zoneselectorlayout.h
     core/utils/utils.h
     core/utils/utils.cpp
     core/resolve/daemongeometryresolver.h
@@ -172,6 +174,7 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/windowtrackingadaptor.h
     dbus/windowtrackingadaptor/internal.h
     dbus/windowdragadaptor/windowdragadaptor.cpp
+    dbus/windowdragadaptor/selector_gate.cpp
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
@@ -211,15 +214,17 @@ generate_export_header(plasmazones_core
 # The compatibility wrappers (core/qpa/*.h) are header-only - no sources to compile.
 # PhosphorWayland provides the QPA plugin, protocol code, and LayerSurface implementation.
 
-# All four TUs below are excluded from unity build:
+# All five TUs below are excluded from unity build:
 #   configdefaults.cpp — Settings PCH includes that conflict with unity macros
-#   drag.cpp / drag_protocol.cpp / drop.cpp — forward-declaration conflicts
-#     with the d-bus-adaptor-generated extern declarations across these TUs
+#   drag.cpp / drag_protocol.cpp / drop.cpp / selector_gate.cpp —
+#     forward-declaration conflicts with the d-bus-adaptor-generated extern
+#     declarations across these TUs
 set_source_files_properties(
     config/configdefaults.cpp
     dbus/windowdragadaptor/drag.cpp
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
+    dbus/windowdragadaptor/selector_gate.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 # PhosphorShaders + PhosphorWayland headers are available via PUBLIC link dependencies

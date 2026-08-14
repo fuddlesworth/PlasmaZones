@@ -35,6 +35,11 @@ private Q_SLOTS:
     void excludeDropsEmptiedColumn();
     void excludeActiveSoloColumnRepointsActive();
     void excludeActiveTilePromotesSurvivor();
+    void excludeActiveTilePromotesByPosition();
+    void excludeActiveTabPromotesVisibleTab();
+    void excludeSoloWindowLeavesNoActiveColumn();
+    void overWideColumnClampsFractionToOne();
+    void invalidWorkAreaAnswersInvalid();
     void gapsShareTheColumnHeight();
     void livePreviewOmitsDraggedWindow();
 
@@ -51,11 +56,15 @@ private:
         }
     }
 
-    /// Stack @p windowId under column @p column as its last tile.
-    static void stackUnder(ScrollState* state, int column, int tileIdx, const QString& windowId)
+    /// Insert @p windowId into column @p column at tile index @p tileIdx.
+    /// Returns false on failure — callers wrap the call in QVERIFY, because a
+    /// QVERIFY inside this helper would only return from the HELPER and let
+    /// the slot run on against an un-stacked strip, cascading confusing
+    /// secondary failures.
+    [[nodiscard]] static bool stackUnder(ScrollState* state, int column, int tileIdx, const QString& windowId)
     {
-        QVERIFY(state->strip().takeWindow(windowId, engineParams()));
-        QVERIFY(state->strip().insertWindowIntoColumnAt(column, tileIdx, windowId, engineParams()));
+        return state->strip().takeWindow(windowId, engineParams())
+            && state->strip().insertWindowIntoColumnAt(column, tileIdx, windowId, engineParams());
     }
 };
 
@@ -119,7 +128,7 @@ void TestScrollEngineSnapshot::tabbedColumnMarksTabs()
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
     ScrollState* state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);
-    stackUnder(state, 1, 1, QStringLiteral("c"));
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
     // Column [b, c] is the active column after the re-insert; make it tabbed.
     QVERIFY(state->strip().toggleActiveColumnTabbed());
 
@@ -151,7 +160,7 @@ void TestScrollEngineSnapshot::minimizedTileKeptWithNullRect()
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
     ScrollState* state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);
-    stackUnder(state, 1, 1, QStringLiteral("c"));
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
     QVERIFY(state->strip().setWindowMinimized(QStringLiteral("b"), true, engineParams()));
 
     const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"));
@@ -200,7 +209,7 @@ void TestScrollEngineSnapshot::excludeRemovesTileAndRenumbers()
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
     ScrollState* state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);
-    stackUnder(state, 1, 1, QStringLiteral("c"));
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
 
     // Excluding the stack's TOP tile: the column survives and c moves up to
     // tile position 0 — the position it will hold once a real begin detaches
@@ -255,7 +264,7 @@ void TestScrollEngineSnapshot::excludeActiveTilePromotesSurvivor()
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
     ScrollState* state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);
-    stackUnder(state, 1, 1, QStringLiteral("c"));
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
 
     // c is column 1's ACTIVE tile after the re-insert. Excluding it leaves b
     // with no activeTab from the model comparison (b's model index is 0, the
@@ -268,6 +277,100 @@ void TestScrollEngineSnapshot::excludeActiveTilePromotesSurvivor()
     QCOMPARE(snap.columns.at(1).tiles.at(0).windowId, QStringLiteral("b"));
     QVERIFY(snap.columns.at(1).tiles.at(0).activeTab);
     QVERIFY(!snap.columns.at(1).tiles.at(0).hidden);
+}
+
+void TestScrollEngineSnapshot::excludeActiveTilePromotesByPosition()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"),
+                {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    // Column 1 becomes [b, c, d] with c ACTIVE (the last insert wins focus).
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("d")));
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+
+    // Excluding the MIDDLE active tile must promote the NEXT tile DOWN (d),
+    // the way removeWindowInternal keeps activeTileIdx's numeric value — a
+    // first-survivor scan would wrongly promote b here.
+    const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+    QVERIFY(snap.valid);
+    QCOMPARE(snap.columns.at(1).tiles.size(), 2);
+    QCOMPARE(snap.columns.at(1).tiles.at(0).windowId, QStringLiteral("b"));
+    QCOMPARE(snap.columns.at(1).tiles.at(1).windowId, QStringLiteral("d"));
+    QVERIFY(!snap.columns.at(1).tiles.at(0).activeTab);
+    QVERIFY(snap.columns.at(1).tiles.at(1).activeTab);
+}
+
+void TestScrollEngineSnapshot::excludeActiveTabPromotesVisibleTab()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+    QVERIFY(state->strip().toggleActiveColumnTabbed());
+
+    // Excluding a TABBED column's active tab: the survivor is promoted to
+    // the visible tab (activeTab set, hidden cleared) so the tab strip does
+    // not render a column with no highlighted segment, and its relRect is
+    // BACK-FILLED from the resolve (the rect walk ran while it was still a
+    // hidden tab) so no tile is handed to renderers visible but rect-less.
+    const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+    QVERIFY(snap.valid);
+    QCOMPARE(snap.columns.size(), 2);
+    QVERIFY(snap.columns.at(1).tabbed);
+    QCOMPARE(snap.columns.at(1).tiles.size(), 1);
+    QCOMPARE(snap.columns.at(1).tiles.at(0).windowId, QStringLiteral("b"));
+    QVERIFY(snap.columns.at(1).tiles.at(0).activeTab);
+    QVERIFY(!snap.columns.at(1).tiles.at(0).hidden);
+    QVERIFY(!snap.columns.at(1).tiles.at(0).relRect.isNull());
+}
+
+void TestScrollEngineSnapshot::excludeSoloWindowLeavesNoActiveColumn()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a")});
+
+    // Excluding the ONLY window empties the snapshot: the dropped-active
+    // fixup must leave activeColumnIndex at -1 rather than inventing one.
+    const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("a"));
+    QVERIFY(snap.valid);
+    QVERIFY(snap.columns.isEmpty());
+    QCOMPARE(snap.activeColumnIndex, -1);
+}
+
+void TestScrollEngineSnapshot::overWideColumnClampsFractionToOne()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a")});
+    // Force the active column wider than the 1200px work area.
+    engine->setColumnWidth(ColumnWidth::makeFixed(2000), QStringLiteral("S1"));
+
+    const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"));
+    QVERIFY(snap.valid);
+    QCOMPARE(snap.columns.size(), 1);
+    // The share is clamped to 1: the preview shows the visible share,
+    // matching the committed clip, never an over-unit fraction.
+    QVERIFY(snap.columns.at(0).widthFraction > 0.0);
+    QVERIFY(snap.columns.at(0).widthFraction <= 1.0);
+}
+
+void TestScrollEngineSnapshot::invalidWorkAreaAnswersInvalid()
+{
+    QObject owner;
+    // A geometry provider answering an invalid rect: the snapshot must
+    // report invalid (distinct from a valid, empty strip).
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")}, [](const QString&) {
+        return QRect();
+    });
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a")});
+    const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"));
+    QVERIFY(!snap.valid);
 }
 
 void TestScrollEngineSnapshot::gapsShareTheColumnHeight()
@@ -315,7 +418,13 @@ void TestScrollEngineSnapshot::livePreviewOmitsDraggedWindow()
     QCOMPARE(snap.columns.at(1).tiles.at(0).windowId, QStringLiteral("c"));
 
     const ScrollStripSnapshot snapWithExclude = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("b"));
+    // The size compare alone cannot separate a correct implementation from a
+    // double-applying one (b is already detached either way): pin the ids
+    // and the active index against the no-exclude snapshot too.
     QCOMPARE(snapWithExclude.columns.size(), 2);
+    QCOMPARE(snapWithExclude.columns.at(0).tiles.at(0).windowId, QStringLiteral("a"));
+    QCOMPARE(snapWithExclude.columns.at(1).tiles.at(0).windowId, QStringLiteral("c"));
+    QCOMPARE(snapWithExclude.activeColumnIndex, snap.activeColumnIndex);
     engine->cancelDragInsertPreview();
 }
 

@@ -274,10 +274,18 @@ void SettingsAdaptor::initializeRegistryScrolling()
     REGISTER_INT_SETTING("scrollingDropIndicatorBorderRadius", scrollingDropIndicatorBorderRadius,
                          setScrollingDropIndicatorBorderRadius)
 
-    // Strip-mode selector settings. ISettings virtuals like the indicator
-    // keys above, so they register through the interface rather than in the
-    // concrete block below. No LayoutMode / GridColumns / MaxRows twin: the
-    // strip popup is one horizontal card row.
+    // Strip-mode selector settings. PURE ISettings virtuals (every backend
+    // must implement them — a stricter contract than the indicator PAINT
+    // keys above, whose getter+no-op-setter default pairs exist so a
+    // non-Settings backend keeps the keys), so they register through the
+    // interface rather than in the concrete block below. No LayoutMode /
+    // GridColumns / MaxRows twin: the strip popup is one horizontal card
+    // row. The int/bool keys keep the shared macros' coercing setters ON
+    // PURPOSE (the macros are frozen boilerplate across four registry TUs,
+    // and the config schema's clampInt one layer down bounds anything a
+    // coerced 0 could write); only the two ENUM keys need the hand-written
+    // refuse-non-numeric form, because a coerced 0 IS a meaningful member
+    // there.
     REGISTER_BOOL_SETTING("scrollingZoneSelectorEnabled", scrollingZoneSelectorEnabled, setScrollingZoneSelectorEnabled)
     REGISTER_INT_SETTING("scrollingZoneSelectorTriggerDistance", scrollingZoneSelectorTriggerDistance,
                          setScrollingZoneSelectorTriggerDistance)
@@ -437,18 +445,21 @@ void SettingsAdaptor::initializeRegistryScrolling()
         REGISTER_CONCRETE_INT("scrollingDefaultWindowHeightPresetIndex", scrollingDefaultWindowHeightPresetIndex,
                               setScrollingDefaultWindowHeightPresetIndex)
         // ── Scrolling.TabIndicator ──
-        // scrollingTabIndicatorEnabled is registered in the ISettings section
-        // above; the other twelve live here so the whole family
-        // sits in one block. EVERY key of the group must be present: this
-        // generic surface is the ONLY channel the settings app has to the
-        // daemon, so an unregistered key is a control that writes the settings
-        // app's own store and never reaches the engine or the overlay — it
-        // looks wired and does nothing.
+        // scrollingTabIndicatorEnabled and the PAINT keys (style, spacing,
+        // radius, colours) register through the ISettings section above; the
+        // six GEOMETRY keys live here, per the split the trailing comment of
+        // this block states. EVERY key of the group must be present
+        // somewhere: this generic surface is the ONLY channel the settings
+        // app has to the daemon, so an unregistered key is a control that
+        // writes the settings app's own store and never reaches the engine
+        // or the overlay — it looks wired and does nothing.
         //
-        // The two enums get validated setters (the isValidScrollingTabIndicator*
-        // closed sets, same shape as scrollingDefaultColumnDisplay above) rather
-        // than a bare int, so a garbage wire value is refused instead of being
-        // cast into a nonexistent style or edge.
+        // The one enum in THIS block (Position) gets a validated setter (the
+        // isValidScrollingTabIndicator* closed set, same shape as
+        // scrollingDefaultColumnDisplay above) rather than a bare int, so a
+        // garbage wire value is refused instead of being cast into a
+        // nonexistent edge; the other enum of the family (Style) is
+        // validated in the ISettings section.
         m_getters[QStringLiteral("scrollingTabIndicatorPosition")] = [concrete]() {
             return concrete->scrollingTabIndicatorPosition();
         };

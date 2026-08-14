@@ -43,6 +43,12 @@ Item {
     property int cardSidePadding: 18
     property int labelSpace: 28
     property int zonePadding: 1
+    // Preview-scaled zone border, from the C++ preview-scale computation in
+    // selector_update.cpp — so the user's configured border width and
+    // corner radius reach the strip tiles. (The layout-mode ZonePreview
+    // does not consume these pushed values; this card is their consumer.)
+    property int tileBorderWidth: 1
+    property int tileBorderRadius: 2
 
     // Palette seeds.
     property color highlightColor: Kirigami.Theme.highlightColor
@@ -54,8 +60,13 @@ Item {
     property real inactiveOpacity: 0.3
 
     // Font seeds (the user's configured zone-selector font, bound from
-    // ZoneSelectorContent's root — the layout-mode cards honour them, so the
-    // strip caption must too).
+    // ZoneSelectorContent's root). In the layout-mode popup these reach the
+    // zone-NUMBER labels via ZonePreview; LayoutCard's own caption uses the
+    // theme small font unscaled. The strip caption is this card's only text,
+    // so it takes the seeds directly — the strip card has no zone numbers to
+    // carry them instead. Its top margin is deliberately fixed at
+    // smallSpacing (labelTopMargin is not forwarded here; it sizes the
+    // layout-mode label BAND, which this card does not have).
     property string fontFamily: ""
     property real fontSizeScale: 1
     property int fontWeight: Font.Bold
@@ -65,6 +76,13 @@ Item {
 
     /// -1 none, 0 top half, 1 bottom half, 2 whole card.
     property int selectedHalf: -1
+    // One padding vocabulary for every tile-separating gap in this card
+    // (tab-strip spacing, tabbed-body margin, tile inset): floored at 1 so
+    // a zero configured gap still separates the miniature tiles visually.
+    readonly property int tilePadding: Math.max(1, zonePadding)
+    // Inactive card border alpha, the strip twin of LayoutCard's named
+    // style constants.
+    readonly property real inactiveBorderAlpha: 0.2
     readonly property bool isTabbed: modelData.tabbed === true
     readonly property bool isActiveColumn: modelData.active === true
     readonly property var tiles: modelData.tiles || []
@@ -83,7 +101,7 @@ Item {
         radius: Kirigami.Units.largeSpacing
         color: card.backgroundColor
         border.width: card.isActiveColumn ? 2 : 1
-        border.color: card.isActiveColumn ? card.highlightColor : Qt.rgba(card.textColor.r, card.textColor.g, card.textColor.b, 0.2)
+        border.color: card.isActiveColumn ? card.highlightColor : Qt.rgba(card.textColor.r, card.textColor.g, card.textColor.b, card.inactiveBorderAlpha)
     }
 
     Item {
@@ -109,8 +127,11 @@ Item {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
+            // 0.14: the tab strip takes the same share of the preview height
+            // that the real tab indicator band takes of a column, eyeballed
+            // against the live strip so the miniature reads as the same UI.
             height: visible ? Math.round(parent.height * 0.14) : 0
-            spacing: Math.max(1, card.zonePadding)
+            spacing: card.tilePadding
 
             Repeater {
                 model: card.isTabbed ? card.tiles : []
@@ -120,10 +141,17 @@ Item {
 
                     width: Math.max(4, (tabStrip.width - tabStrip.spacing * Math.max(0, card.tiles.length - 1)) / Math.max(1, card.tiles.length))
                     height: tabStrip.height
-                    radius: 2
-                    color: modelData.activeTab ? card.highlightColor : card.inactiveColor
-                    opacity: modelData.activeTab ? card.activeOpacity : card.inactiveOpacity
-                    border.width: 1
+                    radius: card.tileBorderRadius
+                    // Single-apply alpha, ZonePreview's contract: the
+                    // configured opacity is baked into the FILL colour
+                    // (discarding the colour's own carried alpha so the two
+                    // don't multiply), and item `opacity` stays 1 so it
+                    // cannot multiply into the border.
+                    color: {
+                        const base = modelData.activeTab ? card.highlightColor : card.inactiveColor;
+                        return Qt.rgba(base.r, base.g, base.b, modelData.activeTab ? card.activeOpacity : card.inactiveOpacity);
+                    }
+                    border.width: card.tileBorderWidth
                     border.color: card.zoneBorderColor
                 }
             }
@@ -134,14 +162,14 @@ Item {
         Rectangle {
             visible: card.isTabbed
             anchors.top: tabStrip.bottom
-            anchors.topMargin: card.isTabbed ? Math.max(1, card.zonePadding) : 0
+            anchors.topMargin: card.tilePadding
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            radius: 3
-            color: card.inactiveColor
-            opacity: card.inactiveOpacity
-            border.width: 1
+            radius: card.tileBorderRadius
+            // Baked alpha, same single-apply contract as the tab segments.
+            color: Qt.rgba(card.inactiveColor.r, card.inactiveColor.g, card.inactiveColor.b, card.inactiveOpacity)
+            border.width: card.tileBorderWidth
             border.color: card.zoneBorderColor
         }
 
@@ -159,12 +187,12 @@ Item {
                 visible: modelData.width > 0 && modelData.height > 0
                 x: modelData.x * preview.width
                 y: modelData.y * preview.height
-                width: Math.max(0, modelData.width * preview.width - card.zonePadding)
-                height: Math.max(0, modelData.height * preview.height - card.zonePadding)
-                radius: 3
-                color: card.inactiveColor
-                opacity: card.inactiveOpacity
-                border.width: 1
+                width: Math.max(0, modelData.width * preview.width - card.tilePadding)
+                height: Math.max(0, modelData.height * preview.height - card.tilePadding)
+                radius: card.tileBorderRadius
+                // Baked alpha, same single-apply contract as the tab segments.
+                color: Qt.rgba(card.inactiveColor.r, card.inactiveColor.g, card.inactiveColor.b, card.inactiveOpacity)
+                border.width: card.tileBorderWidth
                 border.color: card.zoneBorderColor
             }
         }
@@ -180,9 +208,11 @@ Item {
         y: card.selectedHalf === 2 ? 0 : (card.selectedHalf === 1 ? preview.y + preview.height / 2 : preview.y)
         width: card.selectedHalf === 2 ? card.width : preview.width
         height: card.selectedHalf === 2 ? card.height : preview.height / 2
-        radius: card.selectedHalf === 2 ? cardBackground.radius : 3
-        color: card.highlightColor
-        opacity: card.activeOpacity
+        radius: card.selectedHalf === 2 ? cardBackground.radius : card.tileBorderRadius
+        // Baked alpha, same single-apply contract as the tiles above; the
+        // border keeps the highlight colour's own carried alpha, exactly as
+        // ZonePreview does.
+        color: Qt.rgba(card.highlightColor.r, card.highlightColor.g, card.highlightColor.b, card.activeOpacity)
         border.width: 2
         border.color: card.highlightColor
     }
@@ -192,10 +222,21 @@ Item {
         anchors.top: preview.bottom
         anchors.topMargin: Kirigami.Units.smallSpacing
         anchors.horizontalCenter: parent.horizontalCenter
+        // Bounded + elided, LayoutCard's caption contract: the card is
+        // variable-width, and an unbounded caption on a narrow-share card
+        // painted over the neighbouring card (the card root deliberately
+        // does not clip — the whole-card highlight is sized to it).
+        width: Math.max(0, card.width - card.cardSidePadding * 2)
+        horizontalAlignment: Text.AlignHCenter
+        elide: Text.ElideRight
         color: card.textColor
         opacity: 0.8
         font.family: card.fontFamily.length > 0 ? card.fontFamily : Kirigami.Theme.defaultFont.family
-        font.pointSize: Kirigami.Theme.defaultFont.pointSize * 0.85 * card.fontSizeScale
+        // pixelSize, not pointSize: pointSize is -1 for pixel-defined theme
+        // fonts (the guarded form ScrollTabStripContent uses), and a
+        // negative product would be rejected, silently ignoring the user's
+        // font-size scale.
+        font.pixelSize: Math.max(1, Math.round((Kirigami.Theme.defaultFont.pixelSize > 0 ? Kirigami.Theme.defaultFont.pixelSize : Kirigami.Units.gridUnit * 0.6) * 0.85 * card.fontSizeScale))
         font.weight: card.fontWeight
         font.italic: card.fontItalic
         font.underline: card.fontUnderline

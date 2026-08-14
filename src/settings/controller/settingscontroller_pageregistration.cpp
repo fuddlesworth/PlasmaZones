@@ -329,20 +329,22 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("scrolling-templates"), QStringLiteral("scrolling"), PhosphorI18n::tr("Templates"),
                QStringLiteral("pages/scrolling/ScrollingTemplatesPage.qml"), QStringLiteral("view-grid"),
                /*collapsible=*/false, /*divider=*/true);
-    // The advanced tree mirrors Tiling's per-concern split: Columns
-    // (fresh-column/tile defaults + presets), Tabs (the tab indicator's own
-    // thirteen-knob family), and Window (window handling plus the Focus and
-    // view card, which carries viewport centering and the Meta+wheel gesture —
-    // those follow focus, so they sit with it rather than on a View leaf of
-    // their own). Columns is the simple page's counterpart, like
+    // The advanced tree mirrors Tiling's per-concern split, five leaves:
+    // Columns (fresh-column/tile defaults + presets), Tabs (the tab
+    // indicator's own thirteen-knob family), Window (window handling plus
+    // the Focus and view card, which carries viewport centering and the
+    // Meta+wheel gesture — those follow focus, so they sit with it rather
+    // than on a View leaf of their own), Strip Selector (the drag popup)
+    // and Quick Shortcuts. Columns is the simple page's counterpart, like
     // tiling-simple ↔ tiling-algorithm.
     regVirtual(QStringLiteral("scrolling-columns"), QStringLiteral("scrolling"), PhosphorI18n::tr("Columns"),
                QStringLiteral("pages/scrolling/ScrollingColumnsPage.qml"), QStringLiteral("view-file-columns"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly, QStringLiteral("scrolling-simple"));
-    // Ordered between Columns and Window because that is the order the three
-    // read in: which columns are tabbed (Columns), how a tabbed one is marked
-    // (Tabs), how the strip treats windows generally (Window).
+    // Ordered between Columns and Window because that is the order they
+    // read in: which columns are tabbed (Columns), how a tabbed one is
+    // marked (Tabs), how the strip treats windows generally (Window) — with
+    // Strip Selector and Quick Shortcuts trailing as the interaction leaves.
     regVirtual(QStringLiteral("scrolling-tabs"), QStringLiteral("scrolling"), PhosphorI18n::tr("Tabs"),
                QStringLiteral("pages/scrolling/ScrollingTabsPage.qml"), QStringLiteral("tab-detach"),
                /*collapsible=*/false,
@@ -354,6 +356,9 @@ void SettingsController::buildApplicationController()
     // Strip Selector — the drag popup's scrolling twin, a single top leaf
     // like Snapping's Zone Selector (enable + trigger + position + preview
     // size; no arrangement page, the strip popup is one horizontal row).
+    // Unlike that twin it carries NO divider: Snapping's rail seam separates
+    // its selector from a config-cat header that Scrolling does not have,
+    // so the advanced run reads as one undivided block here on purpose.
     regVirtual(QStringLiteral("scrolling-zoneselector"), QStringLiteral("scrolling"),
                PhosphorI18n::tr("Strip Selector"), QStringLiteral("pages/scrolling/ScrollingZoneSelectorPage.qml"),
                QStringLiteral("view-choose"),

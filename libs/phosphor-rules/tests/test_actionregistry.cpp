@@ -325,6 +325,29 @@ private Q_SLOTS:
         QVERIFY2(!reg.validate(makeAction(ActionType::SetDragSelectorEnabled, notBool)), "non-bool value must fail");
     }
 
+    void testDisplayOrderUniqueWithinCategory()
+    {
+        // No consumer reads displayOrder today (the shipped picker sorts by
+        // label), but the field exists for one, and two of the twelve overlay
+        // orders come from loop tables — a collision would be silent until a
+        // consumer appears and the rule editor reordered under it. Pin
+        // (category, displayOrder) uniqueness across every registered type.
+        const ActionRegistry& reg = ActionRegistry::instance();
+        QHash<QString, QString> seen; // "category|order" -> first type
+        for (const QString& type : reg.registeredTypes()) {
+            const auto desc = reg.descriptor(type);
+            QVERIFY2(desc.has_value(), qPrintable(type));
+            const QString key = desc->category + QLatin1Char('|') + QString::number(desc->displayOrder);
+            QVERIFY2(!seen.contains(key),
+                     qPrintable(QStringLiteral("(%1, %2) collides: %3 vs %4")
+                                    .arg(desc->category)
+                                    .arg(desc->displayOrder)
+                                    .arg(seen.value(key), type)));
+            seen.insert(key, type);
+        }
+        QVERIFY2(seen.size() > 10, "The scan itself is broken (almost nothing registered).");
+    }
+
     void testRegisterCustomAction()
     {
         ActionRegistry& reg = ActionRegistry::instance();

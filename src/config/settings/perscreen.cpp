@@ -847,7 +847,13 @@ void Settings::setPerScreenScrollingSetting(const QString& screenIdOrName, const
     // per-key validators bound each half independently and neither can see the
     // pair. Re-seed it now, matching what the global kind setter does, so a
     // scoped monitor never runs with a proportion under Fixed (1px columns) or
-    // pixels under Proportion (100% columns).
+    // pixels under Proportion (100% columns). The VALUE key deliberately
+    // takes NO repair: a client writing Value before Kind (the natural batch
+    // order) would have its value re-seeded to the OLD kind's default before
+    // the kind write arrives — destroying data to fix a pair the very next
+    // write was about to make consistent. A value-only cross-kind write does
+    // mis-render until the pair is next repaired (the kind arm here, or the
+    // load()-time sweep), which is the lesser harm.
     if (key == QLatin1String(PerScreenScrollingKey::DefaultColumnWidthKind)) {
         auto it = findPerScreenEntryMutable(m_perScreenScrollingSettings, screenIdOrName);
         if (it != m_perScreenScrollingSettings.end()) {

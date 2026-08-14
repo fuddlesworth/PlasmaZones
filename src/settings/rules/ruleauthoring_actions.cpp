@@ -386,6 +386,11 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Show on-screen displays");
     }
     if (type == ActionType::SetDragSelectorEnabled) {
+        // "Drag selector" deliberately matches NEITHER settings card label
+        // ("Zone selector popup" / "Strip selector popup"): one action
+        // governs both variants, so unlike the drop-indicator family (whose
+        // label matches its single settings card, see the note there) there
+        // is no one card to echo, and the umbrella term is the honest name.
         return PhosphorI18n::tr("Show the drag selector");
     }
     if (type == ActionType::OverrideAnimationShader) {

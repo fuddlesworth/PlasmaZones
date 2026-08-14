@@ -1015,6 +1015,17 @@ void Daemon::stop()
         m_overlayService->hideLayoutPicker();
         m_overlayService->hideSnapAssist();
         m_overlayService->hideCheatsheet();
+        // The zone selector has the same no-way-out problem: OverlayService
+        // outlives stop(), the drag adaptor's engine borrows are already
+        // nulled and the bus unregisters below, so no drag-end can ever hide
+        // a selector left showing — and the latched m_zoneSelectorVisible
+        // would make showZoneSelector's entry guard refuse every show for
+        // the whole next session.
+        m_overlayService->hideZoneSelector();
+        // hideZoneSelector deliberately keeps the zone triple for the
+        // drag-end snap path; no drag-end follows a stop(), so clear both
+        // selection families explicitly.
+        m_overlayService->clearSelectedZone();
     }
 
     // Save state

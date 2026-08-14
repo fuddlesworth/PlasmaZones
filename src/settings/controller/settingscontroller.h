@@ -717,6 +717,12 @@ public:
     Q_INVOKABLE void clearPerScreenZoneSelectorSizeSettings(const QString& screenName);
 
     // ── Per-screen strip selector overrides ──────────────────────────────────
+    // Same per-card sub-domain contract as the snapping block above, minus
+    // the Arrangement pair — the strip popup is a single horizontal card row
+    // and has no arrangement card, so do not add one for symmetry. The
+    // whole-domain has/clear pair is kept for API symmetry with the snapping
+    // twin even though the scope chips call only the per-card pairs (the
+    // Settings-level members behind both are live via the D-Bus category).
     Q_INVOKABLE QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& screenName) const;
     Q_INVOKABLE void setPerScreenScrollingZoneSelectorSetting(const QString& screenName, const QString& key,
                                                               const QVariant& value);

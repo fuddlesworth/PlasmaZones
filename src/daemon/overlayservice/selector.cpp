@@ -228,6 +228,12 @@ void OverlayService::hideZoneSelector()
     // hands back to the drop bands, which is the documented contract.
     m_selectedStripTarget = {};
     m_selectedStripScreenId.clear();
+    // The popup only exists inside a drag, so a full hide also ends the
+    // memo's useful life — the strip is free to reshape before the next
+    // show, and dropping the cache here (rather than only at the next
+    // drag's setActiveDragWindowId) keeps no stale entry across sessions
+    // (stop() routes through here).
+    m_stripCardFractionsCache.clear();
     //
     // Snapshot keys before iterating so the completion lambda
     // (potentially fired synchronously by ShellHost::hideSlot on a
@@ -243,7 +249,18 @@ void OverlayService::hideZoneSelector()
             continue;
         }
         auto* slot = it->zoneSelectorSlot();
-        if (!slot || !slot->isVisible()) {
+        if (!slot) {
+            continue;
+        }
+        // Blank the strip highlight triple on every slot, visible or not: the
+        // C++ target was just cleared above, and updateStripSelectorHit's
+        // changed-gate compares against that cleared target, so an invalid
+        // first hit after the next show would early-return and leave a stale
+        // highlight painted (slot properties survive the Loader recycle).
+        writeQmlProperty(slot, QStringLiteral("selectedStripColumn"), -1);
+        writeQmlProperty(slot, QStringLiteral("selectedStripGap"), -1);
+        writeQmlProperty(slot, QStringLiteral("selectedStripHalf"), -1);
+        if (!slot->isVisible()) {
             continue;
         }
         QMetaObject::invokeMethod(slot, "resetCursorState");
@@ -272,17 +289,19 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     // Resolve to effective (virtual) screen ID if applicable
     QString cursorScreenId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), screen);
 
-    // Skip excluded screens (autotile-managed) - matches showZoneSelector
-    // exclusion. Strip-selector screens are exempt for the same reason they
-    // are in the show path: the popup IS the engine surface there.
-    if (m_excludedScreens.contains(cursorScreenId) && !isStripSelectorScreen(cursorScreenId)) {
-        return;
-    }
-
     // Clear selection highlight on all OTHER zone selector slots when cursor
     // moves to a different VS, preventing stale highlights from previous VS.
+    // Runs BEFORE the excluded-screen bail below: a hop onto an excluded
+    // screen still makes every other screen's painted selection stale, and
+    // returning first would leave it (and the C++ STRIP mirror — the zone
+    // triple is deliberately kept for the drag-end snap path) alive.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (it.key() != cursorScreenId && it.value().zoneSelectorSlot()) {
+        // screensMatch, not raw !=, matching the mirror clear below and the
+        // drop guard's convention. ASSUMPTION: one screen never coexists
+        // under two key spellings in m_screenStates while the cursor id
+        // resolves to a third — the exact constFind below would then miss
+        // the aliased entry this loop just spared.
+        if (!PhosphorScreens::ScreenIdentity::screensMatch(it.key(), cursorScreenId) && it.value().zoneSelectorSlot()) {
             writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedLayoutId"), QString());
             writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedZoneIndex"), -1);
             writeQmlProperty(it.value().zoneSelectorSlot(), QStringLiteral("selectedStripColumn"), -1);
@@ -297,6 +316,13 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 m_selectedStripScreenId.clear();
             }
         }
+    }
+
+    // Skip excluded screens (autotile-managed) - matches showZoneSelector
+    // exclusion. Strip-selector screens are exempt for the same reason they
+    // are in the show path: the popup IS the engine surface there.
+    if (m_excludedScreens.contains(cursorScreenId) && !isStripSelectorScreen(cursorScreenId)) {
+        return;
     }
 
     auto cursorStateIt = m_screenStates.constFind(cursorScreenId);
@@ -556,6 +582,16 @@ void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
         hideZoneSelectorSlotOnScreen(screenId);
         it->zoneSelectorPhysScreen = nullptr;
         it->zoneSelectorGeometry = QRect();
+        // A strip target keyed to the destroyed screen can no longer be
+        // repainted or re-hit-tested, so it would keep driving the preview
+        // and win the drop against a card list nobody can see — the same
+        // hazard hideZoneSelector's clear documents. hideDisabledAndRefresh
+        // routes context-disable teardowns here without going through
+        // hideZoneSelector, so the clear must live here too.
+        if (PhosphorScreens::ScreenIdentity::screensMatch(m_selectedStripScreenId, screenId)) {
+            m_selectedStripTarget = {};
+            m_selectedStripScreenId.clear();
+        }
         // If this screen was the active zone-selector source, clear the
         // global visible flag so a fresh show after hot-plug isn't
         // gated out by the early-return at showZoneSelector's top.
@@ -691,6 +727,23 @@ void OverlayService::clearSelectedZone()
     // and a stale strip target is exactly as dangerous as a stale zone.
     m_selectedStripTarget = {};
     m_selectedStripScreenId.clear();
+    // Blank the painted highlights too, BOTH families. Slot properties
+    // survive the Loader recycle, and with the C++ mirrors just emptied the
+    // hit-tests' changed-gates compare equal on an invalid first hit after
+    // the next show — so a highlight left painted here (e.g. across a
+    // stop()->start() cycle) has no other repair path. Consistent by
+    // construction: mirrors empty + display blank cannot disagree.
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        auto* slot = it.value().zoneSelectorSlot();
+        if (!slot) {
+            continue;
+        }
+        writeQmlProperty(slot, QStringLiteral("selectedLayoutId"), QString());
+        writeQmlProperty(slot, QStringLiteral("selectedZoneIndex"), -1);
+        writeQmlProperty(slot, QStringLiteral("selectedStripColumn"), -1);
+        writeQmlProperty(slot, QStringLiteral("selectedStripGap"), -1);
+        writeQmlProperty(slot, QStringLiteral("selectedStripHalf"), -1);
+    }
 }
 
 QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const

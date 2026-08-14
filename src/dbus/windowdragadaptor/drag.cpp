@@ -713,12 +713,12 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     // would stay painted for the rest of the drag.
                     clearScrollDropIndicator();
                 } else if (insertEngine->providesDragInsertSelector() && m_overlayService) {
-                    // The begin detached the drag window; a visible strip
-                    // popup is now rendering a strip that no longer exists
-                    // (its exclusion emulated the detach, but the column set
-                    // can differ when the engine healed residue at begin).
-                    // Re-snapshot at the boundary — the ONLY mid-drag moment
-                    // the frozen strip changes shape (DETACH-ONCE).
+                    // The begin detached the drag window. The popup's
+                    // exclusion emulated that detach, so the column set
+                    // normally matches — but the begin boundary is the ONE
+                    // mid-drag moment the frozen strip is ALLOWED to change
+                    // shape (DETACH-ONCE), so re-snapshot here rather than
+                    // relying on the emulation staying faithful forever.
                     m_overlayService->refreshStripSelector(insertScreenId);
                 }
             }

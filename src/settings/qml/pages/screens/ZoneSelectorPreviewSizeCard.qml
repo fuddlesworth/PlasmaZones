@@ -290,7 +290,7 @@ Item {
                     Keys.onRightPressed: sizeButtonRow.focusStep(1)
                     ToolTip.visible: hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
-                    ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewSmall)
+                    ToolTip.text: i18nc("pixel-unit width in a preset tooltip", "%1 px width", root.constants.zoneSelectorPreviewSmall)
                 }
 
                 Button {
@@ -311,7 +311,7 @@ Item {
                     Keys.onRightPressed: sizeButtonRow.focusStep(1)
                     ToolTip.visible: hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
-                    ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewMedium)
+                    ToolTip.text: i18nc("pixel-unit width in a preset tooltip", "%1 px width", root.constants.zoneSelectorPreviewMedium)
                 }
 
                 Button {
@@ -332,7 +332,7 @@ Item {
                     Keys.onRightPressed: sizeButtonRow.focusStep(1)
                     ToolTip.visible: hovered
                     ToolTip.delay: Kirigami.Units.toolTipDelay
-                    ToolTip.text: i18n("%1px width", root.constants.zoneSelectorPreviewLarge)
+                    ToolTip.text: i18nc("pixel-unit width in a preset tooltip", "%1 px width", root.constants.zoneSelectorPreviewLarge)
                 }
 
                 Button {

@@ -1173,8 +1173,8 @@ public:
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so
     // this is the sole accessor; writes go through setPerScreenAutotileSetting /
     // the perScreenGap* helpers. ISettings carries no set/clear/has snapping
-    // triplet at all, unlike the autotile, scrolling and zone-selector blocks
-    // — see the note above the getter in isettings.h.
+    // triplet at all, unlike the autotile, scrolling, zone-selector and
+    // strip-selector blocks — see the note above the getter in isettings.h.
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
 
     // Per-monitor gap overrides (config-backed, unified — one value per monitor

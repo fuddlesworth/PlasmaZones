@@ -22,6 +22,7 @@ set(plasmazones_settings_SRCS
     search/searchcatalog_p.h
     search/searchcatalog.cpp
     search/searchcatalog_animations.cpp
+    search/searchcatalog_simple.cpp
     search/searchproviders.h
     search/searchproviders.cpp
     utils/registryshaderpreviewbackend.h

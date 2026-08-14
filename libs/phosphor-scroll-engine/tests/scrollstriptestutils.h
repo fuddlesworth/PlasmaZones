@@ -57,11 +57,9 @@ inline PhosphorScrollEngine::ScrollLayoutParams defaultParams()
 inline constexpr int kEngineInnerGap = 6;
 
 /// Params matching a makeGappedProviderEngine engine, for a test that
-/// hand-computes gap-dependent pixel expectations at the strip level. The
-/// current gapped-engine tests assert on payloads read back from the engine
-/// instead, so nothing uses this yet — it exists so the first test that DOES
-/// derive expectations by hand has one definition of the gap to derive them
-/// from. The plain engineParams()/makeProviderEngine pair runs at gap 0,
+/// hand-computes gap-dependent pixel expectations at the strip level (the
+/// snapshot suite's gapsShareTheColumnHeight drives its strip mutations with
+/// it). The plain engineParams()/makeProviderEngine pair runs at gap 0,
 /// which CANNOT observe a gap-dependent defect: a layout that omits the gap
 /// term entirely still matches. That blind spot hid a real drop-indicator
 /// bug.

@@ -78,8 +78,13 @@ void OverlayService::refreshStripSelector(const QString& screenId)
     if (!m_zoneSelectorVisible) {
         return;
     }
+    // isVisible, not just slot existence (slots are created once and only
+    // setVisible(false) on hide): a screen whose slot a sibling modal has
+    // temporarily hidden should not pay the engine snapshot + serialization
+    // below per placementChanged — the restore path re-pushes the model via
+    // showZoneSelectorSlotOnScreen -> updateZoneSelectorWindow anyway.
     if (const auto preIt = m_screenStates.constFind(screenId);
-        preIt == m_screenStates.constEnd() || !preIt->zoneSelectorSlot()) {
+        preIt == m_screenStates.constEnd() || !preIt->zoneSelectorSlot() || !preIt->zoneSelectorSlot()->isVisible()) {
         return;
     }
     // Full property re-push: the card list, the bar geometry sized off the
@@ -115,6 +120,22 @@ void OverlayService::updateStripSelectorHit(QQuickItem* slot, int localX, int lo
             }
         }
     } else {
+        // A refresh that just re-pushed stripColumns only SCHEDULED the Row's
+        // layout pass (polish), and on the preview-begin tick this hit-test
+        // runs in the same D-Bus turn with no frame in between — the card x
+        // positions read back below would be one layout pass stale. Deliver
+        // the pending polish synchronously so the rects describe the list
+        // just handed to QML rather than the previous generation. Flushing
+        // the ROW covers the dominant term — it is the positioner that
+        // places the cards, and the items the refresh also polishes (slot /
+        // grid / shader anchor) are plain Items with a no-op updatePolish.
+        // Residual ancestor staleness (e.g. a ScrollView control relayout
+        // still pending) self-heals on the next cursor tick, as before this
+        // flush existed. The empty-strip arm above needs no flush — the
+        // strip layer is anchors.fill.
+        if (auto* stripRow = findQmlItemByName(slot, QStringLiteral("zoneSelectorStripRow"))) {
+            stripRow->ensurePolished();
+        }
         // Rendered card rects keyed by delegate index — same read-back
         // discipline as the layout-mode walk in selector.cpp (QML layout is
         // the authority; the ScrollView clips scrolled-out cards, and an
@@ -156,19 +177,23 @@ void OverlayService::updateStripSelectorHit(QQuickItem* slot, int localX, int lo
         qmlHalf = hit.half;
     }
 
+    // Exactly one selection family at a time: entering the strip hit-test at
+    // all means the cursor is on a strip screen, so any zone selection a
+    // cross-screen hop left behind is stale even when THIS strip's hit is
+    // unchanged (invalid -> invalid included) — clearing it must not hide
+    // behind the changed-gate below.
+    m_selectedLayoutId.clear();
+    m_selectedZoneIndex = -1;
+    m_selectedZoneRelGeo = QRectF();
+
     const bool changed = target.columnIndex != m_selectedStripTarget.columnIndex
         || target.tileIndex != m_selectedStripTarget.tileIndex || target.newColumn != m_selectedStripTarget.newColumn
-        || (target.isValid() && m_selectedStripScreenId != screenId);
+        || (target.isValid() && !PhosphorScreens::ScreenIdentity::screensMatch(m_selectedStripScreenId, screenId));
     if (!changed) {
         return;
     }
     m_selectedStripTarget = target;
     m_selectedStripScreenId = target.isValid() ? screenId : QString();
-    // Exactly one selection family at a time: a strip write invalidates any
-    // zone selection a cross-screen hop may have left behind.
-    m_selectedLayoutId.clear();
-    m_selectedZoneIndex = -1;
-    m_selectedZoneRelGeo = QRectF();
     writeQmlProperty(slot, QStringLiteral("selectedStripColumn"), qmlColumn);
     writeQmlProperty(slot, QStringLiteral("selectedStripGap"), qmlGap);
     writeQmlProperty(slot, QStringLiteral("selectedStripHalf"), qmlHalf);

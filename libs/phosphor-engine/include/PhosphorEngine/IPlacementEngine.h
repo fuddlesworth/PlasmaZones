@@ -845,8 +845,11 @@ public:
     /// column cards whose gap / join / half targets translate into
     /// DragInsertTarget — instead of zone layouts, on screens this engine
     /// owns. Consumed by WindowDragAdaptor's trigger gate and OverlayService's
-    /// model selection. Default false: engine-owned screens suppress the
-    /// popup entirely (the pre-existing autotile behaviour).
+    /// model selection. Default false: the screen's drag popup speaks the
+    /// zone-layout vocabulary instead (snap screens keep the classic zone
+    /// selector; an ENGINE-owned screen without this capability suppresses
+    /// the popup entirely — the pre-existing autotile behaviour — because
+    /// the engine owns placement there and has no picker of its own).
     virtual bool providesDragInsertSelector() const
     {
         return false;

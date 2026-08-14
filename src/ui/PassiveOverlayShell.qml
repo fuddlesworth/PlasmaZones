@@ -522,14 +522,11 @@ Window {
         property int layoutRows: 1
         property int contentWidth: 180
         property int contentHeight: 129
-        property int containerPadding: 36
-        property int containerPaddingSide: 18
         property int containerTopMargin: 10
         property int containerSideMargin: 10
         // Card corner radius the surface decoration rounds to (see osdSlot).
         property real cardCornerRadius: Kirigami.Units.largeSpacing * 1.5
         property int labelTopMargin: 8
-        property int labelHeight: 20
         property int labelSpace: 28
         property int cardPadding: 26
         property int cardSidePadding: 18
@@ -648,12 +645,9 @@ Window {
                 layoutColumns: zoneSelectorSlot.layoutColumns
                 contentWidth: zoneSelectorSlot.contentWidth
                 contentHeight: zoneSelectorSlot.contentHeight
-                containerPadding: zoneSelectorSlot.containerPadding
-                containerPaddingSide: zoneSelectorSlot.containerPaddingSide
                 containerTopMargin: zoneSelectorSlot.containerTopMargin
                 containerSideMargin: zoneSelectorSlot.containerSideMargin
                 labelTopMargin: zoneSelectorSlot.labelTopMargin
-                labelHeight: zoneSelectorSlot.labelHeight
                 labelSpace: zoneSelectorSlot.labelSpace
                 cardPadding: zoneSelectorSlot.cardPadding
                 cardSidePadding: zoneSelectorSlot.cardSidePadding

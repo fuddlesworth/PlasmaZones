@@ -29,7 +29,8 @@ inline constexpr QLatin1StringView EngineEnable{"engine-enable"};
 /// A single boolean: a winning rule with `value == true` locks the context.
 ///
 /// NOTE, as for `DefaultAssignment`, `OsdEnabled` and `DragSelectorEnabled`
-/// below: the slot id itself has no reader. `LayoutRegistry::resolveContextLocked` scans the matched
+/// below: the slot id itself has no reader.
+/// `LayoutRegistry::resolveContextLocked` scans the matched
 /// rules for the action TYPE and reads its `value` param directly, so the id
 /// exists to satisfy the registry invariant that every non-terminal descriptor
 /// resolves a non-empty slot (`ActionRegistry::validate` rejects an action

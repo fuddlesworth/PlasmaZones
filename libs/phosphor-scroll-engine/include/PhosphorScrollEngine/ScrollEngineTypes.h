@@ -153,9 +153,14 @@ struct ScrollStripSnapshotColumn
 /// detached). When a drag-insert preview is live the resolve already runs
 /// against the preview's detached strip; when it is not, the accessor's
 /// excludeWindowId emulates the detach (tile removed, an emptied column
-/// dropped, later positions renumbered). The shipped consumer builds targets
-/// only from the column endpoints (tile 0 / append -1); per-tile indices are
-/// carried so richer targets stay expressible.
+/// dropped, later positions renumbered). GEOMETRY is pre-detach on the
+/// emulated path: widthFraction and the relRects come from the strip's
+/// relayout WITH the drag window still in it (its column previews the
+/// survivor at half height, siblings keep pre-detach widths) — the honest
+/// "what you are dragging out of" picture; only STRUCTURE (indices) is
+/// post-detach. The shipped consumer builds targets only from the column
+/// endpoints (tile 0 / append -1); per-tile indices are carried so richer
+/// targets stay expressible.
 struct ScrollStripSnapshot
 {
     QVector<ScrollStripSnapshotColumn> columns;

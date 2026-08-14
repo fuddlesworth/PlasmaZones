@@ -894,13 +894,13 @@ private:
         QLatin1StringView actionType,
         const std::function<std::optional<bool>(RegistryFixture&, const QString&)>& resolve)
     {
-        const auto osdAction = [&actionType](bool enabled) {
+        const auto boolAction = [&actionType](bool enabled) {
             PWR::RuleAction a;
             a.type = QString(actionType);
             a.params.insert(QString(PWR::ActionParam::Value), enabled);
             return a;
         };
-        const auto negatedRule = [&osdAction](const QString& name, PWR::Field field, const QVariant& value) {
+        const auto negatedRule = [&boolAction](const QString& name, PWR::Field field, const QVariant& value) {
             PWR::Rule r;
             r.id = QUuid::createUuid();
             r.name = name;
@@ -908,13 +908,13 @@ private:
             r.priority = 900;
             r.match =
                 PWR::MatchExpression::makeNone({PWR::MatchExpression::makeLeaf(field, PWR::Operator::Equals, value)});
-            r.actions = {osdAction(false)};
+            r.actions = {boolAction(false)};
             return r;
         };
 
         RegistryFixture f = makeRegistryFixture();
 
-        // None{Mode == "tiling"}: mode is unstamped on an OSD query and reads
+        // None{Mode == "tiling"}: mode is unstamped on this resolver's query and reads
         // back as an ENGAGED empty string, so the inner leaf is false and the
         // None matches EVERY context. Excluded structurally, so no verdict.
         QVERIFY(f.store->setAllRules(
@@ -934,14 +934,15 @@ private:
         // Positive control: a plain ScreenId rule on the same fixture DOES
         // resolve, so the three nullopts above are the guards and not a dead
         // resolver.
-        const auto screenRule = [&osdAction](const QString& name, const QString& screenId, bool enabled, int priority) {
+        const auto screenRule = [&boolAction](const QString& name, const QString& screenId, bool enabled,
+                                              int priority) {
             PWR::Rule r;
             r.id = QUuid::createUuid();
             r.name = name;
             r.enabled = true;
             r.priority = priority;
             r.match = PWR::MatchExpression::makeLeaf(PWR::Field::ScreenId, PWR::Operator::Equals, screenId);
-            r.actions = {osdAction(enabled)};
+            r.actions = {boolAction(enabled)};
             return r;
         };
         QVERIFY(f.store->setAllRules({screenRule(QStringLiteral("plain"), QStringLiteral("DP-1"), false, 400)}));

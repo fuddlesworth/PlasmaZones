@@ -57,4 +57,9 @@ inline void addSection(PhosphorControl::SearchController* search, const QString&
 /// seedSearchCatalog.
 void seedAnimationEventAnchors(PhosphorControl::SearchController* search);
 
+/// Seed the condensed simple-mode pages' anchors. Same split-by-concern as
+/// the animation events above (searchcatalog_simple.cpp). Called only by
+/// seedSearchCatalog.
+void seedSimplePageAnchors(PhosphorControl::SearchController* search);
+
 } // namespace PlasmaZones

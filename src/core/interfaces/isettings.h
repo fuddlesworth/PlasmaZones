@@ -546,7 +546,8 @@ public:
 
     // Strip-mode selector overrides. Separate store from the zone-selector
     // pair above (own group prefix, own map) but the same key vocabulary —
-    // see the note on resolvedScrollingZoneSelectorConfig.
+    // see the note on resolvedScrollingZoneSelectorConfig in
+    // settings_interfaces.h.
     virtual QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& /*screenIdOrName*/) const
     {
         return {};
@@ -570,8 +571,8 @@ public:
     // unification the per-monitor gap dimensions are config-backed and live in
     // the per-screen AUTOTILE map (one value per monitor drives both snap and
     // tile), and this getter surfaces that map's gap subset. Hence no
-    // set/clear/has triplet, unlike the autotile, scrolling and zone-selector
-    // blocks above:
+    // set/clear/has triplet, unlike the autotile, scrolling, zone-selector
+    // and strip-selector blocks above:
     // writes go through setPerScreenAutotileSetting and the perScreenGap*
     // accessors, and a snapping-side writer would just be a second door onto
     // the same keys.

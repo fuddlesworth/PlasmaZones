@@ -71,8 +71,10 @@ inline constexpr QLatin1StringView SetOsdEnabled{"setOsdEnabled"};
 /// that exist because a pick could not be committed (an excluded dragged
 /// window, a layout-suppressed or disabled context, an engine-owned screen
 /// without the strip capability). Live-resolved daemon-side via
-/// `LayoutRegistry::resolveContextDragSelectorEnabled` and consumed by
-/// `WindowDragAdaptor::checkZoneSelectorTrigger`, mirroring `SetOsdEnabled`.
+/// `LayoutRegistry::resolveContextDragSelectorEnabled` and consumed by TWO
+/// load-bearing gates — `WindowDragAdaptor::checkZoneSelectorTrigger` (and
+/// its edge-activation sibling) and
+/// `OverlayService::selectorEnabledForScreen` — mirroring `SetOsdEnabled`.
 inline constexpr QLatin1StringView SetDragSelectorEnabled{"setDragSelectorEnabled"};
 inline constexpr QLatin1StringView Exclude{"exclude"};
 /// Exclude a matched window from the placement engines ONLY — snapping,

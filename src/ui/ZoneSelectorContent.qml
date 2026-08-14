@@ -52,8 +52,6 @@ Item {
     property int layoutColumns: 1
     property int contentWidth: 180
     property int contentHeight: 129
-    property int containerPadding: 36
-    property int containerPaddingSide: 18
     property int containerTopMargin: 10
     property int containerSideMargin: 10
     /// Effective edge margins for corner / edge selector positions. The
@@ -78,7 +76,6 @@ Item {
     readonly property real effectiveTopMargin: Math.max(containerTopMargin, _captureMargin)
     readonly property real effectiveSideMargin: Math.max(containerSideMargin, _captureMargin)
     property int labelTopMargin: 8
-    property int labelHeight: 20
     property int labelSpace: 28
     property int cardPadding: 26
     property int cardSidePadding: 18
@@ -437,6 +434,8 @@ Item {
                                 cardSidePadding: root.cardSidePadding
                                 labelSpace: root.labelSpace
                                 zonePadding: root.scaledPadding
+                                tileBorderWidth: root.scaledBorderWidth
+                                tileBorderRadius: root.scaledBorderRadius
                                 highlightColor: root.highlightColor
                                 inactiveColor: root.inactiveColor
                                 zoneBorderColor: root.borderColor
@@ -471,6 +470,11 @@ Item {
                             required property int index
 
                             readonly property int cardCount: root.stripColumns.length
+                            // Fixed drawing dimensions of this miniature
+                            // indicator — diagram detail, not layout spacing,
+                            // so deliberately not theme-scaled (and a Units
+                            // change would skew the bar against the 8 px
+                            // card-width floor).
                             width: 4
                             height: stripLayer.cellHeight
                             radius: 2
@@ -482,7 +486,11 @@ Item {
                             // bar always lands on its gap. The helper reads
                             // root.stripColumns, which the binding tracks
                             // through the call; the list is replaced
-                            // wholesale on every strip reshape.
+                            // wholesale on every strip reshape. The FIRST and
+                            // LAST bars sit inside the adjacent card's
+                            // footprint (there is no inter-card gap to centre
+                            // in at the strip ends) — deliberate, not drift
+                            // from the interior bars' centred placement.
                             x: {
                                 if (index === 0)
                                     return 0;
@@ -495,6 +503,12 @@ Item {
 
                     Label {
                         anchors.centerIn: parent
+                        // Bounded + wrapped: the empty-strip popup is exactly
+                        // one card cell wide, and this sentence is wider than
+                        // that at the default font (more so in de/pl/ru).
+                        width: parent.width
+                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignHCenter
                         text: i18nc("@info strip selector empty state", "No columns yet. Drop here to start the strip.")
                         color: Kirigami.Theme.disabledTextColor
                         visible: root.stripColumns.length === 0 // stripLayer already gates on stripMode

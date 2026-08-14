@@ -15,6 +15,7 @@
 
 #include <PhosphorProtocol/ZoneTypes.h>
 
+#include <QList>
 #include <QObject>
 #include <QRect>
 #include <QString>

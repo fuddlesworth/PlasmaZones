@@ -29,9 +29,13 @@ class Settings;
 
 namespace PerScreenDetail {
 
-/// Storage-key form of a screen identifier, canonicalized for WRITES.
-/// Defined in perscreen.cpp alongside Settings::canonicalPerScreenKey, which
-/// it must stay in lockstep with.
+/// READ-side variant list: the ordered, de-duplicated storage-key forms an
+/// entry could be keyed under — the queried form FIRST, uncanonicalized,
+/// then the connector/EDID alternate. Never key a write off this list (that
+/// is canonicalWriteKey's job, and mixing them recreates the duplicate-entry
+/// bug canonicalization exists to prevent). Defined in perscreen.cpp
+/// alongside Settings::canonicalPerScreenKey, which it must stay in lockstep
+/// with.
 QStringList perScreenKeyVariants(const QString& screenIdOrName);
 
 /// Canonical write-side key. A thin forwarder to Settings::canonicalPerScreenKey

@@ -582,6 +582,11 @@ private:
     // Cleared alongside the windowId/screenId pair in cancelSnap and the
     // pending-clear sites.
     int m_snapAssistPendingDesktop = 0;
+    // Activity snapshot, same rationale as the desktop one: the suppression
+    // gate and the layout resolve in the deferred compute would otherwise
+    // read the LIVE activity and could pair the new activity's layout with
+    // the drop activity's occupancy. Cleared wherever the desktop is.
+    QString m_snapAssistPendingActivity;
 
     // Current drag state
     QString m_draggedWindowId;
@@ -674,13 +679,15 @@ private:
     // must not re-arm reorder for this drag, or the fallback survives
     // exactly one tick. Cleared at beginDrag and in resetDragState.
     bool m_dragReorderAbandoned = false;
-    // The dragged window matches an Exclude / ExcludePlacement rule.
-    // Evaluated ONCE per drag (dragStarted, and beginDrag's bypass twin)
-    // through the same SnapEngine::isWindowExcluded probe the drop path
-    // refuses with, so the selector popup and the drop agree: a window
-    // whose drop would be refused never sees the popup either (the
-    // pre-existing gap where the trigger check had only cursor coords).
-    // Cleared in resetDragState.
+    // The dragged window matches an Exclude / ExcludePlacement rule (or the
+    // minimum-window-size floor). Evaluated ONCE per drag (dragStarted, and
+    // beginDrag's bypass and pending twins) through
+    // SnapEngine::isWindowExcluded — the shared placement Exclude rules
+    // (mode-neutral; the scroll side enforces the same rules effect-side
+    // before a strip ever adopts such a window) plus the snap minimum-size
+    // floor. So on either variant, a window whose placement would be
+    // refused never sees the popup (the pre-existing gap where the trigger
+    // check had only cursor coords). Cleared in resetDragState.
     bool m_dragWindowExcludedFromSelector = false;
     bool m_overlayShown = false;
     // Overlay was blanked mid-drag via IOverlayService::setIdleForDragPause()

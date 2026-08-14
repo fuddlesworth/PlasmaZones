@@ -7,8 +7,8 @@
  *
  * A row's advanced-mode tier is declared in QML (`advancedOnly: true`, or a
  * `visible:` binding gated on `advancedMode`). The global search index is built
- * in C++ from searchcatalog.cpp and searchcatalog_animations.cpp before any
- * page is instantiated, so it cannot
+ * in C++ from searchcatalog.cpp, searchcatalog_animations.cpp and
+ * searchcatalog_simple.cpp before any page is instantiated, so it cannot
  * read that declaration at runtime — the QML anchor registry is per-page and
  * only populates once a page is built. The flag therefore has to be mirrored
  * into the catalogue by hand, and a hand-mirrored fact drifts.
@@ -73,7 +73,10 @@ QString readAll(const QString& path)
 /// Basename -> absolute path for every .qml under @p qmlDir. The settings QML
 /// tree is nested (pages/<family>/, components/, dialogs/) while this test's
 /// whole scraping model is keyed on unique basenames; this index bridges the
-/// two.
+/// two. LATENT ASSUMPTION: basenames are unique across subdirectories (true
+/// today) — a duplicate would silently overwrite here and vanish the loser's
+/// anchors from every check in this file. The index also caches on first
+/// call and ignores @p qmlDir thereafter (harmless with one call site).
 const QHash<QString, QString>& qmlFileIndex(const QString& qmlDir)
 {
     static QHash<QString, QString> index;
@@ -102,8 +105,8 @@ QString stripLineComments(const QString& src)
         // Escapes are honoured so a literal \" cannot end the span early.
         //
         // Backticks are NOT quotes here. No file under src/settings/qml holds a
-        // JS template literal, and the backticks that do appear (113 files
-        // carry them) are markdown code spans inside doc comments, always after
+        // JS template literal, and the backticks that do appear (well over a
+        // hundred files carry them) are markdown code spans inside doc comments, always after
         // the comment marker that already ends the scan. Treating one as a
         // quote would only ever misfire: a code line whose backtick count is
         // odd before a trailing `//` would keep its comment.
@@ -432,8 +435,10 @@ private Q_SLOTS:
         // anchors split into their own file; every check below must parse the
         // union or the split silently removes those entries from coverage.
         m_catalogAnimations = QStringLiteral(P_SOURCE_DIR "/src/settings/search/searchcatalog_animations.cpp");
+        m_catalogSimple = QStringLiteral(P_SOURCE_DIR "/src/settings/search/searchcatalog_simple.cpp");
         QVERIFY2(QFileInfo::exists(m_catalog), qPrintable(m_catalog));
         QVERIFY2(QFileInfo::exists(m_catalogAnimations), qPrintable(m_catalogAnimations));
+        QVERIFY2(QFileInfo::exists(m_catalogSimple), qPrintable(m_catalogSimple));
         QVERIFY2(QDir(m_qmlDir).exists(), qPrintable(m_qmlDir));
     }
 
@@ -470,12 +475,13 @@ private Q_SLOTS:
         // silently. Glob the QML and assert the converse of the map's own
         // comment, so the invariant is checked rather than described.
         //
-        // The glob is *.qml, not *Page.qml: sixteen non-page files in this
-        // directory declare `searchAnchor:`, and an `advancedOnly: true`
+        // The glob is *.qml, not *Page.qml: a couple dozen non-page files in
+        // this directory declare `searchAnchor:`, and an `advancedOnly: true`
         // written inline beside one of those anchors is a real gate that a
         // page-only glob never sees.
         const QStringList files = qmlFileIndex(m_qmlDir).keys();
-        // 155 files today. The floor sits well under that: this glob is the
+        // Well over 160 files today (re-measure with a find|wc before
+        // touching the floor). The floor sits well under that: this glob is the
         // test's whole input, so a directory move or a filter typo that halved
         // it must fail rather than quietly narrow the sweep.
         QVERIFY2(files.size() > 140,
@@ -579,8 +585,10 @@ private Q_SLOTS:
         // instantiation named in the map must still carry the gate.
         //
         // Today the sole cross-file case is WindowAppearancePage hosting
-        // WindowFilterCard; host pages are derived from the map, not hardcoded,
-        // so a future cross-file entry is covered automatically.
+        // WindowFilterCard. Host PAGES are derived from the map; the shared
+        // CARD name below is still hardcoded to WindowFilterCard, so a future
+        // cross-file entry for a different card needs this loop extended (it
+        // would fail loudly on the wrong card, not pass silently).
         QVERIFY(!crossFileAdvanced().isEmpty());
         const QString sharedCard = QStringLiteral("WindowFilterCard");
 
@@ -631,7 +639,8 @@ private Q_SLOTS:
 
     void catalogueTiersMatchTheQml()
     {
-        const QString catalogSrc = stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations));
+        const QString catalogSrc =
+            stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations) + readAll(m_catalogSimple));
 
         // Every (page, anchor) the catalogue marks advanced-only.
         QSet<QString> flagged;
@@ -684,8 +693,9 @@ private Q_SLOTS:
         // Counted per call shape, not in total. kCall reaches addSetting and
         // addSection through one alternation, so a reformat that broke only
         // the addSection shape would still clear any combined floor on the
-        // strength of the addSetting hits alone. 195 addSetting, 61
-        // addSection, 256 unique pairs today; the floors sit far enough below
+        // strength of the addSetting hits alone. At least 250 addSetting and 75
+        // addSection calls today (re-measure with grep -c before touching
+        // the floors); the floors sit far enough below
         // to catch a shape going dark while leaving generous room to prune
         // entries.
         const auto shapeCallCount = [&catalogSrc](const QString& shape) {
@@ -711,7 +721,7 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("catalogue parse matched only %1 addSection calls — that call shape "
                                            "changed and kCall no longer sees it")
                                 .arg(sectionCalls)));
-        // Floor at 200 against a measured 256: comfortably above the vacuity
+        // Floor at 200 against a measured count well past 250: comfortably above the vacuity
         // point (a regex going dark yields 0, not 200) yet far enough below the
         // real count that an ordinary catalogue prune cannot trip it and get
         // misread as a broken regex.
@@ -840,7 +850,8 @@ private Q_SLOTS:
         }
 
         // Every (pageId, anchor) the catalogue registers.
-        const QString catalogSrc = stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations));
+        const QString catalogSrc =
+            stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations) + readAll(m_catalogSimple));
         static const QRegularExpression kCall(
             QStringLiteral("\\badd(?:Setting|Section)\\(\\s*search\\s*,\\s*QStringLiteral\\(\"([^\"]+)\"\\)\\s*,"
                            "\\s*QStringLiteral\\(\"([^\"]+)\"\\)"));
@@ -896,11 +907,16 @@ private Q_SLOTS:
     /// simple/advanced rework and nothing replaced it.
     void everyCataloguePageIdIsRegistered()
     {
-        const QString catalogSrc = stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations));
+        const QString catalogSrc =
+            stripLineComments(readAll(m_catalog) + readAll(m_catalogAnimations) + readAll(m_catalogSimple));
         const QString registration =
             readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp"));
-        const QString topology =
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp"));
+        // stripLineComments BEFORE slicing, like every other source read in
+        // this file: a commented-out id inside validPageNames() would
+        // otherwise count as navigable, defeating the exact regression this
+        // slice exists to catch.
+        const QString topology = stripLineComments(
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp")));
         QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
         QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
 
@@ -923,9 +939,9 @@ private Q_SLOTS:
         while (vit.hasNext()) {
             known.insert(vit.next().captured(1));
         }
-        // Guard against the slice silently collapsing: validPageNames has ~41
-        // entries, so a near-zero count means the parse broke, not that the
-        // catalogue is clean.
+        // Guard against the slice silently collapsing: validPageNames has
+        // about 50 entries, so a near-zero count means the parse broke, not
+        // that the catalogue is clean.
         QVERIFY2(known.size() > 20,
                  qPrintable(QStringLiteral("validPageNames slice yielded only %1 ids").arg(known.size())));
 
@@ -978,8 +994,12 @@ private Q_SLOTS:
     {
         const QString registration = stripLineComments(
             readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pageregistration.cpp")));
-        const QString topology =
-            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp"));
+        // stripLineComments BEFORE slicing, like every other source read in
+        // this file: a commented-out id inside validPageNames() would
+        // otherwise count as navigable, defeating the exact regression this
+        // slice exists to catch.
+        const QString topology = stripLineComments(
+            readAll(QStringLiteral(P_SOURCE_DIR "/src/settings/controller/settingscontroller_pagetopology.cpp")));
         QVERIFY2(!registration.isEmpty(), "settingscontroller_pageregistration.cpp unreadable");
         QVERIFY2(!topology.isEmpty(), "settingscontroller_pagetopology.cpp unreadable");
 
@@ -1044,6 +1064,7 @@ private:
     QString m_qmlDir;
     QString m_catalog;
     QString m_catalogAnimations;
+    QString m_catalogSimple;
 };
 
 QTEST_MAIN(TestSearchCatalogTiers)

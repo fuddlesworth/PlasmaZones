@@ -92,38 +92,40 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                  });
 
         // ── Zone selector ───────────────────────────────────────────────────
-        t.insert(pairKey(CD::snappingZoneSelectorGroup(), CD::positionKey()),
-                 {
-                     {QStringLiteral("topLeft"), PhosphorI18n::tr("Top-Left")},
-                     {QStringLiteral("top"), PhosphorI18n::tr("Top")},
-                     {QStringLiteral("topRight"), PhosphorI18n::tr("Top-Right")},
-                     {QStringLiteral("left"), PhosphorI18n::tr("Left")},
-                     {QStringLiteral("center"), PhosphorI18n::tr("Center")},
-                     {QStringLiteral("right"), PhosphorI18n::tr("Right")},
-                     {QStringLiteral("bottomLeft"), PhosphorI18n::tr("Bottom-Left")},
-                     {QStringLiteral("bottom"), PhosphorI18n::tr("Bottom")},
-                     {QStringLiteral("bottomRight"), PhosphorI18n::tr("Bottom-Right")},
-                 });
+        // Named locals for the vocabularies both selector families share
+        // (the scopeLabels / stickyLabels pattern): a t.value() copy keyed on
+        // insertion order would degrade SILENTLY to blanks if the snapping
+        // block ever moved below the strip one.
+        const QHash<QString, QString> selectorPositionLabels{
+            {QStringLiteral("topLeft"), PhosphorI18n::tr("Top-Left")},
+            {QStringLiteral("top"), PhosphorI18n::tr("Top")},
+            {QStringLiteral("topRight"), PhosphorI18n::tr("Top-Right")},
+            {QStringLiteral("left"), PhosphorI18n::tr("Left")},
+            {QStringLiteral("center"), PhosphorI18n::tr("Center")},
+            {QStringLiteral("right"), PhosphorI18n::tr("Right")},
+            {QStringLiteral("bottomLeft"), PhosphorI18n::tr("Bottom-Left")},
+            {QStringLiteral("bottom"), PhosphorI18n::tr("Bottom")},
+            {QStringLiteral("bottomRight"), PhosphorI18n::tr("Bottom-Right")},
+        };
+        // Only two values, though the picker shows five buttons: four of them
+        // write Manual and differ by the sibling PreviewWidth. Naming the
+        // stored value honestly beats guessing at which button was pressed.
+        const QHash<QString, QString> selectorSizeModeLabels{
+            {QStringLiteral("auto"), PhosphorI18n::tr("Auto")},
+            {QStringLiteral("manual"), PhosphorI18n::tr("Manual")},
+        };
+        t.insert(pairKey(CD::snappingZoneSelectorGroup(), CD::positionKey()), selectorPositionLabels);
         t.insert(pairKey(CD::snappingZoneSelectorGroup(), CD::layoutModeKey()),
                  {
                      {QStringLiteral("grid"), PhosphorI18n::tr("Grid")},
                      {QStringLiteral("horizontal"), PhosphorI18n::tr("Horizontal")},
                      {QStringLiteral("vertical"), PhosphorI18n::tr("Vertical")},
                  });
-        // Only two values, though the picker shows five buttons: four of them
-        // write Manual and differ by the sibling PreviewWidth. Naming the
-        // stored value honestly beats guessing at which button was pressed.
-        t.insert(pairKey(CD::snappingZoneSelectorGroup(), CD::sizeModeKey()),
-                 {
-                     {QStringLiteral("auto"), PhosphorI18n::tr("Auto")},
-                     {QStringLiteral("manual"), PhosphorI18n::tr("Manual")},
-                 });
+        t.insert(pairKey(CD::snappingZoneSelectorGroup(), CD::sizeModeKey()), selectorSizeModeLabels);
         // The strip selector twin reuses the same vocabularies (no
         // LayoutMode: the strip popup is a single horizontal card row).
-        t.insert(pairKey(CD::scrollingZoneSelectorGroup(), CD::positionKey()),
-                 t.value(pairKey(CD::snappingZoneSelectorGroup(), CD::positionKey())));
-        t.insert(pairKey(CD::scrollingZoneSelectorGroup(), CD::sizeModeKey()),
-                 t.value(pairKey(CD::snappingZoneSelectorGroup(), CD::sizeModeKey())));
+        t.insert(pairKey(CD::scrollingZoneSelectorGroup(), CD::positionKey()), selectorPositionLabels);
+        t.insert(pairKey(CD::scrollingZoneSelectorGroup(), CD::sizeModeKey()), selectorSizeModeLabels);
 
         // ── Drag modifiers. No settings page exposes these, so the enumerator
         //    names are the only prior art for the wording. ──────────────────

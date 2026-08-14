@@ -23,10 +23,26 @@ ColumnLayout {
     required property QtObject constants
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16 / 9)
+    // MIRROR CONTRACT with ZoneSelectorSection: the settingValue /
+    // writeSetting forwarders and _writePreviewSize below are identical to
+    // the snapping twin's modulo the appSettings property names — change one
+    // host, change both. The effective-value LIST is deliberately NOT
+    // identical: no LayoutMode / GridColumns / MaxRows here, the strip popup
+    // has no arrangement card (see settingscontroller.h). The blocks stay
+    // duplicated per host because each binding must read its host's OWN
+    // appSettings property in the binding expression for the dependency to
+    // be tracked — the psHelper call is fine, the property read is what
+    // carries the notify.
     readonly property int effectivePosition: settingValue("Position", appSettings.scrollingZoneSelectorPosition)
     readonly property int effectiveSizeMode: settingValue("SizeMode", appSettings.scrollingZoneSelectorSizeMode)
     readonly property int effectivePreviewWidth: {
         var sm = effectiveSizeMode;
+        // Auto mode's ILLUSTRATIVE width, for the miniature preview only.
+        // The popup's real Auto width is qBound(120, screenWidth / 10, 280)
+        // in computeZoneSelectorLayout, which needs the monitor's pixel
+        // width this page does not have — so the preview scales the Medium
+        // preset by the aspect ratio instead. Same approximation as the
+        // snapping twin; do not read it as the popup's actual size.
         if (sm === 0)
             return Math.round(root.constants.zoneSelectorPreviewMedium * (safeAspectRatio / (16 / 9)));
 

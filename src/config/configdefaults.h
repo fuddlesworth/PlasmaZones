@@ -285,7 +285,10 @@ public:
     }
     // Zone-selector preview-size presets (Small / Large). Medium reuses the
     // default previewWidth() (180). Used by the Small/Medium/Large quick-size
-    // buttons so the widths aren't hard-coded in QML.
+    // buttons of BOTH selector pages — the strip page reuses them through the
+    // snapping bounds bridge, which its page header declares as UI bounds,
+    // not values bound to either config group (so the strip's own stored
+    // default, scrollingZoneSelectorPreviewWidth(), is free to diverge).
     static constexpr int previewWidthSmall()
     {
         return 120;

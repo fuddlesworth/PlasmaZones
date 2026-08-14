@@ -995,8 +995,13 @@ void Daemon::initEnginesAndWiring()
     // not). Every structural strip change (insert, consume/expel, tab toggle,
     // resize, window close) ends in a relayout that emits placementChanged,
     // so a popup rendered from the pre-change card list re-pushes its model
-    // and drops its (renumbered, now-stale) selection; a spurious fire is
-    // self-healing — the next cursor tick re-selects under the new list.
+    // and drops its (renumbered, now-stale) selection. The converse does NOT
+    // hold — the engine also emits placementChanged on non-structural
+    // changes (a pure view-anchor move in applyLayout, two early-exit
+    // emits), and those fires drop a live popup pick spuriously; that is
+    // accepted as self-healing — the next cursor tick re-selects under the
+    // unchanged list — rather than taught to the engine (distinguishing the
+    // anchor-only emit would need a new signal contract).
     // During a live drag-insert preview the strip is frozen (detach-once), so
     // this cannot fight the preview. Without it, a window closing on the
     // strip mid-popup left the cards stale and the popup-only drop arm

@@ -22,16 +22,25 @@ ColumnLayout {
     id: root
 
     required property var appSettings
-    // Controller exposing the per-screen / scope methods (scopeScreenName,
-    // hasPerScreenZoneSelectorSettings, clearPerScreenZoneSelectorSettings).
-    // Required: the raw ISettings object passed as `appSettings` does NOT carry
-    // the scope chip's Q_INVOKABLEs, so the two must be supplied independently.
+    // Controller exposing the per-screen / scope methods — the per-card
+    // has/clear pairs the scope chips call (hasPerScreenZoneSelector
+    // Position/Arrangement/SizeSettings and their clearers) plus the
+    // get/set accessors PerScreenOverrideHelper routes through. Required:
+    // the raw ISettings object passed as `appSettings` does NOT carry the
+    // scope chip's Q_INVOKABLEs, so the two must be supplied independently.
     required property var controller
     required property QtObject constants
     // Screen aspect ratio for preview calculations (with safety check)
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16 / 9)
-    // Effective values that resolve per-screen > global
+    // Effective values that resolve per-screen > global.
+    // MIRROR CONTRACT with ScrollingZoneSelectorSection: these blocks and
+    // the helpers below stay duplicated per host on purpose (each host's
+    // getters must read its OWN appSettings properties directly to keep the
+    // bindings notify-reactive). Change one host, change both — including
+    // the illustrative Auto-width approximation, which is NOT the popup's
+    // real qBound(120, screenWidth / 10, 280) Auto formula (this page has
+    // no monitor pixel width to feed it).
     readonly property int effectivePosition: settingValue("Position", appSettings.zoneSelectorPosition)
     readonly property int effectiveLayoutMode: settingValue("LayoutMode", appSettings.zoneSelectorLayoutMode)
     readonly property int effectiveSizeMode: settingValue("SizeMode", appSettings.zoneSelectorSizeMode)

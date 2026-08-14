@@ -3,8 +3,10 @@
 //
 // Per-context rule resolution for LayoutRegistry — the read side of the
 // assignment cascade. Contents, in file order: resolveAssignmentEntry, the
-// gap / lock / default-assignment / OSD resolvers, the shared cascade-miss
-// default tail (resolveDefaultAssignmentEntryForContext), the overlay
+// gap / lock / default-assignment resolvers, the shared single-slot boolean
+// body (resolveContextBoolSlot) with its OSD and drag-selector wrappers, the
+// shared cascade-miss default tail
+// (resolveDefaultAssignmentEntryForContext), the overlay
 // resolver, and the exact-context-rule finders (exactContextEntry,
 // hasExactContextRule, findExactContextRule, exactContextRuleId). Split from
 // layoutregistry_assignments.cpp for file-size; the assignment CRUD /
@@ -204,8 +206,11 @@ std::optional<AssignmentEntry> LayoutRegistry::resolveAssignmentEntry(const QStr
             // unstamped, and WindowQuery::valueForField returns an ENGAGED
             // empty string for it — which a positive leaf never matches but a
             // negated None{Mode Equals "tiling"} does.
-            // TiledWindowCount is deliberately NOT excluded here, unlike in the
-            // six sibling resolvers. This is the one resolver that STAMPS it
+            // TiledWindowCount is deliberately NOT excluded here, unlike in
+            // every sibling resolver (gap / lock / default-assignment / the
+            // shared bool-slot body serving OSD and drag-selector / overlay /
+            // the two param resolvers in layoutregistry_contextparams.cpp).
+            // This is the one resolver that STAMPS it
             // (line above), so both polarities evaluate correctly and the
             // algorithm-switch feature it exists for — `TiledWindowCount
             // GreaterThan 1 → SetTilingAlgorithm bsp` — depends on rules
@@ -959,10 +964,12 @@ const PhosphorRules::Rule* LayoutRegistry::findExactContextRule(const QString& s
             //
             // Fall through to the SHAPE test, applied to THIS rule as well as
             // the rest: a rule that lost only its SetEngineMode but kept a
-            // layout slot and the exact-context match is still the rule that
-            // assigns this context. A bare `continue` here skipped that test
-            // for the id rule itself, so the very rule most likely to be the
-            // right answer was the one rule excluded from consideration.
+            // layout slot and the exact-context match is still a rule that
+            // can assign this context. A bare `continue` here skipped that
+            // test for the id rule itself, so it was the one rule excluded
+            // from consideration. Note the fall-through makes it ELIGIBLE on
+            // equal, list-order terms — an earlier-listed shape match still
+            // wins; the id rule is not preferred.
             if (shapeMatch == nullptr && hasAnyAssignmentSlotAction(rule)
                 && matchIsExactContext(rule.match, screenId, virtualDesktop, activity)) {
                 shapeMatch = &rule;

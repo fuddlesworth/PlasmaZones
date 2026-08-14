@@ -59,7 +59,7 @@ QString actionDescription(const QString& type)
         return PhosphorI18n::tr(
             "Shows or hides the drag selector popup for the matched screen, desktop or activity. "
             "Off means dragging a window near the trigger edge offers no picker there. On offers "
-            "it even when the global selector toggle is off.");
+            "it even when the global selector toggle for that screen is off.");
     }
     // ── Placement (window) ──
     if (type == ActionType::Exclude) {

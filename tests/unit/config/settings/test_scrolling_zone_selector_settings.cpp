@@ -28,6 +28,9 @@
  * for one selector must not surface in the other's resolved config.
  */
 
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSignalSpy>
 #include <QTest>
 #include <QVariantMap>
@@ -209,6 +212,15 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         Settings settings;
 
+        // The ACCEPT arm first: these adapters are the Q_PROPERTY WRITE path
+        // and have no other caller, so without an in-range write the reject
+        // probes below could not tell a working guard from an adapter whose
+        // forwarding call was deleted outright.
+        settings.setScrollingZoneSelectorPositionInt(static_cast<int>(ZoneSelectorPosition::BottomRight));
+        QCOMPARE(settings.scrollingZoneSelectorPosition(), ZoneSelectorPosition::BottomRight);
+        settings.setScrollingZoneSelectorSizeModeInt(static_cast<int>(ZoneSelectorSizeMode::Manual));
+        QCOMPARE(settings.scrollingZoneSelectorSizeMode(), ZoneSelectorSizeMode::Manual);
+
         const int position = settings.scrollingZoneSelectorPositionInt();
         settings.setScrollingZoneSelectorPositionInt(-1);
         settings.setScrollingZoneSelectorPositionInt(static_cast<int>(ZoneSelectorPosition::BottomRight) + 1);
@@ -249,15 +261,21 @@ private Q_SLOTS:
         settings.setScrollingZoneSelectorPreviewWidth(ConfigDefaults::previewWidthLarge());
         settings.setScrollingZoneSelectorTriggerDistance(77);
 
+        // Non-default values for BOTH remaining fields too, so no assertion
+        // below compares a pass-through against the same getter it reads
+        // (which is correct by construction and carries no signal).
+        settings.setScrollingZoneSelectorPreviewHeight(ConfigDefaults::scrollingZoneSelectorPreviewHeight() + 13);
+        settings.setScrollingZoneSelectorPreviewLockAspect(!ConfigDefaults::scrollingZoneSelectorPreviewLockAspect());
+
         const ZoneSelectorConfig config = settings.resolvedScrollingZoneSelectorConfig(QStringLiteral("test-screen-1"));
 
         QCOMPARE(config.layoutMode, static_cast<int>(ZoneSelectorLayoutMode::Horizontal));
         QCOMPARE(config.position, static_cast<int>(ZoneSelectorPosition::Bottom));
         QCOMPARE(config.sizeMode, static_cast<int>(ZoneSelectorSizeMode::Manual));
         QCOMPARE(config.previewWidth, ConfigDefaults::previewWidthLarge());
-        QCOMPARE(config.previewHeight, settings.scrollingZoneSelectorPreviewHeight());
+        QCOMPARE(config.previewHeight, ConfigDefaults::scrollingZoneSelectorPreviewHeight() + 13);
         QCOMPARE(config.triggerDistance, 77);
-        QCOMPARE(config.previewLockAspect, settings.scrollingZoneSelectorPreviewLockAspect());
+        QCOMPARE(config.previewLockAspect, !ConfigDefaults::scrollingZoneSelectorPreviewLockAspect());
         // The interface promises the two grid fields stay at the struct
         // defaults under Horizontal (a single row consults neither).
         QCOMPARE(config.maxRows, ZoneSelectorConfig{}.maxRows);
@@ -379,6 +397,113 @@ private Q_SLOTS:
         QVERIFY(!settings.hasPerScreenZoneSelectorSettings(screen));
         QCOMPARE(settings.resolvedZoneSelectorConfig(screen).triggerDistance, snappingBefore);
         QCOMPARE(settings.resolvedScrollingZoneSelectorConfig(screen).triggerDistance, snappingBefore + 11);
+    }
+
+    /// The per-card scope predicates PARTITION the store: clearing one card's
+    /// sub-domain must leave the other card's overrides intact, in both
+    /// families — a one-key typo in the predicates would silently cross-wipe
+    /// the sibling card on a scope-chip reset.
+    void perCardScopeClearsArePartitioned()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        const QString screen = QStringLiteral("test-screen-1");
+
+        // Strip family: Position card = Position + TriggerDistance;
+        // Size card = SizeMode + PreviewWidth + PreviewHeight +
+        // PreviewLockAspect.
+        settings.setPerScreenScrollingZoneSelectorSetting(screen, QString::fromLatin1(ZoneSelectorConfigKey::Position),
+                                                          static_cast<int>(ZoneSelectorPosition::BottomRight));
+        settings.setPerScreenScrollingZoneSelectorSetting(
+            screen, QString::fromLatin1(ZoneSelectorConfigKey::TriggerDistance), 66);
+        settings.setPerScreenScrollingZoneSelectorSetting(screen, QString::fromLatin1(ZoneSelectorConfigKey::SizeMode),
+                                                          static_cast<int>(ZoneSelectorSizeMode::Manual));
+        settings.setPerScreenScrollingZoneSelectorSetting(screen,
+                                                          QString::fromLatin1(ZoneSelectorConfigKey::PreviewHeight),
+                                                          ConfigDefaults::scrollingZoneSelectorPreviewHeight() + 30);
+        QVERIFY(settings.hasPerScreenScrollingZoneSelectorPositionSettings(screen));
+        QVERIFY(settings.hasPerScreenScrollingZoneSelectorSizeSettings(screen));
+
+        settings.clearPerScreenScrollingZoneSelectorPositionSettings(screen);
+        QVERIFY(!settings.hasPerScreenScrollingZoneSelectorPositionSettings(screen));
+        QVERIFY(settings.hasPerScreenScrollingZoneSelectorSizeSettings(screen));
+        const QVariantMap afterPositionClear = settings.getPerScreenScrollingZoneSelectorSettings(screen);
+        QVERIFY(!afterPositionClear.contains(QString::fromLatin1(ZoneSelectorConfigKey::Position)));
+        QVERIFY(!afterPositionClear.contains(QString::fromLatin1(ZoneSelectorConfigKey::TriggerDistance)));
+        QCOMPARE(afterPositionClear.value(QString::fromLatin1(ZoneSelectorConfigKey::PreviewHeight)).toInt(),
+                 ConfigDefaults::scrollingZoneSelectorPreviewHeight() + 30);
+
+        // The reverse direction.
+        settings.setPerScreenScrollingZoneSelectorSetting(
+            screen, QString::fromLatin1(ZoneSelectorConfigKey::TriggerDistance), 66);
+        settings.clearPerScreenScrollingZoneSelectorSizeSettings(screen);
+        QVERIFY(settings.hasPerScreenScrollingZoneSelectorPositionSettings(screen));
+        QVERIFY(!settings.hasPerScreenScrollingZoneSelectorSizeSettings(screen));
+        const QVariantMap afterSizeClear = settings.getPerScreenScrollingZoneSelectorSettings(screen);
+        QCOMPARE(afterSizeClear.value(QString::fromLatin1(ZoneSelectorConfigKey::TriggerDistance)).toInt(), 66);
+        QVERIFY(!afterSizeClear.contains(QString::fromLatin1(ZoneSelectorConfigKey::SizeMode)));
+        QVERIFY(!afterSizeClear.contains(QString::fromLatin1(ZoneSelectorConfigKey::PreviewHeight)));
+
+        // Snapping family, same contract (Position / Arrangement / Size).
+        settings.setPerScreenZoneSelectorSetting(screen, QString::fromLatin1(ZoneSelectorConfigKey::Position),
+                                                 static_cast<int>(ZoneSelectorPosition::BottomLeft));
+        settings.setPerScreenZoneSelectorSetting(screen, QString::fromLatin1(ZoneSelectorConfigKey::LayoutMode),
+                                                 static_cast<int>(ZoneSelectorLayoutMode::Vertical));
+        settings.setPerScreenZoneSelectorSetting(screen, QString::fromLatin1(ZoneSelectorConfigKey::PreviewWidth),
+                                                 ConfigDefaults::previewWidthSmall());
+        QVERIFY(settings.hasPerScreenZoneSelectorPositionSettings(screen));
+        QVERIFY(settings.hasPerScreenZoneSelectorArrangementSettings(screen));
+        QVERIFY(settings.hasPerScreenZoneSelectorSizeSettings(screen));
+        settings.clearPerScreenZoneSelectorArrangementSettings(screen);
+        QVERIFY(settings.hasPerScreenZoneSelectorPositionSettings(screen));
+        QVERIFY(!settings.hasPerScreenZoneSelectorArrangementSettings(screen));
+        QVERIFY(settings.hasPerScreenZoneSelectorSizeSettings(screen));
+    }
+
+    /// The LOAD path is filtered like the write path: a grid-arrangement key
+    /// hand-edited into the on-disk strip group (or reintroduced by a
+    /// load-table swap regression) must not enter the store or displace the
+    /// Horizontal stamp.
+    void loadPathRefusesTheGridArrangementKeys()
+    {
+        IsolatedConfigGuard guard;
+        const QString screen = QStringLiteral("test-screen-1");
+        {
+            Settings settings;
+            settings.setPerScreenScrollingZoneSelectorSetting(screen,
+                                                              QString::fromLatin1(ZoneSelectorConfigKey::Position),
+                                                              static_cast<int>(ZoneSelectorPosition::BottomRight));
+            QVERIFY(settings.save());
+        }
+
+        // Smuggle a LayoutMode into the stored strip group the way a
+        // hand-edited config would (PerScreen -> ScrollingZoneSelector ->
+        // <screen> is the resolver's JSON path for the group prefix).
+        const QString configFile = guard.configPath() + QStringLiteral("/plasmazones/config.json");
+        QFile file(configFile);
+        QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(configFile));
+        QJsonObject root = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+        QJsonObject perScreen = root.value(QStringLiteral("PerScreen")).toObject();
+        QJsonObject category = perScreen.value(QStringLiteral("ScrollingZoneSelector")).toObject();
+        QJsonObject entry = category.value(screen).toObject();
+        QVERIFY2(!entry.isEmpty(), "the saved override did not land where this test expects — fix the path");
+        entry.insert(QString::fromLatin1(ZoneSelectorConfigKey::LayoutMode),
+                     static_cast<int>(ZoneSelectorLayoutMode::Grid));
+        category.insert(screen, entry);
+        perScreen.insert(QStringLiteral("ScrollingZoneSelector"), category);
+        root.insert(QStringLiteral("PerScreen"), perScreen);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(QJsonDocument(root).toJson());
+        file.close();
+
+        Settings reloaded;
+        const QVariantMap stored = reloaded.getPerScreenScrollingZoneSelectorSettings(screen);
+        QVERIFY(!stored.contains(QString::fromLatin1(ZoneSelectorConfigKey::LayoutMode)));
+        QCOMPARE(stored.value(QString::fromLatin1(ZoneSelectorConfigKey::Position)).toInt(),
+                 static_cast<int>(ZoneSelectorPosition::BottomRight));
+        QCOMPARE(reloaded.resolvedScrollingZoneSelectorConfig(screen).layoutMode,
+                 static_cast<int>(ZoneSelectorLayoutMode::Horizontal));
     }
 
     /// Overrides survive a save/load round trip through their own group prefix,

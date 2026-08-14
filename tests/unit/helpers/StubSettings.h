@@ -2501,7 +2501,11 @@ public:
     // quartet, hash-backed for the same reason as the snapping twin above:
     // a stub falling through to the defaulted ISettings virtuals passes any
     // consumer test vacuously (empty map, swallowed writes). Same deliberate
-    // omissions as the twin.
+    // omissions as the twin, plus one MORE than the twin has: production's
+    // strip setter refuses keys outside the six-key kStripSelectorKeys
+    // subset (LayoutMode / GridColumns / MaxRows), while this stub stores
+    // any key verbatim — the resolver override below simply never reads the
+    // non-subset keys, so they sit inert rather than being rejected.
     QVariantMap getPerScreenScrollingZoneSelectorSettings(const QString& screenIdOrName) const override
     {
         return m_perScreenScrollingZoneSelector.value(screenIdOrName);
@@ -2532,6 +2536,31 @@ public:
         }
     }
 
+    // The RESOLVE half of the contract the two store comments above promise.
+    // Without these overrides the defaulted interface resolvers read only
+    // the global getters, so a consumer test that wrote a per-screen
+    // override got the GLOBAL value back with no warning — exactly the
+    // vacuity the hash-backed stores exist to prevent. The merge is coercing
+    // and unvalidated, per the stub's deliberate omissions; the strip arm
+    // reads only production's six-key subset (see the note on its store).
+    // TWO further omissions vs production's resolvers: the lookup is by
+    // EXACT key (no connector/EDID key variants) and there is no
+    // virtual→physical sub-screen fallback — a test driving either needs
+    // the real Settings.
+    ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& screenIdOrName) const override
+    {
+        ZoneSelectorConfig config = IZoneSelectorSettings::resolvedZoneSelectorConfig(screenIdOrName);
+        applyStubSelectorOverrides(config, m_perScreenZoneSelector.value(screenIdOrName), /*stripSubset=*/false);
+        return config;
+    }
+    ZoneSelectorConfig resolvedScrollingZoneSelectorConfig(const QString& screenIdOrName) const override
+    {
+        ZoneSelectorConfig config = IScrollingZoneSelectorSettings::resolvedScrollingZoneSelectorConfig(screenIdOrName);
+        applyStubSelectorOverrides(config, m_perScreenScrollingZoneSelector.value(screenIdOrName),
+                                   /*stripSubset=*/true);
+        return config;
+    }
+
     // Persistence (ISettings)
     void load() override
     {
@@ -2555,6 +2584,33 @@ private:
     QHash<QString, QVariantMap> m_perScreenScrolling;
     QHash<QString, QVariantMap> m_perScreenZoneSelector;
     QHash<QString, QVariantMap> m_perScreenScrollingZoneSelector;
+
+    // Shared merge body of the two resolver overrides above. Coercing and
+    // unvalidated on purpose (stub omission); the strip arm admits only the
+    // six-key subset production's write path enforces.
+    static void applyStubSelectorOverrides(ZoneSelectorConfig& config, const QVariantMap& overrides, bool stripSubset)
+    {
+        namespace K = ZoneSelectorConfigKey;
+        const auto applyInt = [&overrides](const char* key, int& field) {
+            const auto it = overrides.constFind(QLatin1String(key));
+            if (it != overrides.constEnd()) {
+                field = it->toInt();
+            }
+        };
+        applyInt(K::Position, config.position);
+        applyInt(K::SizeMode, config.sizeMode);
+        applyInt(K::PreviewWidth, config.previewWidth);
+        applyInt(K::PreviewHeight, config.previewHeight);
+        applyInt(K::TriggerDistance, config.triggerDistance);
+        if (const auto it = overrides.constFind(QLatin1String(K::PreviewLockAspect)); it != overrides.constEnd()) {
+            config.previewLockAspect = it->toBool();
+        }
+        if (!stripSubset) {
+            applyInt(K::LayoutMode, config.layoutMode);
+            applyInt(K::MaxRows, config.maxRows);
+            applyInt(K::GridColumns, config.gridColumns);
+        }
+    }
     QString m_defaultLayoutId;
     bool m_suppressDefaultLayoutAssignment = ConfigDefaults::suppressDefaultLayoutAssignment();
     QString m_renderingBackend = ConfigDefaults::renderingBackend();

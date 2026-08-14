@@ -567,6 +567,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // read would describe the new desktop's occupancy instead of the
         // desktop the user actually dropped on.
         m_snapAssistPendingDesktop = m_layoutManager->currentVirtualDesktopForScreen(releaseScreenId);
+        // Snapshot the activity axis for the same reason as the desktop one:
+        // the deferred compute's suppression gate and layout resolve must
+        // describe the context the user dropped in, not whatever an activity
+        // switch landed on during the one-event-loop deferral.
+        m_snapAssistPendingActivity = m_layoutManager->currentActivity();
         // The snap-assist Escape grab is NOT bound here on purpose. Binding on
         // the dragStopped/endDrag path would fsync kglobalshortcutsrc while the
         // kwin-effect is still awaiting the endDrag reply — the very drop-path
@@ -595,9 +600,11 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     const QString windowId = m_snapAssistPendingWindowId;
     const QString screenId = m_snapAssistPendingScreenId;
     const int desktopAtDrop = m_snapAssistPendingDesktop;
+    const QString activityAtDrop = m_snapAssistPendingActivity;
     m_snapAssistPendingWindowId.clear();
     m_snapAssistPendingScreenId.clear();
     m_snapAssistPendingDesktop = 0; // mirror snapshot clear; see header
+    m_snapAssistPendingActivity.clear();
 
     if (windowId.isEmpty() || screenId.isEmpty() || !m_layoutManager || !m_windowTracking) {
         return;
@@ -624,7 +631,10 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // desktop, like the occupancy filter below — a live read here could
     // describe a different desktop than the occupancy it gates. Hoisted above
     // the QScreen lookup so the suppressed path pays no discarded resolve.
-    if (isActiveLayoutSuppressedForScreen(screenId, desktopFilter)) {
+    // Snapshot activity, like the desktop: fall back to a live read only
+    // when the snapshot is missing (pre-snapshot codepath).
+    const QString activityFilter = !activityAtDrop.isEmpty() ? activityAtDrop : m_layoutManager->currentActivity();
+    if (m_layoutManager->isContextActiveLayoutSuppressed(screenId, desktopFilter, activityFilter)) {
         return;
     }
 
@@ -634,8 +644,7 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // live desktop, so a virtual-desktop switch landing in this handler's
     // one-event-loop deferral would pair the NEW desktop's layout with the
     // OLD desktop's occupancy.
-    PhosphorZones::Layout* layout =
-        m_layoutManager->layoutForScreen(screenId, desktopFilter, m_layoutManager->currentActivity());
+    PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(screenId, desktopFilter, activityFilter);
     if (!layout) {
         return;
     }
