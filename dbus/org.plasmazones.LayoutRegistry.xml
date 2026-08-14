@@ -209,6 +209,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to open on (empty = editor default)."/>
             </arg>
         </method>
+        <method name="openEditorForScrollingTemplate">
+            <annotation name="org.gtk.GDBus.DocString" value="Launch the editor in scrolling-template mode."/>
+            <arg name="templateId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Template UUID to edit. Empty = create a new template."/>
+            </arg>
+        </method>
         <method name="getScreenStates">
             <annotation name="org.gtk.GDBus.DocString" value="Return current mode, layout, algorithm, and scrolling template for all screens as a JSON array: one object per screen with screenId, virtualDesktop, activity, mode (0=Snapping, 1=Autotile, 2=Scrolling), layoutId, layoutName, layoutIdExplicit, algorithmId, algorithmName, algorithmIdExplicit, scrollingTemplateId, scrollingTemplateName, scrollingTemplateExplicit. layoutId and algorithmId are the RESOLVED values (cascade and default fallbacks included; layoutId is empty for a Scrolling context); the *Explicit booleans say whether this exact screen/desktop/activity tuple pins the field itself, so a caller can tell an inherited value from an assigned one. scrollingTemplateId reads the stored entry field, so a template preserved across a mode toggle is reported even while another mode runs. That raw read also means it does NOT include the configured default-template fallback that getScrollingTemplateLayout applies, which is deliberate: this method reports what the context stores, not what the strip would resolve."/>
             <arg name="statesJson" type="s" direction="out">

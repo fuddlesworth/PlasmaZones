@@ -32,7 +32,8 @@ public:
     ~EditorAppAdaptor() override;
 
 public Q_SLOTS:
-    void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+    void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                             const QString& templateId, bool newTemplate);
 
 private:
     EditorLaunchController* m_launcher; ///< Non-owning; parent object, guaranteed non-null.

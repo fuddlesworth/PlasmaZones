@@ -600,6 +600,12 @@ void SettingsController::editLayoutOnScreen(const QString& layoutId, const QStri
                                                 QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, screenId});
 }
 
+void SettingsController::editScrollingTemplate(const QString& templateId)
+{
+    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                                QStringLiteral("openEditorForScrollingTemplate"), {templateId});
+}
+
 void SettingsController::openLayoutsFolder()
 {
     const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')

@@ -74,7 +74,8 @@ public:
      * forwarded launch cannot leak into a subsequent non-preview launch on
      * the same running instance.
      */
-    void applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+    void applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                         const QString& templateId = QString(), bool newTemplate = false);
 
     /**
      * @brief Entry point for a forwarded launch.
@@ -89,7 +90,8 @@ public:
      * anything is a no-op — the user has to focus the existing window
      * themselves.
      */
-    void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+    void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                             const QString& templateId, bool newTemplate);
 
 private:
     EditorController* m_controller; ///< Non-owning; must outlive this object.

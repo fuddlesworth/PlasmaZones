@@ -4,6 +4,7 @@
 #include "EditorController.h"
 
 #include "EditorGapsModel.h"
+#include "EditorTemplateModel.h"
 #include "../config/configbackends.h"
 #include "../config/configdefaults.h"
 #include "services/ILayoutService.h"
@@ -25,6 +26,7 @@
 #include "../shaderpreview/shaderpreviewcontroller.h"
 
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 
 #include <QClipboard>
 #include <QDBusConnection>
@@ -131,6 +133,19 @@ EditorController::EditorController(QObject* parent)
           QStringLiteral("layoutListChanged"), QStringLiteral("layoutPropertyChanged")}) {
         bus.connect(svc, path, iface, sig, &m_layoutReloadTimer, SLOT(start()));
     }
+
+    // Local read view of the scrolling templates, the template sibling of
+    // m_localLayoutManager: instant template opens without the daemon, plus
+    // the offline save fallback. The store watches nothing, so subscribe to
+    // the daemon's change signal for cross-process writes — no debounce
+    // needed, template CRUD emits once per operation.
+    m_templateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
+    m_templateStore->loadTemplates();
+    bus.connect(svc, path, iface, QStringLiteral("scrollingTemplatesChanged"), this, SLOT(reloadLocalTemplates()));
+
+    // Scrolling-template edit state sub-model (see the gaps model above for
+    // the pattern: child QObject that reaches back for undo + dirty flag).
+    m_scrollingTemplate = new EditorTemplateModel(this, this);
 
     // Connect service signals
     connect(m_layoutService, &ILayoutService::errorOccurred, this, [this](const QString& error) {

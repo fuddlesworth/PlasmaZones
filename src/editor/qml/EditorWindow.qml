@@ -23,6 +23,8 @@ Window {
     property bool hasMultipleSelection: editorWindow._editorController ? editorWindow._editorController.hasMultipleSelection : false
     property string selectionAnchorId: "" // For Shift+click range selection
     readonly property bool previewMode: editorWindow._editorController ? editorWindow._editorController.previewMode : false
+    // Editing mode: 0 = zone layout, 1 = scrolling template (EditorController::ModeScrollingTemplate)
+    readonly property bool templateMode: editorWindow._editorController ? editorWindow._editorController.editorMode === 1 : false
     // Fullscreen editing mode - hides all panels for distraction-free editing
     property bool fullscreenMode: false
     // Zone spacing (between zones) matches zone padding (per-layout override or global setting)
@@ -216,14 +218,14 @@ Window {
     // is first mapped. We must set the target screen BEFORE showing, otherwise the
     // window always lands on the primary monitor.
     visible: false
-    title: i18nc("@title", "Layout Editor")
+    title: templateMode ? i18nc("@title", "Scrolling Template Editor") : i18nc("@title", "Layout Editor")
     Component.onCompleted: {
         // Initialize selectedZoneId from editorController context property
         if (editorWindow._editorController) {
             editorWindow.selectedZoneId = editorWindow._editorController.selectedZoneId || "";
             editorWindow.pushDefaultZoneColors();
-            // If no layout loaded and not in preview mode, create new
-            if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode)
+            // If no layout loaded and not in preview or template mode, create new
+            if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode && !editorWindow.templateMode)
                 editorWindow._editorController.createNewLayout();
 
             // Set screen and show via C++ Q_INVOKABLE — QML Window.screen assignment
@@ -346,6 +348,7 @@ Window {
         helpDialog: helpDialog
         fullscreenMode: editorWindow.fullscreenMode
         previewMode: editorWindow.previewMode
+        templateMode: editorWindow.templateMode
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
     }
 
@@ -389,6 +392,7 @@ Window {
         exportDialog: exportDialog
         fullscreenMode: editorWindow.fullscreenMode
         previewMode: editorWindow.previewMode
+        templateMode: editorWindow.templateMode
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
 
         Behavior on opacity {
@@ -427,7 +431,7 @@ Window {
 
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredWidth: parent.width - (propertiesPanel.visible ? propertiesPanel.width : 0)
+            Layout.preferredWidth: parent.width - (propertiesPanel.visible ? propertiesPanel.width : 0) - (templatePanel.visible ? templatePanel.Layout.preferredWidth : 0)
             Layout.minimumWidth: Kirigami.Units.gridUnit * 22
 
             // Actual drawing area (zones handle their own gaps via edgeGap and zoneSpacing)
@@ -456,6 +460,11 @@ Window {
                 // Allow standard Tab navigation first
                 Keys.enabled: true
                 Keys.onPressed: function (event) {
+                    if (editorWindow.templateMode) {
+                        if (templateCanvasLoader.item)
+                            templateCanvasLoader.item.handleKeyPress(event);
+                        return;
+                    }
                     keyboardNav.handleKeyPress(event);
                 }
                 Component.onCompleted: _insetsReady = true
@@ -466,7 +475,25 @@ Window {
                 GridOverlay {
                     id: gridCanvas
 
+                    visible: !editorWindow.templateMode
                     editorController: editorWindow._editorController
+                }
+
+                // ═══════════════════════════════════════════════════════════
+                // TEMPLATE STRIP CANVAS - Scrolling-template mode only.
+                // A Loader so layout mode pays nothing for it; sized to the
+                // drawing area like the zone canvas machinery it replaces.
+                // ═══════════════════════════════════════════════════════════
+                Loader {
+                    id: templateCanvasLoader
+
+                    anchors.fill: parent
+                    active: editorWindow.templateMode
+                    z: editorWindow.zoneBaseZ
+
+                    sourceComponent: TemplateStripCanvas {
+                        editorController: editorWindow._editorController
+                    }
                 }
 
                 // Zones - use zone ID for stable selection
@@ -474,7 +501,10 @@ Window {
                 Repeater {
                     id: zonesRepeater
 
-                    model: editorWindow._editorController ? editorWindow._editorController.zones : []
+                    // Empty model in template mode: the zone delegates and every
+                    // subsystem keyed off them (dividers, snapping, resize) stay
+                    // uninstantiated while the strip canvas owns the area.
+                    model: (editorWindow._editorController && !editorWindow.templateMode) ? editorWindow._editorController.zones : []
                     Component.onCompleted: {
                         editorWindow._zonesRepeater = zonesRepeater;
                     }
@@ -560,6 +590,7 @@ Window {
                 DividerManager {
                     id: dividerManager
 
+                    visible: !editorWindow.templateMode
                     editorController: editorWindow._editorController
                     zoneSpacing: editorWindow.zoneSpacing
                     drawingArea: drawingArea
@@ -617,6 +648,8 @@ Window {
                 // CANVAS MOUSE HANDLER - Extracted to CanvasMouseHandler.qml
                 // ═══════════════════════════════════════════════════════════
                 CanvasMouseHandler {
+                    visible: !editorWindow.templateMode
+                    enabled: !editorWindow.templateMode
                     editorWindow: editorWindow
                     editorController: editorWindow._editorController
                     drawingArea: drawingArea
@@ -665,12 +698,21 @@ Window {
         PropertyPanel {
             id: propertiesPanel
 
-            chromeVisible: !editorWindow.fullscreenMode && !editorWindow.previewMode
+            chromeVisible: !editorWindow.fullscreenMode && !editorWindow.previewMode && !editorWindow.templateMode
             editorController: editorWindow._editorController
             selectedZoneId: editorWindow.selectedZoneId
             selectedZone: editorWindow.selectedZone
             selectionCount: editorWindow.selectionCount
             hasMultipleSelection: editorWindow.hasMultipleSelection
+        }
+
+        // Template-mode replacement for the zone property panel: description,
+        // later-column defaults, and the preset vocabularies.
+        TemplatePropertyPanel {
+            id: templatePanel
+
+            chromeVisible: editorWindow.templateMode && !editorWindow.fullscreenMode
+            editorController: editorWindow._editorController
         }
     }
 
@@ -685,6 +727,7 @@ Window {
         anchors.right: parent.right
         visible: !editorWindow.fullscreenMode
         previewMode: editorWindow.previewMode
+        templateMode: editorWindow.templateMode
         editorController: editorWindow._editorController
         confirmCloseDialog: confirmCloseDialog
         editorWindow: editorWindow
@@ -851,7 +894,7 @@ Window {
         id: confirmLaunchDialog
 
         title: i18nc("@title:window", "Unsaved Changes")
-        subtitle: i18nc("@info", "Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?")
+        subtitle: editorWindow.templateMode ? i18nc("@info", "Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?") : i18nc("@info", "Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?")
         standardButtons: Kirigami.Dialog.Save | Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
         preferredWidth: Kirigami.Units.gridUnit * 24
         // Same rule as the screen-switch prompt: apply the parked request only

@@ -150,6 +150,9 @@ public Q_SLOTS:
     void openEditor();
     void openEditorForScreen(const QString& screenId);
     void openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId);
+    /// Launch the editor in scrolling-template mode. An empty id opens a new
+    /// template; otherwise the stored template with that id is edited.
+    void openEditorForScrollingTemplate(const QString& templateId);
 
     // Screen assignments
     QString getLayoutForScreen(const QString& screenId);

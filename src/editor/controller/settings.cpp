@@ -19,6 +19,29 @@
 
 namespace PlasmaZones {
 
+namespace {
+
+/// Load a shortcut from config with validation: an empty stored value falls
+/// back to the default, and the member only updates (and the signal only
+/// fires) when the value actually changes. Lives here rather than in the
+/// header because loadEditorSettings below is its only caller.
+template<typename F>
+void loadShortcutSetting(PhosphorConfig::IGroup& group, const QString& key, const QString& defaultValue,
+                         QString& member, F emitSignal)
+{
+    QString value = group.readString(key, defaultValue);
+    if (value.isEmpty()) {
+        qCWarning(lcEditor) << "Invalid editor shortcut" << key << "(empty), using default";
+        value = defaultValue;
+    }
+    if (member != value) {
+        member = value;
+        emitSignal();
+    }
+}
+
+} // anonymous namespace
+
 QString EditorController::validateZoneName(const QString& zoneId, const QString& name)
 {
     // Empty names are allowed

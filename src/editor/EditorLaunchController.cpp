@@ -38,26 +38,28 @@ bool EditorLaunchController::registerDBusService()
 }
 
 void EditorLaunchController::applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew,
-                                             bool preview)
+                                             bool preview, const QString& templateId, bool newTemplate)
 {
     // Translation only — the controller owns what the args MEAN and whether
     // they can be applied right now. A forwarded launch can land on an editor
-    // holding unsaved edits, and `--new` / `--layout <id>` both replace the
-    // loaded layout, so requestLaunch parks the request and has the UI ask
-    // rather than destroying the work. An initial launch has a freshly
-    // constructed controller with nothing unsaved, so it applies immediately.
-    m_controller->requestLaunch(screenId, layoutId, createNew, preview);
+    // holding unsaved edits, and every object-naming shape (`--new`,
+    // `--layout <id>`, `--scrolling-template <id>`, `--new-scrolling-template`)
+    // replaces the loaded object, so requestLaunch parks the request and has
+    // the UI ask rather than destroying the work. An initial launch has a
+    // freshly constructed controller with nothing unsaved, so it applies
+    // immediately.
+    m_controller->requestLaunch(screenId, layoutId, createNew, preview, templateId, newTemplate);
 }
 
 void EditorLaunchController::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
-                                                 bool preview)
+                                                 bool preview, const QString& templateId, bool newTemplate)
 {
     // Apply the forwarded CLI args to the running editor. Screen and layout
     // changes propagate through targetScreenChanged / layoutIdChanged signals,
     // which QML observes and reacts to (EditorWindow.qml calls
     // showFullScreenOnTargetScreen on screen changes, which handles the
     // destroy-and-remap dance for cross-monitor moves on Wayland).
-    applyLaunchArgs(screenId, layoutId, createNew, preview);
+    applyLaunchArgs(screenId, layoutId, createNew, preview, templateId, newTemplate);
 }
 
 } // namespace PlasmaZones

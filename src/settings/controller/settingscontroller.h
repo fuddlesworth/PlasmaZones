@@ -487,6 +487,9 @@ public:
     Q_INVOKABLE void openScrollingTemplateFile(const QString& templateId);
     Q_INVOKABLE void editLayout(const QString& layoutId);
     Q_INVOKABLE void editLayoutOnScreen(const QString& layoutId, const QString& screenId);
+    /// Open the editor in scrolling-template mode for the stored template
+    /// with @p templateId; an empty id opens the editor on a new template.
+    Q_INVOKABLE void editScrollingTemplate(const QString& templateId);
     Q_INVOKABLE void openLayoutsFolder();
     Q_INVOKABLE void importLayout(const QString& filePath);
     Q_INVOKABLE void exportLayout(const QString& layoutId, const QString& filePath);

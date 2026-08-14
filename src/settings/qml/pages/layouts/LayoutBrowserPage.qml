@@ -400,7 +400,7 @@ SettingsFlickable {
                 icon.name: "list-add"
                 onClicked: {
                     if (root.viewMode === 2)
-                        templateEditorDialog.openForNew();
+                        settingsController.editScrollingTemplate("");
                     else if (root.viewMode === 0)
                         newLayoutDialog.open();
                     else
@@ -534,7 +534,7 @@ SettingsFlickable {
                                 }
                                 onActivated: layoutId => {
                                     if (root.viewMode === 2)
-                                        templateEditorDialog.openForEdit(layoutId);
+                                        settingsController.editScrollingTemplate(layoutId);
                                     else
                                         settingsController.editLayout(layoutId);
                                 }
@@ -688,7 +688,7 @@ SettingsFlickable {
         function onEditTemplateRequested(templateId) {
             if (root.viewMode !== 2)
                 return;
-            templateEditorDialog.openForEdit(templateId);
+            settingsController.editScrollingTemplate(templateId);
         }
 
         // When LayoutBrowserPage is hosted outside Main.qml (KCM / preview host),
@@ -701,13 +701,6 @@ SettingsFlickable {
     // New Layout wizard dialog
     NewLayoutDialog {
         id: newLayoutDialog
-
-        controller: settingsController
-    }
-
-    // Scrolling template form editor (create + edit share the one dialog)
-    ScrollingTemplateEditorDialog {
-        id: templateEditorDialog
 
         controller: settingsController
     }

@@ -46,10 +46,12 @@ constexpr PlasmaZones::SingleInstanceIds kEditorIds{PhosphorProtocol::Service::A
 /// The running instance applies the forwarded args (layout / screen / preview)
 /// but deliberately does not attempt to raise its window — see the comment on
 /// EditorController::handleLaunchRequest for why.
-bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
+bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                             const QString& templateId, bool newTemplate)
 {
-    return PlasmaZones::SingleInstanceService::forward(kEditorIds, QStringLiteral("handleLaunchRequest"),
-                                                       {screenId, layoutId, createNew, preview});
+    return PlasmaZones::SingleInstanceService::forward(
+        kEditorIds, QStringLiteral("handleLaunchRequest"),
+        {screenId, layoutId, createNew, preview, templateId, newTemplate});
 }
 
 } // anonymous namespace
@@ -172,8 +174,13 @@ int main(int argc, char* argv[])
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},
                                        PhosphorI18n::tr("Create new layout"));
     QCommandLineOption previewOption(QStringLiteral("preview"), PhosphorI18n::tr("Open in read-only preview mode"));
+    QCommandLineOption templateIdOption(QStringList{QStringLiteral("t"), QStringLiteral("scrolling-template")},
+                                        PhosphorI18n::tr("Scrolling template ID to edit"), QStringLiteral("uuid"));
+    QCommandLineOption newTemplateOption(QStringLiteral("new-scrolling-template"),
+                                         PhosphorI18n::tr("Create new scrolling template"));
 
-    parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
+    parser.addOptions(
+        {layoutIdOption, screenOption, newLayoutOption, previewOption, templateIdOption, newTemplateOption});
     parser.process(app);
 
     // Use platform style if available, fall back to Fusion for non-KDE environments
@@ -203,16 +210,31 @@ int main(int argc, char* argv[])
     if (parser.isSet(newLayoutOption) && parser.isSet(layoutIdOption)) {
         qWarning() << "--new and --layout are mutually exclusive; ignoring --layout";
     }
+    if ((parser.isSet(templateIdOption) || parser.isSet(newTemplateOption))
+        && (parser.isSet(layoutIdOption) || parser.isSet(newLayoutOption))) {
+        qWarning() << "The scrolling-template flags are mutually exclusive with --layout/--new;"
+                   << "ignoring the layout flags";
+    }
+    if (parser.isSet(newTemplateOption) && parser.isSet(templateIdOption)) {
+        qWarning() << "--new-scrolling-template and --scrolling-template are mutually exclusive;"
+                   << "ignoring --scrolling-template";
+    }
 
-    const bool createNewLayout = parser.isSet(newLayoutOption);
-    const QString layoutIdArg =
-        (!createNewLayout && parser.isSet(layoutIdOption)) ? parser.value(layoutIdOption) : QString();
-    const bool previewArg = parser.isSet(previewOption) && !createNewLayout;
+    const bool newTemplateArg = parser.isSet(newTemplateOption);
+    const QString templateIdArg =
+        (!newTemplateArg && parser.isSet(templateIdOption)) ? parser.value(templateIdOption) : QString();
+    const bool templateLaunch = newTemplateArg || !templateIdArg.isEmpty();
+    const bool createNewLayout = !templateLaunch && parser.isSet(newLayoutOption);
+    const QString layoutIdArg = (!templateLaunch && !createNewLayout && parser.isSet(layoutIdOption))
+        ? parser.value(layoutIdOption)
+        : QString();
+    const bool previewArg = parser.isSet(previewOption) && !createNewLayout && !templateLaunch;
 
     // Single-instance: if another editor is already running, forward the launch
     // request and exit. Avoids spawning parallel editor processes when the user
     // hits the shortcut repeatedly while the first editor is still starting up.
-    if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
+    if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg, templateIdArg,
+                                newTemplateArg)) {
         return 0;
     }
 
@@ -266,7 +288,8 @@ int main(int argc, char* argv[])
     // surface the error so the user knows the shortcut silently failed.
     if (!launcher.registerDBusService()) {
         qCWarning(lcEditor) << "Editor D-Bus service already owned; forwarding to running instance";
-        if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
+        if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg, templateIdArg,
+                                    newTemplateArg)) {
             return 0;
         }
         qCCritical(lcEditor) << "Editor D-Bus name" << PhosphorProtocol::Service::Apps::Editor::ServiceName
@@ -275,7 +298,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    launcher.applyLaunchArgs(targetScreen, layoutIdArg, createNewLayout, previewArg);
+    launcher.applyLaunchArgs(targetScreen, layoutIdArg, createNewLayout, previewArg, templateIdArg, newTemplateArg);
 
     // Set up QML engine
     QQmlApplicationEngine engine;

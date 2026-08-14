@@ -127,6 +127,16 @@ QVariantList EditorController::screenModel() const
 // land here so the switch itself is written once.
 void EditorController::applyTargetScreen(const QString& screenName)
 {
+    // Templates are screen-portable: a screen switch in template mode moves
+    // the window without loading that screen's layout over the template.
+    // The screen selector is hidden in template mode, so this is a guard for
+    // programmatic switches (forwarded launches naming only a screen resolve
+    // through applyLaunch, which flips the mode first).
+    if (m_editorMode == ModeScrollingTemplate) {
+        setTargetScreenDirect(screenName);
+        return;
+    }
+
     const QString previousLayout = m_layoutId;
     m_targetScreen = screenName;
 
@@ -220,7 +230,18 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
         }
     };
 
-    if (launch.createNew) {
+    if (launch.newTemplate) {
+        // Template shapes first: they never carry preview (templates have no
+        // read-only rendering) and switch screens without loading a layout.
+        setPreviewMode(false);
+        switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
+        createNewScrollingTemplate();
+    } else if (!launch.templateId.isEmpty()) {
+        setPreviewMode(false);
+        switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
+        loadScrollingTemplate(launch.templateId);
+    } else if (launch.createNew) {
+        setEditorModeInternal(ModeLayout);
         setPreviewMode(false);
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
         createNewLayout();
@@ -228,10 +249,15 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
         // Switch screen first (direct, no auto-load) so loadLayout resolves
         // per-screen geometry and virtual-screen context against the target
         // screen rather than whatever was current before the forward.
+        setEditorModeInternal(ModeLayout);
         switchScreen(launch.screenId, /*loadAssignedLayout*/ false);
         setPreviewMode(launch.preview || PhosphorLayout::LayoutId::isAutotile(launch.layoutId));
         loadLayout(launch.layoutId);
     } else {
+        // Plain screen shape edits that screen's assigned LAYOUT, so leave
+        // template mode before the switch or applyTargetScreen's template
+        // guard would skip the load.
+        setEditorModeInternal(ModeLayout);
         setPreviewMode(false);
         // No layout named, so follow the screen's assigned layout. This is the
         // one path that routes through setTargetScreen, and setTargetScreen
@@ -241,9 +267,10 @@ void EditorController::applyLaunch(const PendingLaunch& launch)
     }
 }
 
-void EditorController::requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
+void EditorController::requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                                     const QString& templateId, bool newTemplate)
 {
-    const PendingLaunch launch{screenId, layoutId, createNew, preview};
+    const PendingLaunch launch{screenId, layoutId, createNew, preview, templateId, newTemplate};
 
     // createNewLayout() and loadLayout() replace what is loaded outright, with
     // no confirmation of their own, so with edits in flight they silently
@@ -255,7 +282,9 @@ void EditorController::requestLaunch(const QString& screenId, const QString& lay
     // to this prompt reaches applyLaunch with the edits still unsaved — Discard
     // here means "go anyway", not "revert the layout" — so setTargetScreen
     // would see a dirty controller and park a second time.
-    const bool replacesLayoutOutright = createNew || !layoutId.isEmpty();
+    // The template shapes replace the loaded object outright too, so they
+    // take the same parking gate.
+    const bool replacesLayoutOutright = createNew || !layoutId.isEmpty() || newTemplate || !templateId.isEmpty();
     if (m_hasUnsavedChanges && replacesLayoutOutright) {
         m_pendingLaunch = launch;
         Q_EMIT launchRequestRequiresConfirmation();
@@ -423,6 +452,9 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
  */
 void EditorController::createNewLayout()
 {
+    // Editing a layout, whatever mode the editor was in before.
+    setEditorModeInternal(ModeLayout);
+
     // A fresh layout has no fixed-zone bounding box to reference. Drop any
     // override from the previous layout so QML normalizes against the
     // screen geometry that setTargetScreen already cached — no D-Bus
@@ -524,6 +556,10 @@ void EditorController::loadLayout(const QString& layoutId)
         qCWarning(lcEditor) << "Invalid JSON for layout" << layoutId;
         return;
     }
+
+    // Only flip modes once the payload resolved — a failed load leaves the
+    // current editing session (template or layout) untouched.
+    setEditorModeInternal(ModeLayout);
 
     QJsonObject layoutObj = doc.object();
     m_layoutId = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)].toString();
@@ -809,6 +845,13 @@ void EditorController::loadLayout(const QString& layoutId)
  */
 bool EditorController::saveLayout()
 {
+    // Single save verb for both editing modes: every QML save path (Save
+    // button, Ctrl+S, the three unsaved-changes prompts) calls this, so the
+    // dispatch lives here rather than in each of them.
+    if (m_editorMode == ModeScrollingTemplate) {
+        return saveScrollingTemplateNow();
+    }
+
     if (!m_layoutService || !m_zoneManager) {
         Q_EMIT layoutSaveFailed(PhosphorI18n::tr("Services not initialized"));
         return false;
@@ -979,7 +1022,11 @@ bool EditorController::saveLayout()
 void EditorController::discardChanges()
 {
     if (!m_isNewLayout && !m_layoutId.isEmpty()) {
-        loadLayout(m_layoutId);
+        if (m_editorMode == ModeScrollingTemplate) {
+            loadScrollingTemplate(m_layoutId);
+        } else {
+            loadLayout(m_layoutId);
+        }
     }
     Q_EMIT editorClosed();
 }

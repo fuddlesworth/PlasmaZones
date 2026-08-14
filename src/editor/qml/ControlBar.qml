@@ -26,6 +26,10 @@ ToolBar {
     required property var confirmCloseDialog
     required property var editorWindow
     required property bool previewMode
+    // Scrolling-template mode: zone creation, starter templates, and the
+    // snapping controls are zone-canvas affordances and hide. Save/Cancel and
+    // the unsaved indicator stay, driven by the same controller properties.
+    required property bool templateMode
 
     height: Kirigami.Units.gridUnit * 5
     z: 100
@@ -41,7 +45,7 @@ ToolBar {
         RowLayout {
             id: zoneCreationSection
 
-            visible: !controlBar.previewMode
+            visible: !controlBar.previewMode && !controlBar.templateMode
             spacing: Kirigami.Units.gridUnit // Use theme spacing (within section)
 
             Button {
@@ -195,9 +199,54 @@ ToolBar {
             }
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        // TEMPLATE COLUMN SECTION - template mode's counterpart of Add Zone.
+        // The canvas also offers a trailing add stub, but that sits after
+        // the last band and scrolls off screen once the columns fill the
+        // strip, so the bar carries the always-visible affordance.
+        // ═══════════════════════════════════════════════════════════════
+        RowLayout {
+            id: templateColumnSection
+
+            readonly property var templateModel: controlBar.editorController ? controlBar.editorController.scrollingTemplate : null
+            readonly property int columnCount: templateModel ? templateModel.columns.length : 0
+            readonly property int columnLimit: templateModel ? templateModel.scrollingConstants().maxTemplateColumns : 16
+
+            visible: controlBar.templateMode && !controlBar.previewMode
+            spacing: Kirigami.Units.gridUnit
+
+            Button {
+                text: i18nc("@action:button", "Add Column")
+                icon.name: "list-add"
+                enabled: templateColumnSection.templateModel !== null && templateColumnSection.columnCount < templateColumnSection.columnLimit
+                Accessible.name: text
+                Accessible.description: i18nc("@info", "Add a starting column to the template")
+                ToolTip.visible: hovered
+                ToolTip.text: templateColumnSection.columnCount < templateColumnSection.columnLimit ? i18nc("@tooltip", "Add a starting column at the end of the strip") : i18nc("@tooltip", "A template can start at most %1 columns", templateColumnSection.columnLimit)
+                onClicked: templateColumnSection.templateModel.addColumn()
+            }
+
+            Label {
+                text: i18np("%n column", "%n columns", templateColumnSection.columnCount)
+                color: Kirigami.Theme.disabledTextColor
+            }
+
+            Kirigami.Separator {
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1
+            }
+
+            Label {
+                text: i18nc("@info", "Drag a column's right edge to resize it. Click a column for reorder, tabs, and remove.")
+                color: Kirigami.Theme.disabledTextColor
+                elide: Text.ElideRight
+                Layout.maximumWidth: Kirigami.Units.gridUnit * 24
+            }
+        }
+
         // Visual separator
         Kirigami.Separator {
-            visible: !controlBar.previewMode
+            visible: !controlBar.previewMode && !controlBar.templateMode
             Layout.fillHeight: true
             Layout.preferredWidth: 1
         }
@@ -208,7 +257,7 @@ ToolBar {
         RowLayout {
             id: snappingSection
 
-            visible: !controlBar.previewMode
+            visible: !controlBar.previewMode && !controlBar.templateMode
             spacing: Kirigami.Units.gridUnit // Use theme spacing (within section)
 
             // Edge snapping toggle - first in snapping section

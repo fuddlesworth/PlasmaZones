@@ -13,12 +13,12 @@
 #include <QScreen>
 #include <QQuickWindow>
 #include <QSize>
-#include "../config/configbackends.h"
 #include "core/types/constants.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include "core/platform/logging.h"
 #include "undo/UndoController.h"
 #include "EditorGapsModel.h"
+#include "EditorTemplateModel.h"
 #include "../shaderpreview/ishaderpreviewbackend.h"
 
 #include <memory>
@@ -26,6 +26,7 @@
 
 namespace PhosphorZones {
 class Layout;
+class ScrollingTemplateStore;
 }
 
 namespace PhosphorRules {
@@ -43,6 +44,7 @@ class ShaderPreviewController;
 class SnappingService;
 class TemplateService;
 class EditorGapsModel;
+class EditorTemplateModel;
 
 /**
  * @brief Controller for the layout editor
@@ -56,6 +58,8 @@ class EditorController : public QObject, public IShaderPreviewBackend
 
     // The gap sub-model calls markUnsaved() and reaches the shared undo stack.
     friend class EditorGapsModel;
+    // The scrolling-template sub-model does the same.
+    friend class EditorTemplateModel;
 
     // PhosphorZones::Layout properties
     Q_PROPERTY(QString layoutId READ layoutId NOTIFY layoutIdChanged)
@@ -174,6 +178,18 @@ class EditorController : public QObject, public IShaderPreviewBackend
     // Preview mode (read-only view for autotile layouts)
     Q_PROPERTY(bool previewMode READ previewMode NOTIFY previewModeChanged)
 
+    // Editing mode: which domain object the editor is editing, orthogonal to
+    // previewMode. 0 = ModeLayout, 1 = ModeScrollingTemplate. Set only by
+    // launch args, so a mode change always rides a launch request and
+    // inherits its unsaved-changes gating.
+    Q_PROPERTY(int editorMode READ editorMode NOTIFY editorModeChanged)
+
+    // Scrolling-template edit state sub-model (see EditorTemplateModel for
+    // the contract); exposed by pointer the way `gaps` is. The template's
+    // name / id / dirty flag reuse layoutName / layoutId / hasUnsavedChanges
+    // so the TopBar, save gating, and confirm dialogs work unchanged.
+    Q_PROPERTY(PlasmaZones::EditorTemplateModel* scrollingTemplate READ scrollingTemplate CONSTANT)
+
     // Clipboard operations
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
     Q_PROPERTY(UndoController* undoController READ undoController CONSTANT)
@@ -185,6 +201,22 @@ public:
     // Preview mode
     bool previewMode() const;
     void setPreviewMode(bool preview);
+
+    // Editing mode values for the editorMode property. Not a Q_ENUM: the
+    // controller reaches QML as a context property, where enum types are not
+    // resolvable — QML compares against these documented ints instead.
+    static constexpr int ModeLayout = 0;
+    static constexpr int ModeScrollingTemplate = 1;
+
+    int editorMode() const
+    {
+        return m_editorMode;
+    }
+
+    EditorTemplateModel* scrollingTemplate() const
+    {
+        return m_scrollingTemplate;
+    }
 
     // Property getters
     QString layoutId() const;
@@ -374,7 +406,8 @@ public:
      * cancelPendingLaunch(). With a clean editor — every initial launch, since
      * a freshly constructed controller has nothing unsaved — it applies at once.
      */
-    void requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+    void requestLaunch(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                       const QString& templateId = QString(), bool newTemplate = false);
 
     /// Apply the launch parked by requestLaunch(). No-op when nothing is
     /// pending. The caller decides whether the outgoing edits were saved
@@ -498,6 +531,18 @@ public Q_SLOTS:
     // PhosphorZones::Layout operations
     void createNewLayout();
     void loadLayout(const QString& layoutId);
+
+    // Scrolling-template operations. Both flip the editor into template
+    // mode; saveLayout() dispatches to the template save path while that
+    // mode is active.
+    void loadScrollingTemplate(const QString& templateId);
+    void createNewScrollingTemplate();
+
+    // D-Bus subscriber slot for the daemon's scrollingTemplatesChanged
+    // signal, the template sibling of reloadLocalLayouts(): the store
+    // watches nothing, so this reload is the only way another process's
+    // template write reaches the editor's local read view.
+    void reloadLocalTemplates();
     /// Persist the current layout. Returns false when the save did not land —
     /// the daemon refused the payload, or the services are not up — in which
     /// case layoutSaveFailed carries the reason and the unsaved-changes flag
@@ -818,6 +863,9 @@ Q_SIGNALS:
     // Preview mode signal
     void previewModeChanged();
 
+    // Editing mode (template-state signals live on EditorTemplateModel)
+    void editorModeChanged();
+
     // Clipboard signals
     void canPasteChanged();
     void clipboardOperationFailed(const QString& error);
@@ -875,29 +923,6 @@ private:
     void syncSelectionSignals();
 
     /**
-     * @brief Load a shortcut from config with validation
-     * @param group KConfig group to read from
-     * @param key Config key name
-     * @param defaultValue Default shortcut if not set or empty
-     * @param member Reference to member variable to update
-     * @param emitSignal Lambda to emit the changed signal
-     */
-    template<typename F>
-    void loadShortcutSetting(PhosphorConfig::IGroup& group, const QString& key, const QString& defaultValue,
-                             QString& member, F emitSignal)
-    {
-        QString value = group.readString(key, defaultValue);
-        if (value.isEmpty()) {
-            qCWarning(lcEditor) << "Invalid editor shortcut" << key << "(empty), using default";
-            value = defaultValue;
-        }
-        if (member != value) {
-            member = value;
-            emitSignal();
-        }
-    }
-
-    /**
      * @brief Loads editor settings from KConfig
      */
     void loadEditorSettings();
@@ -936,6 +961,20 @@ private:
     bool m_hasUnsavedChanges = false;
     bool m_isNewLayout = false;
     bool m_previewMode = false;
+
+    // ─── Editing mode + scrolling-template state ─────────────────────────
+    int m_editorMode = ModeLayout;
+    /// Edit-state sub-model (child QObject; reaches back for undo + dirty).
+    EditorTemplateModel* m_scrollingTemplate = nullptr;
+    /// Local read view of the template files, the template sibling of
+    /// m_localLayoutManager: instant opens without the daemon, offline save
+    /// fallback, reloaded on the daemon's scrollingTemplatesChanged signal.
+    std::unique_ptr<PhosphorZones::ScrollingTemplateStore> m_templateStore;
+
+    /// Flip the editing mode, resetting cross-mode UI state (selection).
+    void setEditorModeInternal(int mode);
+    /// The template save path saveLayout() dispatches to in template mode.
+    bool saveScrollingTemplateNow();
 
     // Services (dependency injection)
     ILayoutService* m_layoutService = nullptr;
@@ -1014,6 +1053,8 @@ private:
         QString layoutId;
         bool createNew = false;
         bool preview = false;
+        QString templateId;
+        bool newTemplate = false;
     };
     std::optional<PendingLaunch> m_pendingLaunch;
     /// Apply a launch request outright, replacing whatever is loaded.

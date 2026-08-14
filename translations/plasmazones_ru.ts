@@ -4,7 +4,7 @@
 <context>
     <name>plasmazones</name>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="52"/>
+        <location filename="../src/editor/controller/settings.cpp" line="75"/>
         <source>A zone with this name already exists</source>
         <translation>Зона с таким именем уже существует</translation>
     </message>
@@ -903,37 +903,37 @@
         <translation>На передний план</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="603"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="609"/>
         <source>Cancel Zone Overlay</source>
         <translation>Отменить наложение зон</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="662"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="668"/>
         <source>Layout Picker: Move Left</source>
         <translation>Выбор раскладки: влево</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="666"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="672"/>
         <source>Layout Picker: Move Right</source>
         <translation>Выбор раскладки: вправо</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="670"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="676"/>
         <source>Layout Picker: Move Up</source>
         <translation>Выбор раскладки: вверх</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="674"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="680"/>
         <source>Layout Picker: Move Down</source>
         <translation>Выбор раскладки: вниз</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="678"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="684"/>
         <source>Layout Picker: Confirm</source>
         <translation>Выбор раскладки: подтвердить</translation>
     </message>
     <message>
-        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="679"/>
+        <location filename="../src/dbus/windowdragadaptor/windowdragadaptor.cpp" line="685"/>
         <source>Layout Picker: Confirm (Numpad Enter)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1022,9 +1022,19 @@
         <translation>Сбросить переопределение краевого зазора</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="173"/>
+        <location filename="../src/editor/main.cpp" line="175"/>
         <source>Create new layout</source>
         <translation>Создать новую раскладку</translation>
+    </message>
+    <message>
+        <location filename="../src/editor/main.cpp" line="178"/>
+        <source>Scrolling template ID to edit</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/main.cpp" line="180"/>
+        <source>Create new scrolling template</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/editor/controller/clipboard.cpp" line="96"/>
@@ -1064,56 +1074,56 @@
         <translation>Заполнить зону</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="523"/>
+        <location filename="../src/editor/controller/layout.cpp" line="555"/>
         <source>Invalid layout data format</source>
         <translation>Неверный формат данных раскладки</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="994"/>
-        <location filename="../src/editor/controller/layout.cpp" line="1032"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1041"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1079"/>
         <source>File path cannot be empty</source>
         <translation>Путь к файлу не может быть пустым</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1001"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="630"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1048"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="636"/>
         <source>Failed to import layout: %1</source>
         <translation>Не удалось импортировать раскладку: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1012"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="637"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1059"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="643"/>
         <source>That file is not a layout this app can read.</source>
         <translation>Этот файл не является раскладкой, которую может прочитать приложение.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1055"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1102"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="447"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="453"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="682"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="688"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="184"/>
         <source>Could not write the export. Check that the folder is writable.</source>
         <translation>Не удалось записать экспорт. Убедитесь, что папка доступна для записи.</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1037"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1084"/>
         <source>No layout loaded to export</source>
         <translation>Нет загруженной раскладки для экспорта</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="1044"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="673"/>
+        <location filename="../src/editor/controller/layout.cpp" line="1091"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="679"/>
         <source>Failed to export layout: %1</source>
         <translation>Не удалось экспортировать раскладку: %1</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="488"/>
+        <location filename="../src/editor/controller/layout.cpp" line="520"/>
         <location filename="../src/editor/services/DBusLayoutService.cpp" line="40"/>
         <source>Layout ID cannot be empty</source>
         <translation>Идентификатор раскладки не может быть пустым</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="169"/>
+        <location filename="../src/editor/main.cpp" line="171"/>
         <source>Layout ID to edit</source>
         <translation>Идентификатор раскладки для редактирования</translation>
     </message>
@@ -1162,7 +1172,7 @@
         <translation>Закрыть справку по комбинациям клавиш</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="493"/>
+        <location filename="../src/editor/controller/layout.cpp" line="525"/>
         <source>Layout service not initialized</source>
         <translation>Служба раскладок не инициализирована</translation>
     </message>
@@ -1185,7 +1195,7 @@
         <translation>Переместить зону</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="434"/>
+        <location filename="../src/editor/controller/layout.cpp" line="466"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="274"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="282"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
@@ -1193,7 +1203,7 @@
         <translation>Новая раскладка</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="174"/>
+        <location filename="../src/editor/main.cpp" line="176"/>
         <source>Open in read-only preview mode</source>
         <translation>Открыть в режиме предпросмотра только для чтения</translation>
     </message>
@@ -1274,7 +1284,7 @@
         <translation>На задний план</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/layout.cpp" line="813"/>
+        <location filename="../src/editor/controller/layout.cpp" line="856"/>
         <source>Services not initialized</source>
         <translation>Службы не инициализированы</translation>
     </message>
@@ -1303,7 +1313,7 @@
         <translation>Переключить эффект шейдера</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="171"/>
+        <location filename="../src/editor/main.cpp" line="173"/>
         <source>Target screen name</source>
         <translation>Имя целевого экрана</translation>
     </message>
@@ -1344,7 +1354,7 @@
         <translation>Обновить цвет зон (%1)</translation>
     </message>
     <message>
-        <location filename="../src/editor/main.cpp" line="164"/>
+        <location filename="../src/editor/main.cpp" line="166"/>
         <source>Visual layout editor for PlasmaZones</source>
         <translation>Визуальный редактор раскладок для PlasmaZones</translation>
     </message>
@@ -1356,7 +1366,7 @@
         <translation>Диспетчер зон не инициализирован</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="40"/>
+        <location filename="../src/editor/controller/settings.cpp" line="63"/>
         <source>Zone name contains invalid characters: &lt; &gt; &quot; &apos; \</source>
         <translation>Имя зоны содержит недопустимые символы: &lt; &gt; &quot; &apos; \</translation>
     </message>
@@ -1370,22 +1380,22 @@
         <translation>Зона не найдена</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="94"/>
+        <location filename="../src/editor/controller/settings.cpp" line="117"/>
         <source>Zone number %1 is already in use</source>
         <translation>Номер зоны %1 уже используется</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="74"/>
+        <location filename="../src/editor/controller/settings.cpp" line="97"/>
         <source>Zone number cannot exceed 99</source>
         <translation>Номер зоны не может превышать 99</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="31"/>
+        <location filename="../src/editor/controller/settings.cpp" line="54"/>
         <source>Zone name cannot exceed %1 characters</source>
         <translation>Имя зоны не может превышать %1 символов</translation>
     </message>
     <message>
-        <location filename="../src/editor/controller/settings.cpp" line="71"/>
+        <location filename="../src/editor/controller/settings.cpp" line="94"/>
         <source>Zone number must be at least 1</source>
         <translation>Номер зоны должен быть не менее 1</translation>
     </message>
@@ -3722,7 +3732,8 @@
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="215"/>
         <location filename="../src/settings/rules/ruleauthoring.cpp" line="414"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="36"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="297"/>
         <source>Tabbed</source>
         <translation>С вкладками</translation>
     </message>
@@ -5155,14 +5166,14 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="85"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="248"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="883"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="882"/>
         <source>export</source>
         <translation>экспорт</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="86"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="248"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="885"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="884"/>
         <source>import</source>
         <translation>импорт</translation>
     </message>
@@ -5203,7 +5214,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="69"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="97"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="900"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="899"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="49"/>
         <source>grid</source>
         <translation>сетка</translation>
@@ -5263,8 +5274,8 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="534"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="538"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="806"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="895"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="894"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="922"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="117"/>
         <source>edge</source>
         <translation>край</translation>
@@ -5370,8 +5381,8 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="124"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="159"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="567"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="890"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="918"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="889"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="917"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="37"/>
         <source>picker</source>
         <translation>выбор</translation>
@@ -5710,7 +5721,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="194"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="226"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="871"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="214"/>
         <source>on-screen display</source>
         <translation>экранное сообщение</translation>
@@ -5926,7 +5937,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="349"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="510"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="864"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="863"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="208"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="23"/>
         <source>Window filtering</source>
@@ -5935,7 +5946,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="351"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="512"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="865"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="210"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="529"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="58"/>
@@ -6133,7 +6144,7 @@
         <translation>контур</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="885"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="884"/>
         <source>load</source>
         <translation>загрузить</translation>
     </message>
@@ -6190,8 +6201,8 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="522"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="611"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="774"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="874"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="877"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="873"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="93"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="170"/>
         <source>size</source>
@@ -6945,20 +6956,20 @@
         <translation>Длительность плавного изменения фокуса</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="971"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="970"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="135"/>
         <source>Save current settings</source>
         <translation>Сохранить текущие параметры</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="973"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="972"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="239"/>
         <source>Import a profile</source>
         <translation>Импортировать профиль</translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="94"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="974"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="973"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="260"/>
         <source>Profiles</source>
         <translation>Профили</translation>
@@ -7185,8 +7196,8 @@
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="557"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="895"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="894"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="922"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="160"/>
         <source>distance</source>
         <translation>расстояние</translation>
@@ -7793,14 +7804,14 @@
         <translation>переполнение</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="937"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="936"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="92"/>
         <source>Scrolling Quick Shortcuts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="955"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="961"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="954"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="960"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="215"/>
         <source>User sets</source>
         <translation>Наборы пользователя</translation>
@@ -8113,7 +8124,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="602"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="614"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="902"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="54"/>
         <source>count</source>
         <translation>количество</translation>
@@ -8298,7 +8309,7 @@
         <translation>без ограничений</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="853"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="852"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="133"/>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalTimingDefaultsCard.qml.cpp" line="154"/>
         <location filename=".qml-stubs/src/settings/qml/components/GlobalTimingDefaultsCard.qml.cpp" line="176"/>
@@ -8306,51 +8317,51 @@
         <translation>Глобальные параметры анимации по умолчанию</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="855"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="854"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="61"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="68"/>
         <source>Multiple windows</source>
         <translation>Несколько окон</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="855"/>
         <source>sequence</source>
         <translation>последовательность</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="855"/>
         <source>simultaneous</source>
         <translation>одновременно</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="856"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="855"/>
         <source>one by one</source>
         <translation>по очереди</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="857"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="89"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="94"/>
         <source>Stagger delay</source>
         <translation>Задержка между окнами</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
         <source>pause</source>
         <translation>пауза</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
         <source>interval</source>
         <translation>интервал</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="859"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="858"/>
         <source>delay</source>
         <translation>задержка</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="861"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="860"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="111"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="118"/>
         <source>Minimum distance</source>
@@ -8361,65 +8372,65 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="358"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="518"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="522"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="874"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="877"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="861"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="873"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="216"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="218"/>
         <source>threshold</source>
         <translation>порог</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="861"/>
         <source>skip</source>
         <translation>пропустить</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="862"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="861"/>
         <source>geometry</source>
         <translation>геометрия</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="513"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="867"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="211"/>
         <source>dialogs</source>
         <translation>диалоги</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="513"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="867"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="211"/>
         <source>popups</source>
         <translation>всплывающие окна</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="867"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="866"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="211"/>
         <source>tooltips</source>
         <translation>подсказки</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="513"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="868"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="867"/>
         <source>menus</source>
         <translation>меню</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="869"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="213"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationWindowFilterCard.qml.cpp" line="62"/>
         <source>Exclude notifications and OSDs</source>
         <translation>Исключить уведомления и OSD</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="871"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="214"/>
         <source>volume</source>
         <translation>громкость</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="871"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="870"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="214"/>
         <source>brightness</source>
         <translation>яркость</translation>
@@ -8427,7 +8438,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="354"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="517"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="873"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="872"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="216"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="539"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="85"/>
@@ -8437,7 +8448,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="355"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="518"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="874"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="873"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="216"/>
         <source>narrow</source>
         <translation>узкое</translation>
@@ -8445,7 +8456,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="357"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="521"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="875"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="218"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="549"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="125"/>
@@ -8455,7 +8466,7 @@
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="358"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="522"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="877"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="876"/>
         <location filename="../src/settings/search/searchcatalog_simple.cpp" line="218"/>
         <source>short</source>
         <translation>низкое</translation>
@@ -8463,125 +8474,125 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="246"/>
         <location filename="../src/settings/controller/settingscontroller_pageregistration.cpp" line="306"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="881"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="880"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="559"/>
         <source>Configuration</source>
         <translation>Настройка</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="882"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="881"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="567"/>
         <source>Backup</source>
         <translation>Резервная копия</translation>
     </message>
     <message>
         <location filename="../src/settings/search/searchcatalog.cpp" line="249"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="883"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="882"/>
         <source>save</source>
         <translation>сохранить</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="883"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="885"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="882"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="884"/>
         <source>data</source>
         <translation>данные</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="884"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="883"/>
         <location filename=".qml-stubs/src/settings/qml/GeneralPage.qml.cpp" line="582"/>
         <source>Restore</source>
         <translation>Восстановить</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="889"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="888"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="113"/>
         <source>Zone selector popup</source>
         <translation>Всплывающее окно выбора зоны</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="890"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="918"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="889"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="917"/>
         <source>enable</source>
         <translation>включить</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="890"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="918"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="889"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="917"/>
         <source>toggle</source>
         <translation>переключить</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="892"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="920"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="891"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="919"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPositionCard.qml.cpp" line="40"/>
         <source>Position and trigger</source>
         <oldsource>Position &amp; Trigger</oldsource>
         <translation type="unfinished">Положение и триггер</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="894"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="922"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="893"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="921"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPositionCard.qml.cpp" line="81"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPositionCard.qml.cpp" line="95"/>
         <source>Trigger distance</source>
         <translation>Расстояние срабатывания</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="895"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="923"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="894"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="922"/>
         <source>proximity</source>
         <translation>близость</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="897"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="896"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="157"/>
         <source>Layout arrangement</source>
         <oldsource>Layout Arrangement</oldsource>
         <translation type="unfinished">Расположение раскладки</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="899"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="898"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="169"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="176"/>
         <source>Arrangement</source>
         <translation>Расположение</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="900"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="899"/>
         <source>horizontal</source>
         <translation>горизонтальное</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="900"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="899"/>
         <source>vertical</source>
         <translation>вертикальное</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="902"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="901"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="193"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="200"/>
         <source>Grid columns</source>
         <translation>Столбцы сетки</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="902"/>
         <source>columns</source>
         <translation>столбцы</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="903"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="902"/>
         <source>per row</source>
         <translation>в строке</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="905"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="904"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="228"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorSection.qml.cpp" line="235"/>
         <source>Max visible rows</source>
         <translation>Максимум видимых строк</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="906"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="905"/>
         <source>rows</source>
         <translation>строки</translation>
     </message>
@@ -8594,18 +8605,18 @@
         <location filename="../src/settings/search/searchcatalog.cpp" line="162"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="799"/>
         <location filename="../src/settings/search/searchcatalog.cpp" line="815"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="906"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="905"/>
         <source>scroll</source>
         <translation>прокрутка</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="906"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="905"/>
         <source>visible</source>
         <translation>видимых</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="908"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="925"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="907"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="924"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="45"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="168"/>
         <location filename=".qml-stubs/src/settings/qml/pages/screens/ZoneSelectorPreviewSizeCard.qml.cpp" line="385"/>
@@ -8614,63 +8625,63 @@
         <translation type="unfinished">Размер предпросмотра</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="929"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="928"/>
         <location filename=".qml-stubs/src/settings/qml/pages/snapping/SnappingOrderingPage.qml.cpp" line="13"/>
         <source>Snapping layout priority</source>
         <oldsource>Snapping Layout Priority</oldsource>
         <translation type="unfinished">Приоритет раскладок при прилипании</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="931"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="930"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/TilingOrderingPage.qml.cpp" line="13"/>
         <source>Tiling algorithm priority</source>
         <oldsource>Tiling Algorithm Priority</oldsource>
         <translation type="unfinished">Приоритет алгоритмов мозаичного размещения</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="933"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="932"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="92"/>
         <source>Snapping Quick Shortcuts</source>
         <translation>Быстрые комбинации клавиш прилипания</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="935"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="934"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/QuickLayoutSlotsCard.qml.cpp" line="92"/>
         <source>Tiling Quick Shortcuts</source>
         <translation>Быстрые комбинации клавиш мозаичного размещения</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="943"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="945"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="947"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="942"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="944"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="946"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderBrowserPage.qml.cpp" line="464"/>
         <source>User shaders</source>
         <translation>Пользовательские шейдеры</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="949"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="948"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="147"/>
         <source>Easing presets</source>
         <oldsource>Easing Presets</oldsource>
         <translation type="unfinished">Предустановки плавности</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="951"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="950"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsPresetsPage.qml.cpp" line="282"/>
         <source>Spring presets</source>
         <oldsource>Spring Presets</oldsource>
         <translation type="unfinished">Предустановки пружины</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="953"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="959"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="952"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="958"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="127"/>
         <source>Save current state</source>
         <translation>Сохранить текущее состояние</translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="957"/>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="963"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="956"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="962"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="233"/>
         <source>Saved sets</source>
         <translation>Сохранённые наборы</translation>
@@ -8923,8 +8934,14 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="142"/>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="525"/>
         <source>The daemon refused the template. Check that it has a name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="151"/>
+        <source>Could not save the template.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -8948,15 +8965,15 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="858"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="864"/>
         <location filename="../src/settings/rules/rulemodel_labels.cpp" line="118"/>
         <source>Scrolling (no template)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="388"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="619"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="768"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="625"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="774"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="204"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="597"/>
         <source>That file path is not allowed.</source>
@@ -8964,8 +8981,8 @@
     </message>
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="434"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="651"/>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="826"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="657"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="832"/>
         <location filename="../src/settings/controller/settingscontroller_transfer.cpp" line="152"/>
         <source>That export path is not allowed.</source>
         <translation>Этот путь экспорта недопустим.</translation>
@@ -8976,17 +8993,17 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="696"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="702"/>
         <source>Failed to update layout visibility: %1</source>
         <translation>Не удалось обновить видимость раскладки: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="709"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="715"/>
         <source>Failed to update auto-assign: %1</source>
         <translation>Не удалось обновить автоназначение: %1</translation>
     </message>
     <message>
-        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="723"/>
+        <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="729"/>
         <source>Failed to update aspect ratio: %1</source>
         <translation>Не удалось обновить соотношение сторон: %1</translation>
     </message>
@@ -9909,265 +9926,304 @@
         <translation>Шестнадцатеричный код цвета</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="48"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="52"/>
         <source>Add Zone</source>
         <comment>@action:button</comment>
         <translation>Добавить зону</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="52"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="56"/>
         <source>Click to add a new zone to the layout</source>
         <comment>@info</comment>
         <translation>Щёлкните, чтобы добавить новую зону в раскладку</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="54"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="58"/>
         <source>Add a new zone to the layout. The zone will be created centered on the canvas.</source>
         <comment>@tooltip</comment>
         <translation>Добавить новую зону в раскладку. Зона будет создана по центру холста.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="78"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="82"/>
         <source>Apply Template…</source>
         <comment>@item:inmenu</comment>
         <translation>Применить шаблон…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="86"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="90"/>
         <source>Grid 2×2</source>
         <comment>@item:inmenu</comment>
         <translation>Сетка 2×2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="91"/>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="99"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="95"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="103"/>
         <source>Grid Layouts</source>
         <comment>@title:group</comment>
         <translation>Сеточные раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="94"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="98"/>
         <source>Grid 3×2</source>
         <comment>@item:inmenu</comment>
         <translation>Сетка 3×2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="102"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="106"/>
         <source>Columns 2</source>
         <comment>@item:inmenu</comment>
         <translation>2 столбца</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="107"/>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="115"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="111"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="119"/>
         <source>Column Layouts</source>
         <comment>@title:group</comment>
         <translation>Столбцовые раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="110"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="114"/>
         <source>Columns 3</source>
         <comment>@item:inmenu</comment>
         <translation>3 столбца</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="118"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="122"/>
         <source>Rows 2</source>
         <comment>@item:inmenu</comment>
         <translation>2 строки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="123"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="127"/>
         <source>Row Layouts</source>
         <comment>@title:group</comment>
         <translation>Строчные раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="126"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="130"/>
         <source>Priority Grid</source>
         <comment>@item:inmenu</comment>
         <translation>Приоритетная сетка</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="131"/>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="139"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="135"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="143"/>
         <source>Special Layouts</source>
         <comment>@title:group</comment>
         <translation>Особые раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="134"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="138"/>
         <source>Focus</source>
         <comment>@item:inmenu</comment>
         <translation>Фокус</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="144"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="148"/>
         <source>Layout templates</source>
         <comment>@label</comment>
         <translation>Шаблоны раскладок</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="145"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="149"/>
         <source>Apply a predefined layout template</source>
         <comment>@info</comment>
         <translation>Применить готовый шаблон раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="218"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="219"/>
+        <source>Add Column</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="223"/>
+        <source>Add a starting column to the template</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="225"/>
+        <source>Add a starting column at the end of the strip</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="225"/>
+        <source>A template can start at most %1 columns</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="230"/>
+        <source>%n column</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="240"/>
+        <source>Drag a column&apos;s right edge to resize it. Click a column for reorder, tabs, and remove.</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="267"/>
         <source>Snap to Edges</source>
         <comment>@action:button</comment>
         <translation>Прилипание к краям</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="225"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="274"/>
         <source>Toggle edge snapping. Zones will align with edges of other zones when enabled.</source>
         <comment>@info</comment>
         <translation>Переключить прилипание к краям. При включении зоны будут выравниваться по краям других зон.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="227"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="276"/>
         <source>Edge snapping enabled. Zones align to edges of other zones. Click to disable.</source>
         <comment>@tooltip</comment>
         <translation>Прилипание к краям включено. Зоны выравниваются по краям других зон. Щёлкните, чтобы отключить.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="227"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="276"/>
         <source>Edge snapping disabled. Click to enable. Zones will align to edges of other zones.</source>
         <comment>@tooltip</comment>
         <translation>Прилипание к краям отключено. Щёлкните, чтобы включить. Зоны будут выравниваться по краям других зон.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="250"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="299"/>
         <source>Snap to Grid</source>
         <comment>@action:button</comment>
         <translation>Прилипание к сетке</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="256"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="305"/>
         <source>Toggle grid snapping. Zones will align to a grid when enabled. Use the sliders to change horizontal and vertical grid sizes.</source>
         <comment>@info</comment>
         <translation>Переключить прилипание к сетке. При включении зоны будут выравниваться по сетке. Используйте ползунки, чтобы изменить размеры сетки по горизонтали и вертикали.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="258"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="307"/>
         <source>Grid snapping enabled (H:%1% V:%2%). Zones align to grid lines. Click to disable.</source>
         <comment>@tooltip</comment>
         <translation>Прилипание к сетке включено (Г:%1% В:%2%). Зоны выравниваются по линиям сетки. Щёлкните, чтобы отключить.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="258"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="307"/>
         <source>Grid snapping disabled. Click to enable. Zones will align to grid lines.</source>
         <comment>@tooltip</comment>
         <translation>Прилипание к сетке отключено. Щёлкните, чтобы включить. Зоны будут выравниваться по линиям сетки.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="285"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="334"/>
         <source>H:</source>
         <comment>@label</comment>
         <translation>Г:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="286"/>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="298"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="347"/>
         <source>Horizontal grid interval</source>
         <comment>@label</comment>
         <translation>Горизонтальный интервал сетки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="299"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="348"/>
         <source>Adjust horizontal grid interval (1% to 50%)</source>
         <comment>@info</comment>
         <translation>Настройка горизонтального интервала сетки (от 1% до 50%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="318"/>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="359"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="367"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="408"/>
         <source>%1%</source>
         <comment>@info grid interval percentage</comment>
         <translation>%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="321"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="370"/>
         <source>Horizontal interval: %1%</source>
         <comment>@info</comment>
         <translation>Горизонтальный интервал: %1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="325"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="374"/>
         <source>V:</source>
         <comment>@label</comment>
         <translation>В:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="327"/>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="339"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="376"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="388"/>
         <source>Vertical grid interval</source>
         <comment>@label</comment>
         <translation>Вертикальный интервал сетки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="340"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="389"/>
         <source>Adjust vertical grid interval (1% to 50%)</source>
         <comment>@info</comment>
         <translation>Настройка вертикального интервала сетки (от 1% до 50%)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="362"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="411"/>
         <source>Vertical interval: %1%</source>
         <comment>@info</comment>
         <translation>Вертикальный интервал: %1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="371"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="420"/>
         <source>Show Grid</source>
         <comment>@action:button</comment>
         <translation>Показывать сетку</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="377"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="426"/>
         <source>Toggle grid overlay visibility. Shows or hides the visual grid lines on the canvas.</source>
         <comment>@info</comment>
         <translation>Переключить видимость наложения сетки. Показывает или скрывает линии сетки на холсте.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="379"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="428"/>
         <source>Grid overlay visible. Click to hide grid lines.</source>
         <comment>@tooltip</comment>
         <translation>Наложение сетки видимо. Щёлкните, чтобы скрыть линии сетки.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="379"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="428"/>
         <source>Grid overlay hidden. Click to show grid lines.</source>
         <comment>@tooltip</comment>
         <translation>Наложение сетки скрыто. Щёлкните, чтобы показать линии сетки.</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="431"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="480"/>
         <source>Unsaved changes</source>
         <comment>@info</comment>
         <translation>Несохранённые изменения</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="476"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="525"/>
         <source>Cancel</source>
         <comment>@action:button</comment>
         <translation>Отмена</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="478"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="527"/>
         <source>Discard changes and close editor</source>
         <comment>@info</comment>
         <translation>Отменить изменения и закрыть редактор</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="491"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="540"/>
         <source>Save</source>
         <comment>@action:button</comment>
         <translation>Сохранить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="496"/>
+        <location filename=".qml-stubs/src/editor/qml/ControlBar.qml.cpp" line="545"/>
         <source>Save layout and close editor</source>
         <comment>@info</comment>
         <translation>Сохранить раскладку и закрыть редактор</translation>
@@ -10263,57 +10319,69 @@
         <translation>Уведомление об ошибке</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="219"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="221"/>
         <source>Layout Editor</source>
         <comment>@title</comment>
         <translation>Редактор раскладок</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="724"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="221"/>
+        <source>Scrolling Template Editor</source>
+        <comment>@title</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="767"/>
         <source>Exit fullscreen</source>
         <comment>@action:button</comment>
         <translation>Выйти из полноэкранного режима</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="747"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="790"/>
         <source>Exit Fullscreen (F11)</source>
         <translation>Выйти из полноэкранного режима (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="775"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="807"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="853"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="818"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="850"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="896"/>
         <source>Unsaved Changes</source>
         <comment>@title:window</comment>
         <translation>Несохранённые изменения</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="776"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="819"/>
         <source>You have unsaved changes. What would you like to do?</source>
         <comment>@info</comment>
         <translation>У вас есть несохранённые изменения. Что вы хотите сделать?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="808"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="851"/>
         <source>Switching to %1 will load that screen&apos;s layout. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Переключение на %1 загрузит раскладку этого экрана. Что вы хотите сделать с несохранёнными изменениями?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="854"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="897"/>
         <source>Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?</source>
         <comment>@info</comment>
         <translation>Открытие другой раскладки заменит ту, которую вы редактируете. Что вы хотите сделать с несохранёнными изменениями?</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="881"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="897"/>
+        <source>Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?</source>
+        <comment>@info</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="924"/>
         <source>Import Layout</source>
         <comment>@title:window</comment>
         <translation>Импорт раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="882"/>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="894"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="925"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="937"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="964"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="993"/>
         <source>JSON files (*.json)</source>
@@ -10321,7 +10389,7 @@
         <translation>Файлы JSON (*.json)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="882"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="925"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="944"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="964"/>
         <location filename=".qml-stubs/src/editor/qml/ShaderSettingsDialog.qml.cpp" line="993"/>
@@ -10330,37 +10398,37 @@
         <translation>Все файлы (*)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="893"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="936"/>
         <source>Export Layout</source>
         <comment>@title:window</comment>
         <translation>Экспорт раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="921"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="964"/>
         <source>Layout Editor Help</source>
         <comment>@title:window</comment>
         <translation>Справка редактора раскладок</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="964"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1007"/>
         <source>Layout saved successfully</source>
         <comment>@info</comment>
         <translation>Раскладка успешно сохранена</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="968"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1011"/>
         <source>Layout exported</source>
         <comment>@info</comment>
         <translation>Раскладка экспортирована</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="973"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1016"/>
         <source>Failed to load layout: %1</source>
         <comment>@info</comment>
         <translation>Не удалось загрузить раскладку: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="978"/>
+        <location filename=".qml-stubs/src/editor/qml/EditorWindow.qml.cpp" line="1021"/>
         <source>Failed to save layout: %1</source>
         <comment>@info</comment>
         <translation>Не удалось сохранить раскладку: %1</translation>
@@ -11686,247 +11754,253 @@
         <translation>Загрузить предустановку шейдера</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="74"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="79"/>
         <source>Currently selected screen for layout editing</source>
         <comment>@info</comment>
         <translation>Экран, выбранный в данный момент для редактирования раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="74"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="79"/>
         <source>Select screen for layout editing</source>
         <comment>@info</comment>
         <translation>Выберите экран для редактирования раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="154"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="159"/>
         <source>Layout:</source>
         <comment>@label</comment>
         <translation>Раскладка:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="170"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="159"/>
+        <source>Template:</source>
+        <comment>@label</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="175"/>
         <source>Preview</source>
         <comment>@info</comment>
         <translation>Предпросмотр</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="200"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="205"/>
         <source>Layout name</source>
         <comment>@label</comment>
         <translation>Имя раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="201"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="206"/>
         <source>Enter name for the layout</source>
         <comment>@info</comment>
         <translation>Введите имя раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="229"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="234"/>
         <source>%1/%2</source>
         <comment>@info</comment>
         <translation>%1/%2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="233"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="238"/>
         <source>Character count: %1 of %2</source>
         <comment>@info</comment>
         <translation>Число символов: %1 из %2</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="234"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="239"/>
         <source>Shows how many characters are used in the layout name</source>
         <comment>@info</comment>
         <translation>Показывает, сколько символов использовано в имени раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="341"/>
         <source>Undo: %1</source>
         <comment>@action:tooltip</comment>
         <translation>Отменить: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="336"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="341"/>
         <source>Undo</source>
         <comment>@action:tooltip</comment>
         <translation>Отменить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="338"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="343"/>
         <source>Undo</source>
         <comment>@action</comment>
         <translation>Отменить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="353"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="358"/>
         <source>Redo: %1</source>
         <comment>@action:tooltip</comment>
         <translation>Повторить: %1</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="353"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="358"/>
         <source>Redo</source>
         <comment>@action:tooltip</comment>
         <translation>Повторить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="355"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="360"/>
         <source>Redo</source>
         <comment>@action</comment>
         <translation>Повторить</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="374"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="382"/>
         <source>Layout-specific settings (gaps)</source>
         <comment>@tooltip</comment>
         <translation>Параметры конкретной раскладки (зазоры)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="376"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="384"/>
         <source>Layout Settings</source>
         <comment>@action</comment>
         <translation>Параметры раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="377"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="385"/>
         <source>Configure per-layout gap overrides</source>
         <comment>@info</comment>
         <translation>Настроить переопределения зазоров для отдельной раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="397"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="406"/>
         <source>Layout visibility (per monitor/desktop/activity)</source>
         <comment>@tooltip</comment>
         <translation>Видимость раскладки (по экрану/рабочему столу/комнате)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="399"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="408"/>
         <source>Layout Visibility</source>
         <comment>@action</comment>
         <translation>Видимость раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="400"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="409"/>
         <source>Configure where this layout appears in the zone selector</source>
         <comment>@info</comment>
         <translation>Настроить, где эта раскладка отображается в выборе зоны</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="413"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="422"/>
         <source>Shader effect settings</source>
         <comment>@tooltip</comment>
         <translation>Параметры эффекта шейдера</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="415"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="424"/>
         <source>Shader Settings</source>
         <comment>@action</comment>
         <translation>Параметры шейдера</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="416"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="425"/>
         <source>Configure visual shader effects for zones</source>
         <comment>@info</comment>
         <translation>Настроить визуальные эффекты шейдеров для зон</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="440"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="449"/>
         <source>Import layout from file</source>
         <comment>@tooltip</comment>
         <translation>Импортировать раскладку из файла</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="442"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="451"/>
         <source>Import Layout</source>
         <comment>@action</comment>
         <translation>Импорт раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="443"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="452"/>
         <source>Import a layout from a JSON file</source>
         <comment>@info</comment>
         <translation>Импортировать раскладку из файла JSON</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="452"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="461"/>
         <source>Export layout to file</source>
         <comment>@tooltip</comment>
         <translation>Экспортировать раскладку в файл</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="454"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="463"/>
         <source>Export Layout</source>
         <comment>@action</comment>
         <translation>Экспорт раскладки</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="455"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="464"/>
         <source>Export the current layout to a JSON file</source>
         <comment>@info</comment>
         <translation>Экспортировать текущую раскладку в файл JSON</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="469"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="478"/>
         <source>Exit fullscreen mode (F11)</source>
         <comment>@tooltip</comment>
         <translation>Выйти из полноэкранного режима (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="469"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="478"/>
         <source>Enter fullscreen mode (F11)</source>
         <comment>@tooltip</comment>
         <translation>Войти в полноэкранный режим (F11)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="472"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="481"/>
         <source>Exit Fullscreen</source>
         <comment>@action</comment>
         <translation>Выйти из полноэкранного режима</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="472"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="481"/>
         <source>Fullscreen</source>
         <comment>@action</comment>
         <translation>Полный экран</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="473"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="482"/>
         <source>Toggle fullscreen editing mode</source>
         <comment>@info</comment>
         <translation>Переключить полноэкранный режим редактирования</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="480"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="489"/>
         <source>Quick reference guide (F1)</source>
         <comment>@tooltip</comment>
         <translation>Краткий справочник (F1)</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="482"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="491"/>
         <source>Help</source>
         <comment>@action</comment>
         <translation>Справка</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="483"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="492"/>
         <source>Open quick reference guide</source>
         <comment>@info</comment>
         <translation>Открыть краткий справочник</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="495"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="504"/>
         <source>Close editor</source>
         <comment>@tooltip</comment>
         <translation>Закрыть редактор</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="497"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="506"/>
         <source>Close</source>
         <comment>@action</comment>
         <translation>Закрыть</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="498"/>
+        <location filename=".qml-stubs/src/editor/qml/TopBar.qml.cpp" line="507"/>
         <source>Close the layout editor</source>
         <comment>@info</comment>
         <translation>Закрыть редактор раскладок</translation>
@@ -13025,8 +13099,7 @@
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="111"/>
         <location filename=".qml-stubs/src/settings/qml/dialogs/ConfirmDialogs.qml.cpp" line="167"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="466"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="834"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="176"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="827"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="118"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RulesPage.qml.cpp" line="467"/>
         <location filename=".qml-stubs/src/settings/qml/pages/wizard/WizardFooter.qml.cpp" line="85"/>
@@ -14102,7 +14175,6 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/CurveEditorDialog.qml.cpp" line="457"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="170"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfilesPage.qml.cpp" line="221"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorSheet.qml.cpp" line="123"/>
         <location filename=".qml-stubs/src/settings/qml/pages/shaders/ShaderSetsPage.qml.cpp" line="181"/>
@@ -14816,7 +14888,7 @@
         <translation>Экспорт</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="816"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="809"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="430"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutContextMenu.qml.cpp" line="459"/>
         <location filename=".qml-stubs/src/settings/qml/pages/profiles/ProfileRow.qml.cpp" line="226"/>
@@ -15236,6 +15308,7 @@
         <translation>Новый алгоритм</translation>
     </message>
     <message>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="54"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="399"/>
         <source>New Template</source>
         <translation type="unfinished"></translation>
@@ -15369,7 +15442,7 @@
     </message>
     <message>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="589"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="793"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="786"/>
         <source>Luau files (*.luau)</source>
         <translation>Файлы Luau (*.luau)</translation>
     </message>
@@ -15389,27 +15462,27 @@
         <translation>Импорт файла раскладки KZones</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="792"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="785"/>
         <source>Export Algorithm</source>
         <translation>Экспорт алгоритма</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="809"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="802"/>
         <source>Delete Algorithm</source>
         <translation>Удалить алгоритм</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="809"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="802"/>
         <source>Delete Layout</source>
         <translation>Удалить раскладку</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="809"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="802"/>
         <source>Delete Template</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="810"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/layouts/LayoutBrowserPage.qml.cpp" line="803"/>
         <source>Are you sure you want to delete &quot;%1&quot;?</source>
         <translation>Вы действительно хотите удалить «%1»?</translation>
     </message>
@@ -15471,6 +15544,7 @@
         <translation>Новая раскладка</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="119"/>
         <location filename=".qml-stubs/src/settings/qml/pages/layouts/NewLayoutDialog.qml.cpp" line="260"/>
         <location filename=".qml-stubs/src/settings/qml/pages/tiling/NewAlgorithmDialog.qml.cpp" line="160"/>
         <source>Template</source>
@@ -16274,201 +16348,376 @@
         <translation>Выберите раскладку…</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="25"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="36"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="297"/>
         <source>Stacked</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="71"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="79"/>
+        <location filename="../src/editor/controller/scrollingtemplate.cpp" line="106"/>
         <source>That template is no longer available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="165"/>
-        <source>Edit Scrolling Template</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="165"/>
-        <source>New Scrolling Template</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="189"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="110"/>
         <source>This is a built-in template. Saving stores your own copy, and deleting that copy brings the built-in one back.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="198"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/RuleEditorBody.qml.cpp" line="242"/>
         <source>Name:</source>
         <translation>Имя:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="199"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="200"/>
-        <source>Template name</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="211"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="126"/>
         <source>Description:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="212"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="127"/>
         <source>Template description</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="213"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="128"/>
         <source>Optional description</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="221"/>
-        <source>Starting columns</source>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="141"/>
+        <source>This template starts no columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="228"/>
-        <source>The first windows you open form these columns, left to right. Later windows use the default width below. Leave the list empty for a template that only sets the width presets.</source>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="142"/>
+        <source>The first windows you open form the starting columns, left to right. Later windows use the default width from the panel. A template without starting columns only sets the width presets.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="251"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="229"/>
+        <source>Column %1, %2% wide, tabbed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="229"/>
+        <source>Column %1, %2% wide, stacked</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="291"/>
         <source>Column %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="258"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="359"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="339"/>
+        <source>Move column left</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="340"/>
+        <source>Swap this column with the one to its left</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="341"/>
+        <source>Move left</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="355"/>
+        <source>Show windows stacked</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="355"/>
+        <source>Show windows as tabs</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="356"/>
+        <source>Switch this column between stacked windows and tabs</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="357"/>
+        <source>Show windows stacked</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="357"/>
+        <source>Show windows as tabs</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="366"/>
+        <source>Move column right</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="367"/>
+        <source>Swap this column with the one to its right</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="368"/>
+        <source>Move right</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="381"/>
+        <source>Remove column</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="382"/>
+        <source>Remove this column from the template</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="383"/>
+        <source>Remove column</source>
+        <comment>@tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="494"/>
+        <source>Column width divider</source>
+        <comment>@action:button</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="495"/>
+        <source>Drag horizontally to resize this column</source>
+        <comment>@info:tooltip</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="551"/>
+        <source>Screen edge</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="95"/>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="171"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="182"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="284"/>
         <source>%1%</source>
         <translation type="unfinished">%1%</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="260"/>
-        <source>Width of column %1</source>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="110"/>
+        <source>Click to edit this preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="267"/>
-        <source>Display mode of column %1</source>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="127"/>
+        <source>Edit preset percentage in %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="273"/>
-        <source>Remove column %1</source>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="146"/>
+        <source>Remove %1% from %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="290"/>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="173"/>
+        <source>New preset percentage for %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="179"/>
+        <source>Add preset to %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="181"/>
+        <source>This list can hold at most %1 presets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="181"/>
+        <source>Add this size as a preset</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="203"/>
+        <source>No presets yet. Pick a size and add it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="215"/>
+        <source>Change Description</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="225"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="235"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="245"/>
+        <source>Change Default Width</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="255"/>
+        <source>Change Default Display</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="265"/>
+        <source>Change Width Presets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="275"/>
+        <source>Change Height Presets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="290"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplateStripCanvas.qml.cpp" line="145"/>
         <source>Add Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="306"/>
-        <source>A template can start at most %1 columns.</source>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="302"/>
+        <source>Remove Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="312"/>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="314"/>
+        <source>Move Column</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="337"/>
+        <source>Resize Column</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/editor/EditorTemplateModel.cpp" line="354"/>
+        <source>Change Column Display</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="137"/>
         <source>Later columns</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="321"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="144"/>
         <source>Default width:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="327"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="150"/>
         <source>Fraction of the screen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="331"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="154"/>
         <source>Fixed pixels</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="335"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="158"/>
         <source>The window decides</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="339"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="162"/>
         <source>Width preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="350"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="177"/>
         <source>Width in pixels:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="350"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="177"/>
         <source>Width:</source>
         <translation type="unfinished">Ширина:</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="178"/>
         <source>Default column width in pixels</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="366"/>
-        <source>Preset number:</source>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="196"/>
+        <source>Start at preset:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="367"/>
-        <source>Default width preset number</source>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="197"/>
+        <source>Default width preset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="383"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="200"/>
+        <source>No width presets yet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="201"/>
+        <source>Preset %1 (%2%)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="226"/>
+        <source>Widths:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="241"/>
+        <source>Heights:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="211"/>
         <source>Show windows as:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="384"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="212"/>
         <source>Show windows as</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="391"/>
-        <source>Width presets:</source>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="221"/>
+        <source>Size presets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="392"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="229"/>
         <source>Width presets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="393"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="401"/>
-        <source>For example 0.333, 0.5, 0.667</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="399"/>
-        <source>Height presets:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="400"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="244"/>
         <source>Height presets</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="409"/>
-        <source>The default width is set to a width preset, so this template needs at least one width preset before it can be saved.</source>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="262"/>
+        <source>The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the screen instead.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="416"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="271"/>
         <source>Presets are the sizes the width and height cycling shortcuts step through while this template is assigned.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -19593,8 +19842,8 @@
         <translation>Какой ширины будет столбец при первом открытии</translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="322"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/layouts/ScrollingTemplateEditorDialog.qml.cpp" line="351"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="145"/>
+        <location filename=".qml-stubs/src/editor/qml/TemplatePropertyPanel.qml.cpp" line="178"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingColumnsPage.qml.cpp" line="149"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/ScrollingSimplePage.qml.cpp" line="121"/>
         <source>Default column width</source>
@@ -20574,6 +20823,7 @@
         <translation type="unfinished">%1%</translation>
     </message>
     <message>
+        <location filename=".qml-stubs/src/editor/qml/PresetChipEditor.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/scrolling/PresetListEditor.qml.cpp" line="166"/>
         <source>Remove this preset</source>
         <translation type="unfinished"></translation>
@@ -20600,28 +20850,28 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="91"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="94"/>
         <source>While dragging a window on a scrolling screen, move it to the configured screen edge to open a popup showing the current strip. Drop between two columns to insert a new column, onto a tabbed column to add the window as a tab, or onto the top or bottom half of a column to stack it there.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/search/searchcatalog.cpp" line="917"/>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="96"/>
+        <location filename="../src/settings/search/searchcatalog.cpp" line="916"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="99"/>
         <source>Strip selector popup</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="98"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="101"/>
         <source>Show the current strip as drop targets when dragging windows to screen edges</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="102"/>
+        <location filename=".qml-stubs/src/settings/qml/pages/screens/ScrollingZoneSelectorSection.qml.cpp" line="105"/>
         <source>Enable strip selector popup</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="245"/>
+        <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="246"/>
         <source>%n tab</source>
         <comment>@info:label tabbed column tab count</comment>
         <translation type="unfinished">
@@ -20631,7 +20881,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="245"/>
+        <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="246"/>
         <source>%n window</source>
         <comment>@info:label column window count</comment>
         <translation type="unfinished">

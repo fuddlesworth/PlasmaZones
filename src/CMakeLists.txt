@@ -737,6 +737,8 @@ set(plasmazones_editor_SRCS
     editor/EditorController.cpp
     editor/EditorGapsModel.cpp
     editor/EditorGapsModel.h
+    editor/EditorTemplateModel.cpp
+    editor/EditorTemplateModel.h
     editor/EditorLaunchController.cpp
     editor/EditorLaunchController.h
     editor/EditorAppAdaptor.cpp
@@ -751,6 +753,7 @@ set(plasmazones_editor_SRCS
     editor/controller/zones.cpp
     editor/controller/zoneops.cpp
     editor/controller/settings.cpp
+    editor/controller/scrollingtemplate.cpp
     editor/EditorController.h
     editor/helpers/BatchOperationScope.h
     editor/helpers/ZoneSerialization.cpp
@@ -829,6 +832,8 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/UpdateFixedGeometryCommand.h
     editor/undo/commands/UpdateVisibilityCommand.cpp
     editor/undo/commands/UpdateVisibilityCommand.h
+    editor/undo/commands/UpdateTemplateCommand.cpp
+    editor/undo/commands/UpdateTemplateCommand.h
 )
 
 # Create the executable first
@@ -888,6 +893,9 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/ZoneOperations.qml
         editor/qml/HelpDialogContent.qml
         editor/qml/TemplatePreview.qml
+        editor/qml/TemplateStripCanvas.qml
+        editor/qml/TemplatePropertyPanel.qml
+        editor/qml/PresetChipEditor.qml
         editor/qml/ShaderSettingsDialog.qml
         editor/qml/VisibilitySettingsDialog.qml
         editor/qml/LayoutSettingsDialog.qml

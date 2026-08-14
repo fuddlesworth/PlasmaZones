@@ -465,4 +465,14 @@ void LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const Q
     launchEditor(args, QStringLiteral("for layout: %1 on screen: %2").arg(layoutId, screenId));
 }
 
+void LayoutAdaptor::openEditorForScrollingTemplate(const QString& templateId)
+{
+    if (templateId.isEmpty()) {
+        launchEditor({QStringLiteral("--new-scrolling-template")}, QStringLiteral("for a new scrolling template"));
+        return;
+    }
+    launchEditor({QStringLiteral("--scrolling-template"), templateId},
+                 QStringLiteral("for scrolling template: %1").arg(templateId));
+}
+
 } // namespace PlasmaZones

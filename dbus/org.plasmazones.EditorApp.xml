@@ -43,6 +43,14 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString"
                             value="Open in read-only preview mode. Auto-enabled for autotile: layoutIds."/>
             </arg>
+            <arg name="templateId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString"
+                            value="Scrolling template UUID to edit. Empty = not a template launch. Mutually exclusive with layoutId/createNew."/>
+            </arg>
+            <arg name="newTemplate" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString"
+                            value="Create a new scrolling template. Mutually exclusive with templateId and the layout shapes."/>
+            </arg>
         </method>
     </interface>
 </node>
