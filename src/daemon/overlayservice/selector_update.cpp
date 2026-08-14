@@ -3,6 +3,7 @@
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
+#include "common/stripcardserialize.h"
 #include "core/platform/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
@@ -193,12 +194,14 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // renders the previous mode's stale model.
     QVariantList layouts;
     QVariantList stripColumns;
+    QList<qreal> stripFractions;
     if (stripMode) {
         stripColumns = buildStripList(screenId);
+        stripFractions = stripFractionsFromColumns(stripColumns);
         // Write-through: this is a fresh build of the authoritative list, so
         // refresh the trigger-edge memo rather than letting the next probe
         // pay for a second identical build.
-        m_stripCardCountCache.insert(screenId, static_cast<int>(stripColumns.size()));
+        m_stripCardFractionsCache.insert(screenId, stripFractions);
     } else {
         layouts = buildLayoutsList(screenId);
     }
@@ -227,12 +230,13 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     }
     writeQmlProperty(window, QStringLiteral("locked"), locked);
 
-    // Compute layout for geometry updates using per-screen config. The
-    // strip's card count sizes the bar exactly like a layout count does; an
-    // empty strip keeps one cell so the bar retains a hittable "open the
-    // first column" body instead of collapsing.
+    // Compute layout for geometry updates using per-screen config. Strip
+    // cards are variable-width (each column's real work-area share), so the
+    // fractions drive the bar width; an empty strip keeps one uniform cell
+    // (empty fraction list) so the bar retains a hittable "open the first
+    // column" body instead of collapsing.
     const int layoutCount = stripMode ? std::max(1, static_cast<int>(stripColumns.size())) : layouts.size();
-    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount);
+    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions);
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
     // containerWidth/Height, so it has to be correct before we apply the layout.

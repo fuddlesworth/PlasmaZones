@@ -388,22 +388,38 @@ Item {
                 width: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
                 height: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
 
-                // Strip mode (scrolling screens): one uniform card per
-                // column in a plain Row. Uniform cell sizes on purpose —
-                // computeZoneSelectorLayout's bar/scroll math assumes one
-                // cell size per card, and the insert bars below position
-                // arithmetically off that same uniformity. The C++ hit-test
-                // reads the CARD rects back by objectName + index and
-                // derives gap targets from adjacent cards itself, so no
-                // width-taking gap items exist to skew the content width.
+                // Strip mode (scrolling screens): one VARIABLE-WIDTH card
+                // per column in a plain Row — each card is its column's real
+                // work-area share of the full-screen preview width.
+                // stripCardWidth mirrors stripCardPreviewWidth in
+                // zoneselectorlayout.h (which sizes the bar off the same
+                // fractions) and the card's own width binding — change one,
+                // change all three. The C++ hit-test reads the CARD rects
+                // back by objectName + index and derives gap targets from
+                // adjacent cards itself, so no width-taking gap items exist
+                // to skew the content width.
                 Item {
                     id: stripLayer
 
                     objectName: "zoneSelectorStripLayer"
                     visible: root.stripMode
                     anchors.fill: parent
-                    readonly property real cellWidth: root.indicatorWidth + root.cardSidePadding * 2
                     readonly property real cellHeight: root.indicatorHeight + root.labelSpace + root.cardPadding
+
+                    function stripCardWidth(i) {
+                        var f = root.stripColumns[i] ? root.stripColumns[i].widthFraction : 0;
+                        if (!(f > 0 && f <= 1))
+                            f = 1;
+                        return Math.max(8, Math.round(root.indicatorWidth * f)) + root.cardSidePadding * 2;
+                    }
+
+                    /// Left edge of card @p i in strip-row coordinates.
+                    function stripCardX(i) {
+                        var x = 0;
+                        for (var j = 0; j < i; ++j)
+                            x += stripCardWidth(j) + root.indicatorSpacing;
+                        return x;
+                    }
 
                     Row {
                         id: stripRow
@@ -461,12 +477,18 @@ Item {
                             z: 10
                             color: root.highlightColor
                             visible: root.selectedStripGap === index
+                            // Positions derive from the same per-card width
+                            // formula the cards use (variable widths), so a
+                            // bar always lands on its gap. The helper reads
+                            // root.stripColumns, which the binding tracks
+                            // through the call; the list is replaced
+                            // wholesale on every strip reshape.
                             x: {
                                 if (index === 0)
                                     return 0;
                                 if (index === cardCount)
-                                    return cardCount * stripLayer.cellWidth + (cardCount - 1) * root.indicatorSpacing - width;
-                                return index * (stripLayer.cellWidth + root.indicatorSpacing) - root.indicatorSpacing / 2 - width / 2;
+                                    return stripLayer.stripCardX(cardCount - 1) + stripLayer.stripCardWidth(cardCount - 1) - width;
+                                return stripLayer.stripCardX(index) - root.indicatorSpacing / 2 - width / 2;
                             }
                         }
                     }

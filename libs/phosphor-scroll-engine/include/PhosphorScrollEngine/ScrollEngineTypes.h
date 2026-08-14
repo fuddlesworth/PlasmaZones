@@ -129,12 +129,12 @@ struct ScrollStripSnapshotTile
     bool activeTab = false;
 };
 
-/// One column of a strip snapshot, in strip order. The card FOOTPRINT stays
-/// uniform-width by design (the popup's bar/scroll math assumes one cell size
-/// per card), but the preview drawn inside each card is scaled to the
-/// column's real share of the screen via @c widthFraction — tile relRects are
-/// column-relative, so without the fraction every column would render as a
-/// full-width mini-screen regardless of its actual width.
+/// One column of a strip snapshot, in strip order. Popup cards render
+/// VARIABLE-WIDTH off @c widthFraction — each card is its column at preview
+/// scale (a half-screen column is a half-width card) — and the bar width
+/// sums the same fractions. Tile relRects are column-relative, so without
+/// the fraction every column would render as a full-width mini-screen
+/// regardless of its actual width.
 struct ScrollStripSnapshotColumn
 {
     bool tabbed = false;

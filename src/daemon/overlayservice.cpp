@@ -891,7 +891,7 @@ void OverlayService::hideDisabledAndRefresh()
     // The events that route through here (desktop/activity switch, exclusion
     // recompute, settings save) are exactly the ones that can reshape a
     // screen's strip, so drop every memoized card count up front.
-    m_stripCardCountCache.clear();
+    m_stripCardFractionsCache.clear();
     QHash<QString, ContextGates> gates;
     gates.reserve(m_screenStates.size());
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {

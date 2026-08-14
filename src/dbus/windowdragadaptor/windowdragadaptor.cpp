@@ -884,9 +884,15 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     // dimensions.
     const int layoutCount = m_overlayService ? m_overlayService->selectorCardCount(effectiveId)
                                              : (m_layoutManager ? m_layoutManager->layouts().size() : 0);
+    // Variable-width strip cards: the fractions reproduce the real bar
+    // width (empty on layout-mode screens and for an empty strip, where the
+    // uniform cell math applies).
+    const QList<qreal> stripFractions =
+        m_overlayService ? m_overlayService->selectorStripFractions(effectiveId) : QList<qreal>();
 
     // Use shared layout computation (same code as OverlayService)
-    const ZoneSelectorLayout selectorLayout = computeZoneSelectorLayout(config, screenGeom, layoutCount);
+    const ZoneSelectorLayout selectorLayout =
+        computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions);
     const int barHeight = selectorLayout.barHeight;
     const int barWidth = selectorLayout.barWidth;
 

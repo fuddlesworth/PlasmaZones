@@ -138,6 +138,14 @@ public:
     // the shortcut gates' zero test unreachable on scrolling screens.
     virtual int selectorCardCount(const QString& screenId) const = 0;
 
+    // Strip-selector screens only: one work-area width share per rendered
+    // strip card, in card order (empty everywhere else, and for an empty
+    // strip). The other half of the trigger-edge sizing contract above:
+    // strip cards render variable-width, so isNearTriggerEdge needs the
+    // fractions, not just the count, for its computeZoneSelectorLayout call
+    // to reproduce the real bar width.
+    virtual QList<qreal> selectorStripFractions(const QString& screenId) const = 0;
+
     // PhosphorZones::Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;
     virtual QString selectedLayoutId() const = 0;

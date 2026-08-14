@@ -9,7 +9,7 @@
 // initEngines installs, consumed through OverlayService::buildStripList —
 // mirroring layoutpreviewserialize's role for the layout-mode popup.
 //
-// Column map: { tabbed: bool, active: bool,
+// Column map: { tabbed: bool, active: bool, widthFraction: real,
 //               tiles: [ { x, y, width, height, activeTab } ] }
 // Tile x/y/width/height are the snapshot's column-relative fractions
 // (0 for tiles that resolve no rect, e.g. the hidden tabs of a tabbed
@@ -34,5 +34,13 @@
 namespace PlasmaZones {
 
 PLASMAZONES_EXPORT QVariantList stripColumnsToVariantList(const PhosphorScrollEngine::ScrollStripSnapshot& snapshot);
+
+/// The widthFraction column of a serialized card list, in card order —
+/// the input computeZoneSelectorLayout's variable-width bar math and the
+/// trigger-edge parity path both consume. Kept beside the serializer so the
+/// key spelling lives in exactly one file. Values pass through raw
+/// (including a 0 for a rect-less column); stripCardPreviewWidth owns the
+/// full-width fallback for out-of-range values.
+PLASMAZONES_EXPORT QList<qreal> stripFractionsFromColumns(const QVariantList& columns);
 
 } // namespace PlasmaZones

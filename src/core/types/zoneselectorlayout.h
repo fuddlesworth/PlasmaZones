@@ -5,6 +5,7 @@
 
 #include "core/interfaces/settings_interfaces.h"
 #include "constants.h"
+#include <QList>
 #include <QRect>
 #include <QScreen>
 #include <algorithm>
@@ -53,15 +54,35 @@ struct ZoneSelectorLayout
     bool needsHorizontalScrolling = false;
 };
 
+/// Per-card preview width for one strip card, from the column's work-area
+/// share. THE parity chokepoint between the C++ bar width and the rendered
+/// cards: ZoneSelectorStripCard.qml and ZoneSelectorContent.qml's insert-bar
+/// arithmetic mirror this formula (indicator width scaled by the fraction,
+/// non-positive/oversized fractions fall back to full width, 8 px floor so a
+/// sliver column stays visible). Change it in all three places or the bar
+/// mis-sizes against the row it wraps.
+inline int stripCardPreviewWidth(int indicatorWidth, qreal widthFraction)
+{
+    const qreal f = (widthFraction > 0.0 && widthFraction <= 1.0) ? widthFraction : 1.0;
+    return std::max(8, qRound(indicatorWidth * f));
+}
+
 /**
  * @brief Compute zone selector layout dimensions from config and screen
  *
  * Determines indicator sizes, grid layout, container dimensions, and bar size
  * based on size mode (Auto/Manual), layout mode (Grid/Horizontal/Vertical),
  * and screen constraints.
+ *
+ * @param stripFractions Strip mode only: one work-area width share per card,
+ * in card order. Non-empty, the horizontal content width sums the per-card
+ * widths (stripCardPreviewWidth per entry) instead of assuming a uniform
+ * cell, so the bar hugs the variable-width card row. Empty = uniform cells
+ * (layout mode, or an empty strip's single hittable cell). When non-empty,
+ * layoutCount must equal stripFractions.size().
  */
 inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, const QRect& screenGeom,
-                                                    int layoutCount)
+                                                    int layoutCount, const QList<qreal>& stripFractions = {})
 {
     ZoneSelectorLayout layout;
     const qreal screenAspectRatio =
@@ -128,7 +149,18 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.rows = visibleRows;
     layout.needsScrolling = (layout.totalRows > visibleRows);
 
-    layout.scrollContentWidth = layout.columns * layout.cellWidth + (layout.columns - 1) * layout.indicatorSpacing;
+    if (!stripFractions.isEmpty()) {
+        // Variable-width strip cards: each card is its column's real share
+        // of the screen (chrome and spacing stay per-card constants).
+        int cardsWidth = 0;
+        for (const qreal f : stripFractions) {
+            cardsWidth += stripCardPreviewWidth(layout.indicatorWidth, f) + layout.cardSidePadding * 2;
+        }
+        layout.scrollContentWidth =
+            cardsWidth + (static_cast<int>(stripFractions.size()) - 1) * layout.indicatorSpacing;
+    } else {
+        layout.scrollContentWidth = layout.columns * layout.cellWidth + (layout.columns - 1) * layout.indicatorSpacing;
+    }
     layout.scrollContentHeight =
         layout.totalRows * layout.cellHeight + (layout.totalRows - 1) * layout.indicatorSpacing;
 

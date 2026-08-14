@@ -28,6 +28,16 @@ constexpr QLatin1String Tiles{"tiles"};
 
 } // namespace
 
+QList<qreal> stripFractionsFromColumns(const QVariantList& columns)
+{
+    QList<qreal> fractions;
+    fractions.reserve(columns.size());
+    for (const QVariant& column : columns) {
+        fractions.append(column.toMap().value(K::WidthFraction).toReal());
+    }
+    return fractions;
+}
+
 QVariantList stripColumnsToVariantList(const PhosphorScrollEngine::ScrollStripSnapshot& snapshot)
 {
     QVariantList columns;

@@ -334,6 +334,9 @@ public:
     // Popup cell count for trigger edge computation (strip cards on strip
     // screens, layouts elsewhere)
     int selectorCardCount(const QString& screenId) const override;
+    // Per-card work-area width shares for the variable-width strip row
+    // (empty on non-strip screens); trigger-edge bar-width parity
+    QList<qreal> selectorStripFractions(const QString& screenId) const override;
 
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;
@@ -369,7 +372,7 @@ public:
             m_activeDragWindowId = windowId;
             // The exclusion id keys the card list, so cached counts built
             // under the previous id are wrong by construction.
-            m_stripCardCountCache.clear();
+            m_stripCardFractionsCache.clear();
         }
     }
     /// Provider of the SERIALIZED strip card list (the daemon injects
@@ -851,9 +854,15 @@ private:
     /// screen is not a strip-selector screen. Implemented in
     /// selector_strip.cpp.
     QVariantList buildStripList(const QString& screenId) const;
-    /// Card count for the trigger-edge sizing contract: selectorCardCount
-    /// answers with THIS on strip-selector screens so isNearTriggerEdge and
-    /// the rendered card row can never disagree.
+    /// Memoized per-card width fractions for the trigger-edge sizing
+    /// contract: selectorCardCount / selectorStripFractions answer from THIS
+    /// on strip-selector screens so isNearTriggerEdge and the rendered card
+    /// row can never disagree. Counting and measuring through buildStripList
+    /// (not a separate engine query) keeps the row-for-row agreement with
+    /// the rendered card list.
+    QList<qreal> stripCardFractions(const QString& screenId) const;
+    /// The fraction list's size — the card count the empty-strip floor and
+    /// the hide loops consult.
     int visibleStripCardCount(const QString& screenId) const;
     /// Strip-mode arm of updateSelectorPosition: reads the rendered card
     /// rects back (stripColumnCard by delegate index) and classifies the
@@ -1049,14 +1058,14 @@ private:
     /// end) — buildStripList excludes it so a not-yet-detached drag window
     /// never appears as its own card.
     QString m_activeDragWindowId;
-    /// Per-screen memo of visibleStripCardCount. isNearTriggerEdge consults
-    /// the count on EVERY drag cursor tick, and an uncached answer costs a
-    /// full engine strip snapshot plus QVariant serialization per tick just
-    /// to read a .size(). Invalidated wherever the card list can change
-    /// shape: the exclusion id (setActiveDragWindowId), the preview
-    /// boundaries and structural strip changes (refreshStripSelector), and
-    /// the desktop/activity/exclusion/settings refresh (hideDisabledAndRefresh).
-    mutable QHash<QString, int> m_stripCardCountCache;
+    /// Per-screen memo of stripCardFractions. isNearTriggerEdge consults
+    /// the fractions on EVERY drag cursor tick, and an uncached answer costs
+    /// a full engine strip snapshot plus QVariant serialization per tick.
+    /// Invalidated wherever the card list can change shape or share: the
+    /// exclusion id (setActiveDragWindowId), the preview boundaries and
+    /// structural strip changes (refreshStripSelector), and the
+    /// desktop/activity/exclusion/settings refresh (hideDisabledAndRefresh).
+    mutable QHash<QString, QList<qreal>> m_stripCardFractionsCache;
     /// Strip-mode selection twin of the zone triple below. Exactly one of
     /// the two families is set (each hit-test arm clears the other on
     /// write); clearSelectedZone clears both.

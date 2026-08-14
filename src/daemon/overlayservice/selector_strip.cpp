@@ -10,6 +10,7 @@
 
 #include "internal.h"
 #include "daemon/overlayservice.h"
+#include "common/stripcardserialize.h"
 #include "core/platform/logging.h"
 #include "core/types/stripselectorhittest.h"
 
@@ -28,19 +29,35 @@ QVariantList OverlayService::buildStripList(const QString& screenId) const
     return m_stripCardsProvider(screenId, m_activeDragWindowId);
 }
 
-int OverlayService::visibleStripCardCount(const QString& screenId) const
+QList<qreal> OverlayService::stripCardFractions(const QString& screenId) const
 {
     // Memoized: the trigger-edge probe asks per cursor tick, and the answer
     // only changes at the invalidation points listed on the cache member.
-    // Counting through buildStripList (not a separate engine count) keeps
+    // Extracting through buildStripList (not a separate engine query) keeps
     // the row-for-row agreement with the rendered card list.
-    const auto cached = m_stripCardCountCache.constFind(screenId);
-    if (cached != m_stripCardCountCache.constEnd()) {
+    const auto cached = m_stripCardFractionsCache.constFind(screenId);
+    if (cached != m_stripCardFractionsCache.constEnd()) {
         return cached.value();
     }
-    const int count = static_cast<int>(buildStripList(screenId).size());
-    m_stripCardCountCache.insert(screenId, count);
-    return count;
+    const QList<qreal> fractions = stripFractionsFromColumns(buildStripList(screenId));
+    m_stripCardFractionsCache.insert(screenId, fractions);
+    return fractions;
+}
+
+int OverlayService::visibleStripCardCount(const QString& screenId) const
+{
+    return static_cast<int>(stripCardFractions(screenId).size());
+}
+
+QList<qreal> OverlayService::selectorStripFractions(const QString& screenId) const
+{
+    // Non-strip screens answer empty (uniform layout cells need no
+    // fractions); an empty strip is empty too — the caller's single
+    // hittable cell comes from selectorCardCount's floor.
+    if (!isStripSelectorScreen(screenId)) {
+        return {};
+    }
+    return stripCardFractions(screenId);
 }
 
 void OverlayService::refreshStripSelector(const QString& screenId)
@@ -57,7 +74,7 @@ void OverlayService::refreshStripSelector(const QString& screenId)
         m_selectedStripScreenId.clear();
     }
     // The strip changed shape, so any memoized card count for it is stale.
-    m_stripCardCountCache.remove(screenId);
+    m_stripCardFractionsCache.remove(screenId);
     if (!m_zoneSelectorVisible) {
         return;
     }
