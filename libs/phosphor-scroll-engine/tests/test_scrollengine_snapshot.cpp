@@ -100,6 +100,12 @@ void TestScrollEngineSnapshot::columnsFollowStripOrder()
     QVERIFY(snap.columns.at(0).tiles.at(0).activeTab);
     QVERIFY(!snap.columns.at(0).tiles.at(0).hidden);
     QVERIFY(snap.columns.at(0).tiles.at(0).relRect.height() > 0.9);
+    // Every resolved column carries its real work-area share for the
+    // preview scaling, in (0, 1].
+    for (const ScrollStripSnapshotColumn& column : snap.columns) {
+        QVERIFY(column.widthFraction > 0.0);
+        QVERIFY(column.widthFraction <= 1.0);
+    }
     // The last-opened window's column is active.
     QCOMPARE(snap.activeColumnIndex, 2);
 }
@@ -179,6 +185,9 @@ void TestScrollEngineSnapshot::fullyMinimizedColumnStillEmitted()
     QCOMPARE(snap.columns.at(1).tiles.size(), 1);
     QVERIFY(snap.columns.at(1).tiles.at(0).minimized);
     QVERIFY(snap.columns.at(1).tiles.at(0).relRect.isNull());
+    // A column that resolves no rect carries no width share either — the
+    // renderer's full-width fallback covers it.
+    QCOMPARE(snap.columns.at(1).widthFraction, 0.0);
     QCOMPARE(snap.columns.at(2).tiles.at(0).windowId, QStringLiteral("c"));
 }
 

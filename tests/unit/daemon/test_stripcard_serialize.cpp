@@ -27,6 +27,9 @@ private Q_SLOTS:
         snap.activeColumnIndex = 1;
 
         ScrollStripSnapshotColumn normal;
+        // Non-default fraction so a dropped insert cannot pass as the
+        // absent-key coercion value.
+        normal.widthFraction = 0.4;
         // Non-zero origin and non-unit width so x, y and width all have
         // non-default expectations (a dropped insert cannot pass as the
         // absent-key coercion value).
@@ -62,7 +65,8 @@ private Q_SLOTS:
 
         // The exact key sets, so a dropped or renamed insert fails here
         // instead of surviving behind a coercion default.
-        const QStringList columnKeys{QStringLiteral("active"), QStringLiteral("tabbed"), QStringLiteral("tiles")};
+        const QStringList columnKeys{QStringLiteral("active"), QStringLiteral("tabbed"), QStringLiteral("tiles"),
+                                     QStringLiteral("widthFraction")};
         const QStringList tileKeys{QStringLiteral("activeTab"), QStringLiteral("height"), QStringLiteral("width"),
                                    QStringLiteral("x"), QStringLiteral("y")};
 
@@ -70,6 +74,7 @@ private Q_SLOTS:
         QCOMPARE(first.keys(), columnKeys);
         QCOMPARE(first.value(QStringLiteral("tabbed")).toBool(), false);
         QCOMPARE(first.value(QStringLiteral("active")).toBool(), false);
+        QCOMPARE(first.value(QStringLiteral("widthFraction")).toReal(), 0.4);
         const QVariantList firstTiles = first.value(QStringLiteral("tiles")).toList();
         QCOMPARE(firstTiles.size(), 2);
         const QVariantMap tileA = firstTiles.at(0).toMap();

@@ -16,8 +16,10 @@ import org.kde.kirigami as Kirigami
  * Cards are uniform-width on purpose: computeZoneSelectorLayout sizes the
  * bar and the scroll content assuming one cell size per card, and the
  * insert-bar overlays in ZoneSelectorContent.qml position arithmetically
- * off the same uniformity. Column proportion is conveyed by the tile
- * geometry inside the preview, not by the card's footprint.
+ * off the same uniformity. Column proportion is conveyed INSIDE the card:
+ * the preview box is the monitor (aspect-locked mini-screen, like the
+ * layout cards) and `columnArea` scales to the column's widthFraction of
+ * it, so a half-screen column draws as half the preview width.
  *
  * PRODUCER CONTRACT: every tile map carries numeric x/y/width/height and a
  * boolean activeTab (stripcardserialize.cpp inserts all of them
@@ -65,6 +67,10 @@ Item {
     readonly property bool isTabbed: modelData.tabbed === true
     readonly property bool isActiveColumn: modelData.active === true
     readonly property var tiles: modelData.tiles || []
+    // Real on-screen share of the work-area width, (0, 1] from the snapshot.
+    // 0 (column resolved no rect) or a missing key falls back to a full-width
+    // preview rather than collapsing the column to nothing.
+    readonly property real widthFraction: (modelData.widthFraction > 0 && modelData.widthFraction <= 1) ? modelData.widthFraction : 1
 
     width: previewWidth + cardSidePadding * 2
     height: previewHeight + labelSpace + cardPadding
@@ -92,15 +98,30 @@ Item {
         // the caption or a neighbouring card.
         clip: true
 
+        // The column drawn at its real on-screen proportions: the preview
+        // box previewWidth x previewHeight is the monitor (aspect-locked by
+        // computeZoneSelectorLayout, like the layout-mode mini-screens), and
+        // this inner area is the column's true slice of it — full height,
+        // widthFraction of the width, centred. The 8 px floor keeps a very
+        // narrow column visible.
+        Item {
+            id: columnArea
+
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: Math.max(8, Math.round(parent.width * card.widthFraction))
+        }
+
         // Tab strip for a tabbed column: one segment per tab.
         Row {
             id: tabStrip
 
             visible: card.isTabbed
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: visible ? Math.round(parent.height * 0.14) : 0
+            anchors.top: columnArea.top
+            anchors.left: columnArea.left
+            anchors.right: columnArea.right
+            height: visible ? Math.round(preview.height * 0.14) : 0
             spacing: Math.max(1, card.zonePadding)
 
             Repeater {
@@ -126,9 +147,9 @@ Item {
             visible: card.isTabbed
             anchors.top: tabStrip.bottom
             anchors.topMargin: card.isTabbed ? Math.max(1, card.zonePadding) : 0
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
+            anchors.left: columnArea.left
+            anchors.right: columnArea.right
+            anchors.bottom: columnArea.bottom
             radius: 3
             color: card.inactiveColor
             opacity: card.inactiveOpacity
@@ -148,10 +169,10 @@ Item {
                 required property var modelData
 
                 visible: modelData.width > 0 && modelData.height > 0
-                x: modelData.x * preview.width
-                y: modelData.y * preview.height
-                width: Math.max(0, modelData.width * preview.width - card.zonePadding)
-                height: Math.max(0, modelData.height * preview.height - card.zonePadding)
+                x: columnArea.x + modelData.x * columnArea.width
+                y: modelData.y * columnArea.height
+                width: Math.max(0, modelData.width * columnArea.width - card.zonePadding)
+                height: Math.max(0, modelData.height * columnArea.height - card.zonePadding)
                 radius: 3
                 color: card.inactiveColor
                 opacity: card.inactiveOpacity
@@ -167,9 +188,9 @@ Item {
     // footprint matches that semantic rather than stopping at the preview.
     Rectangle {
         visible: card.selectedHalf >= 0
-        x: card.selectedHalf === 2 ? 0 : preview.x
+        x: card.selectedHalf === 2 ? 0 : preview.x + columnArea.x
         y: card.selectedHalf === 2 ? 0 : (card.selectedHalf === 1 ? preview.y + preview.height / 2 : preview.y)
-        width: card.selectedHalf === 2 ? card.width : preview.width
+        width: card.selectedHalf === 2 ? card.width : columnArea.width
         height: card.selectedHalf === 2 ? card.height : preview.height / 2
         radius: card.selectedHalf === 2 ? cardBackground.radius : 3
         color: card.highlightColor

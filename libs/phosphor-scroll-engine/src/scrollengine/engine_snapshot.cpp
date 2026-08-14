@@ -67,6 +67,13 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
 
         const ResolvedColumn* resolvedColumn = resolvedByIndex.value(ci, nullptr);
         const QRect columnRect = resolvedColumn ? resolvedColumn->rect : QRect();
+        // Real on-screen share, for the preview inside the uniform card. A
+        // column wider than the work area (over-wide preset) clamps to 1 —
+        // the preview shows the visible share, matching the committed clip.
+        if (!columnRect.isEmpty() && params.workArea.width() > 0) {
+            outColumn.widthFraction =
+                qBound(0.0, static_cast<qreal>(columnRect.width()) / params.workArea.width(), 1.0);
+        }
 
         for (int ti = 0; ti < modelColumn.tiles.size(); ++ti) {
             const Tile& modelTile = modelColumn.tiles.at(ti);

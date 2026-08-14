@@ -129,13 +129,19 @@ struct ScrollStripSnapshotTile
     bool activeTab = false;
 };
 
-/// One column of a strip snapshot, in strip order. Deliberately carries no
-/// per-column footprint: the shipped popup renders uniform-width cards by
-/// design and conveys column proportion through the tile geometry inside the
-/// preview, so a resolved-width fraction here would be produced-and-unread.
+/// One column of a strip snapshot, in strip order. The card FOOTPRINT stays
+/// uniform-width by design (the popup's bar/scroll math assumes one cell size
+/// per card), but the preview drawn inside each card is scaled to the
+/// column's real share of the screen via @c widthFraction — tile relRects are
+/// column-relative, so without the fraction every column would render as a
+/// full-width mini-screen regardless of its actual width.
 struct ScrollStripSnapshotColumn
 {
     bool tabbed = false;
+    /// Resolved column width as a fraction of the work-area width, clamped
+    /// to (0, 1]. 0 when the column resolves no rect (fully minimized) —
+    /// renderers fall back to a full-width preview for that case.
+    qreal widthFraction = 0.0;
     /// MODEL tile order, minimized tiles included.
     QVector<ScrollStripSnapshotTile> tiles;
 };

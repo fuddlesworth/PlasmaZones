@@ -22,6 +22,7 @@ constexpr QLatin1String Height{"height"};
 constexpr QLatin1String ActiveTab{"activeTab"};
 constexpr QLatin1String Tabbed{"tabbed"};
 constexpr QLatin1String Active{"active"};
+constexpr QLatin1String WidthFraction{"widthFraction"};
 constexpr QLatin1String Tiles{"tiles"};
 } // namespace K
 
@@ -47,6 +48,7 @@ QVariantList stripColumnsToVariantList(const PhosphorScrollEngine::ScrollStripSn
         QVariantMap columnMap;
         columnMap.insert(K::Tabbed, column.tabbed);
         columnMap.insert(K::Active, ci == snapshot.activeColumnIndex);
+        columnMap.insert(K::WidthFraction, column.widthFraction);
         columnMap.insert(K::Tiles, tiles);
         columns.append(columnMap);
     }
