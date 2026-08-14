@@ -327,10 +327,9 @@ void ScreenManager::calculateAvailableGeometry(const PhysicalScreen& screen)
     //
     //  2. plasmashell D-Bus script eval. Tells us *which edge* each Plasma
     //     panel lives on plus a per-edge thickness. The thickness is NOT
-    //     authoritative — Plasma 6 reports `floating=true` for panels that
-    //     nonetheless reserve exclusive space, and the scripting API's
-    //     `panel.geometry` is undefined in recent versions. This source
-    //     contributes directional ratios only.
+    //     authoritative — floating-style panels still reserve exclusive
+    //     space, and the scripting API's `panel.geometry` is undefined in
+    //     recent versions. This source contributes directional ratios only.
     //
     // Reconciliation: the sensor tells us the total reserved in each axis;
     // D-Bus ratios distribute that total across the two edges on that axis.
