@@ -31,7 +31,7 @@ PhosphorUi.SettingsAppWindow {
     // itself and it stays undefined (context properties sit at the bottom
     // of the lookup order). Wire such children from these names instead.
     // Same two names every page already uses for the same capture (see
-    // LayoutsPage / GeneralPage / TilingAlgorithmPage…), so there is one
+    // LayoutBrowserPage / GeneralPage / TilingAlgorithmPage…), so there is one
     // spelling for one idea across the settings tree.
     readonly property var controllerBridge: settingsController
     readonly property var settingsBridge: appSettings
@@ -48,7 +48,7 @@ PhosphorUi.SettingsAppWindow {
     readonly property alias defaultsConfirmDialog: confirmDialogs.defaults
     // Aspect-ratio labels consumed by the layout context menu's submenu, kept
     // at window scope rather than inside the Menu so future consumers
-    // (Per-Screen Override picker, Layouts page) can bind to the same
+    // (Per-Screen Override picker, the library pages) can bind to the same
     // canonical i18n strings without duplicating them.
     //
     // Kept as an object literal for back-compat with any QML reader that
@@ -466,9 +466,10 @@ PhosphorUi.SettingsAppWindow {
     // the chain-walk so future tweaks happen in one place.
     // Re-run on a mode flip: the flat rail has no scopes, but flipping back
     // to the tree rail must restore the drill scope for the active page.
-    // Without this a mode-agnostic page (Rules, Layouts) leaves the rail at
-    // top level while the active page is nested — the counterpart pages only
-    // get there incidentally, via the redirect's activePageChanged.
+    // Without this a page visible in both modes (Rules, the per-mode library
+    // pages) leaves the rail at top level while the active page is nested —
+    // the counterpart pages only get there incidentally, via the redirect's
+    // activePageChanged.
     Connections {
         function onAdvancedModeChanged() {
             // Deferred: `sidebar.flattenTree` is bound to the same property
@@ -485,8 +486,9 @@ PhosphorUi.SettingsAppWindow {
     }
 
     function _drillIntoActivePage() {
-        // Flat simple-mode rail has no drill scopes — every page is a
-        // top-level row, so there is nothing to restore into.
+        // Flat simple-mode rail has no drill scopes, so there is nothing to
+        // restore into (multi-leaf drill parents render as expandable headers
+        // there, not as scopes).
         if (window.sidebar.flattenTree)
             return;
         const chain = settingsController.app.parentChainFor(settingsController.activePage);
@@ -590,6 +592,27 @@ PhosphorUi.SettingsAppWindow {
     Connections {
         function onActivePageChanged() {
             window._drillIntoActivePage();
+        }
+
+        target: settingsController
+    }
+
+    // Fallback reporter for layoutOperationFailed while NO library page is
+    // current. The library instances gate their own handler on visibility —
+    // each consults its own wizard copy for the inline-vs-toast decision, and
+    // that covers every CRUD emitter, which all start from the current page.
+    // But save() also emits this signal when flushing staged assignment
+    // changes fails, and the footer Save runs from any page, so without this
+    // the failure would leave no UI trace. The two predicates partition
+    // exactly on the active page id: a current library page means its visible
+    // instance reports and this handler bows out.
+    Connections {
+        function onLayoutOperationFailed(reason) {
+            // The predicate lives in C++ (isLibraryPage) so a fourth library
+            // page cannot be added there and silently missed here.
+            if (settingsController.isLibraryPage(settingsController.activePage))
+                return;
+            window.showToast(reason);
         }
 
         target: settingsController
@@ -810,10 +833,13 @@ PhosphorUi.SettingsAppWindow {
     //      without having to drill in.
     //   2. Inline SettingsSwitch on the snapping / tiling rows so a
     //      whole feature can be disabled without drilling in.
-    // Simple mode gets a completely flat rail: every visible page as one
-    // top-level row, no category headers or drill-downs. Advanced mode
-    // keeps the full tree. The window-appearance leaf is registered as
-    // Decorations → "General"; standing alone it must read "Appearance".
+    // Simple mode gets a mostly flat rail: category headers dissolve and
+    // every visible page becomes a top-level row, except that a multi-leaf
+    // drill parent (the three placement modes, each showing General + its
+    // library leaf) keeps its own expandable header row with the enable
+    // toggle — see SidebarRows' flat walk. Advanced mode keeps the full
+    // tree. The window-appearance leaf is registered as Decorations →
+    // "General"; standing alone it must read "Appearance".
     //
     // The override titles are backed by a QtObject for the same reason
     // aspectRatioLabelsObject is: the map itself is a `property var` bound to
@@ -939,19 +965,14 @@ PhosphorUi.SettingsAppWindow {
             // "id" to "pageId" (the prior name shadowed the QML id:
             // directive); read `entry.pageId` accordingly.
             readonly property var entry: parent ? parent.modelData : null
-            // Match the drill-parent rows AND their simple-mode counterparts:
-            // simple mode builds the rail through SidebarRows' FLAT walk,
-            // which emits every visible leaf at depth 0, so there the
-            // "Snapping"/"Tiling" rows carry the simple leaf's own pageId.
-            // The inline enable toggles must stay with them.
-            readonly property bool isSnapping: entry && (entry.pageId === "snapping" || entry.pageId === "snapping-simple")
-            readonly property bool isTiling: entry && (entry.pageId === "tiling" || entry.pageId === "tiling-simple")
-            // Scrolling fully mirrors its two siblings now: a SimpleOnly
-            // condensed leaf (scrolling-simple) in simple mode, and in
-            // advanced mode a real drill parent ("scrolling") over the
-            // View/Columns/Window leaves — the parent row carries the
-            // inline enable toggle, exactly like the snapping/tiling arms.
-            readonly property bool isScrolling: entry && (entry.pageId === "scrolling" || entry.pageId === "scrolling-simple")
+            // Match the three placement-mode parent rows. Both rails render
+            // them as rows of their own now — the advanced tree as drill
+            // parents, the simple flat rail as expandable multi-leaf headers
+            // (see SidebarRows' flat walk) — so the inline enable toggle
+            // keys off exactly these three ids in both modes.
+            readonly property bool isSnapping: entry && entry.pageId === "snapping"
+            readonly property bool isTiling: entry && entry.pageId === "tiling"
+            readonly property bool isScrolling: entry && entry.pageId === "scrolling"
             // The id whose dirty state this row REPRESENTS, which is not
             // always the id it renders. Simple mode condenses a whole subtree
             // down to one visible row, and that row's own dirty state covers
@@ -1040,7 +1061,11 @@ PhosphorUi.SettingsAppWindow {
 
                 visible: trailingRow.isSnapping || trailingRow.isTiling || trailingRow.isScrolling
                 checked: trailingRow.isSnapping ? appSettings.snappingEnabled : (trailingRow.isTiling ? appSettings.autotileEnabled : (trailingRow.isScrolling ? appSettings.scrollingEnabled : false))
-                accessibleName: trailingRow.entry ? trailingRow.entry.title : ""
+                // "Enable Snapping", not the bare feature name: the row itself
+                // already announces the title (SidebarRow's Accessible.name),
+                // so the switch has to name the ACTION or the two controls are
+                // indistinguishable to a screen reader.
+                accessibleName: trailingRow.entry ? i18n("Enable %1", trailingRow.entry.title) : ""
                 onToggled: function (newValue) {
                     // Disabling from the sidebar is a destructive shortcut
                     // when the page underneath has unsaved edits — those

@@ -262,7 +262,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     //
     // NOTE: we deliberately do NOT call `setDefaultAutotileAlgorithm(newId)`
     // here. The global default algorithm is a user-owned setting modified
-    // ONLY through the Layouts page (or its sub-pages / context menus).
+    // ONLY through the settings app's library pages and their context menus.
     // Per-screen / per-context applies that route through this method —
     // e.g. UnifiedLayoutController applying an autotile entry on the
     // current screen, or AutotileAdaptor::setAlgorithm from a script —

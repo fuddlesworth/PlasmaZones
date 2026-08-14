@@ -344,7 +344,13 @@ qt_add_qml_module(plasmazones-settings
         # also hosts the unified inner/outer gap controls.
         qml/pages/decoration/WindowAppearancePage.qml
         qml/EditorPage.qml
-        qml/pages/layouts/LayoutsPage.qml
+        # Per-mode library pages — thin hosts fixing the shared
+        # LayoutBrowserPage to one view (snapping layouts / tiling
+        # algorithms / scrolling templates).
+        qml/pages/layouts/LayoutBrowserPage.qml
+        qml/pages/snapping/SnappingLayoutsPage.qml
+        qml/pages/tiling/TilingLibraryPage.qml
+        qml/pages/scrolling/ScrollingTemplatesPage.qml
         qml/pages/snapping/SnappingQuickShortcutsPage.qml
         qml/OrderingPage.qml
         qml/pages/snapping/SnappingOrderingPage.qml
@@ -410,7 +416,6 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/screens/MonitorScopeChip.qml
         qml/pages/layouts/LayoutGridDelegate.qml
         qml/pages/layouts/LayoutManageCard.qml
-        qml/components/SegmentedViewSwitch.qml
         qml/pages/layouts/LayoutFilterBar.qml
         qml/js/LayoutFilterLogic.js
         # Shared group/sort infrastructure (Layouts + Rules pages)

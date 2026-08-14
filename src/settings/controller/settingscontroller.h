@@ -313,6 +313,19 @@ public:
     /// but excluded from per-page Reset (a page Reset must not flip its mode).
     static const Settings::ConfigKeyList& resetExemptModeEnableKeys();
 
+    /// Whether @p page is one of the three per-mode library pages. QML bridge
+    /// over the shared PlasmaZones::isLibraryPage predicate
+    /// (settingscontroller_pagekeys.h) so the id triple has one home — the
+    /// window-scoped layoutOperationFailed fallback in Main.qml keys off it.
+    Q_INVOKABLE bool isLibraryPage(const QString& page) const;
+
+    /// The default snapping layout and default scrolling template:
+    /// manifest-owned for dirty/save/discard but excluded from per-page Reset.
+    /// They are SET from the library pages' card context menus, so the owner
+    /// page carries no editor row for them and "reset this page" must not
+    /// silently clear a selection the page never shows.
+    static const Settings::ConfigKeyList& resetExemptDefaultSelectionKeys();
+
     /// Override the page that the next setNeedsSave(true) calls (and any
     /// property NOTIFY routed through onSettingsPropertyChanged) will mark
     /// dirty, instead of the currently active page. Use for changes made

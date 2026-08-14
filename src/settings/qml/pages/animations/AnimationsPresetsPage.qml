@@ -87,11 +87,19 @@ SettingsFlickable {
             root.appSettings.animationDuration = ms;
     }
 
-    contentHeight: content.implicitHeight
+    // `naturalContentHeight`, not `contentHeight`: reassigning userPresetsList
+    // below swaps the JS-array models of both user-preset Repeaters, which
+    // tears every delegate down for a few frames. See the model-swap scroll
+    // guard in SettingsFlickable.
+    naturalContentHeight: content.implicitHeight
     clip: true
 
     Connections {
         function onUserPresetsChanged() {
+            // Hold the current height across the delegate teardown the model
+            // swap causes, or the page snaps to the top whenever a preset is
+            // saved or deleted while scrolled down.
+            root.holdContentHeight();
             root.userPresetsList = settingsController.animationsPage.userPresets();
             root._deletingPresetName = "";
         }
@@ -100,7 +108,7 @@ SettingsFlickable {
     }
 
     /// ONE page-level dialog for both preset lists, opened with the target
-    /// name captured on `presetName` (the convention LayoutsPage /
+    /// name captured on `presetName` (the convention LayoutBrowserPage /
     /// ShaderSetsPage / ProfilesPage use). The previous shape — a
     /// PromptDialog INSIDE each Repeater delegate — meant any external write
     /// to the profiles dir rebuilt the model and destroyed a delegate with
@@ -216,7 +224,12 @@ SettingsFlickable {
 
                         Label {
                             Layout.fillWidth: true
-                            text: "★ " + modelData.name
+                            // Through i18nc so the marker can be repositioned
+                            // for RTL; the star is what visually distinguishes
+                            // a user preset from the built-in rows above, so
+                            // Accessible.name spells the distinction out.
+                            text: i18nc("marks a user-created preset", "★ %1", modelData.name)
+                            Accessible.name: i18n("User preset %1", modelData.name)
                             color: Kirigami.Theme.textColor
                         }
 
@@ -346,7 +359,9 @@ SettingsFlickable {
 
                         Label {
                             Layout.fillWidth: true
-                            text: "★ " + modelData.name
+                            // Same marker treatment as the easing list above.
+                            text: i18nc("marks a user-created preset", "★ %1", modelData.name)
+                            Accessible.name: i18n("User preset %1", modelData.name)
                             color: Kirigami.Theme.textColor
                         }
 

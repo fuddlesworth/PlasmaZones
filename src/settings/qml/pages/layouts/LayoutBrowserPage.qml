@@ -11,10 +11,12 @@ import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
 /**
- * @brief Layouts / tiling-algorithms listing page.
+ * @brief Shared layout/algorithm/template library browser.
  *
- * Uses the standardized card-container pattern (see ShaderBrowserPage /
- * RulesPage): a SettingsFlickable root whose content is the view switch,
+ * The body of the per-mode library pages: Snapping → Layouts, Tiling →
+ * Library, and Scrolling → Templates each instantiate this with their
+ * fixed `viewMode`. Uses the standardized card-container pattern (see
+ * ShaderBrowserPage / RulesPage): a SettingsFlickable root whose content is
  * the import card, the search row, the filter/group/sort bar, and one
  * collapsible SettingsCard per group, each hosting a responsive Flow of
  * LayoutGridDelegate cards. Rooting on
@@ -38,19 +40,9 @@ SettingsFlickable {
     readonly property real cardHeight: Kirigami.Units.gridUnit * 12
     readonly property real minCardWidth: Kirigami.Units.gridUnit * 14
     // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms,
-    // 2 = Scrolling Templates
-    property int viewMode: 0
-    // The view modes the switch offers, gated per family's master switch.
-    // Maps switch index → viewMode so hiding a middle tab cannot misroute
-    // the ones after it.
-    readonly property var availableViewModes: {
-        let modes = [0];
-        if (settingsBridge.autotileEnabled)
-            modes.push(1);
-        if (settingsBridge.scrollingEnabled)
-            modes.push(2);
-        return modes;
-    }
+    // 2 = Scrolling Templates. Fixed for the page instance's lifetime —
+    // each hosting page passes its own constant.
+    required property int viewMode
     // Selected layout id (tracked across group cards).
     property string selectedLayoutId: ""
     // Grouped, filtered, sorted layouts — `[{ label, items: [...] }]` from
@@ -296,38 +288,52 @@ SettingsFlickable {
         selectDefaultLayout(root.viewMode);
     }
 
-    // Reset to Snapping Layouts when the shown family's master switch
-    // turns off.
-    Connections {
-        function onAutotileEnabledChanged() {
-            if (!root.settingsBridge.autotileEnabled && root.viewMode === 1) {
-                root.viewMode = 0;
-                root.selectedLayoutId = "";
-                root.rebuildModel();
-                root.selectDefaultLayout(0);
+    // Whether this instance's current group model contains the card for
+    // `layoutId`. The three per-mode library pages stay alive together once
+    // visited (PageHost keeps built pages cached), so every cross-page signal
+    // handler below must decide whether THIS instance owns the item — the id
+    // alone cannot say for the UUID-shaped families (snapping layouts and
+    // templates share the namespace), but the rebuilt model can.
+    // The viewMode an item's family belongs to, derived from the same flags
+    // rebuildModel and the context menu branch on.
+    function _familyViewMode(isAutotile, isTemplate) {
+        return isAutotile ? 1 : (isTemplate ? 2 : 0);
+    }
+
+    function _ownsLayoutId(layoutId) {
+        const sections = root.groupsModel || [];
+        for (let i = 0; i < sections.length; ++i) {
+            const items = sections[i].items || [];
+            for (let j = 0; j < items.length; ++j) {
+                if (String(items[j].id) === String(layoutId))
+                    return true;
             }
         }
-
-        function onScrollingEnabledChanged() {
-            if (!root.settingsBridge.scrollingEnabled && root.viewMode === 2) {
-                root.viewMode = 0;
-                root.selectedLayoutId = "";
-                root.rebuildModel();
-                root.selectDefaultLayout(0);
-            }
-        }
-
-        target: root.settingsBridge
+        return false;
     }
 
     Connections {
         function onLayoutsChanged() {
+            // Deliberately ungated: hidden sibling instances rebuild too.
+            // Nothing re-runs this when a cached page becomes current again,
+            // so gating on visibility would show a stale list on revisit.
             root.rebuildModel();
         }
 
         function onLayoutAdded(layoutId) {
             Qt.callLater(() => {
-                root.selectLayoutById(layoutId);
+                // Only the instance whose view actually shows the new card may
+                // take the selection — the other library pages hear the same
+                // signal, and stealing their selection would point it at an id
+                // no card there carries. When the list actually changed,
+                // layoutsChanged has already rebuilt the model before this
+                // deferred call runs; an identical-payload reload skips the
+                // rebuild, but then the row was already present. A card the
+                // current filter or search hides is skipped on purpose: a
+                // selection no visible card carries is the state this guard
+                // exists to avoid.
+                if (root._ownsLayoutId(layoutId))
+                    root.selectLayoutById(layoutId);
             });
         }
 
@@ -342,23 +348,6 @@ SettingsFlickable {
         // — matches the ShaderBrowserPage / RulesPage content rhythm so the
         // filter-row → first-section gap lines up with the other listing pages.
         spacing: Kirigami.Units.largeSpacing
-
-        // ─── View switch (Snapping / Tiling) — only when autotiling is on ──
-        // Centered monitor-switcher-style tiles (shared SegmentedViewSwitch).
-        SegmentedViewSwitch {
-            Layout.fillWidth: true
-            visible: root.availableViewModes.length > 1
-            modes: root.availableViewModes.map(vm => vm === 0 ? i18n("Snapping") : (vm === 1 ? i18n("Tiling") : i18n("Scrolling Templates")))
-            currentIndex: Math.max(0, root.availableViewModes.indexOf(root.viewMode))
-            onIndexChanged: index => {
-                const mode = root.availableViewModes[index];
-                root.viewMode = mode;
-                root.selectedLayoutId = "";
-                // rebuildModel() runs via filterBar.onViewModeChanged →
-                // loadState → filterSettingsChanged for every mode.
-                root.selectDefaultLayout(mode);
-            }
-        }
 
         // ─── Import / Open Folder card (shader-style, drop-zone) ───
         LayoutManageCard {
@@ -465,10 +454,9 @@ SettingsFlickable {
                 // the daemon not running.
                 if (root.viewMode === 2)
                     return i18n("Create a new template or import one");
-                // The tiling view is only reachable while autotiling is on (the
-                // switch is gated on it, and turning it off forces viewMode back
-                // to 0), so an empty list here means the same thing it means for
-                // snapping: nothing has been loaded yet.
+                // An empty tiling list means the same thing it means for
+                // snapping: nothing has been loaded yet (the bundled algorithms
+                // arrive with the daemon's layout list).
                 return root.viewMode === 1 ? i18n("Start the PlasmaZones daemon or add a tiling algorithm") : i18n("Start the PlasmaZones daemon or create a new layout");
             }
 
@@ -536,7 +524,7 @@ SettingsFlickable {
                                 cellHeight: cardFlow._cardWidth * (root.cardHeight / root.minCardWidth)
                                 viewMode: root.viewMode
                                 isSelected: String(modelData.id) === root.selectedLayoutId
-                                // When LayoutsPage is hosted outside Main.qml
+                                // When LayoutBrowserPage is hosted outside Main.qml
                                 // (KCM / future preview) `window.layoutContextMenu`
                                 // is undefined; suppress the right-button mask so a
                                 // missing menu doesn't pretend to exist.
@@ -653,6 +641,12 @@ SettingsFlickable {
     // parameter name for grep-friendliness even though it is unused here.
     Connections {
         function onKzonesImportFinished(count, message) {
+            // KZones import is snapping-only, and every live library instance
+            // hears this signal. Toast.show() visually coalesces repeats, but
+            // each call re-announces to the screen reader, so only the
+            // snapping instance may report.
+            if (root.viewMode !== 0)
+                return;
             if (typeof window !== "undefined" && window && window.showToast)
                 window.showToast(message);
         }
@@ -660,14 +654,23 @@ SettingsFlickable {
         target: settingsController
     }
 
-    // Connect context menu signals from Main.qml to local dialogs.
+    // Connect context menu signals from Main.qml to local dialogs. The menu is
+    // window-scoped and every live library instance hears its signals, so each
+    // handler first checks the item's family against this instance's viewMode
+    // (the same 0/1/2 split rebuildModel applies) — without the gate one menu
+    // action opened the same dialog once per live instance, stacking three
+    // FileDialogs or three modal editors the user had to dismiss one by one.
     Connections {
         function onDeleteRequested(layout) {
+            if (root.viewMode !== root._familyViewMode(layout && layout.isAutotile === true, layout && layout.isScrollingTemplate === true))
+                return;
             deleteConfirmDialog.layoutToDelete = layout;
             deleteConfirmDialog.open();
         }
 
         function onExportRequested(layoutId, isTemplateExport) {
+            if (root.viewMode !== root._familyViewMode(layoutId.startsWith("autotile:"), isTemplateExport))
+                return;
             if (layoutId.startsWith("autotile:")) {
                 algorithmExportDialog.algorithmId = settingsController.algorithmIdFromLayoutId(layoutId);
                 algorithmExportDialog.open();
@@ -683,10 +686,12 @@ SettingsFlickable {
         }
 
         function onEditTemplateRequested(templateId) {
+            if (root.viewMode !== 2)
+                return;
             templateEditorDialog.openForEdit(templateId);
         }
 
-        // When LayoutsPage is hosted outside Main.qml (KCM / preview host),
+        // When LayoutBrowserPage is hosted outside Main.qml (KCM / preview host),
         // `window.layoutContextMenu` is undefined; an unguarded target would
         // emit a runtime warning on every signal fire. Disable entirely then.
         enabled: typeof window !== "undefined" && window && window.layoutContextMenu
@@ -717,15 +722,23 @@ SettingsFlickable {
     // Algorithm created/failed signals from C++ (fires after AlgorithmRegistry picks up the new file)
     Connections {
         function onAlgorithmCreated(algorithmId) {
-            // Always rebuild so the new algorithm is available; only switch view
-            // and auto-select if the user is already looking at the tiling view
-            // (avoids jarring view switch when duplicating from a different context)
+            // Always rebuild so every live instance stays current; only the
+            // tiling instance auto-selects — the guard used to distinguish the
+            // old tabbed page's views and now distinguishes sibling instances,
+            // which each carry their own selection.
             root.rebuildModel();
             if (root.viewMode === 1)
                 root.selectedLayoutId = "autotile:" + algorithmId;
         }
 
         function onAlgorithmOperationFailed(reason) {
+            // Only the tiling instance reports: every live library instance
+            // hears this signal, and the "dialog is closed → toast" guard below
+            // reads each instance's OWN wizard copy, so a sibling instance
+            // would toast while the owning instance shows the error inline —
+            // the double report the guard exists to prevent.
+            if (root.viewMode !== 1)
+                return;
             // Only show toast when the wizard dialog is closed — if the dialog
             // is open, it shows the error inline via its own Connections block.
             // The routing decision is deferred: create can emit this
@@ -742,6 +755,23 @@ SettingsFlickable {
         }
 
         function onLayoutOperationFailed(reason) {
+            // Gated on VISIBILITY, not on a fixed viewMode: unlike
+            // algorithmOperationFailed this signal is emitted for all three
+            // families (template import/export/save/delete/duplicate, plus
+            // hide/auto-assign/aspect on layout and algorithm cards), so a
+            // family gate would route a template failure to an instance that
+            // may not even be built yet. Every emitting operation starts from
+            // the page the user is on, so the current instance is the one
+            // whose wizard the inline-vs-toast guard below should consult —
+            // which is exactly the pre-split semantics. `visible` reads
+            // EFFECTIVE visibility, so a cached hidden page (PageHost keeps
+            // its Loader visible: isCurrent) bows out here. Failures emitted
+            // while NO library page is current (save()'s assignment-apply
+            // failure fires from any page) are reported by Main.qml's
+            // window-scoped fallback handler, whose gate is the exact
+            // complement of this one.
+            if (!root.visible)
+                return;
             // Deferred for the same emit-before-close ordering as
             // onAlgorithmOperationFailed above.
             Qt.callLater(function () {

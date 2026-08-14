@@ -29,8 +29,8 @@ import org.plasmazones.settings
  * drag. Browsing is served by narrowing instead: the search field, the section
  * filter button, and the read-only monitor overview strip (clicking a tile
  * filters the list). Category stays legible via a per-row section badge. (The
- * reusable GroupSortBar / GroupSortLogic / SegmentedViewSwitch components live on
- * for the Layouts page and any future use.)
+ * reusable GroupSortBar / GroupSortLogic components live on for the library
+ * pages and any future use.)
  */
 SettingsFlickable {
     id: page
@@ -518,8 +518,8 @@ SettingsFlickable {
                 onTextChanged: page.searchText = text
             }
 
-            // Multi-select filter, modeled on the Layouts page filter button —
-            // same group ORDER as the Layouts menu: source first (built-in before
+            // Multi-select filter, modeled on the library pages' filter button —
+            // same group ORDER as their menus: source first (built-in before
             // user), then the categories, then the status/type pair. Three groups:
             // source (system vs user-created), category sections, status (active
             // vs disabled). Section labels/order come from the controller (C++).

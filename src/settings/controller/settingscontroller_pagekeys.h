@@ -109,6 +109,17 @@ constexpr int QuickSlotModeScrolling = static_cast<int>(PhosphorZones::Assignmen
 /// cannot disagree about how many slots exist either.
 constexpr int QUICK_LAYOUT_SLOT_COUNT = PhosphorProtocol::Service::QuickLayoutSlotCount;
 
+/// The three per-mode library pages (snapping-layouts / tiling-library /
+/// scrolling-templates). They browse and manage separate stores that write
+/// immediately, so they carry no staged config state of their own and are
+/// never dirty; the one config write their context menu performs (set the
+/// family's default) is attributed to the page that owns the key through an
+/// external-edit envelope. Consumers: isPageDirty's never-dirty early return,
+/// dirtyScopeFor's hoist count (settingscontroller_pagetopology.cpp), and —
+/// through the SettingsController::isLibraryPage Q_INVOKABLE bridge — the
+/// window-scoped layoutOperationFailed fallback in Main.qml.
+bool isLibraryPage(const QString& page);
+
 /// Every animation leaf shares one staging domain and one ShaderProfileTree
 /// key, but Reset/Discard/dirty are scoped per leaf — see animationPageScope.
 bool isAnimationPage(const QString& page);

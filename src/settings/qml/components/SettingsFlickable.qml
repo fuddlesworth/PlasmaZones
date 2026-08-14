@@ -58,7 +58,7 @@ import "../js/SearchAnchorHelpers.js" as SearchAnchors
  *     throw the scroll position away (see the model-swap scroll guard).
  *   - Avoiding nested Flickable / ListView / TextArea scroll surfaces
  *     unless they are intentionally height-clamped to their content
- *     (the `LayoutsPage.qml` pattern). Nested independent scrollers
+ *     (the `LayoutBrowserPage.qml` pattern). Nested independent scrollers
  *     compete with this handler for wheel events and wheel-over-the-
  *     inner produces double-scroll.
  *
@@ -87,10 +87,10 @@ Flickable {
     topMargin: Kirigami.Units.smallSpacing
 
     // ── Model-swap scroll guard ──────────────────────────────────────────
-    // A listing page that swaps its group model (LayoutsPage.rebuildModel and
+    // A listing page that swaps its group model (LayoutBrowserPage.rebuildModel and
     // friends) destroys every card delegate and rebuilds them over the
     // following frames. For that window the page's natural height collapses to
-    // the chrome alone — measured on the Layouts page: 4091 → 671 with a 694 px
+    // the chrome alone — measured on the layout browser: 4091 → 671 with a 694 px
     // viewport — so Flickable sees nothing scrollable, clamps `contentY` to the
     // top, and the cards then re-materialise around a scroll offset that is
     // gone for good. Any edit made while scrolled down (toggling a layout's
