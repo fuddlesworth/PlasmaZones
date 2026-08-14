@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.3.7] - 2026-08-14
+
+### Fixed
+
+- **The panel query no longer crashes the Plasma desktop while a monitor reconnects**: PlasmaZones asks plasmashell where its panels sit so zones can avoid them. When that query arrived while an output was being torn down and rebuilt, which happens when a monitor wakes from sleep or renegotiates its DisplayPort link, plasmashell read panel settings through a screen that no longer existed and crashed, taking the whole desktop with it. The query now skips panels whose screen is gone and no longer reads the two panel properties that triggered the crash ([#916](https://github.com/fuddlesworth/PlasmaZones/issues/916), [#917](https://github.com/fuddlesworth/PlasmaZones/pull/917)).
+
 ## [3.3.5] - 2026-08-04
 
 ### Fixed
