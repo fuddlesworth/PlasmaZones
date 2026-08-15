@@ -199,29 +199,29 @@ inline QRect defaultScreenRect()
 
 /// Whether the ENGINE can currently lay out this feature on the running axis.
 ///
-/// Hardcoded for now: no engine path resolves a non-horizontal axis yet, so
-/// the vertical arm skips every transposed slot while still proving the
-/// fixture itself transposes. Each rewrite phase flips its own feature here,
-/// and that suite's vertical rows go live WITHOUT the test file being touched
-/// in the same commit — a test edited in the commit that makes it pass proves
-/// nothing.
+/// Every feature is transposed as of the strip-axis foundation work: the
+/// layout path resolves through StripAxis, the navigation verbs remap their
+/// direction tokens, the drag-insert bands mirror, and the snapshot / wire /
+/// persistence paths carry the axis. Kept as a function rather than deleted
+/// because a future feature landing horizontal-first has somewhere to declare
+/// itself, and because AX_REQUIRE reads better at a call site than a bare
+/// `if (vertical())`.
 inline bool supported(Feature)
 {
-    return !vertical();
+    return true;
 }
 
-/// Whether the engine can lay out ANYTHING on the running axis. While this is
-/// false the vertical arm exists to prove its own fixture transposes, and
-/// nothing else — every suite skips wholesale from initTestCase.
+/// Whether the engine can lay out ANYTHING on the running axis.
 ///
-/// This blanket gate is a SCAFFOLDING state, not the destination. It costs the
-/// per-phase granularity the Feature enum exists for: once the first rewrite
-/// phase lands, a suite whose layout half works but whose drag-insert half
-/// does not can no longer show the working half green. Replace this call with
-/// per-slot AX_REQUIRE in a suite as soon as any of its features is supported.
+/// True on both axes now, so AX_GUARD_SUITE has stopped being a gate and is
+/// purely the vacuity guard its doc comment describes: it still asserts the
+/// fixture transposed and still prints the axis line ctest's
+/// FAIL_REGULAR_EXPRESSION reads. Keeping the call in every suite's first slot
+/// is what stops a CMake edit that drops the ENVIRONMENT property from leaving
+/// the vertical arm silently re-running the horizontal one.
 inline bool supportedAtAll()
 {
-    return !vertical();
+    return true;
 }
 
 } // namespace Ax

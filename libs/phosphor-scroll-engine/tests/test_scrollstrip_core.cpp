@@ -11,6 +11,8 @@ using namespace PhosphorScrollEngine;
 
 namespace {
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::defaultParams;
 using ScrollTestUtils::kHalf;
 using ScrollTestUtils::rectOf;
@@ -149,7 +151,7 @@ void TestScrollStripCore::openInsertsColumnAndResizesNothing()
     QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
     QCOMPARE(strip.columnCount(), 1);
     const QRect aBefore = rectOf(strip.relayout(params), QStringLiteral("a"));
-    QCOMPARE(aBefore, QRect(0, 0, 400, 800));
+    QCOMPARE(aBefore, Ax::t(QRect(0, 0, 400, 800)));
 
     QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
     QCOMPARE(strip.columnCount(), 2);
@@ -159,8 +161,8 @@ void TestScrollStripCore::openInsertsColumnAndResizesNothing()
     const ResolvedStrip after = strip.relayout(params);
     // The §0 invariant: a's geometry is untouched — same size, same position.
     QCOMPARE(rectOf(after, QStringLiteral("a")), aBefore);
-    QCOMPARE(rectOf(after, QStringLiteral("b")).x(), 410);
-    QCOMPARE(rectOf(after, QStringLiteral("b")).width(), ScrollStrip::resolveColumnWidthPx(kHalf, params));
+    QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("b"))), 410);
+    QCOMPARE(Ax::mainLen(rectOf(after, QStringLiteral("b"))), ScrollStrip::resolveColumnWidthPx(kHalf, params));
 }
 
 void TestScrollStripCore::openScrollsOnlyWhenNeeded()
@@ -174,18 +176,19 @@ void TestScrollStripCore::openScrollsOnlyWhenNeeded()
     // a and b both fit: no scroll happened.
     ResolvedStrip r = strip.relayout(params);
     QCOMPARE(r.viewOffset, 0);
-    QCOMPARE(rectOf(r, QStringLiteral("a")).x(), 0);
-    QCOMPARE(rectOf(r, QStringLiteral("b")).x(), halfPx + params.gap);
+    QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("a"))), 0);
+    QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("b"))), halfPx + params.gap);
 
     // c does not fit — the view scrolls the minimum amount to show it, and
     // NOBODY changes size.
     QVERIFY(strip.insertWindow(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
     r = strip.relayout(params);
     QVERIFY(r.viewOffset > 0);
-    QCOMPARE(rectOf(r, QStringLiteral("c")).width(), halfPx);
-    QCOMPARE(rectOf(r, QStringLiteral("a")).width(), halfPx);
-    // c's right edge is pinned to the viewport's right edge (minimal scroll).
-    QCOMPARE(rectOf(r, QStringLiteral("c")).right() + 1, params.workArea.width());
+    QCOMPARE(Ax::mainLen(rectOf(r, QStringLiteral("c"))), halfPx);
+    QCOMPARE(Ax::mainLen(rectOf(r, QStringLiteral("a"))), halfPx);
+    // c's trailing edge is pinned to the viewport's trailing edge (minimal
+    // scroll).
+    QCOMPARE(Ax::mainEnd(rectOf(r, QStringLiteral("c"))) + 1, Ax::mainLen(params.workArea));
 }
 
 void TestScrollStripCore::closeKeepsNeighboursAnchored()
@@ -289,7 +292,7 @@ void TestScrollStripCore::focusOnOverflowMode()
     QVERIFY(strip.focusColumn(1, params));
     ResolvedStrip r = strip.relayout(params);
     QCOMPARE(r.viewOffset, 0);
-    QCOMPARE(rectOf(r, QStringLiteral("b")).x(), 310);
+    QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("b"))), 310);
 
     // Opening a second wide column centers it: the INSERT's reanchor sees
     // prevIdx = the old column and takes the same OnOverflow branch a
@@ -299,7 +302,7 @@ void TestScrollStripCore::focusOnOverflowMode()
     QVERIFY(wide.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(700), ColumnDisplay::Normal, params));
     r = wide.relayout(params);
     const QRect b = rectOf(r, QStringLiteral("b"));
-    QCOMPARE(b.x(), (params.workArea.width() - 700) / 2);
+    QCOMPARE(Ax::mainPos(b), (Ax::mainLen(params.workArea) - 700) / 2);
 }
 
 void TestScrollStripCore::alwaysCenterSingleColumn()
@@ -309,7 +312,7 @@ void TestScrollStripCore::alwaysCenterSingleColumn()
     params.alwaysCenterSingleColumn = true;
     QVERIFY(strip.insertWindow(QStringLiteral("a"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
     const QRect a = rectOf(strip.relayout(params), QStringLiteral("a"));
-    QCOMPARE(a.x(), (params.workArea.width() - 400) / 2);
+    QCOMPARE(Ax::mainPos(a), (Ax::mainLen(params.workArea) - 400) / 2);
 
     // A second column ends the lone-column special case.
     QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
@@ -340,10 +343,11 @@ void TestScrollStripCore::minimizeKeepsSlotAndRestores()
         QCOMPARE(col.tiles.at(col.activeTileIdx).windowId, QStringLiteral("b"));
     }
     QVERIFY(!rectOf(strip.relayout(params), QStringLiteral("b")).isNull());
-    // Restored in the middle slot: b sits between a and c vertically.
+    // Restored in the middle slot: b sits between a and c along the CROSS
+    // axis, which is the direction the within-column stack divides.
     const ResolvedStrip r = strip.relayout(params);
-    QVERIFY(rectOf(r, QStringLiteral("a")).y() < rectOf(r, QStringLiteral("b")).y());
-    QVERIFY(rectOf(r, QStringLiteral("b")).y() < rectOf(r, QStringLiteral("c")).y());
+    QVERIFY(Ax::crossPos(rectOf(r, QStringLiteral("a"))) < Ax::crossPos(rectOf(r, QStringLiteral("b"))));
+    QVERIFY(Ax::crossPos(rectOf(r, QStringLiteral("b"))) < Ax::crossPos(rectOf(r, QStringLiteral("c"))));
 }
 
 void TestScrollStripCore::fullyMinimizedColumnCollapses()
@@ -359,7 +363,8 @@ void TestScrollStripCore::fullyMinimizedColumnCollapses()
     const ResolvedStrip r = strip.relayout(params);
     QCOMPARE(r.stripExtent, stripBefore - 300 - params.gap);
     // b's column contributes nothing; c closed up next to a.
-    QCOMPARE(rectOf(r, QStringLiteral("c")).x(), rectOf(r, QStringLiteral("a")).x() + 300 + params.gap);
+    QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("c"))),
+             Ax::mainPos(rectOf(r, QStringLiteral("a"))) + 300 + params.gap);
 }
 
 void TestScrollStripCore::externalFocusFollowsWindow()
