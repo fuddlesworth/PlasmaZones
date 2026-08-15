@@ -404,11 +404,18 @@ private Q_SLOTS:
         delete snap;
     }
 
-    // A rule carrying BOTH SnapToZone and RouteToScreen must NOT be moved by
-    // applyOpenScreenRouting: the snap placement directive routes AND snaps it on the
-    // target screen, so a free move here would double-place the window. The Placement
-    // slot guard suppresses it even with everything else set up to move.
-    void testApplyOpenScreenRouting_snapToZonePresent_doesNotDoubleMove()
+    // A rule carrying BOTH SnapToZone and RouteToScreen IS moved by
+    // applyOpenScreenRouting. That inverts what this test used to assert, and the
+    // old assertion was wrong: the function's only caller reaches it exclusively
+    // under `if (!result.shouldSnap)`, so by construction the snap already
+    // declined and nothing has been placed. calculateSnapToPlacementRule declines
+    // for a routed target that is not in snapping mode (typically an autotile
+    // monitor), and the autotile routing hook does not pick those up either
+    // because the effect only reports windowOpened for windows already on an
+    // autotile screen. The window therefore neither snapped nor moved, while the
+    // same rule without its SnapToZone action moved fine. Nothing here can
+    // double-place, because reaching this function means nothing was placed.
+    void testApplyOpenScreenRouting_snapToZonePresent_stillHonoursRoute()
     {
         PhosphorScreens::FakeScreenProvider fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
@@ -454,8 +461,10 @@ private Q_SLOTS:
 
         wta->applyOpenScreenRouting(w, QStringLiteral("DP-1"));
 
-        QVERIFY2(outputSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
-        QVERIFY2(geomSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
+        QVERIFY2(outputSpy.count() == 1,
+                 "a route+snap rule whose snap declined must still be routed to the target monitor");
+        QCOMPARE(outputSpy.first().at(1).toString(), QStringLiteral("DP-2"));
+        QVERIFY2(!geomSpy.isEmpty(), "the route must carry the translated geometry onto the target monitor");
 
         wta->setRuleStore(nullptr);
         wta->setWindowRegistry(nullptr);

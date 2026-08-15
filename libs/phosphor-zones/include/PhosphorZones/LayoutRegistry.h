@@ -617,6 +617,20 @@ public:
     /// @c layoutAssigned per affected screen; one save at end.
     void clearAutotileAssignments();
 
+    /// Inverse of @ref clearAutotileAssignments: flip mode back to @c Autotile
+    /// for every context-assignment entry sitting in @c Snapping while still
+    /// carrying a @c tilingAlgorithm, which is the state a global disable leaves
+    /// behind. Preserves @c snappingLayout, emits @c layoutAssigned per affected
+    /// screen, one save at end.
+    ///
+    /// Needed because the disable is global across every desktop and activity
+    /// while the daemon's re-enable only writes the current desktop per screen,
+    /// so without this an off/on round trip stranded every other context in
+    /// Snapping permanently.
+    ///
+    /// @return how many entries were flipped back.
+    int restoreAutotileAssignments();
+
     /// Batch setters - clear existing, set new, save once at end.
     void setAllScreenAssignments(const QHash<QString, QString>& assignments);
     void setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments);

@@ -125,6 +125,29 @@ void Daemon::updateAutotileScreens()
     const QSet<QString> currentAutotileScreens = m_autotileEngine->activeScreens();
     const QSet<QString> removedScreens = currentAutotileScreens - autotileScreens;
     for (const QString& screenId : removedScreens) {
+        // Capture ONLY when the engine is about to destroy a state for this
+        // screen's current key. stateForScreen is non-creating and keyed on the
+        // engine's own currentKeyForScreen — the very key its teardown predicate
+        // matches on (removeStatesIf, autotileengine/context.cpp) — so a null
+        // here means nothing is being torn down and there is nothing to save.
+        //
+        // This is what keeps the read context and the write key in agreement,
+        // which the unconditional store below depends on. Without it the
+        // per-output desktop-switch path corrupted saved orders: that path sets
+        // the engine's desktop for the screen BEFORE calling us, so
+        // capturedWindowOrder resolved through the NEW desktop's key (usually
+        // empty) and the store filed it under the new desktop, wiping whatever
+        // that desktop had saved from an earlier toggle. The capture was never
+        // needed there in the first place — a desktop switch is a pure context
+        // swap that PRESERVES the departed desktop's TilingState (the engine's
+        // setCurrentDesktopForScreen says so, and its prune only removes states
+        // whose desktop is the current one), so the departed order is still live
+        // in the engine and reappears when the screen returns to that desktop.
+        // A genuine toggle-off does destroy the current key's state, and there
+        // this lookup is non-null and the capture runs exactly as before.
+        if (!m_autotileEngine || !m_autotileEngine->stateForScreen(screenId)) {
+            continue;
+        }
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
         const int desktop = currentDesktopForScreen(screenId);
         // Stored unconditionally, INCLUDING an empty order: the capture is the
@@ -133,28 +156,10 @@ void Daemon::updateAutotileScreens()
         // does not resurrect windows that have since closed or left the
         // screen (seedAutotileOrderForScreen falls back to the zone-ordered
         // list when the saved order is empty).
-        //
-        // KNOWN ISSUE on the per-output desktop-switch path, left as-is
-        // deliberately. That path (start.cpp) sets the engine's desktop for this
-        // screen at [SEQ C], BEFORE calling us at [SEQ E]. So managedWindowOrder
-        // resolves through the engine's key, which is already the NEW desktop
-        // (or, for a sticky-pinned screen, the pinned OLD one), while the key
-        // written below is currentDesktopForScreen — the new desktop. Read
-        // context and write key are therefore not guaranteed to be the same
-        // context, which is the assumption the unconditional store rests on: an
-        // unpinned screen can write an empty order over the arrived-at desktop's
-        // genuine saved order, and a pinned one can file the old desktop's order
-        // under the new desktop's key.
-        //
-        // Not fixed here because the right fix depends on whether a desktop
-        // switch DESTROYS the departed desktop's TilingState. If it does not,
-        // the capture is unnecessary on this path and should be skipped; if it
-        // does, the order must be captured in the switch handler before [SEQ C]
-        // with the pre-switch context passed explicitly. Making the store
-        // conditional on a non-empty order is NOT the fix — that reintroduces
-        // the stale-resurrect bug this comment guards. Getting it wrong silently
-        // loses a user's saved window arrangement, so it wants the state-lifetime
-        // trace first.
+        // Unconditional is safe BECAUSE of the state-existence gate above: it
+        // guarantees this key is the one being torn down, so an empty order here
+        // genuinely means "nothing was tiled at toggle-off" rather than "we asked
+        // the wrong context".
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
         m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
     }
@@ -570,6 +575,24 @@ void Daemon::handleSnappingToAutotile()
     QString defaultAlgoId = m_settings->defaultAutotileAlgorithm();
     if (defaultAlgoId.isEmpty()) {
         defaultAlgoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
+    }
+
+    // FIRST restore every context a previous global disable neutered. The
+    // disable walks all desktops and activities; the per-screen loop below only
+    // ever writes the current desktop, so without this an off/on round trip left
+    // desktops 2..N and every activity-pinned context stranded in Snapping with
+    // no way back. Running it ahead of the loop also means a restored
+    // current-desktop screen is already Autotile by the time the loop runs, so
+    // the "skip screens already on autotile" guard preserves the algorithm the
+    // restore just put back rather than overwriting it with the global default.
+    //
+    // Blocked the same way the loop below is, and for the same reason: each
+    // flipped rule emits RuleStore::rulesChanged synchronously, so an unblocked
+    // restore would drive a full reconcile per rule over a half-restored set.
+    {
+        QSignalBlocker blocker(m_layoutManager.get());
+        QSignalBlocker ruleBlocker(m_ruleStore.get());
+        m_layoutManager->restoreAutotileAssignments();
     }
 
     // Determine which screens need to be converted to autotile. Skip screens

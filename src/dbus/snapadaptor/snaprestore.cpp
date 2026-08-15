@@ -194,8 +194,15 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // restore has had its chance: a SnapToZone restore or a remembered snap
         // already returned shouldSnap=true above (so the route never fights a snap),
         // and the explicit route wins over a remembered float position (it applies
-        // the final geometry). A route WITH SnapToZone moved+snapped on the target
-        // via the placement directive and never reaches here.
+        // the final geometry).
+        //
+        // A route WITH SnapToZone usually moved+snapped on the target via the
+        // placement directive and never reaches here — but not always, and
+        // applyOpenScreenRouting no longer assumes it. calculateSnapToPlacementRule
+        // declines when the routed target is not in Snapping mode (the common case:
+        // an autotile target), or resolves no layout, ordinal or geometry. Those
+        // declines land here with the Placement slot filled and nothing placed, so
+        // the route must still be honoured or the window neither snaps nor moves.
         m_adaptor->applyOpenScreenRouting(windowId, screenId);
         return;
     }

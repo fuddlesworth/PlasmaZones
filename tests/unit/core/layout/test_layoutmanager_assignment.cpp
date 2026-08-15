@@ -714,6 +714,77 @@ private Q_SLOTS:
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
         QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
     }
+
+    // The global autotile disable walks EVERY context; the daemon's re-enable only
+    // ever wrote the current desktop per screen, so an off/on round trip stranded
+    // desktops 2..N in Snapping with no way back. restoreAutotileAssignments is the
+    // inverse of clearAutotileAssignments and closes that.
+    void testRestoreAutotileAssignments_revivesEveryContextTheDisableFlipped()
+    {
+        // createManager(), NOT makeLayoutRegistry directly: the factory installs the
+        // IsolatedConfigGuard that redirects the rule store and the layout directory
+        // into a temporary XDG root. Constructing the registry bare writes to the
+        // developer's REAL ~/.config/plasmazones/rules.json and layout directory.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        // Two different desktops on one screen, both autotile, different algorithms.
+        // Each is given a snap layout FIRST, which is what a real screen carries:
+        // the mode-toggle losslessness invariant means an autotile entry keeps the
+        // snapping layout it had before. It also matters for what this test can
+        // observe — a Snapping entry with no snappingLayout has an empty
+        // activeLayoutId, and the cascade visitors reject those, so the post-clear
+        // state would be invisible to assignmentEntryForScreen and the assertions
+        // below would read the level-1 default instead of the flipped entry.
+        auto* snapA = createTestLayout(QStringLiteral("SnapA"));
+        mgr->addLayout(snapA);
+        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), snapA);
+        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), snapA);
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 1, QString(), QStringLiteral("autotile:wide"));
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile:dwindle"));
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1).mode,
+                 PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2).mode,
+                 PhosphorZones::AssignmentEntry::Autotile);
+
+        mgr->clearAutotileAssignments();
+        // Both flipped, both algorithms preserved — that preservation is what the
+        // restore keys on, and what the disable's own comment promises.
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1).mode,
+                 PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2).mode,
+                 PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2).tilingAlgorithm, QStringLiteral("dwindle"));
+
+        QCOMPARE(mgr->restoreAutotileAssignments(), 2);
+
+        // BOTH desktops come back, each on its OWN algorithm — the whole point.
+        // Desktop 2 is the one the old per-current-desktop enable could never reach.
+        const auto d1 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1);
+        const auto d2 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2);
+        QCOMPARE(d1.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(d1.tilingAlgorithm, QStringLiteral("wide"));
+        QCOMPARE(d2.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(d2.tilingAlgorithm, QStringLiteral("dwindle"));
+    }
+
+    // The restore must not sweep up a context the user genuinely chose Snapping
+    // for. Only an entry still carrying a tilingAlgorithm — the marker a disable
+    // leaves behind — is revived.
+    void testRestoreAutotileAssignments_leavesGenuineSnappingContextsAlone()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("SnapOnly"));
+        mgr->addLayout(layout);
+        mgr->assignLayout(QStringLiteral("DP-2"), 1, QString(), layout);
+
+        const auto before = mgr->assignmentEntryForScreen(QStringLiteral("DP-2"), 1);
+        QCOMPARE(before.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QVERIFY2(before.tilingAlgorithm.isEmpty(), "a never-autotiled context must carry no algorithm");
+
+        QCOMPARE(mgr->restoreAutotileAssignments(), 0);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-2"), 1).mode,
+                 PhosphorZones::AssignmentEntry::Snapping);
+    }
 };
 
 QTEST_MAIN(TestLayoutManagerAssignment)

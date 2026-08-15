@@ -479,30 +479,29 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
 
-    // Bare RouteToScreen only. When a rule ALSO carries SnapToZone, the snap path
-    // owns the move: calculateSnapToPlacementRule resolves the zones ON the target
-    // screen and returns shouldSnap, so moving here too would double-place the
-    // window.
+    // A SnapToZone action in the verdict does NOT disqualify the move, and used to.
+    // The old guard returned whenever the Placement slot was filled, reasoning that
+    // calculateSnapToPlacementRule resolves the zones ON the target screen and snaps
+    // there, so this branch was unreachable for a route+snap rule and moving here
+    // would double-place the window.
     //
-    // KNOWN GAP, documented rather than silently assumed away. The claim that this
-    // branch is unreachable for a route+snap rule is not true:
-    // calculateSnapToPlacementRule also returns noSnap when the routed
-    // (screen, desktop) target is not in Snapping mode, and when that target
-    // resolves no layout, no surviving ordinal, or a degenerate union geometry. It
-    // is pure calculation with no side effects, so on those paths the window has
-    // NOT moved, and this early return then drops the route entirely — the window
-    // neither snaps nor moves, while the same rule without its SnapToZone action
-    // moves it fine.
+    // Both halves of that were wrong. This function has exactly ONE caller,
+    // SnapAdaptor::resolveWindowRestore, and it calls it only under
+    // `if (!result.shouldSnap)` — so reaching here already means the snap did not
+    // happen. calculateSnapToPlacementRule is pure calculation whose every decline
+    // returns before any commit, so there is nothing placed to double-place. It
+    // declines when the routed (screen, desktop) target is not in Snapping mode,
+    // and when that target resolves no layout, no surviving ordinal, or a
+    // degenerate union geometry.
     //
-    // Left as-is deliberately. The most common decline is an autotile-mode target,
-    // which the engine's own comment says is owned by the autotile routing hook,
-    // and whether that hook covers a window OPENING on a snapping screen was not
-    // established. Performing the move here unconditionally would double-place the
-    // window in any case where it is, so the fix needs that trace first rather
-    // than a guess about which decline reached us.
-    if (resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
-        return;
-    }
+    // Nothing else picked the route up either. The most common decline is an
+    // autotile-mode target, which the snap engine hands to "the autotile routing
+    // hook" — but that hook runs from AutotileAdaptor::dispatchWindowOpened, and
+    // the effect only calls windowOpened for windows already on an autotile screen
+    // (autotilehandler.cpp: "Only notify autotile daemon for windows on autotile
+    // screens"). So a window opening on a SNAPPING screen with a RouteToScreen onto
+    // an autotile monitor reached neither path: it did not snap and it did not
+    // move, while the same rule minus its SnapToZone action moved it fine.
     const std::optional<PhosphorRules::RuleAction> route =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
     if (!route) {

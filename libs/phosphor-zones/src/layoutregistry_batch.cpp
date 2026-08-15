@@ -76,6 +76,59 @@ void LayoutRegistry::clearAutotileAssignments()
     }
 }
 
+int LayoutRegistry::restoreAutotileAssignments()
+{
+    // Mirror of clearAutotileAssignments: flip context-assignment rules back to
+    // Autotile where a previous global disable neutered them.
+    //
+    // The disable is global — it walks every context-assignment rule regardless
+    // of desktop or activity — while the re-enable in the daemon only ever wrote
+    // the CURRENT desktop per screen. A Settings off/on round trip therefore
+    // stranded every other desktop and every activity-pinned context in Snapping
+    // with no way back short of re-assigning each by hand. This closes that.
+    //
+    // A non-empty tilingAlgorithm on a Snapping entry is the signal, and it is
+    // the one the disable deliberately leaves behind: it flips the mode while
+    // "preserving both layout fields so re-enabling autotile can restore the
+    // previous algorithm". Entries that never had an autotile configuration
+    // carry no algorithm and are left alone, so a context the user genuinely
+    // chose Snapping for is only converted if it is also carrying an algorithm
+    // from an earlier autotile life — which is exactly the state this restores.
+    //
+    // snappingLayout is preserved on the way back, symmetric with the disable,
+    // so a second disable returns each context to the same snap layout.
+    QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
+    QSet<QPair<QString, int>> affected;
+    int restored = 0;
+
+    for (PWR::Rule& rule : updated) {
+        if (!isContextAssignmentRule(rule)) {
+            continue;
+        }
+        const AssignmentEntry entry = entryFromRuleMatchActions(rule);
+        if (entry.mode != AssignmentEntry::Snapping || entry.tilingAlgorithm.isEmpty()) {
+            continue;
+        }
+        rule.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(AssignmentEntry::Autotile),
+                                                                     entry.snappingLayout, entry.tilingAlgorithm);
+        ++restored;
+
+        const ContextDims dims = decodeDims(rule.match);
+        affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
+    }
+
+    if (restored > 0) {
+        m_ruleStore->setAllRules(updated);
+        for (const auto& [sid, desk] : std::as_const(affected)) {
+            qCDebug(lcZonesLib) << "restoreAutotileAssignments: flipped back to Autotile for screen=" << sid
+                                << "desktop=" << desk;
+            Q_EMIT layoutAssigned(sid, desk, nullptr);
+        }
+        qCInfo(lcZonesLib) << "Restored" << restored << "autotile assignments";
+    }
+    return restored;
+}
+
 // ── Batch setters ───────────────────────────────────────────────────────────
 
 namespace {
