@@ -127,8 +127,36 @@ void LayoutAdaptor::clearAssignment(const QString& screenId)
     m_changedScreenIds.insert(resolvedId);
 }
 
+void LayoutAdaptor::markScreensWithStoredAssignments()
+{
+    // Every batch setter routes through LayoutRegistry::applyBatchAssignments,
+    // which DROPS every rule of the family before rebuilding from the incoming
+    // map. A screen whose assignment is removed by being absent from that map
+    // therefore changes, but marking only the map's own keys never recorded it —
+    // so it was never resnapped and never appeared in assignmentChangesApplied,
+    // and it kept its old placement until something unrelated moved it.
+    //
+    // Marking every screen that currently HAS a stored assignment is a superset
+    // of the ones that actually change (a screen present in the map with an
+    // unchanged value is marked too). That direction is the safe one: an extra
+    // resnap is a no-op for a window already in its zone, while a missed one
+    // leaves the window wrong.
+    if (!m_screenManager) {
+        return;
+    }
+    const QStringList screenIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : screenIds) {
+        const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
+        const QString activity = m_activityManager ? m_activityManager->currentActivity() : QString();
+        if (!m_layoutManager->storedAssignmentIdForScreen(screenId, desktop, activity).isEmpty()) {
+            m_changedScreenIds.insert(screenId);
+        }
+    }
+}
+
 void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
 {
+    markScreensWithStoredAssignments();
     QHash<QString, QString> parsedAssignments;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenIdOrName = it.key();
@@ -385,6 +413,7 @@ QString LayoutAdaptor::getScreenStates()
 
 void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
 {
+    markScreensWithStoredAssignments();
     QHash<QPair<QString, int>, QString> parsedAssignments;
 
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
@@ -615,6 +644,7 @@ bool LayoutAdaptor::hasExplicitAssignmentForScreenActivity(const QString& screen
 
 void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
 {
+    markScreensWithStoredAssignments();
     QHash<QPair<QString, QString>, QString> parsedAssignments;
 
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
@@ -674,6 +704,7 @@ QVariantMap LayoutAdaptor::getAllCombinedAssignments()
 
 void LayoutAdaptor::setAllCombinedAssignments(const QVariantMap& assignments)
 {
+    markScreensWithStoredAssignments();
     QHash<PhosphorZones::CombinedAssignmentKey, QString> parsed;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const QString& rawKey = it.key();

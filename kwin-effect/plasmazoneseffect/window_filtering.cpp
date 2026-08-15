@@ -128,12 +128,27 @@ PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) c
     // value comes from the daemon, not from KWin: resolving it means walking the
     // assignment cascade for the screen's current desktop and activity, which
     // only the daemon can do. m_activeLayoutByScreen is that answer, seeded at
-    // bringup and kept current by activeLayoutForScreenChanged. A screen with no
-    // cached entry leaves the field unset, so the leaf stays inert instead of
-    // comparing against an empty string and matching `Equals ""`.
-    const QString activeLayout = m_activeLayoutByScreen.value(screenId);
-    if (!activeLayout.isEmpty()) {
-        query.activeLayout = activeLayout;
+    // bringup and kept current by activeLayoutForScreenChanged.
+    //
+    // A screen with no cached entry leaves the field EMPTY, not unset: activeLayout
+    // is a Context field that WindowQuery::valueForField reports engaged
+    // unconditionally, so there is no inert state reachable from here.
+    // `Equals <uuid>` correctly fails against an empty value, and an empty-Equals
+    // leaf cannot be authored at all (MatchExpression::isValid rejects it), but a
+    // NEGATED leaf DOES match an unseeded screen. The isEmpty() guard is map
+    // hygiene rather than match semantics.
+    //
+    // The id is the layout active on that screen's CURRENTLY VISIBLE desktop,
+    // because that is what the daemon publishes per screen, and it is stamped onto
+    // off-desktop windows too (reconcileRuleHiddenTitleBar and
+    // reconcileRuleWindowLayer run for them). So a rule pairing ActiveLayout with
+    // VirtualDesktop asks about two different desktops for such a window, and an
+    // ActiveLayout-scoped title-bar or layer rule re-resolves on every desktop
+    // switch. The daemon-side stamp resolves the same way deliberately, so both
+    // sides agree; making it per-(screen, desktop) would need a wider wire.
+    const auto cached = m_activeLayoutByScreen.constFind(screenId);
+    if (cached != m_activeLayoutByScreen.constEnd() && !cached.value().isEmpty()) {
+        query.activeLayout = cached.value();
     }
     applyOwnLayerFlags(query, windowId);
     return query;

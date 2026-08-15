@@ -317,6 +317,19 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // assigned) screen the service would report for it. The settings
     // screen-picker stores the canonical id form the runtime reports, which is
     // what the open path hands us here.
+    //
+    // Two consequences of pinning the SPAWN screen, both inherent rather than
+    // oversights. The verdict may itself carry RouteToScreen or RouteToDesktop, so
+    // ActiveLayout and ScreenId here describe where the window came from, never the
+    // route target — the route comes out of the same resolve, so the target cannot
+    // be known before it. And because resolveCached is keyed on (windowId,
+    // rule-set revision) and never invalidated on a layout, desktop or screen
+    // change, this context is fixed for the window's lifetime. That is safe only
+    // while every consumer of the shared entry is an open-path caller, which is
+    // true today; a future mid-session caller of shouldFloatByRule,
+    // shouldRestoreToZoneOnLogin or placementZonesByRule would read an open-time
+    // layout id. Adding one means invalidating the evaluator on assignment
+    // changes, which also costs the open-path memoisation these resolvers rely on.
     const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId, screenId);
     if (!query) {
         return {};

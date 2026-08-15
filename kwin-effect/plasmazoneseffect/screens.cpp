@@ -237,6 +237,16 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                 }
                 if (self->m_daemonGate.pendingVsConfigReplies > 0 && --self->m_daemonGate.pendingVsConfigReplies == 0) {
                     self->m_daemonGate.virtualScreensReady = true;
+                    // The screen-id keyspace just changed shape. Until these
+                    // definitions landed, resolveEffectiveScreenId returned the
+                    // PHYSICAL id for a subdivided monitor, while the daemon keys
+                    // its published active layouts by EFFECTIVE (virtual) id — so
+                    // any verdict resolved in that window matched a screen id that
+                    // no longer describes the window, and cached it. Drop those
+                    // verdicts and re-fold the decorations they baked into. Both
+                    // are coalesced, so the multi-screen batch pays for one.
+                    self->invalidateAllRuleCaches();
+                    self->scheduleBorderSweep();
                     if (self->m_daemonGate.serviceRegistered) {
                         self->processDaemonReadyWindowState();
                     }

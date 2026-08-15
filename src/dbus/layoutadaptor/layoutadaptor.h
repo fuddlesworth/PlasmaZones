@@ -452,6 +452,12 @@ public:
      */
     void applyAssignmentChangesFor(const QSet<QString>& screenIds);
 
+    /// Mark every screen that currently holds a stored assignment as changed,
+    /// before a batch setter replaces the family wholesale. Internal (NOT
+    /// bus-exposed): a screen dropped by absence from the incoming map would
+    /// otherwise never be marked, resnapped, or reported.
+    void markScreensWithStoredAssignments();
+
     /// Release the save-batch suppression. Internal (NOT bus-exposed): called
     /// from applyAssignmentChanges so a client that dies mid-batch cannot leave
     /// screenLayoutChanged muted for the daemon's lifetime.
