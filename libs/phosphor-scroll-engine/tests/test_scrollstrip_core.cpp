@@ -31,6 +31,89 @@ private Q_SLOTS:
         AX_GUARD_SUITE();
     }
 
+    /// THE ALGEBRAIC ANCHOR for the whole transposition effort, and the one
+    /// test here that does not go through the Ax harness at all: it builds
+    /// both ScrollLayoutParams by hand and runs BOTH axes in the SAME process,
+    /// so it verifies the ENGINE's mapping rather than agreeing with the
+    /// harness's copy of it.
+    ///
+    /// Property: relayout on a transposed strip is the exact transpose of
+    /// relayout on the original, tile for tile.
+    ///
+    /// Deliberately NOT gated by the suite guard — it runs identically on both
+    /// arms, because both axes are constructed locally rather than read from
+    /// the environment.
+    void relayoutUnderAVerticalAxisIsTheExactTranspose()
+    {
+        // Mixed intents on purpose: a Proportion column, a Fixed one, a Preset
+        // one carrying a client minimum, and a stack holding an Auto/Fixed
+        // split. Each resolves through a different arm of the sizing code, so
+        // a missed axis read in any single arm breaks this.
+        const auto build = [](const ScrollLayoutParams& p) {
+            ScrollStrip s;
+            s.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.5), ColumnDisplay::Normal, p);
+            s.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, p);
+            s.insertWindow(QStringLiteral("c"), ColumnWidth::makePreset(0.5), ColumnDisplay::Normal, p, 250, 0);
+            s.focusColumn(2, p);
+            s.insertWindowIntoActiveColumn(QStringLiteral("d"), kHalf, std::nullopt, p);
+            s.setWindowHeightIntent(QStringLiteral("d"), WindowHeight::makeFixed(220));
+            s.focusColumn(1, p);
+            return s;
+        };
+
+        ScrollLayoutParams h;
+        h.workArea = QRect(0, 0, 1200, 800);
+        h.gap = 10;
+        h.axis = StripAxis::horizontal();
+
+        ScrollLayoutParams v = h;
+        v.workArea = QRect(0, 0, 800, 1200); // T(workArea)
+        v.axis = StripAxis::vertical();
+
+        ScrollStrip hs = build(h);
+        ScrollStrip vs = build(v);
+        const ResolvedStrip hr = hs.relayout(h);
+        const ResolvedStrip vr = vs.relayout(v);
+
+        QCOMPARE(vr.stripExtent, hr.stripExtent);
+        QCOMPARE(vr.viewOffset, hr.viewOffset);
+        QCOMPARE(vr.columns.size(), hr.columns.size());
+
+        const auto transposed = [](const QRect& r) {
+            return QRect(r.y(), r.x(), r.height(), r.width());
+        };
+
+        for (int ci = 0; ci < hr.columns.size(); ++ci) {
+            const ResolvedColumn& hc = hr.columns.at(ci);
+            const ResolvedColumn& vc = vr.columns.at(ci);
+            QCOMPARE(vc.columnIndex, hc.columnIndex);
+            QCOMPARE(vc.tiles.size(), hc.tiles.size());
+            QCOMPARE(vc.rect, transposed(hc.rect));
+            for (int ti = 0; ti < hc.tiles.size(); ++ti) {
+                const ResolvedTile& ht = hc.tiles.at(ti);
+                const ResolvedTile& vt = vc.tiles.at(ti);
+                QCOMPARE(vt.windowId, ht.windowId);
+                QCOMPARE(vt.hidden, ht.hidden);
+                QVERIFY2(vt.rect == transposed(ht.rect),
+                         qPrintable(QStringLiteral("tile %1: horizontal (%2,%3 %4x%5) should transpose to "
+                                                   "(%6,%7 %8x%9) but got (%10,%11 %12x%13)")
+                                        .arg(ht.windowId)
+                                        .arg(ht.rect.x())
+                                        .arg(ht.rect.y())
+                                        .arg(ht.rect.width())
+                                        .arg(ht.rect.height())
+                                        .arg(transposed(ht.rect).x())
+                                        .arg(transposed(ht.rect).y())
+                                        .arg(transposed(ht.rect).width())
+                                        .arg(transposed(ht.rect).height())
+                                        .arg(vt.rect.x())
+                                        .arg(vt.rect.y())
+                                        .arg(vt.rect.width())
+                                        .arg(vt.rect.height())));
+            }
+        }
+    }
+
     void openInsertsColumnAndResizesNothing();
     void openScrollsOnlyWhenNeeded();
     void closeKeepsNeighboursAnchored();

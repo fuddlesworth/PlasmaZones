@@ -248,8 +248,13 @@ public:
     /// becomes the tile's Fixed intent symmetrically, only when
     /// @p heightChanged; a lone tile is included, because relayout honours a
     /// solo tile's Fixed height (niri parity). Other columns are untouched.
-    bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged = true,
-                             bool heightChanged = true);
+    /// @p mainChanged / @p crossChanged say which axis the interactive resize
+    /// actually moved, in ROLE terms. @p ackedSize is the compositor's
+    /// physical QSize and is decoded through @p params.axis, so the caller
+    /// must derive the two flags against that same axis or each guard ends up
+    /// protecting the intent it was not written for.
+    bool reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool mainChanged, bool crossChanged,
+                             const ScrollLayoutParams& params);
 
     // ── Display ──────────────────────────────────────────────────────────────
     /// Toggle the active column between Normal and Tabbed presentation.

@@ -1021,9 +1021,15 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
         }
         return;
     }
-    const bool widthChanged = lastApplied.width() != newFrame.width();
-    const bool heightChanged = lastApplied.height() != newFrame.height();
-    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), widthChanged, heightChanged)) {
+    // Derived in ROLE terms against the same params the reconcile decodes the
+    // acked size with. Comparing physical width/height here while the
+    // reconcile reads main/cross would make each guard protect the intent it
+    // was not written for.
+    const ScrollLayoutParams resizeParams = layoutParamsForScreen(key.screenId);
+    const StripAxis resizeAxis = resizeParams.axis;
+    const bool mainChanged = resizeAxis.mainSize(lastApplied) != resizeAxis.mainSize(newFrame);
+    const bool crossChanged = resizeAxis.crossSize(lastApplied) != resizeAxis.crossSize(newFrame);
+    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), mainChanged, crossChanged, resizeParams)) {
         // The reconcile WROTE persisted intent (the column's Fixed width, the
         // tile's Fixed height — both serialized by serializeStripState), and
         // placementChanged is the sole producer of DirtyScrollStrips. Without

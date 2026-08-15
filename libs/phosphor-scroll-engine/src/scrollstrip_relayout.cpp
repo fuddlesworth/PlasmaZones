@@ -17,11 +17,24 @@ int proportionalPx(qreal proportion, int workExtent, int gap)
     return qMax(1, qRound(proportion * (workExtent + gap)) - gap);
 }
 
+/// The work area measured along the strip, and across it. Every "how much
+/// room is there" question in this file is one of these two, and naming them
+/// keeps the anchor math readable once the physical axis stops being fixed.
+int mainExtent(const ScrollLayoutParams& params)
+{
+    return params.axis.mainSize(params.workArea);
+}
+
+int crossExtent(const ScrollLayoutParams& params)
+{
+    return params.axis.crossSize(params.workArea);
+}
+
 } // namespace
 
 int ScrollStrip::resolveColumnWidthPx(const ColumnWidth& width, const ScrollLayoutParams& params)
 {
-    const int workW = params.workArea.width();
+    const int workW = mainExtent(params);
     // Degenerate work area (unknown/removed screen, or outer gaps wider
     // than the screen): resolve every column to 1px instead of feeding a
     // negative bound into qBound below — its Q_ASSERT(!(max < min)) would
@@ -76,10 +89,22 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
         // Applied HERE, in the one function every consumer
         // (columnStripPos / stripExtentPx / relayout / the anchor math) goes
         // through, so the strip widens consistently for such columns. The
-        // Top/Bottom axis needs nothing: the tabbed branch applies no
-        // minHeight floor, so there is no contradicted clamp on heights.
+        // CROSS axis needs nothing: the tabbed branch applies no minimum floor
+        // across the column, so there is no contradicted clamp there.
+        //
+        // The gate asks whether the indicator's THICKNESS eats the MAIN axis,
+        // which is not the same question as whether the indicator sits on a
+        // vertical screen edge. Those two coincide on a horizontal strip and
+        // invert on a vertical one: a Left/Right indicator is thick along x,
+        // which is the main axis only while the strip runs horizontally.
+        // TabIndicatorPosition stays a SCREEN-edge vocabulary on purpose (a
+        // user who asked for the indicator on the left means the left of their
+        // screen, and rotating a monitor must not move it), so the axis has to
+        // be brought in here rather than folded into the enum.
         int reservationFloor = 0;
-        if (c.display == ColumnDisplay::Tabbed && isVerticalTabIndicator(params.tabIndicator.position)) {
+        const bool indicatorEatsMainAxis =
+            isVerticalTabIndicator(params.tabIndicator.position) == params.axis.isHorizontal();
+        if (c.display == ColumnDisplay::Tabbed && indicatorEatsMainAxis) {
             int visibleTiles = 0;
             for (const Tile& tile : c.tiles) {
                 if (!tile.minimized) {
@@ -94,7 +119,7 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
             }
         }
     }
-    return qMin(px, params.workArea.width());
+    return qMin(px, mainExtent(params));
 }
 
 int ScrollStrip::columnStripPos(int columnIndex, const ScrollLayoutParams& params) const
@@ -137,18 +162,18 @@ int ScrollStrip::centeredAnchorFor(int columnIndex, const ScrollLayoutParams& pa
     }
     // Degenerate-area guard, same as clampedAnchor's (the rationale lives
     // there): a centered anchor computed against a 0-width area is 0.
-    if (params.workArea.width() <= 0) {
+    if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
     const int colW = columnExtentPx(m_columns.at(columnIndex), params);
-    return (params.workArea.width() - colW) / 2;
+    return (mainExtent(params) - colW) / 2;
 }
 
 int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params) const
 {
     // Degenerate-area guard, same as clampedAnchor's (the rationale lives
     // there). Checked here too so the centering arms cannot bypass it.
-    if (params.workArea.width() <= 0) {
+    if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
     // Structural changes (minimize collapse, consume) keep the view where it
@@ -179,10 +204,10 @@ int ScrollStrip::clampedAnchor(int anchor, const ScrollLayoutParams& params) con
     // centeredAnchorFor, centerVisibleColumns and removeWindowInternal
     // (scrollstrip_structure.cpp) carry their own copies of the guard for
     // the arms that do not pass through here.
-    if (params.workArea.width() <= 0) {
+    if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
-    const int workW = params.workArea.width();
+    const int workW = mainExtent(params);
     const int stripW = stripExtentPx(params);
     const int stripX = columnStripPos(m_activeColumnIdx, params);
     // anchor = stripX - viewOffset; viewOffset must stay within [0, max(0, stripW - workW)].
@@ -199,10 +224,10 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
     }
     // Degenerate-area guard, same as clampedAnchor's (the rationale lives
     // there): every arm below would write 0 over the persisted anchor.
-    if (params.workArea.width() <= 0) {
+    if (mainExtent(params) <= 0) {
         return;
     }
-    const int workW = params.workArea.width();
+    const int workW = mainExtent(params);
     const int colW = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
     const int stripX = columnStripPos(m_activeColumnIdx, params);
 
@@ -257,7 +282,7 @@ void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
     // reclaim removeWindowInternal's deliberate right-edge dead space.
     const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
     if (!centerLone && params.centerFocusedColumn != CenterFocusedColumn::Always && m_activeColumnIdx >= 0) {
-        const int workW = params.workArea.width();
+        const int workW = mainExtent(params);
         const int colW = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const int pos = columnStripPos(m_activeColumnIdx, params) - viewOffsetFor(params);
         if (pos >= 0 && pos + colW <= workW) {
@@ -288,10 +313,10 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     // Degenerate-area guard, same rationale as clampedAnchor's: the span
     // math below would write a garbage anchor over persisted state. Refuse
     // (the verb reports no_target) rather than centering against nothing.
-    if (params.workArea.width() <= 0) {
+    if (mainExtent(params) <= 0) {
         return false;
     }
-    const int workW = params.workArea.width();
+    const int workW = mainExtent(params);
     const int viewOffset = viewOffsetFor(params);
     // FULLY visible columns only (niri center-visible-columns): a partially
     // clipped edge column is exactly what the verb pushes out of the way, so
@@ -340,8 +365,12 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
     out.viewOffset = viewOffsetFor(params);
 
     const QRect area = params.workArea;
+    const StripAxis axis = params.axis;
     const int gap = params.gap;
-    int x = area.x() - out.viewOffset;
+    // Walks ALONG the strip. The view offset only ever slides on this axis,
+    // which is what makes one spring per output enough to carry the whole
+    // strip rigidly.
+    int mainCursor = axis.mainLow(area) - out.viewOffset;
 
     for (int ci = 0; ci < m_columns.size(); ++ci) {
         const Column& col = m_columns.at(ci);
@@ -356,7 +385,8 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         ResolvedColumn rc;
         rc.columnIndex = ci;
         rc.tabbed = col.display == ColumnDisplay::Tabbed;
-        rc.rect = QRect(x, area.y(), colW, area.height());
+        // A column spans the FULL cross extent; only its main extent varies.
+        rc.rect = axis.makeRect(mainCursor, axis.crossLow(area), colW, crossExtent(params));
 
         QVector<int> visible;
         visible.reserve(col.tiles.size());
@@ -390,11 +420,14 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 rc.tiles.append(rt);
             }
         } else if (!visible.isEmpty()) {
-            // Vertical stack: Fixed/Preset tiles take their px, Auto tiles
-            // share the remainder proportionally to weight.
+            // The stack, which runs ACROSS the strip: Fixed/Preset tiles take
+            // their px, Auto tiles share the remainder proportionally to
+            // weight. Every quantity from here to the end of the branch is a
+            // cross-axis extent, which is why "height" keeps its name — it is
+            // the role, not the screen dimension.
             const int n = visible.size();
             const int gapsTotal = gap * (n - 1);
-            const int availH = qMax(n, area.height() - gapsTotal);
+            const int availH = qMax(n, crossExtent(params) - gapsTotal);
 
             QVector<int> heights(n, 0);
             qreal autoWeightTotal = 0;
@@ -410,7 +443,7 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                     heights[vi] =
                         qMin(availH,
                              proportionalPx(nearestPresetValue(params.presetWindowHeights, t.height.presetFraction),
-                                            area.height(), gap));
+                                            crossExtent(params), gap));
                     fixedTotal += heights[vi];
                     break;
                 case WindowHeight::Auto:
@@ -518,19 +551,19 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                 }
             } // respectMinimumSize
 
-            int y = area.y();
+            int crossCursor = axis.crossLow(area);
             for (int vi = 0; vi < n; ++vi) {
                 ResolvedTile rt;
                 rt.windowId = col.tiles.at(visible.at(vi)).windowId;
-                rt.rect = QRect(x, y, colW, heights[vi]);
+                rt.rect = axis.makeRect(mainCursor, crossCursor, colW, heights[vi]);
                 rt.windowedFullscreen = col.tiles.at(visible.at(vi)).windowedFullscreen;
                 rc.tiles.append(rt);
-                y += heights[vi] + gap;
+                crossCursor += heights[vi] + gap;
             }
         }
 
         out.columns.append(rc);
-        x += colW + gap;
+        mainCursor += colW + gap;
     }
     return out;
 }

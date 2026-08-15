@@ -421,7 +421,7 @@ void TestScrollStripOps::reconcileAppResize()
 
     // The client acked 640 wide: the column's intent becomes Fixed(640);
     // the other column is untouched.
-    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(640, 780)));
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(640, 780), true, true, params));
     const ResolvedStrip r = strip.relayout(params);
     QCOMPARE(rectOf(r, QStringLiteral("b")).width(), 640);
     // Lone tile: the acked height is recorded and honored (niri parity).
@@ -432,7 +432,7 @@ void TestScrollStripOps::reconcileAppResize()
     // 0.5 of 1200 with a 10px inner gap comes to.
     QCOMPARE(rectOf(r, QStringLiteral("a")).width(), 595);
     // Same size again: no change reported.
-    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(640, 780)));
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(640, 780), true, true, params));
 }
 
 void TestScrollStripOps::reconcileGuardsAndEmptyAck()
@@ -442,26 +442,27 @@ void TestScrollStripOps::reconcileGuardsAndEmptyAck()
     QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
 
-    // widthChanged=false: a vertical-only resize must not convert the
-    // column's Proportion intent into Fixed pixels.
-    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(999, 300), /*widthChanged=*/false));
+    // mainChanged=false: a resize purely ACROSS the strip must not convert
+    // the column's Proportion intent into Fixed pixels.
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(999, 300), /*mainChanged=*/false,
+                                      /*crossChanged=*/true, params));
     QCOMPARE(strip.columns().at(0).width.kind, ColumnWidth::Proportion);
 
     // Empty and half-empty acks are refused outright: QSize(0,0) is
     // "valid" to QSize but would reconcile into a 1px column, and a
     // zero-height ack would pin a bogus Fixed height. Neither may touch
     // the recorded intents.
-    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(0, 0)));
-    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(640, 0)));
-    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(0, 640)));
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(0, 0), true, true, params));
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(640, 0), true, true, params));
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(0, 640), true, true, params));
     QCOMPARE(strip.columns().at(0).width.kind, ColumnWidth::Proportion);
 
     // heightChanged=false: a horizontal-only resize must not pin the tile's
     // height intent either (multi-tile column, so height IS recordable).
     // Value-level: the first reconcile above pinned Fixed(300); a failure
     // here names what the intent became instead of a bare "not equal".
-    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(999, 555), /*widthChanged=*/false,
-                                       /*heightChanged=*/false));
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("b"), QSize(999, 555), /*mainChanged=*/false,
+                                       /*crossChanged=*/false, params));
     const int bIdx = strip.columns().at(0).indexOfWindow(QStringLiteral("b"));
     QVERIFY(bIdx >= 0);
     const WindowHeight after = strip.columns().at(0).tiles.at(bIdx).height;
@@ -469,7 +470,7 @@ void TestScrollStripOps::reconcileGuardsAndEmptyAck()
     QCOMPARE(after.fixedPx, 300);
 
     // Unknown window: plain no-op.
-    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("nope"), QSize(100, 100)));
+    QVERIFY(!strip.reconcileWindowSize(QStringLiteral("nope"), QSize(100, 100), true, true, params));
 }
 
 void TestScrollStripOps::visibleColumnIndicesTrackTheViewport()
@@ -526,8 +527,8 @@ void TestScrollStripOps::reconcileLoneTileRecordsHeightIntent()
     const auto params = defaultParams();
     ScrollStrip strip;
     QVERIFY(strip.insertWindow(QStringLiteral("solo"), kHalf, ColumnDisplay::Normal, params));
-    QVERIFY(strip.reconcileWindowSize(QStringLiteral("solo"), QSize(600, 300), /*widthChanged=*/false,
-                                      /*heightChanged=*/true));
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("solo"), QSize(600, 300), /*mainChanged=*/false,
+                                      /*crossChanged=*/true, params));
     const Column& col = strip.columns().at(0);
     QCOMPARE(col.tiles.at(0).height.kind, WindowHeight::Fixed);
     QCOMPARE(rectOf(strip.relayout(params), QStringLiteral("solo")).height(), 300);
@@ -750,9 +751,9 @@ void TestScrollStripOps::reconcilePreMaximizeSlotKeyedOnResizedColumn()
 
     // Height-only ack on a tile of the maximized column: no width intent
     // moved, so nothing to invalidate.
-    QVERIFY(strip.reconcileWindowSize(QStringLiteral("a"), QSize(1200, 300), false, true));
-    // Width ack on the OTHER column while the maximized one stays active.
-    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(500, 800), true, false));
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("a"), QSize(1200, 300), false, true, params));
+    // Main-axis ack on the OTHER column while the maximized one stays active.
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(500, 800), true, false, params));
 
     QVERIFY(strip.toggleMaximizeActiveColumn(params));
     const ResolvedStrip r = strip.relayout(params);
@@ -961,8 +962,10 @@ void TestScrollStripOps::renormalizationRespectsAutoFloors()
     // (no per-tile minHeights, so every tile has slack down to 1px) the
     // rebalance alone can absorb the overflow. This pins the fits-the-column
     // invariant, not the renormalization step in isolation.
-    QVERIFY(strip.reconcileWindowSize(QStringLiteral("a"), QSize(600, 700), /*widthChanged=*/false));
-    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(600, 700), /*widthChanged=*/false));
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("a"), QSize(600, 700), /*mainChanged=*/false,
+                                      /*crossChanged=*/true, params));
+    QVERIFY(strip.reconcileWindowSize(QStringLiteral("b"), QSize(600, 700), /*mainChanged=*/false,
+                                      /*crossChanged=*/true, params));
 
     const ResolvedStrip r = strip.relayout(params);
     // Pinned before the walk: the invariants below are per-tile, so a

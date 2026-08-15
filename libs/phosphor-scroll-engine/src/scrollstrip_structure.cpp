@@ -359,7 +359,7 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // anchor is PERSISTED. The removal itself stands; only the anchor
     // bookkeeping is skipped, and the first relayout against a real area
     // re-clamps whatever survived.
-    if (params.workArea.width() > 0) {
+    if (params.axis.mainSize(params.workArea) > 0) {
         const int stripX = columnStripPos(m_activeColumnIdx, params);
         int anchor = removedLeftOfActive ? m_viewAnchor : stripX - oldViewOffset;
         if (stripX - anchor < 0) {
@@ -369,7 +369,7 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     }
 
     if (refocus) {
-        const int workW = params.workArea.width();
+        const int workW = params.axis.mainSize(params.workArea);
         const int colW = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
         if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
@@ -772,7 +772,7 @@ QVector<int> ScrollStrip::visibleColumnIndices(const ScrollLayoutParams& params)
     // Visible = the column's strip span intersects the viewport. Fully
     // minimized columns resolve to zero width and never qualify.
     const int viewOffset = viewOffsetFor(params);
-    const int workW = params.workArea.width();
+    const int workW = params.axis.mainSize(params.workArea);
     QVector<int> visible;
     // Strip x accumulated in the walk rather than re-derived per index: the
     // accumulation is columnStripPos's own body (skip zero-width columns, else
@@ -811,7 +811,7 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
     }
     int rotated = 0;
     const int n = visible.size();
-    const int widthBefore = stripExtentPx(params);
+    const int extentBefore = stripExtentPx(params);
     for (int i = 0; i < n; ++i) {
         const int from = clockwise ? (i - 1 + n) % n : (i + 1) % n;
         Column& dest = m_columns[visible.at(i)];
@@ -838,7 +838,7 @@ int ScrollStrip::rotateVisibleColumns(bool clockwise, const ScrollLayoutParams& 
     // (restoreViewAnchor / updateViewForFocus document not clamping them),
     // so an unconditional clamp here would silently undo an explicit
     // centerColumn on a first/last column on the next rotate.
-    if (params.workArea.isValid() && stripExtentPx(params) < widthBefore) {
+    if (params.workArea.isValid() && stripExtentPx(params) < extentBefore) {
         m_viewAnchor = clampedAnchor(m_viewAnchor, params);
     }
     return rotated;

@@ -13,8 +13,12 @@ qreal ScrollStrip::currentHeightFraction(const Tile& t, const ScrollLayoutParams
     case WindowHeight::Preset:
         // Snapped, matching relayout's resolution of the same anchor.
         return nearestPresetValue(params.presetWindowHeights, t.height.presetFraction, -1);
-    case WindowHeight::Fixed:
-        return params.workArea.height() > 0 ? static_cast<qreal>(t.height.fixedPx) / params.workArea.height() : -1;
+    case WindowHeight::Fixed: {
+        // A tile's Fixed extent is pixels ACROSS the strip, so it becomes a
+        // fraction of the cross extent.
+        const int cross = params.axis.crossSize(params.workArea);
+        return cross > 0 ? static_cast<qreal>(t.height.fixedPx) / cross : -1;
+    }
     case WindowHeight::Auto:
         return -1;
     }
@@ -51,7 +55,7 @@ bool ScrollStrip::cycleActiveColumnPresetWidth(int delta, const ScrollLayoutPara
     // exact-inverse fraction below selects the same nearest entry the old
     // pixel-space probe did.
     const int count = params.presetColumnWidths.size();
-    const int workW = params.workArea.width();
+    const int workW = params.axis.mainSize(params.workArea);
     if (workW <= 0) {
         return false;
     }
@@ -81,7 +85,7 @@ bool ScrollStrip::adjustActiveColumnWidth(qreal deltaPercent, const ScrollLayout
     if (!col || qFuzzyIsNull(deltaPercent)) {
         return false;
     }
-    const int workW = params.workArea.width();
+    const int workW = params.axis.mainSize(params.workArea);
     if (workW <= 0) {
         return false; // degenerate area: qBound(1, …, workW) would invert
     }
@@ -126,7 +130,7 @@ bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
         // the column visually unchanged, and then reported TRUE — a false
         // success OSD on the exact dead-end this branch exists to remove.
         const bool defaultIsFullWidth =
-            resolveColumnWidthPx(params.defaultColumnWidth, params) >= params.workArea.width();
+            resolveColumnWidthPx(params.defaultColumnWidth, params) >= params.axis.mainSize(params.workArea);
         col->width = defaultIsFullWidth ? ColumnWidth::makeProportion(0.5) : params.defaultColumnWidth;
         // Unconditionally true: both arms leave the column narrower than the
         // full width it had on entry, so the toggle always did something.
@@ -147,7 +151,7 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     // On-screen leftover: the columns are contiguous in strip space, so the
     // occupied viewport region is one interval — everything outside it is
     // reclaimable.
-    const int workW = params.workArea.width();
+    const int workW = params.axis.mainSize(params.workArea);
     const int viewOffset = viewOffsetFor(params);
     const int stripW = stripExtentPx(params);
     const int covered = qMax(0, qMin(workW, stripW - viewOffset) - qMax(0, -viewOffset));
@@ -209,7 +213,7 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     if (!tile || qFuzzyIsNull(deltaPercent)) {
         return false;
     }
-    const int workH = params.workArea.height();
+    const int workH = params.axis.crossSize(params.workArea);
     if (workH <= 0) {
         return false; // degenerate area: qBound(1, …, workH) would invert
     }
@@ -226,7 +230,7 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
         }
         for (const ResolvedTile& rt : rc.tiles) {
             if (rt.windowId == tile->windowId) {
-                currentPx = rt.rect.height();
+                currentPx = params.axis.crossSize(rt.rect);
             }
         }
     }
@@ -286,8 +290,8 @@ bool ScrollStrip::resetActiveColumnHeights()
     return changed;
 }
 
-bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool widthChanged,
-                                      bool heightChanged)
+bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& ackedSize, bool mainChanged,
+                                      bool crossChanged, const ScrollLayoutParams& params)
 {
     const int colIdx = columnOfWindow(windowId);
     // isEmpty (not merely isValid): a 0x0 ack is "valid" to QSize but would
@@ -297,13 +301,20 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
     }
     Column& col = m_columns[colIdx];
     bool changed = false;
-    // Only take the width when the resize actually MOVED it (the engine
-    // compares against the last applied rect): a purely vertical interactive
-    // resize must not convert a Proportion/Preset intent into Fixed pixels —
-    // that would stop the column reflowing on work-area, preset-list, and
-    // DPI changes.
-    if (widthChanged) {
-        const ColumnWidth acked = ColumnWidth::makeFixed(ackedSize.width());
+    // Only take the column's extent when the resize actually MOVED it along
+    // the strip (the engine compares against the last applied rect): a resize
+    // purely ACROSS the strip must not convert a Proportion/Preset intent into
+    // Fixed pixels — that would stop the column reflowing on work-area,
+    // preset-list, and DPI changes.
+    //
+    // The acked size is a PHYSICAL QSize from the compositor, so it has to be
+    // decoded by role here. Reading .width() unconditionally would, on a
+    // vertical strip, feed the cross extent into the column's intent while the
+    // guard above still spoke about the main one — the resize would appear to
+    // work and then relayout into the wrong shape, with both intents pinned to
+    // Fixed pixels on the wrong axes.
+    if (mainChanged) {
+        const ColumnWidth acked = ColumnWidth::makeFixed(params.axis.mainSize(ackedSize));
         if (!(col.width == acked)) {
             col.width = acked;
             changed = true;
@@ -316,13 +327,14 @@ bool ScrollStrip::reconcileWindowSize(const QString& windowId, const QSize& acke
             }
         }
     }
-    // Same guard as width: a purely horizontal resize must not convert the
-    // tile's height intent into Fixed pixels. Lone tiles included — relayout
-    // honors a solo tile's Fixed height (niri parity), so an interactive
-    // vertical resize of a lone window sticks instead of snapping back.
-    if (heightChanged) {
+    // Same guard as the column's: a resize purely ALONG the strip must not
+    // convert the tile's cross-axis intent into Fixed pixels. Lone tiles
+    // included — relayout honors a solo tile's Fixed height (niri parity), so
+    // an interactive cross-axis resize of a lone window sticks instead of
+    // snapping back.
+    if (crossChanged) {
         Tile& tile = col.tiles[col.indexOfWindow(windowId)];
-        const WindowHeight ackedH = WindowHeight::makeFixed(ackedSize.height());
+        const WindowHeight ackedH = WindowHeight::makeFixed(params.axis.crossSize(ackedSize));
         if (!(tile.height == ackedH)) {
             tile.height = ackedH;
             changed = true;
