@@ -743,7 +743,7 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
     //     ALLOWS the restore. This is the case the fix targets: a window
     //     restored at login was being denied its snap position because a
     //     same-class sibling reported a real pid against its unknown one.
-    //   * handlers/snaphandler.cpp, snap-all skips when !hasOther... && the appId
+    //   * kwin-effect/handlers/snaphandler.cpp, snap-all skips when !hasOther... && the appId
     //     is already snapped — false can now SKIP a pid-unknown window that the
     //     old sentinel comparison would have snapped. Narrow: it needs an
     //     unknown pid, a same-class sibling, and the appId already in the

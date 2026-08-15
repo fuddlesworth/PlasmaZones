@@ -21,7 +21,6 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
-#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorRules/RuleAction.h>
@@ -193,6 +192,15 @@ WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const Q
     // would report a Scrolling screen as "snapping" and fire a rule that should
     // stay inert. Scrolling has no engine yet (the router passes those windows
     // through to KWin), so it stamps nothing.
+    //
+    // Note this DID change one case beyond the Scrolling fix. modeForScreen has
+    // no empty answer: a screen with no stored assignment falls back to a
+    // default entry whose mode is Snapping, so such a screen now stamps
+    // "snapping" where the earlier id-prefix version left the field empty. That
+    // is the correct answer rather than an accident — it is what
+    // screenModeForWindow reports for the same screen, and a snapping-mode rule
+    // should fire on a screen the router will hand to the snap engine — but it
+    // means `Mode NotEquals "snapping"` no longer matches an unassigned screen.
     int modeDesktop = desktop;
     QString modeActivity = activity;
     if (!m_windowRegistry.isNull()) {

@@ -481,7 +481,8 @@ void Daemon::handleAutotileDisabled()
         // registry alone still ran a full reconcile (updateAutotileScreens, resnap
         // apply, OSD) per iteration, re-entrantly, over a half-written assignment
         // set. That is the very thing this blocker exists to prevent. Both are
-        // released together and one reconcile is driven explicitly at the end.
+        // released together, and the caller's own diffActiveAssignments()
+        // republishes the snapshot the blocked rulesChanged would have driven.
         QSignalBlocker ruleBlocker(m_ruleStore.get());
         m_layoutManager->clearAutotileAssignments();
     }
@@ -619,7 +620,8 @@ void Daemon::handleSnappingToAutotile()
         // registry alone still ran a full reconcile (updateAutotileScreens, resnap
         // apply, OSD) per iteration, re-entrantly, over a half-written assignment
         // set. That is the very thing this blocker exists to prevent. Both are
-        // released together and one reconcile is driven explicitly at the end.
+        // released together, and the caller's own diffActiveAssignments()
+        // republishes the snapshot the blocked rulesChanged would have driven.
         QSignalBlocker ruleBlocker(m_ruleStore.get());
         for (const QString& screenId : screensToConvert) {
             // Per-output virtual desktops (#648): each screen resolves its own desktop.

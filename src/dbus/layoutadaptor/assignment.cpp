@@ -898,9 +898,6 @@ void LayoutAdaptor::applyAssignmentChanges()
     }
     QSet<QString> changed = std::move(m_changedScreenIds);
     m_changedScreenIds.clear();
-    // Closing a batch releases the suppression, so a client that dies before its
-    // own setSaveBatchMode(false) cannot mute screenLayoutChanged for good.
-    clearSaveBatchMode();
     applyAssignmentChangesFor(changed);
 }
 

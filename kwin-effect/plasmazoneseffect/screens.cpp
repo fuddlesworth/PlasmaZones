@@ -281,8 +281,12 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
                     // written for. The screen-id keyspace has just changed
                     // shape, so cached ScreenId / ScreenOrientation /
                     // ActiveLayout verdicts resolved against the old shape are
-                    // stale. Both calls coalesce, so the per-screen replies of
-                    // one reconfigure pay for one sweep.
+                    // stale. Note only scheduleBorderSweep coalesces (via
+                    // m_borderSweepPending); invalidateAllRuleCaches runs its
+                    // layer reconcile per call, so a reconfigure touching N
+                    // physical screens pays that N times. Wasteful, not wrong,
+                    // and it early-returns entirely for a session with no
+                    // animation, layer or exclusion rules.
                     self->invalidateAllRuleCaches();
                     self->scheduleBorderSweep();
                 }
