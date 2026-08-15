@@ -10,6 +10,7 @@
 #include "core/types/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h>
 #include "core/platform/logging.h"
 #include "core/utils/utils.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
