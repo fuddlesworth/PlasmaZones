@@ -784,18 +784,32 @@ void LayoutAdaptor::setSaveBatchMode(bool enabled)
     m_suppressScreenLayoutSignal = enabled;
 }
 
-void LayoutAdaptor::markScreensChanged(const QSet<QString>& screenIds)
-{
-    m_changedScreenIds.unite(screenIds);
-}
-
 void LayoutAdaptor::applyAssignmentChanges()
 {
+    // Drains the CLIENT's buffer only — the set accumulated by this adaptor's
+    // own assignment slots since the last apply. Nothing else writes it.
+    if (m_changedScreenIds.isEmpty()) {
+        // Nothing was staged, so there is nothing to apply. The early return
+        // matters because downstream an EMPTY set means "every screen"
+        // (populateResnapBufferForAllScreens skips its include filter, and the
+        // OSD loop treats empty as match-all). Without this, a bus peer calling
+        // applyAssignmentChanges with no preceding mutation would force a full
+        // resnap of every window plus a per-screen OSD.
+        return;
+    }
     QSet<QString> changed = std::move(m_changedScreenIds);
     m_changedScreenIds.clear();
+    applyAssignmentChangesFor(changed);
+}
+
+void LayoutAdaptor::applyAssignmentChangesFor(const QSet<QString>& screenIds)
+{
+    if (screenIds.isEmpty()) {
+        return;
+    }
     // Signal is typed as QStringList for D-Bus compatibility (QSet is not
     // marshallable). Receivers that need set semantics convert back.
-    Q_EMIT assignmentChangesApplied(QStringList(changed.begin(), changed.end()));
+    Q_EMIT assignmentChangesApplied(QStringList(screenIds.begin(), screenIds.end()));
 }
 
 } // namespace PlasmaZones

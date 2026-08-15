@@ -415,13 +415,18 @@ void Daemon::reconcileActiveAssignments()
     if (changed.isEmpty()) {
         return;
     }
-    // Snapping screens resnap via the shared legacy apply path: mark the changed
-    // screens on the adaptor and trigger the same assignmentChangesApplied handler
-    // the KCM batch uses, so rule-driven and assignment-driven changes run identical
-    // code. Gated on `changed` because only an assignment-id change moves windows.
+    // Snapping screens resnap through the same assignmentChangesApplied handler
+    // the KCM batch uses, so rule-driven and assignment-driven changes run
+    // identical code. Gated on `changed` because only an assignment-id change
+    // moves windows.
+    //
+    // Emitted for THIS set explicitly rather than staged into the adaptor's
+    // m_changedScreenIds: that buffer is the bus client's save batch, and every
+    // assignment write reaches here synchronously via RuleStore::rulesChanged,
+    // so staging would drain the client's batch mid-save and leave its closing
+    // apply with an empty set (which downstream means every screen).
     if (m_layoutAdaptor) {
-        m_layoutAdaptor->markScreensChanged(changed);
-        m_layoutAdaptor->applyAssignmentChanges();
+        m_layoutAdaptor->applyAssignmentChangesFor(changed);
     }
 }
 

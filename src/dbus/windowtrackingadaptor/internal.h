@@ -46,18 +46,37 @@ inline QJsonObject rectToJsonObject(const QRect& rect)
 } // namespace WindowTrackingInternal
 
 // Build a per-window rule query from the registry metadata, or nullopt when no
-// metadata is tracked (the caller falls back to its own default). Shared by the
-// RestorePosition and Float resolvers so the metadata→query derivation lives in
-// one place. windowClass is not tracked daemon-side (the compositor reports
-// appId, which is class-derived), so rules match on appId / title / role / type
-// / desktop / pid plus the recorded desktop / activity context; screenId stays
-// empty (a window-domain rule does not pin a screen). The extended window
-// properties (state flags, geometry, accessory flags, captionNormal) are carried
-// straight through from the effect's snapshot (setWindowMetadata's a{sv}), so a
-// Float / RestorePosition rule keyed on e.g. IsModal or Width matches the same
-// values the effect path resolves live. Placement state (IsFloating / IsSnapped /
-// Zone) is deliberately absent: these resolvers run at window-open, before any
-// placement exists, so a predicate over them must stay inert.
+// metadata is tracked (the caller falls back to its own default). Never call this
+// directly — every daemon-side per-window resolver goes through
+// WindowTrackingAdaptor::buildContextualRuleQuery, which wraps this and adds the
+// screen-derived context fields (see below).
+//
+// Rules match on appId / title / role / type / desktop / pid plus the recorded
+// desktop / activity context. The extended window properties (state flags,
+// geometry, accessory flags, captionNormal) are carried straight through from the
+// effect's snapshot (setWindowMetadata's a{sv}), so a Float / RestorePosition rule
+// keyed on e.g. IsModal or Width matches the same values the effect path resolves
+// live.
+//
+// Two known-dead field pairings, both pre-existing and neither closable here:
+//
+//   * windowClass is not tracked daemon-side (the compositor reports appId, which
+//     is class-derived) and setWindowMetadata's wire carries no windowClass field.
+//     The effect stamps it, but the effect resolves only APPEARANCE actions, so a
+//     `WindowClass ⇒ Float` rule matches on neither side. Closing it needs a new
+//     wire field, or the rule builder must stop offering WindowClass alongside
+//     window-domain open-path actions.
+//
+//   * Placement state (IsFloating / IsSnapped / IsTiled / Zone) is absent because
+//     these resolvers were written for window-open, before any placement exists.
+//     That premise no longer holds for all of them: shouldRestoreSizeOnUnsnap
+//     fires mid-session on every unsnap, and the snap engine's exclusion-query
+//     provider is consulted per snap attempt, both at moments when the placement
+//     IS known. So an Exclude or SetRestoreSizeOnUnsnap rule carrying a placement
+//     leaf never matches. These fields are optional, so it fails closed (inert)
+//     rather than matching spuriously — but it fails silently. Threading the
+//     placement state into the mid-session callers is a design change, not a
+//     stamping fix.
 inline std::optional<PhosphorRules::WindowQuery>
 buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry, const QString& windowId)
 {
@@ -97,15 +116,18 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     query.windowType = meta->windowType;
     query.virtualDesktop = meta->virtualDesktop;
     query.activity = meta->activity;
-    // Screen-derived context fields (ScreenId, Mode, ScreenOrientation, ActiveLayout)
-    // are not stamped here, because the window metadata carries no screen. ScreenId
-    // and ActiveLayout are filled by the caller-side wrapper
+    // The four screen-derived context fields (ScreenId, ActiveLayout,
+    // ScreenOrientation, Mode) are not stamped here, because the window metadata
+    // carries no screen. All four are filled by the caller-side wrapper
     // WindowTrackingAdaptor::buildContextualRuleQuery, which resolves the window's
-    // screen (or takes the open path's hint) and reads the layout assigned to that
-    // context — every daemon-side resolver goes through it, so a rule matching
-    // either field resolves on this path. Mode and ScreenOrientation remain unstamped
-    // daemon-side: the effect's live per-window query (ruleQueryFor) supplies those,
-    // so a rule pairing one of them with a window property resolves there, not here.
+    // screen (or takes the open path's hint) and reads that screen's context.
+    //
+    // They are NOT optional fields: WindowQuery::valueForField returns each of
+    // them always-engaged, so leaving one unstamped compares an empty string
+    // rather than reporting "no value". `Equals <x>` correctly fails against
+    // that, and an empty-Equals leaf cannot be authored (MatchExpression::isValid
+    // rejects it), but a NEGATED leaf matches. That is why the wrapper is
+    // mandatory rather than merely preferable.
     // Extended properties — optional→optional copy preserves engagement exactly,
     // so a field the effect could not observe stays disengaged and inert here too.
     query.isMinimized = meta->isMinimized;

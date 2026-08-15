@@ -105,29 +105,61 @@ WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const Q
     if (!m_layoutManager) {
         return query;
     }
-    // ActiveLayout is the layout id assigned to the window's (screen, desktop,
-    // activity) context — the SAME id assignmentIdForScreen hands the windowless
-    // context cascade, so an `ActiveLayout Equals <uuid>` leaf resolves identically
-    // whether it sits on a context rule or a window rule. The window's OWN desktop
-    // wins over the screen's current one where known (effectiveDesktop), matching
-    // how the per-window mode resolution reads its context.
+    // ActiveLayout is the layout active on that SCREEN right now — the id
+    // assignmentIdForScreen resolves for the screen's current desktop and
+    // activity, which is the same id the windowless context cascade stamps and
+    // the same one the daemon publishes to the KWin effect. Keeping all three on
+    // one definition is the point: `ActiveLayout Equals <uuid>` has to mean the
+    // same thing whether it sits on a context rule, a daemon-resolved window
+    // rule, or an effect-resolved appearance rule.
+    //
+    // Deliberately NOT the window's own desktop/activity. The effect resolves
+    // this field from a per-SCREEN cache the daemon publishes for each screen's
+    // current context and cannot do otherwise (it has no layout registry), so
+    // stamping the window's context here would make the identical leaf match on
+    // one side and not the other for any window sitting on a desktop other than
+    // the one its screen is showing. The trade-off is explicit: a window on
+    // desktop 2 whose screen currently shows desktop 1 matches desktop 1's
+    // layout.
     //
     // The "screen's current desktop" comes from the layout registry's own
     // per-output record rather than the VirtualDesktopManager: we are asking the
     // registry which layout it has assigned, so it must be asked on the same
     // desktop it resolves layoutForScreen against, and its accessor already falls
     // back to the global current desktop when a screen has no per-output value.
-    int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
-    QString activity = m_layoutManager->currentActivity();
-    if (!m_windowRegistry.isNull()) {
-        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
-        if (const std::optional<PhosphorEngine::WindowRegistry::WindowContext> ctx =
-                m_windowRegistry->windowContext(instanceId)) {
-            desktop = ctx->effectiveDesktop(desktop);
-            activity = ctx->effectiveActivity(activity);
-        }
+    const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+    const QString activity = m_layoutManager->currentActivity();
+    const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+    query->activeLayout = assignmentId;
+
+    // ScreenOrientation and Mode are the other two screen-derived context fields,
+    // and they were dead here for exactly the reason ActiveLayout was: nothing
+    // stamps them on this side, and the effect resolves only APPEARANCE actions,
+    // so it never sees an open-path rule at all. Float, Placement, RouteToScreen,
+    // RouteToDesktop, RestorePosition, RestoreToZoneOnLogin and
+    // RestoreSizeOnUnsnap are resolved here and nowhere else — a rule pairing one
+    // of them with a Mode or ScreenOrientation leaf matched nothing, and (both
+    // being non-optional context fields) a negated leaf matched everything.
+    m_layoutManager->stampScreenOrientation(*query, screenId);
+
+    // Mode is the SCREEN's configured engine mode, normalised to the query
+    // vocabulary. Note the two vocabularies differ by one token: an assignment
+    // records "autotile", while WindowQuery::mode carries the placement-mode wire
+    // token "tiling" (the same token resolveContextGaps takes from the autotile
+    // path). Stamping the raw assignment token would silently never match a
+    // `Mode Equals "tiling"` leaf.
+    //
+    // This is the screen's mode, not the window's placement. The effect derives
+    // the same field from a live window's snapped/tiled state and leaves it empty
+    // while the window floats; here, at window-open, no placement exists yet, so
+    // the screen's configured mode is the only thing knowable and is what an
+    // open-path rule ("float this app when the screen is tiling") is asking
+    // about. An unassigned screen leaves the field empty, matching the
+    // floating-window convention of "no mode".
+    if (!assignmentId.isEmpty()) {
+        query->mode =
+            PhosphorLayout::LayoutId::isAutotile(assignmentId) ? QStringLiteral("tiling") : QStringLiteral("snapping");
     }
-    query->activeLayout = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
     return query;
 }
 

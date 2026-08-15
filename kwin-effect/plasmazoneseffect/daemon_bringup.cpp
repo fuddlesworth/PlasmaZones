@@ -182,7 +182,7 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // Re-push cursor screen — use the cached effective screen ID (which includes
     // virtual screen IDs like "A/vs:0") so the daemon's shortcut handler resolves
     // to the correct virtual screen, not the physical monitor.
-    // m_lastEffectiveScreenId was set during the last processCursorPosition() call
+    // m_lastEffectiveScreenId was set during the last slotMouseChanged() call
     // via resolveEffectiveScreenId(), so it already has the correct virtual ID.
     if (!m_lastEffectiveScreenId.isEmpty()) {
         PhosphorProtocol::ClientHelpers::fireAndForget(this, PhosphorProtocol::Service::Interface::WindowTracking,
@@ -228,6 +228,14 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // Re-notify active window (gives daemon lastActiveScreenName).
     // Use notifyWindowActivated which bypasses user exclusion lists — the daemon
     // must always know which window is active for correct shortcut handling.
+    //
+    // This runs BEFORE the virtual-screen fetch below, so on a subdivided setup
+    // the screen id it reports is the physical one (the defs map is empty here:
+    // cleared on daemon loss, and never populated on a fresh start). That is
+    // deliberate — the daemon should not be left with no active window at all for
+    // the duration of a D-Bus round trip — and it is corrected rather than
+    // tolerated: notifyActiveWindowScreen() re-sends once the definitions land,
+    // from the fetch-completion path.
     KWin::EffectWindow* activeWindow = getActiveWindow();
     if (activeWindow) {
         notifyWindowActivated(activeWindow);
@@ -235,7 +243,7 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
 
     // Fetch virtual screen definitions from daemon — needed before any screen ID
     // resolution so that getWindowScreenId() and cursor tracking return virtual
-    // screen IDs when subdivisions are configured.
+    // screen IDs when subdivisions are configured (see the re-notify above).
     // Clear ready flag immediately to close the race window where stale virtual
     // screen state from the previous daemon cycle is used before the new fetch
     // completes.
@@ -331,6 +339,17 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
         return;
     }
     m_daemonGate.readyWindowStateProcessed = true;
+
+    // Re-send the active window now that the virtual-screen definitions have
+    // landed. continueDaemonReadySetup already notified once, deliberately, so
+    // the daemon is never left without an active window — but that ran before
+    // the fetch, so on a subdivided setup it resolved a PHYSICAL screen id.
+    // getWindowScreenId resolves through the (now populated) definitions, so
+    // this second notify carries the virtual id the daemon keys its shortcut
+    // routing on. Idempotent: notifyWindowActivated re-states the same window.
+    if (KWin::EffectWindow* activeWindow = getActiveWindow()) {
+        notifyWindowActivated(activeWindow);
+    }
 
     // Delegate autotile re-initialization to handler.
     // Snapshot the active window so the autotile raise loop can re-activate it

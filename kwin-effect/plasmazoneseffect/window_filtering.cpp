@@ -713,7 +713,18 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
     }
 
     QString windowClass = w->windowClass();
-    pid_t windowPid = w->pid();
+    const pid_t windowPid = w->pid();
+    // KWin reports -1 when the pid is unknown, notably during session restore
+    // before the client reattaches (see window_identity.cpp, which clamps it for
+    // the same reason). Comparing that sentinel as if it were a real pid makes
+    // `-1 != <real pid>` true and reports "another app spawned this class" for
+    // what is the same app — and session restore is exactly when the pid is
+    // unknown AND several same-class windows appear together. The caller
+    // suppresses snap restore on a true result, so an undiscriminating answer
+    // must fail toward allowing the restore.
+    if (windowPid <= 0) {
+        return false;
+    }
 
     // Check all existing windows for same class but different PID
     // This detects when another app (e.g., Cachy Update) spawns a window
@@ -730,6 +741,9 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
         }
         if (!shouldHandleWindow(other)) {
             continue; // Skip non-managed windows
+        }
+        if (other->pid() <= 0) {
+            continue; // Same unknown-pid sentinel — cannot discriminate against it either.
         }
         if (other->windowClass() == windowClass && other->pid() != windowPid) {
             // Found another window of the same class with different PID

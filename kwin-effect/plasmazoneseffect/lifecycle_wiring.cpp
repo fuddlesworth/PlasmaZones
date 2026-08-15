@@ -985,6 +985,20 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // between unregistration and the next daemon's fetch. continueDaemonReady
         // setup re-clears and refetches on bringup; this closes the gap before it.
         m_daemonGate.virtualScreensReady = false;
+        // Drop the subdivision geometry itself, not just the gate. The dead
+        // daemon owned these definitions, and the next daemon may subdivide
+        // differently or not at all — keeping them let the bringup's
+        // active-window notify resolve a screen id against the PREVIOUS
+        // session's boundaries and report it to the new daemon, which then held
+        // a wrong lastActiveScreenId until the user's next focus change.
+        //
+        // Safe against every consumer: the VS-crossing detectors in
+        // window_connections and autotilehandler/tiling, and the reposition path
+        // in screenchangehandler, are each additionally gated on
+        // virtualScreensReady or serviceRegistered — both already false here —
+        // so they were inert during the daemon-down interval regardless. The one
+        // remaining reader (tiling.cpp's fast bail) only skips work sooner.
+        m_virtualScreenDefs.clear();
         // The stale floating-window set is dropped further down in this same
         // handler (clearAllFloatingState beside clearAllZoneState, paired with
         // the rule-cache invalidation) — no separate clear here.

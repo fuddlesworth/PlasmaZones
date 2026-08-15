@@ -427,11 +427,30 @@ private Q_SLOTS:
 public:
     void invalidateCache();
 
-    // Mark screens as changed for the next applyAssignmentChanges(), without
-    // going through setAssignmentEntry. Internal (NOT bus-exposed): the daemon
-    // calls this to drive the same resnap/retile path when a RULE edit (not a
-    // legacy assignment edit) changes the active assignment for some screens.
-    void markScreensChanged(const QSet<QString>& screenIds);
+    /**
+     * @brief Emit @ref assignmentChangesApplied for an explicitly supplied set.
+     *
+     * Internal (NOT bus-exposed). The daemon's rule-driven reconcile uses this
+     * instead of staging into @ref m_changedScreenIds and calling
+     * @ref applyAssignmentChanges, because that buffer belongs to the BUS
+     * CLIENT: the settings app accumulates a save batch across N
+     * setAssignmentEntry calls and commits it with one applyAssignmentChanges.
+     *
+     * Sharing the buffer was a real defect, not a tidiness question. Every
+     * assignment write emits RuleStore::rulesChanged synchronously, which drives
+     * Daemon::reconcileActiveAssignments, so an N-entry save ran the apply pass
+     * N times mid-batch and drained the client's buffer each time. The client's
+     * closing call then saw an empty set — which downstream means EVERY screen —
+     * and resnapped and OSD'd all of them instead of the ones it edited.
+     *
+     * The two sets are genuinely different facts ("screens this client edited"
+     * versus "screens whose resolved assignment moved"), so they get their own
+     * storage rather than a mode flag arbitrating one buffer.
+     *
+     * A no-op on an empty set: empty means "every screen" downstream, never
+     * "nothing".
+     */
+    void applyAssignmentChangesFor(const QSet<QString>& screenIds);
 
     /**
      * @brief Publish the daemon's freshly recomputed active-assignment snapshot.

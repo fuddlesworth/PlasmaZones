@@ -595,15 +595,23 @@ private:
      * Diffs each screen's resolved assignment id against the snapshot; for the
      * screens that changed, retiles autotile screens (updateAutotileScreens
      * self-diffs) and drives the legacy resnap/OSD path via the LayoutAdaptor
-     * (markScreensChanged + applyAssignmentChanges). A no-op when nothing
+     * (applyAssignmentChangesFor, which carries this set explicitly rather than
+     * staging into the bus client's save-batch buffer). A no-op when nothing
      * assignment-affecting changed (appearance / exclude / lock edits, etc.).
      */
     void reconcileActiveAssignments();
 
     /**
      * @brief Recompute each effective screen's active assignment id and return
-     *        the set whose id differs from @ref m_activeAssignmentByScreen,
-     *        updating the snapshot to the new values (dropping removed screens).
+     *        the set whose id differs from @ref m_activeAssignmentByScreen, or
+     *        which dropped out of the effective-screen list entirely, updating
+     *        the snapshot to the new values (dropping removed screens).
+     *
+     * The removed screens are in the returned set because they must be
+     * broadcast as "no longer resolving to any layout" — so a consumer that
+     * treats the result as "screens to resnap" has to tolerate ids that no
+     * longer exist. In practice screenRemoved diffs first, so they are gone by
+     * the time a later rule edit lands.
      *
      * Called by reconcileActiveAssignments (with apply) and, with the result
      * discarded, to refresh the snapshot after a context switch or a legacy
