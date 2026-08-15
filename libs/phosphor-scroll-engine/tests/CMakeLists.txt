@@ -70,6 +70,12 @@ function(pse_add_test _name)
 endfunction()
 
 pse_add_test(test_stripaxis test_stripaxis.cpp)
+# The park decision lives in a PRIVATE header, and the library builds with
+# hidden visibility, so its symbols are not linkable from here. Compile that
+# one TU straight into the test instead: it is pure and depends on nothing but
+# StripAxis and QtCore, which is exactly why it was worth extracting.
+pse_add_test(test_scrollpark test_scrollpark.cpp ${CMAKE_CURRENT_SOURCE_DIR}/../src/scrollengine/engine_park.cpp)
+target_include_directories(test_scrollpark PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 pse_add_test(test_scrollstrip_core test_scrollstrip_core.cpp)
 pse_add_test(test_scrollstrip_ops test_scrollstrip_ops.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)

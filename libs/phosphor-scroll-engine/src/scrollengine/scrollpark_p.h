@@ -83,6 +83,23 @@ void parkRect(QRect& rect, const QRect& screenRect, int parkTop);
 /// Resolve one tile's committed placement: off-viewport parking, the
 /// main-axis straddle clamp, and the cross-axis stack-overflow clamp.
 ///
+/// THE INVARIANT, in one sentence: a park on the MAIN (strip) axis always
+/// carries a scrollEdge naming the end the column departed by and is the only
+/// park crop mode can opt out of; a park on the CROSS (stack) axis never
+/// carries one, is enforced in both crop and clamp mode, and preserves any
+/// main-axis edge already consumed this pass by handing it back through
+/// ParkResult::rememberedEdge.
+///
+/// Keying either arm on a PHYSICAL axis rather than a role silently swaps
+/// those behaviours on a vertical strip: a stack overflow would emit a
+/// departure edge the effect then animates as strip motion, and a genuine
+/// strip departure would be suppressed by the absence of crop mode.
+///
+/// ORDER IS LOAD-BEARING: the main-axis arms run first, and the cross-axis arm
+/// is reachable only by a tile whose main-axis position is already inside the
+/// screen. On a vertical strip the main-axis arms run on y, so a main-axis
+/// park is decided BEFORE the cross-axis test could misread the same rect.
+///
 /// @param remembered the departure edge this window is currently carrying, or
 ///        an empty string when it carries none.
 ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered);

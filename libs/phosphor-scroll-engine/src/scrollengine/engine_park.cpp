@@ -7,6 +7,24 @@
 
 namespace PhosphorScrollEngine::Detail {
 
+namespace {
+
+/// The wire vocabulary for the two ends of the strip. A departure is named by
+/// the SCREEN edge the column left through, so it swaps physical words with
+/// the axis: leading is "left" on a horizontal strip and "top" on a vertical
+/// one.
+QString leadingEdge(StripAxis axis)
+{
+    return axis.isHorizontal() ? QStringLiteral("left") : QStringLiteral("top");
+}
+
+QString trailingEdge(StripAxis axis)
+{
+    return axis.isHorizontal() ? QStringLiteral("right") : QStringLiteral("bottom");
+}
+
+} // namespace
+
 void parkRect(QRect& rect, const QRect& screenRect, int parkTop)
 {
     const int maxLeft = qMax(screenRect.left(), screenRect.right() + 1 - rect.width());
@@ -28,28 +46,29 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
     // parked rect (as the old code effectively did, by encoding it in the park
     // position) makes it a fact about whichever side happened to be safe to
     // park on. Empty for a tile that is on screen — nothing to anchor.
+    const StripAxis axis = in.axis;
     if (in.hidden) {
         // Non-active tile of a tabbed column: parked off-canvas so it cannot
         // steal input from the visible tab (hit-testing uses real geometry
-        // only). It follows its COLUMN's side, so a column off the left edge
-        // keeps its hidden tiles anchored left. A column that is ON screen
-        // records NO edge: its hidden tabs are parked for input reasons, not
-        // because the strip scrolled them away, and there is no departure to
-        // animate back from. Defaulting them to "right" made the next tab
-        // switch slide the newly-active tab in from off the right edge.
-        if (in.columnRect.right() < in.workArea.left()) {
-            out.emittedEdge = QStringLiteral("left");
-        } else if (in.columnRect.left() > in.workArea.right()) {
-            out.emittedEdge = QStringLiteral("right");
+        // only). It follows its COLUMN's side, so a column off the strip's
+        // leading edge keeps its hidden tiles anchored there. A column that is
+        // ON screen records NO edge: its hidden tabs are parked for input
+        // reasons, not because the strip scrolled them away, and there is no
+        // departure to animate back from. Defaulting them to the trailing edge
+        // made the next tab switch slide the newly-active tab in from off it.
+        if (axis.mainHigh(in.columnRect) < axis.mainLow(in.workArea)) {
+            out.emittedEdge = leadingEdge(axis);
+        } else if (axis.mainLow(in.columnRect) > axis.mainHigh(in.workArea)) {
+            out.emittedEdge = trailingEdge(axis);
         }
         parkRect(rect, in.screenRect, in.parkTop);
         out.parked = true;
-    } else if (rect.right() < in.workArea.left()) {
-        out.emittedEdge = QStringLiteral("left");
+    } else if (axis.mainHigh(rect) < axis.mainLow(in.workArea)) {
+        out.emittedEdge = leadingEdge(axis);
         parkRect(rect, in.screenRect, in.parkTop);
         out.parked = true;
-    } else if (rect.left() > in.workArea.right()) {
-        out.emittedEdge = QStringLiteral("right");
+    } else if (axis.mainLow(rect) > axis.mainHigh(in.workArea)) {
+        out.emittedEdge = trailingEdge(axis);
         parkRect(rect, in.screenRect, in.parkTop);
         out.parked = true;
     }
@@ -112,16 +131,18 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
     // Crop mode covers only what the setting names: the side-edge straddle.
     // Cross-axis stack overflow is enforced unconditionally further down.
     if (!in.cropStraddlers && !out.parked) {
-        const bool straddleRight = rect.right() > in.screenRect.right() && rect.left() <= in.screenRect.right();
-        // Both predicates read the PRE-mutation rect, and the left one is
-        // consumed after the right branch may have called setRight. Safe only
+        const bool straddleHigh =
+            axis.mainHigh(rect) > axis.mainHigh(in.screenRect) && axis.mainLow(rect) <= axis.mainHigh(in.screenRect);
+        // Both predicates read the PRE-mutation rect, and the low one is
+        // consumed after the high branch may have called setMainHigh. Safe only
         // because the two are mutually exclusive: a column cannot straddle both
-        // edges, since columnExtentPx caps every column at the work area's main
+        // ends, since columnExtentPx caps every column at the work area's main
         // extent, which is never larger than the screen's. That is a non-local
         // invariant holding this code up, so it is stated here rather than left
         // to be rediscovered.
-        const bool straddleLeft = rect.left() < in.screenRect.left() && rect.right() >= in.screenRect.left();
-        if (straddleRight || straddleLeft) {
+        const bool straddleLow =
+            axis.mainLow(rect) < axis.mainLow(in.screenRect) && axis.mainHigh(rect) >= axis.mainLow(in.screenRect);
+        if (straddleHigh || straddleLow) {
             // Under respectMinimumSize the peek floor rises to the client's
             // declared minimum: committing a clamped extent the client refuses
             // makes KWin regrow the frame from its origin, pushing it straight
@@ -132,25 +153,30 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
             // instead of parking forever. For exactly that oversized-minimum
             // case the regrow hazard the floor exists to avoid is knowingly
             // re-accepted — a straddle beats a permanently invisible window.
-            const int peekFloor = qMin(in.screenRect.width(), qMax(kMinVisiblePeekPx, in.tileMin.width()));
-            if (straddleRight) {
-                const int visible = in.screenRect.right() + 1 - rect.left();
+            // The client minimum is decoded by ROLE here: a straddle along the
+            // strip is bounded by however much of the window has to stay
+            // visible ALONG that axis, which is the client's width only while
+            // the strip runs horizontally.
+            const int peekFloor =
+                qMin(axis.mainSize(in.screenRect), qMax(kMinVisiblePeekPx, axis.mainSize(in.tileMin)));
+            if (straddleHigh) {
+                const int visible = axis.mainHigh(in.screenRect) + 1 - axis.mainLow(rect);
                 if (visible >= peekFloor) {
-                    rect.setRight(in.screenRect.right());
+                    axis.setMainHigh(rect, axis.mainHigh(in.screenRect));
                 } else {
-                    out.emittedEdge = QStringLiteral("right");
+                    out.emittedEdge = trailingEdge(axis);
                     out.rememberedEdge = out.emittedEdge;
                     parkRect(rect, in.screenRect, in.parkTop);
                     out.parked = true;
                 }
             }
-            if (!out.parked && straddleLeft) {
-                const int visible = rect.right() + 1 - in.screenRect.left();
+            if (!out.parked && straddleLow) {
+                const int visible = axis.mainHigh(rect) + 1 - axis.mainLow(in.screenRect);
                 if (visible >= peekFloor) {
-                    out.clampPinnedMain = rect.left() != in.screenRect.left();
-                    rect.setLeft(in.screenRect.left());
+                    out.clampPinnedMain = axis.mainLow(rect) != axis.mainLow(in.screenRect);
+                    axis.setMainLow(rect, axis.mainLow(in.screenRect));
                 } else {
-                    out.emittedEdge = QStringLiteral("left");
+                    out.emittedEdge = leadingEdge(axis);
                     out.rememberedEdge = out.emittedEdge;
                     parkRect(rect, in.screenRect, in.parkTop);
                     out.parked = true;
@@ -171,18 +197,18 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
     // main-axis departure edge already consumed this pass is put back and NOT
     // emitted: this park has no side to animate from, and the memory must
     // survive for the eventual main-axis arrival.
-    if (!out.parked && rect.top() > in.screenRect.bottom()) {
+    if (!out.parked && axis.crossPos(rect) > axis.crossHigh(in.screenRect)) {
         if (!out.emittedEdge.isEmpty()) {
             out.rememberedEdge = out.emittedEdge;
             out.emittedEdge.clear();
         }
         parkRect(rect, in.screenRect, in.parkTop);
         out.parked = true;
-    } else if (!out.parked && rect.bottom() > in.screenRect.bottom()) {
-        const int peekFloor = qMin(in.screenRect.height(), qMax(kMinVisiblePeekPx, in.tileMin.height()));
-        const int visible = in.screenRect.bottom() + 1 - rect.top();
+    } else if (!out.parked && axis.crossHigh(rect) > axis.crossHigh(in.screenRect)) {
+        const int peekFloor = qMin(axis.crossSize(in.screenRect), qMax(kMinVisiblePeekPx, axis.crossSize(in.tileMin)));
+        const int visible = axis.crossHigh(in.screenRect) + 1 - axis.crossPos(rect);
         if (visible >= peekFloor) {
-            rect.setBottom(in.screenRect.bottom());
+            axis.setCrossHigh(rect, axis.crossHigh(in.screenRect));
         } else {
             if (!out.emittedEdge.isEmpty()) {
                 out.rememberedEdge = out.emittedEdge;
