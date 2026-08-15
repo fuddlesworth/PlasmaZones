@@ -813,6 +813,13 @@ void PlasmaZonesEffect::slotActiveLayoutForScreenChanged(const QString& screenId
     if (screenId.isEmpty()) {
         return;
     }
+    // The screen id is not whitelisted against KWin's outputs, deliberately. The
+    // daemon keys by EFFECTIVE screen id, which includes virtual-screen
+    // subdivisions ("<output>/vs:N") that are not KWin outputs at all, so
+    // rejecting unknown ids would drop every legitimate entry on a subdivided
+    // monitor. Growth is bounded instead: entries are pruned when their physical
+    // screen disconnects (fetchAllVirtualScreenConfigs) and the whole map is
+    // dropped on daemon loss, and an id matching no window is inert.
     // An empty id means the screen no longer resolves to any layout (unplugged,
     // or its assignment was cleared with the default suppressed). Remove the
     // entry rather than storing "": both leave ruleQuery's ActiveLayout empty

@@ -638,8 +638,19 @@ void Daemon::initEnginesAndWiring()
         m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this,
         [this](const QStringList& changedScreenIdsList) {
             const QSet<QString> changedScreenIds(changedScreenIdsList.begin(), changedScreenIdsList.end());
-            if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
+            if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager) {
+                // Refresh the snapshot even when the resnap work below cannot run.
+                // The tail of this lambda calls diffActiveAssignments, which is what
+                // republishes each screen's active layout to the KWin effect — and
+                // it needs only m_layoutManager, which the guard above may have
+                // rejected for an unrelated missing member. Returning outright
+                // during a teardown or re-init window left the effect's ActiveLayout
+                // cache stale for a KCM apply that otherwise succeeded.
+                if (m_layoutManager) {
+                    diffActiveAssignments();
+                }
                 return;
+            }
 
             const QString activity = currentActivity();
 

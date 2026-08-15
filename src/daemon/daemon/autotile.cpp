@@ -133,6 +133,28 @@ void Daemon::updateAutotileScreens()
         // does not resurrect windows that have since closed or left the
         // screen (seedAutotileOrderForScreen falls back to the zone-ordered
         // list when the saved order is empty).
+        //
+        // KNOWN ISSUE on the per-output desktop-switch path, left as-is
+        // deliberately. That path (start.cpp) sets the engine's desktop for this
+        // screen at [SEQ C], BEFORE calling us at [SEQ E]. So managedWindowOrder
+        // resolves through the engine's key, which is already the NEW desktop
+        // (or, for a sticky-pinned screen, the pinned OLD one), while the key
+        // written below is currentDesktopForScreen — the new desktop. Read
+        // context and write key are therefore not guaranteed to be the same
+        // context, which is the assumption the unconditional store rests on: an
+        // unpinned screen can write an empty order over the arrived-at desktop's
+        // genuine saved order, and a pinned one can file the old desktop's order
+        // under the new desktop's key.
+        //
+        // Not fixed here because the right fix depends on whether a desktop
+        // switch DESTROYS the departed desktop's TilingState. If it does not,
+        // the capture is unnecessary on this path and should be skipped; if it
+        // does, the order must be captured in the switch handler before [SEQ C]
+        // with the pre-switch context passed explicitly. Making the store
+        // conditional on a non-empty order is NOT the fix — that reintroduces
+        // the stale-resurrect bug this comment guards. Getting it wrong silently
+        // loses a user's saved window arrangement, so it wants the state-lifetime
+        // trace first.
         QStringList order = m_autotileEngine->managedWindowOrder(screenId);
         m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
     }

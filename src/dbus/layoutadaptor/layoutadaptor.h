@@ -482,6 +482,23 @@ public:
      * @param changedScreenIds The screens whose id actually differs from the
      *        previous snapshot. Only these are broadcast, so a recompute that
      *        finds nothing moved is silent on the bus.
+     *
+     * @note Both parameters are const references and the daemon passes its own
+     *       live @c m_activeAssignmentByScreen as @p activeByScreen, so this
+     *       method must not do anything that could re-enter the daemon while it
+     *       iterates them. It is safe today because the only subscribers to
+     *       @ref activeLayoutForScreenChanged are out-of-process (the KWin
+     *       effect, over the bus) and the test suite. An in-process subscriber
+     *       that recomputed on the signal would be iterating a container it was
+     *       simultaneously rewriting — take @p activeByScreen by value first if
+     *       one is ever added.
+     *
+     * @note Each broadcast costs the effect a full rule-cache invalidation and a
+     *       stacking-order decoration sweep, which is required (an
+     *       ActiveLayout-scoped appearance slot is baked into the decoration) but
+     *       not free. For a user with per-desktop layout assignments that lands
+     *       on every virtual-desktop switch, alongside the transition. Keeping
+     *       @p changedScreenIds tight is what bounds it.
      */
     void publishActiveAssignments(const QHash<QString, QString>& activeByScreen, const QSet<QString>& changedScreenIds);
 
