@@ -11,6 +11,7 @@
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
 #include "scrollenginelogging.h"
+#include "scrollpark_p.h"
 
 #include <QHash>
 #include <QJsonArray>
@@ -20,26 +21,11 @@
 
 namespace PhosphorScrollEngine {
 
-namespace {
-
-/// Distance a parked window sits below the union of all outputs. Small on
-/// purpose: "just past the bottom-most monitor" keeps coordinates sane for
-/// KWin (extreme coordinates are never committed — the stuck-off-screen
-/// folklore guard), while still separating parked rects from the union's
-/// bottom edge itself. The park position carries NO direction meaning; the
-/// scrollEdge field on the tile request does.
-constexpr int kParkMargin = 16;
-
-/// Minimum visible sliver a straddling tile keeps on screen, on BOTH axes:
-/// the horizontal edge clamps and the vertical stack-overflow clamp share
-/// this floor (each raises it to the client's declared minimum under
-/// respectMinimumSize). Hoisted here beside kParkMargin because it governs
-/// two clamp sites, not one loop body.
-/// (The self-activation cap that used to sit here is a ScrollEngine class
-/// constant now — kMaxPendingSelfActivations — shared with the verb TU.)
-constexpr int kMinVisiblePeekPx = 48;
-
-} // namespace
+// kParkMargin and kMinVisiblePeekPx moved to scrollpark_p.h alongside the
+// placement decision they govern; this TU only needs the margin, to derive
+// the park line that separates "was parked last batch" from "was on screen".
+// (The self-activation cap that used to sit here is a ScrollEngine class
+// constant now — kMaxPendingSelfActivations — shared with the verb TU.)
 
 ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, int columnCountOverride) const
 {
@@ -424,12 +410,6 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             unionBottom = qMax(unionBottom, r.bottom());
         }
     }
-    const auto park = [&](QRect& rect) {
-        const int maxLeft = qMax(screenRect.left(), screenRect.right() + 1 - rect.width());
-        rect.moveLeft(qBound(screenRect.left(), rect.left(), maxLeft));
-        rect.moveTop(unionBottom + 1 + kParkMargin);
-    };
-
     // A window under a compositor interactive move keeps its geometry with
     // KWin — skip it in the batch (and leave its m_lastAppliedRect memory
     // alone) while neighbours animate. The one live source is the daemon's
@@ -544,7 +524,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // this pass commits lands exactly here (the park lambda moves only the
     // top), so a remembered rect at or below it was a park and one above it
     // was a real placement.
-    const int parkTop = unionBottom + 1 + kParkMargin;
+    const int parkTop = unionBottom + 1 + Detail::kParkMargin;
     // BOTH pairing predicates demand POSITIVE evidence, symmetrically: an
     // entry must exist AND sit on the right side of the park line. A missing
     // entry means neither — onWindowResized's refused-ack arm drops a live
@@ -621,238 +601,29 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // past are exactly the ones that have parked, and without this the
             // screen goes empty instead of showing the strip move.
             const QRect stripRect = rect;
-            // Which screen edge this tile's motion is anchored to, decided
-            // from the STRIP, before parking touches the rect. That ordering
-            // is the fix: the departure side is a fact about the strip, and
-            // reading it back off a parked rect (as the old code effectively
-            // did, by encoding it in the park position) makes it a fact about
-            // whichever side happened to be safe to park on. Empty for a tile
-            // that is on screen — nothing to anchor.
-            QString scrollEdge;
-            bool parkedNow = false;
-            if (tile.hidden) {
-                // Non-active tile of a tabbed column: parked off-canvas so it
-                // cannot steal input from the visible tab (hit-testing uses
-                // real geometry only). It follows its COLUMN's side, so a
-                // column off the left edge keeps its hidden tiles anchored
-                // left. A column that is ON screen records NO edge: its hidden
-                // tabs are parked for input reasons, not because the strip
-                // scrolled them away, and there is no departure to animate back
-                // from. Defaulting them to "right" made the next tab switch
-                // slide the newly-active tab in from off the right edge.
-                if (column.rect.right() < params.workArea.left()) {
-                    scrollEdge = QStringLiteral("left");
-                } else if (column.rect.left() > params.workArea.right()) {
-                    scrollEdge = QStringLiteral("right");
-                }
-                park(rect);
-                parkedNow = true;
-            } else if (rect.right() < params.workArea.left()) {
-                scrollEdge = QStringLiteral("left");
-                park(rect);
-                parkedNow = true;
-            } else if (rect.left() > params.workArea.right()) {
-                scrollEdge = QStringLiteral("right");
-                park(rect);
-                parkedNow = true;
-            }
-            // The dispatch keys on parkedNow, not on the edge being empty: a
-            // hidden tab of an on-screen column parks WITHOUT an edge, and
-            // treating that as "on screen" would consume a remembered
-            // departure it is not making.
-            //
-            // m_parkedScrollEdge's write/consume contract lives here, its
-            // producer/consumer pair: written when a window parks WITH a
-            // departure direction, consumed when it comes back on screen;
-            // never-parked windows never appear. Paths that drop a window's
-            // m_lastAppliedRect while it stays alive drop the edge too, with
-            // two deliberate exceptions (the window remains a live tile that
-            // may genuinely be parked right now): windowOpened's re-adoption
-            // TAKES the edge and puts it back on a refused insert, and
-            // onWindowResized's refused-ack arm drops only the rect. The
-            // bring-up aliveness sweep reclaims died-parked entries; one
-            // seam-only gap — an embedder driving strip-level minimize
-            // directly (production models minimize as a float toggle, which
-            // clears) can strand an entry until then.
-            if (parkedNow) {
-                if (scrollEdge.isEmpty()) {
-                    // Parked with no departure direction. Any edge remembered
-                    // from an earlier genuine departure is stale now that the
-                    // column has come back, and leaving it would make the next
-                    // activation of this tab slide in from a side it has
-                    // already returned from.
-                    m_parkedScrollEdge.remove(tile.windowId);
-                } else {
-                    m_parkedScrollEdge.insert(tile.windowId, scrollEdge);
-                }
+            Detail::ParkInputs parkIn;
+            parkIn.tileRect = rect;
+            parkIn.columnRect = column.rect;
+            parkIn.workArea = params.workArea;
+            parkIn.screenRect = screenRect;
+            parkIn.tileMin = params.respectMinimumSize ? state->strip().windowMinimumSize(tile.windowId) : QSize();
+            parkIn.axis = params.axis;
+            parkIn.parkTop = parkTop;
+            parkIn.hidden = tile.hidden;
+            parkIn.cropStraddlers = cropStraddlers;
+            const Detail::ParkResult parkOut =
+                Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
+            rect = parkOut.rect;
+            const bool parkedNow = parkOut.parked;
+            const bool clampPinnedMain = parkOut.clampPinnedMain;
+            QString scrollEdge = parkOut.emittedEdge;
+            // The helper is pure, so applying its verdict to the edge memory is
+            // the caller's job. nullopt erases, a value stores — every path
+            // through it decides one or the other.
+            if (parkOut.rememberedEdge.has_value()) {
+                m_parkedScrollEdge.insert(tile.windowId, *parkOut.rememberedEdge);
             } else {
-                // On screen. If it was parked until now, it is arriving, and
-                // the edge it went out by is the edge it must come back in
-                // from — the whole reason that edge is remembered rather than
-                // read back off the parked rect. Consumed here: the window is
-                // on screen, so there is no longer a departure to remember,
-                // and leaving the entry would re-anchor a later unrelated
-                // move to a stale side.
-                scrollEdge = m_parkedScrollEdge.take(tile.windowId);
-            }
-            // A partially-visible edge column is CLAMPED at BOTH screen
-            // edges, adjacent output or not, and the same enforcement runs
-            // on the vertical axis for stack overflow.
-            //
-            // Keeping the TRUE rect everywhere and clipping the overhang at
-            // render time was the previous contract, and it is not
-            // enforceable: the effect's per-output skip works only while the
-            // window is composited through the GL scene, and the compositor
-            // is free to present an idle-but-damaged surface directly on a
-            // hardware plane, bypassing the effect chain entirely — at which
-            // point the full frame appears on the neighbouring monitor with
-            // every effect-side guard behaving perfectly. Committed geometry
-            // is the only contract every present path honours, so the rect
-            // itself must stop at the boundary. The window resizes rather
-            // than being visually cropped; that is the accepted cost — and
-            // it recurs: every scroll step changes the visible remainder of
-            // both edge columns, so each step re-commits a new width for
-            // each of them (a client reconfigure plus an animated geometry
-            // change). Scrolling is discrete, not per-frame, which bounds
-            // the cost.
-            //
-            // The clamp bound is the SCREEN edge, not the work area's: the
-            // band between them is this monitor's own panel area, not the
-            // neighbour. A remainder too small to be a useful peek parks
-            // instead (with its departure edge, like any off-viewport
-            // column), rather than committing a sliver the client's minimum
-            // size would immediately fight.
-            //
-            // BOTH edges clamp, adjacent output or not. Gating on the
-            // resolver made the two sides of a centred column LOOK different
-            // on an asymmetric topology: the neighboured side resized while
-            // the free side kept a full-size overhang cropped by the screen
-            // edge, showing a different slice of its content. A free-side
-            // overhang was harmless, but consistency between the two peeks
-            // matters more than preserving it, and clamping everywhere also
-            // makes every monitor topology behave identically.
-            // Unconditional, AFTER every positioning decision above. The
-            // first version ran only for never-parked tiles (inside the
-            // scrollEdge-empty branch), which missed the single most common
-            // straddler: a previously-parked neighbour scrolling back into
-            // partial view consumes its remembered departure edge, arrives
-            // with scrollEdge set, and skipped the clamp — committing its
-            // full rect across the boundary. The edge stays with the tile
-            // either way; it drives the animation, not the geometry.
-            // Crop mode (scrollingCropStraddlers): keep the TRUE rect for a
-            // HORIZONTAL straddler and let the effect crop the overhang — it
-            // forces GL composition via blocksDirectScanout while scrolling
-            // screens exist, which closes the hardware-plane bypass that
-            // made render-side cropping unsafe as a default. The clamp below
-            // stays the default because it needs no such assumption. Crop
-            // mode covers only what the setting names: the side-edge
-            // straddle. Vertical stack overflow is enforced unconditionally
-            // further down.
-            // Set when the clamp MOVES the tile's left edge, which pins its x
-            // at the screen edge instead of leaving it where the strip put it.
-            // The right-edge clamp keeps x and only changes width, so it does
-            // not qualify — the asymmetry is QRect's: setLeft moves x1 and
-            // holds x2, setRight holds x1 and moves x2.
-            bool clampPinnedMain = false;
-            if (!cropStraddlers && !parkedNow) {
-                const bool straddleRight = rect.right() > screenRect.right() && rect.left() <= screenRect.right();
-                // Both predicates read the PRE-mutation rect, and the left one
-                // is consumed after the right branch may have called setRight.
-                // Safe only because the two are mutually exclusive: a column
-                // cannot straddle both edges, since columnExtentPx caps every
-                // column at the work area's width, which is never wider than
-                // the screen. That is a non-local invariant holding this code
-                // up, so it is stated here rather than left to be rediscovered.
-                const bool straddleLeft = rect.left() < screenRect.left() && rect.right() >= screenRect.left();
-                if (straddleRight || straddleLeft) {
-                    // Under respectMinimumSize the peek floor rises to the
-                    // client's declared minimum: committing a clamped width
-                    // the client refuses makes KWin regrow the frame from x,
-                    // pushing it straight back across the boundary (X11
-                    // clients have no Wayland-side repair for this). Such a
-                    // column parks instead of peeking. The floor is capped at
-                    // the screen's own extent, so a column whose declared
-                    // minimum exceeds the screen still peeks at full screen
-                    // width instead of parking on every pass forever (its
-                    // visible remainder CAN reach the capped floor; an
-                    // uncapped one it never could). For exactly that
-                    // oversized-minimum case the regrow-across-the-boundary
-                    // hazard the floor exists to avoid is knowingly
-                    // re-accepted — a straddle beats a permanently invisible
-                    // window. The effect-side per-output cull (which does not
-                    // gate on crop mode) suppresses the regrown overhang on
-                    // the neighbour wherever the frame goes through GL
-                    // composition, but unlike crop mode nothing here forces
-                    // that: blocksDirectScanout is crop-only, so a directly
-                    // scanned-out frame can still show the overhang. That is
-                    // the same bypass the clamp exists to avoid, re-accepted
-                    // for this one degenerate case.
-                    // Strip-level lookup: the tile is by construction a strip
-                    // tile of the state in hand, so the engine-level resolve
-                    // (canonicalize + reverse map + float-restore fallback)
-                    // would re-derive what one walk answers.
-                    const QSize tileMin =
-                        params.respectMinimumSize ? state->strip().windowMinimumSize(tile.windowId) : QSize();
-                    const int peekFloorX = qMin(screenRect.width(), qMax(kMinVisiblePeekPx, tileMin.width()));
-                    if (straddleRight) {
-                        const int visible = screenRect.right() + 1 - rect.left();
-                        if (visible >= peekFloorX) {
-                            rect.setRight(screenRect.right());
-                        } else {
-                            scrollEdge = QStringLiteral("right");
-                            m_parkedScrollEdge.insert(tile.windowId, scrollEdge);
-                            park(rect);
-                            parkedNow = true;
-                        }
-                    }
-                    if (!parkedNow && straddleLeft) {
-                        const int visible = rect.right() + 1 - screenRect.left();
-                        if (visible >= peekFloorX) {
-                            clampPinnedMain = rect.left() != screenRect.left();
-                            rect.setLeft(screenRect.left());
-                        } else {
-                            scrollEdge = QStringLiteral("left");
-                            m_parkedScrollEdge.insert(tile.windowId, scrollEdge);
-                            park(rect);
-                            parkedNow = true;
-                        }
-                    }
-                }
-            }
-            // The vertical axis needs the same enforcement, in BOTH modes: a
-            // stacked column whose minimum heights overflow the work area
-            // lays its trailing tiles out below it (relayout documents the
-            // overflow as standing), and on a vertically-stacked monitor
-            // topology that commits geometry onto the lower output. That is
-            // stack layout, not strip motion, so it is not what crop mode
-            // opts into and it carries no arrival direction. A tile entirely
-            // below the screen parks; a straddling one clamps or parks by
-            // the same floor logic as the sides. A horizontally-consumed
-            // departure edge is put back and NOT emitted: the park is
-            // vertical, so there is no side to animate from, and the memory
-            // must survive for the eventual horizontal arrival.
-            if (!parkedNow && rect.top() > screenRect.bottom()) {
-                if (!scrollEdge.isEmpty()) {
-                    m_parkedScrollEdge.insert(tile.windowId, scrollEdge);
-                    scrollEdge.clear();
-                }
-                park(rect);
-                parkedNow = true;
-            } else if (!parkedNow && rect.bottom() > screenRect.bottom()) {
-                const QSize tileMinV =
-                    params.respectMinimumSize ? state->strip().windowMinimumSize(tile.windowId) : QSize();
-                const int peekFloorY = qMin(screenRect.height(), qMax(kMinVisiblePeekPx, tileMinV.height()));
-                const int visible = screenRect.bottom() + 1 - rect.top();
-                if (visible >= peekFloorY) {
-                    rect.setBottom(screenRect.bottom());
-                } else {
-                    if (!scrollEdge.isEmpty()) {
-                        m_parkedScrollEdge.insert(tile.windowId, scrollEdge);
-                        scrollEdge.clear();
-                    }
-                    park(rect);
-                    parkedNow = true;
-                }
+                m_parkedScrollEdge.remove(tile.windowId);
             }
 
             QJsonObject obj;
