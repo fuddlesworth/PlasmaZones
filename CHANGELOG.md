@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Window rules that match on "Active layout" now work**: a rule such as "snap this app to zone 1 when the active layout is 4K" never fired, no matter which app or zone it named. PlasmaZones knew which layout was active when it resolved settings that apply to a whole monitor, but not when it resolved a rule for one window, so the layout the rule asked about always read as blank and the match failed. Rules matching on the active layout now resolve against the layout assigned to the monitor the window is on, which also makes rules that match on a specific monitor work for floating and position restore ([#919](https://github.com/fuddlesworth/PlasmaZones/discussions/919)).
+- **Border and opacity rules can match on "Active layout" too**: the appearance a window is drawn with is resolved inside the compositor, which had no way to know which layout a monitor was using, so an "Active layout is" condition on a border, tint, opacity, or window-layer rule never matched there either. The compositor now tracks each monitor's active layout and re-draws affected windows when it changes, including on a virtual-desktop or activity switch ([#919](https://github.com/fuddlesworth/PlasmaZones/discussions/919)).
+
 ## [3.3.7] - 2026-08-14
 
 ### Fixed

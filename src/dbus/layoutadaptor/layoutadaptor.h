@@ -193,6 +193,14 @@ public Q_SLOTS:
     QStringList getAvailableScreenIds();
 
     QString getAllScreenAssignments();
+
+    /// Each effective screen's RESOLVED active layout id, as the daemon last
+    /// computed it. Served from the snapshot @ref publishActiveAssignments
+    /// pushes rather than resolved on demand, so a reader and the
+    /// @ref activeLayoutForScreenChanged stream can never disagree about what
+    /// the current value is. Screens resolving to no layout are omitted.
+    QVariantMap getActiveLayoutsForScreens();
+
     QVariantMap getAllDesktopAssignments(); // Get all per-desktop assignments as key -> layoutId
     QVariantMap getAllActivityAssignments(); // Get all per-activity assignments as key -> layoutId
     // Combined-context (screen + desktop + activity); key format
@@ -357,6 +365,19 @@ Q_SIGNALS:
     void layoutDeleted(const QString& layoutId);
 
     void screenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
+
+    /**
+     * @brief Emitted when a screen's RESOLVED active layout changes.
+     *
+     * The companion to @ref getActiveLayoutsForScreens, and the signal a
+     * subscriber tracking the `ActiveLayout` rule field wants. Distinct from
+     * @ref screenLayoutChanged in both coverage and timing: that one reports
+     * assignment MUTATIONS and is suppressed during a KCM save batch, while
+     * this fires whenever the resolved value moves for any reason at all,
+     * including a desktop or activity switch that mutates nothing.
+     */
+    void activeLayoutForScreenChanged(const QString& screenId, const QString& layoutId);
+
     void virtualDesktopCountChanged(int count);
 
     /**
@@ -411,6 +432,28 @@ public:
     // calls this to drive the same resnap/retile path when a RULE edit (not a
     // legacy assignment edit) changes the active assignment for some screens.
     void markScreensChanged(const QSet<QString>& screenIds);
+
+    /**
+     * @brief Publish the daemon's freshly recomputed active-assignment snapshot.
+     *
+     * Internal (NOT bus-exposed). The daemon owns the recomputation — its
+     * `diffActiveAssignments()` is the one place that resolves every effective
+     * screen's active assignment id against that screen's current desktop and
+     * activity, and it already runs on every edge that can move the value
+     * (assignment edits, rule edits, desktop / activity switches, screen
+     * reconfigure, startup). Rather than duplicate that resolution here, the
+     * daemon hands the result over: this stores it as the readback snapshot for
+     * @ref getActiveLayoutsForScreens and emits
+     * @ref activeLayoutForScreenChanged for each screen in @p changedScreenIds.
+     *
+     * @param activeByScreen The complete new snapshot, keyed by effective screen
+     *        id. Replaces the previous one wholesale, so a screen that went away
+     *        drops out of the readback.
+     * @param changedScreenIds The screens whose id actually differs from the
+     *        previous snapshot. Only these are broadcast, so a recompute that
+     *        finds nothing moved is silent on the bus.
+     */
+    void publishActiveAssignments(const QHash<QString, QString>& activeByScreen, const QSet<QString>& changedScreenIds);
 
     /**
      * @brief Notify consumers that the layout list data has changed
@@ -516,6 +559,12 @@ private:
     // Track which screens had assignments modified during the current batch.
     // Populated by setAssignmentEntry/clearAssignment, consumed by applyAssignmentChanges.
     QSet<QString> m_changedScreenIds;
+
+    // Resolved active layout id per effective screen, pushed by the daemon via
+    // publishActiveAssignments. Mirrors Daemon::m_activeAssignmentByScreen — the
+    // daemon is the authority, this is the bus-facing copy that backs
+    // getActiveLayoutsForScreens.
+    QHash<QString, QString> m_activeAssignmentByScreen;
 
     // JSON caching for performance
     QString m_cachedActiveLayoutJson;

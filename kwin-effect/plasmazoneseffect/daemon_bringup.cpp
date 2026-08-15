@@ -288,6 +288,11 @@ void PlasmaZonesEffect::continueDaemonReadySetup()
     // IsSnapped / Zone rule fields without waiting for their next state change.
     m_navigationHandler->syncZonesFromDaemon();
 
+    // Repopulate the per-screen active-layout cache. The daemon owns the
+    // assignment cascade, so this is the only way the effect can answer "which
+    // layout is active on this screen" when stamping a window-rule query.
+    fetchActiveLayoutsForScreens();
+
     // One-shot Rules subscription. The daemon emits rulesChanged per
     // per-rule mutation; slotRulesChanged debounces via a 50ms timer to
     // collapse batch edits into a single full-ruleset refetch. Subscribed here
@@ -707,7 +712,86 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("snapAssistReady"), m_snapHandler.get(),
                                           SLOT(slotSnapAssistReady(QString, QString, PhosphorProtocol::EmptyZoneList)));
 
+    // LayoutRegistry: a screen's resolved active layout moved. Subscribed here
+    // (once, from the constructor) rather than in the daemon-ready setup, so it
+    // needs no re-subscribe gate — the bringup pairs it with a bulk
+    // fetchActiveLayoutsForScreens, and the broadcasts carry deltas from there.
+    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                          PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                          QStringLiteral("activeLayoutForScreenChanged"), this,
+                                          SLOT(slotActiveLayoutForScreenChanged(QString, QString)));
+
     qCInfo(lcEffect) << "Connected to navigation D-Bus signals";
+}
+
+void PlasmaZonesEffect::fetchActiveLayoutsForScreens()
+{
+    if (!isDaemonReady("fetch active layouts")) {
+        return;
+    }
+    auto* watcher = new QDBusPendingCallWatcher(
+        PhosphorProtocol::ClientHelpers::asyncCall(PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                                   QStringLiteral("getActiveLayoutsForScreens")),
+        this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        const QDBusPendingReply<QVariantMap> reply = *w;
+        // Authoritative refresh: the previous daemon session's ids are stale, so
+        // drop them whether or not the reply arrived. Keeping them would leave an
+        // ActiveLayout rule matching a layout that a restarted daemon may no
+        // longer have assigned anywhere.
+        const bool had = !m_activeLayoutByScreen.isEmpty();
+        m_activeLayoutByScreen.clear();
+        if (reply.isValid()) {
+            const QVariantMap layouts = reply.value();
+            for (auto it = layouts.constBegin(); it != layouts.constEnd(); ++it) {
+                const QString layoutId = it.value().toString();
+                if (!layoutId.isEmpty()) {
+                    m_activeLayoutByScreen.insert(it.key(), layoutId);
+                }
+            }
+            qCDebug(lcEffect) << "Synced" << m_activeLayoutByScreen.size() << "screen active layouts from daemon";
+        } else {
+            qCDebug(lcEffect) << "Failed to get active layouts from daemon";
+        }
+        if (!had && m_activeLayoutByScreen.isEmpty()) {
+            // Nothing was cached and nothing arrived — no ActiveLayout leaf can
+            // have resolved differently, so skip the sweep.
+            return;
+        }
+        // The cache is an ActiveLayout match input, so the stale verdicts have to
+        // drop, and the border sweep re-folds the appearance slots that bake into
+        // each decoration. Both are coalesced with the sibling re-seeds above.
+        invalidateAllRuleCaches();
+        scheduleBorderSweep();
+    });
+}
+
+void PlasmaZonesEffect::slotActiveLayoutForScreenChanged(const QString& screenId, const QString& layoutId)
+{
+    if (screenId.isEmpty()) {
+        return;
+    }
+    // An empty id means the screen no longer resolves to any layout (unplugged,
+    // or its assignment was cleared with the default suppressed). Remove the
+    // entry rather than storing "" so ruleQuery leaves the field unset and an
+    // ActiveLayout leaf stays inert on that screen.
+    const QString previous = m_activeLayoutByScreen.value(screenId);
+    if (previous == layoutId) {
+        return;
+    }
+    if (layoutId.isEmpty()) {
+        m_activeLayoutByScreen.remove(screenId);
+    } else {
+        m_activeLayoutByScreen.insert(screenId, layoutId);
+    }
+    qCDebug(lcEffect) << "Active layout for screen" << screenId << "changed to" << layoutId;
+    // Same pairing as every other match-input change: drop the cached verdicts,
+    // then re-fold, because an ActiveLayout-scoped SetOpacity / border / tint is
+    // baked into the decoration at updateWindowDecoration time and a cache clear
+    // on its own would leave the previous layout's appearance on screen.
+    invalidateAllRuleCaches();
+    scheduleBorderSweep();
 }
 
 } // namespace PlasmaZones

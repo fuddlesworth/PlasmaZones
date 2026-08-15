@@ -2213,6 +2213,34 @@ private Q_SLOTS:
     /// and parses. A 50ms single-shot debounce coalesces the burst into a
     /// single fetch at the trailing edge.
     void slotRulesChanged();
+
+    /// D-Bus signal handler for `LayoutRegistry.activeLayoutForScreenChanged`.
+    /// Writes the screen's new active layout id into m_activeLayoutByScreen (an
+    /// empty id removes the entry, so a screen that resolves to no layout leaves
+    /// the ActiveLayout query field unset rather than engaged-empty) and, on a
+    /// real change, drops the placement-scoped verdicts and re-folds every
+    /// decorated window. The re-fold is not optional: an appearance slot keyed on
+    /// ActiveLayout bakes into the decoration at updateWindowDecoration time, so
+    /// clearing the match cache alone would leave the old value on screen.
+    void slotActiveLayoutForScreenChanged(const QString& screenId, const QString& layoutId);
+
+private:
+    /// Fetch every screen's resolved active layout via
+    /// `LayoutRegistry.getActiveLayoutsForScreens` and replace
+    /// m_activeLayoutByScreen with the reply. Called at bringup: the
+    /// per-screen broadcasts only carry CHANGES, so without a bulk seed the
+    /// effect would match ActiveLayout against an empty cache until the user
+    /// happened to switch a layout.
+    void fetchActiveLayoutsForScreens();
+
+    /// Each screen's resolved active layout id (a layout UUID in braces, or
+    /// "autotile:<algo>"), mirroring what the daemon's assignment cascade
+    /// resolves for that screen's current desktop and activity. Read by
+    /// ruleQuery to stamp WindowQuery::activeLayout, which is the only way a
+    /// window-domain rule on this side can match the ActiveLayout field — the
+    /// effect has no layout registry of its own and cannot resolve the cascade.
+    /// A screen with no entry leaves the field unset (inert), never empty.
+    QHash<QString, QString> m_activeLayoutByScreen;
 };
 
 } // namespace PlasmaZones

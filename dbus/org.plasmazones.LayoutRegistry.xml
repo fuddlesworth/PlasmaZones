@@ -321,6 +321,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object keyed by connector name, containing one entry per screen with stored assignments. Each entry includes {&quot;screenId&quot;: &lt;stable-id&gt;}. Screens with an explicit base-level assignment additionally include {&quot;default&quot;, &quot;snappingLayout&quot;, &quot;tilingAlgorithm&quot;, &quot;mode&quot;}; screens with explicit per-desktop assignments include numeric-string keys (&quot;1&quot;, &quot;2&quot;, …) mapping to the assigned layout id. Screens with no stored entries are omitted entirely — DO NOT use this method to enumerate available screens; call getAvailableScreenIds instead."/>
             </arg>
         </method>
+        <method name="getActiveLayoutsForScreens">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns each effective screen&apos;s RESOLVED active layout id, as the daemon last computed it for that screen&apos;s current virtual desktop and activity. Unlike getAllScreenAssignments this is the resolved value (including synthesized global-default fallbacks), which is what the ActiveLayout rule field matches against. Pair with activeLayoutForScreenChanged: fetch once on daemon-ready, then track the signal."/>
+            <arg name="activeLayouts" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of stable screen id to active layout id (a layout UUID in braces, or &apos;autotile:&lt;algo&gt;&apos; for a tiling assignment). A screen with no resolvable layout is omitted."/>
+            </arg>
+        </method>
         <!-- Quick Layout Slots (1-9) -->
         <method name="getQuickLayoutSlot">
             <annotation name="org.gtk.GDBus.DocString" value="Get the layout ID assigned to a quick slot (1-9) for the given mode."/>
@@ -629,6 +635,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
             <arg name="virtualDesktop" type="i">
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop number (0 = display default)."/>
+            </arg>
+        </signal>
+        <signal name="activeLayoutForScreenChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen&apos;s RESOLVED active layout changes, for any reason: an assignment edit, a virtual-desktop or activity switch, a rule edit that moves the assignment cascade, or a change to the global default. This is the companion signal to getActiveLayoutsForScreens and the one to track for the ActiveLayout rule field. Unlike screenLayoutChanged, which reports assignment MUTATIONS and is suppressed during a KCM save batch, this reports every change to the value a rule would see."/>
+            <arg name="screenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Stable screen id whose active layout changed."/>
+            </arg>
+            <arg name="layoutId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="The screen&apos;s new active layout id (a layout UUID in braces, or &apos;autotile:&lt;algo&gt;&apos;). Empty when the screen no longer resolves to any layout."/>
             </arg>
         </signal>
     </interface>

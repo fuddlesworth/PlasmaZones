@@ -374,8 +374,27 @@ QSet<QString> Daemon::diffActiveAssignments()
             changed.insert(screenId);
         }
     }
+    // A screen that went away is a change too: it drops out of `next`, so the
+    // loop above never visits it and it would otherwise vanish silently. The
+    // effect caches these ids per screen and stamps them onto its window-rule
+    // queries, so a dropped screen has to be announced or its last layout id
+    // lingers in that cache for the rest of the session.
+    for (auto it = m_activeAssignmentByScreen.constBegin(); it != m_activeAssignmentByScreen.constEnd(); ++it) {
+        if (!next.contains(it.key())) {
+            changed.insert(it.key());
+        }
+    }
     // Replace wholesale so screens that went away drop out of the snapshot.
     m_activeAssignmentByScreen = std::move(next);
+    // Mirror the fresh snapshot onto the bus-facing adaptor and broadcast the
+    // screens that moved. This is the ONE resolution of "which layout is active
+    // on which screen" in the daemon, and every edge that can move that value
+    // already routes through here, so publishing from this spot is what keeps a
+    // remote ActiveLayout matcher (the KWin effect's window-rule queries) from
+    // needing to re-derive the cascade itself.
+    if (m_layoutAdaptor) {
+        m_layoutAdaptor->publishActiveAssignments(m_activeAssignmentByScreen, changed);
+    }
     return changed;
 }
 

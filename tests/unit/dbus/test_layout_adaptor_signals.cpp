@@ -302,6 +302,55 @@ private Q_SLOTS:
         m_adaptor->setAlgorithmRegistry(nullptr);
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // Active-layout-per-screen wire (discussion #919). The daemon owns the
+    // assignment cascade and pushes its recomputed snapshot here; the adaptor
+    // serves it as the readback and broadcasts only the screens that moved.
+    // The KWin effect consumes both to match the ActiveLayout rule field, which
+    // it cannot resolve on its own.
+    // ─────────────────────────────────────────────────────────────────
+    void testPublishActiveAssignments_broadcastsOnlyChangedScreens()
+    {
+        QSignalSpy spy(m_adaptor, &LayoutAdaptor::activeLayoutForScreenChanged);
+
+        const QHash<QString, QString> snapshot{{QStringLiteral("DP-1"), m_layoutId},
+                                               {QStringLiteral("DP-2"), QStringLiteral("autotile:bsp")}};
+        m_adaptor->publishActiveAssignments(snapshot, {QStringLiteral("DP-1")});
+
+        QCOMPARE(spy.count(), 1);
+        const QList<QVariant> args = spy.takeFirst();
+        QCOMPARE(args.at(0).toString(), QStringLiteral("DP-1"));
+        QCOMPARE(args.at(1).toString(), m_layoutId);
+
+        // The readback carries the WHOLE snapshot, not just the broadcast screen:
+        // a subscriber seeding at bringup has to see every screen, because the
+        // signal stream from then on only carries deltas.
+        const QVariantMap readback = m_adaptor->getActiveLayoutsForScreens();
+        QCOMPARE(readback.size(), 2);
+        QCOMPARE(readback.value(QStringLiteral("DP-1")).toString(), m_layoutId);
+        QCOMPARE(readback.value(QStringLiteral("DP-2")).toString(), QStringLiteral("autotile:bsp"));
+    }
+
+    void testPublishActiveAssignments_emptyIdIsBroadcastButNotReadBack()
+    {
+        m_adaptor->publishActiveAssignments({{QStringLiteral("DP-1"), m_layoutId}}, {QStringLiteral("DP-1")});
+
+        QSignalSpy spy(m_adaptor, &LayoutAdaptor::activeLayoutForScreenChanged);
+        // DP-1 unplugged: it drops out of the snapshot entirely.
+        m_adaptor->publishActiveAssignments({}, {QStringLiteral("DP-1")});
+
+        // The screen still has to be announced, with an empty id, or a subscriber
+        // keeps matching windows against a layout that is no longer on it.
+        QCOMPARE(spy.count(), 1);
+        const QList<QVariant> args = spy.takeFirst();
+        QCOMPARE(args.at(0).toString(), QStringLiteral("DP-1"));
+        QVERIFY2(args.at(1).toString().isEmpty(), "a dropped screen must broadcast an empty layout id");
+
+        // But the readback omits it rather than carrying an empty entry — an
+        // empty value stamped onto a rule query would match `Equals ""`.
+        QVERIFY(m_adaptor->getActiveLayoutsForScreens().isEmpty());
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     QObject* m_parent = nullptr;

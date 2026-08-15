@@ -416,6 +416,36 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
     qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "desktop assignments";
 }
 
+QVariantMap LayoutAdaptor::getActiveLayoutsForScreens()
+{
+    QVariantMap result;
+    for (auto it = m_activeAssignmentByScreen.constBegin(); it != m_activeAssignmentByScreen.constEnd(); ++it) {
+        // Omit screens that resolve to nothing rather than emitting an empty
+        // string: a reader stamping this onto a rule query must leave the field
+        // unset for such a screen, and an empty entry invites stamping "" —
+        // which matches `Equals ""` and is exactly the trap this whole wire
+        // exists to close.
+        if (!it.value().isEmpty()) {
+            result.insert(it.key(), it.value());
+        }
+    }
+    return result;
+}
+
+void LayoutAdaptor::publishActiveAssignments(const QHash<QString, QString>& activeByScreen,
+                                             const QSet<QString>& changedScreenIds)
+{
+    // Snapshot first, broadcast second: a subscriber that reacts to the signal
+    // by calling getActiveLayoutsForScreens must not read the pre-change map.
+    m_activeAssignmentByScreen = activeByScreen;
+    for (const QString& screenId : changedScreenIds) {
+        // A screen dropped from the snapshot (monitor unplugged) broadcasts an
+        // empty id, which tells subscribers to forget their cached value rather
+        // than keep matching against a layout that is no longer on that screen.
+        Q_EMIT activeLayoutForScreenChanged(screenId, m_activeAssignmentByScreen.value(screenId));
+    }
+}
+
 QVariantMap LayoutAdaptor::getAllDesktopAssignments()
 {
     QVariantMap result;

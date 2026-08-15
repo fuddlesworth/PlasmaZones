@@ -378,6 +378,17 @@ void Daemon::initLayoutAndSettingsWiring()
         // Resnap/retile/OSD is triggered separately by applyAssignmentChanges()
         // after the KCM's batch save completes — NOT here in the settings handler.
         syncModeFromAssignments();
+
+        // Refresh the active-assignment snapshot without applying, the same way
+        // the desktop / activity switch handlers do. A settings save can move a
+        // screen's RESOLVED assignment while mutating no assignment at all: the
+        // cascade falls through to the global default providers, so editing the
+        // default layout (or toggling snapping / autotile) re-resolves every
+        // screen that has no stored entry of its own. Without this the snapshot
+        // goes stale, which both makes a later rule edit falsely re-resnap those
+        // screens and leaves subscribers to activeLayoutForScreenChanged (the
+        // KWin effect's ActiveLayout rule matching) pinned to the old layout.
+        diffActiveAssignments();
     }));
 
     // Resnap currently-snapped windows when a snapping gap/padding setting

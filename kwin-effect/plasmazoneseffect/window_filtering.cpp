@@ -120,9 +120,21 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
+    const QString screenId = getWindowScreenId(w);
     PhosphorRules::WindowQuery query =
-        ruleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
+        ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
                      m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    // ActiveLayout — stamped here rather than inside the free builder because the
+    // value comes from the daemon, not from KWin: resolving it means walking the
+    // assignment cascade for the screen's current desktop and activity, which
+    // only the daemon can do. m_activeLayoutByScreen is that answer, seeded at
+    // bringup and kept current by activeLayoutForScreenChanged. A screen with no
+    // cached entry leaves the field unset, so the leaf stays inert instead of
+    // comparing against an empty string and matching `Equals ""`.
+    const QString activeLayout = m_activeLayoutByScreen.value(screenId);
+    if (!activeLayout.isEmpty()) {
+        query.activeLayout = activeLayout;
+    }
     applyOwnLayerFlags(query, windowId);
     return query;
 }
