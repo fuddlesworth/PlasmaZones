@@ -21,26 +21,216 @@
 // body.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollStrip.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
+#include <PhosphorScrollEngine/StripAxis.h>
 
+#include <QByteArray>
 #include <QObject>
+#include <QPoint>
 #include <QRect>
 #include <QSet>
+#include <QSize>
 #include <QString>
+// The fixture guard below asserts, so this header owns its QTest dependency
+// rather than relying on every includer having reached for it first.
+#include <QTest>
 
 #include <functional>
 
 namespace ScrollTestUtils {
 
-/// The one screen geometry the whole suite fixtures against.
-inline constexpr int kScreenWidth = 1200;
-inline constexpr int kScreenHeight = 800;
+/// The one strip geometry the whole suite fixtures against, named for ROLES
+/// rather than for screen dimensions. MAIN is always 1200 and CROSS always
+/// 800, under BOTH orientations — that is the whole point, because it keeps
+/// every hardcoded pixel literal in the suite meaning the same thing after a
+/// transpose. Do not reconstruct a physical rect from these by hand; ask
+/// Ax::defaultScreenRect() for it.
+inline constexpr int kMainExtent = 1200;
+inline constexpr int kCrossExtent = 800;
 
+/// Axis harness. Every suite runs TWICE — once per orientation, as two ctest
+/// registrations over one binary — and the axis is a property of the PROCESS,
+/// read once from PZ_SCROLL_TEST_AXIS.
+///
+/// The role readers here DELEGATE to the engine's own StripAxis rather than
+/// reimplementing the mapping. That is deliberate and load-bearing: a second,
+/// independent coordinate mapper inside the tests would make a bug in
+/// StripAxis invisible to every test that reaches geometry through these
+/// helpers, and the suite would be verifying its own transpose instead of the
+/// engine's.
+///
+/// Ax::t() is the ONE piece of mapping the harness owns outright, because it
+/// is the test's DEFINITION of correctness and must not be able to agree with
+/// the engine by construction.
+namespace Ax {
+
+/// Rewrite phases, so a suite's vertical rows go live exactly when the engine
+/// gains that capability — and with no edit to the test file in the commit
+/// that turns them on, which is the entire value of this harness.
+enum class Feature {
+    Layout,
+    Navigation,
+    Verbs,
+    DragInsert,
+    Snapshot,
+    Persistence,
+    Wire,
+};
+
+/// Resolved ONCE per process. The engine's own enum, never a test-local twin,
+/// so an engine-side rename breaks the harness at compile time.
+inline PhosphorProtocol::ScrollAxis axis()
+{
+    static const PhosphorProtocol::ScrollAxis resolved = [] {
+        return qgetenv("PZ_SCROLL_TEST_AXIS") == QByteArrayLiteral("vertical")
+            ? PhosphorProtocol::ScrollAxis::Vertical
+            : PhosphorProtocol::ScrollAxis::Horizontal;
+    }();
+    return resolved;
+}
+
+inline bool vertical()
+{
+    return axis() == PhosphorProtocol::ScrollAxis::Vertical;
+}
+
+/// The engine's mapper, for the role readers below to delegate to.
+inline PhosphorScrollEngine::StripAxis stripAxis()
+{
+    return PhosphorScrollEngine::StripAxis(axis());
+}
+
+// -- The transpose, owned by the harness -------------------------------
+//
+// T(QRect(x, y, w, h)) = QRect(y, x, h, w) — a reflection through the line
+// y = x. Every fixture in the suite is anchored at the origin, so there is no
+// offset term and T is an involution: T(T(r)) == r.
+
+inline QRect t(const QRect& r)
+{
+    return vertical() ? QRect(r.y(), r.x(), r.height(), r.width()) : r;
+}
+inline QSize t(const QSize& s)
+{
+    return vertical() ? QSize(s.height(), s.width()) : s;
+}
+inline QPoint t(const QPoint& p)
+{
+    return vertical() ? QPoint(p.y(), p.x()) : p;
+}
+
+// -- Role readers over a PHYSICAL rect the engine produced --------------
+
+inline int mainPos(const QRect& r)
+{
+    return stripAxis().mainPos(r);
+}
+inline int mainLen(const QRect& r)
+{
+    return stripAxis().mainSize(r);
+}
+inline int mainEnd(const QRect& r)
+{
+    return stripAxis().mainHigh(r);
+}
+inline int crossPos(const QRect& r)
+{
+    return stripAxis().crossPos(r);
+}
+inline int crossLen(const QRect& r)
+{
+    return stripAxis().crossSize(r);
+}
+inline int crossEnd(const QRect& r)
+{
+    return stripAxis().crossHigh(r);
+}
+
+// -- Role names for direction tokens and wire keys ----------------------
+//
+// Strip travel runs lead -> trail along the MAIN axis; the within-column
+// stack runs crossLead -> crossTrail. Under a transpose the two vocabularies
+// swap physical words, which is why no assertion about BEHAVIOUR should ever
+// spell "left" or "up" directly.
+
+inline QString edgeLead()
+{
+    return vertical() ? QStringLiteral("top") : QStringLiteral("left");
+}
+inline QString edgeTrail()
+{
+    return vertical() ? QStringLiteral("bottom") : QStringLiteral("right");
+}
+inline QString crossLead()
+{
+    return vertical() ? QStringLiteral("left") : QStringLiteral("up");
+}
+inline QString crossTrail()
+{
+    return vertical() ? QStringLiteral("right") : QStringLiteral("down");
+}
+
+inline QLatin1String mainPosKey()
+{
+    return vertical() ? QLatin1String("y") : QLatin1String("x");
+}
+inline QLatin1String mainLenKey()
+{
+    return vertical() ? QLatin1String("height") : QLatin1String("width");
+}
+inline QLatin1String crossPosKey()
+{
+    return vertical() ? QLatin1String("x") : QLatin1String("y");
+}
+inline QLatin1String crossLenKey()
+{
+    return vertical() ? QLatin1String("width") : QLatin1String("height");
+}
+
+/// The suite's screen rect for the running axis: 1200x800 horizontally,
+/// 800x1200 vertically, both at the origin. Main stays 1200 either way.
 inline QRect defaultScreenRect()
 {
-    return QRect(0, 0, kScreenWidth, kScreenHeight);
+    return vertical() ? QRect(0, 0, kCrossExtent, kMainExtent) : QRect(0, 0, kMainExtent, kCrossExtent);
+}
+
+/// Whether the ENGINE can currently lay out this feature on the running axis.
+///
+/// Hardcoded for now: no engine path resolves a non-horizontal axis yet, so
+/// the vertical arm skips every transposed slot while still proving the
+/// fixture itself transposes. Each rewrite phase flips its own feature here,
+/// and that suite's vertical rows go live WITHOUT the test file being touched
+/// in the same commit — a test edited in the commit that makes it pass proves
+/// nothing.
+inline bool supported(Feature)
+{
+    return !vertical();
+}
+
+/// Whether the engine can lay out ANYTHING on the running axis. While this is
+/// false the vertical arm exists to prove its own fixture transposes, and
+/// nothing else — every suite skips wholesale from initTestCase.
+///
+/// This blanket gate is a SCAFFOLDING state, not the destination. It costs the
+/// per-phase granularity the Feature enum exists for: once the first rewrite
+/// phase lands, a suite whose layout half works but whose drag-insert half
+/// does not can no longer show the working half green. Replace this call with
+/// per-slot AX_REQUIRE in a suite as soon as any of its features is supported.
+inline bool supportedAtAll()
+{
+    return !vertical();
+}
+
+} // namespace Ax
+
+/// The suite's screen rect. Axis-aware via the harness, so a fixture cannot
+/// go on describing a landscape screen after a transpose.
+inline QRect defaultScreenRect()
+{
+    return Ax::defaultScreenRect();
 }
 
 inline PhosphorScrollEngine::ScrollLayoutParams defaultParams()
@@ -48,6 +238,7 @@ inline PhosphorScrollEngine::ScrollLayoutParams defaultParams()
     PhosphorScrollEngine::ScrollLayoutParams p;
     p.workArea = defaultScreenRect();
     p.gap = 10;
+    p.axis = Ax::stripAxis();
     return p;
 }
 
@@ -68,6 +259,7 @@ inline PhosphorScrollEngine::ScrollLayoutParams gappedEngineParams()
     PhosphorScrollEngine::ScrollLayoutParams p;
     p.workArea = defaultScreenRect();
     p.gap = kEngineInnerGap;
+    p.axis = Ax::stripAxis();
     return p;
 }
 
@@ -78,6 +270,7 @@ inline PhosphorScrollEngine::ScrollLayoutParams engineParams()
     PhosphorScrollEngine::ScrollLayoutParams p;
     p.workArea = defaultScreenRect();
     p.gap = 0;
+    p.axis = Ax::stripAxis();
     return p;
 }
 
@@ -217,3 +410,74 @@ inline bool resolveContains(const PhosphorScrollEngine::ResolvedStrip& resolved,
 }
 
 } // namespace ScrollTestUtils
+
+/// Skip a transposed slot while the engine cannot yet lay that feature out on
+/// the running axis. Expands at the call site, so the including test file's
+/// own QTest include supplies QSKIP.
+#define AX_REQUIRE(feature)                                                                                            \
+    do {                                                                                                               \
+        if (!ScrollTestUtils::Ax::supported(feature)) {                                                                \
+            QSKIP("engine cannot lay out this feature on the running axis yet");                                       \
+        }                                                                                                              \
+    } while (false)
+
+/// For a slot that is INHERENTLY single-axis rather than merely unsupported —
+/// channel precedence, blob round trips, id drift, prune sweeps. Running those
+/// twice buys nothing and doubles the suite's wall time. Use this rather than
+/// excluding a whole FILE: most such files still hold a handful of slots that
+/// resolve real pixels, and a file-level exclusion loses exactly those.
+#define AX_HORIZONTAL_ONLY()                                                                                           \
+    do {                                                                                                               \
+        if (ScrollTestUtils::Ax::vertical()) {                                                                         \
+            QSKIP("no axis dependence: this slot asserts on non-geometric behaviour");                                 \
+        }                                                                                                              \
+    } while (false)
+
+/// THE VACUITY GUARD. Every suite calls this from its FIRST private slot, and
+/// never gates it — it is the one slot that must run on both arms.
+///
+/// Without it, a CMake edit that drops the ENVIRONMENT property would leave
+/// the vertical arm silently re-running the HORIZONTAL suite, reporting a full
+/// set of green targets that between them cover one axis. The printed line is
+/// the out-of-band half: the vertical ctest registration carries a
+/// FAIL_REGULAR_EXPRESSION on "axis=horizontal", so the check is enforced by
+/// ctest rather than by the binary that would be doing the lying.
+///
+/// A plain function rather than a slot-defining macro on purpose — moc's
+/// preprocessor is its own dialect, and a macro that expands to a member
+/// definition inside a Q_OBJECT class body is exactly the kind of thing it
+/// parses differently from the compiler.
+namespace ScrollTestUtils::Ax {
+
+inline void assertFixtureIsTransposed()
+{
+    // Printed BEFORE any assertion and before the suite gate below can skip,
+    // because the ctest-side FAIL_REGULAR_EXPRESSION reads this line and a
+    // skipped suite still has to produce it.
+    qInfo("PZ scroll test axis=%s", vertical() ? "vertical" : "horizontal");
+    const QRect screen = ScrollTestUtils::defaultScreenRect();
+    QCOMPARE(screen, vertical() ? QRect(0, 0, kCrossExtent, kMainExtent) : QRect(0, 0, kMainExtent, kCrossExtent));
+    // Main is 1200 and cross 800 under BOTH axes. That is the property which
+    // lets every hardcoded pixel literal in the suite keep its meaning across
+    // a transpose, so it is worth asserting rather than assuming.
+    QCOMPARE(mainLen(screen), kMainExtent);
+    QCOMPARE(crossLen(screen), kCrossExtent);
+    QCOMPARE(ScrollTestUtils::defaultParams().axis, stripAxis());
+}
+
+} // namespace ScrollTestUtils::Ax
+
+/// Every suite's initTestCase calls this. It proves the fixture really did
+/// transpose, then skips the whole suite while the engine cannot lay out on
+/// the running axis.
+///
+/// QSKIP has to expand HERE rather than inside the helper above: it is
+/// `qSkip(); return;`, so calling it from a plain function would return from
+/// that function and let the suite carry on running.
+#define AX_GUARD_SUITE()                                                                                               \
+    do {                                                                                                               \
+        ScrollTestUtils::Ax::assertFixtureIsTransposed();                                                              \
+        if (!ScrollTestUtils::Ax::supportedAtAll()) {                                                                  \
+            QSKIP("engine is horizontal-only for now; this arm exists to prove the fixture transposes");               \
+        }                                                                                                              \
+    } while (false)

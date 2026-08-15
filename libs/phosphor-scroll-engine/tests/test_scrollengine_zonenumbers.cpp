@@ -64,6 +64,13 @@ class TestScrollEngineZoneNumbers : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, then skips while the
+    /// engine is horizontal-only.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void zoneNumbersAreViewportRelativeVisibleSlots();
     void crossColumnDigitMovesTheWholeColumn();
     void intraColumnDigitReordersStackMate();

@@ -35,8 +35,8 @@
 
 using namespace PhosphorScrollEngine;
 
-using ScrollTestUtils::kScreenHeight;
-using ScrollTestUtils::kScreenWidth;
+using ScrollTestUtils::kCrossExtent;
+using ScrollTestUtils::kMainExtent;
 using ScrollTestUtils::makeProviderEngine;
 
 namespace {
@@ -58,6 +58,13 @@ class TestScrollEnginePerScreen : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, then skips while the
+    /// engine is horizontal-only.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void widthChannelsRankRuleOverSettingsOverGlobal();
     void heightChannelsRankRuleOverSettingsOverGlobal();
     void absentTrioSlotsFallBackPerSlotToTheGlobal();
@@ -222,7 +229,7 @@ void TestScrollEnginePerScreen::heightChannelsRankRuleOverSettingsOverGlobal()
 
     const WindowHeight ruled = openedHeight(engine, kS1, QStringLiteral("app|a"));
     QCOMPARE(ruled.kind, WindowHeight::Fixed);
-    QCOMPARE(ruled.fixedPx, kScreenHeight / 2);
+    QCOMPARE(ruled.fixedPx, kCrossExtent / 2);
 
     const WindowHeight perScreen = openedHeight(engine, kS2, QStringLiteral("app|b"));
     QCOMPARE(perScreen.kind, WindowHeight::Fixed);
@@ -360,7 +367,7 @@ void TestScrollEnginePerScreen::fixedKindWithAProportionValueFallsThroughToTheGl
     const ColumnWidth committed = openedWidth(engine, kS2, QStringLiteral("app|b"));
     QCOMPARE(committed.kind, ColumnWidth::Fixed);
     QCOMPARE(committed.fixedPx, 640);
-    QVERIFY(committed.fixedPx < kScreenWidth); // the fixture's own sanity check
+    QVERIFY(committed.fixedPx < kMainExtent); // the fixture's own sanity check
 
     const ColumnWidth rejectedFraction = openedWidth(engine, kS3, QStringLiteral("app|c"));
     QCOMPARE(rejectedFraction.kind, ColumnWidth::Proportion);
@@ -389,11 +396,11 @@ void TestScrollEnginePerScreen::templatePresetListReplacesSettingsListWholesale(
     const QVector<QRect> onTemplate = engine->visibleTileRects(kS1);
     QCOMPARE(onTemplate.size(), 1);
     // 0.5 anchor snaps to 0.4, the nearer template entry.
-    QCOMPARE(onTemplate.first().width(), qRound(0.4 * kScreenWidth));
+    QCOMPARE(onTemplate.first().width(), qRound(0.4 * kMainExtent));
 
     const QVector<QRect> onSettings = engine->visibleTileRects(kS2);
     QCOMPARE(onSettings.size(), 1);
-    QCOMPARE(onSettings.first().width(), qRound(0.5 * kScreenWidth)); // settings idx 1
+    QCOMPARE(onSettings.first().width(), qRound(0.5 * kMainExtent)); // settings idx 1
 }
 
 void TestScrollEnginePerScreen::templatePresetHeightsReplaceSettingsHeights()
@@ -430,10 +437,10 @@ void TestScrollEnginePerScreen::templatePresetHeightsReplaceSettingsHeights()
 
     const QVector<QRect> templateRects = engine->visibleTileRects(kS1);
     QCOMPARE(templateRects.size(), 1);
-    QCOMPARE(templateRects.first().height(), qRound(0.6 * kScreenHeight));
+    QCOMPARE(templateRects.first().height(), qRound(0.6 * kCrossExtent));
     const QVector<QRect> settingsRects = engine->visibleTileRects(kS2);
     QCOMPARE(settingsRects.size(), 1);
-    QCOMPARE(settingsRects.first().height(), qRound(0.5 * kScreenHeight));
+    QCOMPARE(settingsRects.first().height(), qRound(0.5 * kCrossExtent));
 }
 
 void TestScrollEnginePerScreen::templateListShrinkClampsResolvedPresetWidth()
@@ -449,7 +456,7 @@ void TestScrollEnginePerScreen::templateListShrinkClampsResolvedPresetWidth()
     engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
     QVector<QRect> rects = engine->visibleTileRects(kS1);
     QCOMPARE(rects.size(), 1);
-    QCOMPARE(rects.first().width(), qRound(0.75 * kScreenWidth));
+    QCOMPARE(rects.first().width(), qRound(0.75 * kMainExtent));
 
     // Now the template arrives with a single entry: the column's anchor
     // snaps to the lone 0.6 preset at the next resolve.
@@ -458,13 +465,13 @@ void TestScrollEnginePerScreen::templateListShrinkClampsResolvedPresetWidth()
     engine->applyPerScreenConfig(kS1, templ);
     rects = engine->visibleTileRects(kS1);
     QCOMPARE(rects.size(), 1);
-    QCOMPARE(rects.first().width(), qRound(0.6 * kScreenWidth));
+    QCOMPARE(rects.first().width(), qRound(0.6 * kMainExtent));
 
     // Clearing the override restores the settings vocabulary.
     engine->clearPerScreenConfig(kS1);
     rects = engine->visibleTileRects(kS1);
     QCOMPARE(rects.size(), 1);
-    QCOMPARE(rects.first().width(), qRound(0.75 * kScreenWidth));
+    QCOMPARE(rects.first().width(), qRound(0.75 * kMainExtent));
 }
 
 void TestScrollEnginePerScreen::invalidTemplateEntriesFallBackToSettingsList()
@@ -484,7 +491,7 @@ void TestScrollEnginePerScreen::invalidTemplateEntriesFallBackToSettingsList()
     engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
     QVector<QRect> rects = engine->visibleTileRects(kS1);
     QCOMPARE(rects.size(), 1);
-    QCOMPARE(rects.first().width(), qRound(0.5 * kScreenWidth));
+    QCOMPARE(rects.first().width(), qRound(0.5 * kMainExtent));
 
     // A mixed list keeps its valid entries: 0.01 drops, 0.3 survives, and
     // the anchor snaps to the lone remaining entry.
@@ -493,7 +500,7 @@ void TestScrollEnginePerScreen::invalidTemplateEntriesFallBackToSettingsList()
     engine->applyPerScreenConfig(kS1, mixed);
     rects = engine->visibleTileRects(kS1);
     QCOMPARE(rects.size(), 1);
-    QCOMPARE(rects.first().width(), qRound(0.3 * kScreenWidth));
+    QCOMPARE(rects.first().width(), qRound(0.3 * kMainExtent));
 }
 
 void TestScrollEnginePerScreen::invalidTemplateHeightEntriesFallBackToSettingsList()
@@ -517,7 +524,7 @@ void TestScrollEnginePerScreen::invalidTemplateHeightEntriesFallBackToSettingsLi
     engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
     const QVector<QRect> rects = engine->visibleTileRects(kS1);
     QCOMPARE(rects.size(), 1);
-    QCOMPARE(rects.first().height(), qRound(0.5 * kScreenHeight));
+    QCOMPARE(rects.first().height(), qRound(0.5 * kCrossExtent));
 
     // A mixed list keeps its valid entries, so the rejection above is a
     // rejection and not a dead branch.
@@ -527,7 +534,7 @@ void TestScrollEnginePerScreen::invalidTemplateHeightEntriesFallBackToSettingsLi
     QCOMPARE(engine->effectivePresetWindowHeights(kS1), QList<qreal>({0.4}));
     const QVector<QRect> snapped = engine->visibleTileRects(kS1);
     QCOMPARE(snapped.size(), 1);
-    QCOMPARE(snapped.first().height(), qRound(0.4 * kScreenHeight));
+    QCOMPARE(snapped.first().height(), qRound(0.4 * kCrossExtent));
 }
 
 void TestScrollEnginePerScreen::templateListsAreCappedAtTheKeepAndScanBounds()
@@ -659,7 +666,7 @@ void TestScrollEnginePerScreen::autoHeightKindOverridesAFixedGlobal()
     // Auto fills the column, unlike the global's 200px.
     const QVector<QRect> filled = engine->visibleTileRects(kS1);
     QCOMPARE(filled.size(), 1);
-    QCOMPARE(filled.first().height(), kScreenHeight);
+    QCOMPARE(filled.first().height(), kCrossExtent);
 
     const WindowHeight globalHeight = openedHeight(engine, kS2, QStringLiteral("app|b"));
     QCOMPARE(globalHeight.kind, WindowHeight::Fixed);

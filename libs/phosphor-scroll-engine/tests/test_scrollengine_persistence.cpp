@@ -27,6 +27,13 @@ class TestScrollEnginePersistence : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, then skips while the
+    /// engine is horizontal-only.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void modeRoundTripRestoresFocusAndAnchor();
     void presetIntentRoundTripsExactly();
     void stashedShapeOutranksTheOpenHeightRule();
@@ -203,7 +210,7 @@ void TestScrollEnginePersistence::stashedShapeOutranksTheOpenHeightRule()
     QCOMPARE(fresh.width.kind, ColumnWidth::Proportion);
     QCOMPARE(fresh.width.proportion, 0.9);
     QCOMPARE(fresh.tiles.first().height.kind, WindowHeight::Fixed);
-    QCOMPARE(fresh.tiles.first().height.fixedPx, qRound(0.9 * ScrollTestUtils::kScreenHeight));
+    QCOMPARE(fresh.tiles.first().height.fixedPx, qRound(0.9 * ScrollTestUtils::kCrossExtent));
 }
 
 void TestScrollEnginePersistence::legacyPresetIndexBlobResolvesAgainstEffectiveList()

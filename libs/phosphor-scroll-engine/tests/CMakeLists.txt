@@ -41,6 +41,32 @@ function(pse_add_test _name)
     add_test(NAME ${_name} COMMAND ${_name})
     set_tests_properties(${_name} PROPERTIES LABELS "phosphorscrollengine")
     phosphor_apply_test_isolation(${_name})
+
+    # SECOND registration of the SAME binary, transposed. The axis is a
+    # property of the process (PZ_SCROLL_TEST_AXIS, read once by
+    # ScrollTestUtils::Ax), so one build serves both arms and the two report
+    # independent pass/fail under readable names.
+    #
+    # phosphor_apply_test_isolation takes the ctest test name as its second
+    # argument, which is what gives this arm its own XDG sandbox and its own
+    # 120s timeout rather than sharing the horizontal arm's.
+    add_test(NAME ${_name}_vertical COMMAND ${_name})
+    set_tests_properties(${_name}_vertical PROPERTIES LABELS "phosphorscrollengine")
+    phosphor_apply_test_isolation(${_name} ${_name}_vertical)
+    # APPEND, never a plain set_tests_properties(... ENVIRONMENT ...) — that
+    # is a SET and would drop the XDG sandbox and the timeout the call above
+    # just installed. The helper exists so this cannot be got wrong.
+    phosphor_append_test_environment(${_name}_vertical "PZ_SCROLL_TEST_AXIS=vertical")
+    # The out-of-band half of the vacuity guard. Every suite's first slot
+    # prints its resolved axis; if the ENVIRONMENT property above is ever
+    # dropped, the binary runs HORIZONTALLY under a name claiming otherwise
+    # and every assertion still passes. Failing on the printed word catches
+    # that from outside the binary that would be lying.
+    #
+    # FAIL_REGULAR_EXPRESSION, deliberately not PASS_REGULAR_EXPRESSION: the
+    # latter REPLACES the exit-code criterion, so a genuinely failing test
+    # whose output happened to match would be reported as passing.
+    set_tests_properties(${_name}_vertical PROPERTIES FAIL_REGULAR_EXPRESSION "axis=horizontal")
 endfunction()
 
 pse_add_test(test_stripaxis test_stripaxis.cpp)

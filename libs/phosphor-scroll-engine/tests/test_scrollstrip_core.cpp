@@ -22,6 +22,15 @@ class TestScrollStripCore : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite
+    /// under a name claiming otherwise, then skips while the engine is
+    /// horizontal-only.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void openInsertsColumnAndResizesNothing();
     void openScrollsOnlyWhenNeeded();
     void closeKeepsNeighboursAnchored();
