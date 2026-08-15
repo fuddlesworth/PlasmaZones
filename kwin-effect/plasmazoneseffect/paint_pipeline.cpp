@@ -1441,7 +1441,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
         && w == m_scrollTabPaintAnchor && !m_scrollTabDeferred.isEmpty();
     const auto tabInjectGuard = qScopeGuard([&]() {
         if (injectTabsAfterThisWindow) {
-            injectScrollTabIndicators(renderTarget, viewport);
+            injectScrollTabIndicators(renderTarget, viewport, deviceRegion);
         }
     });
     // Part two-and-a-half: the anchor's paint alone is not a reliable trigger.
@@ -1460,7 +1460,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // reads.
     if (!m_capturingSnapshot && !m_directPaintCapture && w && !m_scrollTabDeferred.isEmpty()
         && m_scrollTabDrawn.size() < m_scrollTabDeferred.size() && m_scrollTabAboveAnchor.contains(w)) {
-        injectScrollTabIndicators(renderTarget, viewport);
+        injectScrollTabIndicators(renderTarget, viewport, deviceRegion);
     }
 
     // Read the cached per-frame clock pinned by prePaintScreen. Multiple
@@ -1918,7 +1918,8 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
 }
 
 void PlasmaZonesEffect::injectScrollTabIndicators(const KWin::RenderTarget& renderTarget,
-                                                  const KWin::RenderViewport& viewport)
+                                                  const KWin::RenderViewport& viewport,
+                                                  const KWin::Region& deviceRegion)
 {
     // Same direct-drive shape as the strip pass's above-strip composite:
     // drive each surface through OUR OWN paintWindow so the view offset
@@ -1952,7 +1953,15 @@ void PlasmaZonesEffect::injectScrollTabIndicators(const KWin::RenderTarget& rend
         KWin::WindowPaintData indicatorData;
         indicatorData.setOpacity(indicator->opacity());
         const int indicatorMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
-        paintWindow(renderTarget, viewport, indicator, indicatorMask, KWin::Region::infinite(), indicatorData);
+        // The trigger's deviceRegion, NEVER an infinite region. Paint order
+        // only becomes stacking order if every window above repaints the same
+        // pixels after us, and KWin hands each of them only the damage region
+        // — an unclipped injection painted indicators outside it, where no
+        // occluder ever drew again, and the strip surfaced over fullscreen
+        // windows, Spectacle's overlay, and the lock surface until the next
+        // full-damage frame. See the declaration's parameter doc for why the
+        // trigger's region is also the semantically correct clip.
+        paintWindow(renderTarget, viewport, indicator, indicatorMask, deviceRegion, indicatorData);
     }
 }
 

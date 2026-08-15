@@ -898,8 +898,23 @@ private:
      * column but below whatever stacks over the strip — behaving like members
      * of the window layer even though the protocol has no such placement for
      * them.
+     *
+     * @param deviceRegion The triggering paintWindow call's device region. The
+     * injected draw is clipped to it, never painted unclipped: paint order
+     * only yields stacking order when every window above repaints the same
+     * pixels afterwards, and KWin hands each of them only the damage region.
+     * An unclipped injection put indicator pixels OUTSIDE that region, where
+     * no occluder ever painted again — so the strip surfaced on top of
+     * fullscreen windows, Spectacle's capture overlay, even the lock surface,
+     * persisting until the next full-damage frame. The trigger's region is
+     * also the CORRECT clip, not merely a safe one: for the anchor trigger it
+     * is damage minus the opaque regions stacked above the strip, exactly
+     * where content at the strip's slot may show; for the above-anchor
+     * trigger the occluder's own paint follows immediately and resolves its
+     * overlap the same way it would for a naturally-slotted window below it.
      */
-    void injectScrollTabIndicators(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport);
+    void injectScrollTabIndicators(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                   const KWin::Region& deviceRegion);
 
     TilingHandler* tilingHandler() const
     {
