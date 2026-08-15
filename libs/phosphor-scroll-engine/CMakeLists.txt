@@ -22,6 +22,7 @@ include(GenerateExportHeader)
 set(CMAKE_AUTOMOC ON)
 
 add_library(PhosphorScrollEngine SHARED
+    include/PhosphorScrollEngine/StripAxis.h
     include/PhosphorScrollEngine/ScrollTypes.h
     include/PhosphorScrollEngine/ScrollStashTypes.h
     include/PhosphorScrollEngine/ScrollEngineTypes.h
@@ -73,6 +74,12 @@ target_link_libraries(PhosphorScrollEngine
     PUBLIC
         Qt6::Core
         PhosphorEngine::PhosphorEngine
+        # Already reaches us transitively (PhosphorEngine links it PUBLIC), but
+        # StripAxis.h includes a PhosphorProtocol header directly. Naming it
+        # here keeps that honest: without it, demoting PhosphorEngine's link to
+        # PRIVATE would break THIS library's compile for reasons pointing at
+        # another one. Types is the QtCore-only half — no QtDBus enters here.
+        PhosphorProtocol::Types
     PRIVATE
         PhosphorScreens::Runtime  # ScrollEngine queries screen geometry via ScreenManager
         PhosphorIdentity::PhosphorIdentity

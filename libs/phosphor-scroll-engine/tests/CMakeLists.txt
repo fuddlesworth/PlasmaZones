@@ -43,6 +43,7 @@ function(pse_add_test _name)
     phosphor_apply_test_isolation(${_name})
 endfunction()
 
+pse_add_test(test_stripaxis test_stripaxis.cpp)
 pse_add_test(test_scrollstrip_core test_scrollstrip_core.cpp)
 pse_add_test(test_scrollstrip_ops test_scrollstrip_ops.cpp)
 pse_add_test(test_scrollengine_smoke test_scrollengine_smoke.cpp)
