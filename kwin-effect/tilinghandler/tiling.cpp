@@ -198,7 +198,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString screenId; ///< daemon's TARGET screen for this window (req.screenId)
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
         QString scrollEdge; ///< scrolling strip: screen edge to animate from ("left"/"right"), else empty
-        int viewDeltaX = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
+        int viewDelta = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
         /// scrolling strip: where a PARKED column really sits. Converted to a
         /// translation from this batch's rect at apply time and ADDED to the
         /// window's committed frame by the paint path — not substituted for
@@ -311,8 +311,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // off-screen, which is the same flung strip the clamp exists to
         // prevent, just moved onto the per-window springs. One bounded value
         // for both consumers makes the animator's own clamp idempotent.
-        entry.viewDeltaX =
-            qBound(-StripViewAnimator::kMaxViewDeltaPx, req.viewDeltaX, StripViewAnimator::kMaxViewDeltaPx);
+        entry.viewDelta =
+            qBound(-StripViewAnimator::kMaxViewDeltaPx, req.viewDelta, StripViewAnimator::kMaxViewDeltaPx);
         entry.visualPos = req.hasVisualPos ? QPoint(req.visualX, req.visualY) : QPoint();
         entry.hasVisualPos = req.hasVisualPos;
         entry.tabFrom = req.tabFrom;
@@ -416,7 +416,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         bool isWindowedFullscreen = false;
         QString stacking;
         QString scrollEdge;
-        int viewDeltaX = 0;
+        int viewDelta = 0;
         /// Carried verbatim from Entry::visualPos — see its doc for how the
         /// paint path consumes it (a delta ADDED to the commit).
         QPoint visualPos;
@@ -468,7 +468,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
-                        e.isWindowedFullscreen, e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos,
+                        e.isWindowedFullscreen, e.stacking, e.scrollEdge, e.viewDelta, e.visualPos, e.hasVisualPos,
                         e.tabFrom});
     }
 
@@ -485,7 +485,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     //
     // Filled with the screenIds whose spring actually STARTED (or
     // retargeted) a leg this batch. Consumed twice below: the residual-
-    // origin branch of the apply lambda treats an entry's viewDeltaX as
+    // origin branch of the apply lambda treats an entry's viewDelta as
     // real only for these screens (with no leg the paint offset is zero,
     // so an origin placed a delta behind the target would pop backwards
     // and slide double), and the cascade decision skips the direction sort
@@ -525,7 +525,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QSet<QString> seededScreens;
         QSet<KWin::LogicalOutput*> seededOutputs;
         for (const TileSnap& s : toApply) {
-            if (s.viewDeltaX == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
+            if (s.viewDelta == 0 || s.screenId.isEmpty() || seededScreens.contains(s.screenId)) {
                 continue;
             }
             // Marked seeded only once the output RESOLVES. Marking before the
@@ -566,8 +566,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // fresh leg from a retarget by whether the spring is
                 // already live, so this ordering is load-bearing (see its
                 // header contract).
-                m_effect->m_stripTransition.notifyLeg(out, stripEffectId, stripEffectParams, s.viewDeltaX);
-                if (m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDeltaX, viewProfile)) {
+                m_effect->m_stripTransition.notifyLeg(out, stripEffectId, stripEffectParams, s.viewDelta);
+                if (m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDelta, viewProfile)) {
                     startedViewScreens.insert(s.screenId);
                 } else {
                     // The spring declined (animations off, no clock): there
@@ -1205,7 +1205,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // the two forms are identical.
                 bool visualDeltaChanged = false;
                 if (snap.hasVisualPos) {
-                    // Bounded on the way in, for the same reason viewDeltaX is
+                    // Bounded on the way in, for the same reason viewDelta is
                     // and with the same constant: the wire deliberately does
                     // not validate visualX/visualY, on the stated grounds that
                     // the effect clamps the delta before it reaches the paint
@@ -1552,7 +1552,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // deliberately degenerate — the edge-anchored slide-out
                         // below would fight the view offset for the same pixels.
                         originOverride = QRectF(committedGeo);
-                    } else if (snap.viewDeltaX != 0 && startedViewScreens.contains(snap.screenId)) {
+                    } else if (snap.viewDelta != 0 && startedViewScreens.contains(snap.screenId)) {
                         // Carried by the view: the strip's own spring moves
                         // this window, so the per-window animation must cover
                         // only what the view does NOT explain — the residual.
@@ -1567,7 +1567,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // which already handle the no-view case.
                         //
                         // The paint position is `animatedRect + viewOffset`,
-                        // and the offset starts at exactly viewDeltaX. So for
+                        // and the offset starts at exactly viewDelta. So for
                         // the first frame to land where the window is now, the
                         // animation has to start a delta BEHIND its current
                         // rect. Everything that then differs from the target is
@@ -1623,7 +1623,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             // arriving tab whose batch also carries view
                             // travel lands here (its edge is empty — a hidden
                             // tab of an on-screen column parks without one —
-                            // while viewDeltaX is set because it is not
+                            // while viewDelta is set because it is not
                             // parked NOW). Differencing against the park
                             // builds an origin below the union of every
                             // output and the tab flies up the full screen:
@@ -1637,7 +1637,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                 originOverride = QRectF(committedGeo);
                             } else {
                                 const KWin::RectF cur = snap.window->frameGeometry();
-                                originOverride = QRectF(QRect(qRound(cur.x()) - snap.viewDeltaX, qRound(cur.y()),
+                                originOverride = QRectF(QRect(qRound(cur.x()) - snap.viewDelta, qRound(cur.y()),
                                                               qRound(cur.width()), qRound(cur.height())));
                             }
                         }

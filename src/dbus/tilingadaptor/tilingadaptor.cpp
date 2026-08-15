@@ -145,7 +145,7 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // Absent for every non-scrolling producer, and absent within scrolling
         // for a window the view does not carry — both mean zero, which is what
         // the default gives.
-        entry.viewDeltaX = obj.value(QLatin1String("viewDeltaX")).toInt(0);
+        entry.viewDelta = obj.value(QLatin1String("viewDelta")).toInt(0);
         // Present only for a parked scrolling column; absent means the
         // committed rect IS the paint position.
         //

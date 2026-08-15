@@ -90,7 +90,7 @@ PhosphorProtocol::TileRequestList parseWindowsTiledJson(const QString& json)
         entry.windowedFullscreen = obj.value(QLatin1String("windowedFullscreen")).toBool(false);
         entry.stacking = obj.value(QLatin1String("stacking")).toString();
         entry.scrollEdge = obj.value(QLatin1String("scrollEdge")).toString();
-        entry.viewDeltaX = obj.value(QLatin1String("viewDeltaX")).toInt(0);
+        entry.viewDelta = obj.value(QLatin1String("viewDelta")).toInt(0);
         const QJsonValue visualXVal = obj.value(QLatin1String("visualX"));
         const QJsonValue visualYVal = obj.value(QLatin1String("visualY"));
         if (!entry.floating && visualXVal.isDouble() && visualYVal.isDouble()) {

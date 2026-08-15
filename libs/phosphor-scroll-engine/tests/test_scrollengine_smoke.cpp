@@ -911,7 +911,7 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
     const QJsonArray firstBatch = QJsonDocument::fromJson(tiled.first().at(0).toString().toUtf8()).array();
     QVERIFY2(!firstBatch.isEmpty(), "expected the opening batch to carry app|a");
     for (const QJsonValue& v : firstBatch) {
-        QVERIFY2(!v.toObject().contains(QLatin1String("viewDeltaX")),
+        QVERIFY2(!v.toObject().contains(QLatin1String("viewDelta")),
                  "a context's first batch has no previous view to slide from");
     }
 
@@ -946,7 +946,7 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
                         o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
         const bool parked = now.top() > defaultScreenRect().bottom();
         if (parked) {
-            QVERIFY2(!o.contains(QLatin1String("viewDeltaX")),
+            QVERIFY2(!o.contains(QLatin1String("viewDelta")),
                      qPrintable(QStringLiteral("parked tile %1 must not claim to ride the view").arg(id)));
             continue;
         }
@@ -954,7 +954,7 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
         if (prev == before.constEnd() || prev->top() > defaultScreenRect().bottom()) {
             continue; // arriving from a park: no on-screen predecessor to difference against
         }
-        QVERIFY2(o.contains(QLatin1String("viewDeltaX")),
+        QVERIFY2(o.contains(QLatin1String("viewDelta")),
                  qPrintable(QStringLiteral("on-screen tile %1 should ride the view").arg(id)));
         // The whole of this window's movement, and nothing but the view's.
         // Sign: the field is the translation that puts the window BACK where
@@ -966,7 +966,7 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
         // clamp pins at the screen edge does NOT move by the view delta, and
         // the engine drops the field for exactly that reason — the boundary
         // suite owns that case.
-        QCOMPARE(prev->x() - now.x(), o.value(QLatin1String("viewDeltaX")).toInt());
+        QCOMPARE(prev->x() - now.x(), o.value(QLatin1String("viewDelta")).toInt());
         QCOMPARE(now.y(), prev->y());
         QCOMPARE(now.size(), prev->size());
         ++carried;
@@ -1011,7 +1011,7 @@ void TestScrollEngineSmoke::viewDeltaIsSuppressedAcrossAWorkAreaChange()
     const QJsonArray batch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
     QVERIFY(!batch.isEmpty());
     for (const QJsonValue& v : batch) {
-        QVERIFY2(!v.toObject().contains(QLatin1String("viewDeltaX")),
+        QVERIFY2(!v.toObject().contains(QLatin1String("viewDelta")),
                  "a batch resolved in a different work area than its baseline must carry no view delta");
     }
 
@@ -1026,7 +1026,7 @@ void TestScrollEngineSmoke::viewDeltaIsSuppressedAcrossAWorkAreaChange()
     const QJsonArray settled = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
     bool anyDelta = false;
     for (const QJsonValue& v : settled) {
-        anyDelta = anyDelta || v.toObject().contains(QLatin1String("viewDeltaX"));
+        anyDelta = anyDelta || v.toObject().contains(QLatin1String("viewDelta"));
     }
     QVERIFY2(anyDelta, "once the basis matches again the view delta must come back");
 }
@@ -1107,14 +1107,14 @@ void TestScrollEngineSmoke::secondScrollMeasuresFromTheEmittedBaselineOnly()
     int checked = 0;
     for (const QJsonValue& v : second) {
         const QJsonObject o = v.toObject();
-        if (!o.contains(QLatin1String("viewDeltaX"))) {
+        if (!o.contains(QLatin1String("viewDelta"))) {
             continue;
         }
         const QString id = o.value(QLatin1String("windowId")).toString();
         if (!wasOnScreenInFirst(id)) {
             continue;
         }
-        QCOMPARE(o.value(QLatin1String("viewDeltaX")).toInt(),
+        QCOMPARE(o.value(QLatin1String("viewDelta")).toInt(),
                  xOf(tiled, afterFirst, id) - o.value(QLatin1String("x")).toInt());
         ++checked;
     }

@@ -692,7 +692,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // costs it the ride and leaves it to its own motion, which is the
             // honest description of a window the layout is holding still.
             if (!parkedNow && viewDelta != 0 && !clampPinnedMain) {
-                obj[QLatin1String("viewDeltaX")] = viewDelta;
+                obj[QLatin1String("viewDelta")] = viewDelta;
             }
             // A parked column keeps its strip position as a PAINT hint. The
             // commit above stays the park, which is the only rect that cannot

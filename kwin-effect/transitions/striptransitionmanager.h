@@ -90,7 +90,7 @@ public:
     /// (that ordering is load-bearing: it is what lets this method tell a
     /// fresh leg from a retarget — see below), with the already resolved
     /// `scrolling.view` @p effectId and @p params (the profile's effective
-    /// pack parameters) and the batch's @p viewDeltaX. An EMPTY id erases
+    /// pack parameters) and the batch's @p viewDelta. An EMPTY id erases
     /// any entry for the output — the user cleared the pack (or disabled
     /// animations) mid-flight, and the next frame falls through to the plain
     /// translation that was running inside the capture all along, visually
@@ -101,7 +101,7 @@ public:
     ///     accumulated iTime and velocity state all persist — a wheel batch
     ///     landing mid-leg must not restart the pass any more than it
     ///     restarts the spring. The sampler's offset baseline is shifted by
-    ///     @p viewDeltaX so the committed step never reads as velocity.
+    ///     @p viewDelta so the committed step never reads as velocity.
     ///   • FRESH LEG (spring NOT live at call time — possible because this
     ///     runs before applyBatchDelta): the motion sampler resets, so a
     ///     pass that begins after a stale armed entry (animations toggled,
@@ -109,7 +109,7 @@ public:
     ///     no inherited velocity.
     ///   • PACK SWAP (different @p effectId): the sampler resets too — pack
     ///     B must not begin at pack A's accumulated clock and frame count.
-    void notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params, int viewDeltaX);
+    void notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params, int viewDelta);
 
     /// True while any armed output's view spring is live OR its settle fade
     /// is open. Feeds PlasmaZonesEffect::isActive() and

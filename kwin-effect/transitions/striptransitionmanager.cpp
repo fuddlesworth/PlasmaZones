@@ -55,7 +55,7 @@ StripTransitionManager::~StripTransitionManager()
 }
 
 void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params,
-                                       int viewDeltaX)
+                                       int viewDelta)
 {
     if (!output) {
         return;
@@ -111,11 +111,11 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
         pass.frameCount = 0;
     } else {
         // RETARGET: the batch is about to step the spring's committed value
-        // by viewDeltaX with no time passing. Shift the sampler's offset
+        // by viewDelta with no time passing. Shift the sampler's offset
         // baseline by the same amount so the finite difference sees only
         // spring motion — without this every wheel notch spiked the
         // velocity by the column width over one frame.
-        pass.motion.compensateBatchJump(qreal(viewDeltaX));
+        pass.motion.compensateBatchJump(qreal(viewDelta));
     }
     // Params re-translated either way so a settings change mid-scroll
     // applies on the next frame.

@@ -55,6 +55,16 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// other placement, and zero within scrolling for a window the view does
     /// not carry.
     ///
+    /// SIGNED SCALAR ALONG THE SCREEN'S OWN STRIP AXIS, not along x. A strip
+    /// only ever slides one way at a time, so the type says so: an x/y pair
+    /// would make a both-non-zero state representable that no producer can
+    /// mean and every consumer would have to decide about, and it would fork
+    /// the single clamp budget the effect leans on into two components that
+    /// jointly admit sqrt(2) times it. Which axis this is measured along is a
+    /// property of the SCREEN, published separately, because the paint path
+    /// and the tab-indicator surface need it at moments when no batch is in
+    /// hand.
+    ///
     /// It is a property of the batch rather than of the window, carried
     /// per-entry so a batch spanning several screens stays unambiguous. The
     /// effect springs it ONCE per output and lets every carrying window ride
@@ -65,7 +75,7 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// its committed rect is off below the union of all outputs, so no
     /// translation puts it back on screen, and it keeps the edge-anchored
     /// slide-out built from `scrollEdge` instead.
-    int viewDeltaX = 0;
+    int viewDelta = 0;
     /// Scrolling strip: where this window really sits on the strip, when that
     /// differs from the rect committed above. Only a PARKED column sets it.
     ///

@@ -45,7 +45,7 @@ namespace PlasmaZones {
  * restore, and nothing needs them to agree.
  *
  * @par Sign
- * `TileRequestEntry::viewDeltaX` is the translation that puts a window back
+ * `TileRequestEntry::viewDelta` is the translation that puts a window back
  * where it was rendered. Committed view advances BY that delta, and the paint
  * offset is `committed - animated`, which therefore starts at the delta and
  * rings out to zero.

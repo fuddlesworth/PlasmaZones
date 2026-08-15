@@ -296,7 +296,7 @@ Q_SIGNALS:
      * @param tileRequests Typed list of TileRequestEntry structs, wire shape
      *        a(siiiissbbbssiiibs): (windowId, x, y, width, height, zoneId,
      *        screenId, monocle, floating, windowedFullscreen, stacking,
-     *        scrollEdge, viewDeltaX, visualX, visualY, hasVisualPos, tabFrom)
+     *        scrollEdge, viewDelta, visualX, visualY, hasVisualPos, tabFrom)
      */
     void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
 
