@@ -1795,13 +1795,16 @@ add_test(NAME test_zone_zorder COMMAND test_zone_zorder)
 # through hand-built commands against a raw QUndoStack. UndoController.cpp
 # rides along only because pushCommand references its push(); the stubs keep
 # it unreached. Qt6::Gui is explicit for QUndoCommand, same rationale as
-# test_zone_zorder above.
+# test_zone_zorder above. PhosphorAudio is a compile-time need, not a call:
+# the stubs' TU includes EditorController.h, whose IShaderPreviewBackend base
+# includes <PhosphorAudio/IAudioSpectrumProvider.h>.
 add_executable(test_editor_template_model editor/test_editor_template_model.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/EditorTemplateModel.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/undo/UndoController.cpp
                ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateTemplateCommand.cpp)
 target_link_libraries(test_editor_template_model PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
-                                                         PhosphorZones::PhosphorZones)
+                                                         PhosphorZones::PhosphorZones
+                                                         PhosphorAudio::PhosphorAudio)
 add_test(NAME test_editor_template_model COMMAND test_editor_template_model)
 
 # The editor's D-Bus client has to read the daemon's ANSWER, not just the reply
