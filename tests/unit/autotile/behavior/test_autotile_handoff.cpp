@@ -495,7 +495,7 @@ private Q_SLOTS:
     void testFloatRestore_predicateAllows_appliesMove()
     {
         const FloatRestoreOutcome r = runFloatRestoreGate([](AutotileEngine& e) {
-            e.setRestorePositionPredicate([](const QString&) {
+            e.setRestorePositionPredicate([](const QString&, const QString&) {
                 return true;
             });
         });
@@ -508,7 +508,7 @@ private Q_SLOTS:
     void testFloatRestore_predicateDenies_skipsMove()
     {
         const FloatRestoreOutcome r = runFloatRestoreGate([](AutotileEngine& e) {
-            e.setRestorePositionPredicate([](const QString&) {
+            e.setRestorePositionPredicate([](const QString&, const QString&) {
                 return false;
             });
         });
@@ -554,7 +554,7 @@ private Q_SLOTS:
 
         // Opt-in ON, so the gate is NOT what suppresses the move — only the
         // screen-local resolution is.
-        engine.setRestorePositionPredicate([](const QString&) {
+        engine.setRestorePositionPredicate([](const QString&, const QString&) {
             return true;
         });
 

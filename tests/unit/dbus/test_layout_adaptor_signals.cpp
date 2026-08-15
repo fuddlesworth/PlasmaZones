@@ -5,25 +5,31 @@
  * @file test_layout_adaptor_signals.cpp
  * @brief LayoutAdaptor signal emission contract tests.
  *
- * Pins the rule (Phase 1.2 of refactor/dbus-performance): property
- * mutations (setLayoutHidden, setLayoutAutoAssign, setLayoutAspectRatioClass)
- * emit `layoutChanged` but NEVER `layoutListChanged` — the list hasn't
- * changed. layoutListChanged is reserved for genuine add/delete/reload
- * operations (onLayoutsChanged, notifyLayoutListChanged).
+ * Pins the rule: property mutations (setLayoutHidden, setLayoutAutoAssign,
+ * setLayoutAspectRatioClass) emit the compact
+ * `layoutPropertyChanged(layoutId, property, value)` and NEITHER
+ * `layoutChanged` NOR `layoutListChanged`. The whole-layout and list signals
+ * are reserved for genuine add/delete/reload operations (onLayoutsChanged,
+ * notifyLayoutListChanged).
  *
- * Subscribers (SettingsController) wire both signals to the same reload
- * slot, so dropping the redundant list-changed emission is behavior-
- * preserving on the client side but shaves one D-Bus marshal + slot
- * invocation per property mutation.
+ * Read the tests, not an older description of them: the assertions below
+ * require layoutChanged.count() == 0. An earlier revision of this comment
+ * described the Phase-1.2 state, where property mutations still emitted
+ * layoutChanged and only the list signal was dropped. Anyone "restoring" that
+ * emission on the strength of the comment would fail every test in this file.
+ *
+ * Also covers the active-layout-per-screen wire (discussion #919): the
+ * snapshot readback, the changed-screens broadcast, and the empty-id contract.
  */
 
 #include <QTest>
+#include <QDBusVariant>
+#include <QScopeGuard>
 #include <QSignalSpy>
 
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include "config/configbackends.h"
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 #include "helpers/IsolatedConfigGuard.h"
@@ -37,6 +43,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <memory>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -271,6 +278,16 @@ private Q_SLOTS:
         PhosphorTiles::AlgorithmRegistry registry;
         registry.registerAlgorithm(QStringLiteral("twocol"), new TwoColumnStubAlgorithm);
         m_adaptor->setAlgorithmRegistry(&registry);
+        // Detach on EVERY exit path, not just the success one. The adaptor is owned
+        // by m_parent and lives until cleanup(), while this registry dies at the end
+        // of the method, and layoutadaptor.h documents the pointer as "Borrowed;
+        // outlives adaptor". Any QVERIFY2 below returns early, so a bare clear at the
+        // bottom would leave the adaptor holding a destroyed registry through
+        // teardown — turning one failing assertion into a crash that loses the rest
+        // of the run.
+        const auto detachRegistry = qScopeGuard([this] {
+            m_adaptor->setAlgorithmRegistry(nullptr);
+        });
 
         const QString autotileId = PhosphorLayout::LayoutId::makeAutotileId(QStringLiteral("twocol"));
         const QString jsonStr = m_adaptor->getLayout(autotileId);
@@ -297,9 +314,126 @@ private Q_SLOTS:
         QCOMPARE(relGeo.value(K::Width).toDouble(), 0.5);
         QCOMPARE(zone0.value(K::ZoneNumber).toInt(), 1);
         QVERIFY2(!zone0.value(K::Id).toString().isEmpty(), "zone needs a stable id (editor keys zones by id)");
+    }
 
-        // Clear the dangling local-registry pointer before it goes out of scope.
-        m_adaptor->setAlgorithmRegistry(nullptr);
+    // ─────────────────────────────────────────────────────────────────
+    // Active-layout-per-screen wire (discussion #919). The daemon owns the
+    // assignment cascade and pushes its recomputed snapshot here; the adaptor
+    // serves it as the readback and broadcasts only the screens that moved.
+    // The KWin effect consumes both to match the ActiveLayout rule field, which
+    // it cannot resolve on its own.
+    // ─────────────────────────────────────────────────────────────────
+    void testPublishActiveAssignments_broadcastsOnlyChangedScreens()
+    {
+        QSignalSpy spy(m_adaptor, &LayoutAdaptor::activeLayoutForScreenChanged);
+
+        const QHash<QString, QString> snapshot{{QStringLiteral("DP-1"), m_layoutId},
+                                               {QStringLiteral("DP-2"), QStringLiteral("autotile:bsp")}};
+        m_adaptor->publishActiveAssignments(snapshot, {QStringLiteral("DP-1")});
+
+        QCOMPARE(spy.count(), 1);
+        const QList<QVariant> args = spy.takeFirst();
+        QCOMPARE(args.at(0).toString(), QStringLiteral("DP-1"));
+        QCOMPARE(args.at(1).toString(), m_layoutId);
+
+        // The readback carries the WHOLE snapshot, not just the broadcast screen:
+        // a subscriber seeding at bringup has to see every screen, because the
+        // signal stream from then on only carries deltas.
+        const QVariantMap readback = m_adaptor->getActiveLayoutsForScreens();
+        QCOMPARE(readback.size(), 2);
+        QCOMPARE(readback.value(QStringLiteral("DP-1")).toString(), m_layoutId);
+        QCOMPARE(readback.value(QStringLiteral("DP-2")).toString(), QStringLiteral("autotile:bsp"));
+    }
+
+    void testPublishActiveAssignments_emptyIdIsBroadcastButNotReadBack()
+    {
+        m_adaptor->publishActiveAssignments({{QStringLiteral("DP-1"), m_layoutId}}, {QStringLiteral("DP-1")});
+
+        QSignalSpy spy(m_adaptor, &LayoutAdaptor::activeLayoutForScreenChanged);
+        QVERIFY(spy.isValid());
+        // DP-1 unplugged: it drops out of the snapshot entirely.
+        m_adaptor->publishActiveAssignments({}, {QStringLiteral("DP-1")});
+
+        // The screen still has to be announced, with an empty id, or a subscriber
+        // keeps matching windows against a layout that is no longer on it.
+        QCOMPARE(spy.count(), 1);
+        const QList<QVariant> args = spy.takeFirst();
+        QCOMPARE(args.at(0).toString(), QStringLiteral("DP-1"));
+        QVERIFY2(args.at(1).toString().isEmpty(), "a dropped screen must broadcast an empty layout id");
+
+        QVERIFY(m_adaptor->getActiveLayoutsForScreens().isEmpty());
+    }
+
+    void testGetActiveLayoutsForScreens_omitsPresentButEmptyEntries()
+    {
+        // The readback's empty-value filter guards a screen that is PRESENT in
+        // the snapshot carrying an EMPTY id, which is a state the producer really
+        // makes: diffActiveAssignments inserts assignmentIdForScreen for every
+        // effective screen, and that resolves empty for a connected screen with no
+        // assignment and the global default suppressed.
+        //
+        // Publishing an all-empty snapshot would NOT exercise the filter — the map
+        // would have no entries to iterate either way, so the assertion would pass
+        // with the guard deleted. Publish a mixed one so it actually discriminates.
+        m_adaptor->publishActiveAssignments({{QStringLiteral("DP-1"), QString()}, {QStringLiteral("DP-2"), m_layoutId}},
+                                            {QStringLiteral("DP-1"), QStringLiteral("DP-2")});
+
+        const QVariantMap readback = m_adaptor->getActiveLayoutsForScreens();
+        QCOMPARE(readback.size(), 1);
+        QVERIFY2(!readback.contains(QStringLiteral("DP-1")),
+                 "a present-but-empty entry must be omitted, not carried as an empty string");
+        QCOMPARE(readback.value(QStringLiteral("DP-2")).toString(), m_layoutId);
+    }
+
+    void testPublishActiveAssignments_emptyChangedSetIsSilent()
+    {
+        m_adaptor->publishActiveAssignments({{QStringLiteral("DP-1"), m_layoutId}}, {QStringLiteral("DP-1")});
+
+        QSignalSpy spy(m_adaptor, &LayoutAdaptor::activeLayoutForScreenChanged);
+        QVERIFY(spy.isValid());
+        // A recompute republishes with an empty changed set. The readback must
+        // still be refreshed, but the bus must stay quiet — the effect pairs every
+        // broadcast with a full rule-cache invalidation and a decoration sweep, so
+        // a spurious one is not free.
+        //
+        // The second snapshot carries a screen the first did not (DP-2), so the two
+        // halves are independently observable: a snapshot write that was skipped
+        // along with the broadcast would leave the readback at one entry, and a
+        // broadcast that ignored the changed set would raise the spy.
+        m_adaptor->publishActiveAssignments(
+            {{QStringLiteral("DP-1"), m_layoutId}, {QStringLiteral("DP-2"), QStringLiteral("autotile:bsp")}}, {});
+
+        QCOMPARE(spy.count(), 0);
+        QCOMPARE(m_adaptor->getActiveLayoutsForScreens().size(), 2);
+    }
+
+    // The snapshot must be in place BEFORE the broadcast goes out: the effect
+    // reacts to activeLayoutForScreenChanged by re-reading the whole map, and a
+    // read that landed between the emit and the snapshot write would seed the
+    // effect's cache with the value the signal just superseded.
+    void testPublishActiveAssignments_readbackIsCurrentAtSignalTime()
+    {
+        m_adaptor->publishActiveAssignments({{QStringLiteral("DP-1"), QStringLiteral("autotile:bsp")}},
+                                            {QStringLiteral("DP-1")});
+
+        QVariantMap seenAtSignalTime;
+        int signalCount = 0;
+        // The lambda captures the two locals by reference, and m_adaptor outlives
+        // this function (it is torn down in cleanup()). Drop the connection as
+        // soon as the observed publish is done, BEFORE any assertion that could
+        // return early, so no later emit can write through dangling references.
+        const QMetaObject::Connection conn =
+            connect(m_adaptor, &LayoutAdaptor::activeLayoutForScreenChanged, this,
+                    [this, &seenAtSignalTime, &signalCount](const QString&, const QString&) {
+                        seenAtSignalTime = m_adaptor->getActiveLayoutsForScreens();
+                        ++signalCount;
+                    });
+
+        m_adaptor->publishActiveAssignments({{QStringLiteral("DP-1"), m_layoutId}}, {QStringLiteral("DP-1")});
+        QObject::disconnect(conn);
+
+        QCOMPARE(signalCount, 1);
+        QCOMPARE(seenAtSignalTime.value(QStringLiteral("DP-1")).toString(), m_layoutId);
     }
 
 private:

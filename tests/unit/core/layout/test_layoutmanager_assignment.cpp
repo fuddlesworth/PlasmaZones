@@ -714,6 +714,281 @@ private Q_SLOTS:
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
         QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
     }
+
+    // The global autotile disable walks EVERY context; the daemon's re-enable only
+    // ever wrote the current desktop per screen, so an off/on round trip stranded
+    // desktops 2..N in Snapping with no way back. restoreAutotileAssignments is the
+    // inverse of clearAutotileAssignments and closes that.
+    void testRestoreAutotileAssignments_revivesEveryContextTheDisableFlipped()
+    {
+        // createManager(), NOT makeLayoutRegistry directly: the factory installs the
+        // IsolatedConfigGuard that redirects the rule store and the layout directory
+        // into a temporary XDG root. Constructing the registry bare writes to the
+        // developer's REAL ~/.config/plasmazones/rules.json and layout directory.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        // Two different desktops on one screen, both autotile, different algorithms.
+        // Each is given a snap layout FIRST, which is what a real screen carries:
+        // the mode-toggle losslessness invariant means an autotile entry keeps the
+        // snapping layout it had before. It also matters for what this test can
+        // observe — a Snapping entry with no snappingLayout has an empty
+        // activeLayoutId, and the cascade visitors reject those, so the post-clear
+        // state would be invisible to assignmentEntryForScreen and the assertions
+        // below would read the level-1 default instead of the flipped entry.
+        auto* snapA = createTestLayout(QStringLiteral("SnapA"));
+        mgr->addLayout(snapA);
+        mgr->assignLayout(QStringLiteral("DP-1"), 1, QString(), snapA);
+        mgr->assignLayout(QStringLiteral("DP-1"), 2, QString(), snapA);
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 1, QString(), QStringLiteral("autotile:wide"));
+        mgr->assignLayoutById(QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile:dwindle"));
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1).mode,
+                 PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2).mode,
+                 PhosphorZones::AssignmentEntry::Autotile);
+
+        // An autotile quick-layout slot the disable will wipe. The wipe is
+        // documented as ONE-WAY (layoutregistry_batch.cpp): the restore rebuilds
+        // assignment rules and has nothing to rebuild slots from, so the slot must
+        // still be gone after it runs. Pinning it here keeps a future "make the
+        // restore symmetric" change from happening by accident.
+        mgr->setQuickLayoutSlot(PhosphorZones::AssignmentEntry::Autotile, 1, QStringLiteral("autotile:bsp"));
+        QCOMPARE(mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).value(1),
+                 QStringLiteral("autotile:bsp"));
+
+        mgr->clearAutotileAssignments();
+        QVERIFY2(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).contains(1),
+                 "the disable wipes autotile quick-layout slots");
+        // Both flipped, both algorithms preserved — that preservation is what the
+        // restore keys on, and what the disable's own comment promises.
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1).mode,
+                 PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2).mode,
+                 PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2).tilingAlgorithm, QStringLiteral("dwindle"));
+
+        QCOMPARE(mgr->restoreAutotileAssignments(), 2);
+
+        // BOTH desktops come back, each on its OWN algorithm — the whole point.
+        // Desktop 2 is the one the old per-current-desktop enable could never reach.
+        const auto d1 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1);
+        const auto d2 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2);
+        QCOMPARE(d1.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(d1.tilingAlgorithm, QStringLiteral("wide"));
+        QCOMPARE(d2.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(d2.tilingAlgorithm, QStringLiteral("dwindle"));
+
+        // The slot the disable wiped stays wiped — the restore is one-way there.
+        QVERIFY2(!mgr->quickLayoutSlots(PhosphorZones::AssignmentEntry::Autotile).contains(1),
+                 "restoreAutotileAssignments rebuilds assignment rules only, never quick-layout slots");
+    }
+
+    // An activity-pinned context is a Combined (screen + desktop + activity) rule,
+    // which the cascade-family union admits, so the global disable reaches it and
+    // the restore must reach it back — on its OWN algorithm, not the global
+    // default. This is the axis the daemon's old per-current-desktop re-enable
+    // could never address at all.
+    void testRestoreAutotileAssignments_revivesActivityPinnedContext()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* snap = createTestLayout(QStringLiteral("SnapWork"));
+        mgr->addLayout(snap);
+
+        const QString screen = QStringLiteral("DP-1");
+        const QString activity = QStringLiteral("work");
+        mgr->assignLayout(screen, 1, activity, snap);
+        mgr->assignLayoutById(screen, 1, activity, QStringLiteral("autotile:tall"));
+        QCOMPARE(mgr->assignmentEntryForScreen(screen, 1, activity).mode, PhosphorZones::AssignmentEntry::Autotile);
+
+        mgr->clearAutotileAssignments();
+        QCOMPARE(mgr->assignmentEntryForScreen(screen, 1, activity).mode, PhosphorZones::AssignmentEntry::Snapping);
+
+        QCOMPARE(mgr->restoreAutotileAssignments(), 1);
+
+        const auto revived = mgr->assignmentEntryForScreen(screen, 1, activity);
+        QCOMPARE(revived.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(revived.tilingAlgorithm, QStringLiteral("tall"));
+        QCOMPARE(revived.snappingLayout, snap->id().toString());
+    }
+
+    // A window-property rule that happens to carry a SetEngineMode action must be
+    // left alone: its SetEngineMode is a per-window intent, not a context
+    // assignment, so a global disable/enable has no business flipping it. The
+    // isContextAssignmentRule guard is what keeps it out of the walk, and the
+    // rule authored here would otherwise qualify for the flip: Snapping mode
+    // with a surviving tiling algorithm is exactly the discriminator the
+    // restore keys on.
+    void testRestoreAutotileAssignments_leavesWindowRuleWithEngineModeIntact()
+    {
+        namespace PWR = PhosphorRules;
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* store = mgr->findChild<PWR::RuleStore*>();
+        QVERIFY(store != nullptr);
+
+        PWR::Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.name = QStringLiteral("test-window-rule-with-mode");
+        rule.enabled = true;
+        // A window-property match, NOT the (screen, desktop, activity) shape.
+        rule.match =
+            PWR::MatchExpression::makeLeaf(PWR::Field::AppId, PWR::Operator::AppIdMatches, QStringLiteral("konsole"));
+        rule.actions = PWR::ContextRuleBridge::makeAssignmentActions(QStringLiteral("snapping"), QString(),
+                                                                     QStringLiteral("dwindle"));
+        PWR::RuleAction floatAction;
+        floatAction.type = QString(PWR::ActionType::Float);
+        rule.actions.append(floatAction);
+        QVERIFY(store->addRule(rule));
+
+        QCOMPARE(mgr->restoreAutotileAssignments(), 0);
+
+        // The rule survives with every action it was authored with, the Float
+        // included — a rebuild would have dropped it.
+        const auto rules = store->ruleSet().rules();
+        bool found = false;
+        for (const PWR::Rule& stored : rules) {
+            if (stored.id != rule.id) {
+                continue;
+            }
+            found = true;
+            QCOMPARE(stored.actions.size(), rule.actions.size());
+            bool hasFloat = false;
+            bool stillSnapping = false;
+            for (const PWR::RuleAction& action : stored.actions) {
+                if (action.type == QLatin1String(PWR::ActionType::Float)) {
+                    hasFloat = true;
+                } else if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
+                    stillSnapping = action.params.value(PWR::ActionParam::Mode).toString() == QLatin1String("snapping");
+                }
+            }
+            QVERIFY2(hasFloat, "the rule's non-assignment action must survive the restore walk");
+            QVERIFY2(stillSnapping, "a window rule's engine mode must not be flipped to autotile");
+        }
+        QVERIFY(found);
+    }
+
+    // A MIXED context-assignment rule — the (screen, desktop) context shape plus
+    // an action that is nobody's assignment slot — must keep that extra action
+    // across BOTH legs of the flip. flipAssignmentModes rebuilds the three
+    // assignment slots from makeAssignmentActions and then re-appends every
+    // surviving non-slot action in its original relative order, so the extra
+    // action lands last. Assigning makeAssignmentActions' output wholesale
+    // (the shape before the fix) would delete it on the way down and again on
+    // the way back up.
+    void testClearRestoreAutotile_mixedRuleKeepsNonAssignmentActions()
+    {
+        namespace PWR = PhosphorRules;
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* store = mgr->findChild<PWR::RuleStore*>();
+        QVERIFY(store != nullptr);
+
+        auto* snap = createTestLayout(QStringLiteral("SnapMixed"));
+        mgr->addLayout(snap);
+
+        // An exact-context autotile assignment (DP-1, desktop 1) carrying both
+        // layout fields, so makeAssignmentActions emits all three slots on
+        // every rebuild and the action count stays comparable across the flips.
+        PWR::Rule rule = PWR::ContextRuleBridge::makeAssignmentRule(QString(), QStringLiteral("DP-1"), 1, QString(),
+                                                                    QStringLiteral("autotile"), snap->id().toString(),
+                                                                    QStringLiteral("dwindle"), /*priority=*/100);
+        // TWO non-assignment actions, so the assertions can discriminate the
+        // preserved order AMONG survivors (SetOpacity before Float), not merely
+        // survival: a rebuild that reversed or re-sorted survivors would keep
+        // the count and lose the pair's order.
+        PWR::RuleAction opacityAction;
+        opacityAction.type = QString(PWR::ActionType::SetOpacity);
+        // SetOpacity's validator requires a wire-encoded [0.0, 1.0] Value.
+        opacityAction.params.insert(QString(PWR::ActionParam::Value), 0.8);
+        rule.actions.append(opacityAction);
+        PWR::RuleAction floatAction;
+        floatAction.type = QString(PWR::ActionType::Float);
+        rule.actions.append(floatAction);
+        QCOMPARE(rule.actions.size(), 5);
+        QVERIFY(store->addRule(rule));
+
+        // Read the stored rule back and report (engine mode, action count,
+        // whether the survivors still trail in authored order).
+        const auto inspect = [store, &rule](QString& modeOut, int& countOut, bool& survivorsInOrderOut) {
+            modeOut.clear();
+            countOut = -1;
+            survivorsInOrderOut = false;
+            const auto stored = store->ruleSet().ruleById(rule.id);
+            QVERIFY(stored.has_value());
+            countOut = stored->actions.size();
+            survivorsInOrderOut = stored->actions.size() >= 2
+                && stored->actions.at(stored->actions.size() - 2).type == QLatin1String(PWR::ActionType::SetOpacity)
+                && stored->actions.last().type == QLatin1String(PWR::ActionType::Float);
+            for (const PWR::RuleAction& action : stored->actions) {
+                if (action.type == QLatin1String(PWR::ActionType::SetEngineMode)) {
+                    modeOut = action.params.value(PWR::ActionParam::Mode).toString();
+                }
+            }
+        };
+
+        QString mode;
+        int actionCount = -1;
+        bool survivorsInOrder = false;
+
+        mgr->clearAutotileAssignments();
+        inspect(mode, actionCount, survivorsInOrder);
+        QCOMPARE(mode, QStringLiteral("snapping"));
+        QCOMPARE(actionCount, 5);
+        QVERIFY2(survivorsInOrder,
+                 "the disable must re-append the rule's non-assignment actions, in authored order, after the slots");
+
+        QCOMPARE(mgr->restoreAutotileAssignments(), 1);
+        inspect(mode, actionCount, survivorsInOrder);
+        QCOMPARE(mode, QStringLiteral("autotile"));
+        QCOMPARE(actionCount, 5);
+        QVERIFY2(survivorsInOrder,
+                 "the restore must re-append the rule's non-assignment actions, in authored order, after the slots");
+    }
+
+    // The discriminating half of "algorithm memory": a context the user switched
+    // back to Snapping BY HAND still carries its tiling algorithm, and the restore
+    // revives it too. That is the intended semantics stated in
+    // layoutregistry_batch.cpp — the global enable brings autotile back everywhere
+    // it has ever been configured, not only where the last global disable took it
+    // away. No global disable runs in this test, so nothing but the surviving
+    // algorithm can be driving the flip.
+    void testRestoreAutotileAssignments_revivesHandSwitchedContext()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* snap = createTestLayout(QStringLiteral("SnapChosen"));
+        mgr->addLayout(snap);
+
+        mgr->assignLayout(QStringLiteral("DP-3"), 1, QString(), snap);
+        mgr->assignLayoutById(QStringLiteral("DP-3"), 1, QString(), QStringLiteral("autotile:wide"));
+        // The user picks the snapping layout again — a hand switch, not a disable.
+        mgr->assignLayout(QStringLiteral("DP-3"), 1, QString(), snap);
+
+        const auto handSwitched = mgr->assignmentEntryForScreen(QStringLiteral("DP-3"), 1);
+        QCOMPARE(handSwitched.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QCOMPARE(handSwitched.tilingAlgorithm, QStringLiteral("wide")); // algorithm memory survives the switch
+
+        QCOMPARE(mgr->restoreAutotileAssignments(), 1);
+
+        const auto revived = mgr->assignmentEntryForScreen(QStringLiteral("DP-3"), 1);
+        QCOMPARE(revived.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(revived.tilingAlgorithm, QStringLiteral("wide"));
+    }
+
+    // The restore must not sweep up a context the user genuinely chose Snapping
+    // for. Only an entry still carrying a tilingAlgorithm — the marker a disable
+    // leaves behind — is revived.
+    void testRestoreAutotileAssignments_leavesGenuineSnappingContextsAlone()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* layout = createTestLayout(QStringLiteral("SnapOnly"));
+        mgr->addLayout(layout);
+        mgr->assignLayout(QStringLiteral("DP-2"), 1, QString(), layout);
+
+        const auto before = mgr->assignmentEntryForScreen(QStringLiteral("DP-2"), 1);
+        QCOMPARE(before.mode, PhosphorZones::AssignmentEntry::Snapping);
+        QVERIFY2(before.tilingAlgorithm.isEmpty(), "a never-autotiled context must carry no algorithm");
+
+        QCOMPARE(mgr->restoreAutotileAssignments(), 0);
+        QCOMPARE(mgr->assignmentEntryForScreen(QStringLiteral("DP-2"), 1).mode,
+                 PhosphorZones::AssignmentEntry::Snapping);
+    }
 };
 
 QTEST_MAIN(TestLayoutManagerAssignment)

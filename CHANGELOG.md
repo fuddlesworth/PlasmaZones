@@ -7,13 +7,32 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **The active layout of each monitor is published on the session bus**: `org.plasmazones.LayoutRegistry` gained a `getActiveLayoutsForScreens` readback and an `activeLayoutForScreenChanged` signal, so the compositor and other subscribers can follow which layout each monitor is on ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+
+### Fixed
+
+- **Window rules that match on "Active layout" now work**: a rule such as "snap this app to zone 1 when the active layout is 4K" never fired, no matter which app or zone it named. PlasmaZones knew which layout was active when it resolved settings that apply to a whole monitor, but not when it resolved a rule for one window, so the layout the rule asked about always read as blank and the match failed. Rules matching on the active layout now resolve against the layout assigned to the monitor the window is on, which also makes rules that match on a specific monitor work for floating and position restore ([#919](https://github.com/fuddlesworth/PlasmaZones/discussions/919), [#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **Rules that match on "Screen orientation" now work on window rules**: this condition had the same problem as "Active layout" and was silently broken in the same way. Pairing it with an action that applies when a window opens, such as float, snap to zone, or move to another monitor, matched nothing at all, while an "is not" version of the same condition matched every window. It now resolves against the monitor the window is opening on ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **Rules that exclude windows now update when you change focus or move a window to another monitor**: an exclusion rule was answered once per window and the answer was kept, so a rule such as "exclude while floating" could leave a window unmanaged and undecorated after it stopped floating. Focus changes, monitor changes, and layout changes now re-check exclusions, and a setup whose only rules are exclusions is no longer skipped entirely ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **Turning autotile off and on again keeps each monitor's tiling algorithm**: the algorithm chosen per monitor was saved when autotile was turned off, and then overwritten with the global default when it was turned back on, so every monitor came back on the same algorithm ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **Turning autotile off and on again brings it back on your other virtual desktops and activities**: switching autotile off cleared it from every desktop and activity, while switching it back on only ever reached the desktop you were looking at. Every other desktop and activity stayed on snapping with no way back except assigning autotile to each one by hand ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **A window set to move to another monitor now moves even when it also has a "snap to zone" action**: if the monitor it was being sent to was using autotile, the snap could not be applied there, and the window was then left where it opened instead of being moved. The same rule without the snap action moved it correctly ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **Windows restored at login are no longer wrongly treated as belonging to another app**: PlasmaZones compares process ids to spot a second app opening a window of the same type. During session restore a window's process id is not known yet, and the unknown value was compared as though it were real, which suppressed the snap position of windows restored alongside it ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **Windows whose process id is unknown are no longer grouped with each other**: the checks that decide whether several windows of one app are open treated every window with an unknown process id as the same process, so unrelated windows were counted together while their ids were still missing ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **A monitor left out of a batch of layout changes is now re-snapped**: saving assignments for some monitors and not others left the omitted ones showing their previous placement until something else moved them ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **A settings window that dies while saving no longer silences layout changes**: the daemon muted its own layout-change signals for the duration of a save, and a settings app that quit or crashed mid-save never unmuted them, so nothing the daemon did afterwards reached the compositor until it was restarted ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **The per-monitor state readback no longer reports the previous desktop or activity**: right after a virtual-desktop or activity switch it still answered with the context you had just left ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+- **Border and opacity rules can match on "Active layout" too**: the appearance a window is drawn with is resolved inside the compositor, which had no way to know which layout a monitor was using, so an "Active layout is" condition on a border, tint, opacity, or window-layer rule never matched there either. The compositor now tracks each monitor's active layout and re-draws affected windows when it changes, including on a virtual-desktop or activity switch ([#919](https://github.com/fuddlesworth/PlasmaZones/discussions/919), [#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
+
 ## [3.3.7] - 2026-08-14
 
 ### Fixed
 
 - **The panel query no longer crashes the Plasma desktop while a monitor reconnects**: PlasmaZones asks plasmashell where its panels sit so zones can avoid them. When that query arrived while an output was being torn down and rebuilt, which happens when a monitor wakes from sleep or renegotiates its DisplayPort link, plasmashell read panel settings through a screen that no longer existed and crashed, taking the whole desktop with it. The query now skips panels whose screen is gone and no longer reads the two panel properties that triggered the crash ([#916](https://github.com/fuddlesworth/PlasmaZones/issues/916), [#917](https://github.com/fuddlesworth/PlasmaZones/pull/917)).
 
-## [3.3.5] - 2026-08-04
+## [3.3.6] - 2026-08-04
 
 ### Fixed
 
@@ -1800,6 +1819,9 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.7...HEAD
+[3.3.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.6...v3.3.7
+[3.3.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.4...v3.3.6
 [3.3.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.3...v3.3.4
 [3.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.2...v3.3.3
 [3.3.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v3.3.1...v3.3.2

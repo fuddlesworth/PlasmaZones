@@ -36,10 +36,10 @@ class Settings;
 class StagingService
 {
 public:
-    /// A single entry in the assignment staging map. `fullCleared` takes
-    /// precedence over individual field clears; `stagedMode` (Overview
-    /// page's atomic write) takes precedence over the per-field snapping
-    /// / tiling fields.
+    /// A single entry in the assignment staging map. Exactly two shapes are
+    /// produced: `stageFullClear` sets `fullCleared`, and
+    /// `stageAssignmentEntry` sets `stagedMode` plus whichever layout fields
+    /// the context carries. `fullCleared` takes precedence at flush time.
     struct StagedAssignment
     {
         QString screenId;
@@ -60,19 +60,6 @@ public:
 
     // ── Assignment staging ────────────────────────────────────────────
 
-    /// Stage a snapping-layout assignment. The snapping and tiling slots are
-    /// mutually exclusive in the unified Rule model — one assignment
-    /// context carries either a snapping layout or a tiling algorithm, not
-    /// both — so staging here clears any staged tiling assignment for the
-    /// same context. Callers that want to write both atomically must use
-    /// `stageAssignmentEntry`.
-    void stageSnapping(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-
-    /// Stage a tiling-algorithm assignment. See `stageSnapping` — the two
-    /// slots are mutually exclusive, so this clears any staged snapping
-    /// assignment for the same context.
-    void stageTiling(const QString& screen, int desktop, const QString& activity, const QString& layoutId);
-
     /// Stage a full clear of the (screen × desktop × activity) context.
     void stageFullClear(const QString& screen, int desktop, const QString& activity);
 
@@ -83,12 +70,8 @@ public:
     /// untouched. No-op when nothing is staged for the context.
     void removeStagedAssignment(const QString& screen, int desktop, const QString& activity);
 
-    /// Stage a tiling-only clear (flushes as "mode=0 + no layouts",
-    /// reverting the context back to snapping mode).
-    void stageTilingClear(const QString& screen, int desktop, const QString& activity);
-
-    /// Atomic mode+layout staging used by the Overview page, bypasses the
-    /// per-field paths and flushes through `setAssignmentEntry`.
+    /// Atomic mode+layout staging, the only way an assignment is staged with
+    /// a value. Flushes through `setAssignmentEntry`.
     void stageAssignmentEntry(const QString& screen, int desktop, const QString& activity, int mode,
                               const QString& snappingLayoutId, const QString& tilingAlgorithmId);
 

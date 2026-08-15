@@ -27,7 +27,6 @@
 #include <PhosphorRules/RuleStore.h>
 
 #include <QJsonArray>
-#include "internal.h"
 
 namespace PlasmaZones {
 
@@ -179,9 +178,24 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // autotile engine, which sees the live window in the effect, honoured
         // them). Supplying the same full WindowQuery the float / restore
         // predicates use brings snapping to parity.
-        snap->setExclusionQueryProvider([this](const QString& windowId) -> std::optional<PhosphorRules::WindowQuery> {
-            return buildRuleQueryForWindow(m_windowRegistry, windowId);
-        });
+        //
+        // The engine passes a screen hint where it has one. resolveWindowRestore
+        // knows the screen the window is opening on and hands it over, which is
+        // the case the fallbacks cannot serve: the window is in no SnapState yet,
+        // so resolveScreenForWindow comes back empty and an Exclude rule keyed on
+        // ScreenId or ActiveLayout would not resolve. The navigation actions ask
+        // about already-tracked windows and pass an empty hint, where the engine
+        // fallbacks inside resolveScreenForWindow answer.
+        //
+        // Cost: each consult builds a full contextual query (screen resolve plus
+        // the assignment cascade walks) and the engine calls this before it
+        // short-circuits on an empty Exclude rule set, so the build happens even
+        // when no rule can match. Acceptable because every caller is on the open
+        // or navigation path, not a per-frame one.
+        snap->setExclusionQueryProvider(
+            [this](const QString& windowId, const QString& screenHint) -> std::optional<PhosphorRules::WindowQuery> {
+                return buildContextualRuleQuery(windowId, screenHint);
+            });
 
         // Open-floating gate (snap). A matched "Float this app" rule opens the
         // window floating instead of auto-snapping it. Purely rule-driven (no
@@ -263,15 +277,38 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // when the autotile `restoreFloatedWindowsOnLogin` setting (or a per-window
         // RestorePosition rule) opts it in. Same closure shape as the snap wiring
         // above, with Mode::Autotile selecting the autotile default.
+        //
+        // Both autotile predicates ask UNCACHED (useCache=false). Unlike the snap
+        // engine, which consults them once on the open path, the autotile engine
+        // reaches both from insertWindow, which backfillWindows drives mid-session
+        // on an algorithm switch, a maxWindows increase and an overflow-behaviour
+        // change. The memoised entry carries the ScreenId / ActiveLayout the window
+        // opened with, so a cached answer there would depend on which resolver
+        // happened to seed the entry rather than on the layout assigned now.
+        //
+        // Going uncached costs the free ride the memoised entry gave these
+        // predicates on the screen context, so the engine hands its insert screen
+        // over as the hint and both forward it into buildContextualRuleQuery. The
+        // hint is what keeps the fresh query pointed at the RIGHT screen:
+        // resolveScreenForWindow consults the service and the snap engine before
+        // the autotile engine, so a window carrying stale snap state would
+        // resolve to the snap screen rather than the one it is landing on, and
+        // the consults reached from context seeding can run before the engine
+        // has keyed the window at all. The engine passes an empty hint where it
+        // genuinely knows no screen, and resolveScreenForWindow's engine
+        // fallbacks answer for tracked windows.
         if (m_cachedAutotileEngine) {
-            m_cachedAutotileEngine->setRestorePositionPredicate([this](const QString& windowId) -> bool {
-                return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Autotile);
-            });
+            m_cachedAutotileEngine->setRestorePositionPredicate(
+                [this](const QString& windowId, const QString& screenHint) -> bool {
+                    return shouldRestoreFloatedPosition(windowId, PhosphorZones::AssignmentEntry::Mode::Autotile,
+                                                        /*useCache=*/false, screenHint);
+                });
             // Open-floating gate (autotile). Same rule-driven resolver as snap; the
             // window is inserted then marked floating so it stays managed.
-            m_cachedAutotileEngine->setFloatPredicate([this](const QString& windowId) -> bool {
-                return shouldFloatByRule(windowId);
-            });
+            m_cachedAutotileEngine->setFloatPredicate(
+                [this](const QString& windowId, const QString& screenHint) -> bool {
+                    return shouldFloatByRule(windowId, /*useCache=*/false, screenHint);
+                });
         }
     }
 

@@ -12,6 +12,7 @@
 #include "core/platform/logging.h"
 #include "core/utils/geometryutils.h"
 #include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include "core/platform/supportreport.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorProtocol/ServiceConstants.h>
@@ -88,9 +89,30 @@ void ControlAdaptor::toggleAutotileForScreen(const QString& screenId)
                          << "to" << (newMode == 1 ? "autotile" : "snapping");
 
     if (m_layoutAdaptor) {
+        // Canonicalize the connector name to the id form setAssignmentEntry
+        // resolves to, so the explicit apply below names the same screen the
+        // assignment was written for. This is not a validity check: idForName
+        // passes an unrecognized name straight back, and the empty case already
+        // returned at the top of this method, so an unknown screen reaches the
+        // apply unchanged and is refused (or ignored) downstream.
+        const QString resolvedScreenId = PhosphorScreens::ScreenIdentity::idForName(screenId);
         // setAssignmentEntry(screenId, desktop=0 (current), activity="" (current), mode, layout, algorithm)
         m_layoutAdaptor->setAssignmentEntry(screenId, 0, QString(), newMode, QString(), QString());
-        m_layoutAdaptor->applyAssignmentChanges();
+        // Apply this ONE screen explicitly rather than calling
+        // applyAssignmentChanges, which drains the shared client buffer: that
+        // buffer belongs to the settings app, which accumulates a save batch
+        // across many setAssignmentEntry calls, and draining it here would make
+        // its closing call see an empty set — which downstream means EVERY
+        // screen. It would also release that client's save-batch suppression
+        // mid-batch. The screen id must be resolved the same way
+        // setAssignmentEntry resolves it so the two name the same screen.
+        //
+        // setAssignmentEntry still stages the screen into that shared buffer, so
+        // a settings-app batch closing later carries this screen along. That is a
+        // superset of what the client edited rather than a wrong set, and this
+        // screen genuinely did change, so the extra apply is redundant work and
+        // not a wrong result.
+        m_layoutAdaptor->applyAssignmentChangesFor({resolvedScreenId});
     } else {
         qCWarning(lcDbusWindow) << "toggleAutotileForScreen: LayoutAdaptor not available";
     }

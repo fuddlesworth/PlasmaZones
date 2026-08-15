@@ -81,13 +81,17 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
     // QPointer: the `handled` handshake already prevents a double-delete, but
     // a raw watcher capture would still dangle if that invariant ever slips.
     connect(timeoutTimer, &QTimer::timeout, this,
-            [windowId, handled, watcherGuard = QPointer<QDBusPendingCallWatcher>(watcher), timeoutTimer]() {
+            [this, windowId, handled, watcherGuard = QPointer<QDBusPendingCallWatcher>(watcher), timeoutTimer]() {
                 if (*handled) {
                     return;
                 }
                 *handled = true;
                 qCWarning(lcEffect) << "endDrag timed out after" << EndDragTimeoutMs
                                     << "ms; daemon unresponsive. Leaving window" << windowId << "at release position.";
+                // The window still sits wherever the user dropped it, on whatever
+                // screen that is, so a crossing the handlers deferred during the
+                // drag has to be re-resolved even though no outcome ever arrived.
+                drainDragSuppressedRuleInvalidations();
                 if (watcherGuard) {
                     watcherGuard->deleteLater();
                 }
@@ -106,9 +110,13 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 timeoutTimer->stop();
                 timeoutTimer->deleteLater();
 
+                // Both failure paths below leave the window at its release
+                // position on its release screen, so the deferred cross-screen
+                // invalidations are still owed even though no action is applied.
                 QDBusPendingReply<PhosphorProtocol::DragOutcome> reply = *w;
                 if (reply.isError()) {
                     qCWarning(lcEffect) << "endDrag call failed:" << reply.error().message();
+                    drainDragSuppressedRuleInvalidations();
                     return;
                 }
                 const PhosphorProtocol::DragOutcome outcome = reply.value();
@@ -118,6 +126,7 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     // based on a corrupted payload.
                     qCWarning(lcEffect) << "endDrag outcome rejected:" << err
                                         << "— dropping without applying any action for" << windowId;
+                    drainDragSuppressedRuleInvalidations();
                     return;
                 }
                 qCInfo(lcEffect) << "endDrag outcome:" << windowId << "action=" << outcome.action
@@ -281,6 +290,20 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     break;
                 }
                 }
+
+                // A drop that changed the window's screen without changing its
+                // snap state (NoOp / CancelSnap) still stales the per-screen
+                // match inputs (ScreenId, ScreenOrientation, ActiveLayout). The
+                // outputChanged / VS-crossing handlers skip their own
+                // invalidation while a drag is in flight and record the window id
+                // in m_dragSuppressedRuleInvalidations instead, so draining that
+                // set here is what covers those two outcomes. It cannot be
+                // rediscovered by comparing screens at this point: both handlers
+                // stamp m_trackedScreenPerWindow unconditionally, ahead of their
+                // drag gate, so the tracked screen already equals the live one.
+                // Idempotent with the per-branch calls above (the flush coalesces
+                // the turn), so it runs for every outcome rather than only the two.
+                drainDragSuppressedRuleInvalidations();
 
                 // Auto-fill: if window was dropped without snapping to a
                 // zone and wasn't floated, try the first empty zone on the

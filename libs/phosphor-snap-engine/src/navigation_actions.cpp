@@ -150,14 +150,14 @@ bool SnapEngine::isAppIdExcluded(const QString& appId) const
     return evaluateExcludeRules(query);
 }
 
-bool SnapEngine::isWindowExcluded(const QString& windowId) const
+bool SnapEngine::isWindowExcluded(const QString& windowId, const QString& screenHint) const
 {
     // Build the richest query available: the daemon-supplied full attributes
     // (window class / title / frame size / flags) when the provider is wired,
     // else the appId-only query — the historical fallback unit tests rely on.
     std::optional<PhosphorRules::WindowQuery> query;
     if (m_exclusionQueryProvider) {
-        query = m_exclusionQueryProvider(windowId);
+        query = m_exclusionQueryProvider(windowId, screenHint);
     }
     if (!query) {
         PhosphorRules::WindowQuery q;
@@ -186,6 +186,11 @@ bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QStrin
     if (!m_windowTracker) {
         return false;
     }
+    // No screen hint on purpose, even though @p screenId is in hand: exclusion asks
+    // where the window IS, and every caller here is a navigation action on an
+    // already-tracked window, so resolveScreenForWindow's engine fallbacks answer.
+    // @p screenId is the acting screen for the feedback below, which is not the
+    // same question once the two diverge.
     if (isWindowExcluded(windowId)) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << action << ":" << windowId << "excluded by rule, appId:" << appId;

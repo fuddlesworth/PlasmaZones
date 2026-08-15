@@ -24,40 +24,85 @@ namespace PWR = PhosphorRules;
 
 using namespace RuleHelpers;
 
-void LayoutRegistry::clearAutotileAssignments()
-{
-    // Flip every Autotile assignment rule to Snapping (preserving both layout
-    // fields) and drop autotile quick-layout slots.
-    QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
-    // Dedup (screenId, virtualDesktop) — see purgeSnappingLayoutFromAssignments
-    // above for the duplicate-emit hazard this guards against.
-    QSet<QPair<QString, int>> affected;
-    bool changed = false;
+namespace {
 
+// One walk, both directions. @p shouldFlip selects the entries to convert and
+// @p target is the mode they are rewritten to; both layout fields are carried
+// across verbatim, which is what lets the pair round-trip. Returns the flipped
+// rules through @p updated and the (screen, desktop) pairs to announce through
+// @p affected — dedup'ed, see purgeSnappingLayoutFromAssignments for the
+// duplicate-emit hazard that guards against. The caller commits and emits,
+// because the two directions differ in what else they persist.
+//
+// The rewrite replaces only the three assignment slots. A MIXED context rule
+// (context match + SetEngineMode alongside SetOpacity / Float / Exclude /
+// LockContext / OverrideAnimation* / gap actions) must still flip — a mixed
+// autotile rule is a real autotile assignment and a global disable has to
+// neuter it — so the predicate deliberately does NOT gate on
+// isPureAssignmentRule the way the purge path at layoutregistry_assignments.cpp
+// does. Assigning makeAssignmentActions' output wholesale would therefore drop
+// every non-assignment action such a rule carries, in BOTH directions. Instead
+// the fresh slot actions are followed by every surviving non-slot action, in
+// their original order relative to each other (their position relative to the
+// slot actions is NOT preserved — survivors always follow the rebuilt slots).
+// Dropping a gap action here also changed the gap
+// fingerprint the settings layer watches, which re-entered the settings handler
+// mid-write; preserving the actions closes that re-entrancy exposure too.
+template<typename PredicateFn>
+int flipAssignmentModes(QList<PWR::Rule>& updated, QSet<QPair<QString, int>>& affected, AssignmentEntry::Mode target,
+                        PredicateFn shouldFlip)
+{
+    int flipped = 0;
     for (PWR::Rule& rule : updated) {
-        // Only pure context-assignment rules are flipped — a window-property
-        // rule that legitimately carries a SetEngineMode action must not be
-        // rebuilt (makeAssignmentActions would drop its other actions).
+        // Only context-assignment rules are flipped. A window-property rule's
+        // SetEngineMode is a per-window intent, not a context assignment, so a
+        // global autotile disable has no business neutering it.
         if (!isContextAssignmentRule(rule)) {
             continue;
         }
         const AssignmentEntry entry = entryFromRuleMatchActions(rule);
-        if (entry.mode != AssignmentEntry::Autotile) {
+        if (!shouldFlip(entry)) {
             continue;
         }
-        // Flip to Snapping — preserve both layout fields so re-enabling
-        // autotile can restore the previous algorithm.
-        rule.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(AssignmentEntry::Snapping),
-                                                                     entry.snappingLayout, entry.tilingAlgorithm);
-        changed = true;
+        QList<PWR::RuleAction> rebuiltActions = PWR::ContextRuleBridge::makeAssignmentActions(
+            modeToWireString(target), entry.snappingLayout, entry.tilingAlgorithm);
+        for (const PWR::RuleAction& action : std::as_const(rule.actions)) {
+            if (!isAssignmentSlotAction(action)) {
+                rebuiltActions.append(action);
+            }
+        }
+        rule.actions = rebuiltActions;
+        ++flipped;
 
         // Recover (screen, desktop) for the layoutAssigned signal.
         const ContextDims dims = decodeDims(rule.match);
         affected.insert(qMakePair(dims.screenId, dims.virtualDesktop));
     }
+    return flipped;
+}
+
+} // namespace
+
+void LayoutRegistry::clearAutotileAssignments()
+{
+    // Flip every Autotile assignment rule to Snapping (preserving both layout
+    // fields) and drop autotile quick-layout slots.
+    QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
+    QSet<QPair<QString, int>> affected;
+
+    // Flip to Snapping — preserve both layout fields so re-enabling
+    // autotile can restore the previous algorithm.
+    const int flipped =
+        flipAssignmentModes(updated, affected, AssignmentEntry::Snapping, [](const AssignmentEntry& entry) {
+            return entry.mode == AssignmentEntry::Autotile;
+        });
+    bool changed = flipped > 0;
 
     // Drop autotile quick-layout slots — clearing autotile everywhere
     // includes the per-mode autotile bindings. Snapping slots are untouched.
+    // This is a ONE-WAY loss: restoreAutotileAssignments rebuilds the assignment
+    // rules but has nothing to rebuild these from, and writeQuickLayouts()
+    // persists the wipe immediately.
     auto& autotileSlots = m_quickLayoutSlots[modeIndex(AssignmentEntry::Autotile)];
     if (!autotileSlots.isEmpty()) {
         autotileSlots.clear();
@@ -65,15 +110,86 @@ void LayoutRegistry::clearAutotileAssignments()
     }
 
     if (changed) {
-        m_ruleStore->setAllRules(updated);
+        if (!m_ruleStore->setAllRules(updated)) {
+            qCWarning(lcZonesLib) << "clearAutotileAssignments: rule store refused to persist the flipped assignments";
+        }
         writeQuickLayouts();
+        // Advisory emits: the layout pointer is always null, so these say "this
+        // context moved, re-resolve it" rather than carrying the new layout.
+        //
+        // A context rule with no screen dimension decodes to an empty screenId
+        // and is skipped: the per-screen subscribers cannot act on it, and the
+        // LayoutAdaptor would relay a screenLayoutChanged("") onto the bus. The
+        // screen-agnostic subscribers (drag adaptor, overlay refresh) therefore
+        // see nothing when a screenless rule is the ONLY entry a flip touched,
+        // which is what the settings-driven reconcile that follows covers.
         for (const auto& [sid, desk] : std::as_const(affected)) {
+            if (sid.isEmpty()) {
+                continue;
+            }
             qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << sid
                                 << "desktop=" << desk;
             Q_EMIT layoutAssigned(sid, desk, nullptr);
         }
         qCInfo(lcZonesLib) << "Cleared all autotile assignments";
     }
+}
+
+int LayoutRegistry::restoreAutotileAssignments()
+{
+    // Reverse direction of clearAutotileAssignments for the ASSIGNMENT RULES:
+    // flip context-assignment rules back to Autotile where a previous global
+    // disable neutered them. The quick-layout slots that disable wiped are not
+    // recoverable and stay gone.
+    //
+    // The disable is global — it walks every context-assignment rule regardless
+    // of desktop or activity — while the re-enable in the daemon only ever wrote
+    // the CURRENT desktop per screen. A Settings off/on round trip therefore
+    // stranded every other desktop and every activity-pinned context in Snapping
+    // with no way back short of re-assigning each by hand. This closes that.
+    //
+    // The discriminator is a non-empty tilingAlgorithm on a Snapping entry, and
+    // it means exactly one thing: this context ran autotile at some point. Both
+    // assignLayout and purgeSnappingLayoutFromAssignments preserve the field, so
+    // it survives a user manually switching the context back to Snapping just as
+    // it survives the global disable. The restore therefore revives EVERY
+    // context carrying algorithm memory, the hand-switched ones included. That
+    // is the intended semantics of the global enable: autotile comes back
+    // everywhere it has ever been configured, not only where the last disable
+    // took it away.
+    //
+    // Note also that the daemon fires this on every entering-autotile edge, not
+    // only after a disable — toggling snapping OFF while autotile is already on
+    // is such an edge and revives the same set.
+    //
+    // snappingLayout is preserved on the way back, symmetric with the disable,
+    // so a second disable returns each context to the same snap layout.
+    QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
+    QSet<QPair<QString, int>> affected;
+
+    const int restored =
+        flipAssignmentModes(updated, affected, AssignmentEntry::Autotile, [](const AssignmentEntry& entry) {
+            return entry.mode == AssignmentEntry::Snapping && !entry.tilingAlgorithm.isEmpty();
+        });
+
+    if (restored > 0) {
+        if (!m_ruleStore->setAllRules(updated)) {
+            qCWarning(lcZonesLib)
+                << "restoreAutotileAssignments: rule store refused to persist the restored assignments";
+        }
+        // Advisory emits with a null layout pointer, and screenless context
+        // rules skipped — see the sibling loop in clearAutotileAssignments.
+        for (const auto& [sid, desk] : std::as_const(affected)) {
+            if (sid.isEmpty()) {
+                continue;
+            }
+            qCDebug(lcZonesLib) << "restoreAutotileAssignments: flipped back to Autotile for screen=" << sid
+                                << "desktop=" << desk;
+            Q_EMIT layoutAssigned(sid, desk, nullptr);
+        }
+        qCInfo(lcZonesLib) << "Restored" << restored << "autotile assignments";
+    }
+    return restored;
 }
 
 // ── Batch setters ───────────────────────────────────────────────────────────
@@ -112,18 +228,31 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     // below — mirrors `upsertAssignmentRule`'s `rule.enabled =
     // existing->enabled` preservation. Without this capture, disabled
     // assignment rules silently flip back to enabled on any KCM
-    // "apply all" call that runs a batch setter.
+    // "apply all" call that runs a batch setter. Non-assignment actions a
+    // mixed rule carries are captured too — the rebuild emits only the three
+    // slot actions, and dropping the rest here was the last rebuild path
+    // that still clobbered them (flipAssignmentModes and upsertAssignmentRule
+    // both preserve survivors the same way).
     struct OldEntrySnapshot
     {
         AssignmentEntry entry;
         bool enabled = true;
         int priority = 0;
+        QList<PWR::RuleAction> survivors;
     };
     QHash<KeyT, OldEntrySnapshot> oldEntries;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const BatchContext ctx = decode(it.key());
         if (const PWR::Rule* existing = findExactContextRule(ctx.screenId, ctx.virtualDesktop, ctx.activity)) {
-            oldEntries.insert(it.key(), {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority});
+            QList<PWR::RuleAction> survivors;
+            for (const PWR::RuleAction& action : existing->actions) {
+                if (!isAssignmentSlotAction(action)) {
+                    survivors.append(action);
+                }
+            }
+            oldEntries.insert(
+                it.key(),
+                {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority, std::move(survivors)});
         }
     }
 
@@ -175,6 +304,7 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
         // precedent. If there's no prior snapshot (new assignment), the
         // default `enabled = true` from the OldEntrySnapshot ctor wins.
         rebuilt.enabled = oldSnapshot.enabled;
+        rebuilt.actions.append(oldSnapshot.survivors);
         kept.append(rebuilt);
         storedScreens.insert(ctx.screenId);
         ++count;
@@ -182,6 +312,16 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     }
 
     // Step 4 — one commit, then signal per stored screen.
+    //
+    // The emit is UNCONDITIONAL, not value-changed-gated. What the signal
+    // carries is the RESOLVED cascade value for the screen, and the only
+    // per-key state captured before the family drop is each key's own stored
+    // AssignmentEntry (Step 1) — not what the cascade resolved to. Gating would
+    // mean a second full assignmentIdForScreen pass over every incoming key's
+    // screen before the drop, purely to suppress a signal whose subscribers
+    // (geometry recalc, daemon refresh) already no-op on an unchanged value. A
+    // KCM "apply all" is the only caller, so the redundant emits are bounded by
+    // the screen count of one save.
     m_ruleStore->setAllRules(kept);
     for (const QString& screenId : storedScreens) {
         // Per-output virtual desktops (#648): a desktop-family batch passes
@@ -254,6 +394,9 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
         AssignmentEntry entry;
         bool enabled = true;
         int priority = 0;
+        // Non-slot actions carried across the rebuild — see the
+        // applyBatchAssignments snapshot for the clobber this closes.
+        QList<PWR::RuleAction> survivors;
     };
     QHash<CombinedAssignmentKey, OldEntrySnapshot> oldEntries;
     // Validity gate up front: a malformed key (zero desktop or empty
@@ -272,7 +415,15 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             continue;
         }
         if (const PWR::Rule* existing = findExactContextRule(key.screenId, key.virtualDesktop, key.activity)) {
-            oldEntries.insert(key, {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority});
+            QList<PWR::RuleAction> survivors;
+            for (const PWR::RuleAction& action : existing->actions) {
+                if (!isAssignmentSlotAction(action)) {
+                    survivors.append(action);
+                }
+            }
+            oldEntries.insert(
+                key,
+                {entryFromRuleMatchActions(*existing), existing->enabled, existing->priority, std::move(survivors)});
         }
     }
 
@@ -314,6 +465,7 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
             QString(), key.screenId, key.virtualDesktop, key.activity, modeToWireString(entry.mode),
             entry.snappingLayout, entry.tilingAlgorithm, priority);
         rebuilt.enabled = oldSnapshot.enabled;
+        rebuilt.actions.append(oldSnapshot.survivors);
         kept.append(rebuilt);
         emittedKeys.insert(key);
         ++count;
@@ -329,6 +481,13 @@ void LayoutRegistry::setAllCombinedAssignments(const QHash<CombinedAssignmentKey
     // layoutAssigned(screen, desktop, wrongLayoutPtr) for the just-stored
     // Combined rule. The signal still only carries (screenId, desktop,
     // layoutPtr), but the layoutPtr we resolve here is now the right one.
+    //
+    // Only the keys that were STORED emit. A context deleted by omission (it was
+    // in the family before this batch and is absent from the incoming map) is
+    // dropped from the rule set with no layoutAssigned of its own. The daemon
+    // still learns about it, through setAllRules → rulesChanged → the assignment
+    // reconcile, so direct layoutAssigned subscribers must not treat this signal
+    // as a complete record of which contexts a batch touched.
     for (const CombinedAssignmentKey& emitKey : std::as_const(emittedKeys)) {
         emitLayoutAssigned(emitKey.screenId, emitKey.virtualDesktop,
                            assignmentIdForScreen(emitKey.screenId, emitKey.virtualDesktop, emitKey.activity));

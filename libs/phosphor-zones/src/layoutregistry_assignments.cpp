@@ -110,6 +110,19 @@ void LayoutRegistry::upsertAssignmentRule(const QString& screenId, int virtualDe
         // silently re-enable a rule the user disabled. A disabled context
         // assignment is still an explicit assignment — preserve the flag.
         rule.enabled = existing->enabled;
+        // makeAssignmentRule emits only the three assignment slots. The
+        // deterministic-id branch of findExactContextRule can hand back a
+        // canonical-id rule that has since acquired non-assignment actions
+        // (SetOpacity, gap actions, Float, ...), and assigning the rebuilt
+        // list wholesale would silently delete them — the same clobber
+        // flipAssignmentModes guards against with isAssignmentSlotAction.
+        // A dropped gap action would also move the gap fingerprint the
+        // settings layer watches and fire settingsChanged mid-write.
+        for (const PWR::RuleAction& action : existing->actions) {
+            if (!isAssignmentSlotAction(action)) {
+                rule.actions.append(action);
+            }
+        }
         m_ruleStore->updateRule(rule);
     }
 }

@@ -120,9 +120,36 @@ void PlasmaZonesEffect::clearWindowZone(const QString& windowId)
 PhosphorRules::WindowQuery PlasmaZonesEffect::ruleQuery(KWin::EffectWindow* w) const
 {
     const QString windowId = getWindowId(w);
+    const QString screenId = getWindowScreenId(w);
     PhosphorRules::WindowQuery query =
-        ruleQueryFor(w, getWindowScreenId(w), isWindowFloating(windowId), isWindowSnapped(windowId),
+        ruleQueryFor(w, screenId, isWindowFloating(windowId), isWindowSnapped(windowId),
                      m_autotileHandler->isTiledWindow(windowId), zoneForWindow(windowId));
+    // ActiveLayout — stamped here rather than inside the free builder because the
+    // value comes from the daemon, not from KWin: resolving it means walking the
+    // assignment cascade for the screen's current desktop and activity, which
+    // only the daemon can do. m_activeLayoutByScreen is that answer, seeded at
+    // bringup and kept current by activeLayoutForScreenChanged.
+    //
+    // A screen with no cached entry leaves the field EMPTY, not unset: activeLayout
+    // is a Context field that WindowQuery::valueForField reports engaged
+    // unconditionally, so there is no inert state reachable from here.
+    // `Equals <uuid>` correctly fails against an empty value, and an empty-Equals
+    // leaf cannot be authored at all (MatchExpression::isValid rejects it), but a
+    // NEGATED leaf DOES match an unseeded screen. The isEmpty() guard is map
+    // hygiene rather than match semantics.
+    //
+    // The id is the layout active on that screen's CURRENTLY VISIBLE desktop,
+    // because that is what the daemon publishes per screen, and it is stamped onto
+    // off-desktop windows too (reconcileRuleHiddenTitleBar and
+    // reconcileRuleWindowLayer run for them). So a rule pairing ActiveLayout with
+    // VirtualDesktop asks about two different desktops for such a window, and an
+    // ActiveLayout-scoped title-bar or layer rule re-resolves on every desktop
+    // switch. The daemon-side stamp resolves the same way deliberately, so both
+    // sides agree; making it per-(screen, desktop) would need a wider wire.
+    const auto cached = m_activeLayoutByScreen.constFind(screenId);
+    if (cached != m_activeLayoutByScreen.constEnd() && !cached.value().isEmpty()) {
+        query.activeLayout = cached.value();
+    }
     applyOwnLayerFlags(query, windowId);
     return query;
 }
@@ -183,8 +210,9 @@ bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
     return it != m_ruleWindowLayerSnapshots.cend() ? it->keepAbove : w->keepAbove();
 }
 
-PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::EffectWindow* w,
-                                                                     const QString& windowId) const
+PhosphorRules::ResolvedActions
+PlasmaZonesEffect::resolveRuleActions(KWin::EffectWindow* w, const QString& windowId,
+                                      std::optional<PhosphorRules::WindowQuery>* sharedQuery) const
 {
     const PhosphorRules::RuleEvaluator& evaluator = m_shaderManager.animationRuleEvaluator();
     // An empty windowId can't key the per-window cache; nothing to resolve.
@@ -197,16 +225,22 @@ PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::Effec
     if (std::optional<PhosphorRules::ResolvedActions> cached = evaluator.resolveCachedIfPresent(windowId)) {
         return std::move(*cached);
     }
-    // Miss → build the query once and resolve (caching the result). Defensive guard
+    // Miss → build the query once and resolve (caching the result), reusing the
+    // caller's slot when it already holds this window's query (see the header
+    // doc) and filling it otherwise. Defensive guard
     // against a windowless query (no engaged window attribute): it can't fill any
     // slot, so return empty actions WITHOUT caching to avoid a useless cache entry.
     // In practice a non-null w always engages placement/state attributes, so this
     // only ever covers the already-handled empty-windowId case — kept as a belt.
-    const PhosphorRules::WindowQuery query = ruleQuery(w);
-    if (!query.hasWindow()) {
+    std::optional<PhosphorRules::WindowQuery> localQuery;
+    std::optional<PhosphorRules::WindowQuery>& slot = sharedQuery ? *sharedQuery : localQuery;
+    if (!slot) {
+        slot = ruleQuery(w);
+    }
+    if (!slot->hasWindow()) {
         return {};
     }
-    return evaluator.resolveCached(windowId, query);
+    return evaluator.resolveCached(windowId, *slot);
 }
 
 bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason) const
@@ -350,7 +384,8 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     return true;
 }
 
-bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w) const
+bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w,
+                                                 std::optional<PhosphorRules::WindowQuery>* sharedQuery) const
 {
     // The `isEmpty()` fast path keeps a no-exclusions user at two pointer
     // reads — same cost as the prior list-derived check.
@@ -365,15 +400,26 @@ bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w) const
     // revision-keyed for rule edits and cleared by the same placement /
     // class-swap invalidation paths (flushPendingRuleInvalidations,
     // invalidateAllRuleCaches, the metadataChanged lambda).
+    // Caller-owned memoisation slot (see the header doc): a miss builds the query
+    // into it so the caller's own resolver pass reuses the build instead of
+    // walking the ~30 accessors a second time for the same window.
+    std::optional<PhosphorRules::WindowQuery> localQuery;
+    std::optional<PhosphorRules::WindowQuery>& slot = sharedQuery ? *sharedQuery : localQuery;
+    const auto query = [&]() -> const PhosphorRules::WindowQuery& {
+        if (!slot) {
+            slot = ruleQuery(w);
+        }
+        return *slot;
+    };
     const QString windowId = getWindowId(w);
     if (windowId.isEmpty()) {
-        return m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded();
+        return m_snappingExclusionEvaluator.resolve(query()).isExcluded();
     }
     if (std::optional<PhosphorRules::ResolvedActions> cached =
             m_snappingExclusionEvaluator.resolveCachedIfPresent(windowId)) {
         return cached->isExcluded();
     }
-    return m_snappingExclusionEvaluator.resolveCached(windowId, ruleQuery(w)).isExcluded();
+    return m_snappingExclusionEvaluator.resolveCached(windowId, query()).isExcluded();
 }
 
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
@@ -530,7 +576,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
     return true;
 }
 
-bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
+bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
+                                             std::optional<PhosphorRules::WindowQuery>* sharedQuery) const
 {
     if (!w) {
         return false;
@@ -582,7 +629,7 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
     // management is not decorated either (preserves prior behavior, since the
     // decoration path used to run through shouldHandleWindow). No dedicated
     // decoration rule slice, so no new rule action.
-    if (isExcludedBySnappingRule(w)) {
+    if (isExcludedBySnappingRule(w, sharedQuery)) {
         return false;
     }
 
@@ -701,7 +748,30 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
     }
 
     QString windowClass = w->windowClass();
-    pid_t windowPid = w->pid();
+    const pid_t windowPid = w->pid();
+    // KWin reports -1 when the pid is unknown, notably during session restore
+    // before the client reattaches (see window_identity.cpp, which clamps it for
+    // the same reason). Comparing that sentinel as if it were a real pid makes
+    // `-1 != <real pid>` true and reports "another app spawned this class" for
+    // what is the same app — and session restore is exactly when the pid is
+    // unknown AND several same-class windows appear together.
+    //
+    // "Cannot discriminate" is reported as false. Note the two callers read that
+    // answer with OPPOSITE polarity, so this is a real behaviour choice rather
+    // than a neutral one:
+    //   * window_lifecycle.cpp, canSnapRestore = ... && !hasOther...  — false
+    //     ALLOWS the restore. This is the case the fix targets: a window
+    //     restored at login was being denied its snap position because a
+    //     same-class sibling reported a real pid against its unknown one.
+    //   * kwin-effect/handlers/snaphandler.cpp, snap-all skips when !hasOther... && the appId
+    //     is already snapped — false can now SKIP a pid-unknown window that the
+    //     old sentinel comparison would have snapped. Narrow: it needs an
+    //     unknown pid, a same-class sibling, and the appId already in the
+    //     snapped set. Accepted deliberately, because the login case is the
+    //     common one and a wrongly-denied restore is the more visible failure.
+    if (windowPid <= 0) {
+        return false;
+    }
 
     // Check all existing windows for same class but different PID
     // This detects when another app (e.g., Cachy Update) spawns a window
@@ -718,6 +788,9 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
         }
         if (!shouldHandleWindow(other)) {
             continue; // Skip non-managed windows
+        }
+        if (other->pid() <= 0) {
+            continue; // Same unknown-pid sentinel — cannot discriminate against it either.
         }
         if (other->windowClass() == windowClass && other->pid() != windowPid) {
             // Found another window of the same class with different PID

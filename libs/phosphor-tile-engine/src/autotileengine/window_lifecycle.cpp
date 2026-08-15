@@ -564,7 +564,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // callback, so not running it keeps an arrival's marker window free of
     // foreign code — matching insertShouldFloat, which short-circuits it for the
     // same reason.
-    const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId);
+    const bool ruleWillFloat = !isMigrationArrival && m_floatPredicate && m_floatPredicate(windowId, screenId);
     if (state && state->tiledWindowCount() >= maxWin && !ruleWillFloat && !isMigrationArrival) {
         qCDebug(PhosphorTileEngine::lcTileEngine)
             << "Max window limit reached for screen" << screenId << "(max=" << maxWin << ")";

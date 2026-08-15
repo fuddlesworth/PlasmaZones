@@ -54,11 +54,13 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    // Empty windowId is a precondition violation that the sibling slots
-    // (snapToAppRule, snapToEmptyZone, resolveWindowRestore) all guard;
+    // Empty windowId or screen is a precondition violation that the sibling
+    // slots (snapToAppRule, snapToEmptyZone, resolveWindowRestore) all guard;
     // mirror their early-return so the input contract is symmetric across
-    // the snap-restore family.
-    if (windowId.isEmpty()) {
+    // the snap-restore family. The calculators resolve the layout, the
+    // last-used state and the desktop filter from the screen, so an empty one
+    // has no honest answer to give.
+    if (windowId.isEmpty() || windowScreenId.isEmpty()) {
         return;
     }
 
@@ -91,7 +93,7 @@ void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowSc
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || windowScreenName.isEmpty()) {
         return;
     }
 
@@ -124,7 +126,7 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || windowScreenId.isEmpty()) {
         return;
     }
 
@@ -194,8 +196,15 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
         // restore has had its chance: a SnapToZone restore or a remembered snap
         // already returned shouldSnap=true above (so the route never fights a snap),
         // and the explicit route wins over a remembered float position (it applies
-        // the final geometry). A route WITH SnapToZone moved+snapped on the target
-        // via the placement directive and never reaches here.
+        // the final geometry).
+        //
+        // A route WITH SnapToZone usually moved+snapped on the target via the
+        // placement directive and never reaches here — but not always, and
+        // applyOpenScreenRouting no longer assumes it. calculateSnapToPlacementRule
+        // declines when the routed target is not in Snapping mode (the common case:
+        // an autotile target), or resolves no layout, ordinal or geometry. Those
+        // declines land here with the Placement slot filled and nothing placed, so
+        // the route must still be honoured or the window neither snaps nor moves.
         m_adaptor->applyOpenScreenRouting(windowId, screenId);
         return;
     }
@@ -204,6 +213,16 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // Return value intentionally ignored: applySnapResult has already set
     // shouldSnap (false on a disabled-context refusal) and there is no
     // post-snap work in this slot to skip.
+    //
+    // In particular, a refusal here does NOT fall through to
+    // applyOpenScreenRouting. That asymmetry is deliberate. Both of
+    // applySnapResult's refusals mean the user has told us to keep our hands off
+    // this window — snapping is globally disabled, or the destination context is
+    // marked disabled — so honouring the rule's RouteToScreen and moving the
+    // window anyway would act on exactly the context that just said no. The
+    // RouteToDesktop above is different: it is emitted before the engine is
+    // consulted at all, by design, because a desktop route is independent of
+    // whether the window snaps.
 }
 
 bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY,

@@ -96,19 +96,51 @@ void Daemon::initLayoutAndSettingsWiring()
     // daemon.h, so reverse-order member destruction tears m_settings
     // down FIRST. The lambdas capture `this` and dereference m_settings,
     // so any cascade query during member-destruction would UAF without
-    // the explicit teardown in stop() (which clears both providers
-    // before any unique_ptr member runs its destructor) plus the null
+    // the explicit teardown in stop() (which clears EVERY provider
+    // installed in this function — see lifecycle.cpp, and add the
+    // matching clear there when installing another one)
+    // before any unique_ptr member runs its destructor, plus the null
     // checks below as a belt-and-suspenders guard against future
     // refactors that reset m_settings explicitly. NOTE: snap with
     // defaultLayoutId="" silently falls through to the autotile branch
     // — see test_layoutmanager_assignment.cpp
     // testLevel1Default_snapEnabledEmptyId_autotileEnabled_autotileWins
     // for the pinned behaviour.
-    m_layoutManager->setDefaultLayoutIdProvider([this]() {
+    m_layoutManager->setDefaultLayoutIdProvider([this]() -> QString {
         if (!m_settings || !m_settings->snappingEnabled()) {
             return QString();
         }
-        return m_settings->defaultLayoutId();
+        const QString id = m_settings->defaultLayoutId();
+        if (id.isEmpty()) {
+            return QString();
+        }
+        // Refuse an id whose layout no longer exists. Deleting a layout does not
+        // clear this setting, so the level-1 default would otherwise keep handing
+        // out a dead UUID: every unassigned screen resolves to it, which means the
+        // daemon publishes it as that screen's active layout and an
+        // `ActiveLayout Equals <deleted uuid>` rule keeps matching a layout the
+        // user removed. Falling through to empty puts those screens in the
+        // no-resolvable-layout state the cascade already handles.
+        //
+        // This duplicates the same dead-id check inside LayoutRegistry::defaultLayout(),
+        // and has to: that one FALLS BACK (to the active layout, then the first
+        // registered one) where this provider must return empty, because the
+        // provider's answer is the published ActiveLayout value.
+        //
+        // Known asymmetry, accepted: layoutForScreen() still routes through
+        // defaultLayout()'s fallback, so after the configured default is deleted
+        // a screen keeps live zones from the first registered layout while
+        // ActiveLayout publishes empty for it. Zones stay usable, and no rule
+        // matches a layout the user deleted.
+        //
+        // Cost: one QUuid parse plus an O(layouts) layoutById scan per cascade
+        // miss, which the drag path hits per resolve. The empty-id early return
+        // above keeps the common unconfigured case off this path entirely.
+        const auto uuid = Utils::parseUuid(id);
+        if (!uuid || !m_layoutManager->layoutById(*uuid)) {
+            return QString();
+        }
+        return id;
     });
     m_layoutManager->setDefaultAutotileAlgorithmProvider([this]() {
         if (!m_settings || !m_settings->autotileEnabled()) {
@@ -128,12 +160,13 @@ void Daemon::initLayoutAndSettingsWiring()
             if (!m_autotileEngine) {
                 return std::nullopt;
             }
-            // const overload: a non-creating lookup that returns nullptr when the
-            // screen has no tiling state. The non-const overload would lazily
-            // CREATE an empty state, both polluting m_screenStates during a pure
-            // resolution query and reporting 0 (not nullopt) for a non-tiling
-            // screen, which would make a TiledWindowCount predicate match there
-            // instead of staying inert.
+            // const overload, as intent: a non-creating lookup that returns
+            // nullptr when the screen has no tiling state, so a TiledWindowCount
+            // predicate stays inert there instead of matching on a reported 0.
+            // (Both overloads are non-creating today — see
+            // AutotileEngine::stateForScreen in autotileengine/facade.cpp — so
+            // the as_const is a statement of intent, not the thing preventing a
+            // create-on-read.)
             const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
             if (!state) {
                 return std::nullopt;
@@ -378,6 +411,22 @@ void Daemon::initLayoutAndSettingsWiring()
         // Resnap/retile/OSD is triggered separately by applyAssignmentChanges()
         // after the KCM's batch save completes — NOT here in the settings handler.
         syncModeFromAssignments();
+
+        // Refresh the active-assignment snapshot without applying, the same way
+        // the desktop / activity switch handlers do. A settings save can move a
+        // screen's RESOLVED assignment while mutating no assignment at all: the
+        // cascade falls through to the global default providers, so editing the
+        // default layout (or toggling snapping / autotile) re-resolves every
+        // screen that has no stored entry of its own. Without this the snapshot
+        // goes stale, which both makes a later rule edit falsely re-resnap those
+        // screens and leaves subscribers to activeLayoutForScreenChanged (the
+        // KWin effect's ActiveLayout rule matching) pinned to the old layout.
+        //
+        // During init()'s D-Bus retry loop this can run before m_layoutAdaptor
+        // exists: the snapshot advances and the publish is dropped. Harmless —
+        // the adaptor's mirror is seeded by the priming diffActiveAssignments()
+        // in initEngines once the adaptor is up.
+        diffActiveAssignments();
     }));
 
     // Resnap currently-snapped windows when a snapping gap/padding setting

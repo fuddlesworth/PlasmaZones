@@ -278,6 +278,13 @@ void PlasmaZonesEffect::initTimers()
     m_animationRulesRefreshDebounce.setSingleShot(true);
     m_animationRulesRefreshDebounce.setInterval(50);
     connect(&m_animationRulesRefreshDebounce, &QTimer::timeout, this, &PlasmaZonesEffect::loadRuleAnimationsFromDbus);
+
+    // Single retry of a failed getActiveLayoutsForScreens. Held as a member so
+    // the daemon-loss handler can stop it (see m_activeLayoutFetchRetryTimer);
+    // the retry itself re-gates on isDaemonReady inside fetchActiveLayoutsForScreens.
+    m_activeLayoutFetchRetryTimer.setSingleShot(true);
+    m_activeLayoutFetchRetryTimer.setInterval(ActiveLayoutFetchRetryDelayMs);
+    connect(&m_activeLayoutFetchRetryTimer, &QTimer::timeout, this, &PlasmaZonesEffect::fetchActiveLayoutsForScreens);
 }
 
 void PlasmaZonesEffect::connectDragTracker()
@@ -579,6 +586,15 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // window snapped while on another desktop isn't created until that desktop
     // becomes current. Rebuild on every desktop switch so those borders appear
     // without waiting for the window to be re-activated.
+    //
+    // Known one-frame cost: a desktop switch usually moves each screen's resolved
+    // active layout too, and this sweep re-folds appearance against the
+    // m_activeLayoutByScreen entries the PREVIOUS desktop resolved — the daemon's
+    // activeLayoutForScreenChanged broadcasts land after, and each one re-folds
+    // the affected windows. So an ActiveLayout-scoped border / tint / opacity can
+    // show the outgoing desktop's value for the frames between the switch and the
+    // broadcast. Not corrected here: the effect cannot resolve the daemon's
+    // assignment cascade, so there is no local value to fold instead.
     connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, [this]() {
         updateAllDecorations();
     });
@@ -985,6 +1001,20 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // between unregistration and the next daemon's fetch. continueDaemonReady
         // setup re-clears and refetches on bringup; this closes the gap before it.
         m_daemonGate.virtualScreensReady = false;
+        // Drop the subdivision geometry itself, not just the gate. The dead
+        // daemon owned these definitions, and the next daemon may subdivide
+        // differently or not at all — keeping them let the bringup's
+        // active-window notify resolve a screen id against the PREVIOUS
+        // session's boundaries and report it to the new daemon, which then held
+        // a wrong lastActiveScreenId until the user's next focus change.
+        //
+        // Safe against every consumer: the VS-crossing detectors in
+        // window_connections and autotilehandler/tiling, and the reposition path
+        // in screenchangehandler, are each additionally gated on
+        // virtualScreensReady or serviceRegistered — both already false here —
+        // so they were inert during the daemon-down interval regardless. The one
+        // remaining reader (tiling.cpp's fast bail) only skips work sooner.
+        m_virtualScreenDefs.clear();
         // The stale floating-window set is dropped further down in this same
         // handler (clearAllFloatingState beside clearAllZoneState, paired with
         // the rule-cache invalidation) — no separate clear here.
@@ -1057,6 +1087,21 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // authoritatively repopulated on daemon-ready.
         m_navigationHandler->clearAllZoneState();
         m_navigationHandler->clearAllFloatingState();
+        // Same argument, same dead session: the per-screen active-layout ids
+        // feed the ActiveLayout rule-match field. They are the dead daemon's
+        // resolution of its own cascade, so a `WHEN ActiveLayout = X` rule
+        // would keep matching the previous session's layout for the whole
+        // daemon-down interval — and permanently if the daemon never returns,
+        // because the only other writer (fetchActiveLayoutsForScreens) is gated
+        // on isDaemonReady and so never runs again. Repopulated authoritatively
+        // by that fetch on daemon-ready.
+        m_activeLayoutByScreen.clear();
+        // Reset the fetch retry latch with it, so the next daemon gets a fresh
+        // attempt rather than inheriting a spent one from the dead session, and
+        // stop any retry still counting down — it would fire against the dead
+        // daemon and re-arm the latch this line just cleared.
+        m_activeLayoutFetchRetryTimer.stop();
+        m_activeLayoutFetchRetried = false;
         // The placement caches above feed placement-scoped rule match inputs. A
         // SetOpacity rule keyed on IsSnapped/IsFloating/Zone caches its verdict
         // per (windowId, ruleSet revision) — neither moves here — so drop the
@@ -1067,6 +1112,16 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // Also carries the window-layer sweep (see invalidateAllRuleCaches): a
         // `WHEN IsFloating` layer rule releases its keep-above here (snapshot
         // restore) instead of stranding it for the daemon-down interval.
+        //
+        // Drop the drag-deferred cross-screen invalidations first. The bulk
+        // invalidation below supersedes them, and a drag whose endDrag reply
+        // died with the daemon would otherwise leave them parked until some
+        // later drag drained them against the next session's state. The parked
+        // active-layout invalidate flag is superseded the same way — clearing
+        // it here saves the next bringup's first sweep a redundant full
+        // invalidate for values the loss handler already dropped.
+        m_dragSuppressedRuleInvalidations.clear();
+        m_activeLayoutInvalidatePending = false;
         invalidateAllRuleCaches();
         m_decorationManager->restoreAll();
         m_autotileHandler->restoreAllMonocleMaximized();
