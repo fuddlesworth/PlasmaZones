@@ -3,6 +3,48 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/StripAxis.h>
+
+#include <QString>
+
+namespace PhosphorScrollEngine::Detail {
+
+/// ROLE step -> PHYSICAL direction token, for the verbs and navigation paths
+/// that hold a main/cross step and owe the rest of the system a physical
+/// word: the navigation OSD renders it as an arrow, the cross-surface
+/// resolver reads it geometrically, and the sibling engines consume it
+/// verbatim.
+///
+/// Shared by engine_navigation.cpp and engine_verbs.cpp, ONE definition, for
+/// the same reason P_SCROLL_RESOLVE lives here: a verb whose arrow disagreed
+/// with the direction focus actually moved would be a silent lie on screen.
+inline QString physicalTokenForMain(int delta, StripAxis axis)
+{
+    if (delta == 0) {
+        return {};
+    }
+    if (axis.isHorizontal()) {
+        return delta < 0 ? QStringLiteral("left") : QStringLiteral("right");
+    }
+    return delta < 0 ? QStringLiteral("up") : QStringLiteral("down");
+}
+
+/// The same for a step ACROSS the strip, within a column. Note the words swap
+/// with the axis exactly as the main-axis pair does — on a vertical strip the
+/// stack runs left-to-right.
+inline QString physicalTokenForCross(int delta, StripAxis axis)
+{
+    if (delta == 0) {
+        return {};
+    }
+    if (axis.isHorizontal()) {
+        return delta < 0 ? QStringLiteral("up") : QStringLiteral("down");
+    }
+    return delta < 0 ? QStringLiteral("left") : QStringLiteral("right");
+}
+
+} // namespace PhosphorScrollEngine::Detail
+
 // Shared preamble for every strip operation: resolve the target screen and
 // its current-context state. Emits no feedback itself — callers own that.
 // Included by engine_navigation.cpp and engine_verbs.cpp; ONE definition so

@@ -56,20 +56,6 @@ int crossDelta(const QString& direction, StripAxis axis)
     return axis.isHorizontal() ? verticalDelta(direction) : horizontalDelta(direction);
 }
 
-/// The inverse, for the paths that hold a ROLE step and owe the rest of the
-/// system a physical token — the OSD's arrow, the cross-surface resolver, and
-/// the strip-relative D-Bus entry point.
-QString physicalTokenForMain(int delta, StripAxis axis)
-{
-    if (delta == 0) {
-        return {};
-    }
-    if (axis.isHorizontal()) {
-        return delta < 0 ? QStringLiteral("left") : QStringLiteral("right");
-    }
-    return delta < 0 ? QStringLiteral("up") : QStringLiteral("down");
-}
-
 /// True for any of the four direction tokens, WITHOUT consulting an axis.
 ///
 /// The empty-screen crossing arm needs this: P_SCROLL_RESOLVE leaves params
@@ -133,7 +119,7 @@ void ScrollEngine::focusColumnByDelta(int delta, const QString& screenId)
     // token at the call site — which is what the D-Bus adaptor used to do —
     // walks the STACK on a vertical strip, and at the stack's end tries to
     // cross to the physically-left monitor.
-    const QString token = physicalTokenForMain(delta, stripAxisForScreen(screenId));
+    const QString token = Detail::physicalTokenForMain(delta, stripAxisForScreen(screenId));
     if (token.isEmpty()) {
         return;
     }
@@ -325,19 +311,31 @@ QString ScrollEngine::entryWindowForCrossing(const QString& screenId, const QStr
     if (!state || state->strip().isEmpty()) {
         return QString();
     }
-    // The entry edge faces back toward the source: a crossing moving "right"
-    // enters the viewport's LEFT edge, "left" its right edge. Vertical
-    // crossings have no strip edge, so the focused window stands in.
-    const int wantLeftmost = (direction == QLatin1String("right")) ? 1 : (direction == QLatin1String("left")) ? -1 : 0;
     // Params resolved once and threaded into the walks below: the public
     // visibleTiles overload would send this back through a second
     // ScreenManager query plus context-gap-provider call for the same values.
+    //
+    // Resolved BEFORE the entry-edge decision, because that decision needs
+    // this screen's axis.
     const ScrollLayoutParams params = layoutParamsForScreen(screenId);
-    if (wantLeftmost == 0) {
+    // The entry edge faces back toward the source: a crossing travelling in
+    // the target's +main direction enters its LOW main edge, and vice versa.
+    //
+    // Keyed on the TARGET's axis, never the source's — screenId here is the
+    // target, and both call sites pass it that way. A landscape monitor beside
+    // a portrait one is precisely the topology this feature exists for, so the
+    // two axes routinely differ.
+    //
+    // travel == 0 means the direction is PERPENDICULAR to the target's strip:
+    // it has no edge facing the source, since every column spans the full
+    // cross extent and none is nearer than another. That is today's
+    // vertical-crossing arm, generalized rather than disturbed.
+    const int travel = mainDelta(direction, params.axis);
+    if (travel == 0) {
         // Stand-in only if it is actually ON screen: a hidden tab or a parked
         // column carries no zone number, and the contract at the tail of this
         // function (the entry slot may never address a tile the zone numbers
-        // dropped) binds the vertical arm the same as the horizontal one.
+        // dropped) binds the perpendicular arm the same as the parallel one.
         const QString active = state->strip().activeWindowId();
         for (const VisibleTile& tile : visibleTiles(screenId, params)) {
             if (tile.windowId == active) {
@@ -355,7 +353,7 @@ QString ScrollEngine::entryWindowForCrossing(const QString& screenId, const QStr
     QString best;
     int bestEdge = 0;
     for (const VisibleTile& tile : visibleTiles(screenId, params)) {
-        const int edge = (wantLeftmost > 0) ? tile.rect.left() : -tile.rect.right();
+        const int edge = (travel > 0) ? params.axis.mainLow(tile.rect) : -params.axis.mainHigh(tile.rect);
         if (best.isEmpty() || edge < bestEdge) {
             best = tile.windowId;
             bestEdge = edge;
@@ -529,14 +527,20 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     }
     state->strip().takeWindow(windowId, sourceParams);
 
-    // Entering from the facing edge: moving right arrives as the target's
-    // first column, moving left as its last — unless it takes the swap
-    // partner's slot, which for a STACKED partner is a slot inside that
-    // partner's column rather than a column position. A VERTICAL crossing
-    // has no facing strip edge, so it appends like "left" does (the same
-    // convention the daemon's handoffReceive documents for its
-    // insertIndex -1 fallback).
-    int columnIdx = (direction == QLatin1String("right")) ? 0 : targetState->strip().columnCount();
+    // Entering from the facing edge: travelling in the target's +main
+    // direction arrives as its FIRST column, the reverse as its last — unless
+    // it takes the swap partner's slot, which for a STACKED partner is a slot
+    // inside that partner's column rather than a column position.
+    //
+    // Keyed on the TARGET's axis (targetParams), never the source's: a
+    // rightward press leaving a landscape screen for a portrait one is exactly
+    // the topology this feature exists for.
+    //
+    // A PERPENDICULAR crossing has no facing strip edge, so it appends — the
+    // same convention the daemon's handoffReceive documents for its
+    // insertIndex -1 fallback, and what a vertical crossing already did.
+    const int entryTravel = mainDelta(direction, targetParams.axis);
+    int columnIdx = (entryTravel > 0) ? 0 : targetState->strip().columnCount();
     QSize partnerMinSize;
     WindowHeight partnerHeight;
     bool partnerWindowedFs = false;

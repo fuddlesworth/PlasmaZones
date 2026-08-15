@@ -45,22 +45,30 @@ namespace PhosphorScrollEngine {
 
 void ScrollEngine::focusColumnFirst(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusFirstColumn(params), "focus", true, QStringLiteral("left"));
+    // The reason token feeds the OSD's ARROW, so it has to name the direction
+    // focus actually travelled — which on a vertical strip is up, not left.
+    // These verbs are end-relative and their BEHAVIOUR needs no axis; only the
+    // glyph does. params is in scope via P_SCROLL_RESOLVE inside the macro.
+    P_SCROLL_VERB(screenId, state->strip().focusFirstColumn(params), "focus", true,
+                  Detail::physicalTokenForMain(-1, params.axis));
 }
 
 void ScrollEngine::focusColumnLast(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusLastColumn(params), "focus", true, QStringLiteral("right"));
+    P_SCROLL_VERB(screenId, state->strip().focusLastColumn(params), "focus", true,
+                  Detail::physicalTokenForMain(1, params.axis));
 }
 
 void ScrollEngine::moveColumnToFirst(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToFirst(params), "move", true, QStringLiteral("left"));
+    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToFirst(params), "move", true,
+                  Detail::physicalTokenForMain(-1, params.axis));
 }
 
 void ScrollEngine::moveColumnToLast(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToLast(params), "move", true, QStringLiteral("right"));
+    P_SCROLL_VERB(screenId, state->strip().moveActiveColumnToLast(params), "move", true,
+                  Detail::physicalTokenForMain(1, params.axis));
 }
 
 // NOTE on the P_SCROLL_* macros above: they deliberately inject `screen`,
@@ -163,12 +171,17 @@ void ScrollEngine::centerVisibleColumns(const QString& screenId)
 
 void ScrollEngine::focusWindowTop(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(false), "focus", true, QStringLiteral("up"));
+    // CROSS-axis ends: the stack runs top-to-bottom on a horizontal strip and
+    // left-to-right on a vertical one, so these two swap words with the axis
+    // just as the main-axis pair above does.
+    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(false), "focus", true,
+                  Detail::physicalTokenForCross(-1, params.axis));
 }
 
 void ScrollEngine::focusWindowBottom(const QString& screenId)
 {
-    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(true), "focus", true, QStringLiteral("down"));
+    P_SCROLL_VERB(screenId, state->strip().focusTileAtEnd(true), "focus", true,
+                  Detail::physicalTokenForCross(1, params.axis));
 }
 
 void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
@@ -182,7 +195,7 @@ void ScrollEngine::focusColumnPlain(int delta, const QString& screenId)
         return;
     }
     P_SCROLL_VERB(screenId, state->strip().focusAdjacentColumn(delta, params), "focus", true,
-                  delta < 0 ? QStringLiteral("left") : QStringLiteral("right"));
+                  Detail::physicalTokenForMain(delta, params.axis));
 }
 
 void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
@@ -199,7 +212,7 @@ void ScrollEngine::focusColumnWrap(int delta, const QString& screenId)
     P_SCROLL_VERB(screenId,
                   state->strip().focusAdjacentColumn(delta, params)
                       || (delta < 0 ? state->strip().focusLastColumn(params) : state->strip().focusFirstColumn(params)),
-                  "focus", true, delta < 0 ? QStringLiteral("left") : QStringLiteral("right"));
+                  "focus", true, Detail::physicalTokenForMain(delta, params.axis));
 }
 
 void ScrollEngine::setColumnWidth(const ColumnWidth& width, const QString& screenId)
