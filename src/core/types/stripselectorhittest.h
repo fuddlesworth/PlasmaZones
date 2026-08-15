@@ -65,8 +65,32 @@ struct StripSelectorHit
 /// empty-strip "whole bar opens the first column" target is the CALLER's
 /// branch (selector_strip.cpp), not this function's.
 inline StripSelectorHit classifyStripSelectorPoint(const QVector<QRectF>& cardRects, const QVector<bool>& tabbed,
-                                                   const QPointF& pos, qreal gapInflate)
+                                                   const QPointF& pos, qreal gapInflate, bool verticalAxis = false)
 {
+    // The popup is a MINIATURE of the strip, so it must mirror the axis. If
+    // the strip runs vertically and this row stayed horizontal, half 0/1 would
+    // still mean "top/bottom of the card" while a column has become a
+    // horizontal band — which silently REVERSES insert order, with no error
+    // and no visual tell.
+    //
+    // Transposed at the BOUNDARY rather than by forking the math below: swap
+    // every rect and the point through the line y = x, run the existing
+    // classification untouched, and return the hit as-is. The returned
+    // vocabulary is already axis-neutral in meaning (gapIndex, columnIndex,
+    // half 0 = first tile, 1 = append, 2 = whole card), so nothing downstream
+    // changes — and the horizontal case stays byte-identical, which keeps
+    // every pinned test meaningful as the identity case.
+    if (verticalAxis) {
+        const auto flip = [](const QRectF& r) {
+            return r.isEmpty() ? r : QRectF(r.y(), r.x(), r.height(), r.width());
+        };
+        QVector<QRectF> swapped;
+        swapped.reserve(cardRects.size());
+        for (const QRectF& r : cardRects) {
+            swapped.append(flip(r));
+        }
+        return classifyStripSelectorPoint(swapped, tabbed, QPointF(pos.y(), pos.x()), gapInflate, false);
+    }
     StripSelectorHit hit;
     const int count = cardRects.size();
 
