@@ -192,27 +192,39 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="openEditor">
-            <annotation name="org.gtk.GDBus.DocString" value="Launch the layout editor for the active layout."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Launch the layout editor for the active layout. Returns false when the editor process could not be started."/>
+            <arg name="launched" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the editor process was spawned."/>
+            </arg>
         </method>
         <method name="openEditorForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Launch the layout editor for the layout assigned to the given screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Launch the layout editor for the layout assigned to the given screen. Returns false when the editor process could not be started."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to edit layout for (e.g. DP-1)."/>
             </arg>
+            <arg name="launched" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the editor process was spawned."/>
+            </arg>
         </method>
         <method name="openEditorForLayoutOnScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Launch the layout editor for a specific layout, optionally targeting a screen for geometry/name matching."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Launch the layout editor for a specific layout, optionally targeting a screen for geometry/name matching. Returns false when the id is malformed or the editor process could not be started."/>
             <arg name="layoutId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to edit."/>
             </arg>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to open on (empty = editor default)."/>
             </arg>
+            <arg name="launched" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the editor process was spawned."/>
+            </arg>
         </method>
         <method name="openEditorForScrollingTemplate">
-            <annotation name="org.gtk.GDBus.DocString" value="Launch the editor in scrolling-template mode. Opens on the screen under the cursor. A malformed or unknown non-empty id is refused with a daemon-side warning and no editor is spawned."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Launch the editor in scrolling-template mode. Opens on the screen under the cursor. Returns false when a malformed or unknown non-empty id is refused or the editor process could not be started."/>
             <arg name="templateId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Template UUID to edit. Empty = create a new template."/>
+            </arg>
+            <arg name="launched" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True when the editor process was spawned."/>
             </arg>
         </method>
         <method name="getScreenStates">

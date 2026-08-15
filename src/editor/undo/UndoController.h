@@ -81,6 +81,10 @@ Q_SIGNALS:
     void canRedoChanged();
     void undoTextChanged();
     void redoTextChanged();
+    /// Forwarded QUndoStack::cleanChanged: true when the stack is back at
+    /// its clean index (the last setClean, or empty). Lets the controller
+    /// derive the dirty flag where every edit is a command on this stack.
+    void cleanStateChanged(bool clean);
 
 private Q_SLOTS:
     /**

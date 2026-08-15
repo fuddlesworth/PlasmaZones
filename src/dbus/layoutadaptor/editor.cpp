@@ -30,7 +30,7 @@ namespace PlasmaZones {
 // Editor Launch Helper
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void LayoutAdaptor::launchEditor(const QStringList& args, const QString& description)
+bool LayoutAdaptor::launchEditor(const QStringList& args, const QString& description)
 {
     // Resolved once for the daemon's lifetime, deliberately: the fallback is
     // the bare name, which QProcess re-resolves against PATH at every spawn,
@@ -78,7 +78,9 @@ void LayoutAdaptor::launchEditor(const QStringList& args, const QString& descrip
     process.setProcessEnvironment(env);
     if (!process.startDetached()) {
         qCWarning(lcDbusLayout) << "Failed to launch editor" << description;
+        return false;
     }
+    return true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -389,56 +391,56 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
 // Editor Launch
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void LayoutAdaptor::openEditor()
+bool LayoutAdaptor::openEditor()
 {
-    launchEditor({}, QString());
+    return launchEditor({}, QString());
 }
 
-void LayoutAdaptor::openEditorForScreen(const QString& screenId)
+bool LayoutAdaptor::openEditorForScreen(const QString& screenId)
 {
     // Intentionally passes the screen ID — the editor process
     // uses it for QScreen::name() matching and geometry lookup.
-    launchEditor({QStringLiteral("--screen"), screenId}, QStringLiteral("for screen: %1").arg(screenId));
+    return launchEditor({QStringLiteral("--screen"), screenId}, QStringLiteral("for screen: %1").arg(screenId));
 }
 
-void LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId)
+bool LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId)
 {
     // Validate the bus-supplied id before spawning a process: an autotile
     // preview id is a legal non-UUID shape, everything else must parse.
     if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && QUuid::fromString(layoutId).isNull()) {
         qCWarning(lcDbusLayout) << "openEditorForLayoutOnScreen: rejecting malformed layout id" << layoutId;
-        return;
+        return false;
     }
     QStringList args{QStringLiteral("--layout"), layoutId};
     if (!screenId.isEmpty()) {
         args << QStringLiteral("--screen") << screenId;
     }
-    launchEditor(args, QStringLiteral("for layout: %1 on screen: %2").arg(layoutId, screenId));
+    return launchEditor(args, QStringLiteral("for layout: %1 on screen: %2").arg(layoutId, screenId));
 }
 
-void LayoutAdaptor::openEditorForScrollingTemplate(const QString& templateId)
+bool LayoutAdaptor::openEditorForScrollingTemplate(const QString& templateId)
 {
     // An EMPTY id is the documented "create a new template" shape. A
     // NON-EMPTY id must parse as a UUID and name a template the store
     // actually holds (the same store gate delete/duplicate apply), so a
-    // caller bug spawns a warning here instead of an editor showing
+    // caller bug answers false here instead of an editor showing
     // "no longer available".
     if (templateId.isEmpty()) {
-        launchEditor({QStringLiteral("--new-scrolling-template")}, QStringLiteral("for a new scrolling template"));
-        return;
+        return launchEditor({QStringLiteral("--new-scrolling-template")},
+                            QStringLiteral("for a new scrolling template"));
     }
     const QUuid parsed = QUuid::fromString(templateId);
     if (parsed.isNull()) {
         qCWarning(lcDbusLayout) << "openEditorForScrollingTemplate: rejecting malformed template id" << templateId;
-        return;
+        return false;
     }
     const auto* store = m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr;
     if (!store || !store->templateById(parsed).isValid()) {
         qCWarning(lcDbusLayout) << "openEditorForScrollingTemplate: unknown template" << templateId;
-        return;
+        return false;
     }
-    launchEditor({QStringLiteral("--scrolling-template"), templateId},
-                 QStringLiteral("for scrolling template: %1").arg(templateId));
+    return launchEditor({QStringLiteral("--scrolling-template"), templateId},
+                        QStringLiteral("for scrolling template: %1").arg(templateId));
 }
 
 } // namespace PlasmaZones

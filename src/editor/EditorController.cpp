@@ -191,6 +191,25 @@ EditorController::EditorController(QObject* parent)
     connect(m_zoneManager, &ZoneManager::zoneColorChanged, this, &EditorController::zoneColorChanged);
     connect(m_zoneManager, &ZoneManager::zonesModified, this, &EditorController::markUnsaved);
 
+    // Template mode derives the DIRTY flag from the undo stack's clean state:
+    // every template edit is a command on this stack (field setters, columns,
+    // the rename command), so undoing back to the saved or loaded baseline
+    // genuinely restores it and may clear the flag. Gated hard: a NEW
+    // template is dirty by definition until its first save (its clean-index
+    // baseline is the unsaved blank), and layout mode keeps its wider
+    // markUnsaved sources, where a clean stack does not imply a clean layout.
+    connect(m_undoController, &UndoController::cleanStateChanged, this, [this](bool clean) {
+        if (m_editorMode != ModeScrollingTemplate || m_isNewLayout) {
+            return;
+        }
+        const bool unsaved = !clean;
+        if (m_hasUnsavedChanges == unsaved) {
+            return;
+        }
+        m_hasUnsavedChanges = unsaved;
+        Q_EMIT hasUnsavedChangesChanged();
+    });
+
     // Initialize ZoneManager with default screen size (updated when target screen is set)
     m_zoneManager->setReferenceScreenSize(targetScreenSize());
 

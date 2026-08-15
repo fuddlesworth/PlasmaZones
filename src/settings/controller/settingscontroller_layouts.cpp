@@ -591,41 +591,42 @@ QVariantMap SettingsController::physicalScreenResolution(const QString& screenId
     return result;
 }
 
-// The three editor launchers are one-way daemon calls: with the daemon down,
-// send() still queues successfully and the bus silently discards the
-// message, so each one gates on daemonRunning() first — otherwise the Edit
-// and New buttons are silent no-ops (the exact failure createNewLayout's
-// sync-call path already reports).
-void SettingsController::editLayout(const QString& layoutId)
+// The three editor launchers used to be one-way calls, which made every
+// failure invisible: a stopped daemon silently discards the message, and a
+// missing or broken editor binary died inside the daemon with only a journal
+// line. The launch verbs now answer whether the process was spawned, so the
+// launchers read the reply and toast the one failure the user can act on.
+void SettingsController::launchEditorViaDaemon(const QString& method, const QVariantList& args)
 {
-    if (!daemonRunning()) {
+    const QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry), method, args);
+    if (reply.type() != QDBusMessage::ReplyMessage) {
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not open the editor. The daemon may not be running."));
         return;
     }
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, QString()});
+    if (!reply.arguments().value(0).toBool()) {
+        // The daemon answered and refused: the editor binary could not be
+        // started, or the id failed the daemon-side validation.
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not open the editor."));
+    }
+}
+
+void SettingsController::editLayout(const QString& layoutId)
+{
+    launchEditorViaDaemon(QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, QString()});
 }
 
 void SettingsController::editLayoutOnScreen(const QString& layoutId, const QString& screenId)
 {
-    if (layoutId.isEmpty() || screenId.isEmpty())
-        return;
-    if (!daemonRunning()) {
-        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not open the editor. The daemon may not be running."));
+    if (layoutId.isEmpty() || screenId.isEmpty()) {
         return;
     }
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, screenId});
+    launchEditorViaDaemon(QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, screenId});
 }
 
 void SettingsController::editScrollingTemplate(const QString& templateId)
 {
-    if (!daemonRunning()) {
-        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not open the editor. The daemon may not be running."));
-        return;
-    }
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                QStringLiteral("openEditorForScrollingTemplate"), {templateId});
+    launchEditorViaDaemon(QStringLiteral("openEditorForScrollingTemplate"), {templateId});
 }
 
 void SettingsController::openLayoutsFolder()

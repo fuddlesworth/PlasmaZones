@@ -149,12 +149,15 @@ public Q_SLOTS:
     QString createLayoutFromJson(const QString& layoutJson);
 
     // Editor launch
-    void openEditor();
-    void openEditorForScreen(const QString& screenId);
-    void openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId);
+    // The four launch verbs answer whether the editor process was actually
+    // spawned, so a caller can surface a missing or broken binary instead of
+    // a silent no-op. Validation refusals answer false too.
+    bool openEditor();
+    bool openEditorForScreen(const QString& screenId);
+    bool openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId);
     /// Launch the editor in scrolling-template mode. An empty id opens a new
     /// template; otherwise the stored template with that id is edited.
-    void openEditorForScrollingTemplate(const QString& templateId);
+    bool openEditorForScrollingTemplate(const QString& templateId);
 
     // Screen assignments
     QString getLayoutForScreen(const QString& screenId);
@@ -536,7 +539,9 @@ private:
      * @param args Command line arguments for the editor
      * @param description Description for logging (e.g., "for screen: DP-1")
      */
-    void launchEditor(const QStringList& args, const QString& description);
+    /// Spawn the editor process. False when startDetached failed (missing or
+    /// unexecutable binary) — the four public launch verbs forward this.
+    bool launchEditor(const QStringList& args, const QString& description);
 
     /**
      * @brief Build activity info JSON object

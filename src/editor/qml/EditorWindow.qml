@@ -27,6 +27,11 @@ Window {
     readonly property bool templateMode: editorWindow._editorController ? editorWindow._editorController.editorMode === 1 : false
     // Fullscreen editing mode - hides all panels for distraction-free editing
     property bool fullscreenMode: false
+    // Set by intentional close paths that ALREADY resolved unsaved changes
+    // (the confirm dialog's Discard, discardChanges' editorClosed), so the
+    // onClosing guard below lets them through. The clean-session paths need
+    // no flag — the guard checks the dirty state itself.
+    property bool _closeConfirmed: false
     // Zone spacing (between zones) matches zone padding (per-layout override or global setting)
     readonly property real zoneSpacing: {
         if (!editorWindow._editorController)
@@ -219,6 +224,17 @@ Window {
     // window always lands on the primary monitor.
     visible: false
     title: templateMode ? i18nc("@title", "Scrolling Template Editor") : i18nc("@title", "Layout Editor")
+    onClosing: close => {
+        // A compositor-initiated close (Alt+F4, a window-menu close verb)
+        // must honor the same unsaved-changes prompt every in-app close
+        // affordance shows. Intentional dirty closes set _closeConfirmed
+        // first; a clean session passes straight through.
+        if (editorWindow._closeConfirmed || !editorWindow._editorController || !editorWindow._editorController.hasUnsavedChanges)
+            return;
+
+        close.accepted = false;
+        confirmCloseDialog.open();
+    }
     Component.onCompleted: {
         // Initialize selectedZoneId from editorController context property
         if (editorWindow._editorController) {
@@ -843,6 +859,10 @@ Window {
             editorWindow.close();
         }
         onDiscarded: {
+            // Discard closes while the controller is still dirty, so it must
+            // mark the close as confirmed or the onClosing guard would
+            // re-open this very dialog.
+            editorWindow._closeConfirmed = true;
             editorWindow.close();
         }
     }
@@ -1040,6 +1060,10 @@ Window {
         }
 
         function onEditorClosed() {
+            // discardChanges can leave the dirty flag set (a discarded NEW
+            // template has nothing to reload), and the user already chose to
+            // discard, so this close is confirmed by definition.
+            editorWindow._closeConfirmed = true;
             editorWindow.close();
         }
 

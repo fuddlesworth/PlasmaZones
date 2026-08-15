@@ -861,6 +861,9 @@ private Q_SLOTS:
     /// no page manifest can see (the per-screen overrides): latches the
     /// value-based dirty reconcile off until the next clean transition.
     void onValueBlindSettingsChanged();
+    /// Shared body of the three edit* launchers: calls a launch verb, reads
+    /// its spawned verdict, and toasts the failure the user can act on.
+    void launchEditorViaDaemon(const QString& method, const QVariantList& args);
     void loadLayoutsAsync();
     // Debounce slot: all layout-mutation D-Bus signals (layoutCreated,
     // layoutDeleted, layoutChanged, layoutPropertyChanged, layoutListChanged)
