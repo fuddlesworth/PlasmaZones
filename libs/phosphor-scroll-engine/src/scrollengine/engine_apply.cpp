@@ -498,7 +498,14 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 if (lastIt == m_lastAppliedRect.constEnd()) {
                     continue;
                 }
-                if (tile.rect == lastIt->translated(-rawViewDelta, 0)) {
+                // Along the MAIN axis: the view only ever slides along the
+                // strip, so the carried signature is a rect displaced on that
+                // axis alone. Hardcoding x here would make anyCarried
+                // unreachable on a vertical strip, and the test below would
+                // then zero the delta for EVERY vertical batch — silently
+                // dropping the one-spring-per-output slide rather than
+                // failing.
+                if (tile.rect == params.axis.translatedMain(*lastIt, -rawViewDelta)) {
                     anyCarried = true;
                     break;
                 }

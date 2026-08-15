@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorScrollEngine/StripAxis.h>
+
 #include <QList>
 #include <QRect>
 #include <QString>
@@ -689,6 +691,14 @@ struct ScrollLayoutParams
 {
     QRect workArea;
     int gap = 0;
+    /// Which way this screen's strip runs. Resolved per screen in
+    /// layoutParamsForScreen, so a portrait and a landscape monitor in one
+    /// session hold different axes at the same time — never cache the RESOLVED
+    /// axis anywhere, only the tri-state setting it came from.
+    ///
+    /// Defaulted to Horizontal so every existing construction, the test
+    /// fixtures included, keeps the historical layout with no edit.
+    StripAxis axis = StripAxis::horizontal();
     /// Preset proportion lists (niri defaults: 1/3, 1/2, 2/3). Never empty —
     /// resolvers snap a Preset fraction anchor to the nearest entry.
     /// KEEP IN SYNC with THREE other copies, not one:
