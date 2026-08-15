@@ -529,6 +529,15 @@ private:
     bool validateNonEmpty(const QString& value, const QString& paramName, const QString& operation) const;
 
     /**
+     * @brief Validate a 1-based virtual desktop number arriving over the bus
+     * @param virtualDesktop The desktop number as received
+     * @param operation Operation name for error message
+     * @param allowZero Accept 0, the documented screen-level wildcard
+     * @return true if usable, false if out of range (logs warning)
+     */
+    bool validateDesktopNumber(int virtualDesktop, const QString& operation, bool allowZero = false) const;
+
+    /**
      * @brief Parse JSON string to QJsonObject with validation
      * @param jsonString JSON string to parse
      * @param operation Operation name for error messages

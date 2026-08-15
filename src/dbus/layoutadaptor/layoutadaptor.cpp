@@ -258,6 +258,11 @@ bool LayoutAdaptor::validateNonEmpty(const QString& value, const QString& paramN
     return DbusHelpers::validateNonEmpty(value, paramName, operation, lcDbusLayout);
 }
 
+bool LayoutAdaptor::validateDesktopNumber(int virtualDesktop, const QString& operation, bool allowZero) const
+{
+    return DbusHelpers::validateDesktopNumber(virtualDesktop, operation, lcDbusLayout, allowZero);
+}
+
 std::optional<QJsonObject> LayoutAdaptor::parseJsonObject(const QString& jsonString, const QString& operation) const
 {
     QJsonParseError parseError;

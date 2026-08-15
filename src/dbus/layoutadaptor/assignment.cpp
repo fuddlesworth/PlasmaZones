@@ -115,6 +115,13 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
 void LayoutAdaptor::clearAssignment(const QString& screenId)
 {
+    // Bus boundary: guard the screen name like every assignLayout* sibling does.
+    // ScreenIdentity::idForName("") returns "" unchanged, so without this an empty
+    // id reached clearAssignment and then shipped as an empty entry in the
+    // assignmentChangesApplied list.
+    if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
+        return;
+    }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId);
     m_changedScreenIds.insert(resolvedId);
@@ -250,6 +257,9 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout to desktop"))) {
         return;
     }
+    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("assign layout to desktop"))) {
+        return;
+    }
 
     // Validate UUID for manual layouts, skip for autotile IDs
     if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
@@ -271,6 +281,12 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 
 void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
+        return;
+    }
+    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("clear assignment"))) {
+        return;
+    }
     const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, QString());
     m_changedScreenIds.insert(resolvedId);
@@ -576,6 +592,9 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
 
 void LayoutAdaptor::clearAssignmentForScreenActivity(const QString& screenId, const QString& activityId)
 {
+    if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
+        return;
+    }
     const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, 0, activityId);
     m_changedScreenIds.insert(resolvedId);
@@ -701,6 +720,9 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout"))) {
         return;
     }
+    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("assign layout"))) {
+        return;
+    }
 
     // Validate UUID for manual layouts, skip for autotile IDs
     if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
@@ -724,6 +746,12 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
 void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                             const QString& activityId)
 {
+    if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
+        return;
+    }
+    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("clear assignment"))) {
+        return;
+    }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, virtualDesktop, activityId);
     m_changedScreenIds.insert(resolvedId);
@@ -763,6 +791,14 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
     // Autotile.
     if (mode < 0 || mode > 1) {
         qCWarning(lcDbusLayout) << "setAssignmentEntry: mode out of range:" << mode;
+        return;
+    }
+
+    // The desktop was the one argument the comment above claimed to cover but
+    // did not. 0 is legal here (the documented screen-level entry); a negative
+    // number names a context nothing resolves, and persisting a rule for it grows
+    // the rule set with entries no cascade will ever read.
+    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("set assignment entry"), /*allowZero=*/true)) {
         return;
     }
 

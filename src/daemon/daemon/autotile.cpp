@@ -446,6 +446,14 @@ void Daemon::handleAutotileDisabled()
     // setups (screen A snap + screen B autotile) recover correctly.
     if (m_layoutManager) {
         QSignalBlocker blocker(m_layoutManager.get());
+        // Block the RULE STORE too, not just the registry. Every assignment write
+        // goes through upsertAssignmentRule and emits RuleStore::rulesChanged
+        // synchronously, which drives reconcileActiveAssignments — so blocking the
+        // registry alone still ran a full reconcile (updateAutotileScreens, resnap
+        // apply, OSD) per iteration, re-entrantly, over a half-written assignment
+        // set. That is the very thing this blocker exists to prevent. Both are
+        // released together and one reconcile is driven explicitly at the end.
+        QSignalBlocker ruleBlocker(m_ruleStore.get());
         m_layoutManager->clearAutotileAssignments();
     }
 
@@ -466,6 +474,14 @@ void Daemon::handleAutotileDisabled()
 
         {
             QSignalBlocker blocker(m_layoutManager.get());
+            // Block the RULE STORE too, not just the registry. Every assignment write
+            // goes through upsertAssignmentRule and emits RuleStore::rulesChanged
+            // synchronously, which drives reconcileActiveAssignments — so blocking the
+            // registry alone still ran a full reconcile (updateAutotileScreens, resnap
+            // apply, OSD) per iteration, re-entrantly, over a half-written assignment
+            // set. That is the very thing this blocker exists to prevent. Both are
+            // released together and one reconcile is driven explicitly at the end.
+            QSignalBlocker ruleBlocker(m_ruleStore.get());
             for (const QString& screenId : effectiveIds) {
                 // Per-output virtual desktops (#648): each screen resolves its own desktop.
                 const int desktop = currentDesktopForScreen(screenId);
@@ -491,6 +507,11 @@ void Daemon::handleAutotileDisabled()
             m_layoutManager->setActiveLayout(fallbackLayout);
         }
     }
+    // One reconcile for the whole disable, now that both blockers are released.
+    // Required, not tidiness: with rulesChanged blocked above, nothing else
+    // recomputes the active-assignment snapshot, so the KWin effect's per-screen
+    // ActiveLayout cache would keep the pre-disable ids until an unrelated edge.
+    reconcileActiveAssignments();
     // No parallel saved-floating sets to clear — each window's cross-mode state
     // lives only in its unified WindowPlacement record (single source of truth).
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
@@ -510,12 +531,12 @@ void Daemon::handleSnappingToAutotile()
         return;
     }
 
-    // Resolve algorithm from settings (this is a global enable, not per-desktop toggle)
-    QString algoId = m_settings->defaultAutotileAlgorithm();
-    if (algoId.isEmpty()) {
-        algoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
+    // Resolve the FALLBACK algorithm from settings. Per screen, a preserved
+    // per-screen algorithm wins over it (see the assignment loop below).
+    QString defaultAlgoId = m_settings->defaultAutotileAlgorithm();
+    if (defaultAlgoId.isEmpty()) {
+        defaultAlgoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
     }
-    const QString autotileLayoutId = PhosphorLayout::LayoutId::makeAutotileId(algoId);
 
     // Determine which screens need to be converted to autotile. Skip screens
     // that already have an autotile assignment so we preserve their per-screen
@@ -540,7 +561,7 @@ void Daemon::handleSnappingToAutotile()
     // Side effects deferred past the no-op check above so an enable with nothing
     // to convert leaves engine state untouched.
     if (m_autotileEngine) {
-        m_autotileEngine->setAlgorithm(algoId);
+        m_autotileEngine->setAlgorithm(defaultAlgoId);
     }
     // Pre-save snap-float state before autotile entry (same rationale as toggle handler)
     presaveSnapFloats();
@@ -559,15 +580,38 @@ void Daemon::handleSnappingToAutotile()
     // cascading resolution.
     {
         QSignalBlocker blocker(m_layoutManager.get());
+        // Block the RULE STORE too, not just the registry. Every assignment write
+        // goes through upsertAssignmentRule and emits RuleStore::rulesChanged
+        // synchronously, which drives reconcileActiveAssignments — so blocking the
+        // registry alone still ran a full reconcile (updateAutotileScreens, resnap
+        // apply, OSD) per iteration, re-entrantly, over a half-written assignment
+        // set. That is the very thing this blocker exists to prevent. Both are
+        // released together and one reconcile is driven explicitly at the end.
+        QSignalBlocker ruleBlocker(m_ruleStore.get());
         for (const QString& screenId : screensToConvert) {
             // Per-output virtual desktops (#648): each screen resolves its own desktop.
             const int desktop = currentDesktopForScreen(screenId);
+            // Restore this screen's own algorithm where one survives.
+            // clearAutotileAssignments deliberately PRESERVES entry.tilingAlgorithm
+            // when it flips a screen to Snapping, precisely so re-enabling can put
+            // it back — but assignLayoutById overwrites tilingAlgorithm from the id
+            // it is handed, so building one id from the global default silently
+            // discarded every screen's customisation on the disable/enable round
+            // trip. (The "skip screens already on autotile" guard above cannot
+            // cover this: after a disable, no screen is on autotile.)
+            const QString screenAlgo = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
+            const QString algoForScreen = screenAlgo.isEmpty() ? defaultAlgoId : screenAlgo;
             if (!activity.isEmpty()) {
                 m_layoutManager->clearAssignment(screenId, desktop, activity);
             }
-            m_layoutManager->assignLayoutById(screenId, desktop, QString(), autotileLayoutId);
+            m_layoutManager->assignLayoutById(screenId, desktop, QString(),
+                                              PhosphorLayout::LayoutId::makeAutotileId(algoForScreen));
         }
     }
+    // One reconcile for the whole enable, now that both blockers are released —
+    // same rationale as handleAutotileDisabled: with rulesChanged blocked, nothing
+    // else republishes the active-assignment snapshot.
+    reconcileActiveAssignments();
 }
 
 QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
