@@ -1382,9 +1382,9 @@ add_executable(test_dbus_validation dbus/test_dbus_validation.cpp)
 target_link_libraries(test_dbus_validation PRIVATE Qt6::Test Qt6::Core Qt6::DBus PhosphorCompositor::PhosphorCompositor)
 add_test(NAME test_dbus_validation COMMAND test_dbus_validation)
 
-# LayoutAdaptor signal contract test (Phase 1.2 of refactor/dbus-performance).
-# Pins the rule: property mutations emit layoutChanged only, NEVER
-# layoutListChanged - the list hasn't changed.
+# LayoutAdaptor signal contract test. Pins the rule: property mutations emit
+# the compact layoutPropertyChanged and neither layoutChanged nor
+# layoutListChanged. Also covers the active-layout-per-screen wire.
 add_executable(test_layout_adaptor_signals dbus/test_layout_adaptor_signals.cpp)
 target_link_libraries(test_layout_adaptor_signals PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                       PhosphorTiles::PhosphorTiles)

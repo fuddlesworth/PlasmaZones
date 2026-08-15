@@ -26,7 +26,6 @@
 #include "core/interfaces/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorWorkspaces/VirtualDesktopManager.h>
 #include "dbus/snapadaptor/snapadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
@@ -473,7 +472,19 @@ private Q_SLOTS:
     // screen the window is opening on.
     void testPlacementZonesByRule_activeLayoutMatch_resolvesZones()
     {
-        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+        // Pin the PER-OUTPUT desktop, not the global one. Production reads
+        // currentVirtualDesktopForScreen; if the fixture leaves m_screenVirtualDesktop
+        // empty, that accessor falls back to the same global member
+        // currentVirtualDesktop() returns, and the test would pass just as well
+        // against the global accessor — proving nothing about the per-output
+        // resolution the stamp depends on. Recording a per-output value that
+        // DIFFERS from the global default makes the two distinguishable.
+        const int perOutputDesktop = m_layoutManager->currentVirtualDesktop() + 2;
+        m_layoutManager->setCurrentVirtualDesktopForScreen(m_screenId, perOutputDesktop);
+        QVERIFY2(m_layoutManager->currentVirtualDesktopForScreen(m_screenId)
+                     != m_layoutManager->currentVirtualDesktop(),
+                 "fixture must make the per-output and global desktops differ, or this test cannot discriminate");
+        m_layoutManager->assignLayout(m_screenId, perOutputDesktop, QString(), m_testLayout);
 
         auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
         m_wta->setWindowRegistry(registry);
@@ -507,8 +518,11 @@ private Q_SLOTS:
     void testPlacementZonesByRule_activeLayoutMismatch_resolvesNothing()
     {
         PhosphorZones::Layout* other = createTestLayout(2, m_layoutManager);
+        other->setName(QStringLiteral("OtherLayout"));
         m_layoutManager->addLayout(other);
-        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), other);
+        const int perOutputDesktop = m_layoutManager->currentVirtualDesktop() + 2;
+        m_layoutManager->setCurrentVirtualDesktopForScreen(m_screenId, perOutputDesktop);
+        m_layoutManager->assignLayout(m_screenId, perOutputDesktop, QString(), other);
 
         auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
         m_wta->setWindowRegistry(registry);
@@ -531,6 +545,56 @@ private Q_SLOTS:
         const PhosphorSnapEngine::PlacementDirective directive =
             m_wta->placementZonesByRule(QStringLiteral("codeapp|inst10"), m_screenId);
         QVERIFY2(directive.zoneOrdinals.isEmpty(), "a rule keyed on a different layout must not place the window");
+
+        m_wta->setRuleStore(nullptr);
+        m_wta->setWindowRegistry(nullptr);
+    }
+
+    // The UNHINTED path. The four restore/float resolvers pass no screen hint, so
+    // buildContextualRuleQuery resolves the screen itself via
+    // resolveScreenForWindow. Before this coverage existed, both new ActiveLayout
+    // tests went through the hinted path only, while the changelog claimed the
+    // fix applied to floating and position restore.
+    //
+    // Scope, stated so nobody reads more into a green run than it earns: this
+    // window IS in snap state, which is the case the snap-only service accessor
+    // already covered, so the test pins that the unhinted branch stamps at all —
+    // NOT the engine fallbacks resolveScreenForWindow adds for autotile-tracked
+    // and not-yet-placed windows. Pinning those needs a fixture with a live
+    // autotile engine tracking the window, which this one does not wire.
+    void testShouldFloatByRule_activeLayoutMatch_resolvesWithoutScreenHint()
+    {
+        const int perOutputDesktop = m_layoutManager->currentVirtualDesktop() + 2;
+        m_layoutManager->setCurrentVirtualDesktopForScreen(m_screenId, perOutputDesktop);
+        m_layoutManager->assignLayout(m_screenId, perOutputDesktop, QString(), m_testLayout);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst11"), QStringLiteral("floatapp"), QString(), QString(), QString(),
+                                 0, 0, QString(), 0, QVariantMap());
+
+        // Give the service a snap record so the unhinted screen lookup resolves.
+        const QString windowId = QStringLiteral("floatapp|inst11");
+        // Keyed by the COMPOSITE id, which is what the engine passes to the
+        // predicates and therefore what screenForWindow is asked about. Assigning
+        // by the bare instance id instead would leave the lookup empty and the
+        // test would pass for the wrong reason (or, as here, fail).
+        m_wta->service()->assignWindowToZone(windowId, m_zoneIds[0], m_screenId, 1);
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::ActiveLayout, Operator::Equals, m_testLayout->id().toString());
+        RuleAction floatAction;
+        floatAction.type = QString(ActionType::Float);
+        rule.actions = {floatAction};
+        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+
+        QVERIFY2(m_wta->shouldFloatByRule(windowId),
+                 "an ActiveLayout-keyed Float rule must resolve on the unhinted path too");
 
         m_wta->setRuleStore(nullptr);
         m_wta->setWindowRegistry(nullptr);
