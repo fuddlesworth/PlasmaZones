@@ -400,6 +400,21 @@ void PlasmaZonesEffect::fetchAllVirtualScreenConfigs()
             ++it;
     }
 
+    // Prune the per-screen active-layout cache on the same rule. The daemon
+    // normally announces a departing screen with an empty id and the broadcast
+    // handler removes the entry, so this is the belt to that braces: it covers a
+    // screen that goes away while the daemon is down or mid-restart, when no
+    // broadcast is coming. Entries are keyed by EFFECTIVE screen id, so a
+    // subdivided monitor's "<phys>/vs:N" children have to be matched by their
+    // physical prefix rather than by a direct lookup.
+    for (auto it = m_activeLayoutByScreen.begin(); it != m_activeLayoutByScreen.end();) {
+        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key());
+        if (!currentPhysIds.contains(physId))
+            it = m_activeLayoutByScreen.erase(it);
+        else
+            ++it;
+    }
+
     if (physIds.isEmpty()) {
         // No physical screens to query — gate opens immediately
         m_daemonGate.virtualScreensReady = true;

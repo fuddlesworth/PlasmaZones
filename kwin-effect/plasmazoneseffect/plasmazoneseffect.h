@@ -756,18 +756,9 @@ public:
         m_idCaches.screenIdCache.clear();
     }
 
-    // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
-    int cachedAnimationSequenceMode() const
-    {
-        return m_cachedAnimationSequenceMode;
-    }
     int animationDurationMs() const
     {
         return m_cachedAnimationDuration;
-    }
-    int cachedAnimationStaggerInterval() const
-    {
-        return m_cachedAnimationStaggerInterval;
     }
 
     /**
@@ -1385,9 +1376,14 @@ private:
     /// window.floating) yields the DecorationProfile that drives the window's
     /// surface-pack chain and the per-pack parameters that style it (border
     /// width / radius / colours are the pack's own params, not host fields).
-    /// Seeded in the constructor with a baseline matching
-    /// today's per-field defaults so decoration renders correctly before the
-    /// async fetch lands; replaced wholesale when the setting arrives.
+    /// Seeded in the constructor with a deliberately EMPTY, neutral baseline
+    /// (seedDecorationTreeBaseline) — nothing is auto-inserted, because border
+    /// and title-bar appearance resolve through resolveEffectiveWindowAppearance
+    /// rather than through this tree; replaced wholesale when the setting
+    /// arrives. Do not read this as "populated by default":
+    /// hasDecorationTreeContent() is false until the user has actually applied
+    /// surface packs, which is load-bearing for the invalidation gates that
+    /// consult it.
     PhosphorSurfaceShaders::DecorationProfileTree m_decorationTree;
 
     /// Compiled surface-shader packs keyed by pack id (CompiledSurfacePack holds

@@ -132,6 +132,23 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 m_autotileHandler->handleWindowOutputChanged(safeW);
             }
 
+            // A genuine screen change stales this window's cached rule verdict.
+            // The verdict cache is keyed on (windowId, rule-set revision) and
+            // neither moves here, while ScreenId, ScreenOrientation and (since the
+            // ActiveLayout wire) the screen's active layout are all per-screen
+            // match inputs — so without this the window keeps matching against the
+            // monitor it came FROM, indefinitely, because two monitors sitting on
+            // unchanged layouts produce no broadcast to correct it.
+            //
+            // Gated exactly like the daemon notify below: not for KWin's
+            // orphan-reassignment when a monitor drops out, and not mid-drag,
+            // where the drag system owns the transitions and the deferred flush's
+            // decoration rebuild has not been established as safe.
+            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId && !involuntaryMove
+                && !m_dragTracker->isDragging()) {
+                invalidateRuleCacheForStateChange(getWindowId(safeW));
+            }
+
             // For snapping→snapping cross-screen moves: notify the daemon which
             // decides whether to unsnap based on its own state. If the daemon just
             // assigned this window to the new screen (restore/resnap/snap assist),

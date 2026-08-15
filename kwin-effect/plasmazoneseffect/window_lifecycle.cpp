@@ -493,6 +493,17 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
     if (!m_shaderManager.animationRuleSet().isEmpty()) {
         m_shaderManager.animationRuleEvaluator().clearCache();
     }
+    // The exclusion verdicts are cached the same way and IsFocused is a match
+    // field for them too, so a focus change staled them identically. This was the
+    // one match input with no covering clear route at all: the exclusion cache is
+    // cleared on a placement change and on a metadata change, never on focus, so
+    // `Exclude WHEN isFocused` pinned to whatever the focus state was at the
+    // window's first consult — and that verdict gates shouldHandleWindow and
+    // shouldDecorateWindow, not merely appearance. The updateAllDecorations below
+    // re-drives the decoration side in the same turn.
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        m_snappingExclusionEvaluator.clearCache();
+    }
 
     // Re-resolve every window's border against the new focus state so the
     // active window picks up the active colour and the rest the inactive one.
