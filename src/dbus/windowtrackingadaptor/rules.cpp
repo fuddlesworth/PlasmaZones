@@ -32,6 +32,18 @@
 
 namespace PlasmaZones {
 
+void WindowTrackingAdaptor::ensureRuleEvaluator()
+{
+    // Lazily construct against the store's live RuleSet. The evaluator binds a
+    // const reference to RuleStore::m_ruleSet, which is a by-value member, so the
+    // binding survives rule edits (the store mutates in place and bumps its own
+    // revision, which is what the evaluator's cache is keyed on). Every caller
+    // has already established m_ruleStore is non-null.
+    if (!m_ruleEvaluator) {
+        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
+    }
+}
+
 QString WindowTrackingAdaptor::resolveScreenForWindow(const QString& windowId) const
 {
     // Mode-neutral: the service's accessor is snap-only (it reads the owning
@@ -79,10 +91,25 @@ WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const Q
     // that differs from where the window currently sits), and every other path
     // reads the service's live screen-for-window.
     //
-    // Stamping uniformly across ALL resolvers is load-bearing, not tidiness: they
-    // share ONE resolveCached entry keyed on windowId, so whichever resolver
-    // touches a window first seeds the verdict the rest reuse. A resolver that
-    // left these blank would poison every sibling for that window's lifetime.
+    // Stamping uniformly is load-bearing, not tidiness: seven of the nine
+    // consumers share ONE RuleEvaluator::resolveCached entry keyed on (windowId,
+    // rule-set revision), and resolveCached returns the cached actions WITHOUT
+    // consulting the query on a hit — so whichever of them touches a window first
+    // seeds the verdict the rest reuse for that window's lifetime. (The two that
+    // do not share it: shouldRestoreSizeOnUnsnap uses the uncached resolve(), and
+    // the exclusion provider feeds SnapEngine's own evaluator.)
+    //
+    // Uniformity alone is NOT sufficient, because the hinted and unhinted paths
+    // resolve different screens — the ORDER matters just as much. The
+    // hint-bearing resolver must seed first, and does on both engines today:
+    // SnapEngine::resolveWindowRestore runs calculateSnapToPlacementRule ahead of
+    // the restore, managed-restore and float predicates, and
+    // AutotileAdaptor::dispatchWindowOpened runs applyOpenRoutingForAutotile
+    // ahead of the tile engine's windowOpened. Reordering either silently reverts
+    // ScreenId / ActiveLayout matching on the open path with a green test suite.
+    // The one known hole is a sticky window under StickyWindowHandling::IgnoreAll:
+    // calculateSnapToPlacementRule early-returns before reaching the resolver, so
+    // the unhinted restore predicate seeds first for those windows.
     const QString screenId = screenIdHint.isEmpty() ? resolveScreenForWindow(windowId) : screenIdHint;
     if (screenId.isEmpty()) {
         // No screen resolvable (window not placed yet and no hint) — leave both
@@ -183,9 +210,7 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
         return globalDefault;
     }
 
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // Shares m_ruleEvaluator with shouldFloatByRule; resolveCached is keyed on
     // (windowId, ruleSet revision) and ignores the query on a hit. Safe because both
     // are open-path (resolved once per window lifetime — see shouldFloatByRule) and
@@ -212,9 +237,7 @@ bool WindowTrackingAdaptor::shouldRestoreToZoneOnLogin(const QString& windowId)
     if (!query) {
         return globalDefault;
     }
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestoreToZoneOnLogin))) {
@@ -234,9 +257,7 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     if (!query) {
         return globalDefault;
     }
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // Unlike the open-path resolvers above, this fires MID-SESSION on every unsnap
     // (drag-out / drop / cursor-left-zones), long after the window opened. A fresh
     // uncached resolve is required: resolveCached is keyed on (windowId, ruleSet
@@ -269,9 +290,7 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
         return false;
     }
 
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // resolveCached is keyed on (windowId, ruleSet revision); on a cache hit the
     // freshly built `query` is ignored. That is safe because windowId is both
     // lifetime-stable AND unique: a reopened window gets a fresh instanceId (new
@@ -303,9 +322,7 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
         return {};
     }
 
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     // Shares m_ruleEvaluator with shouldFloatByRule / shouldRestoreFloatedPosition;
     // resolveCached is keyed on (windowId, ruleSet revision) and returns every matched
     // slot, so reading the Placement slot off the same verdict is free. Same open-path
@@ -397,9 +414,7 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     if (!query) {
         return;
     }
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     emitRouteToDesktopIfMatched(m_ruleEvaluator->resolveCached(windowId, *query), windowId);
 }
 
@@ -414,15 +429,30 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     if (!query) {
         return;
     }
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
 
-    // Bare RouteToScreen only. A rule that ALSO carries SnapToZone routes AND snaps
-    // via the placement directive (calculateSnapToPlacementRule resolves the zones
-    // ON the target screen and returns shouldSnap, so the facade never reaches the
-    // no-snap branch that calls this); moving here too would double-place the window.
+    // Bare RouteToScreen only. When a rule ALSO carries SnapToZone, the snap path
+    // owns the move: calculateSnapToPlacementRule resolves the zones ON the target
+    // screen and returns shouldSnap, so moving here too would double-place the
+    // window.
+    //
+    // KNOWN GAP, documented rather than silently assumed away. The claim that this
+    // branch is unreachable for a route+snap rule is not true:
+    // calculateSnapToPlacementRule also returns noSnap when the routed
+    // (screen, desktop) target is not in Snapping mode, and when that target
+    // resolves no layout, no surviving ordinal, or a degenerate union geometry. It
+    // is pure calculation with no side effects, so on those paths the window has
+    // NOT moved, and this early return then drops the route entirely — the window
+    // neither snaps nor moves, while the same rule without its SnapToZone action
+    // moves it fine.
+    //
+    // Left as-is deliberately. The most common decline is an autotile-mode target,
+    // which the engine's own comment says is owned by the autotile routing hook,
+    // and whether that hook covers a window OPENING on a snapping screen was not
+    // established. Performing the move here unconditionally would double-place the
+    // window in any case where it is, so the fix needs that trace first rather
+    // than a guess about which decline reached us.
     if (resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
         return;
     }
@@ -449,16 +479,36 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
                               << "is not currently connected — not moving" << windowId;
         return;
     }
-    const QRect cur = frameGeometry(windowId);
+    // The daemon's frame-geometry shadow is written only by the effect's DEBOUNCED
+    // flush, while this runs inside the synchronous window-open round trip — so
+    // for a genuinely new window the shadow is usually still empty here, and
+    // returning on that would make a bare RouteToScreen rule silently no-op for
+    // exactly the case it exists to handle. The registry metadata carries the
+    // frame rect and is pushed by the setWindowMetadata call that precedes the
+    // restore, so fall back to it before declining.
+    QRect cur = frameGeometry(windowId);
+    if (!cur.isValid() && !m_windowRegistry.isNull()) {
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+        if (const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(instanceId)) {
+            if (meta->positionX && meta->positionY && meta->width && meta->height && *meta->width > 0
+                && *meta->height > 0) {
+                cur = QRect(*meta->positionX, *meta->positionY, *meta->width, *meta->height);
+            }
+        }
+    }
     if (!cur.isValid()) {
-        // No geometry pushed yet — nothing to translate onto the target screen.
+        // Neither the shadow nor the metadata knows where the window is — nothing
+        // to translate onto the target screen.
+        qCDebug(lcDbusWindow) << "applyOpenScreenRouting: no frame geometry for" << windowId << "— not moving";
         return;
     }
 
     // Map the window's position relative to its current screen's available area onto
-    // the target screen's, preserving size, then clamp so the whole frame fits.
-    // Preserves "the same spot on the other monitor" across differing resolutions; an
-    // unknown / degenerate source area falls back to the target's top-left.
+    // the target screen's, then clamp so the whole frame fits. Size is preserved
+    // only where it fits: a route onto a SMALLER monitor shrinks the frame to the
+    // target's available area rather than overflowing it. Preserves "the same spot
+    // on the other monitor" across differing resolutions; an unknown / degenerate
+    // source area falls back to the target's top-left.
     const QRect srcAvail = screens->screenAvailableGeometry(screenId);
     const int w = qMin(cur.width(), dstAvail.width());
     const int h = qMin(cur.height(), dstAvail.height());
@@ -492,9 +542,7 @@ QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& window
     if (!query) {
         return QString();
     }
-    if (!m_ruleEvaluator) {
-        m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
-    }
+    ensureRuleEvaluator();
     const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
 
     // RouteToDesktop is engine-neutral — emit it for autotile windows too.

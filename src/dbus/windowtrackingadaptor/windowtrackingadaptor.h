@@ -736,6 +736,10 @@ public:
     std::optional<PhosphorRules::WindowQuery> buildContextualRuleQuery(const QString& windowId,
                                                                        const QString& screenIdHint = QString()) const;
 
+    /// Construct @ref m_ruleEvaluator on first use. Callers must have already
+    /// established that @ref m_ruleStore is non-null.
+    void ensureRuleEvaluator();
+
     /// Mode-neutral screen lookup for @p windowId: the snap service first (it
     /// canonicalizes the composite id), then each engine's own tracker. Returns
     /// empty only when neither engine has placed the window and it holds no snap
