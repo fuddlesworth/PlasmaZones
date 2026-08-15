@@ -115,7 +115,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Width adjustment step")
             searchAnchor: "scrollingColumnWidthStep"
-            description: i18n("How far the increase and decrease column width shortcuts move a column per press, as a share of the screen width")
+            description: i18n("How far the increase and decrease column width shortcuts move a column per press, as a share of the strip")
 
             SettingsSlider {
                 accessibleName: i18n("Column width adjustment step")

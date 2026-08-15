@@ -1,7 +1,7 @@
 {
     "id": "{c2d8e5f3-9a1b-4d7c-b0e8-2a1c0d9e8f03}",
     "name": "Tabbed halves",
-    "description": "Two half-screen columns that show their windows as tabs, so the screen stays split in two while each side stacks as many windows as you like.",
+    "description": "Two half-width columns that show their windows as tabs, so the screen stays split in two while each half stacks as many windows as you like.",
     "columns": [
         { "width": 0.5, "display": 1 },
         { "width": 0.5, "display": 1 }

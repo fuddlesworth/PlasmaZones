@@ -11,14 +11,21 @@ import org.phosphor.animation
 /**
  * @brief Visual strip canvas for scrolling-template editing
  *
- * Renders the template's seed blueprint as full-height column bands, the way
- * the scrolling engine lays the first windows out. Column widths are
- * fractions of the screen width, so the canvas width IS the screen: bands
- * whose summed widths pass the right edge scroll horizontally, exactly like
- * the real strip. Drag the divider after a column to resize it (strip
- * semantics: neighbours keep their width and shift, nothing redistributes),
- * click a column to select it, and use its action buttons to reorder, flip
- * stacked or tabbed, or remove. Adding columns lives in the ControlBar.
+ * Renders the template's seed blueprint as full-cross-extent column bands, the
+ * way the scrolling engine lays the first windows out. A column's width is a
+ * fraction of the screen ALONG the strip, so the canvas's main extent IS the
+ * screen: bands whose summed widths pass the far edge scroll, exactly like the
+ * real strip. Drag the divider after a column to resize it (strip semantics:
+ * neighbours keep their width and shift, nothing redistributes), click a
+ * column to select it, and use its action buttons to reorder, flip stacked or
+ * tabbed, or remove. Adding columns lives in the ControlBar.
+ *
+ * The canvas transposes with the target screen's strip axis
+ * (controller.templatePreviewVertical): on a vertical strip the bands stack
+ * down the canvas and scroll on y. The template data is unchanged either way —
+ * a column width is a fraction along the strip whichever way the strip runs —
+ * so this is a rendering and input concern only, and every geometry expression
+ * below reads through mainExtent / verticalAxis rather than naming x or y.
  */
 Item {
     id: stripCanvas
@@ -36,6 +43,13 @@ Item {
     // list without identities, unlike zones.
     property int selectedColumn: -1
 
+    // Which way the strip runs on the target screen, and the canvas extent a
+    // column fraction is measured against. Every axis-dependent expression in
+    // this file goes through these two, so the transposition is one binding
+    // and not a scattered set of x/y swaps.
+    readonly property bool verticalAxis: editorController ? editorController.templatePreviewVertical : false
+    readonly property real mainExtent: verticalAxis ? height : width
+
     readonly property var columns: templateModel ? templateModel.columns : []
     readonly property int columnCount: columns ? columns.length : 0
     readonly property var constants: templateModel ? templateModel.scrollingConstants() : ({})
@@ -51,10 +65,10 @@ Item {
     // Tracks the previous count so an append can be told apart from a
     // removal or reload; -1 means "next change is a reload, never a grow".
     property int _lastColumnCount: -1
-    // Set when an append should scroll the tail into view; consumed by
-    // onContentWidthChanged, which fires after the Row has repolished, so
-    // the scroll target is not one band stale. An append that never moves
-    // contentWidth needs no scroll (the strip fits), so there is no
+    // Set when an append should scroll the tail into view; consumed by the
+    // content-size handler, which fires after the Grid has repolished, so the
+    // scroll target is not one band stale. An append that never moves the
+    // content size needs no scroll (the strip fits), so there is no
     // tick-timed fallback on purpose.
     property bool _revealTailPending: false
 
@@ -69,7 +83,11 @@ Item {
         function onLayoutIdChanged() {
             stripCanvas._lastColumnCount = -1;
             stripCanvas.selectedColumn = -1;
+            // Both, unconditionally: the axis can flip under a loaded
+            // template, and a stale offset on the now-cross axis would leave
+            // the strip scrolled sideways out of view.
             stripFlickable.contentX = 0;
+            stripFlickable.contentY = 0;
             // Re-stamp after the model reset lands (this handler runs BEFORE
             // it by design): if the new template happens to carry the same
             // column count, onColumnCountChanged never fires and the -1
@@ -87,7 +105,7 @@ Item {
     // Keep the selection inside the list when columns are removed or the
     // template is reloaded underneath us, and reveal a column appended while
     // the strip's tail is scrolled off screen (the ControlBar's Add Column
-    // lands at the end, which can lie past the right edge).
+    // lands at the end, which can lie past the far edge).
     onColumnCountChanged: {
         if (selectedColumn >= columnCount)
             selectedColumn = columnCount - 1;
@@ -98,9 +116,9 @@ Item {
             // removal also lands here and selects/reveals the tail, which is
             // accepted — the model does not expose the inserted index.
             selectedColumn = columnCount - 1;
-            // onContentWidthChanged consumes this once the Row has
-            // repolished. An append that does NOT move contentWidth needs no
-            // scroll at all (the strip fits, contentX is already clamped to
+            // consumeTailReveal consumes this once the Grid has repolished.
+            // An append that does NOT move the main content size needs no
+            // scroll at all (the strip fits, the offset is already clamped to
             // 0), so no tick-timed fallback exists — the one residual is a
             // flag from such an append being consumed by a LATER overflow
             // crossing, which the non-grow retire below bounds.
@@ -117,36 +135,69 @@ Item {
         selectedColumn = (index >= 0 && index < columnCount) ? index : -1;
     }
 
+    // The strip's scroll offset, whichever axis it runs on. Reading and
+    // writing it through one pair keeps revealColumn and the tail reveal
+    // axis-blind.
+    function _mainOffset() {
+        return stripCanvas.verticalAxis ? stripFlickable.contentY : stripFlickable.contentX;
+    }
+
+    function _setMainOffset(value) {
+        if (stripCanvas.verticalAxis)
+            stripFlickable.contentY = value;
+        else
+            stripFlickable.contentX = value;
+    }
+
     // Keep the selected band inside the viewport: keyboard selection and
     // resize can walk or grow a column past the visible edge on an
-    // overflowing strip. Band pitch in content space is fraction * canvas
-    // width (each band gives up one gap, the Row spacing gives it back).
+    // overflowing strip. Band pitch in content space is fraction * the
+    // canvas's main extent (each band gives up one gap, the Grid spacing gives
+    // it back).
     function revealColumn(index) {
         if (index < 0 || index >= columnCount)
             return;
 
-        let x = 0;
+        const viewport = stripCanvas.verticalAxis ? stripFlickable.height : stripFlickable.width;
+        const content = stripCanvas.verticalAxis ? stripFlickable.contentHeight : stripFlickable.contentWidth;
+        let low = 0;
         for (let i = 0; i < index; i++)
-            x += columns[i].width * stripCanvas.width;
-        const right = x + columns[index].width * stripCanvas.width;
-        if (x < stripFlickable.contentX)
-            stripFlickable.contentX = Math.max(0, x);
-        else if (right > stripFlickable.contentX + stripFlickable.width)
-            stripFlickable.contentX = Math.max(0, Math.min(right - stripFlickable.width, stripFlickable.contentWidth - stripFlickable.width));
+            low += columns[i].width * stripCanvas.mainExtent;
+        const high = low + columns[index].width * stripCanvas.mainExtent;
+        const offset = stripCanvas._mainOffset();
+        if (low < offset)
+            stripCanvas._setMainOffset(Math.max(0, low));
+        else if (high > offset + viewport)
+            stripCanvas._setMainOffset(Math.max(0, Math.min(high - viewport, content - viewport)));
+    }
+
+    // An axis flip re-lays the whole strip, so an offset measured on the old
+    // main axis means nothing on the new one. Rewind both rather than try to
+    // carry a position across: the band under the cursor is not the band under
+    // it after a transposition.
+    onVerticalAxisChanged: {
+        stripFlickable.contentX = 0;
+        stripFlickable.contentY = 0;
+        _revealTailPending = false;
     }
 
     // Keyboard handling, called from EditorWindow's canvas key handler while
-    // template mode is active. Left/Right select, Shift+Left/Right resize,
-    // Ctrl+Left/Right reorder, Delete removes. Only keys that actually act
+    // template mode is active. The arrows ALONG the strip select, Shift+them
+    // resize, Ctrl+them reorder, Delete removes. Only keys that actually act
     // are accepted; an arrow with nothing selected (or an empty strip) falls
-    // through instead of being swallowed as a no-op.
+    // through instead of being swallowed as a no-op — which is also what the
+    // cross-axis arrows do, deliberately: a column stack has no keyboard verb
+    // here, so those keys stay available to whatever else wants them rather
+    // than being eaten by the axis that happens to be drawn.
     function handleKeyPress(event) {
         if (!templateModel)
             return false;
 
+        const lowKey = verticalAxis ? Qt.Key_Up : Qt.Key_Left;
+        const highKey = verticalAxis ? Qt.Key_Down : Qt.Key_Right;
         const step = constants.keyboardResizeStep || 0.01;
-        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
-            const dir = event.key === Qt.Key_Right ? 1 : -1;
+        if (event.key === lowKey || event.key === highKey) {
+            const dir = event.key === highKey ? 1 : -1;
             if (event.modifiers & Qt.ShiftModifier) {
                 if (selectedColumn >= 0) {
                     event.accepted = true;
@@ -191,9 +242,9 @@ Item {
         anchors.centerIn: parent
         width: parent.width - Kirigami.Units.gridUnit * 8
         visible: stripCanvas.columnCount === 0
-        icon.name: "view-split-left-right"
+        icon.name: stripCanvas.verticalAxis ? "view-split-top-bottom" : "view-split-left-right"
         text: i18nc("@info:placeholder", "This template starts no columns")
-        explanation: i18nc("@info:placeholder", "The first windows you open form the starting columns, left to right. Later windows use the default width from the panel. A template without starting columns only sets the width presets.")
+        explanation: i18nc("@info:placeholder", "The first windows you open form the starting columns, in order along the strip. Later windows use the default width from the panel. A template without starting columns only sets the width presets.")
 
         helpfulAction: Kirigami.Action {
             text: i18nc("@action:button", "Add Column")
@@ -212,27 +263,41 @@ Item {
 
         anchors.fill: parent
         visible: stripCanvas.columnCount > 0
-        // Content is the bands plus the last column's divider gap; adding
-        // columns lives in the ControlBar, so a strip that exactly fills the
-        // screen has nothing to scroll (bands give up one gap of width, so
-        // the sum still lands exactly on the viewport width).
-        contentWidth: Math.max(stripRow.width + stripCanvas.bandSpacing, width)
-        contentHeight: height
+        // Content along the strip is the bands plus the last column's divider
+        // gap; adding columns lives in the ControlBar, so a strip that exactly
+        // fills the screen has nothing to scroll (bands give up one gap of
+        // width, so the sum still lands exactly on the viewport extent).
+        // Across the strip the content is the viewport, so that axis never
+        // scrolls whichever way the strip runs.
+        contentWidth: stripCanvas.verticalAxis ? width : Math.max(stripGrid.width + stripCanvas.bandSpacing, width)
+        contentHeight: stripCanvas.verticalAxis ? Math.max(stripGrid.height + stripCanvas.bandSpacing, height) : height
         boundsBehavior: Flickable.StopAtBounds
         clip: true
 
         // Only genuine overflow (summed widths past 100%) scrolls; the bar
         // appears just then so the excess is discoverable. An appended
         // column's reveal waits for this signal so it scrolls against the
-        // repolished width, not the stale one.
-        onContentWidthChanged: {
-            if (stripCanvas._revealTailPending) {
-                stripCanvas._revealTailPending = false;
-                contentX = Math.max(0, contentWidth - width);
-            }
+        // repolished content size, not the stale one. Both handlers exist
+        // because either can be the main axis, and each ignores the call when
+        // it is currently the CROSS one — a cross-axis content change is just
+        // the viewport resizing and must not consume a pending reveal.
+        function consumeTailReveal(fromVerticalAxis) {
+            if (!stripCanvas._revealTailPending || fromVerticalAxis !== stripCanvas.verticalAxis)
+                return;
+
+            stripCanvas._revealTailPending = false;
+            const viewport = stripCanvas.verticalAxis ? height : width;
+            const content = stripCanvas.verticalAxis ? contentHeight : contentWidth;
+            stripCanvas._setMainOffset(Math.max(0, content - viewport));
         }
+
+        onContentWidthChanged: consumeTailReveal(false)
+        onContentHeightChanged: consumeTailReveal(true)
         ScrollBar.horizontal: ScrollBar {
-            policy: ScrollBar.AsNeeded
+            policy: stripCanvas.verticalAxis ? ScrollBar.AlwaysOff : ScrollBar.AsNeeded
+        }
+        ScrollBar.vertical: ScrollBar {
+            policy: stripCanvas.verticalAxis ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
         }
 
         // Deselect on a click that lands between or past the bands, and hand
@@ -245,10 +310,22 @@ Item {
             }
         }
 
-        Row {
-            id: stripRow
+        // Grid rather than Row/Column so one positioner serves both axes: a
+        // single row lays the bands along x, a single column lays them along
+        // y. Both dimensions are given explicitly — Grid's defaults would
+        // otherwise wrap the bands into a real grid.
+        Grid {
+            id: stripGrid
 
-            height: parent.height
+            readonly property int bandCount: Math.max(1, stripCanvas.columnCount)
+
+            rows: stripCanvas.verticalAxis ? bandCount : 1
+            columns: stripCanvas.verticalAxis ? 1 : bandCount
+            // Cross extent only: the main extent stays implicit so the
+            // positioner sizes itself to the bands, which is what the
+            // Flickable's content size is measured from.
+            width: stripCanvas.verticalAxis ? stripFlickable.width : implicitWidth
+            height: stripCanvas.verticalAxis ? implicitHeight : stripFlickable.height
             spacing: stripCanvas.bandSpacing
 
             Repeater {
@@ -277,17 +354,19 @@ Item {
                     property real dragFraction: 0
                     readonly property real displayFraction: resizing ? dragFraction : widthFraction
 
-                    // No width floor: the rendered edge must stay exactly at
-                    // fraction * canvas width or the drag math and the
-                    // screen-edge marker both lie. A 5%-minimum band on a
-                    // narrow canvas renders small and clips its caption; that
-                    // is the honest rendering.
+                    // Extent along the strip. No floor: the rendered edge must
+                    // stay exactly at fraction * the canvas's main extent or
+                    // the drag math and the screen-edge marker both lie. A
+                    // 5%-minimum band on a short canvas renders small and
+                    // clips its caption; that is the honest rendering.
+                    readonly property real mainSize: Math.max(displayFraction * stripCanvas.mainExtent - stripCanvas.bandSpacing, 0)
+
                     // NO clip here: the drag handle is a child positioned
                     // OUTSIDE the band's bounds (in the gap after it), and a
                     // clipping band would erase it and its hit area. The
                     // caption clips inside the content column instead.
-                    width: Math.max(displayFraction * stripCanvas.width - stripCanvas.bandSpacing, 0)
-                    height: parent.height
+                    width: stripCanvas.verticalAxis ? stripGrid.width : mainSize
+                    height: stripCanvas.verticalAxis ? mainSize : stripGrid.height
                     radius: Kirigami.Units.smallSpacing * Theme.radiusMultiplier
                     color: isSelected ? Theme.withAlpha(Kirigami.Theme.highlightColor, 0.25) : Theme.withAlpha(Kirigami.Theme.alternateBackgroundColor, 0.6)
                     border.width: isSelected ? 2 : 1
@@ -322,32 +401,47 @@ Item {
                     }
 
                     // Display-mode sketch: tabbed columns show one window with
-                    // a segmented tab bar, stacked columns show two windows on
-                    // top of each other.
-                    ColumnLayout {
+                    // a segmented tab bar, stacked columns show two windows
+                    // divided along the CROSS axis. The whole sketch depicts
+                    // the within-column stack, so it runs across the strip and
+                    // transposes with it — on a vertical strip the tab bar is
+                    // a rail down one side and the two windows sit side by
+                    // side.
+                    GridLayout {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.largeSpacing
-                        spacing: Kirigami.Units.smallSpacing
+                        rows: stripCanvas.verticalAxis ? 1 : 3
+                        columns: stripCanvas.verticalAxis ? 3 : 1
+                        rowSpacing: Kirigami.Units.smallSpacing
+                        columnSpacing: Kirigami.Units.smallSpacing
                         // The caption must not overflow a narrow band now
                         // that the width floor is gone; the clip lives here
                         // so the out-of-bounds drag handle stays untouched.
                         clip: true
 
-                        RowLayout {
-                            Layout.fillWidth: true
+                        GridLayout {
+                            Layout.fillWidth: !stripCanvas.verticalAxis
+                            Layout.fillHeight: stripCanvas.verticalAxis
                             visible: band.isTabbed
-                            spacing: Kirigami.Units.smallSpacing / 2
+                            rows: stripCanvas.verticalAxis ? 3 : 1
+                            columns: stripCanvas.verticalAxis ? 1 : 3
+                            rowSpacing: Kirigami.Units.smallSpacing / 2
+                            columnSpacing: Kirigami.Units.smallSpacing / 2
 
                             Repeater {
                                 model: 3
 
                                 Rectangle {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: Kirigami.Units.smallSpacing * 2
-                                    radius: height / 2
-                                    color: Theme.withAlpha(Kirigami.Theme.textColor, index === 0 ? 0.5 : 0.2)
-
                                     required property int index
+
+                                    readonly property real pillThickness: Kirigami.Units.smallSpacing * 2
+
+                                    Layout.fillWidth: !stripCanvas.verticalAxis
+                                    Layout.fillHeight: stripCanvas.verticalAxis
+                                    Layout.preferredWidth: stripCanvas.verticalAxis ? pillThickness : -1
+                                    Layout.preferredHeight: stripCanvas.verticalAxis ? -1 : pillThickness
+                                    radius: Math.min(width, height) / 2
+                                    color: Theme.withAlpha(Kirigami.Theme.textColor, index === 0 ? 0.5 : 0.2)
                                 }
                             }
                         }
@@ -386,9 +480,14 @@ Item {
                             }
                         }
 
+                        // The second stacked window, a quarter of the column's
+                        // CROSS extent, so it divides the stack the same way
+                        // whichever axis that stack runs on.
                         Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: band.height * 0.25
+                            Layout.fillWidth: !stripCanvas.verticalAxis
+                            Layout.fillHeight: stripCanvas.verticalAxis
+                            Layout.preferredWidth: stripCanvas.verticalAxis ? band.width * 0.25 : -1
+                            Layout.preferredHeight: stripCanvas.verticalAxis ? -1 : band.height * 0.25
                             visible: !band.isTabbed
                             radius: Kirigami.Units.smallSpacing
                             color: Theme.withAlpha(Kirigami.Theme.textColor, 0.08)
@@ -405,25 +504,30 @@ Item {
                         id: bandActions
 
                         readonly property real buttonSize: Kirigami.Units.gridUnit * 2.5
-                        // Hide rather than overflow when the band is too
-                        // narrow, mirroring ActionButtons' fit gate.
+                        // Hide rather than overflow when the band is too small
+                        // to hold the row, mirroring ActionButtons' fit gate.
+                        // The row stays a horizontal Row on both axes (it is
+                        // chrome, not a picture of the layout), so BOTH band
+                        // dimensions are checked — on a vertical strip the
+                        // band is wide but can be short.
                         readonly property real requiredWidth: 4 * buttonSize + 3 * spacing + 2 * anchors.margins
+                        readonly property real requiredHeight: buttonSize + 2 * anchors.margins
 
                         anchors.top: parent.top
                         anchors.right: parent.right
                         anchors.margins: Kirigami.Units.smallSpacing
                         spacing: Kirigami.Units.smallSpacing
-                        visible: (band.isSelected || bandArea.containsMouse) && band.width >= requiredWidth
+                        visible: (band.isSelected || bandArea.containsMouse) && band.width >= requiredWidth && band.height >= requiredHeight
                         z: 2
 
                         ZoneActionButton {
                             buttonSize: bandActions.buttonSize
-                            iconSource: "arrow-left"
+                            iconSource: stripCanvas.verticalAxis ? "arrow-up" : "arrow-left"
                             enabled: band.index > 0
                             opacity: enabled ? 1 : 0.4
-                            accessibleName: i18nc("@action:button", "Move column left")
-                            accessibleDescription: i18nc("@info:tooltip", "Swap this column with the one to its left")
-                            tooltipText: i18nc("@tooltip", "Move left")
+                            accessibleName: i18nc("@action:button", "Move column toward the strip start")
+                            accessibleDescription: i18nc("@info:tooltip", "Swap this column with the previous one")
+                            tooltipText: i18nc("@tooltip", "Move toward start")
                             onClicked: {
                                 // Hoist before the move: the model write
                                 // rebuilds the delegates, so band.index must
@@ -445,14 +549,14 @@ Item {
 
                         ZoneActionButton {
                             buttonSize: bandActions.buttonSize
-                            iconSource: "arrow-right"
+                            iconSource: stripCanvas.verticalAxis ? "arrow-down" : "arrow-right"
                             enabled: band.index < stripCanvas.columnCount - 1
                             opacity: enabled ? 1 : 0.4
-                            accessibleName: i18nc("@action:button", "Move column right")
-                            accessibleDescription: i18nc("@info:tooltip", "Swap this column with the one to its right")
-                            tooltipText: i18nc("@tooltip", "Move right")
+                            accessibleName: i18nc("@action:button", "Move column toward the strip end")
+                            accessibleDescription: i18nc("@info:tooltip", "Swap this column with the next one")
+                            tooltipText: i18nc("@tooltip", "Move toward end")
                             onClicked: {
-                                // Same hoist rationale as move-left.
+                                // Same hoist rationale as move-toward-start.
                                 const from = band.index;
                                 stripCanvas.templateModel.moveColumn(from, from + 1);
                                 stripCanvas.selectedColumn = from + 1;
@@ -471,24 +575,35 @@ Item {
                     }
 
                     // Width drag handle, drawn in the gap after this column
-                    // the way DividerHandle sits between zones: full-height
-                    // rounded bar with grip dots and a centre line, subtle at
-                    // rest and highlighted on hover/drag. Strip semantics
-                    // still apply — only this column resizes, later columns
-                    // shift along the strip — which is why every column gets
-                    // one, the last included.
+                    // the way DividerHandle sits between zones: a rounded bar
+                    // spanning the column's cross extent, with grip dots and a
+                    // centre line, subtle at rest and highlighted on
+                    // hover/drag. Strip semantics still apply — only this
+                    // column resizes, later columns shift along the strip —
+                    // which is why every column gets one, the last included.
+                    //
+                    // "After this column" is along the STRIP, so the handle
+                    // sits past the band's far main edge and lies across the
+                    // cross one; both anchor pairs flip together with the
+                    // axis.
                     Rectangle {
                         id: dragHandle
 
                         readonly property real handleThickness: Math.max(stripCanvas.bandSpacing, Kirigami.Units.smallSpacing)
                         readonly property bool isDragging: band.resizing
 
-                        anchors.horizontalCenter: parent.right
-                        anchors.horizontalCenterOffset: stripCanvas.bandSpacing / 2
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: handleThickness
-                        height: parent.height - stripCanvas.bandSpacing
-                        radius: width / 2
+                        anchors.horizontalCenter: stripCanvas.verticalAxis ? parent.horizontalCenter : parent.right
+                        anchors.horizontalCenterOffset: stripCanvas.verticalAxis ? 0 : stripCanvas.bandSpacing / 2
+                        anchors.verticalCenter: stripCanvas.verticalAxis ? parent.bottom : parent.verticalCenter
+                        anchors.verticalCenterOffset: stripCanvas.verticalAxis ? stripCanvas.bandSpacing / 2 : 0
+                        // Floored at zero: the cross extent is the band's, and
+                        // a band narrower than one gap would otherwise give
+                        // the handle a negative size.
+                        readonly property real handleSpan: Math.max(0, (stripCanvas.verticalAxis ? parent.width : parent.height) - stripCanvas.bandSpacing)
+
+                        width: stripCanvas.verticalAxis ? handleSpan : handleThickness
+                        height: stripCanvas.verticalAxis ? handleThickness : handleSpan
+                        radius: Math.min(width, height) / 2
                         color: (handleArea.containsMouse || dragHandle.isDragging) ? Theme.withAlpha(Kirigami.Theme.highlightColor, dragHandle.isDragging ? 0.4 : 0.25) : Theme.withAlpha(Kirigami.Theme.backgroundColor, 0.3)
                         border.color: (handleArea.containsMouse || dragHandle.isDragging) ? Kirigami.Theme.highlightColor : stripCanvas.frameBorderColor
                         border.width: dragHandle.isDragging ? 2 : (handleArea.containsMouse ? 1 : 0)
@@ -514,7 +629,11 @@ Item {
 
                             readonly property real dotSize: Kirigami.Units.smallSpacing * 0.75
                             readonly property real dotSpacing: dotSize * 2.5
-                            readonly property int dotCount: Math.max(3, Math.min(7, Math.floor(height / dotSpacing)))
+                            // Dots run along the handle's LONG side, which is
+                            // the band's cross extent — height on a horizontal
+                            // strip, width on a vertical one.
+                            readonly property real dotRun: stripCanvas.verticalAxis ? width : height
+                            readonly property int dotCount: Math.max(3, Math.min(7, Math.floor(dotRun / dotSpacing)))
 
                             anchors.fill: parent
                             anchors.margins: Kirigami.Units.smallSpacing
@@ -525,8 +644,10 @@ Item {
                                 Rectangle {
                                     required property int index
 
-                                    x: gripPattern.width / 2 - gripPattern.dotSize / 2
-                                    y: index * gripPattern.dotSpacing + (gripPattern.height - (gripPattern.dotCount - 1) * gripPattern.dotSpacing) / 2 - gripPattern.dotSize / 2
+                                    readonly property real alongOffset: index * gripPattern.dotSpacing + (gripPattern.dotRun - (gripPattern.dotCount - 1) * gripPattern.dotSpacing) / 2 - gripPattern.dotSize / 2
+
+                                    x: stripCanvas.verticalAxis ? alongOffset : gripPattern.width / 2 - gripPattern.dotSize / 2
+                                    y: stripCanvas.verticalAxis ? gripPattern.height / 2 - gripPattern.dotSize / 2 : alongOffset
                                     width: gripPattern.dotSize
                                     height: gripPattern.dotSize
                                     radius: gripPattern.dotSize / 2
@@ -548,11 +669,13 @@ Item {
                             }
                         }
 
-                        // Centre line indicator, matching DividerHandle.
+                        // Centre line indicator, matching DividerHandle. It
+                        // runs along the handle, so it is thin across and long
+                        // down the handle's own long side.
                         Rectangle {
                             anchors.centerIn: parent
-                            width: 2
-                            height: parent.height * 0.6
+                            width: stripCanvas.verticalAxis ? parent.width * 0.6 : 2
+                            height: stripCanvas.verticalAxis ? 2 : parent.height * 0.6
                             radius: Math.round(Kirigami.Units.smallSpacing / 4)
                             color: (handleArea.containsMouse || dragHandle.isDragging) ? Kirigami.Theme.highlightColor : stripCanvas.frameBorderColor
                             opacity: (handleArea.containsMouse || dragHandle.isDragging) ? 0.8 : 0.4
@@ -567,27 +690,34 @@ Item {
                         MouseArea {
                             id: handleArea
 
-                            property real startX: 0
+                            // The gesture's coordinate ALONG the strip, in
+                            // content space.
+                            property real startMain: 0
                             property real startFraction: 0
+
+                            function mainCoordOf(mouse) {
+                                const p = mapToItem(stripGrid, mouse.x, mouse.y);
+                                return stripCanvas.verticalAxis ? p.y : p.x;
+                            }
 
                             anchors.fill: parent
                             anchors.margins: -Kirigami.Units.smallSpacing
                             hoverEnabled: true
-                            cursorShape: Qt.SizeHorCursor
+                            cursorShape: stripCanvas.verticalAxis ? Qt.SizeVerCursor : Qt.SizeHorCursor
                             preventStealing: true
                             Accessible.role: Accessible.Slider
                             Accessible.name: i18nc("@action:button", "Column width divider")
-                            Accessible.description: i18nc("@info:tooltip", "Drag horizontally to resize this column")
+                            Accessible.description: i18nc("@info:tooltip", "Drag along the strip to resize this column")
                             // Coordinates are captured in CONTENT space
-                            // (stripRow), not viewport space: shrinking a
-                            // late column can make the Flickable re-clamp
-                            // contentX, which moves the viewport under the
-                            // cursor and would corrupt a viewport-space
+                            // (stripGrid), not viewport space: shrinking a
+                            // late column can make the Flickable re-clamp its
+                            // scroll offset, which moves the viewport under
+                            // the cursor and would corrupt a viewport-space
                             // delta.
                             onPressed: mouse => {
                                 stripCanvas.selectColumn(band.index);
                                 stripCanvas.keyFocusTarget.forceActiveFocus();
-                                startX = mapToItem(stripRow, mouse.x, mouse.y).x;
+                                startMain = mainCoordOf(mouse);
                                 startFraction = band.widthFraction;
                                 band.dragFraction = startFraction;
                                 band.resizing = true;
@@ -596,8 +726,8 @@ Item {
                                 if (!band.resizing)
                                     return;
 
-                                const nowX = mapToItem(stripRow, mouse.x, mouse.y).x;
-                                const fraction = startFraction + (nowX - startX) / stripCanvas.width;
+                                const nowMain = mainCoordOf(mouse);
+                                const fraction = startFraction + (nowMain - startMain) / stripCanvas.mainExtent;
                                 band.dragFraction = Math.max(stripCanvas.minFraction, Math.min(stripCanvas.maxFraction, fraction));
                             }
                             // The one model write of the gesture, after the
@@ -627,29 +757,39 @@ Item {
         }
     }
 
-    // Screen-edge marker: everything right of this line starts off screen,
-    // the way the real strip scrolls columns past the monitor's edge. In
-    // content space 100% of the screen lands at width - bandSpacing (each
-    // band gives up one gap), and the caption sits LEFT of the line so it
-    // stays on the canvas instead of under the property panel.
+    // Screen-edge marker: everything past this line starts off screen, the way
+    // the real strip scrolls columns past the monitor's edge. In content space
+    // 100% of the screen lands at mainExtent - bandSpacing (each band gives up
+    // one gap), and the caption sits on the NEAR side of the line so it stays
+    // on the canvas instead of under the property panel.
     Rectangle {
-        // Sits OUTSIDE the clipped Flickable, so it must hide itself once
-        // scrolling would carry it past the canvas's left edge — its x goes
-        // negative there and it would otherwise paint over the inset margins.
-        x: stripCanvas.width - stripCanvas.bandSpacing - stripFlickable.contentX - 1
-        width: 2
-        height: parent.height
-        visible: stripFlickable.visible && stripFlickable.contentWidth > stripFlickable.width && x >= 0
+        id: screenEdgeMarker
+
+        // Position ALONG the strip, in viewport space. Sits OUTSIDE the
+        // clipped Flickable, so it must hide itself once scrolling would carry
+        // it past the canvas's near edge — the offset goes negative there and
+        // it would otherwise paint over the inset margins.
+        readonly property real mainPos: stripCanvas.mainExtent - stripCanvas.bandSpacing - stripCanvas._mainOffset() - 1
+        readonly property real mainContent: stripCanvas.verticalAxis ? stripFlickable.contentHeight : stripFlickable.contentWidth
+        readonly property real mainViewport: stripCanvas.verticalAxis ? stripFlickable.height : stripFlickable.width
+
+        x: stripCanvas.verticalAxis ? 0 : mainPos
+        y: stripCanvas.verticalAxis ? mainPos : 0
+        width: stripCanvas.verticalAxis ? parent.width : 2
+        height: stripCanvas.verticalAxis ? 2 : parent.height
+        visible: stripFlickable.visible && mainContent > mainViewport && mainPos >= 0
         color: Theme.withAlpha(Kirigami.Theme.negativeTextColor, 0.5)
 
         Label {
-            anchors.top: parent.top
-            anchors.right: parent.left
+            anchors.top: stripCanvas.verticalAxis ? undefined : parent.top
+            anchors.bottom: stripCanvas.verticalAxis ? parent.top : undefined
+            anchors.left: stripCanvas.verticalAxis ? parent.left : undefined
+            anchors.right: stripCanvas.verticalAxis ? undefined : parent.left
             anchors.margins: Kirigami.Units.smallSpacing
-            // The caption hangs LEFT of the line, so it needs its own gate:
-            // for small positive marker x it would otherwise paint past the
-            // canvas edge into the inset margins.
-            visible: parent.x >= implicitWidth + Kirigami.Units.smallSpacing
+            // The caption hangs on the NEAR side of the line, so it needs its
+            // own gate: for a small positive marker offset it would otherwise
+            // paint past the canvas edge into the inset margins.
+            visible: screenEdgeMarker.mainPos >= (stripCanvas.verticalAxis ? implicitHeight : implicitWidth) + Kirigami.Units.smallSpacing
             text: i18nc("@info marker caption", "Screen edge")
             color: Kirigami.Theme.negativeTextColor
             font: Kirigami.Theme.smallFont

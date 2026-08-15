@@ -123,7 +123,7 @@ QString actionDescription(const QString& type)
     }
     // ── niri open rules (window, scrolling) ──
     if (type == ActionType::OpenColumnWidth) {
-        return PhosphorI18n::tr("Sets the width a matching window's column opens at on a scrolling screen.");
+        return PhosphorI18n::tr("Sets how much of the strip a matching window's column takes on a scrolling screen.");
     }
     if (type == ActionType::OpenWindowHeight) {
         return PhosphorI18n::tr("Sets the height a matching window takes inside its column when it opens.");
@@ -301,7 +301,8 @@ QString actionDescription(const QString& type)
     }
     // ── Scrolling parameters (context) ──
     if (type == ActionType::SetScrollDefaultColumnWidth) {
-        return PhosphorI18n::tr("Sets the width newly opened columns take on the matched scrolling context.");
+        return PhosphorI18n::tr(
+            "Sets how much of the strip newly opened columns take on the matched scrolling context.");
     }
     if (type == ActionType::SetCenterFocusedColumn) {
         return PhosphorI18n::tr(

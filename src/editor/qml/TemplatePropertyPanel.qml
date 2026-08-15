@@ -182,7 +182,7 @@ Rectangle {
                     valueRole: "value"
                     model: [
                         {
-                            "text": i18nc("@item:inlistbox default width kind", "Fraction of the screen"),
+                            "text": i18nc("@item:inlistbox default width kind", "Fraction of the strip"),
                             "value": templatePanel.constants.kindProportion
                         },
                         {
@@ -316,7 +316,7 @@ Rectangle {
                 Layout.rightMargin: Kirigami.Units.largeSpacing
                 visible: templatePanel.presetDefaultNeedsWidths
                 type: Kirigami.MessageType.Warning
-                text: i18nc("@info", "The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the screen instead.")
+                text: i18nc("@info", "The default width is set to a width preset, so this template needs at least one width preset. Without one it saves as a fraction of the strip instead.")
             }
 
             Label {

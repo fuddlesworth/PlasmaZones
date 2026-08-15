@@ -50,4 +50,23 @@ inline constexpr ScrollAxis scrollAxisFromInt(int value)
     return isValidScrollAxis(value) ? static_cast<ScrollAxis>(value) : ScrollAxis::Horizontal;
 }
 
+/// The Auto rule, resolving a work area's dimensions to a strip axis: a work
+/// area taller than it is wide runs the strip vertically.
+///
+/// Strictly greater on height, with no threshold knob. An aspect-ratio
+/// threshold is a setting nobody can reason about, where "taller than wide" is
+/// a rule you can state in one sentence. A square work area resolves
+/// HORIZONTAL, and so does a degenerate one, which is both the historical
+/// behaviour and the only safe answer when the geometry says nothing.
+///
+/// Lives here, on ints rather than a QRect, because more than one process has
+/// to answer the SAME question: the daemon's engine resolves it per layout
+/// pass, and the editor resolves it to draw a template preview for a screen it
+/// is not laying out. Two copies of a one-line rule is exactly how the two
+/// answers drift apart.
+inline constexpr ScrollAxis autoScrollAxisFor(int workAreaWidth, int workAreaHeight)
+{
+    return workAreaHeight > workAreaWidth ? ScrollAxis::Vertical : ScrollAxis::Horizontal;
+}
+
 } // namespace PhosphorProtocol

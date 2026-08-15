@@ -68,6 +68,13 @@ EditorController::EditorController(QObject* parent)
     connect(m_shaderPreview, &ShaderPreviewController::shaderPresetLoadFailed, this,
             &EditorController::shaderPresetLoadFailed);
 
+    // The template preview's axis is derived from the target screen (its
+    // per-screen override, and its size under Auto), so it re-resolves
+    // whenever the target moves. The settings-load path emits this too, for
+    // the other input: the config values themselves.
+    connect(this, &EditorController::targetScreenChanged, this, &EditorController::templatePreviewVerticalChanged);
+    connect(this, &EditorController::targetScreenSizeChanged, this, &EditorController::templatePreviewVerticalChanged);
+
     // Begin watching rules.json for external writes. The editor has no
     // D-Bus rules-reload path, so without this its m_localRuleStore would serve
     // the snapshot scanned at launch — the assignment cascade would ignore rule

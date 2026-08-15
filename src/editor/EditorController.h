@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QHash>
 #include <QObject>
 #include <QVariantList>
 #include <QFont>
@@ -104,6 +105,15 @@ class EditorController : public QObject, public IShaderPreviewBackend
 
     // Screen
     Q_PROPERTY(QString targetScreen READ targetScreen WRITE setTargetScreen NOTIFY targetScreenChanged)
+
+    // Scrolling-template preview axis: true when the strip on the TARGET
+    // SCREEN runs vertically. Read-only and derived, never a preference of its
+    // own — the strip canvas is a picture of what the engine will do with this
+    // template, so it resolves the same per-screen-override / global-setting /
+    // Auto ladder the engine resolves, against the target screen's size. A
+    // template itself carries no axis: its column extents are fractions ALONG
+    // the strip whichever way that strip happens to run.
+    Q_PROPERTY(bool templatePreviewVertical READ templatePreviewVertical NOTIFY templatePreviewVerticalChanged)
 
     // PhosphorZones::Zone gap settings (per-layout override + global mirrors).
     // Extracted into a sub-model exposed by pointer; QML reads
@@ -246,6 +256,7 @@ public:
     bool fillOnDropEnabled() const;
     int fillOnDropModifier() const;
     QString targetScreen() const;
+    bool templatePreviewVertical() const;
     EditorGapsModel* gaps() const
     {
         return m_gaps;
@@ -799,6 +810,7 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     void targetScreenChanged();
+    void templatePreviewVerticalChanged();
 
     /// A screen switch was requested while unsaved edits were pending, so it
     /// was parked instead of applied. The UI prompts, then calls
@@ -1042,6 +1054,18 @@ private:
 
     // Screen
     QString m_targetScreen;
+
+    // Strip-axis inputs for templatePreviewVertical(), snapshotted by
+    // loadEditorSettings(). The tri-state config enum (Auto / Horizontal /
+    // Vertical), NOT PhosphorProtocol::ScrollAxis — the two numberings differ
+    // on purpose and are never cast between.
+    /// Auto. Spelled as the literal rather than ConfigDefaults::
+    /// scrollingStripAxis() so this header need not pull in configdefaults.h;
+    /// loadEditorSettings() carries a static_assert tying the two together.
+    int m_scrollingStripAxis = 0;
+    /// Per-screen StripAxis overrides, keyed by the screen id or name the
+    /// group was stored under. Absent screen means "use the global value".
+    QHash<QString, int> m_perScreenStripAxis;
     /// Launch arguments parked by requestLaunch() while unsaved edits are
     /// pending. nullopt when nothing is awaiting confirmation.
     struct PendingLaunch

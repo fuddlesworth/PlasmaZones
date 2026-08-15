@@ -156,20 +156,18 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
 
 StripAxis ScrollEngine::resolveStripAxis(const QRect& workArea) const
 {
-    // Auto: a work area taller than it is wide runs the strip vertically.
-    //
-    // Strictly greater on height, with no threshold knob. An aspect-ratio
-    // threshold is a setting nobody can reason about, where "taller than wide"
-    // is a rule you can state in one sentence. A square work area resolves
-    // HORIZONTAL, and so does a null one — engine_apply nulls params.workArea
-    // whenever the gap-adjusted rect degenerates, so that is a live path, and
-    // horizontal is both the historical behaviour and the only safe answer
-    // when the geometry says nothing.
+    // Auto: a work area taller than it is wide runs the strip vertically. The
+    // rule itself lives in PhosphorProtocol::autoScrollAxisFor so the editor's
+    // template preview resolves the identical answer for a screen it is not
+    // laying out; see the note there for why there is no threshold knob and
+    // why a degenerate rect resolves horizontal (engine_apply nulls
+    // params.workArea whenever the gap-adjusted rect degenerates, so that is a
+    // live path here).
     //
     // Measured against the WORK AREA rather than the screen rect, so a tall
     // reserved panel is accounted for consistently with everything else the
     // strip measures.
-    return workArea.height() > workArea.width() ? StripAxis::vertical() : StripAxis::horizontal();
+    return StripAxis(PhosphorProtocol::autoScrollAxisFor(workArea.width(), workArea.height()));
 }
 
 StripAxis ScrollEngine::stripAxisForScreen(const QString& screenId) const
