@@ -136,11 +136,18 @@ void LayoutAdaptor::markScreensWithStoredAssignments()
     // so it was never resnapped and never appeared in assignmentChangesApplied,
     // and it kept its old placement until something unrelated moved it.
     //
-    // Marking every screen that currently HAS a stored assignment is a superset
-    // of the ones that actually change (a screen present in the map with an
-    // unchanged value is marked too). That direction is the safe one: an extra
-    // resnap is a no-op for a window already in its zone, while a missed one
-    // leaves the window wrong.
+    // Marking every screen that currently HAS a stored assignment errs toward
+    // marking too many, which is the safe direction: an extra resnap is a no-op
+    // for a window already in its zone, while a missed one leaves the window
+    // wrong.
+    //
+    // Coverage is COMPLETE only for the base family (setAllScreenAssignments).
+    // This reads the CURRENT (desktop, activity) context, while the desktop,
+    // activity and combined setters drop and rebuild their family across every
+    // context — so a screen whose only stored entry is for a desktop the user is
+    // not currently on is still not marked when that family is replaced. Closing
+    // that needs the registry to report the contexts a family currently holds,
+    // rather than probing one context per screen from here.
     if (!m_screenManager) {
         return;
     }
@@ -874,6 +881,12 @@ void LayoutAdaptor::applyAssignmentChanges()
 {
     // Drains the CLIENT's buffer only — the set accumulated by this adaptor's
     // own assignment slots since the last apply. Nothing else writes it.
+    //
+    // Release the batch suppression FIRST, above the empty-buffer return: a
+    // client that called setSaveBatchMode(true) and then died before staging
+    // anything is exactly the case this release exists for, and it stages
+    // nothing, so releasing after the return would never fire for it.
+    clearSaveBatchMode();
     if (m_changedScreenIds.isEmpty()) {
         // Nothing was staged, so there is nothing to apply. The early return
         // matters because downstream an EMPTY set means "every screen"

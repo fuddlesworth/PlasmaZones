@@ -762,13 +762,21 @@ void PlasmaZonesEffect::fetchActiveLayoutsForScreens()
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         const QDBusPendingReply<QVariantMap> reply = *w;
-        // Authoritative refresh: the previous daemon session's ids are stale, so
-        // drop them whether or not the reply arrived. Keeping them would leave an
-        // ActiveLayout rule matching a layout that a restarted daemon may no
-        // longer have assigned anywhere.
         const bool had = !m_activeLayoutByScreen.isEmpty();
-        m_activeLayoutByScreen.clear();
         if (reply.isValid()) {
+            // Authoritative refresh: a VALID reply replaces the map wholesale, so
+            // a screen the daemon no longer reports drops out.
+            //
+            // Only on success. Wiping before checking validity meant a failed
+            // reply emptied the map and then swept every window's decoration to
+            // the no-ActiveLayout appearance, with the retry sweeping it back a
+            // second later — turning a silently wrong value into a visible
+            // flip-flop of border colour, tint and hidden title bar. Holding the
+            // previous ids until the retry resolves is strictly better, and the
+            // stale-across-daemon-restart case the old comment worried about is
+            // already covered by the clear in the service-unregistered handler,
+            // which fires independently of this reply.
+            m_activeLayoutByScreen.clear();
             const QVariantMap layouts = reply.value();
             for (auto it = layouts.constBegin(); it != layouts.constEnd(); ++it) {
                 const QString layoutId = it.value().toString();
@@ -794,6 +802,9 @@ void PlasmaZonesEffect::fetchActiveLayoutsForScreens()
                     fetchActiveLayoutsForScreens();
                 });
             }
+            // Nothing was touched, so nothing can have resolved differently. Let
+            // the retry's outcome be the only thing that drives a sweep.
+            return;
         }
         if (!had && m_activeLayoutByScreen.isEmpty()) {
             // Nothing was cached and nothing arrived — no ActiveLayout leaf can

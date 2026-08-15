@@ -4,6 +4,7 @@
 #include "plasmazoneseffect.h"
 
 #include <PhosphorIdentity/ScreenId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 
@@ -273,6 +274,17 @@ void PlasmaZonesEffect::fetchVirtualScreenConfig(const QString& physicalScreenId
             const auto restoreReadyIfLive = [self, generation]() {
                 if (generation == 0) {
                     self->m_daemonGate.virtualScreensReady = true;
+                    // A LIVE reconfigure reaches here and never reaches
+                    // countdownVsGate, which returns immediately for
+                    // generation 0 — so the invalidate+sweep that batch path
+                    // performs would otherwise not happen for the case it was
+                    // written for. The screen-id keyspace has just changed
+                    // shape, so cached ScreenId / ScreenOrientation /
+                    // ActiveLayout verdicts resolved against the old shape are
+                    // stale. Both calls coalesce, so the per-screen replies of
+                    // one reconfigure pay for one sweep.
+                    self->invalidateAllRuleCaches();
+                    self->scheduleBorderSweep();
                 }
             };
 

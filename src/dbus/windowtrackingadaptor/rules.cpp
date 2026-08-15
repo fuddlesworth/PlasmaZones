@@ -21,6 +21,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorRules/RuleAction.h>
@@ -169,23 +170,48 @@ WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const Q
     // being non-optional context fields) a negated leaf matched everything.
     m_layoutManager->stampScreenOrientation(*query, screenId);
 
-    // Mode is the SCREEN's configured engine mode, normalised to the query
-    // vocabulary. Note the two vocabularies differ by one token: an assignment
-    // records "autotile", while WindowQuery::mode carries the placement-mode wire
-    // token "tiling" (the same token resolveContextGaps takes from the autotile
-    // path). Stamping the raw assignment token would silently never match a
+    // Mode is the engine mode that will own this window, normalised to the query
+    // vocabulary. The two vocabularies differ by one token: an assignment records
+    // "autotile" while WindowQuery::mode carries the placement-mode wire token
+    // "tiling", so stamping the raw assignment token would never match a
     // `Mode Equals "tiling"` leaf.
     //
-    // This is the screen's mode, not the window's placement. The effect derives
-    // the same field from a live window's snapped/tiled state and leaves it empty
-    // while the window floats; here, at window-open, no placement exists yet, so
-    // the screen's configured mode is the only thing knowable and is what an
-    // open-path rule ("float this app when the screen is tiling") is asking
-    // about. An unassigned screen leaves the field empty, matching the
-    // floating-window convention of "no mode".
-    if (!assignmentId.isEmpty()) {
-        query->mode =
-            PhosphorLayout::LayoutId::isAutotile(assignmentId) ? QStringLiteral("tiling") : QStringLiteral("snapping");
+    // Resolved at the WINDOW's effective desktop and activity, deliberately
+    // unlike ActiveLayout above. There is one authoritative answer to "which
+    // engine owns this window" — Daemon::initEngines' screenModeForWindow — and
+    // it resolves exactly this way; its own comment records that reading the
+    // SCREEN's current desktop was a bug, because the answer then flipped
+    // whenever a per-output desktop switch crossed a snap/autotile boundary. A
+    // rule matching on Mode has to agree with the router that acts on it.
+    // ActiveLayout takes the screen's context instead because it must agree with
+    // the effect's per-screen cache, which has no window context available. The
+    // two fields answer to different authorities, so they resolve differently.
+    //
+    // Derived from the mode enum, not from the assignment id's prefix:
+    // AssignmentEntry::activeLayoutId returns the autotile form only for
+    // Autotile and returns snappingLayout for Scrolling as well, so a prefix test
+    // would report a Scrolling screen as "snapping" and fire a rule that should
+    // stay inert. Scrolling has no engine yet (the router passes those windows
+    // through to KWin), so it stamps nothing.
+    int modeDesktop = desktop;
+    QString modeActivity = activity;
+    if (!m_windowRegistry.isNull()) {
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+        if (const std::optional<PhosphorEngine::WindowRegistry::WindowContext> ctx =
+                m_windowRegistry->windowContext(instanceId)) {
+            modeDesktop = ctx->effectiveDesktop(desktop);
+            modeActivity = ctx->effectiveActivity(activity);
+        }
+    }
+    switch (m_layoutManager->modeForScreen(screenId, modeDesktop, modeActivity)) {
+    case PhosphorZones::AssignmentEntry::Snapping:
+        query->mode = QStringLiteral("snapping");
+        break;
+    case PhosphorZones::AssignmentEntry::Autotile:
+        query->mode = QStringLiteral("tiling");
+        break;
+    case PhosphorZones::AssignmentEntry::Scrolling:
+        break;
     }
     return query;
 }

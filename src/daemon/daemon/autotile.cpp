@@ -536,11 +536,15 @@ void Daemon::handleAutotileDisabled()
             m_layoutManager->setActiveLayout(fallbackLayout);
         }
     }
-    // One reconcile for the whole disable, now that both blockers are released.
-    // Required, not tidiness: with rulesChanged blocked above, nothing else
-    // recomputes the active-assignment snapshot, so the KWin effect's per-screen
-    // ActiveLayout cache would keep the pre-disable ids until an unrelated edge.
-    reconcileActiveAssignments();
+    // Deliberately NO reconcile / diff here. The sole caller (the consolidated
+    // settings handler in init_services.cpp) ends with its own
+    // diffActiveAssignments(), which republishes the snapshot the blocked
+    // rulesChanged would otherwise have driven. Calling reconcileActiveAssignments
+    // here instead ran updateAutotileScreens BEFORE that caller does, which moved
+    // the synchronous windowsReleased that populates m_pendingSnapFloatRestores
+    // ahead of the caller's own release, and the resnap apply it triggers then
+    // cleared that buffer — losing the snap-float restore the caller depends on,
+    // and costing a second full resnap plus an unbudgeted OSD burst.
     // No parallel saved-floating sets to clear — each window's cross-mode state
     // lives only in its unified WindowPlacement record (single source of truth).
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
@@ -637,10 +641,10 @@ void Daemon::handleSnappingToAutotile()
                                               PhosphorLayout::LayoutId::makeAutotileId(algoForScreen));
         }
     }
-    // One reconcile for the whole enable, now that both blockers are released —
-    // same rationale as handleAutotileDisabled: with rulesChanged blocked, nothing
-    // else republishes the active-assignment snapshot.
-    reconcileActiveAssignments();
+    // No reconcile here either, for the same reason as handleAutotileDisabled:
+    // the sole caller's own diffActiveAssignments() republishes the snapshot, and
+    // reconciling here would fire a full resnap and a per-screen OSD burst
+    // mid-enable, ahead of the caller's own updateAutotileScreens.
 }
 
 QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
