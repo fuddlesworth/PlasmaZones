@@ -567,7 +567,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // already live, so this ordering is load-bearing (see its
                 // header contract).
                 m_effect->m_stripTransition.notifyLeg(out, stripEffectId, stripEffectParams, s.viewDelta);
-                if (m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDelta, viewProfile)) {
+                if (m_effect->m_stripViewAnimator->applyBatchDelta(out, s.viewDelta, scrollAxisForScreen(s.screenId),
+                                                                   viewProfile)) {
                     startedViewScreens.insert(s.screenId);
                 } else {
                     // The spring declined (animations off, no clock): there

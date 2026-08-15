@@ -149,6 +149,12 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // membership.
     QStringList ffmScreens;
     QStringList cropScreens;
+    // The axis rides the same walk and the same single push. Computing it here
+    // rather than in a second pass is what keeps it correctly ordered on BOTH
+    // paths into this function — the settings path and the debounced
+    // geometry/rotation path — because the push happens before any
+    // scheduleRetileForScreen, which always coalesces onto a later turn.
+    QStringList verticalAxisScreens;
     for (const QString& screenId : scrollingScreens) {
         QVariantMap overrides = m_settings->getPerScreenScrollingSettings(screenId);
         if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
@@ -218,6 +224,19 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         }
         if (params.cropStraddlers.value_or(m_settings->scrollingCropStraddlers())) {
             cropScreens.append(screenId);
+        }
+        // Taken from the ENGINE, never re-derived here. The engine owns the
+        // work area that Auto resolves against, and a second aspect-ratio
+        // derivation in the daemon could disagree with it on a near-square
+        // monitor — a disagreement that is intermittent, geometry-dependent
+        // and invisible in tests, which is the worst shape a bug can have.
+        // The base pointer does not carry the accessor: the axis is a
+        // scrolling concept and deliberately not on IPlacementEngine, so this
+        // is a downcast rather than a widening of the shared contract.
+        if (const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
+            if (scroll->stripAxisForScreen(screenId).axis() == PhosphorProtocol::ScrollAxis::Vertical) {
+                verticalAxisScreens.append(screenId);
+            }
         }
         // TEMPLATE channel: the context's resolved native ScrollingTemplate
         // (cascade entry, else the default-template setting) pushes its
@@ -404,7 +423,7 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // that LEFT scrolling are absent by construction (the walk only visits the
     // current set), so the departing-screen cleanup below has nothing to undo.
     if (m_scrollingAdaptor) {
-        m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens);
+        m_scrollingAdaptor->setScrollEffectBehaviour(ffmScreens, cropScreens, verticalAxisScreens);
     }
     m_scrollEngine->setActiveScreens(scrollingScreens);
 

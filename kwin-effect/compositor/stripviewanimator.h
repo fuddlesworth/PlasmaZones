@@ -7,7 +7,9 @@
 #include <PhosphorAnimation/IMotionClock.h>
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 
+#include <QPointF>
 #include <QtGlobal>
 
 #include <functional>
@@ -103,12 +105,30 @@ public:
     /// gate on this rather than on the wire delta: with no leg the paint
     /// path's offset is zero, so an origin placed a delta behind the target
     /// pops backwards and slides double.
-    bool applyBatchDelta(KWin::LogicalOutput* output, int deltaX, const PhosphorAnimation::Profile& profile);
+    /// @p delta is a SIGNED SCALAR along @p axis, that output's strip axis.
+    ///
+    /// The animated value stays one-dimensional on purpose. kMaxViewDeltaPx is
+    /// a scalar budget the design leans on twice (the wire boundary clamps to
+    /// it and this class re-clamps idempotently), and a QPointF would admit a
+    /// diagonal at sqrt(2) times it while carrying a velocity vector whose
+    /// off-axis component is provably but no longer structurally zero.
+    ///
+    /// An axis MISMATCH against a live leg cancels rather than retargets: the
+    /// in-flight motion describes travel along an axis the strip no longer
+    /// has, so there is nothing to preserve velocity through.
+    bool applyBatchDelta(KWin::LogicalOutput* output, int delta, PhosphorProtocol::ScrollAxis axis,
+                         const PhosphorAnimation::Profile& profile);
 
     /// Paint translation for a window carried by @p output's view, in logical
     /// pixels. Zero when nothing is in flight, which is the resting state and
     /// the common case.
-    qreal offsetFor(KWin::LogicalOutput* output) const;
+    /// The paint translation, already resolved onto the output's own axis, so
+    /// a caller cannot put it in the wrong component.
+    QPointF offsetFor(KWin::LogicalOutput* output) const;
+
+    /// The same value as a signed scalar along that axis, for the shader pass
+    /// and the motion sampler, which stay one-dimensional by design.
+    qreal offsetAlongAxis(KWin::LogicalOutput* output) const;
 
     bool hasActiveAnimations() const;
     bool isAnimatingOn(KWin::LogicalOutput* output) const;
@@ -146,6 +166,10 @@ private:
         /// Where the strip's committed geometry currently sits, in this
         /// output's accumulated view coordinate.
         qreal committed = 0.0;
+        /// Which axis that coordinate runs along. Held per output because a
+        /// portrait and a landscape monitor coexist, and because a leg has to
+        /// be able to tell an axis FLIP from an ordinary retarget.
+        PhosphorProtocol::ScrollAxis axis = PhosphorProtocol::ScrollAxis::Horizontal;
         PhosphorAnimation::AnimatedValue<qreal> animation;
     };
 

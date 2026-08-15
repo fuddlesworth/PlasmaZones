@@ -169,6 +169,11 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
         toSet(behaviour.value(QStringLiteral("focusFollowsMouse")), QLatin1String("focusFollowsMouse"));
     const QSet<QString> crop =
         toSet(behaviour.value(QStringLiteral("cropStraddlers")), QLatin1String("cropStraddlers"));
+    // Membership: a screen IN the list runs its strip vertically. An absent
+    // key reads as an empty set, which means horizontal everywhere — the
+    // historical layout, and the same safe direction the two siblings take.
+    const QSet<QString> verticalAxis =
+        toSet(behaviour.value(QStringLiteral("verticalAxis")), QLatin1String("verticalAxis"));
     // Seeded BEFORE the change gate, the m_activeLayoutsSeeded shape: an
     // identical map is still a real map, and the daemon's first publish is
     // legitimately all-empty on a session with no scrolling screen. Gating the
@@ -185,13 +190,22 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     if (ffmOffEverywhere()) {
         m_ffmSuppressPending = false;
     }
-    if (crop == m_scrollCropStraddlerScreens) {
+    // BOTH painted sets take part in the gate. Testing crop alone would drop
+    // an axis-only change on the floor — which is exactly what a monitor
+    // rotation produces when the crop membership happens not to move, and it
+    // would leave the effect sliding the strip along the old axis with no
+    // batch coming to correct it.
+    const bool cropChanged = crop != m_scrollCropStraddlerScreens;
+    const bool axisChanged = verticalAxis != m_scrollVerticalAxisScreens;
+    if (!cropChanged && !axisChanged) {
         return;
     }
     m_scrollCropStraddlerScreens = crop;
-    // The crop set is PAINTED state: a screen that just started (or stopped)
-    // cropping has stale pixels on it, and nothing else will revisit them —
-    // the strip's geometry did not move, so no tile batch is coming. The
+    m_scrollVerticalAxisScreens = verticalAxis;
+    // Both are PAINTED state: a screen that just started (or stopped) cropping
+    // has stale pixels on it, and a screen whose axis just flipped has pixels
+    // laid out the other way. Nothing else will revisit them — the strip's
+    // geometry did not necessarily move, so no tile batch is guaranteed. The
     // focus-follows-mouse set needs no such bookend; it is read fresh on the
     // next pointer move.
     if (KWin::effects) {

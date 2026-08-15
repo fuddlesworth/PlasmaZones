@@ -89,7 +89,13 @@ public:
     /// trust. The published contract says sorted, and the change gate is a
     /// list compare, so canonicalizing at the one write site is what makes
     /// both true whatever order the producer walked its screens in.
-    void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens);
+    /// @p verticalAxisScreens are the scrolling screens whose strip runs
+    /// VERTICALLY. Absent from the list, like an absent key, means horizontal —
+    /// the historical layout — so a compositor that predates the axis reads
+    /// the whole desktop as horizontal, which is what it would have drawn
+    /// anyway.
+    void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens,
+                                  const QStringList& verticalAxisScreens);
 
     /// Wire keys of the @ref scrollEffectBehaviour map, in one place for the
     /// DAEMON side (this adaptor and its tests). They are not shared with the
@@ -106,6 +112,14 @@ public:
     static QString cropStraddlersKey()
     {
         return QStringLiteral("cropStraddlers");
+    }
+    /// Membership, not a per-screen value: a screen IN this list runs its
+    /// strip vertically, and absence means horizontal. Membership keeps the
+    /// map's one shape rather than introducing a second, and it makes an
+    /// absent key and an empty list mean the same safe thing.
+    static QString verticalAxisKey()
+    {
+        return QStringLiteral("verticalAxis");
     }
 
     /// Clear the engine pointer during shutdown (same late-D-Bus-call

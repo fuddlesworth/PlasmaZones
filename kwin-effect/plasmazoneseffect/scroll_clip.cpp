@@ -135,7 +135,12 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
         return false;
     }
     visual.translate(vit->x(), vit->y());
-    visual.translate(m_stripViewAnimator->offsetFor(managed), 0.0);
+    // The clip predicate has to follow the SAME axis the strip is sliding on,
+    // or an off-view column is judged against a band ninety degrees from where
+    // it is actually drawn. This one gates the park reap, the setTransformed
+    // flag and the strip-capture anchor election, so getting it wrong either
+    // culls a visible column or keeps a parked one painting forever.
+    visual.translate(m_stripViewAnimator->offsetFor(managed));
     if (const auto decoIt = m_windowDecorations.constFind(windowId); decoIt != m_windowDecorations.constEnd()) {
         const qreal pad = decoIt->outerPadding;
         visual.adjust(-pad, -pad, pad, pad);

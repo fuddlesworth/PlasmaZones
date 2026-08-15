@@ -1723,7 +1723,8 @@ add_test(NAME test_tiling_state COMMAND test_tiling_state)
 add_executable(test_strip_view_animator compositor-common/test_strip_view_animator.cpp
                ${CMAKE_SOURCE_DIR}/kwin-effect/compositor/stripviewanimator.cpp)
 target_include_directories(test_strip_view_animator PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
-target_link_libraries(test_strip_view_animator PRIVATE Qt6::Test PhosphorAnimation::PhosphorAnimation)
+target_link_libraries(test_strip_view_animator PRIVATE Qt6::Test PhosphorAnimation::PhosphorAnimation
+                                                       PhosphorProtocol::Types)
 add_test(NAME test_strip_view_animator COMMAND test_strip_view_animator)
 
 # StripMotionSampler is header-only plain numbers (no KWin types at all), so

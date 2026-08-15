@@ -37,15 +37,36 @@ void StripViewAnimator::setEnabled(bool enabled)
     }
 }
 
-bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
+bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int delta_, PhosphorProtocol::ScrollAxis axis,
                                         const PhosphorAnimation::Profile& profile)
 {
-    if (!output || deltaX == 0) {
+    if (!output || delta_ == 0) {
         return false;
     }
-    const qreal delta = qBound(-kMaxViewDeltaPx, deltaX, kMaxViewDeltaPx);
+    const qreal delta = qBound(-kMaxViewDeltaPx, delta_, kMaxViewDeltaPx);
 
     ViewMotion& motion = m_motions[output];
+    if (motion.axis != axis) {
+        // The strip's axis flipped under a live leg. CANCEL rather than
+        // retarget: the in-flight motion describes travel along an axis this
+        // output no longer has, so there is no velocity worth preserving and
+        // retargeting would carry sideways momentum into a vertical slide.
+        //
+        // Damage first, for the same reason the no-clock arm below does: the
+        // offset the leg was contributing vanishes with the cancel, and the
+        // committed geometry is already final, so nothing else would repaint
+        // the stale frame away.
+        //
+        // The accumulator resets too. It is an accumulated coordinate ALONG an
+        // axis, so carrying it across a flip would leave the new axis's first
+        // leg starting from a distance measured on the old one.
+        if (motion.animation.isAnimating() && m_repaintRequest) {
+            m_repaintRequest(output);
+        }
+        motion.animation.cancel();
+        motion.committed = 0.0;
+        motion.axis = axis;
+    }
     const qreal previousCommitted = motion.committed;
     motion.committed += delta;
 
@@ -107,7 +128,7 @@ bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
     return true;
 }
 
-qreal StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
+qreal StripViewAnimator::offsetAlongAxis(KWin::LogicalOutput* output) const
 {
     if (!output) {
         return 0.0;
@@ -117,6 +138,21 @@ qreal StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
         return 0.0;
     }
     return it->second.committed - it->second.animation.value();
+}
+
+QPointF StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
+{
+    const qreal along = offsetAlongAxis(output);
+    if (qFuzzyIsNull(along)) {
+        return {};
+    }
+    const auto it = m_motions.find(output);
+    const PhosphorProtocol::ScrollAxis axis =
+        it == m_motions.end() ? PhosphorProtocol::ScrollAxis::Horizontal : it->second.axis;
+    // Resolved HERE rather than at each paint site, so a caller cannot put the
+    // scalar in the wrong component — which is the whole failure this returns
+    // a point to prevent.
+    return axis == PhosphorProtocol::ScrollAxis::Horizontal ? QPointF(along, 0.0) : QPointF(0.0, along);
 }
 
 bool StripViewAnimator::hasActiveAnimations() const

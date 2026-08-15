@@ -77,6 +77,8 @@ class TestStripViewAnimator : public QObject
 
 private Q_SLOTS:
     void init();
+    void offsetResolvesOntoTheOutputsOwnAxis();
+    void anAxisFlipCancelsRatherThanRetargets();
     void offsetStartsAtDeltaAndSettlesToZero();
     void secondDeltaMidFlightAccumulatesWithoutJumping();
     void outputsAreIndependent();
@@ -128,9 +130,13 @@ private:
 
     /// The profile arrives per batch (the caller resolves the scrolling.view
     /// motion node), so every call site hands it in.
-    void scroll(KWin::LogicalOutput* output, int deltaX)
+    ///
+    /// The delta is a signed scalar ALONG @p axis, which defaults to
+    /// horizontal so every pre-existing case keeps its meaning unchanged.
+    void scroll(KWin::LogicalOutput* output, int delta,
+                PhosphorProtocol::ScrollAxis axis = PhosphorProtocol::ScrollAxis::Horizontal)
     {
-        m_animator->applyBatchDelta(output, deltaX, m_profile);
+        m_animator->applyBatchDelta(output, delta, axis, m_profile);
     }
 
     PhosphorAnimation::Profile m_profile;
@@ -150,25 +156,73 @@ void TestStripViewAnimator::init()
     useLinearProfile(100);
 }
 
+/// offsetFor resolves the scalar onto the output's own axis, so a paint site
+/// cannot put it in the wrong component — which is the whole reason it returns
+/// a point rather than a number.
+void TestStripViewAnimator::offsetResolvesOntoTheOutputsOwnAxis()
+{
+    scroll(fakeOutputA(), 600, PhosphorProtocol::ScrollAxis::Horizontal);
+    latch();
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 600.0);
+    QCOMPARE(m_animator->offsetFor(fakeOutputA()), QPointF(600.0, 0.0));
+
+    // A second output, running vertically at the same moment: the same scalar
+    // resolves onto y instead. Mixed orientations coexist, which is why the
+    // axis is held per output rather than globally.
+    scroll(fakeOutputB(), 600, PhosphorProtocol::ScrollAxis::Vertical);
+    latch();
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputB()), 600.0);
+    QCOMPARE(m_animator->offsetFor(fakeOutputB()), QPointF(0.0, 600.0));
+
+    // At rest it is a null point on either axis, not a zero in one component.
+    tick(1000);
+    QCOMPARE(m_animator->offsetFor(fakeOutputA()), QPointF());
+    QCOMPARE(m_animator->offsetFor(fakeOutputB()), QPointF());
+}
+
+/// An axis flip under a LIVE leg cancels it. Retargeting would carry sideways
+/// momentum into a vertical slide, and the accumulated view coordinate would
+/// keep measuring distance along an axis the strip no longer has.
+void TestStripViewAnimator::anAxisFlipCancelsRatherThanRetargets()
+{
+    scroll(fakeOutputA(), 600, PhosphorProtocol::ScrollAxis::Horizontal);
+    latch();
+    tick(50);
+    QVERIFY2(m_animator->isAnimatingOn(fakeOutputA()), "precondition: a horizontal leg is mid-flight");
+
+    // The rotation lands. A new batch arrives on the other axis.
+    scroll(fakeOutputA(), 300, PhosphorProtocol::ScrollAxis::Vertical);
+    latch();
+
+    // The new leg runs on the new axis, and it starts from the flip rather
+    // than from wherever the cancelled horizontal leg had reached: a fresh
+    // 300 delta means a 300 offset, not 300 plus the old leg's remainder.
+    QCOMPARE(m_animator->offsetFor(fakeOutputA()), QPointF(0.0, 300.0));
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 300.0);
+
+    tick(1000);
+    QCOMPARE(m_animator->offsetFor(fakeOutputA()), QPointF());
+}
+
 void TestStripViewAnimator::offsetStartsAtDeltaAndSettlesToZero()
 {
     // The contract the paint path reads: at the instant a batch lands, the
     // offset is exactly the delta, which puts every carried window back where
     // it was rendered. It then rings out to zero, where the strip agrees with
     // its committed geometry.
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
 
     scroll(fakeOutputA(), 600);
     QVERIFY(m_animator->isAnimatingOn(fakeOutputA()));
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 600.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 600.0);
     latch();
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 600.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 600.0);
 
     tick(50);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 300.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 300.0);
 
     tick(50);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
     QVERIFY(!m_animator->isAnimatingOn(fakeOutputA()));
     QVERIFY(!m_animator->hasActiveAnimations());
 }
@@ -187,15 +241,15 @@ void TestStripViewAnimator::secondDeltaMidFlightAccumulatesWithoutJumping()
     scroll(fakeOutputA(), 600);
     latch();
     tick(50);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 300.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 300.0);
 
     scroll(fakeOutputA(), 600);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 900.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 900.0);
 
     // And it still converges rather than accumulating forever.
     latch();
     tick(500);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
 }
 
 void TestStripViewAnimator::outputsAreIndependent()
@@ -204,18 +258,18 @@ void TestStripViewAnimator::outputsAreIndependent()
     // on another. The paint path reads offsetFor with the window's own managed
     // output, so a shared value would drag every other strip sideways.
     scroll(fakeOutputA(), 400);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 400.0);
-    QCOMPARE(m_animator->offsetFor(fakeOutputB()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 400.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputB()), 0.0);
     QVERIFY(!m_animator->isAnimatingOn(fakeOutputB()));
 
     scroll(fakeOutputB(), -200);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 400.0);
-    QCOMPARE(m_animator->offsetFor(fakeOutputB()), -200.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 400.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputB()), -200.0);
 
     // Dropping one output leaves the other's leg untouched.
     m_animator->forgetOutput(fakeOutputB());
-    QCOMPARE(m_animator->offsetFor(fakeOutputB()), 0.0);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 400.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputB()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 400.0);
 }
 
 void TestStripViewAnimator::disabledPlacesOutright()
@@ -225,15 +279,15 @@ void TestStripViewAnimator::disabledPlacesOutright()
     // the whole strip permanently displaced from its committed geometry.
     m_animator->setEnabled(false);
     scroll(fakeOutputA(), 600);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
     QVERIFY(!m_animator->isAnimatingOn(fakeOutputA()));
 
     // Disabling MID-FLIGHT must also land at zero rather than freeze.
     m_animator->setEnabled(true);
     scroll(fakeOutputA(), 600);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 600.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 600.0);
     m_animator->setEnabled(false);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
 }
 
 void TestStripViewAnimator::missingClockLeavesViewAtRest()
@@ -245,7 +299,7 @@ void TestStripViewAnimator::missingClockLeavesViewAtRest()
         return nullptr;
     });
     scroll(fakeOutputA(), 600);
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
     QVERIFY(!m_animator->isAnimatingOn(fakeOutputA()));
 }
 
@@ -256,12 +310,12 @@ void TestStripViewAnimator::absurdDeltaIsClamped()
     // — so this is the only thing standing between a garbled value and a
     // strip flung somewhere it takes seconds to spring back from.
     scroll(fakeOutputA(), std::numeric_limits<int>::max());
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx));
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx));
 
     // The rail is symmetric, and a scroll the other way is not an exotic
     // input — it is half of ordinary use.
     scroll(fakeOutputB(), std::numeric_limits<int>::min());
-    QCOMPARE(m_animator->offsetFor(fakeOutputB()), -static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx));
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputB()), -static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx));
 }
 
 void TestStripViewAnimator::repaintsAreRequestedWhileInFlight()
@@ -302,7 +356,7 @@ void TestStripViewAnimator::reapingAClockDropsOnlyItsOwnOutput()
 
     QCOMPARE(reaped, 1);
     QVERIFY2(!m_animator->isAnimatingOn(fakeOutputA()), "the reaped output's leg must be gone");
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
     QVERIFY2(m_repaints > 0, "reaping must damage the output whose offset it just dropped");
     QVERIFY2(m_animator->isAnimatingOn(fakeOutputB()), "another clock's leg must keep ticking");
 }
@@ -322,12 +376,12 @@ void TestStripViewAnimator::forgettingAnOutputDropsItsAccumulator()
     latch();
     tick(50);
     QVERIFY2(m_animator->isAnimatingOn(fakeOutputA()), "precondition: A's leg is mid-flight");
-    QVERIFY(m_animator->offsetFor(fakeOutputA()) != 0.0);
+    QVERIFY(m_animator->offsetAlongAxis(fakeOutputA()) != 0.0);
 
     m_animator->forgetOutput(fakeOutputA());
 
     QVERIFY2(!m_animator->isAnimatingOn(fakeOutputA()), "the forgotten output must hold no leg");
-    QCOMPARE(m_animator->offsetFor(fakeOutputA()), 0.0);
+    QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
     QVERIFY2(m_animator->isAnimatingOn(fakeOutputB()), "forgetting one output must not touch another");
 }
 

@@ -102,7 +102,8 @@ QVariantMap ScrollingAdaptor::scrollEffectBehaviour() const
 }
 
 void ScrollingAdaptor::setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens,
-                                                const QStringList& cropStraddlerScreens)
+                                                const QStringList& cropStraddlerScreens,
+                                                const QStringList& verticalAxisScreens)
 {
     // Canonicalized HERE, not assumed: the published contract (the XML
     // DocString and the property doc) says both lists are sorted, and the
@@ -122,6 +123,10 @@ void ScrollingAdaptor::setScrollEffectBehaviour(const QStringList& focusFollowsM
     QVariantMap next;
     next.insert(focusFollowsMouseKey(), canonical(focusFollowsMouseScreens));
     next.insert(cropStraddlersKey(), canonical(cropStraddlerScreens));
+    // Same canonicalization as its two siblings, for the same reason: this is
+    // the published-contract boundary, and the emit-on-change compare below is
+    // an order-sensitive list compare.
+    next.insert(verticalAxisKey(), canonical(verticalAxisScreens));
     if (next == m_scrollEffectBehaviour) {
         return;
     }

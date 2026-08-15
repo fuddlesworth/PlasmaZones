@@ -7,6 +7,7 @@
 
 #include <PhosphorCompositor/TilingState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 
 #include <QHash>
 #include <QObject>
@@ -371,6 +372,18 @@ public:
     bool anyScreenCropsStraddlers() const
     {
         return !m_scrollCropStraddlerScreens.isEmpty();
+    }
+
+    /// Which way @p screenId's strip runs. NEVER derive this from the output's
+    /// aspect ratio: the axis is resolved by the engine against the work area
+    /// and may be an explicit user choice, so a guess here can disagree with
+    /// the geometry the daemon actually committed — and the disagreement shows
+    /// up as a full-strip shear for the length of every leg, on exactly the
+    /// near-square topologies where a guess is least reliable.
+    PhosphorProtocol::ScrollAxis scrollAxisForScreen(const QString& screenId) const
+    {
+        return m_scrollVerticalAxisScreens.contains(screenId) ? PhosphorProtocol::ScrollAxis::Vertical
+                                                              : PhosphorProtocol::ScrollAxis::Horizontal;
     }
 
     /// True once the daemon's scrollEffectBehaviour map has landed (live
@@ -999,6 +1012,14 @@ private:
     /// bring-up before the daemon's first reply looks like.
     QSet<QString> m_scrollFocusFollowsMouseScreens;
     QSet<QString> m_scrollCropStraddlerScreens;
+    /// Scrolling screens whose strip runs VERTICALLY. Membership, so an absent
+    /// key or an empty list means horizontal everywhere — the historical
+    /// layout, and the right answer for a daemon that predates the axis.
+    ///
+    /// Held CONTINUOUSLY rather than read off a tile batch, because the paint
+    /// path and the tab-indicator surface both need it at moments when no
+    /// batch is in hand, and because the axis outlives any one batch.
+    QSet<QString> m_scrollVerticalAxisScreens;
     /// Set by applyScrollEffectBehaviour on every apply (before its change
     /// gate, the m_activeLayoutsSeeded shape: an identical map is still a real
     /// map, and the daemon's first publish is legitimately all-empty on a

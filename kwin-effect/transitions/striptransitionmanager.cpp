@@ -359,7 +359,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // last live velocity decaying to zero so velocity-driven packs land
     // without a pop — and self-pumps its remaining frames (the spring's own
     // repaint pump died with it).
-    const qreal offsetLogical = m_effect->m_stripViewAnimator->offsetFor(screen);
+    // The shader pass stays ONE-DIMENSIONAL on purpose, so it takes the signed
+    // scalar along the strip's own axis rather than the resolved point. Which
+    // way that axis points reaches the shader as a separate uniform.
+    const qreal offsetLogical = m_effect->m_stripViewAnimator->offsetAlongAxis(screen);
     const qreal velocityLogical =
         springLive ? pass.motion.sampleLive(offsetLogical, nowMs) : pass.motion.sampleSettleFade(nowMs);
     if (!springLive) {

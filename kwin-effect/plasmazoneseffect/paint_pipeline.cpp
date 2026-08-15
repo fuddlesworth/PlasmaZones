@@ -1702,7 +1702,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // The stored strip-minus-park delta, matching the draw.
                     animatedFrame.translate(visualIt->x(), visualIt->y());
                 }
-                animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut), 0.0);
+                animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
             }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame, backdropScale);
         }
@@ -1814,9 +1814,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     data += QPointF(vit->x(), vit->y());
                 }
             }
-            const qreal viewOffset = m_stripViewAnimator->offsetFor(managed);
-            if (!qFuzzyIsNull(viewOffset)) {
-                data += QPointF(viewOffset, 0.0);
+            const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
+            if (!viewOffset.isNull()) {
+                data += viewOffset;
             }
         } else if (KWin::LogicalOutput* out = w ? w->screen() : nullptr;
                    out && m_stripViewAnimator->isAnimatingOn(out) && isScrollTabIndicatorSurface(w)) {
@@ -1836,7 +1836,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // behind it resolves the window's surface and compares its window
             // class, and no surface needs an offset on an output whose strip is
             // at rest.
-            data += QPointF(m_stripViewAnimator->offsetFor(out), 0.0);
+            // The tab-indicator surface has no tile entry of its own, which is
+            // exactly why the axis is held per output rather than read off a
+            // batch.
+            data += m_stripViewAnimator->offsetFor(out);
         }
     }
 
