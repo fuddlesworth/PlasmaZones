@@ -95,11 +95,12 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
 
         const ResolvedColumn* resolvedColumn = resolvedByIndex.value(ci, nullptr);
         const QRect columnRect = resolvedColumn ? resolvedColumn->rect : QRect();
-        // Real on-screen share, driving the VARIABLE-WIDTH card that IS its
-        // column at preview scale. A column wider than the work area
-        // (over-wide preset) clamps to 1 — the preview shows the visible
-        // share, matching the committed clip.
-        // Along the STRIP, not physically wide: on a vertical strip a column
+        // Real on-screen share ALONG THE STRIP, driving the variable-extent
+        // card that IS its column at preview scale. A column longer than the
+        // work area (over-wide preset) clamps to 1 — the preview shows the
+        // visible share, matching the committed clip.
+        //
+        // Along the strip, not physically wide: on a vertical strip a column
         // spans the full screen width and its share of the strip is its
         // height. Consumers draw the snapshot in role space and transpose it
         // themselves (ZoneSelectorStripCard), so emitting a physical fraction
