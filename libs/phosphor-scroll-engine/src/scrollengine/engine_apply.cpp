@@ -359,7 +359,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // Deliberately no focusWindowAfter activation on this exit either —
         // there is no tile to activate on an empty resolve, and the caller's
         // request dies with the batch it was for.
-        state->clearLastAppliedViewX();
+        state->clearLastAppliedViewOffset();
         // Same empty-strip reasoning applied to the template blueprint: the
         // cursor records which entries this strip's columns already stand
         // for, and an empty strip has no columns to stand for any of them.
@@ -446,8 +446,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // rigidly, instead of starting an independent per-window spring each and
     // watching them desync into a shear.
     //
-    // Sign: a window's x is `workArea.x - viewX + stripX`, so a view that
-    // scrolls right (viewX grows) moves windows left. The delta below is the
+    // Sign: a window's x is `workArea.x - viewOffset + stripX`, so a view that
+    // scrolls right (viewOffset grows) moves windows left. The delta below is the
     // translation that puts a window back where it was rendered last time —
     // the effect starts its spring there and rings it out to zero.
     //
@@ -464,9 +464,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // change while a gap slider is being dragged. The batch that follows a
     // work-area change is placing windows in a new geometry anyway, which is
     // the same situation as the first batch for a context.
-    const bool sameBasis = state->hasLastAppliedViewX() && state->lastAppliedWorkArea() == params.workArea;
-    const int rawViewDelta = sameBasis ? resolved.viewX - state->lastAppliedViewX() : 0;
-    // Zero also when the viewX moved WITHOUT carrying anything — a width
+    const bool sameBasis = state->hasLastAppliedViewOffset() && state->lastAppliedWorkArea() == params.workArea;
+    const int rawViewDelta = sameBasis ? resolved.viewOffset - state->lastAppliedViewOffset() : 0;
+    // Zero also when the viewOffset moved WITHOUT carrying anything — a width
     // change to a column LEFT of the active one shifts strip coordinates and
     // the view coordinate by the same amount to keep the anchor put, which
     // the subtraction above reads as a slide nobody made. The test needs
@@ -753,13 +753,13 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // The right-edge clamp keeps x and only changes width, so it does
             // not qualify — the asymmetry is QRect's: setLeft moves x1 and
             // holds x2, setRight holds x1 and moves x2.
-            bool clampPinnedX = false;
+            bool clampPinnedMain = false;
             if (!cropStraddlers && !parkedNow) {
                 const bool straddleRight = rect.right() > screenRect.right() && rect.left() <= screenRect.right();
                 // Both predicates read the PRE-mutation rect, and the left one
                 // is consumed after the right branch may have called setRight.
                 // Safe only because the two are mutually exclusive: a column
-                // cannot straddle both edges, since columnWidthPx caps every
+                // cannot straddle both edges, since columnExtentPx caps every
                 // column at the work area's width, which is never wider than
                 // the screen. That is a non-local invariant holding this code
                 // up, so it is stated here rather than left to be rediscovered.
@@ -808,7 +808,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                     if (!parkedNow && straddleLeft) {
                         const int visible = rect.right() + 1 - screenRect.left();
                         if (visible >= peekFloorX) {
-                            clampPinnedX = rect.left() != screenRect.left();
+                            clampPinnedMain = rect.left() != screenRect.left();
                             rect.setLeft(screenRect.left());
                         } else {
                             scrollEdge = QStringLiteral("left");
@@ -920,7 +920,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // back instead of staying against the edge. Dropping the field
             // costs it the ride and leaves it to its own motion, which is the
             // honest description of a window the layout is holding still.
-            if (!parkedNow && viewDelta != 0 && !clampPinnedX) {
+            if (!parkedNow && viewDelta != 0 && !clampPinnedMain) {
                 obj[QLatin1String("viewDeltaX")] = viewDelta;
             }
             // A parked column keeps its strip position as a PAINT hint. The
@@ -1002,7 +1002,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // batch suppressed just above leaves the compositor showing the
         // previous positions, and a baseline that moved anyway would make the
         // next batch's delta describe a slide that never happened.
-        state->setLastAppliedViewX(resolved.viewX, params.workArea);
+        state->setLastAppliedViewOffset(resolved.viewOffset, params.workArea);
         Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
     }
 

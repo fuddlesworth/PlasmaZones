@@ -90,7 +90,7 @@ void TestScrollStripCore::openScrollsOnlyWhenNeeded()
     QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
     // a and b both fit: no scroll happened.
     ResolvedStrip r = strip.relayout(params);
-    QCOMPARE(r.viewX, 0);
+    QCOMPARE(r.viewOffset, 0);
     QCOMPARE(rectOf(r, QStringLiteral("a")).x(), 0);
     QCOMPARE(rectOf(r, QStringLiteral("b")).x(), halfPx + params.gap);
 
@@ -98,7 +98,7 @@ void TestScrollStripCore::openScrollsOnlyWhenNeeded()
     // NOBODY changes size.
     QVERIFY(strip.insertWindow(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
     r = strip.relayout(params);
-    QVERIFY(r.viewX > 0);
+    QVERIFY(r.viewOffset > 0);
     QCOMPARE(rectOf(r, QStringLiteral("c")).width(), halfPx);
     QCOMPARE(rectOf(r, QStringLiteral("a")).width(), halfPx);
     // c's right edge is pinned to the viewport's right edge (minimal scroll).
@@ -166,10 +166,10 @@ void TestScrollStripCore::focusNeverModePinsEnteredEdge()
     QCOMPARE(rectOf(r, QStringLiteral("a")).x(), 0);
 
     // Focus b: already fully visible — no scroll at all.
-    const int viewBefore = r.viewX;
+    const int viewBefore = r.viewOffset;
     QVERIFY(strip.focusAdjacentColumn(+1, params));
     r = strip.relayout(params);
-    QCOMPARE(r.viewX, viewBefore);
+    QCOMPARE(r.viewOffset, viewBefore);
 
     // Focus d again: enters from the right, so its right edge pins to the
     // viewport's right edge.
@@ -205,7 +205,7 @@ void TestScrollStripCore::focusOnOverflowMode()
     QVERIFY(strip.focusColumn(0, params));
     QVERIFY(strip.focusColumn(1, params));
     ResolvedStrip r = strip.relayout(params);
-    QCOMPARE(r.viewX, 0);
+    QCOMPARE(r.viewOffset, 0);
     QCOMPARE(rectOf(r, QStringLiteral("b")).x(), 310);
 
     // Opening a second wide column centers it: the INSERT's reanchor sees
@@ -231,7 +231,7 @@ void TestScrollStripCore::alwaysCenterSingleColumn()
     // A second column ends the lone-column special case.
     QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(400), ColumnDisplay::Normal, params));
     const ResolvedStrip r = strip.relayout(params);
-    QCOMPARE(r.viewX, 0);
+    QCOMPARE(r.viewOffset, 0);
 }
 
 void TestScrollStripCore::minimizeKeepsSlotAndRestores()
@@ -271,10 +271,10 @@ void TestScrollStripCore::fullyMinimizedColumnCollapses()
     QVERIFY(strip.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindow(QStringLiteral("c"), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, params));
 
-    const int stripBefore = strip.relayout(params).stripWidth;
+    const int stripBefore = strip.relayout(params).stripExtent;
     QVERIFY(strip.setWindowMinimized(QStringLiteral("b"), true, params));
     const ResolvedStrip r = strip.relayout(params);
-    QCOMPARE(r.stripWidth, stripBefore - 300 - params.gap);
+    QCOMPARE(r.stripExtent, stripBefore - 300 - params.gap);
     // b's column contributes nothing; c closed up next to a.
     QCOMPARE(rectOf(r, QStringLiteral("c")).x(), rectOf(r, QStringLiteral("a")).x() + 300 + params.gap);
 }

@@ -707,7 +707,7 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // shift below must isolate the insert's view side effect, and measuring
     // the two sides under different gap regimes would fold the smart-gaps
     // difference into it as well.
-    const int liveViewX = state->strip().relayout(params).viewX;
+    const int liveViewOffset = state->strip().relayout(params).viewOffset;
 
     // Mirror of commit's insert selection, deliberately kept line-for-line
     // comparable with it: if the two ever diverge, the indicator lies.
@@ -761,7 +761,7 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     // position must be POST-insert, because that is the slot being previewed,
     // while the VIEW must be PRE-insert, because that is what is on screen
     // right now.
-    const int shiftToLiveView = resolved.viewX - liveViewX;
+    const int shiftToLiveView = resolved.viewOffset - liveViewOffset;
     for (const ResolvedColumn& column : resolved.columns) {
         for (const ResolvedTile& tile : column.tiles) {
             if (tile.windowId == p.windowId) {

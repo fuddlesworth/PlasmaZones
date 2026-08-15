@@ -571,7 +571,7 @@ void TestScrollStripOps::degenerateWorkAreaNeverAsserts()
     QVERIFY(strip.insertWindow(QStringLiteral("pr"), kHalf, ColumnDisplay::Normal, defaultParams()));
     const ResolvedStrip resolved = strip.relayout(dead);
     // A zero-width work area drops every column from the resolve:
-    // resolveColumnWidthPx answers 1px, columnWidthPx then clamps that to
+    // resolveColumnWidthPx answers 1px, columnExtentPx then clamps that to
     // qMin(1, workArea.width()) = 0, and relayout skips any column that
     // resolves to zero width. Pin the ACTUAL contract rather than a rect
     // loop that never runs.
@@ -781,7 +781,7 @@ void TestScrollStripOps::centerActiveColumnCentersAndReports()
 
 void TestScrollStripOps::minWidthClampsResolvedColumn()
 {
-    // The per-tile min-WIDTH clamp in columnWidthPx (min-height has its
+    // The per-tile min-WIDTH clamp in columnExtentPx (min-height has its
     // own budget test; width had nothing).
     const auto params = defaultParams();
     ScrollStrip strip;
@@ -1109,7 +1109,7 @@ void TestScrollStripOps::leftOfActiveRemovalHoldsTheActiveColumnStill()
     // column pixel-stationary — the anchor is kept, so the left-side
     // survivors slide right to close the gap while the column the user is
     // looking at never moves. The pre-parity behaviour re-derived the
-    // anchor from the old viewX, sliding the WHOLE visible strip left; in
+    // anchor from the old viewOffset, sliding the WHOLE visible strip left; in
     // this scenario that landed c at the left edge (x == 0), so the two
     // contracts are cleanly told apart.
     auto params = defaultParams();
@@ -1255,7 +1255,7 @@ void TestScrollStripOps::centerVisibleColumnsCentersTheSpanAndFallsBack()
     // centerActiveColumn — the return value gates relayout and the OSD).
     QVERIFY(!strip.centerVisibleColumns(params));
 
-    // No column fully visible: columnWidthPx caps every column at the work
+    // No column fully visible: columnExtentPx caps every column at the work
     // area, so the only route there is a view parked BETWEEN columns — the
     // shape a raw restored anchor can legitimately take (restoreViewAnchor
     // is deliberately unclamped). The verb then falls back to centering the
@@ -1271,7 +1271,7 @@ void TestScrollStripOps::centerVisibleColumnsCentersTheSpanAndFallsBack()
     const ResolvedStrip pre = straddle.relayout(params);
     QVERIFY(resolveContains(pre, QStringLiteral("a")));
     const int cStripX = 2 * (rectOf(pre, QStringLiteral("a")).width() + params.gap);
-    straddle.restoreViewAnchor(cStripX - 60, params); // viewX = 60
+    straddle.restoreViewAnchor(cStripX - 60, params); // viewOffset = 60
     // The fallback's precondition, asserted rather than hand-derived: at
     // this view NOTHING is fully visible (a clipped left, b overflowing
     // right, c past the edge), which is the only state that reaches the

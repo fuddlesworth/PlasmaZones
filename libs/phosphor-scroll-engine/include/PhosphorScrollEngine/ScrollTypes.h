@@ -784,9 +784,9 @@ struct ResolvedStrip
     QVector<ResolvedColumn> columns;
     /// The viewport's left edge in strip coordinates — what the engine uses
     /// to decide which columns are visible vs parked off-screen.
-    int viewX = 0;
+    int viewOffset = 0;
     /// Total strip width in pixels (all non-minimized columns + gaps).
-    int stripWidth = 0;
+    int stripExtent = 0;
 };
 
 } // namespace PhosphorScrollEngine

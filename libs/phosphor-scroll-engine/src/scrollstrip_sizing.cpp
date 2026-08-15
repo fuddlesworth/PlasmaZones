@@ -148,9 +148,9 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
     // occupied viewport region is one interval — everything outside it is
     // reclaimable.
     const int workW = params.workArea.width();
-    const int viewX = viewXFor(params);
-    const int stripW = stripWidthPx(params);
-    const int covered = qMax(0, qMin(workW, stripW - viewX) - qMax(0, -viewX));
+    const int viewOffset = viewOffsetFor(params);
+    const int stripW = stripExtentPx(params);
+    const int covered = qMax(0, qMin(workW, stripW - viewOffset) - qMax(0, -viewOffset));
     const int leftover = workW - covered;
     if (leftover <= 0) {
         return false;

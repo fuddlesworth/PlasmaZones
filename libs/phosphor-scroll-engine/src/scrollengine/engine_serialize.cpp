@@ -440,9 +440,9 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         stash.focusedWindowId = obj.value(kFocused()).toString();
         // Same boundary hardening as widthFromJson. The anchor is deliberately
         // NOT clamped to the strip (restoreViewAnchor: centered anchors imply
-        // out-of-range viewX by design), so the bound is only a sanity range
+        // out-of-range viewOffset by design), so the bound is only a sanity range
         // wide enough for any real strip — it stops a hand-edited INT_MIN/MAX
-        // from overflowing the viewX arithmetic it later feeds.
+        // from overflowing the viewOffset arithmetic it later feeds.
         stash.viewAnchor = qBound(-1000000, obj.value(kViewAnchor()).toInt(0), 1000000);
         const QJsonArray columns = obj.value(kColumns()).toArray();
         for (const QJsonValue& colVal : columns) {

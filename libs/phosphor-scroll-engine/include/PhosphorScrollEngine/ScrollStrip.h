@@ -26,11 +26,11 @@ namespace PhosphorScrollEngine {
 /// ## Coordinates
 ///
 /// Strip coordinates run left-to-right from the first column's left edge at 0.
-/// The viewport is the work area; its left edge sits at `viewX` in strip
+/// The viewport is the work area; its left edge sits at `viewOffset` in strip
 /// coordinates. The view anchor is stored RELATIVE TO THE ACTIVE COLUMN
 /// (`viewAnchor` = active column's left edge position within the viewport),
 /// so structural changes left of the focus never make the focused window
-/// drift — `viewX` is derived, never stored.
+/// drift — `viewOffset` is derived, never stored.
 ///
 /// Mutators that can change which column is focused (or shift pixel
 /// positions under the anchor) take the current ScrollLayoutParams so they
@@ -301,7 +301,7 @@ public:
         return m_viewAnchor;
     }
     /// Restore a previously captured view anchor, RAW: a centered anchor
-    /// implies an out-of-range derived viewX by design (the same shape
+    /// implies an out-of-range derived viewOffset by design (the same shape
     /// centerActiveColumn stores), so no clamp is applied here — later
     /// structural inserts re-clamp when the strip cannot honour the view.
     /// The stash-restore path re-applies the anchor AFTER re-focusing the
@@ -343,22 +343,22 @@ private:
     // scrollstrip_relayout.cpp
     /// Pixel width of column @p c under @p params including its tiles'
     /// min-width clamp (a fully-minimized column resolves to 0).
-    int columnWidthPx(const Column& c, const ScrollLayoutParams& params) const;
+    int columnExtentPx(const Column& c, const ScrollLayoutParams& params) const;
     /// Strip-coordinate left edge of @p columnIndex under @p params.
-    int columnStripX(int columnIndex, const ScrollLayoutParams& params) const;
+    int columnStripPos(int columnIndex, const ScrollLayoutParams& params) const;
     /// Total strip width under @p params.
-    int stripWidthPx(const ScrollLayoutParams& params) const;
+    int stripExtentPx(const ScrollLayoutParams& params) const;
     /// The derived viewport left edge in strip coordinates.
-    int viewXFor(const ScrollLayoutParams& params) const;
+    int viewOffsetFor(const ScrollLayoutParams& params) const;
     /// Anchor value that centers column @p columnIndex in the viewport.
     int centeredAnchorFor(int columnIndex, const ScrollLayoutParams& params) const;
-    /// Clamp @p anchor so the derived viewX stays within [0, stripW - workW]
+    /// Clamp @p anchor so the derived viewOffset stays within [0, stripW - workW]
     /// (left-pinned when the strip fits the viewport entirely).
     int clampedAnchor(int anchor, const ScrollLayoutParams& params) const;
-    int keepOrRecenterAnchor(int oldViewX, const ScrollLayoutParams& params) const;
+    int keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params) const;
     /// Apply the center-focused-column policy after the active column moved
-    /// from @p prevIdx at @p oldViewX (strip coords) to the current active.
-    void reanchorAfterFocusChange(int prevIdx, int oldViewX, const ScrollLayoutParams& params);
+    /// from @p prevIdx at @p oldViewOffset (strip coords) to the current active.
+    void reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const ScrollLayoutParams& params);
     // scrollstrip_sizing.cpp
     /// The tile's current height as a fraction of the column height, or -1
     /// when it has no determinate fraction (Auto weight). Preset anchors

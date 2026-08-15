@@ -40,7 +40,7 @@ namespace PlasmaZones {
  *
  * The coordinate's ORIGIN is arbitrary — it is an accumulation of the deltas
  * the engine has sent for this output, and only differences are ever read. It
- * deliberately does not try to mirror the engine's own `viewX`: the two would
+ * deliberately does not try to mirror the engine's own `viewOffset`: the two would
  * have to be kept in step across every context switch, screen change and
  * restore, and nothing needs them to agree.
  *
