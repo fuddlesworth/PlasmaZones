@@ -272,19 +272,19 @@ CatalogMeta catalogMetaForId(const QString& id)
         add(kIdScrollConsumeWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Consume Window"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Pulls a window from the column to the right into the focused column, stacking them."));
+                              "Pulls a window from the next column into the focused column, stacking them."));
         add(kIdScrollExpelWindow, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Expel Window"),
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Moves the focused window out of a shared column into a new column on the right."));
+                              "Moves the focused window out of a shared column into a new column after it."));
         add(kIdScrollConsumeOrExpelLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Splits the focused window out of a shared column to the left. A window "
-                              "alone in its column merges into the column on the left instead."));
+                              "Splits the focused window out of a shared column toward the start of the strip. "
+                              "A window alone in its column merges into the previous column instead."));
         add(kIdScrollConsumeOrExpelRight, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones",
-                              "Splits the focused window out of a shared column to the right. A window "
-                              "alone in its column merges into the column on the right instead."));
+                              "Splits the focused window out of a shared column toward the end of the strip. "
+                              "A window alone in its column merges into the next column instead."));
         add(kIdScrollCenterColumn, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the focused column sits centered on the screen."));
         add(kIdScrollToggleColumnTabbed, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,

@@ -166,14 +166,14 @@ SettingsFlickable {
                 // row hugs the row that gates it, so no separator sits between
                 // a kind combo and the controls it governs.
                 SettingsRow {
-                    title: i18n("Proportion of the screen")
+                    title: i18n("Proportion of the strip")
                     searchAnchor: "defaultColumnWidthProportion"
-                    description: i18n("How much of the usable screen width a new column takes")
+                    description: i18n("How much of the strip a new column takes")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindProportion
                     visible: true
 
                     SettingsSlider {
-                        accessibleName: i18n("Proportion of the screen")
+                        accessibleName: i18n("Proportion of the strip")
                         from: root._scrollConsts.proportionMin
                         to: root._scrollConsts.proportionMax
                         stepSize: root._scrollConsts.proportionStep

@@ -49,7 +49,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Center the focused column")
             searchAnchor: "centerFocusedColumn"
-            description: i18nc("the words Never, Always, and On overflow must match the option labels shown in the picker beside this text", "With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.")
+            description: i18nc("the words Never, Always, and On overflow must match the option labels shown in the picker beside this text", "With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip runs past the edge of the screen.")
 
             WideComboBox {
                 Accessible.name: i18n("Center the focused column")
