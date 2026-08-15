@@ -98,14 +98,14 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     query.virtualDesktop = meta->virtualDesktop;
     query.activity = meta->activity;
     // Screen-derived context fields (ScreenId, Mode, ScreenOrientation, ActiveLayout)
-    // are intentionally NOT stamped here: the window metadata does not carry the
-    // window's screen geometry / active layout, and this daemon-side query feeds the
-    // open-path Float / Restore / placement resolvers only. The effect's live
-    // per-window query (ruleQueryFor) stamps ScreenId / Mode / ScreenOrientation, so
-    // a rule pairing one of those with a window property resolves there but not on
-    // this path. ActiveLayout is populated only by the windowless context cascade
-    // (never by either per-window query), so it is context-scoped in practice —
-    // which is the primary use of all four of these fields anyway.
+    // are not stamped here, because the window metadata carries no screen. ScreenId
+    // and ActiveLayout are filled by the caller-side wrapper
+    // WindowTrackingAdaptor::buildContextualRuleQuery, which resolves the window's
+    // screen (or takes the open path's hint) and reads the layout assigned to that
+    // context — every daemon-side resolver goes through it, so a rule matching
+    // either field resolves on this path. Mode and ScreenOrientation remain unstamped
+    // daemon-side: the effect's live per-window query (ruleQueryFor) supplies those,
+    // so a rule pairing one of them with a window property resolves there, not here.
     // Extended properties — optional→optional copy preserves engagement exactly,
     // so a field the effect could not observe stays disengaged and inert here too.
     query.isMinimized = meta->isMinimized;

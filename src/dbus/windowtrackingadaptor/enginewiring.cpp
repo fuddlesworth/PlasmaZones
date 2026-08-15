@@ -27,7 +27,6 @@
 #include <PhosphorRules/RuleStore.h>
 
 #include <QJsonArray>
-#include "internal.h"
 
 namespace PlasmaZones {
 
@@ -180,7 +179,7 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // them). Supplying the same full WindowQuery the float / restore
         // predicates use brings snapping to parity.
         snap->setExclusionQueryProvider([this](const QString& windowId) -> std::optional<PhosphorRules::WindowQuery> {
-            return buildRuleQueryForWindow(m_windowRegistry, windowId);
+            return buildContextualRuleQuery(windowId);
         });
 
         // Open-floating gate (snap). A matched "Float this app" rule opens the

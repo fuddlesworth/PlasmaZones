@@ -465,6 +465,77 @@ private Q_SLOTS:
         delete snap;
     }
 
+    // A SnapToZone rule matching on ActiveLayout must resolve on the per-window
+    // open path (discussion #919). WindowRegistry metadata carries no screen, so
+    // ActiveLayout used to stay empty on every per-window query and the leaf
+    // compared "" against the authored layout id — the rule could never fire.
+    // buildContextualRuleQuery now stamps it from the layout assigned to the
+    // screen the window is opening on.
+    void testPlacementZonesByRule_activeLayoutMatch_resolvesZones()
+    {
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), m_testLayout);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst9"), QStringLiteral("codeapp"), QString(), QString(), QString(), 0,
+                                 0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::ActiveLayout, Operator::Equals, m_testLayout->id().toString());
+        RuleAction snapTo;
+        snapTo.type = QString(ActionType::SnapToZone);
+        snapTo.params.insert(QString(ActionParam::Zones), QJsonArray{1});
+        rule.actions = {snapTo};
+        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+
+        const PhosphorSnapEngine::PlacementDirective directive =
+            m_wta->placementZonesByRule(QStringLiteral("codeapp|inst9"), m_screenId);
+        QCOMPARE(directive.zoneOrdinals, QList<int>{1});
+
+        m_wta->setRuleStore(nullptr);
+        m_wta->setWindowRegistry(nullptr);
+    }
+
+    // The negative half of the pair: the SAME rule against a screen carrying a
+    // DIFFERENT layout must not fire. Guards against the stamp degenerating into
+    // "any non-empty layout matches".
+    void testPlacementZonesByRule_activeLayoutMismatch_resolvesNothing()
+    {
+        PhosphorZones::Layout* other = createTestLayout(2, m_layoutManager);
+        m_layoutManager->addLayout(other);
+        m_layoutManager->assignLayout(m_screenId, m_layoutManager->currentVirtualDesktop(), QString(), other);
+
+        auto* registry = new PhosphorEngine::WindowRegistry(m_parent);
+        m_wta->setWindowRegistry(registry);
+        m_wta->setWindowMetadata(QStringLiteral("inst10"), QStringLiteral("codeapp"), QString(), QString(), QString(),
+                                 0, 0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.enabled = true;
+        rule.match = MatchExpression::makeLeaf(Field::ActiveLayout, Operator::Equals, m_testLayout->id().toString());
+        RuleAction snapTo;
+        snapTo.type = QString(ActionType::SnapToZone);
+        snapTo.params.insert(QString(ActionParam::Zones), QJsonArray{1});
+        rule.actions = {snapTo};
+        RuleStore store(ConfigDefaults::rulesFilePath(), m_parent);
+        QVERIFY(store.addRule(rule));
+        m_wta->setRuleStore(&store);
+
+        const PhosphorSnapEngine::PlacementDirective directive =
+            m_wta->placementZonesByRule(QStringLiteral("codeapp|inst10"), m_screenId);
+        QVERIFY2(directive.zoneOrdinals.isEmpty(), "a rule keyed on a different layout must not place the window");
+
+        m_wta->setRuleStore(nullptr);
+        m_wta->setWindowRegistry(nullptr);
+    }
+
     void testMoveWindowToZone_validZone_emitsApplyGeometry()
     {
         QString windowId = QStringLiteral("firefox|12345");

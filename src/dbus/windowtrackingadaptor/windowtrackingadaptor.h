@@ -32,6 +32,7 @@
 #include <QPointer>
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include <PhosphorConfig/IBackend.h>
 
@@ -64,6 +65,7 @@ namespace PhosphorRules {
 class RuleStore;
 class RuleEvaluator;
 class ResolvedActions;
+struct WindowQuery;
 }
 
 namespace PlasmaZones {
@@ -699,6 +701,24 @@ public:
      * daemon next encounters those window IDs.
      */
     void loadState();
+
+    /// Build the per-window rule query, with the screen-derived context fields
+    /// stamped on top of the WindowRegistry metadata. The registry records no
+    /// screen, so `ScreenId` and `ActiveLayout` can only be filled here: @p
+    /// screenIdHint names the screen the window is landing on (the open /
+    /// routing paths know it before the service does), and an empty hint falls
+    /// back to the service's live screen-for-window. `ActiveLayout` resolves to
+    /// the layout assigned to that screen's (desktop, activity) context, the
+    /// same id the windowless context cascade stamps.
+    ///
+    /// EVERY per-window resolver must go through this rather than the bare
+    /// buildRuleQueryForWindow free function: they share one
+    /// resolveCached entry keyed on windowId, so a resolver that skipped the
+    /// stamping would seed a context-blind verdict the others then reuse.
+    ///
+    /// nullopt when no metadata is tracked for @p windowId.
+    std::optional<PhosphorRules::WindowQuery> buildContextualRuleQuery(const QString& windowId,
+                                                                       const QString& screenIdHint = QString()) const;
 
     /// Resolve whether a FLOATED window should have its previous position restored
     /// on open. Consulted by the restore-position predicate the daemon injects into

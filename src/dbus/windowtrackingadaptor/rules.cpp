@@ -32,6 +32,61 @@
 
 namespace PlasmaZones {
 
+std::optional<PhosphorRules::WindowQuery>
+WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const QString& screenIdHint) const
+{
+    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    if (!query) {
+        return std::nullopt;
+    }
+    // Screen-derived context fields. WindowRegistry metadata carries no screen, so
+    // ScreenId and ActiveLayout can only be stamped here: the open path knows the
+    // screen the window is landing on (screenIdHint, which may be a route target
+    // that differs from where the window currently sits), and every other path
+    // reads the service's live screen-for-window.
+    //
+    // Stamping uniformly across ALL resolvers is load-bearing, not tidiness: they
+    // share ONE resolveCached entry keyed on windowId, so whichever resolver
+    // touches a window first seeds the verdict the rest reuse. A resolver that
+    // left these blank would poison every sibling for that window's lifetime.
+    const QString screenId = screenIdHint.isEmpty() ? m_service->screenForWindow(windowId) : screenIdHint;
+    if (screenId.isEmpty()) {
+        // No screen resolvable (window not placed yet and no hint) — leave both
+        // fields as buildRuleQueryForWindow left them rather than stamping a
+        // guess. ScreenId stays empty and ActiveLayout stays empty, so leaves over
+        // either simply do not match, which is what an unknown context should do.
+        return query;
+    }
+    query->screenId = screenId;
+    if (!m_layoutManager) {
+        return query;
+    }
+    // ActiveLayout is the layout id assigned to the window's (screen, desktop,
+    // activity) context — the SAME id assignmentIdForScreen hands the windowless
+    // context cascade, so an `ActiveLayout Equals <uuid>` leaf resolves identically
+    // whether it sits on a context rule or a window rule. The window's OWN desktop
+    // wins over the screen's current one where known (effectiveDesktop), matching
+    // how the per-window mode resolution reads its context.
+    //
+    // The "screen's current desktop" comes from the layout registry's own
+    // per-output record rather than the VirtualDesktopManager: we are asking the
+    // registry which layout it has assigned, so it must be asked on the same
+    // desktop it resolves layoutForScreen against, and its accessor already falls
+    // back to the global current desktop when a screen has no per-output value.
+    int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+    QString activity = m_layoutManager->currentActivity();
+    if (!m_windowRegistry.isNull()) {
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
+        if (const std::optional<PhosphorEngine::WindowRegistry::WindowContext> ctx =
+                m_windowRegistry->windowContext(instanceId)) {
+            desktop = ctx->effectiveDesktop(desktop);
+            activity = ctx->effectiveActivity(activity);
+        }
+    }
+    query->activeLayout = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+    return query;
+}
+
 bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId,
                                                          PhosphorZones::AssignmentEntry::Mode mode)
 {
@@ -47,7 +102,7 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     if (!m_ruleStore) {
         return globalDefault;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId);
     if (!query) {
         return globalDefault;
     }
@@ -77,7 +132,7 @@ bool WindowTrackingAdaptor::shouldRestoreToZoneOnLogin(const QString& windowId)
     if (!m_ruleStore) {
         return globalDefault;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId);
     if (!query) {
         return globalDefault;
     }
@@ -99,7 +154,7 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     if (!m_ruleStore) {
         return globalDefault;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId);
     if (!query) {
         return globalDefault;
     }
@@ -133,7 +188,7 @@ bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
     if (!m_ruleStore) {
         return false;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId);
     if (!query) {
         return false;
     }
@@ -161,24 +216,16 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     if (!m_ruleStore) {
         return {};
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    // Pin the query to the window's opening screen so a user-authored SnapToZone
+    // rule carrying a `ScreenId` or `ActiveLayout` match resolves against the
+    // screen the window is actually opening on, rather than the (not yet
+    // assigned) screen the service would report for it. The settings
+    // screen-picker stores the canonical id form the runtime reports, which is
+    // what the open path hands us here.
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId, screenId);
     if (!query) {
         return {};
     }
-    // Pin the query to the window's opening screen so a user-authored SnapToZone
-    // rule carrying a `ScreenId` match (the settings screen-picker stores the
-    // canonical id form the runtime reports) resolves against the screen the
-    // window is actually opening on. buildRuleQueryForWindow leaves screenId empty
-    // (the sibling Float / RestorePosition resolvers do not have the screen), so
-    // the placement path is the one consumer that pins it.
-    //
-    // The shared evaluator cache is keyed on windowId only, so the FIRST resolver
-    // to touch a window seeds the verdict the others reuse. On the open path that
-    // is this placement resolve: SnapEngine::resolveWindowRestore calls
-    // calculateSnapToPlacementRule up front, before it consults the float /
-    // restore predicates — so the screen-pinned query populates the cache first
-    // and a screen-constrained rule resolves correctly.
-    query->screenId = screenId;
 
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
@@ -266,14 +313,14 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
     if (!m_ruleStore) {
         return;
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    // Pin the screen so a ScreenId / ActiveLayout-scoped rule resolves, mirroring
+    // placementZonesByRule. resolveCached is keyed on windowId (+ rule-set revision), so on
+    // the snap open path this reuses the verdict placementZonesByRule already seeded — no
+    // second evaluation.
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId, screenId);
     if (!query) {
         return;
     }
-    // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
-    // resolveCached is keyed on windowId (+ rule-set revision), so on the snap open path
-    // this reuses the verdict placementZonesByRule already seeded — no second evaluation.
-    query->screenId = screenId;
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
@@ -285,12 +332,12 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     if (!m_ruleStore) {
         return;
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    // Pin the screen so a ScreenId / ActiveLayout-scoped rule resolves, mirroring
+    // placementZonesByRule.
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId, screenId);
     if (!query) {
         return;
     }
-    // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
-    query->screenId = screenId;
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
@@ -365,11 +412,10 @@ QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& window
     if (!m_ruleStore) {
         return QString();
     }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId);
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId, screenId);
     if (!query) {
         return QString();
     }
-    query->screenId = screenId;
     if (!m_ruleEvaluator) {
         m_ruleEvaluator = std::make_unique<PhosphorRules::RuleEvaluator>(m_ruleStore->ruleSet());
     }
