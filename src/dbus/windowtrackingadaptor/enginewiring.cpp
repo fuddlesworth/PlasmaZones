@@ -178,6 +178,13 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         // autotile engine, which sees the live window in the effect, honoured
         // them). Supplying the same full WindowQuery the float / restore
         // predicates use brings snapping to parity.
+        //
+        // No screen hint is available here — the engine asks per snap attempt,
+        // not on a routing path — so the screen comes from
+        // resolveScreenForWindow. That matters for Exclude rules keyed on
+        // ScreenId or ActiveLayout: the snap-only service accessor reports
+        // nothing until the window is in a SnapState, which at window open it
+        // is not, so those leaves would never have resolved here.
         snap->setExclusionQueryProvider([this](const QString& windowId) -> std::optional<PhosphorRules::WindowQuery> {
             return buildContextualRuleQuery(windowId);
         });

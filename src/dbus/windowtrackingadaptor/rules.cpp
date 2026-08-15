@@ -32,6 +32,40 @@
 
 namespace PlasmaZones {
 
+QString WindowTrackingAdaptor::resolveScreenForWindow(const QString& windowId) const
+{
+    // Mode-neutral: the service's accessor is snap-only (it reads the owning
+    // SnapState), so on its own it returns empty for every autotile-tracked
+    // window and for any window that has not been placed yet. Fall through to
+    // each engine's own tracker, which is what lastActiveScreenName() already
+    // does for the focused window — the difference is that this resolves the
+    // screen of the window being ASKED about, never the focused one.
+    //
+    // Order is deliberate: the service first, so windows it already resolves
+    // keep the canonicalizing lookup (issue #628 composite-id skew) and nothing
+    // that resolves today changes. The engine fallbacks only fill cases that
+    // previously came back empty.
+    if (m_service) {
+        const QString fromService = m_service->screenForWindow(windowId);
+        if (!fromService.isEmpty()) {
+            return fromService;
+        }
+    }
+    if (m_snapEngine) {
+        const QString tracked = m_snapEngine->screenForTrackedWindow(windowId);
+        if (!tracked.isEmpty()) {
+            return tracked;
+        }
+    }
+    if (m_autotileEngine) {
+        const QString tracked = m_autotileEngine->screenForTrackedWindow(windowId);
+        if (!tracked.isEmpty()) {
+            return tracked;
+        }
+    }
+    return QString();
+}
+
 std::optional<PhosphorRules::WindowQuery>
 WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const QString& screenIdHint) const
 {
@@ -49,12 +83,22 @@ WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const Q
     // share ONE resolveCached entry keyed on windowId, so whichever resolver
     // touches a window first seeds the verdict the rest reuse. A resolver that
     // left these blank would poison every sibling for that window's lifetime.
-    const QString screenId = screenIdHint.isEmpty() ? m_service->screenForWindow(windowId) : screenIdHint;
+    const QString screenId = screenIdHint.isEmpty() ? resolveScreenForWindow(windowId) : screenIdHint;
     if (screenId.isEmpty()) {
         // No screen resolvable (window not placed yet and no hint) — leave both
         // fields as buildRuleQueryForWindow left them rather than stamping a
-        // guess. ScreenId stays empty and ActiveLayout stays empty, so leaves over
-        // either simply do not match, which is what an unknown context should do.
+        // guess.
+        //
+        // Note what that does and does not buy: ScreenId and ActiveLayout are
+        // non-optional context fields, so WindowQuery::valueForField returns them
+        // ALWAYS ENGAGED (unlike the optional window fields, which report absent).
+        // An unresolvable screen therefore compares an empty string, not "no
+        // value" — `Equals <uuid>` correctly fails, but a NEGATED leaf
+        // (`NotEquals` / `DoesNotContain`) matches. Rules cannot pair an empty
+        // literal with Equals in the first place: MatchExpression::isValid rejects
+        // an empty-Equals context-string leaf, which is what closes the
+        // `Equals ""` trap. Genuine inertness would require making these optional
+        // fields, a change spanning the effect, the daemon and the context cascade.
         return query;
     }
     query->screenId = screenId;

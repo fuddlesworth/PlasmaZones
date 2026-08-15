@@ -803,7 +803,9 @@ public:
     /// Provider that builds the full WindowQuery (window class / title / role /
     /// frame size / flags) for a live windowId. Daemon-injected, keyed by the
     /// live windowId — the daemon resolves it from its WindowRegistry (the same
-    /// `buildRuleQueryForWindow` the float / restore predicates use). When set,
+    /// `buildContextualRuleQuery` the float / restore predicates use, so the
+    /// query carries the screen-derived ScreenId / ActiveLayout context too).
+    /// When set,
     /// exclusion evaluates a window's FULL attributes (matching the autotile
     /// engine) instead of appId alone, and the frame size carried in the query
     /// is checked against the minimum-window-size thresholds. When UNSET

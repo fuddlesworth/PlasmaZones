@@ -712,13 +712,37 @@ public:
     /// same id the windowless context cascade stamps.
     ///
     /// EVERY per-window resolver must go through this rather than the bare
-    /// buildRuleQueryForWindow free function: they share one
-    /// resolveCached entry keyed on windowId, so a resolver that skipped the
-    /// stamping would seed a context-blind verdict the others then reuse.
+    /// buildRuleQueryForWindow free function. Seven of them share one
+    /// RuleEvaluator::resolveCached entry keyed on (windowId, rule-set
+    /// revision), and resolveCached returns the cached actions WITHOUT
+    /// consulting the query on a hit — so whichever of those seven touches a
+    /// window first fixes the context every later one reuses for that window's
+    /// lifetime. (The other two consumers do not share it:
+    /// shouldRestoreSizeOnUnsnap calls the uncached resolve(), and the snap
+    /// engine's exclusion-query provider feeds SnapEngine's separate
+    /// exclusion evaluator.)
+    ///
+    /// Uniform stamping is therefore necessary but NOT sufficient: the hinted
+    /// and unhinted paths resolve different screens, so the ORDER matters too.
+    /// The hint-bearing resolver has to seed first, and does on both engines
+    /// today — SnapEngine::resolveWindowRestore calls calculateSnapToPlacementRule
+    /// (libs/phosphor-snap-engine/src/lifecycle.cpp) ahead of the restore, managed-restore
+    /// and float predicates, and AutotileAdaptor::dispatchWindowOpened calls
+    /// applyOpenRoutingForAutotile ahead of the tile engine's windowOpened.
+    /// Reordering either would silently revert ActiveLayout / ScreenId matching
+    /// on the open path without failing a test.
     ///
     /// nullopt when no metadata is tracked for @p windowId.
     std::optional<PhosphorRules::WindowQuery> buildContextualRuleQuery(const QString& windowId,
                                                                        const QString& screenIdHint = QString()) const;
+
+    /// Mode-neutral screen lookup for @p windowId: the snap service first (it
+    /// canonicalizes the composite id), then each engine's own tracker. Returns
+    /// empty only when neither engine has placed the window and it holds no snap
+    /// state. Used by buildContextualRuleQuery when no caller supplied a hint;
+    /// the service accessor alone is snap-only and reports nothing for
+    /// autotile-tracked windows.
+    QString resolveScreenForWindow(const QString& windowId) const;
 
     /// Resolve whether a FLOATED window should have its previous position restored
     /// on open. Consulted by the restore-position predicate the daemon injects into

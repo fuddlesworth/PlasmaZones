@@ -29,7 +29,19 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
     // resolves through), so a snap / unsnap / zone change must re-resolve the
     // window's appearance. With none of them, a placement change can't change any
     // window's appearance — skip.
-    if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()) {
+    //
+    // The exclusion rule set is checked SEPARATELY and deliberately: it is not an
+    // appearance input, so none of the three predicates above sees it, yet
+    // isExcludedBySnappingRule caches its verdict per (windowId, rule-set
+    // revision) and an Exclude rule can scope on the very placement fields that
+    // just moved. An Exclude-only user (no animation rules, appearance defaults
+    // off, no surface packs) hits all three predicates false, and without this
+    // clause the windowId would never even be enqueued — stranding
+    // `Exclude WHEN IsFloating` (and, since #921, `WHEN ActiveLayout = X`) at its
+    // first-consult verdict, which gates shouldHandleWindow and
+    // shouldDecorateWindow. The flush keeps the expensive per-window appearance
+    // work gated on the appearance predicates; only the cache clear runs here.
+    if (!hasPlacementSensitiveRuleWork()) {
         return;
     }
     // Coalesce: a single float toggle emits BOTH windowFloatingChanged and
@@ -57,21 +69,27 @@ void PlasmaZonesEffect::invalidateRuleCacheForStateChange(const QString& windowI
 void PlasmaZonesEffect::flushPendingRuleInvalidations()
 {
     const QSet<QString> windowIds = std::exchange(m_pendingRuleInvalidations, {});
-    if (windowIds.isEmpty()
-        || (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault()
-            && !hasDecorationTreeContent())) {
+    if (windowIds.isEmpty() || !hasPlacementSensitiveRuleWork()) {
+        return;
+    }
+    // The exclusion verdicts (isExcludedBySnappingRule) are cached per (windowId,
+    // rule-set revision) and an Exclude rule can scope on the placement fields
+    // that just moved. Clear them FIRST and unconditionally on the exclusion set,
+    // ahead of the appearance gate below: an Exclude-only session has no
+    // appearance work at all, and stranding the verdict there is what leaves a
+    // window undecorated and unmanaged after an unfloat.
+    if (!m_snappingExclusionRuleSet.isEmpty()) {
+        m_snappingExclusionEvaluator.clearCache();
+    }
+    // Everything below is appearance work. Skip it when nothing appearance-shaped
+    // is loaded, which is the case the original gate covered.
+    if (m_shaderManager.animationRuleSet().isEmpty() && !hasWindowAppearanceDefault() && !hasDecorationTreeContent()) {
         return;
     }
     // The match cache is keyed on (windowId, ruleSet revision); neither moves on a
     // placement-state change, so drop it once so border / opacity rules re-resolve
     // against the new snapped / floating / zone state.
     m_shaderManager.animationRuleEvaluator().clearCache();
-    // The exclusion verdicts (isExcludedBySnappingRule) are cached the same way
-    // and an Exclude rule can scope on the same placement fields — keep them in
-    // lockstep.
-    if (!m_snappingExclusionRuleSet.isEmpty()) {
-        m_snappingExclusionEvaluator.clearCache();
-    }
     for (const QString& windowId : windowIds) {
         KWin::EffectWindow* w = findWindowById(windowId);
         if (!w) {
@@ -128,7 +146,15 @@ void PlasmaZonesEffect::scheduleBorderSweep()
 
 void PlasmaZonesEffect::invalidateAllRuleCaches()
 {
-    if (m_shaderManager.animationRuleSet().isEmpty() && m_ruleWindowLayerSnapshots.isEmpty()) {
+    // The exclusion set is part of the gate for the same reason it is in
+    // invalidateRuleCacheForStateChange: it is not an animation rule and it
+    // leaves no layer snapshot, so neither of the two original predicates sees
+    // it, yet this function is the ONLY route that clears its verdict cache on a
+    // bulk change (daemon loss / re-seed / an active-layout broadcast). Without
+    // it an Exclude-only session returned here and the clear at the bottom was
+    // unreachable.
+    if (m_shaderManager.animationRuleSet().isEmpty() && m_ruleWindowLayerSnapshots.isEmpty()
+        && m_snappingExclusionRuleSet.isEmpty()) {
         return;
     }
     // A bulk placement change (daemon loss clears the zone/floating caches; the

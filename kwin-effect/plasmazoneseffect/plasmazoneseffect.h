@@ -916,6 +916,25 @@ private:
             || !m_decorationTree.overriddenPaths().isEmpty();
     }
 
+    /// True when a placement-state change could change SOME window's resolved
+    /// rule outcome, so the per-window invalidation path has to run at all.
+    ///
+    /// The exclusion set is a separate term from the three appearance ones on
+    /// purpose. It is not an animation rule, sets no appearance default and
+    /// leaves no decoration-tree content, so an Exclude-only configuration makes
+    /// all three false — yet isExcludedBySnappingRule caches its verdict per
+    /// (windowId, rule-set revision), neither of which moves on a placement flip,
+    /// and that verdict gates shouldHandleWindow / shouldDecorateWindow. Folding
+    /// it in here is what stops `Exclude WHEN IsFloating` (and, since the
+    /// ActiveLayout wire, `WHEN ActiveLayout = X`) freezing at its first consult.
+    /// Callers still gate the expensive appearance work on the three predicates
+    /// separately — this only decides whether the path is entered.
+    bool hasPlacementSensitiveRuleWork() const
+    {
+        return !m_shaderManager.animationRuleSet().isEmpty() || hasWindowAppearanceDefault()
+            || hasDecorationTreeContent() || !m_snappingExclusionRuleSet.isEmpty();
+    }
+
     /// Evaluate a config-default appearance scope token against a live window.
     /// "tiled" → the window is snapped or autotile-managed; "normal" → its
     /// window type is Normal and it is not transient; "all" → always true;
@@ -2233,13 +2252,31 @@ private:
     /// happened to switch a layout.
     void fetchActiveLayoutsForScreens();
 
+    /// Delay before the single retry of a failed `getActiveLayoutsForScreens`.
+    /// Long enough that a daemon still finishing its own startup has settled,
+    /// short enough that the gap is not user-visible.
+    static constexpr int ActiveLayoutFetchRetryDelayMs = 1000;
+
+    /// Latches once a failed active-layout fetch has been retried, so a
+    /// persistently failing call cannot spin. Cleared on a successful reply and
+    /// on daemon loss (the next bringup gets a fresh attempt).
+    bool m_activeLayoutFetchRetried = false;
+
     /// Each screen's resolved active layout id (a layout UUID in braces, or
     /// "autotile:<algo>"), mirroring what the daemon's assignment cascade
     /// resolves for that screen's current desktop and activity. Read by
     /// ruleQuery to stamp WindowQuery::activeLayout, which is the only way a
     /// window-domain rule on this side can match the ActiveLayout field — the
     /// effect has no layout registry of its own and cannot resolve the cascade.
-    /// A screen with no entry leaves the field unset (inert), never empty.
+    ///
+    /// A screen with no entry stamps an EMPTY id, not an absent one:
+    /// WindowQuery::activeLayout is a non-optional context field that
+    /// valueForField always reports as engaged, so there is no inert state to
+    /// reach from here. `Equals <uuid>` correctly fails against it, and an
+    /// empty-Equals leaf cannot be authored in the first place
+    /// (MatchExpression::isValid rejects it), but a NEGATED leaf does match an
+    /// unseeded screen. Absence is preferred over storing "" for map hygiene,
+    /// not for match semantics.
     QHash<QString, QString> m_activeLayoutByScreen;
 };
 

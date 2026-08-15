@@ -716,10 +716,17 @@ void PlasmaZonesEffect::connectNavigationSignals()
     // (once, from the constructor) rather than in the daemon-ready setup, so it
     // needs no re-subscribe gate — the bringup pairs it with a bulk
     // fetchActiveLayoutsForScreens, and the broadcasts carry deltas from there.
-    QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-                                          PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                          QStringLiteral("activeLayoutForScreenChanged"), this,
-                                          SLOT(slotActiveLayoutForScreenChanged(QString, QString)));
+    // The return value is checked because a failure here is otherwise invisible
+    // and half-silent: the bulk fetch would still seed correct values at bringup,
+    // so the feature looks alive, while every later delta is lost. The bulk fetch
+    // recovers the initial VALUE, never the subscription.
+    if (!QDBusConnection::sessionBus().connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                               PhosphorProtocol::Service::Interface::LayoutRegistry,
+                                               QStringLiteral("activeLayoutForScreenChanged"), this,
+                                               SLOT(slotActiveLayoutForScreenChanged(QString, QString)))) {
+        qCWarning(lcEffect) << "Failed to subscribe to activeLayoutForScreenChanged — ActiveLayout rules will not "
+                               "track layout switches this session";
+    }
 
     qCInfo(lcEffect) << "Connected to navigation D-Bus signals";
 }
@@ -751,8 +758,23 @@ void PlasmaZonesEffect::fetchActiveLayoutsForScreens()
                 }
             }
             qCDebug(lcEffect) << "Synced" << m_activeLayoutByScreen.size() << "screen active layouts from daemon";
+            m_activeLayoutFetchRetried = false;
         } else {
-            qCDebug(lcEffect) << "Failed to get active layouts from daemon";
+            // This is the path that silently disables ActiveLayout matching for
+            // the whole session, so it warns rather than whispers, and carries
+            // the reason. The broadcast is NOT a fallback: the daemon only emits
+            // for screens whose value MOVES, so a screen whose layout never
+            // changes again would stay unstamped forever after one failed reply.
+            qCWarning(lcEffect) << "Failed to get active layouts from daemon:" << reply.error().message();
+            if (!m_activeLayoutFetchRetried) {
+                // One bounded retry, re-gated on isDaemonReady inside the call.
+                // Bounded because a persistently failing call would otherwise
+                // spin; the flag clears on the next success or daemon-ready.
+                m_activeLayoutFetchRetried = true;
+                QTimer::singleShot(ActiveLayoutFetchRetryDelayMs, this, [this] {
+                    fetchActiveLayoutsForScreens();
+                });
+            }
         }
         if (!had && m_activeLayoutByScreen.isEmpty()) {
             // Nothing was cached and nothing arrived — no ActiveLayout leaf can
@@ -774,10 +796,13 @@ void PlasmaZonesEffect::slotActiveLayoutForScreenChanged(const QString& screenId
     }
     // An empty id means the screen no longer resolves to any layout (unplugged,
     // or its assignment was cleared with the default suppressed). Remove the
-    // entry rather than storing "" so ruleQuery leaves the field unset and an
-    // ActiveLayout leaf stays inert on that screen.
-    const QString previous = m_activeLayoutByScreen.value(screenId);
-    if (previous == layoutId) {
+    // entry rather than storing "": both leave ruleQuery's ActiveLayout empty
+    // (the field is a non-optional context field, so it is always engaged and
+    // there is no genuinely "unset" state to reach), but removal keeps the map
+    // from accumulating an entry per screen the daemon has ever mentioned.
+    const auto previous = m_activeLayoutByScreen.constFind(screenId);
+    const bool hadEntry = previous != m_activeLayoutByScreen.constEnd();
+    if (hadEntry ? previous.value() == layoutId : layoutId.isEmpty()) {
         return;
     }
     if (layoutId.isEmpty()) {

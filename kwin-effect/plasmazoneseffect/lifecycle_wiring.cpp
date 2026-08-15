@@ -1057,6 +1057,18 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // authoritatively repopulated on daemon-ready.
         m_navigationHandler->clearAllZoneState();
         m_navigationHandler->clearAllFloatingState();
+        // Same argument, same dead session: the per-screen active-layout ids
+        // feed the ActiveLayout rule-match field. They are the dead daemon's
+        // resolution of its own cascade, so a `WHEN ActiveLayout = X` rule
+        // would keep matching the previous session's layout for the whole
+        // daemon-down interval — and permanently if the daemon never returns,
+        // because the only other writer (fetchActiveLayoutsForScreens) is gated
+        // on isDaemonReady and so never runs again. Repopulated authoritatively
+        // by that fetch on daemon-ready.
+        m_activeLayoutByScreen.clear();
+        // Reset the fetch retry latch with it, so the next daemon gets a fresh
+        // attempt rather than inheriting a spent one from the dead session.
+        m_activeLayoutFetchRetried = false;
         // The placement caches above feed placement-scoped rule match inputs. A
         // SetOpacity rule keyed on IsSnapped/IsFloating/Zone caches its verdict
         // per (windowId, ruleSet revision) — neither moves here — so drop the
