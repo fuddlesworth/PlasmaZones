@@ -134,6 +134,11 @@ public:
     P_CONFIG_GROUP(tilingGapsGroup, "Tiling.Gaps")
     P_CONFIG_GROUP(scrollingGroup, "Scrolling")
     P_CONFIG_GROUP(scrollingBehaviorGroup, "Scrolling.Behavior")
+    // Scrolling.Behavior.DragScroll — edge auto-scroll during a drag
+    // re-insert (niri's dnd-edge-view-scroll). Its own subtree rather than
+    // four DragScroll*-prefixed leaves on Scrolling.Behavior, so the card,
+    // the per-page reset manifest and the search catalog address one node.
+    P_CONFIG_GROUP(scrollingDragScrollGroup, "Scrolling.Behavior.DragScroll")
     // Scrolling.TabIndicator — the whole appearance and placement family for
     // the indicator drawn alongside a tabbed column. Its own group rather than
     // a dozen Tab*-prefixed leaves on Scrolling, so the settings page, the
@@ -478,6 +483,15 @@ public:
 
     P_CONFIG_KEY(columnWidthStepPercentKey, "ColumnWidthStepPercent")
     P_CONFIG_KEY(windowHeightStepPercentKey, "WindowHeightStepPercent")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Scrolling.Behavior.DragScroll
+    // (also uses enabledKey — shared leaf name, disambiguated by group)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    P_CONFIG_KEY(triggerWidthKey, "TriggerWidth")
+    P_CONFIG_KEY(delayMsKey, "DelayMs")
+    P_CONFIG_KEY(maxSpeedKey, "MaxSpeed")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Behavior

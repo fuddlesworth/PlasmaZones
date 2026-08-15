@@ -39,6 +39,17 @@ static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
 // same pin, different interface and direction.
 static_assert(!ConfigDefaults::scrollingCropStraddlers(),
               "IScrollSettings::scrollingCropStraddlers defaults to false — update it with this default");
+// The edge auto-scroll block, same class and direction: IScrollSettings
+// carries niri's four figures as defaulted bodies so a stub scrolls the way
+// niri does without knowing this schema exists.
+static_assert(ConfigDefaults::scrollingDragScrollEnabled(),
+              "IScrollSettings::scrollingDragScrollEnabled defaults to true — update it with this default");
+static_assert(ConfigDefaults::scrollingDragScrollTriggerWidth() == 30,
+              "IScrollSettings::scrollingDragScrollTriggerWidth defaults to 30 — update it with this default");
+static_assert(ConfigDefaults::scrollingDragScrollDelayMs() == 100,
+              "IScrollSettings::scrollingDragScrollDelayMs defaults to 100 — update it with this default");
+static_assert(ConfigDefaults::scrollingDragScrollMaxSpeed() == 1500,
+              "IScrollSettings::scrollingDragScrollMaxSpeed defaults to 1500 — update it with this default");
 // The tab indicator's paint half carries the same interface-side defaults, for
 // the same reason: the overlay service reads them through ISettings.
 static_assert(ConfigDefaults::scrollingTabIndicatorStyle() == 1,
@@ -81,6 +92,20 @@ P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCen
 
 P_STORE_GET(bool, scrollingCropStraddlers, scrollingGroup, cropStraddlersKey, bool)
 P_STORE_SET_BOOL(setScrollingCropStraddlers, scrollingGroup, cropStraddlersKey, scrollingCropStraddlersChanged)
+
+P_STORE_GET(bool, scrollingDragScrollEnabled, scrollingDragScrollGroup, enabledKey, bool)
+P_STORE_SET_BOOL(setScrollingDragScrollEnabled, scrollingDragScrollGroup, enabledKey, scrollingDragScrollEnabledChanged)
+
+P_STORE_GET(int, scrollingDragScrollTriggerWidth, scrollingDragScrollGroup, triggerWidthKey, int)
+P_STORE_SET_INT(setScrollingDragScrollTriggerWidth, scrollingDragScrollGroup, triggerWidthKey,
+                scrollingDragScrollTriggerWidthChanged)
+
+P_STORE_GET(int, scrollingDragScrollDelayMs, scrollingDragScrollGroup, delayMsKey, int)
+P_STORE_SET_INT(setScrollingDragScrollDelayMs, scrollingDragScrollGroup, delayMsKey, scrollingDragScrollDelayMsChanged)
+
+P_STORE_GET(int, scrollingDragScrollMaxSpeed, scrollingDragScrollGroup, maxSpeedKey, int)
+P_STORE_SET_INT(setScrollingDragScrollMaxSpeed, scrollingDragScrollGroup, maxSpeedKey,
+                scrollingDragScrollMaxSpeedChanged)
 
 P_STORE_GET(int, scrollingDefaultColumnWidthKind, scrollingGroup, defaultColumnWidthKindKey, int)
 

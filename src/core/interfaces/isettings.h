@@ -915,6 +915,10 @@ Q_SIGNALS:
     void scrollingCenterFocusedColumnChanged();
     void scrollingAlwaysCenterSingleColumnChanged();
     void scrollingCropStraddlersChanged();
+    void scrollingDragScrollEnabledChanged();
+    void scrollingDragScrollTriggerWidthChanged();
+    void scrollingDragScrollDelayMsChanged();
+    void scrollingDragScrollMaxSpeedChanged();
     void scrollingDefaultColumnWidthKindChanged();
     void scrollingDefaultColumnWidthValueChanged();
     void scrollingDefaultColumnDisplayChanged();

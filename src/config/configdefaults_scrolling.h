@@ -83,6 +83,55 @@ public:
     {
         return false;
     }
+    // ── Edge auto-scroll during a drag re-insert (niri parity) ───────────
+    //
+    // niri's dnd-edge-view-scroll defaults, verbatim. Holding a dragged
+    // window near either edge of the work area scrolls the strip, so the
+    // drop can reach a column that is off screen. Speed ramps linearly from
+    // zero at the band's inner edge to the maximum at the work area's edge.
+    // The engine keeps its own copy of these three figures as the
+    // IScrollSettings defaults; the static_asserts in settings/scrolling.cpp
+    // pin the two sides together.
+    static constexpr bool scrollingDragScrollEnabled()
+    {
+        return true;
+    }
+    static constexpr int scrollingDragScrollTriggerWidth()
+    {
+        return 30;
+    }
+    static constexpr int scrollingDragScrollTriggerWidthMin()
+    {
+        return 1;
+    }
+    static constexpr int scrollingDragScrollTriggerWidthMax()
+    {
+        return 300;
+    }
+    static constexpr int scrollingDragScrollDelayMs()
+    {
+        return 100;
+    }
+    static constexpr int scrollingDragScrollDelayMsMin()
+    {
+        return 0;
+    }
+    static constexpr int scrollingDragScrollDelayMsMax()
+    {
+        return 2000;
+    }
+    static constexpr int scrollingDragScrollMaxSpeed()
+    {
+        return 1500;
+    }
+    static constexpr int scrollingDragScrollMaxSpeedMin()
+    {
+        return 50;
+    }
+    static constexpr int scrollingDragScrollMaxSpeedMax()
+    {
+        return 10000;
+    }
     /// Width-kind wire values (0 = proportion, 1 = fixed px, 2 = client
     /// decides, 3 = preset index). Named so the settings layer's
     /// kind-aware branches read against the vocabulary instead of raw ints;

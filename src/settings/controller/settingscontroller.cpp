@@ -175,6 +175,14 @@ QVariantMap SettingsController::scrollingConstants() const
         {QStringLiteral("dropBorderWidthMax"), ConfigDefaults::scrollingDropIndicatorBorderWidthMax()},
         {QStringLiteral("dropBorderRadiusMin"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMin()},
         {QStringLiteral("dropBorderRadiusMax"), ConfigDefaults::scrollingDropIndicatorBorderRadiusMax()},
+        // Edge auto-scroll (Scrolling.Behavior.DragScroll). Bounds only,
+        // same policy as the two indicator blocks above.
+        {QStringLiteral("dragScrollTriggerWidthMin"), ConfigDefaults::scrollingDragScrollTriggerWidthMin()},
+        {QStringLiteral("dragScrollTriggerWidthMax"), ConfigDefaults::scrollingDragScrollTriggerWidthMax()},
+        {QStringLiteral("dragScrollDelayMsMin"), ConfigDefaults::scrollingDragScrollDelayMsMin()},
+        {QStringLiteral("dragScrollDelayMsMax"), ConfigDefaults::scrollingDragScrollDelayMsMax()},
+        {QStringLiteral("dragScrollMaxSpeedMin"), ConfigDefaults::scrollingDragScrollMaxSpeedMin()},
+        {QStringLiteral("dragScrollMaxSpeedMax"), ConfigDefaults::scrollingDragScrollMaxSpeedMax()},
     };
 }
 

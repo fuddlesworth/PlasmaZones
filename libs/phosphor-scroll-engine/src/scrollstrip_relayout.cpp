@@ -333,6 +333,29 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     return true;
 }
 
+bool ScrollStrip::scrollViewBy(int dx, const ScrollLayoutParams& params)
+{
+    if (m_activeColumnIdx < 0 || dx == 0) {
+        return false;
+    }
+    // Degenerate-area guard, same as clampedAnchor's (the rationale lives
+    // there). Checked here too because this mutator runs from a timer: a
+    // screen dying mid-drag must not walk the persisted anchor.
+    if (params.workArea.width() <= 0) {
+        return false;
+    }
+    // viewX = columnStripX(active) - anchor, so moving the view right by dx
+    // means shrinking the anchor by dx. Clamped, unlike the centering
+    // mutators: this one scrolls to a place the user pointed at rather than
+    // to a computed position, so running past either end must simply stop.
+    const int anchor = clampedAnchor(m_viewAnchor - dx, params);
+    if (anchor == m_viewAnchor) {
+        return false;
+    }
+    m_viewAnchor = anchor;
+    return true;
+}
+
 ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
 {
     ResolvedStrip out;

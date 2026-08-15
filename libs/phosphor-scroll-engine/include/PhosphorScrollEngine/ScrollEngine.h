@@ -505,6 +505,13 @@ public:
     /// screen's current one.
     DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
     void updateDragInsertPreview(const DragInsertTarget& target) override;
+    /// Edge auto-scroll (drag_autoscroll.cpp). Moves the VIEW only, which
+    /// is compatible with DETACH-ONCE: the invariant is that structure and
+    /// the hit-tested answer hold still under a stationary cursor, not that
+    /// pixels do. It keeps that answer still by owning the target while it
+    /// scrolls — see dragAutoScrollActive.
+    bool dragAutoScrollTick(const QString& screenId, const QPoint& cursorPos, qreal dtSeconds) override;
+    bool dragAutoScrollActive() const override;
     /// The rect the dragged window would occupy if it were dropped at the
     /// currently remembered target — the drop indicator the daemon paints.
     /// Absolute screen pixels, the same basis as visibleTiles.
@@ -758,6 +765,13 @@ private:
         return m_context.currentKeyForScreen(screenId);
     }
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
+    /// Point the live preview's drop target at the view's leading (@p
+    /// direction < 0) or trailing new-column slot, the two shapes the band
+    /// hit-test already produces at the view's extremes. Called on every
+    /// auto-scroll tick INSTEAD of the hit-test, so the target cannot churn
+    /// as columns slide under a stationary cursor (drag_autoscroll.cpp).
+    /// Returns true when the stored target actually changed.
+    bool writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction);
     ScrollState* stateForWindow(const QString& canonicalId, PhosphorEngine::PlacementStateKey* outKey = nullptr) const;
     /// The screen the engine should operate on for a screen-hinted verb:
     /// @p screenId when it is a scrolling screen, else the active screen.
@@ -997,6 +1011,15 @@ private:
     /// overhang. When false (default) the emit loop clamps the rect at the
     /// screen edge instead, which no present path can bypass.
     bool m_cropStraddlers = false;
+    /// Drag-insert edge auto-scroll (IScrollSettings' DragScroll block, and
+    /// niri's dnd-edge-view-scroll defaults). Speed ramps linearly from
+    /// zero at the band's inner edge to m_dragScrollMaxSpeed px/s at the
+    /// work area's edge, after the cursor has held inside the band for
+    /// m_dragScrollDelayMs.
+    bool m_dragScrollEnabled = true;
+    int m_dragScrollTriggerWidth = 30;
+    int m_dragScrollDelayMs = 100;
+    int m_dragScrollMaxSpeed = 1500;
     ColumnWidth m_defaultColumnWidth = ColumnWidth::makeProportion(0.5);
     /// "Client decides" default width: open at the client's initial size.
     /// This is the GLOBAL verdict only — a per-screen kind override answers

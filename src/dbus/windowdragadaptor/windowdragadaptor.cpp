@@ -5,6 +5,7 @@
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QScreen>
+#include <QTimer>
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -281,7 +282,68 @@ bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) con
     return false;
 }
 
-void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const QRect& rect)
+void WindowDragAdaptor::ensureDragScrollTimerRunning(const QString& windowId)
+{
+    if (!m_dragScrollTimer) {
+        m_dragScrollTimer = new QTimer(this);
+        // ~60 Hz. The engine integrates against the REAL elapsed time, so
+        // this figure only sets how finely the strip is sampled, not how
+        // fast it travels.
+        m_dragScrollTimer->setInterval(16);
+        connect(m_dragScrollTimer, &QTimer::timeout, this, &WindowDragAdaptor::onDragScrollTick);
+    }
+    if (m_dragScrollWindowId != windowId) {
+        // A different drag owns the timer now: restart the elapsed clock so
+        // the first tick of this drag cannot integrate the gap since the
+        // last one.
+        m_dragScrollWindowId = windowId;
+        m_dragScrollElapsed.invalidate();
+    }
+    if (!m_dragScrollTimer->isActive()) {
+        m_dragScrollElapsed.invalidate();
+        m_dragScrollTimer->start();
+    }
+}
+
+void WindowDragAdaptor::stopDragScrollTimer()
+{
+    if (m_dragScrollTimer) {
+        m_dragScrollTimer->stop();
+    }
+    m_dragScrollWindowId.clear();
+    m_dragScrollElapsed.invalidate();
+}
+
+void WindowDragAdaptor::onDragScrollTick()
+{
+    PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
+    // Self-terminating: five engine-side paths cancel a preview without
+    // telling the adaptor, and the drag itself can end between ticks. Rather
+    // than trust every caller to have stopped us, notice here.
+    if (!engine || m_draggedWindowId.isEmpty() || m_draggedWindowId != m_dragScrollWindowId) {
+        stopDragScrollTimer();
+        return;
+    }
+    const qreal dt = m_dragScrollElapsed.isValid() ? qreal(m_dragScrollElapsed.nsecsElapsed()) / 1'000'000'000.0 : 0.0;
+    m_dragScrollElapsed.restart();
+    if (dt <= 0.0) {
+        // First tick of this arming: no interval to integrate yet. The
+        // engine still needs it to arm its start delay, so tick with zero.
+        engine->dragAutoScrollTick(engine->dragInsertPreviewScreenId(), m_lastDragCursorPos, 0.0);
+        return;
+    }
+    const QString screenId = engine->dragInsertPreviewScreenId();
+    if (!engine->dragAutoScrollTick(screenId, m_lastDragCursorPos, dt)) {
+        return;
+    }
+    // The engine owns the target while it scrolls (it writes the view's
+    // leading/trailing new-column slot itself), so there is nothing to
+    // hit-test here — only the rect that target resolves to, which moves
+    // with the view.
+    pushScrollDropIndicator(screenId, engine->dragInsertIndicatorRect(screenId), /*animate=*/false);
+}
+
+void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate)
 {
     if (!m_overlayService || screenId.isEmpty()) {
         return;
@@ -301,7 +363,7 @@ void WindowDragAdaptor::pushScrollDropIndicator(const QString& screenId, const Q
         // to make legible, only a rectangle that must stop being painted.
         m_overlayService->updateScrollDropIndicator(m_dropIndicatorScreenId, QRect(), /*animate=*/false);
     }
-    m_overlayService->updateScrollDropIndicator(screenId, rect, /*animate=*/true);
+    m_overlayService->updateScrollDropIndicator(screenId, rect, animate);
     // An empty rect means the engine has no paintable target (autotile by
     // interface default, or a preview with nothing hit-tested yet). The
     // overlay treats that as a hide, so do not record the screen as lit —
@@ -331,6 +393,7 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
         m_scrollEngine->cancelDragInsertPreview();
     }
     clearScrollDropIndicator();
+    stopDragScrollTimer();
 }
 
 void WindowDragAdaptor::cancelDragInsertPreviews()
@@ -379,6 +442,12 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
 {
     PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
     const QString releaseScreenId = resolveScreenAt(QPointF(cursorX, cursorY)).screenId;
+
+    // The drag is over: every arm below either commits, cancels or finds
+    // nothing, and none of them wants a scroll tick landing between the
+    // decision and the structural insert. Stopped first, before any arm can
+    // return early.
+    stopDragScrollTimer();
 
     // A cancelled drag must stay cancelled. endDrag's cancel arm relies on
     // "the preview is gone, the settle finds nothing" — but the popup-only

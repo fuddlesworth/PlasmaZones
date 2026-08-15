@@ -8,6 +8,7 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 
+#include <QElapsedTimer>
 #include <QString>
 #include <QVector>
 
@@ -186,6 +187,22 @@ struct DragInsertPreview
     /// word "applied at commit" read as though the whole struct always
     /// made it through.
     FloatRestore carried;
+    // ── edge auto-scroll ──
+    /// Which edge band the cursor is in: -1 left, +1 right, 0 neither.
+    /// Also the "armed" flag — 0 means the whole mechanism is idle.
+    int autoScrollDirection = 0;
+    /// Elapsed timer since the cursor entered the band, used for the
+    /// configured start delay. Only meaningful while autoScrollDirection
+    /// is non-zero.
+    QElapsedTimer autoScrollArmed;
+    /// Sub-pixel remainder carried between ticks. The view anchor is
+    /// integer pixels, so without this a speed under one pixel per tick
+    /// would round to zero forever and the strip would never move.
+    qreal autoScrollResidue = 0.0;
+    /// True once the delay has elapsed and the scroll owns the drop
+    /// target. Distinct from autoScrollDirection, which is set the moment
+    /// the cursor enters the band.
+    bool autoScrollOwnsTarget = false;
     // ── cancel restoration ──
     /// Set when begin's defensive block took the window out of the
     /// TARGET strip despite it having no reverse-map entry (a stale

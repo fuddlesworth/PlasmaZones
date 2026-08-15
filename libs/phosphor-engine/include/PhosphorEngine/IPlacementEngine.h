@@ -543,6 +543,42 @@ public:
         Q_UNUSED(target)
     }
 
+    /// Advance edge auto-scroll for a live drag-insert preview (niri's
+    /// dnd-edge-view-scroll): an engine whose layout is a scrollable
+    /// viewport moves its VIEW while the cursor sits inside a band at the
+    /// work area's edge, so a drop can reach a column that is off screen.
+    /// Structure is untouched — this is the one thing a DETACH-ONCE engine
+    /// may move mid-drag.
+    ///
+    /// Driven by the daemon's repeating drag-scroll timer, NOT by cursor
+    /// motion: the whole point is that a PARKED cursor keeps scrolling, and
+    /// motion events stop arriving the moment the hand stops. @p dtSeconds
+    /// is the real elapsed time since the previous tick, so the speed ramp
+    /// is frame-rate independent and a stalled timer cannot lurch.
+    /// Returns true when the view actually moved.
+    ///
+    /// While this is scrolling, the implementation OWNS the drop target: it
+    /// writes the edge slot itself and the caller must not re-hit-test (see
+    /// dragAutoScrollActive). Columns sliding under a stationary cursor
+    /// otherwise re-resolve the target on every boundary that passes, which
+    /// flips the indicator between a new column and a join.
+    virtual bool dragAutoScrollTick(const QString& screenId, const QPoint& cursorPos, qreal dtSeconds)
+    {
+        Q_UNUSED(screenId)
+        Q_UNUSED(cursorPos)
+        Q_UNUSED(dtSeconds)
+        return false;
+    }
+
+    /// Whether edge auto-scroll currently owns the drop target. True from
+    /// the moment the band's delay elapses until the cursor leaves the band
+    /// or the strip hits an end. While true the caller keeps pushing the
+    /// indicator but must leave computeDragInsertTargetAtPoint alone.
+    virtual bool dragAutoScrollActive() const
+    {
+        return false;
+    }
+
     /// The rect the dragged window would occupy if the live preview were
     /// dropped now, in absolute px on @p screenId, for a caller that wants to
     /// PAINT the drop target. Empty when no preview is live, no target has

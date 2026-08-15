@@ -64,6 +64,12 @@ private Q_SLOTS:
     void neighbourCloseInvalidatesStaleTarget();
     void windowedFullscreenSurvivesCancelAndCommit();
     void windowedFullscreenSurvivesCrossScreenCommit();
+    void edgeAutoScrollStaysInertWhenTheStripFits();
+    void edgeAutoScrollHonoursTheStartDelay();
+    void edgeAutoScrollKeepsTheTargetAtTheEdge();
+    void edgeAutoScrollAccumulatesSubPixelSpeed();
+    void edgeAutoScrollClampsAtTheStripEnd();
+    void edgeAutoScrollDisarmsOutsideTheBand();
 
 private:
     static ScrollState* stateFor(ScrollEngine* engine, const QString& screenId)
@@ -76,6 +82,31 @@ private:
         for (const QString& id : ids) {
             engine->windowOpened(id, screenId, 0, 0);
         }
+    }
+
+    /// Where the view sits, in strip pixels. The auto-scroll's whole job.
+    static int viewX(ScrollEngine* engine, const QString& screenId)
+    {
+        return stateFor(engine, screenId)->strip().relayout(engineParams()).viewX;
+    }
+
+    /// One drag-scroll heartbeat at @p cursorX, carrying @p dtSeconds of
+    /// elapsed time — the daemon's timer in miniature.
+    static bool tick(ScrollEngine* engine, int cursorX, qreal dtSeconds = 0.016)
+    {
+        return engine->dragAutoScrollTick(QStringLiteral("S1"), QPoint(cursorX, 300), dtSeconds);
+    }
+
+    /// Arm the band and wait out the configured start delay, leaving the
+    /// scroll owning the target. Returns the view position at that point.
+    static int armLeftBand(ScrollEngine* engine, int cursorX)
+    {
+        // First tick only arms (it is the transition into the band), and
+        // every tick inside the delay window declines to move.
+        tick(engine, cursorX);
+        QTest::qWait(120); // > the 100 ms IScrollSettings default
+        tick(engine, cursorX);
+        return viewX(engine, QStringLiteral("S1"));
     }
 
     /// The rect of @p windowId among visibleTiles, or a null rect.
@@ -1133,6 +1164,165 @@ void TestScrollEngineDragInsert::windowedFullscreenSurvivesCrossScreenCommit()
     QVERIFY(s2->strip().containsWindow(QStringLiteral("b")));
     QVERIFY(s2->strip().isWindowedFullscreen(QStringLiteral("b")));
     QVERIFY(!s2->strip().isWindowedFullscreen(QStringLiteral("c")));
+}
+
+// ── Edge auto-scroll (niri's dnd-edge-view-scroll) ──────────────────────────
+//
+// The feature shipped once and was reverted: it scrolled the view while
+// still hit-testing, so columns sliding under a parked cursor re-answered on
+// every boundary that passed and the indicator flipped between a full-height
+// new column and a half-height join. keepsTheTargetAtTheEdge is the test that
+// exists for that; the rest pin the ramp's edges.
+
+void TestScrollEngineDragInsert::edgeAutoScrollStaysInertWhenTheStripFits()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a")});
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("b|fresh"), QStringLiteral("S1")));
+
+    // One 600 px column on a 1200 px screen: nothing is off screen, so the
+    // bands have nothing to reveal and must not arm at all — otherwise the
+    // target would sit locked to an edge slot with no motion to justify it.
+    const int before = viewX(engine, QStringLiteral("S1"));
+    tick(engine, 2);
+    QTest::qWait(120);
+    QVERIFY(!tick(engine, 2));
+    QVERIFY(!engine->dragAutoScrollActive());
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), before);
+
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::edgeAutoScrollHonoursTheStartDelay()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
+    const int start = viewX(engine, QStringLiteral("S1"));
+    QVERIFY(start > 0); // column a is parked off the left edge
+
+    // Entering the band arms it and moves nothing, and neither does a tick
+    // taken immediately after: a drag that merely passes an edge on its way
+    // somewhere else must not drag the strip with it.
+    QVERIFY(!tick(engine, 2));
+    QVERIFY(!tick(engine, 2));
+    QVERIFY(!engine->dragAutoScrollActive());
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), start);
+
+    QTest::qWait(120);
+    QVERIFY(tick(engine, 2));
+    QVERIFY(engine->dragAutoScrollActive());
+    // At the very edge the ramp is at full speed, so ~16 ms of the 1500 px/s
+    // default is ~24 px — leftwards, revealing the parked column.
+    QVERIFY(viewX(engine, QStringLiteral("S1")) < start);
+
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::edgeAutoScrollKeepsTheTargetAtTheEdge()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
+
+    const QRect wa = ScrollTestUtils::defaultScreenRect();
+    int last = armLeftBand(engine, 2);
+    QVERIFY(engine->dragAutoScrollActive());
+
+    // Walk the strip a long way with the cursor NEVER moving. The indicator
+    // must keep the leading slot's shape the whole time — half of a
+    // full-height new column hanging off the left edge — even as which
+    // column is first visible changes underneath it. This is the reverted
+    // implementation's exact failure: there, the rect's HEIGHT changed as
+    // each boundary crossed the cursor.
+    const QRect first = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+    QVERIFY(first.isValid());
+    QCOMPARE(first.left(), wa.left() - first.width() / 2);
+    bool sawMotion = false;
+    for (int i = 0; i < 20; ++i) {
+        tick(engine, 2);
+        const int now = viewX(engine, QStringLiteral("S1"));
+        sawMotion = sawMotion || now != last;
+        last = now;
+        const QRect rect = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
+        QCOMPARE(rect.height(), first.height());
+        QCOMPARE(rect.left(), wa.left() - rect.width() / 2);
+    }
+    QVERIFY(sawMotion);
+
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::edgeAutoScrollAccumulatesSubPixelSpeed()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
+
+    // One pixel inside the band's INNER edge: depth is 1/30, so a 16 ms tick
+    // asks for well under a pixel. The view anchor is integer pixels, so
+    // without the carried remainder the shallow end of the band would be
+    // dead however long the user held there.
+    const int shallow = ScrollTestUtils::defaultScreenRect().left() + 30 - 1;
+    const int start = armLeftBand(engine, shallow);
+    int moved = 0;
+    for (int i = 0; i < 12 && moved == 0; ++i) {
+        tick(engine, shallow);
+        moved = start - viewX(engine, QStringLiteral("S1"));
+    }
+    QVERIFY(moved > 0);
+
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::edgeAutoScrollClampsAtTheStripEnd()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
+
+    armLeftBand(engine, 0);
+    // Long enough to run out of strip several times over. The view stops at
+    // the first column's left edge and stays there; it never walks negative,
+    // and the tick keeps answering rather than latching.
+    for (int i = 0; i < 60; ++i) {
+        tick(engine, 0, 0.05);
+        QVERIFY(viewX(engine, QStringLiteral("S1")) >= 0);
+    }
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), 0);
+    QVERIFY(!tick(engine, 0, 0.05)); // pinned: nothing moves, nothing changes
+
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::edgeAutoScrollDisarmsOutsideTheBand()
+{
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
+
+    armLeftBand(engine, 2);
+    QVERIFY(engine->dragAutoScrollActive());
+
+    // Cursor pulled back into the middle: the scroll stops owning the target
+    // immediately, so the caller's hit-test takes over again on the same
+    // tick rather than one delay later.
+    const int settled = viewX(engine, QStringLiteral("S1"));
+    QVERIFY(!tick(engine, ScrollTestUtils::defaultScreenRect().center().x()));
+    QVERIFY(!engine->dragAutoScrollActive());
+    QCOMPARE(viewX(engine, QStringLiteral("S1")), settled);
+
+    // Re-entering serves a fresh delay rather than resuming instantly.
+    QVERIFY(!tick(engine, 2));
+    QVERIFY(!engine->dragAutoScrollActive());
+
+    engine->cancelDragInsertPreview();
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineDragInsert)

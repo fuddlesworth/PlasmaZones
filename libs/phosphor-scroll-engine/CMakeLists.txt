@@ -39,6 +39,7 @@ add_library(PhosphorScrollEngine SHARED
     src/scrollengine/enginelimits.h
     src/scrollengine/engine_apply.cpp
     src/scrollengine/engine_snapshot.cpp
+    src/scrollengine/drag_autoscroll.cpp
     src/scrollengine/drag_preview.cpp
     src/scrollengine/engine_lifecycle.cpp
     src/scrollengine/engine_reopen.cpp

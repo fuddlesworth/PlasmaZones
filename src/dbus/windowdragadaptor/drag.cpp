@@ -712,6 +712,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     // outer branch was taken. A rect pushed on an earlier tick
                     // would stay painted for the rest of the drag.
                     clearScrollDropIndicator();
+                    stopDragScrollTimer();
                 } else if (insertEngine->providesDragInsertSelector() && m_overlayService) {
                     // The begin detached the drag window. The popup's
                     // exclusion emulated that detach, so the column set
@@ -738,19 +739,39 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // preview (and the in-strip indicator paints its slot); the
                 // popup clears its target the moment the cursor leaves the
                 // cards, handing ownership straight back to the bands.
+                //
+                // Edge auto-scroll gets the cursor and a heartbeat here; the
+                // strip's own view motion runs off the timer, because motion
+                // ticks stop the instant the hand does and a PARKED cursor in
+                // the band is the whole gesture. Armed unconditionally for a
+                // live preview: the engine answers "not me" for free when it
+                // cannot scroll (autotile's interface default) or when the
+                // strip already fits the viewport.
+                m_lastDragCursorPos = QPoint(cursorX, cursorY);
+                ensureDragScrollTimerRunning(windowId);
+
                 PhosphorEngine::IPlacementEngine::DragInsertTarget target;
-                if (stripSelector && m_overlayService && m_overlayService->hasSelectedStripTarget()
-                    && PhosphorScreens::ScreenIdentity::screensMatch(m_overlayService->selectedStripTargetScreenId(),
-                                                                     insertScreenId)) {
-                    const auto strip = m_overlayService->selectedStripTarget();
-                    target.primary = strip.columnIndex;
-                    target.secondary = strip.tileIndex;
-                    target.newSlot = strip.newColumn;
-                } else {
-                    target = insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
-                }
-                if (target.isValid()) {
-                    insertEngine->updateDragInsertPreview(target);
+                // While the auto-scroll is running it OWNS the target — it
+                // writes the view's leading/trailing new-column slot itself.
+                // Re-hit-testing here would undo that on the next cursor
+                // twitch and bring back the churn the first version of this
+                // feature was reverted for: columns sliding under a nearly
+                // stationary cursor re-answer on every boundary they cross,
+                // flipping the indicator between a new column and a join.
+                if (!insertEngine->dragAutoScrollActive()) {
+                    if (stripSelector && m_overlayService && m_overlayService->hasSelectedStripTarget()
+                        && PhosphorScreens::ScreenIdentity::screensMatch(
+                            m_overlayService->selectedStripTargetScreenId(), insertScreenId)) {
+                        const auto strip = m_overlayService->selectedStripTarget();
+                        target.primary = strip.columnIndex;
+                        target.secondary = strip.tileIndex;
+                        target.newSlot = strip.newColumn;
+                    } else {
+                        target = insertEngine->computeDragInsertTargetAtPoint(insertScreenId, QPoint(cursorX, cursorY));
+                    }
+                    if (target.isValid()) {
+                        insertEngine->updateDragInsertPreview(target);
+                    }
                 }
                 // Paint the drop target. Pushed AFTER the update above so the
                 // rect reflects this tick's target, and pushed unconditionally
@@ -797,6 +818,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             const bool cancelledStripSelector = previewEngine->providesDragInsertSelector();
             previewEngine->cancelDragInsertPreview();
             clearScrollDropIndicator();
+            stopDragScrollTimer();
             if (cancelledStripSelector && m_overlayService && !cancelledScreenId.isEmpty()) {
                 m_overlayService->refreshStripSelector(cancelledScreenId);
             }

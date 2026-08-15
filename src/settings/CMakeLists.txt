@@ -341,6 +341,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/scrolling/PresetListEditor.qml
         qml/pages/scrolling/ScrollingWindowHandlingCard.qml
         qml/pages/scrolling/ScrollingDragInsertCard.qml
+        qml/pages/scrolling/ScrollingEdgeScrollCard.qml
         qml/pages/scrolling/ScrollingDropIndicatorCard.qml
         qml/pages/scrolling/ScrollingFocusCard.qml
         # Shared, mode-neutral page: the baseline window-appearance editor, which

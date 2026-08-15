@@ -734,6 +734,24 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     addSetting(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingTriggersToggleMode"),
                PhosphorI18n::tr("Toggle mode"), {PhosphorI18n::tr("tap"), PhosphorI18n::tr("strip preview")});
 
+    // Edge auto-scroll card, between Triggers and the drop indicator. Its
+    // master switch is in the card header too, so the section carries the
+    // "auto scroll" match and the three rows carry the numbers.
+    addSection(search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScroll"),
+               PhosphorI18n::tr("Edge auto-scroll"));
+    addSetting(
+        search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScrollTriggerWidth"),
+        PhosphorI18n::tr("Trigger width"),
+        {PhosphorI18n::tr("edge"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("drag"), PhosphorI18n::tr("strip")});
+    addSetting(
+        search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScrollDelay"),
+        PhosphorI18n::tr("Start delay"),
+        {PhosphorI18n::tr("edge"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("delay"), PhosphorI18n::tr("drag")});
+    addSetting(
+        search, QStringLiteral("scrolling-window"), QStringLiteral("scrollingDragScrollMaxSpeed"),
+        PhosphorI18n::tr("Maximum speed"),
+        {PhosphorI18n::tr("edge"), PhosphorI18n::tr("scroll"), PhosphorI18n::tr("speed"), PhosphorI18n::tr("drag")});
+
     // Drop indicator card, directly after Triggers on the page. The master
     // switch lives in the card HEADER (no body row of its own), so this is
     // the section-only shape the Borders and Opacity-and-tint cards use —

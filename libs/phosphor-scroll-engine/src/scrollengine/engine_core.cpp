@@ -763,6 +763,15 @@ void ScrollEngine::refreshConfigFromSettings()
     m_alwaysCenterSingleColumn = settings->scrollingAlwaysCenterSingleColumn();
     m_cropStraddlers = settings->scrollingCropStraddlers();
 
+    // Edge auto-scroll. Floors rather than raw values: a zero or negative
+    // trigger width would divide by zero in the ramp, and a non-positive
+    // speed would arm a scroll that can never move (the delay would latch
+    // and the drop target would stay locked to the edge slot forever).
+    m_dragScrollEnabled = settings->scrollingDragScrollEnabled();
+    m_dragScrollTriggerWidth = qMax(1, settings->scrollingDragScrollTriggerWidth());
+    m_dragScrollDelayMs = qMax(0, settings->scrollingDragScrollDelayMs());
+    m_dragScrollMaxSpeed = qMax(1, settings->scrollingDragScrollMaxSpeed());
+
     // Guarded cast, matching every sibling enum in this function (center,
     // insertPos, sticky, indicator position): the shared value key can hold
     // a figure from the OTHER kind in a hand-edited config, and an

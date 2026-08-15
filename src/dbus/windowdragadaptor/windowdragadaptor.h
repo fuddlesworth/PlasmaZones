@@ -7,7 +7,9 @@
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/ZoneMarshalling.h>
 #include <QDBusAbstractAdaptor>
+#include <QElapsedTimer>
 #include <QObject>
+#include <QPoint>
 #include <QString>
 #include <QRect>
 #include <QUuid>
@@ -16,6 +18,7 @@
 #include <memory>
 
 class QScreen;
+class QTimer;
 
 namespace PhosphorScreens {
 class ScreenManager;
@@ -741,6 +744,34 @@ private:
     /// journal without it). Reset by beginDrag.
     bool m_dragInsertTickLogged = false;
 
+    // ── Edge auto-scroll driver (niri's dnd-edge-view-scroll) ───────────
+    //
+    // A repeating timer, not the cursor ticks: dragMoved only fires on
+    // pointer MOTION (DragTracker emits on slotMouseChanged, throttled to
+    // 32 ms), and the whole point of the feature is that a cursor PARKED in
+    // the edge band keeps scrolling. The engine does the ramp; this side
+    // only supplies a heartbeat, the last known cursor and the real elapsed
+    // time between ticks.
+
+    /// ~60 Hz while a drag-insert preview is live on an engine that can
+    /// auto-scroll. Created lazily, stopped by every preview-end path and
+    /// by the tick itself when it finds no preview left.
+    QTimer* m_dragScrollTimer = nullptr;
+    /// Wall time since the previous tick, so the engine's speed ramp is
+    /// frame-rate independent and a late timer cannot lurch the strip.
+    QElapsedTimer m_dragScrollElapsed;
+    /// Last cursor position dragMoved saw, in screen pixels. The timer has
+    /// no cursor of its own.
+    QPoint m_lastDragCursorPos;
+    /// The drag the timer was armed for. A tick is at most 16 ms from
+    /// firing when a drag ends, which is long enough for the next drag's
+    /// eager preview to begin — and that tick would then nudge the NEW
+    /// strip with the OLD drag's parked cursor.
+    QString m_dragScrollWindowId;
+    void ensureDragScrollTimerRunning(const QString& windowId);
+    void stopDragScrollTimer();
+    void onDragScrollTick();
+
     // DRY helper: cancel any active drag-insert preview on either engine.
     void cancelDragInsertIfActive();
 
@@ -751,12 +782,18 @@ private:
     QString m_dropIndicatorScreenId;
     /// Push the drop-target indicator for a live preview on @p screenId,
     /// hiding the previous screen's indicator first when the drag crossed
-    /// screens so a cross-screen drag cannot strand one behind it. Always
-    /// animated: the only caller follows a cursor move, so a rect change is
-    /// the user aiming somewhere new (the overlay change-gates, so an
-    /// unchanged rect animates nothing). Hides ride the overlay's
-    /// animate=false path directly — see clearScrollDropIndicator.
-    void pushScrollDropIndicator(const QString& screenId, const QRect& rect);
+    /// screens so a cross-screen drag cannot strand one behind it. Hides
+    /// ride the overlay's animate=false path directly — see
+    /// clearScrollDropIndicator.
+    ///
+    /// Animated by default: the cursor-tick caller follows a cursor move, so
+    /// a rect change there is the user aiming somewhere new (the overlay
+    /// change-gates, so an unchanged rect animates nothing). Pass
+    /// @p animate false for the edge auto-scroll's own pushes: those land
+    /// every ~16 ms against a ~100 ms transition, so animating them
+    /// retargets the rect six times before it can settle and it stretches
+    /// instead of sliding.
+    void pushScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate = true);
     /// Preview-end teardown for the drop indicator. Safe to call with none
     /// showing.
     ///

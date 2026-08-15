@@ -60,6 +60,10 @@ SettingsFlickable {
             Layout.fillWidth: true
         }
 
+        ScrollingEdgeScrollCard {
+            Layout.fillWidth: true
+        }
+
         ScrollingDropIndicatorCard {
             Layout.fillWidth: true
             picker: dropIndicatorColorDialog

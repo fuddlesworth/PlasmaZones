@@ -322,6 +322,15 @@ public:
     /// center-visible-columns). Falls back to centerActiveColumn when no
     /// column is fully visible. Returns true when the anchor actually moved.
     bool centerVisibleColumns(const ScrollLayoutParams& params);
+    /// Scroll the view @p dx pixels to the right (negative scrolls left)
+    /// WITHOUT changing focus, clamped to the strip's ends. The anchor is
+    /// stored relative to the active column, so a rightward view move
+    /// shrinks it by the same amount. Returns true when the anchor actually
+    /// moved — a caller sitting at either end gets false and can stop.
+    /// This is the only mutator that moves the view without a focus,
+    /// structure or policy change behind it; the drag-insert edge
+    /// auto-scroll is its one caller.
+    bool scrollViewBy(int dx, const ScrollLayoutParams& params);
 
     // ── Relayout ─────────────────────────────────────────────────────────────
     /// Resolve every non-minimized tile's absolute pixel rect against
