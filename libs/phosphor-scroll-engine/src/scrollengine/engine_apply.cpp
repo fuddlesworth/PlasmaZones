@@ -141,7 +141,53 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     params.alwaysCenterSingleColumn = effectiveAlwaysCenterSingleColumn(overrides);
     params.defaultColumnWidth = effectiveDefaultColumnWidth(overrides, params.presetColumnWidths);
     params.tabIndicator = effectiveTabIndicator(overrides);
+    // Resolved LAST, and deliberately so: it reads params.workArea, which is
+    // not final until the outer-gap adjust and the smart-gaps zeroing above
+    // have run. Moving this up beside the gap resolve would silently resolve
+    // Auto against an unadjusted rect, and on a near-square monitor with
+    // asymmetric outer gaps the two rects genuinely disagree.
+    //
+    // Resolved PER CALL and never cached: under Auto two screens with no
+    // per-screen key at all resolve differently, so a cached verdict would
+    // hand one monitor the other's axis.
+    params.axis = resolveStripAxis(params.workArea);
     return params;
+}
+
+StripAxis ScrollEngine::resolveStripAxis(const QRect& workArea) const
+{
+    // Auto: a work area taller than it is wide runs the strip vertically.
+    //
+    // Strictly greater on height, with no threshold knob. An aspect-ratio
+    // threshold is a setting nobody can reason about, where "taller than wide"
+    // is a rule you can state in one sentence. A square work area resolves
+    // HORIZONTAL, and so does a null one — engine_apply nulls params.workArea
+    // whenever the gap-adjusted rect degenerates, so that is a live path, and
+    // horizontal is both the historical behaviour and the only safe answer
+    // when the geometry says nothing.
+    //
+    // Measured against the WORK AREA rather than the screen rect, so a tall
+    // reserved panel is accounted for consistently with everything else the
+    // strip measures.
+    return workArea.height() > workArea.width() ? StripAxis::vertical() : StripAxis::horizontal();
+}
+
+StripAxis ScrollEngine::stripAxisForScreen(const QString& screenId) const
+{
+    // Public accessor for consumers outside the layout path — the daemon
+    // publishes this to the effect, and the strip selector draws with it.
+    // Both MUST take it from here rather than deriving an aspect ratio of
+    // their own: a second derivation can disagree with this one on a
+    // near-square monitor, and a daemon/engine disagreement about the axis is
+    // the worst possible failure mode — intermittent, geometry-dependent, and
+    // invisible in tests.
+    //
+    // Resolves the work area LIVE, through layoutParamsForScreen, rather than
+    // reading a snapshot from the last relayout. The engine subscribes to no
+    // ScreenManager signal, so a cached work area would still be the
+    // PRE-rotation one at the moment the daemon asks, and the published axis
+    // would be correctly ordered but stale.
+    return layoutParamsForScreen(screenId).axis;
 }
 
 QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& screenId) const

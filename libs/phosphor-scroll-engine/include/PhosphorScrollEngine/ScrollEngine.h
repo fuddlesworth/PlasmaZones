@@ -747,6 +747,22 @@ Q_SIGNALS:
     /// urgency, adds the paint settings, and drives the overlay.
     void tabStripsChanged(const QString& screenId, const QString& stripsJson);
 
+public:
+    /// Which way @p screenId's strip runs, resolved live.
+    ///
+    /// THE single source of the resolved axis for everything outside the
+    /// layout path — the daemon publishes it to the effect, and the strip
+    /// selector draws its miniature with it. Neither may derive an aspect
+    /// ratio of its own: two independent derivations can disagree on a
+    /// near-square monitor, and that disagreement is invisible in tests and
+    /// intermittent in the field.
+    ///
+    /// Resolves the work area LIVE. The engine subscribes to no ScreenManager
+    /// signal, so answering from a snapshot taken at the last relayout would
+    /// hand out the PRE-rotation axis at exactly the moment a rotation makes
+    /// someone ask.
+    StripAxis stripAxisForScreen(const QString& screenId) const;
+
 private:
     // engine_core.cpp
     QString canonicalizeForLookup(const QString& rawWindowId) const;
@@ -853,6 +869,11 @@ private:
     /// one) and windowOpened's height-rule arm, which re-resolves the work
     /// area against the POST-insert column count.
     ScrollLayoutParams layoutParamsForScreen(const QString& screenId, int columnCountOverride = -1) const;
+
+    /// Auto-resolve the strip axis from a FINAL work area. Private because
+    /// callers must not pass a rect that has not been through the outer-gap
+    /// adjust; stripAxisForScreen is the public door.
+    StripAxis resolveStripAxis(const QRect& workArea) const;
     /// visibleTiles' real body, taking params the caller already resolved.
     /// The public overload is the thin wrapper; callers that hold params
     /// (the digit path, the normalized-rect walk) use this instead of paying
