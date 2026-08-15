@@ -385,6 +385,20 @@ public:
     {
         m_stripCardsProvider = std::move(provider);
     }
+    /// Whether a screen's strip runs VERTICALLY. A bool rather than an axis
+    /// type for the same reason the cards arrive serialized: this header does
+    /// not know engine types.
+    ///
+    /// Absent provider answers false — horizontal, the historical layout.
+    using StripAxisProvider = std::function<bool(const QString& screenId)>;
+    void setStripAxisProvider(StripAxisProvider provider)
+    {
+        m_stripAxisProvider = std::move(provider);
+    }
+    bool stripIsVertical(const QString& screenId) const
+    {
+        return m_stripAxisProvider ? m_stripAxisProvider(screenId) : false;
+    }
 
     // PhosphorZones::Layout OSD (visual preview when switching layouts)
     // screenId: target screen (empty = screen under cursor, fallback to primary)
@@ -1054,6 +1068,7 @@ private:
     LayoutSupportResolver m_layoutSupportResolver;
     DragInsertSelectorResolver m_dragInsertSelectorResolver;
     StripCardsProvider m_stripCardsProvider;
+    StripAxisProvider m_stripAxisProvider;
     /// Live drag window id (drag adaptor sets at drag start, clears at drag
     /// end) — buildStripList excludes it so a not-yet-detached drag window
     /// never appears as its own card.

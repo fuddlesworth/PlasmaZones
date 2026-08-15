@@ -207,6 +207,10 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     }
     writeQmlProperty(window, QStringLiteral("stripMode"), stripMode);
     writeQmlProperty(window, QStringLiteral("stripColumns"), stripColumns);
+    // Pushed even when this screen is not in strip mode: the property is a
+    // plain bool and a stale true would transpose the next strip popup on a
+    // screen that had since gone horizontal.
+    writeQmlProperty(window, QStringLiteral("stripVerticalAxis"), stripMode && stripIsVertical(screenId));
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
     // Global "Auto-assign for all layouts" master toggle (#370) - when on, every

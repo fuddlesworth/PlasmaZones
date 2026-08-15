@@ -91,8 +91,21 @@ Item {
     // preview rather than collapsing the column to nothing.
     readonly property real widthFraction: (modelData.widthFraction > 0 && modelData.widthFraction <= 1) ? modelData.widthFraction : 1
 
-    width: Math.max(8, Math.round(previewWidth * widthFraction)) + cardSidePadding * 2
-    height: previewHeight + labelSpace + cardPadding
+    /// Whether this card belongs to a VERTICAL strip. The popup is a
+    /// miniature of the strip, so the card's along-strip extent has to follow
+    /// the same axis the real columns do.
+    ///
+    /// The serialized share and the tile rects stay STRIP-LOCAL (along-strip,
+    /// across-strip) on the wire — the producer never transposes. This card is
+    /// the single place the mapping to screen happens.
+    property bool verticalAxis: false
+
+    // The along-strip extent always carries widthFraction; which screen
+    // dimension that is depends on the axis.
+    readonly property int alongExtent: Math.max(8, Math.round(previewWidth * widthFraction))
+
+    width: verticalAxis ? previewWidth + cardSidePadding * 2 : alongExtent + cardSidePadding * 2
+    height: verticalAxis ? alongExtent + labelSpace + cardPadding : previewHeight + labelSpace + cardPadding
 
     Rectangle {
         id: cardBackground
@@ -113,7 +126,7 @@ Item {
         // The card width formula minus the chrome: the whole preview IS the
         // column at its real on-screen share.
         width: card.width - card.cardSidePadding * 2
-        height: card.previewHeight
+        height: card.verticalAxis ? card.alongExtent : card.previewHeight
         // A min-height-overflowing stack legitimately resolves tail tiles
         // past the column (relRect y > 1); clip so they cannot paint over
         // the caption or a neighbouring card.
@@ -185,10 +198,14 @@ Item {
                 required property var modelData
 
                 visible: modelData.width > 0 && modelData.height > 0
-                x: modelData.x * preview.width
-                y: modelData.y * preview.height
-                width: Math.max(0, modelData.width * preview.width - card.tilePadding)
-                height: Math.max(0, modelData.height * preview.height - card.tilePadding)
+                // The rect arrives strip-local: modelData.x/width run ACROSS
+                // the column, y/height ALONG it. On a horizontal strip that is
+                // already screen x/y; on a vertical one the pair swaps, which
+                // is the only transpose this component performs.
+                x: card.verticalAxis ? modelData.y * preview.width : modelData.x * preview.width
+                y: card.verticalAxis ? modelData.x * preview.height : modelData.y * preview.height
+                width: Math.max(0, (card.verticalAxis ? modelData.height : modelData.width) * preview.width - card.tilePadding)
+                height: Math.max(0, (card.verticalAxis ? modelData.width : modelData.height) * preview.height - card.tilePadding)
                 radius: card.tileBorderRadius
                 // Baked alpha, same single-apply contract as the tab segments.
                 color: Qt.rgba(card.inactiveColor.r, card.inactiveColor.g, card.inactiveColor.b, card.inactiveOpacity)
@@ -204,10 +221,15 @@ Item {
     // footprint matches that semantic rather than stopping at the preview.
     Rectangle {
         visible: card.selectedHalf >= 0
-        x: card.selectedHalf === 2 ? 0 : preview.x
-        y: card.selectedHalf === 2 ? 0 : (card.selectedHalf === 1 ? preview.y + preview.height / 2 : preview.y)
-        width: card.selectedHalf === 2 ? card.width : preview.width
-        height: card.selectedHalf === 2 ? card.height : preview.height / 2
+        // Half 0 is the FIRST tile slot and half 1 appends — those are
+        // positions in the column's stack, so the split follows the stack's
+        // axis: top/bottom on a horizontal strip, left/right on a vertical
+        // one. Splitting the wrong way would highlight a region that does not
+        // correspond to the drop the hit-test just classified.
+        x: card.selectedHalf === 2 ? 0 : (card.verticalAxis && card.selectedHalf === 1 ? preview.x + preview.width / 2 : preview.x)
+        y: card.selectedHalf === 2 ? 0 : (!card.verticalAxis && card.selectedHalf === 1 ? preview.y + preview.height / 2 : preview.y)
+        width: card.selectedHalf === 2 ? card.width : (card.verticalAxis ? preview.width / 2 : preview.width)
+        height: card.selectedHalf === 2 ? card.height : (card.verticalAxis ? preview.height : preview.height / 2)
         radius: card.selectedHalf === 2 ? cardBackground.radius : card.tileBorderRadius
         // Baked alpha, same single-apply contract as the tiles above; the
         // border keeps the highlight colour's own carried alpha, exactly as

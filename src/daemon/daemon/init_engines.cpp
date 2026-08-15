@@ -275,6 +275,14 @@ void Daemon::initEnginesAndWiring()
             }
             return stripColumnsToVariantList(scroll->stripSnapshot(screenId, excludeWindowId));
         });
+    // The popup mirrors the strip, so it needs the same axis the engine
+    // resolved. Taken from stripAxisForScreen rather than re-derived from the
+    // screen's aspect: two derivations can disagree on a near-square monitor,
+    // and here that would draw a miniature the drop targets do not match.
+    m_overlayService->setStripAxisProvider([this](const QString& screenId) -> bool {
+        const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+        return scroll && scroll->stripAxisForScreen(screenId).axis() == PhosphorProtocol::ScrollAxis::Vertical;
+    });
 
     // Autotile provider. setContextGapProvider is derived-only
     // (AutotileEngine); m_autotileEngine is held as the base

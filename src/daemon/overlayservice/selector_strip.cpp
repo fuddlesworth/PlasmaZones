@@ -156,7 +156,12 @@ void OverlayService::updateStripSelectorHit(QQuickItem* slot, int localX, int lo
             cardRects[cardIndex] = mapVisibleRectToItem(card, slot);
         }
         const qreal spacing = std::max(4, slot->property("indicatorSpacing").toInt());
-        hit = classifyStripSelectorPoint(cardRects, tabbed, pos, spacing * 0.75);
+        // The row is laid out along the strip's axis (ZoneSelectorContent's
+        // Grid), so the classification has to be told the same thing. These
+        // two MUST agree: a horizontal classification over a vertical row
+        // reverses which half of a card means "first tile" versus "append",
+        // silently and with no visual tell.
+        hit = classifyStripSelectorPoint(cardRects, tabbed, pos, spacing * 0.75, stripIsVertical(screenId));
     }
 
     SelectorStripTarget target;

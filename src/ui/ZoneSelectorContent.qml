@@ -39,6 +39,11 @@ Item {
     // (tabbed dock) on the selectedStripColumn card.
     property bool stripMode: false
     property var stripColumns: []
+    /// Whether the strip this popup mirrors runs VERTICALLY. The popup is a
+    /// miniature, so the card row and each card's along-strip extent follow
+    /// the same axis the real columns do — otherwise the drop halves under the
+    /// cursor stop meaning what the picture shows.
+    property bool stripVerticalAxis: false
     property int selectedStripColumn: -1
     property int selectedStripGap: -1
     property int selectedStripHalf: -1
@@ -418,16 +423,25 @@ Item {
                         return x;
                     }
 
-                    Row {
+                    // Grid rather than Row so ONE container serves both axes:
+                    // it positions children by their own width/height exactly
+                    // as Row does, so rows:1 reproduces the previous layout
+                    // bit for bit, while columns:1 stacks the same cards down
+                    // the popup for a vertical strip. Swapping between a Row
+                    // and a Column would have meant two copies of the delegate.
+                    Grid {
                         id: stripRow
 
                         objectName: "zoneSelectorStripRow"
                         spacing: root.indicatorSpacing
+                        rows: root.stripVerticalAxis ? Math.max(1, root.stripColumns.length) : 1
+                        columns: root.stripVerticalAxis ? 1 : Math.max(1, root.stripColumns.length)
 
                         Repeater {
                             model: root.stripMode ? root.stripColumns : []
 
                             delegate: ZoneSelectorStripCard {
+                                verticalAxis: root.stripVerticalAxis
                                 previewWidth: root.indicatorWidth
                                 previewHeight: root.indicatorHeight
                                 cardPadding: root.cardPadding
