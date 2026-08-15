@@ -323,7 +323,14 @@ QString LayoutAdaptor::getScreenStates()
     // and every other slot in this file dereferences it unguarded.
     QJsonArray result;
 
-    const QString activity = m_layoutManager->currentActivity();
+    // Resolve the context from the LIVE managers, matching getLayoutForScreen and
+    // getAssignedLayoutForScreen above rather than the registry's pushed mirrors.
+    // The mirrors are written from exactly one place each (the daemon's
+    // desktop-switch and activity-switch handlers), so between a real switch and
+    // that handler running they lag — and this readback would then describe the
+    // previous desktop while its file siblings, and the published active-layout
+    // snapshot, already describe the new one. One source per adaptor.
+    const QString activity = m_activityManager ? m_activityManager->currentActivity() : QString();
 
     // Use effective screen IDs (includes virtual screens when configured)
     // so the settings app sees one entry per virtual screen, not per physical monitor.
@@ -331,7 +338,7 @@ QString LayoutAdaptor::getScreenStates()
 
     for (const QString& screenId : std::as_const(screenIds)) {
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
-        const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+        const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
 
         QJsonObject obj;
@@ -820,6 +827,18 @@ void LayoutAdaptor::setSaveBatchMode(bool enabled)
     m_suppressScreenLayoutSignal = enabled;
 }
 
+void LayoutAdaptor::clearSaveBatchMode()
+{
+    // Self-healing counterpart to setSaveBatchMode(true). The XML calls the pair
+    // "always paired", but nothing enforced it: a settings app that crashes
+    // between the two calls, or any session peer calling the setter directly,
+    // muted screenLayoutChanged for the daemon's whole remaining lifetime. Since
+    // applyAssignmentChanges is the close of every legitimate batch, releasing
+    // the flag there bounds the damage to one batch without changing the
+    // behaviour of a well-behaved client, which sets it back to false itself.
+    m_suppressScreenLayoutSignal = false;
+}
+
 void LayoutAdaptor::applyAssignmentChanges()
 {
     // Drains the CLIENT's buffer only — the set accumulated by this adaptor's
@@ -835,6 +854,9 @@ void LayoutAdaptor::applyAssignmentChanges()
     }
     QSet<QString> changed = std::move(m_changedScreenIds);
     m_changedScreenIds.clear();
+    // Closing a batch releases the suppression, so a client that dies before its
+    // own setSaveBatchMode(false) cannot mute screenLayoutChanged for good.
+    clearSaveBatchMode();
     applyAssignmentChangesFor(changed);
 }
 

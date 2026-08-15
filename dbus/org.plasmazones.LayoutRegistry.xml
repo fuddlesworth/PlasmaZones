@@ -183,12 +183,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="getLayoutForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Get the layout currently in use on a screen (resolves with current virtual desktop and activity context)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get the layout currently in use on a screen (resolves with current virtual desktop and activity context). Falls through to the global default layout when the screen has no assignment, INCLUDING when the default is suppressed for that context — so it can report a layout where getActiveLayoutsForScreens omits the screen and getScreenStates reports none. Callers wanting the suppression-aware resolved value must use one of those instead."/>
             <arg name="screenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile, or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
             </arg>
         </method>
         <method name="getAssignedLayoutForScreen">
@@ -231,7 +231,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile, or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
             </arg>
         </method>
         <method name="assignLayoutToScreenDesktop">
@@ -286,7 +286,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <arg name="algorithm" type="s" direction="out"/>
         </method>
         <method name="setAllDesktopAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-desktop assignments (saves once). Canonical key format: 'screenId|desktopNumber' ('screenId:desktopNumber' is accepted as a legacy fallback but misparses virtual-screen ids — do not emit it)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-desktop assignments (saves once). Canonical key format: 'screenId|desktopNumber' ('screenId:desktopNumber' is accepted as a legacy fallback but misparses virtual-screen ids — do not emit it). Clears existing assignments of this family first: a key absent from the map is DELETED, so a partial map silently drops every assignment it omits."/>
             <arg name="assignments" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|desktop' keys to layoutId."/>
             </arg>
@@ -318,7 +318,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         <method name="getAllScreenAssignments">
             <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON. The JSON is a view of *stored* assignment state (suitable for round-trip back through setAllScreenAssignments) — synthesized level-1 global-default fallbacks are deliberately NOT serialized, so callers that need the resolved mode for an unconfigured screen must use the per-context lookup methods instead. Only screens with at least one stored entry (base or per-desktop) appear; for screen enumeration use getAvailableScreenIds."/>
             <arg name="assignmentsJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object keyed by connector name, containing one entry per screen with stored assignments. Each entry includes {&quot;screenId&quot;: &lt;stable-id&gt;}. Screens with an explicit base-level assignment additionally include {&quot;default&quot;, &quot;snappingLayout&quot;, &quot;tilingAlgorithm&quot;, &quot;mode&quot;}; screens with explicit per-desktop assignments include numeric-string keys (&quot;1&quot;, &quot;2&quot;, …) mapping to the assigned layout id. Screens with no stored entries are omitted entirely — DO NOT use this method to enumerate available screens; call getAvailableScreenIds instead."/>
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object keyed by connector name, containing one entry per screen with stored assignments. Each entry includes {&quot;screenId&quot;: &lt;stable-id&gt;}. Screens with an explicit base-level assignment additionally include {&quot;default&quot;, &quot;snappingLayout&quot;, &quot;tilingAlgorithm&quot;, &quot;mode&quot;}; screens with explicit per-desktop assignments include numeric-string keys (&quot;1&quot;, &quot;2&quot;, …) mapping to the assigned layout id. Screens with no stored entries are omitted entirely — DO NOT use this method to enumerate available screens; call getAvailableScreenIds instead. Per-desktop keys are enumerated up to the compositor&apos;s CURRENT desktop count, so a stored entry for a desktop above that count (the user reduced their desktop count) is not serialized, and none are serialized at all when the desktop count is unavailable. The round trip is lossy in that case."/>
             </arg>
         </method>
         <method name="getActiveLayoutsForScreens">
@@ -337,7 +337,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile, or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
             </arg>
         </method>
         <method name="setQuickLayoutSlot">
@@ -420,7 +420,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile, or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
             </arg>
         </method>
         <method name="assignLayoutToScreenActivity">
@@ -457,7 +457,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setAllActivityAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-activity assignments (saves once). Key format: 'screenId|activityId' (legacy ':' fallback accepted)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-activity assignments (saves once). Key format: 'screenId|activityId' (legacy ':' fallback accepted). Clears existing assignments of this family first: a key absent from the map is DELETED, so a partial map silently drops every assignment it omits."/>
             <arg name="assignments" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of 'screenId|activityId' keys to layoutId."/>
             </arg>
@@ -469,7 +469,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             </arg>
         </method>
         <method name="setAllCombinedAssignments">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-(screen,desktop,activity) Combined assignments (saves once). Key format: 'screenId|virtualDesktop|activityId'. Pure-Activity, pure-Desktop and Monitor-only rules are not touched."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-(screen,desktop,activity) Combined assignments (saves once). Key format: 'screenId|virtualDesktop|activityId'. Pure-Activity, pure-Desktop and Monitor-only rules are not touched. Clears existing assignments of this family first: a key absent from the map is DELETED, so a partial map silently drops every assignment it omits."/>
             <arg name="assignments" type="a{sv}" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen|desktop|activity' to layoutId."/>
             </arg>
@@ -493,7 +493,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
             </arg>
             <arg name="layoutId" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID, autotile:&lt;algorithmId&gt; when the context resolves to autotile, or empty string. Parsing this directly as a UUID yields a null UUID for an autotile screen."/>
             </arg>
         </method>
         <method name="assignLayoutToScreenDesktopActivity">

@@ -379,8 +379,15 @@ QSet<QString> Daemon::diffActiveAssignments()
     // effect caches these ids per screen and stamps them onto its window-rule
     // queries, so a dropped screen has to be announced or its last layout id
     // lingers in that cache for the rest of the session.
+    //
+    // Only when it HAD a layout: a screen that was already resolving to nothing
+    // and then went away is an empty-to-empty transition, and broadcasting it
+    // would emit a signal for a value that did not change (the effect's handler
+    // would remove an entry that is not there). Skipping it also keeps dead ids
+    // out of the returned set, which reconcileActiveAssignments feeds to the
+    // resnap and OSD paths.
     for (auto it = m_activeAssignmentByScreen.constBegin(); it != m_activeAssignmentByScreen.constEnd(); ++it) {
-        if (!next.contains(it.key())) {
+        if (!next.contains(it.key()) && !it.value().isEmpty()) {
             changed.insert(it.key());
         }
     }

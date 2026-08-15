@@ -96,19 +96,36 @@ void Daemon::initLayoutAndSettingsWiring()
     // daemon.h, so reverse-order member destruction tears m_settings
     // down FIRST. The lambdas capture `this` and dereference m_settings,
     // so any cascade query during member-destruction would UAF without
-    // the explicit teardown in stop() (which clears both providers
-    // before any unique_ptr member runs its destructor) plus the null
+    // the explicit teardown in stop() (which clears EVERY provider
+    // installed in this function — see lifecycle.cpp, and add the
+    // matching clear there when installing another one)
+    // before any unique_ptr member runs its destructor, plus the null
     // checks below as a belt-and-suspenders guard against future
     // refactors that reset m_settings explicitly. NOTE: snap with
     // defaultLayoutId="" silently falls through to the autotile branch
     // — see test_layoutmanager_assignment.cpp
     // testLevel1Default_snapEnabledEmptyId_autotileEnabled_autotileWins
     // for the pinned behaviour.
-    m_layoutManager->setDefaultLayoutIdProvider([this]() {
+    m_layoutManager->setDefaultLayoutIdProvider([this]() -> QString {
         if (!m_settings || !m_settings->snappingEnabled()) {
             return QString();
         }
-        return m_settings->defaultLayoutId();
+        const QString id = m_settings->defaultLayoutId();
+        if (id.isEmpty()) {
+            return QString();
+        }
+        // Refuse an id whose layout no longer exists. Deleting a layout does not
+        // clear this setting, so the level-1 default would otherwise keep handing
+        // out a dead UUID: every unassigned screen resolves to it, which means the
+        // daemon publishes it as that screen's active layout and an
+        // `ActiveLayout Equals <deleted uuid>` rule keeps matching a layout the
+        // user removed. Falling through to empty puts those screens in the
+        // no-resolvable-layout state the cascade already handles.
+        const auto uuid = Utils::parseUuid(id);
+        if (!uuid || !m_layoutManager->layoutById(*uuid)) {
+            return QString();
+        }
+        return id;
     });
     m_layoutManager->setDefaultAutotileAlgorithmProvider([this]() {
         if (!m_settings || !m_settings->autotileEnabled()) {

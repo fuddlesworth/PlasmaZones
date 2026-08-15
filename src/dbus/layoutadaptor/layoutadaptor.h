@@ -452,6 +452,11 @@ public:
      */
     void applyAssignmentChangesFor(const QSet<QString>& screenIds);
 
+    /// Release the save-batch suppression. Internal (NOT bus-exposed): called
+    /// from applyAssignmentChanges so a client that dies mid-batch cannot leave
+    /// screenLayoutChanged muted for the daemon's lifetime.
+    void clearSaveBatchMode();
+
     /**
      * @brief Publish the daemon's freshly recomputed active-assignment snapshot.
      *
