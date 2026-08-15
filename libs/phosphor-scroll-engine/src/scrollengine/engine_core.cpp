@@ -306,6 +306,12 @@ StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
     // trip re-anchored the strip on whichever window arrived first.
     out.focusedWindowId = state->strip().activeWindowId();
     out.viewAnchor = state->strip().viewAnchor();
+    // Stamped so the restore can tell whether that anchor still means
+    // anything. The state's RESOLVED axis is the right source: it advances on
+    // every relayout, where the applied basis only advances on an emitted
+    // batch and would be stale for a strip whose last pass the emit gate
+    // suppressed.
+    out.axis = state->hasResolvedAxis() ? state->resolvedAxis().axis() : PhosphorProtocol::ScrollAxis::Horizontal;
     return out;
 }
 
@@ -520,7 +526,16 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // fix. focusWindow is a no-op once the state already matches.
     if (!stashStrip.focusedWindowId.isEmpty() && state->strip().containsWindow(stashStrip.focusedWindowId)) {
         state->strip().focusWindow(stashStrip.focusedWindowId, params);
-        state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
+        // The anchor is main-axis pixels, so it only means anything if it was
+        // captured on THIS axis. Replaying one from the other axis scrolls the
+        // restored strip to a nonsense position, and an out-of-range anchor is
+        // legitimate under the current axis (restoreViewAnchor refuses to
+        // clamp for exactly that reason), so there is no way to tell a good
+        // one from a stale one after a flip. Drop it: the focus restore above
+        // still lands, and the centering policy re-derives a view around it.
+        if (stashStrip.axis == params.axis.axis()) {
+            state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
+        }
     }
     const int total = stashStrip.tileCount();
     // The CLAIMED tile's per-tile lease resets too: it was just consumed, so
