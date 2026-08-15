@@ -37,6 +37,50 @@ int verticalDelta(const QString& direction)
     return 0;
 }
 
+/// PHYSICAL direction token -> ROLE step, resolved against the screen's axis.
+///
+/// The token stays physical end to end: it is shared with the geometric
+/// neighbour resolver, forwarded verbatim to the snap and autotile engines,
+/// and rendered as an arrow by the navigation OSD. Only its INTERPRETATION
+/// here depends on which way this screen's strip runs.
+///
+/// On a horizontal strip these are the historical mappings exactly. On a
+/// vertical one up/down walk the strip and left/right walk the stack.
+int mainDelta(const QString& direction, StripAxis axis)
+{
+    return axis.isHorizontal() ? horizontalDelta(direction) : verticalDelta(direction);
+}
+
+int crossDelta(const QString& direction, StripAxis axis)
+{
+    return axis.isHorizontal() ? verticalDelta(direction) : horizontalDelta(direction);
+}
+
+/// The inverse, for the paths that hold a ROLE step and owe the rest of the
+/// system a physical token — the OSD's arrow, the cross-surface resolver, and
+/// the strip-relative D-Bus entry point.
+QString physicalTokenForMain(int delta, StripAxis axis)
+{
+    if (delta == 0) {
+        return {};
+    }
+    if (axis.isHorizontal()) {
+        return delta < 0 ? QStringLiteral("left") : QStringLiteral("right");
+    }
+    return delta < 0 ? QStringLiteral("up") : QStringLiteral("down");
+}
+
+/// True for any of the four direction tokens, WITHOUT consulting an axis.
+///
+/// The empty-screen crossing arm needs this: P_SCROLL_RESOLVE leaves params
+/// default-constructed when there is no state, so its axis is a meaningless
+/// Horizontal there. Testing token validity through an axis-dependent helper
+/// would read as axis-dependent over a value that is garbage on that path.
+bool isDirectionToken(const QString& direction)
+{
+    return horizontalDelta(direction) != 0 || verticalDelta(direction) != 0;
+}
+
 /// A tile's height INTENT read out of the strip model, which exposes a
 /// writer (setWindowHeightIntent) but no reader. Default for an unknown id.
 WindowHeight heightIntentOf(const ScrollStrip& strip, const QString& windowId)
@@ -79,12 +123,32 @@ StackSlot stackSlotOf(const ScrollStrip& strip, const QString& windowId)
 
 } // namespace
 
+void ScrollEngine::focusColumnByDelta(int delta, const QString& screenId)
+{
+    if (delta == 0) {
+        return;
+    }
+    // Synthesized against the TARGET screen's axis, so a strip-relative
+    // caller (the wheel) walks the strip on both orientations. Spelling the
+    // token at the call site — which is what the D-Bus adaptor used to do —
+    // walks the STACK on a vertical strip, and at the stack's end tries to
+    // cross to the physically-left monitor.
+    const QString token = physicalTokenForMain(delta, stripAxisForScreen(screenId));
+    if (token.isEmpty()) {
+        return;
+    }
+    focusInDirection(token, PhosphorEngine::NavigationContext{QString(), screenId});
+}
+
 void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx)
 {
     P_SCROLL_RESOLVE(ctx.screenId);
     const QString action = QStringLiteral("focus");
-    const int h = horizontalDelta(direction);
-    const int v = verticalDelta(direction);
+    // Role steps, not physical ones: on a vertical strip up/down walk the
+    // COLUMNS and left/right walk the stack. params carries this screen's
+    // axis, and P_SCROLL_RESOLVE has already bound it.
+    const int h = mainDelta(direction, params.axis);
+    const int v = crossDelta(direction, params.axis);
     if (!state || state->strip().isEmpty()) {
         // An EMPTY screen still crosses (niri parity): a directional focus
         // press on a monitor with no strip walks onto the neighbour instead
@@ -94,7 +158,13 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
         // no_windows. Direction-gated like the non-empty arm below: this is
         // exported LGPL surface, and an embedder resolver that answers a
         // garbage token must not teleport focus off an empty screen.
-        if ((h != 0 || v != 0) && focusAcrossBoundary(screen, direction, QString())) {
+        // Token validity only, checked WITHOUT the axis: there is no state
+        // here, so P_SCROLL_RESOLVE left params default-constructed and its
+        // axis is a meaningless Horizontal. h and v happen to be correct for
+        // either axis (exactly one is non-zero for any of the four tokens),
+        // but reading them here would look axis-dependent over a garbage
+        // value, so ask the question that is actually being asked.
+        if (isDirectionToken(direction) && focusAcrossBoundary(screen, direction, QString())) {
             return;
         }
         Q_EMIT navigationFeedback(false, action, QStringLiteral("no_windows"), ctx.windowId, QString(), screen);
@@ -222,8 +292,8 @@ void ScrollEngine::moveFocusedInDirection(const QString& direction, const Phosph
     // arms name the same thing this way (the in-strip arm used to read the
     // post-move active window, the boundary arm ctx.windowId).
     const QString focused = state->strip().activeWindowId();
-    const int h = horizontalDelta(direction);
-    const int v = verticalDelta(direction);
+    const int h = mainDelta(direction, params.axis);
+    const int v = crossDelta(direction, params.axis);
     const bool moved =
         (h != 0) ? state->strip().moveActiveColumn(h, params) : (v != 0 && state->strip().moveActiveTile(v));
     if (moved) {
@@ -611,8 +681,8 @@ void ScrollEngine::swapFocusedInDirection(const QString& direction, const Phosph
     // Pre-move focused window, for the same reason moveFocusedInDirection
     // captures one: both success arms must name the same window.
     const QString focused = state->strip().activeWindowId();
-    const int h = horizontalDelta(direction);
-    const int v = verticalDelta(direction);
+    const int h = mainDelta(direction, params.axis);
+    const int v = crossDelta(direction, params.axis);
     const bool moved =
         (h != 0) ? state->strip().moveActiveColumn(h, params) : (v != 0 && state->strip().moveActiveTile(v));
     if (moved) {

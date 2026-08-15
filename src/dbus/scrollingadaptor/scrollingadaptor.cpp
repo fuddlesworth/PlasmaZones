@@ -187,8 +187,14 @@ void ScrollingAdaptor::focusColumn(const QString& screenId, int delta)
     if (!m_engine->isActiveOnScreen(screenId)) {
         return;
     }
-    m_engine->focusInDirection(delta < 0 ? QStringLiteral("left") : QStringLiteral("right"),
-                               PhosphorEngine::NavigationContext{QString(), screenId});
+    // The delta is STRIP-RELATIVE (previous/next column) — the effect collapses
+    // both physical wheel axes onto one +/-1 before it reaches here. Spelling
+    // it as "left"/"right" would be correct only while every strip runs
+    // horizontally: on a vertical one that token means the stack, so a wheel
+    // notch would walk WITHIN the column and then try to cross to the
+    // physically-left monitor at its end. The engine synthesizes the token
+    // against the screen's own axis instead.
+    m_engine->focusColumnByDelta(delta, screenId);
 }
 
 void ScrollingAdaptor::setColumnWidthProportion(const QString& screenId, double proportion)

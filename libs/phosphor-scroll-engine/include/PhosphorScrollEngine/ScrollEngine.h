@@ -763,6 +763,19 @@ public:
     /// someone ask.
     StripAxis stripAxisForScreen(const QString& screenId) const;
 
+    /// Focus the previous/next column ALONG THE STRIP, for callers holding a
+    /// strip-relative intent rather than a physical direction. The wheel is
+    /// the one that matters: the effect collapses both physical wheel axes
+    /// onto a single +/-1 before it ever reaches D-Bus.
+    ///
+    /// The physical token is synthesized HERE from the screen's own axis,
+    /// which is the whole point — a caller that spelled "left"/"right" itself
+    /// would walk the STACK on a vertical strip. Deliberately not routed
+    /// through focusColumnPlain: that verb stops at the strip edge, and the
+    /// wheel's documented contract is that a notch at the edge crosses onto
+    /// the adjacent output.
+    void focusColumnByDelta(int delta, const QString& screenId);
+
 private:
     // engine_core.cpp
     QString canonicalizeForLookup(const QString& rawWindowId) const;
