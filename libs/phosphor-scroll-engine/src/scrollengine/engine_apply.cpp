@@ -890,7 +890,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // The extra entries cost nothing once at rest: they resolve outside the
         // screen, so the per-screen surface simply clips them.
         const bool visibleNow = column.rect.intersects(params.workArea);
-        const bool visibleBefore = viewDelta != 0 && column.rect.translated(viewDelta, 0).intersects(params.workArea);
+        // Along the MAIN axis: the view only ever slides along the strip.
+        const bool visibleBefore =
+            viewDelta != 0 && params.axis.translatedMain(column.rect, viewDelta).intersects(params.workArea);
         if (!column.tabbed || column.tabIndicatorRect.isNull() || (!visibleNow && !visibleBefore)) {
             continue;
         }

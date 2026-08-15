@@ -17,6 +17,27 @@
 
 namespace PhosphorScrollEngine {
 
+namespace {
+
+/// A tile's rect inside its column, in ROLE space: x/width run ALONG the
+/// strip and y/height run ACROSS it (the within-column stack), whichever way
+/// the strip physically runs.
+///
+/// Role rather than physical because the snapshot's consumers draw it in role
+/// space and transpose for display themselves — the selector's strip card
+/// swaps x with y when its screen's strip is vertical. Emitting physical
+/// rects here would make that a double transpose. On a horizontal strip this
+/// is the identity mapping.
+QRectF relRectInColumn(const QRect& tile, const QRect& column, StripAxis axis)
+{
+    return QRectF(static_cast<qreal>(axis.mainPos(tile) - axis.mainPos(column)) / axis.mainSize(column),
+                  static_cast<qreal>(axis.crossPos(tile) - axis.crossPos(column)) / axis.crossSize(column),
+                  static_cast<qreal>(axis.mainSize(tile)) / axis.mainSize(column),
+                  static_cast<qreal>(axis.crossSize(tile)) / axis.crossSize(column));
+}
+
+} // namespace
+
 ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const QString& excludeWindowId) const
 {
     ScrollStripSnapshot snap;
@@ -78,9 +99,14 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
         // column at preview scale. A column wider than the work area
         // (over-wide preset) clamps to 1 — the preview shows the visible
         // share, matching the committed clip.
-        if (!columnRect.isEmpty() && params.workArea.width() > 0) {
-            outColumn.widthFraction =
-                qBound(0.0, static_cast<qreal>(columnRect.width()) / params.workArea.width(), 1.0);
+        // Along the STRIP, not physically wide: on a vertical strip a column
+        // spans the full screen width and its share of the strip is its
+        // height. Consumers draw the snapshot in role space and transpose it
+        // themselves (ZoneSelectorStripCard), so emitting a physical fraction
+        // here would report 1.0 for every column on a vertical screen.
+        if (!columnRect.isEmpty() && params.axis.mainSize(params.workArea) > 0) {
+            outColumn.widthFraction = qBound(
+                0.0, static_cast<qreal>(params.axis.mainSize(columnRect)) / params.axis.mainSize(params.workArea), 1.0);
         }
 
         // Output position the excluded ACTIVE tile would have occupied, for
@@ -107,10 +133,7 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
                 for (const ResolvedTile& resolvedTile : resolvedColumn->tiles) {
                     if (resolvedTile.windowId == modelTile.windowId) {
                         const QRect& r = resolvedTile.rect;
-                        outTile.relRect = QRectF(static_cast<qreal>(r.x() - columnRect.x()) / columnRect.width(),
-                                                 static_cast<qreal>(r.y() - columnRect.y()) / columnRect.height(),
-                                                 static_cast<qreal>(r.width()) / columnRect.width(),
-                                                 static_cast<qreal>(r.height()) / columnRect.height());
+                        outTile.relRect = relRectInColumn(r, columnRect, params.axis);
                         break;
                     }
                 }
@@ -176,10 +199,7 @@ ScrollStripSnapshot ScrollEngine::stripSnapshot(const QString& screenId, const Q
                     for (const ResolvedTile& resolvedTile : resolvedColumn->tiles) {
                         if (resolvedTile.windowId == tile.windowId) {
                             const QRect& r = resolvedTile.rect;
-                            tile.relRect = QRectF(static_cast<qreal>(r.x() - columnRect.x()) / columnRect.width(),
-                                                  static_cast<qreal>(r.y() - columnRect.y()) / columnRect.height(),
-                                                  static_cast<qreal>(r.width()) / columnRect.width(),
-                                                  static_cast<qreal>(r.height()) / columnRect.height());
+                            tile.relRect = relRectInColumn(r, columnRect, params.axis);
                             break;
                         }
                     }

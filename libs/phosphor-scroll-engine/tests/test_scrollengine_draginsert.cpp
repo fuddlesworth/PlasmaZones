@@ -455,23 +455,23 @@ void TestScrollEngineDragInsert::hitTestResolvesTargets()
 
     // b's left edge band: a new column before it — b is the first visible
     // column, so the aim is tagged as a leading-edge hint.
-    const DragTarget before =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.left() + 4, rectB.center().y()));
+    const DragTarget before = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainPos(rectB) + 4, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(before.primary, 0);
     QVERIFY(before.newSlot);
     QVERIFY(before.leadingEdge);
 
     // b's right edge band: b is also the LAST visible column, so this is
     // the trailing append, not a before-b slot.
-    const DragTarget after =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.right() - 4, rectB.center().y()));
+    const DragTarget after = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainEnd(rectB) - 4, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(after.primary, 1);
     QVERIFY(after.newSlot);
     QVERIFY(!after.leadingEdge);
 
     // Right of the whole (short) strip: append.
-    const DragTarget append =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.right() + 200, rectB.center().y()));
+    const DragTarget append = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainEnd(rectB) + 200, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(append.primary, 1);
     QVERIFY(append.newSlot);
     QVERIFY(!append.leadingEdge);
@@ -499,16 +499,14 @@ void TestScrollEngineDragInsert::hitTestResolvesStackedTileSlots()
     const QRect rectC = tileRect(engine, QStringLiteral("S1"), QStringLiteral("c"));
     QVERIFY(!rectB.isNull());
     QVERIFY(!rectC.isNull());
-    const int columnMidX = rectB.center().x();
-
-    // Upper half of the TOP tile: insert before b (model index 0).
-    const DragTarget top = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"),
-                                                                  QPoint(columnMidX, rectB.top() + rectB.height() / 4));
+    // Upper half of the TOP tile: insert before b (model index 0). "Upper"
+    // is a CROSS quarter, which is the direction the stack divides.
+    const DragTarget top = engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), Ax::pointIn(rectB, 0.5, 0.25));
     QVERIFY(!top.newSlot);
     QCOMPARE(top.secondary, 0);
     // Lower half of the BOTTOM tile: insert after c (model index 2).
-    const DragTarget bottom = engine->computeDragInsertTargetAtPoint(
-        QStringLiteral("S1"), QPoint(columnMidX, rectC.bottom() - rectC.height() / 4));
+    const DragTarget bottom =
+        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), Ax::pointIn(rectC, 0.5, 0.75));
     QVERIFY(!bottom.newSlot);
     QCOMPARE(bottom.secondary, 2);
     engine->cancelDragInsertPreview();
@@ -546,13 +544,13 @@ void TestScrollEngineDragInsert::hitTestMapsThroughAMinimizedTile()
     // Upper half of d: insert BEFORE d, which is model index 2. Reusing d's
     // resolved position would answer 1 and drop the window above the
     // minimized tile instead of below it.
-    const DragTarget aboveD = engine->computeDragInsertTargetAtPoint(
-        QStringLiteral("S1"), QPoint(rectD.center().x(), rectD.top() + rectD.height() / 4));
+    const DragTarget aboveD =
+        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), Ax::pointIn(rectD, 0.5, 0.25));
     QVERIFY(!aboveD.newSlot);
     QCOMPARE(aboveD.secondary, 2);
     // Lower half of d: after it, model index 3.
-    const DragTarget belowD = engine->computeDragInsertTargetAtPoint(
-        QStringLiteral("S1"), QPoint(rectD.center().x(), rectD.bottom() - rectD.height() / 4));
+    const DragTarget belowD =
+        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), Ax::pointIn(rectD, 0.5, 0.75));
     QVERIFY(!belowD.newSlot);
     QCOMPARE(belowD.secondary, 3);
     engine->cancelDragInsertPreview();
@@ -598,12 +596,13 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     // fails this: without the shift the promise sits at b's own x, without
     // the clamp it sits a full column past the edge.
     const QRect wa = ScrollTestUtils::defaultScreenRect();
-    QCOMPARE(openSlot.x(), qMax(rectB.x() - openSlot.width(), wa.left() - openSlot.width() / 2));
-    QCOMPARE(openSlot.height(), rectB.height());
+    QCOMPARE(Ax::mainPos(openSlot),
+             qMax(Ax::mainPos(rectB) - Ax::mainLen(openSlot), Ax::mainPos(wa) - Ax::mainLen(openSlot) / 2));
+    QCOMPARE(Ax::crossLen(openSlot), Ax::crossLen(rectB));
     // Width pinned CONCRETELY, not just non-zero: both windows open at the
     // default column width, so the opening slot is exactly b's width. A
     // regression handing back the whole work area would satisfy `> 0`.
-    QCOMPARE(openSlot.width(), rectB.width());
+    QCOMPARE(Ax::mainLen(openSlot), Ax::mainLen(rectB));
 
     // Another screen never borrows this screen's indicator. Asserted AFTER a
     // target exists: before one, the no-target early return fires first and
@@ -618,15 +617,15 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     engine->updateDragInsertPreview(join);
     const QRect joinSlot = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(joinSlot.isValid());
-    QCOMPARE(joinSlot.width(), rectB.width());
-    QCOMPARE(joinSlot.height(), rectB.height() / 2);
-    QCOMPARE(joinSlot.y(), rectB.y() + rectB.height() / 2);
+    QCOMPARE(Ax::mainLen(joinSlot), Ax::mainLen(rectB));
+    QCOMPARE(Ax::crossLen(joinSlot), Ax::crossLen(rectB) / 2);
+    QCOMPARE(Ax::crossPos(joinSlot), Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2);
     // ...and the above-b slot is the upper half of the same column.
     join.secondary = 0;
     engine->updateDragInsertPreview(join);
     const QRect upper = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
-    QCOMPARE(upper.y(), rectB.y());
-    QCOMPARE(upper.height(), rectB.height() / 2);
+    QCOMPARE(Ax::crossPos(upper), Ax::crossPos(rectB));
+    QCOMPARE(Ax::crossLen(upper), Ax::crossLen(rectB) / 2);
 
     // A join with NO secondary takes the append-at-the-end default rather
     // than clamping to tile 0. With b alone in the column, appending puts the
@@ -647,8 +646,9 @@ void TestScrollEngineDragInsert::indicatorRectTracksTarget()
     engine->updateDragInsertPreview(pastEnd);
     const QRect tail = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(tail.isValid());
-    QVERIFY2(tail.x() > rectB.x(), "a past-the-end new column must open to the RIGHT of the last one");
-    QCOMPARE(tail.height(), rectB.height());
+    QVERIFY2(Ax::mainPos(tail) > Ax::mainPos(rectB),
+             "a past-the-end new column must open PAST the last one along the strip");
+    QCOMPARE(Ax::crossLen(tail), Ax::crossLen(rectB));
 
     // The indicator dies with the preview.
     engine->cancelDragInsertPreview();
@@ -764,8 +764,8 @@ void TestScrollEngineDragInsert::fullViewportOuterSlotIndicatorClampsToTheEdge()
     engine->updateDragInsertPreview(rightOuter);
     const QRect right = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(right.isValid());
-    QCOMPARE(right.left(), wa.left() + wa.width() - right.width() / 2);
-    QCOMPARE(right.intersected(wa).width(), right.width() / 2);
+    QCOMPARE(Ax::mainPos(right), Ax::mainPos(wa) + Ax::mainLen(wa) - Ax::mainLen(right) / 2);
+    QCOMPARE(Ax::mainLen(right.intersected(wa)), Ax::mainLen(right) / 2);
 
     // Before-the-first slot aimed from the leading edge: placed just
     // outside the first column, which on a full strip is past the LEFT
@@ -778,8 +778,8 @@ void TestScrollEngineDragInsert::fullViewportOuterSlotIndicatorClampsToTheEdge()
     engine->updateDragInsertPreview(leftOuter);
     const QRect left = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(left.isValid());
-    QCOMPARE(left.left(), wa.left() - left.width() / 2);
-    QCOMPARE(left.intersected(wa).width(), left.width() - left.width() / 2);
+    QCOMPARE(Ax::mainPos(left), Ax::mainPos(wa) - Ax::mainLen(left) / 2);
+    QCOMPARE(Ax::mainLen(left.intersected(wa)), Ax::mainLen(left) - Ax::mainLen(left) / 2);
 
     // Control: a slot between the two visible columns is on screen and
     // untouched.
@@ -818,21 +818,21 @@ void TestScrollEngineDragInsert::scrolledStripEdgeSlotsMirror()
     QVERIFY(!rectC.isNull());
 
     // b's LEFT band: the leading slot, tagged — half-in at the left edge.
-    const DragTarget beforeVisible =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.left() + 4, rectB.center().y()));
+    const DragTarget beforeVisible = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainPos(rectB) + 4, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(beforeVisible.primary, 1);
     QVERIFY(beforeVisible.newSlot);
     QVERIFY(beforeVisible.leadingEdge);
     engine->updateDragInsertPreview(beforeVisible);
     const QRect left = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(left.isValid());
-    QCOMPARE(left.left(), wa.left() - left.width() / 2);
-    QCOMPARE(left.intersected(wa).width(), left.width() - left.width() / 2);
+    QCOMPARE(Ax::mainPos(left), Ax::mainPos(wa) - Ax::mainLen(left) / 2);
+    QCOMPARE(Ax::mainLen(left.intersected(wa)), Ax::mainLen(left) - Ax::mainLen(left) / 2);
 
     // b's RIGHT band: the SAME leading slot aimed from inside — full rect
     // over b itself (the mirror of c's left band covering c).
-    const DragTarget bInner =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectB.right() - 4, rectB.center().y()));
+    const DragTarget bInner = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainEnd(rectB) - 4, Ax::crossPos(rectB) + Ax::crossLen(rectB) / 2));
     QCOMPARE(bInner.primary, 1);
     QVERIFY(bInner.newSlot);
     QVERIFY(!bInner.leadingEdge);
@@ -841,8 +841,8 @@ void TestScrollEngineDragInsert::scrolledStripEdgeSlotsMirror()
     QCOMPARE(overB, rectB);
 
     // c's LEFT band: the between slot — full rect over c.
-    const DragTarget cInner =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectC.left() + 4, rectC.center().y()));
+    const DragTarget cInner = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainPos(rectC) + 4, Ax::crossPos(rectC) + Ax::crossLen(rectC) / 2));
     QCOMPARE(cInner.primary, 2);
     QVERIFY(cInner.newSlot);
     QVERIFY(!cInner.leadingEdge);
@@ -851,15 +851,15 @@ void TestScrollEngineDragInsert::scrolledStripEdgeSlotsMirror()
     QCOMPARE(overC, rectC);
 
     // c's RIGHT band: the trailing append — half-in at the right edge.
-    const DragTarget afterLast =
-        engine->computeDragInsertTargetAtPoint(QStringLiteral("S1"), QPoint(rectC.right() - 4, rectC.center().y()));
+    const DragTarget afterLast = engine->computeDragInsertTargetAtPoint(
+        QStringLiteral("S1"), Ax::point(Ax::mainEnd(rectC) - 4, Ax::crossPos(rectC) + Ax::crossLen(rectC) / 2));
     QCOMPARE(afterLast.primary, 3);
     QVERIFY(afterLast.newSlot);
     engine->updateDragInsertPreview(afterLast);
     const QRect right = engine->dragInsertIndicatorRect(QStringLiteral("S1"));
     QVERIFY(right.isValid());
-    QCOMPARE(right.left(), wa.left() + wa.width() - right.width() / 2);
-    QCOMPARE(right.intersected(wa).width(), right.width() / 2);
+    QCOMPARE(Ax::mainPos(right), Ax::mainPos(wa) + Ax::mainLen(wa) - Ax::mainLen(right) / 2);
+    QCOMPARE(Ax::mainLen(right.intersected(wa)), Ax::mainLen(right) / 2);
 
     engine->cancelDragInsertPreview();
 }

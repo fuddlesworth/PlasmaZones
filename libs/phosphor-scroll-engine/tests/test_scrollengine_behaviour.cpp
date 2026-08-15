@@ -188,7 +188,7 @@ void TestScrollEngineBehaviour::centerFocusedColumnOverrideIsPerScreen()
     for (const ScrollEngine::VisibleTile& tile : engine->visibleTiles(kS1)) {
         if (tile.windowId == QStringLiteral("app|a1")) {
             sawCentered = true;
-            QCOMPARE(tile.rect.x(), kMainExtent / 4);
+            QCOMPARE(Ax::mainPos(tile.rect), kMainExtent / 4);
         }
     }
     QVERIFY(sawCentered);
@@ -197,7 +197,7 @@ void TestScrollEngineBehaviour::centerFocusedColumnOverrideIsPerScreen()
     for (const ScrollEngine::VisibleTile& tile : engine->visibleTiles(kS2)) {
         if (tile.windowId == QStringLiteral("app|b1")) {
             sawAnchored = true;
-            QCOMPARE(tile.rect.x(), 0);
+            QCOMPARE(Ax::mainPos(tile.rect), 0);
         }
     }
     QVERIFY(sawAnchored);
@@ -216,8 +216,11 @@ void TestScrollEngineBehaviour::respectMinimumSizeOverrideIsPerScreen()
     ScrollEngine* engine = makeEngine(&owner, settings);
     engine->applyPerScreenConfig(kS1, onlyKey(ScrollPerScreenKeys::respectMinimumSize(), true));
 
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 800, 0);
-    engine->windowOpened(QStringLiteral("app|b"), kS2, 800, 0);
+    // A minimum ALONG the strip, so it transposes with the fixture: what
+    // widens a column on a horizontal strip lengthens it on a vertical one.
+    const QSize minMain = Ax::t(QSize(800, 0));
+    engine->windowOpened(QStringLiteral("app|a"), kS1, minMain.width(), minMain.height());
+    engine->windowOpened(QStringLiteral("app|b"), kS2, minMain.width(), minMain.height());
 
     const QVector<QRect> clamped = engine->visibleTileRects(kS1);
     QCOMPARE(clamped.size(), 1);
@@ -416,7 +419,7 @@ void TestScrollEngineBehaviour::wrongTypedBehaviourOverridesAreRejected()
     for (const ScrollEngine::VisibleTile& tile : engine->visibleTiles(kS1)) {
         if (tile.windowId == QStringLiteral("app|a2")) {
             sawActive = true;
-            QCOMPARE(tile.rect.x(), kMainExtent / 4);
+            QCOMPARE(Ax::mainPos(tile.rect), kMainExtent / 4);
         }
     }
     QVERIFY(sawActive);

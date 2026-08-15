@@ -151,6 +151,22 @@ inline int crossEnd(const QRect& r)
     return stripAxis().crossHigh(r);
 }
 
+/// A point built from ROLE coordinates: @p main runs along the strip and
+/// @p cross across it. The inverse of the mainPos/crossPos readers, for the
+/// hit-test probes that have to name a spot inside a resolved tile.
+inline QPoint point(int main, int cross)
+{
+    return vertical() ? QPoint(cross, main) : QPoint(main, cross);
+}
+
+/// A fraction of the way along / across a rect the engine produced — the shape
+/// every hit-test probe wants ("the upper quarter of this tile" is a CROSS
+/// quarter, whichever way the strip runs).
+inline QPoint pointIn(const QRect& r, qreal mainFraction, qreal crossFraction)
+{
+    return point(mainPos(r) + qRound(mainFraction * mainLen(r)), crossPos(r) + qRound(crossFraction * crossLen(r)));
+}
+
 // -- Role names for direction tokens and wire keys ----------------------
 //
 // Strip travel runs lead -> trail along the MAIN axis; the within-column

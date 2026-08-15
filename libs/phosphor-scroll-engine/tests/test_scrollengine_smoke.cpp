@@ -593,12 +593,13 @@ void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
     // IScrollSettings so the inner gap is 0 — the 595px figure belongs to
     // the strip-ops fixture, which sets a 10px gap), so the retile MUST move
     // the rect and emit.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 900, 0);
-    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(900, 0));
+    const QSize min900 = Ax::t(QSize(900, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min900.width(), min900.height());
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), min900);
     QCOMPARE(tiledSpy.count(), 0); // nothing applied yet: the retile is queued
     QCoreApplication::processEvents();
     QCOMPARE(tiledSpy.count(), 1);
-    QVERIFY(tiledSpy.last().at(0).toString().contains(QStringLiteral("\"width\":900")));
+    QVERIFY(tiledSpy.last().at(0).toString().contains(QStringLiteral("\"%1\":900").arg(Ax::mainLenKey())));
 }
 
 void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
@@ -621,12 +622,16 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
 
     QSignalSpy floatSpy(engine, &ScrollEngine::windowFloatingChanged);
     // In-bounds growth keeps the window tiled; the column widens instead.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 900, 0);
+    // Minimums ALONG the strip, so they transpose with the fixture: 900
+    // widens the column, 1300 outgrows the work area entirely.
+    const QSize min900 = Ax::t(QSize(900, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min900.width(), min900.height());
     QVERIFY(!state->isFloating(QStringLiteral("app|a")));
     QCOMPARE(floatSpy.count(), 0);
 
     // Past the work-area width: the verdict floats it mid-session.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 1300, 0);
+    const QSize min1300 = Ax::t(QSize(1300, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min1300.width(), min1300.height());
     state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);
     QVERIFY(state->isFloating(QStringLiteral("app|a")));
@@ -638,15 +643,16 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
     // mode-transition capture keys off it) and the restore entry holds the
     // clamp that forced the float.
     QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|a")));
-    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(1300, 0));
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), min1300);
 
     // A repeat report is idempotent — already floating, nothing re-fires.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 1300, 0);
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min1300.width(), min1300.height());
     QCOMPARE(floatSpy.count(), 1);
 
     // Shrinking back below the work area does NOT auto-unfloat: the float
     // may have been rearranged, and the manual unfloat restores the slot.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 400, 0);
+    const QSize min400 = Ax::t(QSize(400, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min400.width(), min400.height());
     QVERIFY(state->isFloating(QStringLiteral("app|a")));
 }
 
@@ -816,7 +822,7 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
         }
     }
     QVERIFY2(!cEntry.isEmpty(), "expected app|c in the tile batch");
-    QCOMPARE(cEntry.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
+    QCOMPARE(cEntry.value(QLatin1String("scrollEdge")).toString(), Ax::edgeTrail());
     // Parked BELOW the union (position carries no direction) while reporting
     // the right edge as data. Asserting BOTH is the point: the pair is what
     // the old single-number design could not express.
@@ -833,7 +839,7 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
         }
     }
     QVERIFY2(!aEntry.isEmpty(), "expected app|a in the tile batch");
-    QCOMPARE(aEntry.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("left"));
+    QCOMPARE(aEntry.value(QLatin1String("scrollEdge")).toString(), Ax::edgeLead());
 
     // app|b has been on screen throughout — never parked, so nothing to
     // anchor and no edge. This is what stops the field being emitted blanket.
@@ -857,8 +863,15 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
         const QJsonArray b = QJsonDocument::fromJson(tiled.at(sig).at(0).toString().toUtf8()).array();
         for (const QJsonValue& v : b) {
             const QJsonObject o = v.toObject();
-            const int right = o.value(QLatin1String("x")).toInt() + o.value(QLatin1String("width")).toInt() - 1;
-            QVERIFY2(right <= defaultScreenRect().right(),
+            // Parked entries are excluded: parkRect is deliberately PHYSICAL
+            // (it means "off every output"), so a parked column sits below
+            // the canvas whichever way the strip runs and its main extent
+            // there says nothing about the neighbour boundary.
+            if (o.value(QLatin1String("y")).toInt() > defaultScreenRect().bottom()) {
+                continue;
+            }
+            const int right = Ax::entryMainEnd(o);
+            QVERIFY2(right <= Ax::mainEnd(defaultScreenRect()),
                      qPrintable(QStringLiteral("rect for %1 crosses the neighbour boundary (right=%2)")
                                     .arg(o.value(QLatin1String("windowId")).toString())
                                     .arg(right)));
@@ -881,9 +894,9 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
         }
     }
     QVERIFY2(!cBack.isEmpty(), "expected app|c in the scroll-back batch");
-    QVERIFY2(cBack.value(QLatin1String("x")).toInt() >= defaultScreenRect().left(),
+    QVERIFY2(Ax::entryMainPos(cBack) >= Ax::mainPos(defaultScreenRect()),
              "app|c should be back on screen after scrolling to the last column");
-    QCOMPARE(cBack.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
+    QCOMPARE(cBack.value(QLatin1String("scrollEdge")).toString(), Ax::edgeTrail());
     engine->setCrossSurfaceResolver(nullptr);
 }
 
@@ -968,8 +981,8 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
         // clamp pins at the screen edge does NOT move by the view delta, and
         // the engine drops the field for exactly that reason — the boundary
         // suite owns that case.
-        QCOMPARE(prev->x() - now.x(), o.value(QLatin1String("viewDelta")).toInt());
-        QCOMPARE(now.y(), prev->y());
+        QCOMPARE(Ax::mainPos(*prev) - Ax::mainPos(now), o.value(QLatin1String("viewDelta")).toInt());
+        QCOMPARE(Ax::crossPos(now), Ax::crossPos(*prev));
         QCOMPARE(now.size(), prev->size());
         ++carried;
     }
@@ -1060,7 +1073,7 @@ void TestScrollEngineSmoke::secondScrollMeasuresFromTheEmittedBaselineOnly()
         for (const QJsonValue& v : b) {
             const QJsonObject o = v.toObject();
             if (o.value(QLatin1String("windowId")).toString() == id) {
-                return o.value(QLatin1String("x")).toInt();
+                return Ax::entryMainPos(o);
             }
         }
         return INT_MIN;
@@ -1116,8 +1129,7 @@ void TestScrollEngineSmoke::secondScrollMeasuresFromTheEmittedBaselineOnly()
         if (!wasOnScreenInFirst(id)) {
             continue;
         }
-        QCOMPARE(o.value(QLatin1String("viewDelta")).toInt(),
-                 xOf(tiled, afterFirst, id) - o.value(QLatin1String("x")).toInt());
+        QCOMPARE(o.value(QLatin1String("viewDelta")).toInt(), xOf(tiled, afterFirst, id) - Ax::entryMainPos(o));
         ++checked;
     }
     QVERIFY2(checked > 0, "expected at least one column on screen across both emitted batches");
@@ -1170,8 +1182,7 @@ void TestScrollEngineSmoke::aWidthChangeKeepsTheResizedColumnInTheBatch()
             continue;
         }
         sawResized = true;
-        QCOMPARE(o.value(QLatin1String("width")).toInt(),
-                 Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))));
+        QCOMPARE(Ax::entryMainLen(o), Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))));
     }
     QVERIFY2(sawResized, "the batch must carry the column whose width changed");
 }
