@@ -23,12 +23,13 @@
 #include <PhosphorEngine/WindowPlacement.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include <QGuiApplication>
-#include <memory>
-#include <QScreen>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 #include "seedorderfilter.h"
+#include <QGuiApplication>
+#include <QScopedValueRollback>
+#include <QScreen>
+#include <memory>
 
 namespace PlasmaZones {
 
@@ -410,9 +411,10 @@ QSet<QString> Daemon::diffActiveAssignments()
     // Only when it HAD a layout: a screen that was already resolving to nothing
     // and then went away is an empty-to-empty transition, and broadcasting it
     // would emit a signal for a value that did not change (the effect's handler
-    // would remove an entry that is not there). Skipping it also keeps dead ids
-    // out of the returned set, which reconcileActiveAssignments feeds to the
-    // resnap and OSD paths.
+    // would remove an entry that is not there). A removed screen that DID have a
+    // layout is in the returned set, which reconcileActiveAssignments feeds to
+    // the resnap and OSD paths — see the tolerance note on
+    // diffActiveAssignments in daemon.h.
     for (auto it = m_activeAssignmentByScreen.constBegin(); it != m_activeAssignmentByScreen.constEnd(); ++it) {
         if (!next.contains(it.key()) && !it.value().isEmpty()) {
             changed.insert(it.key());
@@ -434,6 +436,20 @@ QSet<QString> Daemon::diffActiveAssignments()
 
 void Daemon::reconcileActiveAssignments()
 {
+    // Bulk-write suppression (m_suppressAssignmentReconcile, daemon.h). The
+    // assignment writers in this file flip N rules in a row and each write emits
+    // RuleStore::rulesChanged synchronously; reconciling per rule would run a
+    // full updateAutotileScreens + resnap + OSD pass over a half-written set.
+    // They used to blanket-block the whole rule store for that, which also cut
+    // off rulesChanged's four OTHER consumers (exclude refilter, overlay
+    // refresh, Settings::onRuleStoreChanged, the RuleAdaptor D-Bus relay the
+    // effect invalidates its rule cache on). Suppressing only this one consumer
+    // keeps the writers' invariant and lets the rest see the edit. Each writer
+    // drives one explicit diffActiveAssignments (via its caller) once the set is
+    // whole.
+    if (m_suppressAssignmentReconcile) {
+        return;
+    }
     const QSet<QString> changed = diffActiveAssignments();
     // Per-context tiling rules change a screen's resolved layout WITHOUT changing
     // its assignment id, so they never appear in `changed` (diffActiveAssignments
@@ -459,6 +475,11 @@ void Daemon::reconcileActiveAssignments()
     // assignment write reaches here synchronously via RuleStore::rulesChanged,
     // so staging would drain the client's batch mid-save and leave its closing
     // apply with an empty set (which downstream means every screen).
+    //
+    // applyAssignmentChangesFor also deliberately skips the clearSaveBatchMode()
+    // that applyAssignmentChanges() performs, so a rule edit landing in the
+    // middle of a KCM batch does not release that client's screenLayoutChanged
+    // suppression out from under it.
     if (m_layoutAdaptor) {
         m_layoutAdaptor->applyAssignmentChangesFor(changed);
     }
@@ -480,15 +501,16 @@ void Daemon::handleAutotileDisabled()
     // setups (screen A snap + screen B autotile) recover correctly.
     if (m_layoutManager) {
         QSignalBlocker blocker(m_layoutManager.get());
-        // Block the RULE STORE too, not just the registry. Every assignment write
-        // goes through upsertAssignmentRule and emits RuleStore::rulesChanged
-        // synchronously, which drives reconcileActiveAssignments — so blocking the
-        // registry alone still ran a full reconcile (updateAutotileScreens, resnap
-        // apply, OSD) per iteration, re-entrantly, over a half-written assignment
-        // set. That is the very thing this blocker exists to prevent. Both are
-        // released together, and the caller's own diffActiveAssignments()
-        // republishes the snapshot the blocked rulesChanged would have driven.
-        QSignalBlocker ruleBlocker(m_ruleStore.get());
+        // Suppress the RECONCILE consumer of rulesChanged, not the whole store.
+        // Every assignment write goes through upsertAssignmentRule and emits
+        // RuleStore::rulesChanged synchronously, which drives
+        // reconcileActiveAssignments — so blocking the registry alone still ran a
+        // full reconcile (updateAutotileScreens, resnap apply, OSD) per iteration
+        // over a half-written assignment set. The store itself stays live so the
+        // exclude refilter, overlay refresh, Settings and the RuleAdaptor D-Bus
+        // relay still see the edit. The caller's own diffActiveAssignments()
+        // republishes the snapshot once the set is whole.
+        QScopedValueRollback<bool> reconcileGuard(m_suppressAssignmentReconcile, true);
         m_layoutManager->clearAutotileAssignments();
     }
 
@@ -509,14 +531,10 @@ void Daemon::handleAutotileDisabled()
 
         {
             QSignalBlocker blocker(m_layoutManager.get());
-            // Block the RULE STORE too, not just the registry. Every assignment write
-            // goes through upsertAssignmentRule and emits RuleStore::rulesChanged
-            // synchronously, which drives reconcileActiveAssignments — so blocking the
-            // registry alone still ran a full reconcile (updateAutotileScreens, resnap
-            // apply, OSD) per iteration, re-entrantly, over a half-written assignment
-            // set. That is the very thing this blocker exists to prevent. Both are
-            // released together and one reconcile is driven explicitly at the end.
-            QSignalBlocker ruleBlocker(m_ruleStore.get());
+            // Suppress the RECONCILE consumer of rulesChanged, not the whole store
+            // — same rationale as the clearAutotileAssignments block above. One
+            // reconcile is driven explicitly at the end by the caller.
+            QScopedValueRollback<bool> reconcileGuard(m_suppressAssignmentReconcile, true);
             for (const QString& screenId : effectiveIds) {
                 // Per-output virtual desktops (#648): each screen resolves its own desktop.
                 const int desktop = currentDesktopForScreen(screenId);
@@ -558,11 +576,12 @@ void Daemon::handleAutotileDisabled()
 }
 
 /**
- * @brief Activate autotile on all screens using the last algorithm.
+ * @brief Activate autotile: presave snap floats, restore every neutered
+ *        context, then convert the screens still on snapping.
  *
- * Assigns autotile layout to every screen and sets mode to Autotile.
- * @note Callers MUST call updateAutotileScreens() + updateLayoutFilter()
- *       afterward to derive per-screen state and update the layout model.
+ * @note Callers MUST call updateAutotileScreens() + updateLayoutFilter() and
+ *       diffActiveAssignments() afterward — this function derives no per-screen
+ *       state and publishes nothing itself. See the daemon.h docblock.
  */
 void Daemon::handleSnappingToAutotile()
 {
@@ -577,7 +596,16 @@ void Daemon::handleSnappingToAutotile()
         defaultAlgoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
     }
 
-    // FIRST restore every context a previous global disable neutered. The
+    // Pre-save snap-float state BEFORE anything flips a context to autotile.
+    // captureWindowPlacement routes by the window's CURRENT mode (see the
+    // contract in presaveSnapFloats), so the snap slot is only recorded while
+    // modeForScreen still answers Snapping. The restore below flips whole
+    // contexts to Autotile, so running the presave after it would route the
+    // capture to the autotile engine and lose exactly the float this exists to
+    // preserve.
+    presaveSnapFloats();
+
+    // THEN restore every context a previous global disable neutered. The
     // disable walks all desktops and activities; the per-screen loop below only
     // ever writes the current desktop, so without this an off/on round trip left
     // desktops 2..N and every activity-pinned context stranded in Snapping with
@@ -586,13 +614,15 @@ void Daemon::handleSnappingToAutotile()
     // the "skip screens already on autotile" guard preserves the algorithm the
     // restore just put back rather than overwriting it with the global default.
     //
-    // Blocked the same way the loop below is, and for the same reason: each
-    // flipped rule emits RuleStore::rulesChanged synchronously, so an unblocked
-    // restore would drive a full reconcile per rule over a half-restored set.
+    // Suppressed the same way the loop below is, and for the same reason: each
+    // flipped rule emits RuleStore::rulesChanged synchronously, so an
+    // unsuppressed restore would drive a full reconcile per rule over a
+    // half-restored set.
+    int restored = 0;
     {
         QSignalBlocker blocker(m_layoutManager.get());
-        QSignalBlocker ruleBlocker(m_ruleStore.get());
-        m_layoutManager->restoreAutotileAssignments();
+        QScopedValueRollback<bool> reconcileGuard(m_suppressAssignmentReconcile, true);
+        restored = m_layoutManager->restoreAutotileAssignments();
     }
 
     // Determine which screens need to be converted to autotile. Skip screens
@@ -611,17 +641,40 @@ void Daemon::handleSnappingToAutotile()
         }
     }
 
-    if (screensToConvert.isEmpty()) {
-        return; // No-op enable: do NOT mutate engine algorithm or capture floats.
+    // The restore above can flip contexts on other desktops and activities even
+    // when no current-desktop screen needs converting, so an enable that
+    // restored something is not a no-op for the rest of this function (the seed
+    // + assignment work below and the caller's own republish still matter).
+    // Only an enable that changed nothing at all is a true no-op.
+    if (screensToConvert.isEmpty() && restored == 0) {
+        return; // No-op enable: do NOT mutate engine algorithm.
     }
 
-    // Side effects deferred past the no-op check above so an enable with nothing
-    // to convert leaves engine state untouched.
-    if (m_autotileEngine) {
+    // Engine mutation is gated on there being screens to CONVERT, not on the
+    // restore. A restored context never needs the engine's global algorithm:
+    // restoreAutotileAssignments only flips entries whose tilingAlgorithm is
+    // non-empty (its predicate in layoutregistry_batch.cpp is exactly
+    // "Snapping mode AND non-empty tilingAlgorithm"), so every restored context
+    // carries a concrete algorithm of its own, and that algorithm reaches the
+    // engine as a PerScreenKeys::Algorithm override the next time
+    // updateAutotileScreens resolves that context, not through the global id.
+    //
+    // Setting the global anyway on a restore-only enable is destructive: the
+    // engine's live global algorithm CAN differ from
+    // settings->defaultAutotileAlgorithm() — the layout picker
+    // (UnifiedLayoutController::applyEntry) and the D-Bus
+    // AutotileAdaptor::setAlgorithm both move the engine without writing the
+    // setting — and AutotileEngine::setAlgorithm drops m_userTunedSplitRatio /
+    // m_userTunedMasterCount for every screen lacking an Algorithm override
+    // whenever the id actually changes.
+    //
+    // The float presave cannot sit behind this gate: it has to run ahead of the
+    // restore (see the top of this function), so it is unconditional. That is
+    // safe because captureWindowPlacement is an idempotent record refresh — a
+    // content-identical capture writes nothing.
+    if (m_autotileEngine && !screensToConvert.isEmpty()) {
         m_autotileEngine->setAlgorithm(defaultAlgoId);
     }
-    // Pre-save snap-float state before autotile entry (same rationale as toggle handler)
-    presaveSnapFloats();
 
     // Pre-seed autotile engine with zone-ordered windows BEFORE layout switch
     // so we get deterministic window ordering (zone 1 → master, zone 2 → second).
@@ -637,15 +690,10 @@ void Daemon::handleSnappingToAutotile()
     // cascading resolution.
     {
         QSignalBlocker blocker(m_layoutManager.get());
-        // Block the RULE STORE too, not just the registry. Every assignment write
-        // goes through upsertAssignmentRule and emits RuleStore::rulesChanged
-        // synchronously, which drives reconcileActiveAssignments — so blocking the
-        // registry alone still ran a full reconcile (updateAutotileScreens, resnap
-        // apply, OSD) per iteration, re-entrantly, over a half-written assignment
-        // set. That is the very thing this blocker exists to prevent. Both are
-        // released together, and the caller's own diffActiveAssignments()
-        // republishes the snapshot the blocked rulesChanged would have driven.
-        QSignalBlocker ruleBlocker(m_ruleStore.get());
+        // Suppress the RECONCILE consumer of rulesChanged, not the whole store —
+        // same rationale as the restore block above. The caller's own
+        // diffActiveAssignments() republishes the snapshot once the set is whole.
+        QScopedValueRollback<bool> reconcileGuard(m_suppressAssignmentReconcile, true);
         for (const QString& screenId : screensToConvert) {
             // Per-output virtual desktops (#648): each screen resolves its own desktop.
             const int desktop = currentDesktopForScreen(screenId);

@@ -21,6 +21,7 @@
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
+#include <PhosphorWorkspaces/ActivityManager.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorRules/RuleAction.h>
@@ -57,6 +58,16 @@ QString WindowTrackingAdaptor::resolveScreenForWindow(const QString& windowId) c
     // keep the canonicalizing lookup (issue #628 composite-id skew) and nothing
     // that resolves today changes. The engine fallbacks only fill cases that
     // previously came back empty.
+    //
+    // Note the asymmetry with lastActiveScreenName (queries.cpp), which skips the
+    // service and starts at the snap engine's tracker, then falls back to a cached
+    // screen id rather than to the service. The two answer different questions —
+    // that one resolves the FOCUSED window and has a cache to fall back on, this
+    // one resolves the window being asked about and has none — so they are not
+    // trivially unifiable, and expressing one in terms of the other would change
+    // behaviour rather than deduplicate it. The service lookup earns its place at
+    // the front here because it is the accessor that canonicalizes the composite id
+    // (WindowTrackingService::screenForWindow → snapForWindow → SnapState).
     if (m_service) {
         const QString fromService = m_service->screenForWindow(windowId);
         if (!fromService.isEmpty()) {
@@ -91,25 +102,33 @@ WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const Q
     // that differs from where the window currently sits), and every other path
     // reads the service's live screen-for-window.
     //
-    // Stamping uniformly is load-bearing, not tidiness: seven of the nine
-    // consumers share ONE RuleEvaluator::resolveCached entry keyed on (windowId,
-    // rule-set revision), and resolveCached returns the cached actions WITHOUT
-    // consulting the query on a hit — so whichever of them touches a window first
-    // seeds the verdict the rest reuse for that window's lifetime. (The two that
-    // do not share it: shouldRestoreSizeOnUnsnap uses the uncached resolve(), and
-    // the exclusion provider feeds SnapEngine's own evaluator.)
+    // Stamping uniformly is load-bearing, not tidiness: the open-path consumers
+    // share ONE RuleEvaluator::resolveCached entry keyed on (windowId, rule-set
+    // revision), and resolveCached returns the cached actions WITHOUT consulting
+    // the query on a hit — so whichever of them touches a window first seeds the
+    // verdict the rest reuse for that window's lifetime. Three consumers stay off
+    // that shared entry: shouldRestoreSizeOnUnsnap uses the uncached resolve(),
+    // the exclusion provider feeds SnapEngine's own evaluator, and the predicates
+    // wired into the AUTOTILE engine ask uncached (see below).
     //
     // Uniformity alone is NOT sufficient, because the hinted and unhinted paths
     // resolve different screens — the ORDER matters just as much. The
     // hint-bearing resolver must seed first, and does on both engines today:
-    // SnapEngine::resolveWindowRestore runs calculateSnapToPlacementRule ahead of
-    // the restore, managed-restore and float predicates, and
-    // AutotileAdaptor::dispatchWindowOpened runs applyOpenRoutingForAutotile
-    // ahead of the tile engine's windowOpened. Reordering either silently reverts
-    // ScreenId / ActiveLayout matching on the open path with a green test suite.
-    // The one known hole is a sticky window under StickyWindowHandling::IgnoreAll:
-    // calculateSnapToPlacementRule early-returns before reaching the resolver, so
-    // the unhinted restore predicate seeds first for those windows.
+    // SnapAdaptor::resolveWindowRestore calls applyOpenDesktopRouting
+    // (snaprestore.cpp) before it enters the engine at all, seeding the entry with
+    // the same screenId the engine's own placement / restore / float chain passes
+    // afterwards, and AutotileAdaptor::dispatchWindowOpened runs
+    // applyOpenRoutingForAutotile ahead of the tile engine's windowOpened.
+    // Reordering either silently reverts ScreenId / ActiveLayout matching on the
+    // open path with a green test suite.
+    //
+    // A sticky window under StickyWindowHandling::IgnoreAll makes
+    // calculateSnapToPlacementRule early-return before it reaches the resolver,
+    // which used to leave the unhinted restore predicate seeding first. On the
+    // production path it no longer can: applyOpenDesktopRouting has already
+    // seeded the entry with the hint before the engine is called. The gap is
+    // confined to SnapEngine::windowOpened, a test-only entry point that reaches
+    // the engine without the adaptor facade in front of it.
     const QString screenId = screenIdHint.isEmpty() ? resolveScreenForWindow(windowId) : screenIdHint;
     if (screenId.isEmpty()) {
         // No screen resolvable (window not placed yet and no hint) — leave both
@@ -149,83 +168,52 @@ WindowTrackingAdaptor::buildContextualRuleQuery(const QString& windowId, const Q
     // desktop 2 whose screen currently shows desktop 1 matches desktop 1's
     // layout.
     //
-    // The "screen's current desktop" comes from the layout registry's own
-    // per-output record rather than the VirtualDesktopManager: we are asking the
-    // registry which layout it has assigned, so it must be asked on the same
-    // desktop it resolves layoutForScreen against, and its accessor already falls
-    // back to the global current desktop when a screen has no per-output value.
-    const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
-    const QString activity = m_layoutManager->currentActivity();
-    const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-    query->activeLayout = assignmentId;
+    // The "screen's current desktop" and the activity come from the daemon's live
+    // managers, not the registry's pushed mirrors. The mirrors are written from
+    // one place each (the desktop-switch and activity-switch handlers), so between
+    // a real switch and that handler running they lag, and this query would then
+    // resolve the previous context's layout while diffActiveAssignments — which
+    // reads the live managers — has already published the new one. `ActiveLayout`
+    // only means one thing if every producer of it reads one source. Both
+    // accessors fall back the same way the registry's did: VirtualDesktopManager
+    // returns the global current desktop for a screen with no per-output value.
+    const int desktop = currentDesktopForScreen(screenId);
+    const QString activity = PhosphorWorkspaces::ActivityManager::currentActivityOrEmpty(m_activityManager);
+    query->activeLayout = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
 
-    // ScreenOrientation and Mode are the other two screen-derived context fields,
-    // and they were dead here for exactly the reason ActiveLayout was: nothing
-    // stamps them on this side, and the effect resolves only APPEARANCE actions,
-    // so it never sees an open-path rule at all. Float, Placement, RouteToScreen,
-    // RouteToDesktop, RestorePosition, RestoreToZoneOnLogin and
+    // ScreenOrientation was dead here for exactly the reason ActiveLayout was:
+    // nothing stamped it on this side, and the effect resolves only APPEARANCE
+    // actions, so it never sees an open-path rule at all. Float, Placement,
+    // RouteToScreen, RouteToDesktop, RestorePosition, RestoreToZoneOnLogin and
     // RestoreSizeOnUnsnap are resolved here and nowhere else — a rule pairing one
-    // of them with a Mode or ScreenOrientation leaf matched nothing, and (both
-    // being non-optional context fields) a negated leaf matched everything.
+    // of them with a ScreenOrientation leaf matched nothing, and (the field being
+    // a non-optional context field) a negated leaf matched everything.
     m_layoutManager->stampScreenOrientation(*query, screenId);
 
-    // Mode is the engine mode that will own this window, normalised to the query
-    // vocabulary. The two vocabularies differ by one token: an assignment records
-    // "autotile" while WindowQuery::mode carries the placement-mode wire token
-    // "tiling", so stamping the raw assignment token would never match a
-    // `Mode Equals "tiling"` leaf.
+    // Mode is deliberately left unstamped. WindowQuery documents it as the
+    // window's live PLACEMENT state, empty for a window that is floating or not
+    // placed at all (WindowQuery.h). These resolvers run on the open path, before
+    // any engine has placed the window, so the honest answer here is "not known"
+    // and the field stays as buildRuleQueryForWindow left it. The engine mode
+    // assigned to the screen is a different question and is not what a `Mode`
+    // leaf asks. The effect stamps this field from the live window for the
+    // appearance rules it resolves.
     //
-    // Resolved at the WINDOW's effective desktop and activity, deliberately
-    // unlike ActiveLayout above. There is one authoritative answer to "which
-    // engine owns this window" — Daemon::initEngines' screenModeForWindow — and
-    // it resolves exactly this way; its own comment records that reading the
-    // SCREEN's current desktop was a bug, because the answer then flipped
-    // whenever a per-output desktop switch crossed a snap/autotile boundary. A
-    // rule matching on Mode has to agree with the router that acts on it.
-    // ActiveLayout takes the screen's context instead because it must agree with
-    // the effect's per-screen cache, which has no window context available. The
-    // two fields answer to different authorities, so they resolve differently.
-    //
-    // Derived from the mode enum, not from the assignment id's prefix:
-    // AssignmentEntry::activeLayoutId returns the autotile form only for
-    // Autotile and returns snappingLayout for Scrolling as well, so a prefix test
-    // would report a Scrolling screen as "snapping" and fire a rule that should
-    // stay inert. Scrolling has no engine yet (the router passes those windows
-    // through to KWin), so it stamps nothing.
-    //
-    // Note this DID change one case beyond the Scrolling fix. modeForScreen has
-    // no empty answer: a screen with no stored assignment falls back to a
-    // default entry whose mode is Snapping, so such a screen now stamps
-    // "snapping" where the earlier id-prefix version left the field empty. That
-    // is the correct answer rather than an accident — it is what
-    // screenModeForWindow reports for the same screen, and a snapping-mode rule
-    // should fire on a screen the router will hand to the snap engine — but it
-    // means `Mode NotEquals "snapping"` no longer matches an unassigned screen.
-    int modeDesktop = desktop;
-    QString modeActivity = activity;
-    if (!m_windowRegistry.isNull()) {
-        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
-        if (const std::optional<PhosphorEngine::WindowRegistry::WindowContext> ctx =
-                m_windowRegistry->windowContext(instanceId)) {
-            modeDesktop = ctx->effectiveDesktop(desktop);
-            modeActivity = ctx->effectiveActivity(activity);
-        }
-    }
-    switch (m_layoutManager->modeForScreen(screenId, modeDesktop, modeActivity)) {
-    case PhosphorZones::AssignmentEntry::Snapping:
-        query->mode = QStringLiteral("snapping");
-        break;
-    case PhosphorZones::AssignmentEntry::Autotile:
-        query->mode = QStringLiteral("tiling");
-        break;
-    case PhosphorZones::AssignmentEntry::Scrolling:
-        break;
-    }
+    // The trap that follows, and it is the same shape ScreenOrientation had before
+    // it was stamped above: a rule pairing a `Mode` leaf with an OPEN-PATH action
+    // (Float, SnapToZone, RouteToScreen, RouteToDesktop, RestorePosition,
+    // RestoreToZoneOnLogin, RestoreSizeOnUnsnap) is resolved here and nowhere else,
+    // so the leaf compares against a field nothing filled. Mode is a context field
+    // and therefore always ENGAGED rather than absent, so it compares an empty
+    // string: `Equals <mode>` never matches and the negated `NotEquals` form
+    // matches every window. Only an APPEARANCE action makes a `Mode` leaf
+    // meaningful, because only the effect stamps the field.
     return query;
 }
 
 bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId,
-                                                         PhosphorZones::AssignmentEntry::Mode mode)
+                                                         PhosphorZones::AssignmentEntry::Mode mode, bool useCache,
+                                                         const QString& screenIdHint)
 {
     // m_settings is a hard ctor dependency (qFatal on null), so it is non-null
     // here — deref unguarded like every other method in this class. The global
@@ -239,18 +227,23 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     if (!m_ruleStore) {
         return globalDefault;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId);
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId, screenIdHint);
     if (!query) {
         return globalDefault;
     }
 
     ensureRuleEvaluator();
     // Shares m_ruleEvaluator with shouldFloatByRule; resolveCached is keyed on
-    // (windowId, ruleSet revision) and ignores the query on a hit. Safe because both
-    // are open-path (resolved once per window lifetime — see shouldFloatByRule) and
-    // the effect pushes the window's full metadata before the engine's open-path
-    // resolve, so the first (and only) resolve for a window sees complete metadata.
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    // (windowId, ruleSet revision) and ignores the query on a hit. Safe on the snap
+    // engine, which consults this once per window lifetime on the open path, where
+    // the effect has already pushed the window's full metadata. The autotile engine
+    // also reaches it mid-session (insertWindow via backfillWindows), and passes
+    // useCache=false so that resolve sees the current context — see shouldFloatByRule.
+    // An uncached resolve builds its context from THIS query, so the autotile wiring
+    // also hands over the insert screen as screenIdHint; without it the fresh query
+    // would go out with ScreenId / ActiveLayout unstamped on the open path.
+    const PhosphorRules::ResolvedActions resolved =
+        useCache ? m_ruleEvaluator->resolveCached(windowId, *query) : m_ruleEvaluator->resolve(*query);
     if (const std::optional<PhosphorRules::RuleAction> action =
             resolved.slot(QString(PhosphorRules::ActionSlot::RestorePosition))) {
         // A matched RestorePosition rule overrides the global setting.
@@ -312,26 +305,44 @@ bool WindowTrackingAdaptor::shouldRestoreSizeOnUnsnap(const QString& windowId)
     return globalDefault;
 }
 
-bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId)
+bool WindowTrackingAdaptor::shouldFloatByRule(const QString& windowId, bool useCache, const QString& screenIdHint)
 {
     // Float is purely rule-driven: there is no global "float on open" setting, so
     // absent a matching rule the answer is "do not float".
     if (!m_ruleStore) {
         return false;
     }
-    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId);
+    const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId, screenIdHint);
     if (!query) {
         return false;
     }
 
     ensureRuleEvaluator();
     // resolveCached is keyed on (windowId, ruleSet revision); on a cache hit the
-    // freshly built `query` is ignored. That is safe because windowId is both
-    // lifetime-stable AND unique: a reopened window gets a fresh instanceId (new
-    // key → miss) and a mid-session appId rename changes the composite key too, so
-    // a cached verdict can never outlive the metadata it was built from. Both the
-    // float and restore predicates are open-path (resolved once per lifetime).
-    const PhosphorRules::ResolvedActions resolved = m_ruleEvaluator->resolveCached(windowId, *query);
+    // freshly built `query` is ignored. Window metadata staleness is not the risk:
+    // windowId is lifetime-stable AND unique, so a reopened window gets a fresh
+    // instanceId (new key → miss) and a mid-session appId rename changes the
+    // composite key too. The screen-derived context is: the entry is not
+    // invalidated on a layout, desktop or screen change, so a cached verdict
+    // carries the ScreenId / ActiveLayout the window opened with.
+    //
+    // That is exactly right for the snap engine, which asks once on the open path.
+    // The autotile engine asks again mid-session — insertShouldFloat runs from
+    // insertWindow, which backfillWindows drives on an algorithm switch, a
+    // maxWindows increase and an overflow-behaviour change, and the context seeder
+    // calls it directly. Those callers pass useCache=false so the answer reflects
+    // the layout assigned NOW rather than one that depends on whether some other
+    // resolver happened to seed the entry first.
+    //
+    // They also pass the insert screen as screenIdHint. Skipping the cache means
+    // the query built above is the one that gets resolved, and a hintless
+    // resolveScreenForWindow consults the service and the snap engine BEFORE the
+    // autotile engine — a window carrying stale snap state resolves to the SNAP
+    // screen, not the screen it is landing on, and the consults reached from
+    // context seeding can run before the engine has keyed the window at all. The
+    // hint pins ScreenId / ActiveLayout to the landing screen in both cases.
+    const PhosphorRules::ResolvedActions resolved =
+        useCache ? m_ruleEvaluator->resolveCached(windowId, *query) : m_ruleEvaluator->resolve(*query);
     // The Float action carries free-form params (no Value key), so the verdict is
     // the PRESENCE of the filled slot, not a bool payload.
     return resolved.slot(QString(PhosphorRules::ActionSlot::Float)).has_value();
@@ -358,12 +369,19 @@ PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRu
     // route target — the route comes out of the same resolve, so the target cannot
     // be known before it. And because resolveCached is keyed on (windowId,
     // rule-set revision) and never invalidated on a layout, desktop or screen
-    // change, this context is fixed for the window's lifetime. That is safe only
-    // while every consumer of the shared entry is an open-path caller, which is
-    // true today; a future mid-session caller of shouldFloatByRule,
-    // shouldRestoreToZoneOnLogin or placementZonesByRule would read an open-time
-    // layout id. Adding one means invalidating the evaluator on assignment
-    // changes, which also costs the open-path memoisation these resolvers rely on.
+    // change, this context is fixed for the window's lifetime.
+    //
+    // The contract that follows from that: the shared cached entry belongs to the
+    // OPEN path, and every consumer of it is an open-path caller. A resolver that
+    // also runs mid-session asks uncached instead, so its answer reads the current
+    // context rather than one that depends on which caller seeded the entry first.
+    // shouldRestoreSizeOnUnsnap does that, and so do the float and
+    // restore-position predicates wired into the autotile engine, which
+    // backfillWindows re-drives on algorithm and limit changes (see
+    // enginewiring.cpp). Any new mid-session caller of these resolvers takes the
+    // same route. The alternative, invalidating the evaluator on every assignment
+    // change, would cost the open-path memoisation the whole open round trip
+    // depends on.
     const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId, screenId);
     if (!query) {
         return {};
@@ -454,9 +472,10 @@ void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, con
         return;
     }
     // Pin the screen so a ScreenId / ActiveLayout-scoped rule resolves, mirroring
-    // placementZonesByRule. resolveCached is keyed on windowId (+ rule-set revision), so on
-    // the snap open path this reuses the verdict placementZonesByRule already seeded — no
-    // second evaluation.
+    // placementZonesByRule. resolveCached is keyed on windowId (+ rule-set revision), and
+    // this is the SEEDER on the snap open path: SnapAdaptor::resolveWindowRestore calls
+    // here (snaprestore.cpp) before it enters the engine, so placementZonesByRule reuses
+    // this verdict rather than the other way round — no second evaluation.
     const std::optional<PhosphorRules::WindowQuery> query = buildContextualRuleQuery(windowId, screenId);
     if (!query) {
         return;
@@ -502,6 +521,23 @@ void WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, cons
     // screens"). So a window opening on a SNAPPING screen with a RouteToScreen onto
     // an autotile monitor reached neither path: it did not snap and it did not
     // move, while the same rule minus its SnapToZone action moved it fine.
+    //
+    // One case does then place twice, and is left alone deliberately. A window
+    // spawning on an AUTOTILE screen with a SnapToZone + RouteToScreen rule aimed
+    // at another autotile monitor takes both effect-side paths: window_lifecycle.cpp
+    // runs callResolveWindowRestore first (this free move), then notifyWindowAdded
+    // from its completion, which reaches applyOpenRoutingForAutotile and routes
+    // plus tiles the window on the target. The free move is therefore transient,
+    // and the window ends up correctly tiled either way.
+    //
+    // Suppressing the free move for that shape is NOT safe, because the autotile
+    // leg is not guaranteed to follow. notifyWindowAdded declines for a window
+    // isEligibleForAutotileNotify rejects and for one already in m_notifiedWindows
+    // (a re-add), and applyOpenRoutingForAutotile itself declines when the target
+    // is not in autotile mode on the ROUTED desktop rather than its current one.
+    // Any of those with the move suppressed would strand the window on its spawn
+    // screen — the exact failure the paragraph above describes. A transient extra
+    // move is the cheaper side of that trade.
     const std::optional<PhosphorRules::RuleAction> route =
         resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
     if (!route) {
@@ -622,7 +658,16 @@ QString WindowTrackingAdaptor::applyOpenRoutingForAutotile(const QString& window
             destDesktop = d;
         }
     }
-    if (m_layoutManager->modeForScreen(target, destDesktop, m_layoutManager->currentActivity())
+    // Live ActivityManager, not the registry's pushed mirror — the same source
+    // buildContextualRuleQuery reads for ActiveLayout, and for the same reason: the
+    // mirror is written from the activity-switch handler alone, so between a real
+    // switch and that handler running it names the previous activity and this gate
+    // would read the wrong screen's mode. Scope note: this file's two readers are
+    // converted; other daemon consumers (ScreenModeRouter::modeFor, the
+    // persistence restore path) still read the pushed mirrors, so no file-wide
+    // coherence is claimed here.
+    if (m_layoutManager->modeForScreen(target, destDesktop,
+                                       PhosphorWorkspaces::ActivityManager::currentActivityOrEmpty(m_activityManager))
         != PhosphorZones::AssignmentEntry::Mode::Autotile) {
         qCDebug(lcDbusWindow) << "applyOpenRoutingForAutotile: RouteToScreen target" << target
                               << "is not in autotile mode — not redirecting" << windowId;

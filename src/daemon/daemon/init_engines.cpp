@@ -359,6 +359,26 @@ void Daemon::initEnginesAndWiring()
     connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this](bool /*persisted*/) {
         reconcileActiveAssignments();
     });
+
+    // Deleting a layout moves resolved assignments without touching a single
+    // rule: the assignment entry keeps naming the dead uuid, the cascade stops
+    // resolving it, and the level-1 default provider refuses it too (see the
+    // dead-id guard in initLayoutAndSettingsWiring). Nothing on the rulesChanged
+    // path fires for that, so the published active-layout map kept naming a
+    // layout the user removed and the effect's ActiveLayout matcher with it.
+    // Republish only — no reconcile: the resnap/OSD apply belongs to assignment
+    // edits, and diffActiveAssignments reads layouts without mutating them, so
+    // this cannot re-enter layoutsChanged.
+    //
+    // Disconnect-first for the same reason as the rulesChanged sweep above:
+    // m_layoutManager survives a stop() → init() cycle, and it is a mixed sender
+    // that stop() deliberately does not blanket-sever. No other daemon-receiver
+    // handler sits on this signal, so the targeted sweep only drops our own.
+    disconnect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, nullptr);
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
+        diffActiveAssignments();
+    });
+
     // Prime the snapshot from the initial rule set so the first real rule edit
     // diffs against the live assignments rather than an empty baseline.
     diffActiveAssignments();
@@ -590,9 +610,10 @@ void Daemon::initEnginesAndWiring()
             if (!m_autotileEngine) {
                 return;
             }
-            // const overload: non-creating, returns nullptr (→ count 0) when
-            // the screen has no tiling state, so this gate never allocates a
-            // phantom state while observing the count.
+            // const overload, as intent: returns nullptr (→ count 0) when the
+            // screen has no tiling state, so this gate observes the count without
+            // asking for a state. (Both overloads are non-creating today — see
+            // AutotileEngine::stateForScreen in autotileengine/facade.cpp.)
             const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
             const int count = state ? state->tiledWindowCount() : 0;
             const auto it = m_lastTiledCountByScreen.constFind(screenId);
@@ -641,11 +662,14 @@ void Daemon::initEnginesAndWiring()
             if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager) {
                 // Refresh the snapshot even when the resnap work below cannot run.
                 // The tail of this lambda calls diffActiveAssignments, which is what
-                // republishes each screen's active layout to the KWin effect — and
-                // it needs only m_layoutManager, which the guard above may have
-                // rejected for an unrelated missing member. Returning outright
-                // during a teardown or re-init window left the effect's ActiveLayout
-                // cache stale for a KCM apply that otherwise succeeded.
+                // republishes each screen's active layout to the KWin effect, and
+                // the guard above may have rejected the whole lambda for a member
+                // that republish does not use. Returning outright during a teardown
+                // or re-init window left the effect's ActiveLayout cache stale for a
+                // KCM apply that otherwise succeeded. diffActiveAssignments needs
+                // BOTH m_layoutManager and m_screenManager (it enumerates effective
+                // screen ids) and self-guards on the pair, so the check here is only
+                // to avoid calling into it with nothing to do.
                 if (m_layoutManager) {
                     diffActiveAssignments();
                 }

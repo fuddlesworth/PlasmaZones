@@ -144,9 +144,18 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             // orphan-reassignment when a monitor drops out, and not mid-drag,
             // where the drag system owns the transitions and the deferred flush's
             // decoration rebuild has not been established as safe.
-            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId && !involuntaryMove
-                && !m_dragTracker->isDragging()) {
-                invalidateRuleCacheForStateChange(getWindowId(safeW));
+            //
+            // Mid-drag the invalidation is deferred, not dropped: the id goes
+            // into m_dragSuppressedRuleInvalidations and callEndDrag drains it
+            // once the daemon's outcome has been applied. Nothing at drag end
+            // could rediscover the crossing on its own, because the stamp above
+            // already made the tracked screen equal to the live one.
+            if (!oldScreenId.isEmpty() && oldScreenId != newScreenId && !involuntaryMove) {
+                if (m_dragTracker->isDragging()) {
+                    m_dragSuppressedRuleInvalidations.insert(getWindowId(safeW));
+                } else {
+                    invalidateRuleCacheForStateChange(getWindowId(safeW));
+                }
             }
 
             // For snapping→snapping cross-screen moves: notify the daemon which
@@ -198,6 +207,25 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                 return;
             }
             m_trackedScreenPerWindow[safeW] = newScreenId;
+
+            // A virtual-screen crossing stales this window's cached rule verdict
+            // exactly like the physical cross-screen move above: ScreenId,
+            // ScreenOrientation and the screen's active layout are all per-screen
+            // match inputs, and the verdict cache is keyed on (windowId, rule-set
+            // revision), neither of which moves here. Same gating as the sibling —
+            // not mid-drag, where the drag system owns the transitions — and it
+            // runs ahead of the autotile / daemon delegation below, which return
+            // early for tracked and autotile-screen windows whose verdicts are
+            // stale all the same. The sibling's non-empty / differs terms are
+            // already guaranteed here by isVirtualScreenCrossing above. Mid-drag
+            // the id is parked in m_dragSuppressedRuleInvalidations for
+            // callEndDrag to drain, exactly as the sibling does, because the
+            // stamp above leaves nothing at drag end to detect the crossing from.
+            if (m_dragTracker->isDragging()) {
+                m_dragSuppressedRuleInvalidations.insert(getWindowId(safeW));
+            } else {
+                invalidateRuleCacheForStateChange(getWindowId(safeW));
+            }
 
             // Skip during drag — the drag system owns state transitions.
             // Autotile drag handles VS transfers via the drag-policy-changed path.

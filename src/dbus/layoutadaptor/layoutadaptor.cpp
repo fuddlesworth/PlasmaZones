@@ -548,6 +548,20 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
 
 void LayoutAdaptor::applyQuickLayout(int mode, int number, const QString& screenId)
 {
+    // Same slot-range guard the getQuickLayoutSlot / setQuickLayoutSlot siblings
+    // apply at this boundary. The mode needs none: quickSlotMode maps anything
+    // that is not Autotile onto Snapping.
+    if (number < 1 || number > PhosphorProtocol::Service::QuickLayoutSlotCount) {
+        qCWarning(lcDbusLayout)
+            << "Invalid quick layout slot number:" << number
+            << QStringLiteral("(must be 1-%1)").arg(PhosphorProtocol::Service::QuickLayoutSlotCount);
+        return;
+    }
+    // No screenId guard: an empty screen is legal here, and LayoutRegistry
+    // documents it as such. applyLayoutToScreen skips the per-screen assignment
+    // and just updates the global active layout, which is what the caller with no
+    // focused screen wants (LayoutRegistry::cycleLayoutImpl relies on the same
+    // behaviour).
     m_layoutManager->applyQuickLayout(quickSlotMode(mode), number,
                                       PhosphorScreens::ScreenIdentity::idForName(screenId));
 }

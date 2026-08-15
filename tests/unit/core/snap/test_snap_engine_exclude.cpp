@@ -143,7 +143,7 @@ private Q_SLOTS:
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|win")));
 
         // With the provider supplying a full query, the Title rule matches.
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.appId = QStringLiteral("editor");
             q.title = QStringLiteral("scratchpad - notes");
@@ -152,7 +152,7 @@ private Q_SLOTS:
         QVERIFY(engine.isWindowExcluded(QStringLiteral("app|win")));
 
         // A non-matching title is not excluded.
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.title = QStringLiteral("main window");
             return std::optional<PhosphorRules::WindowQuery>(q);
@@ -169,7 +169,7 @@ private Q_SLOTS:
         m_settings->setMinimumWindowHeight(150);
 
         // Sub-threshold frame → excluded (when the full query carries the size).
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 120;
             q.height = 90;
@@ -178,7 +178,7 @@ private Q_SLOTS:
         QVERIFY(engine.isWindowExcluded(QStringLiteral("app|tiny")));
 
         // At/above threshold → not excluded.
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 800;
             q.height = 600;
@@ -187,7 +187,7 @@ private Q_SLOTS:
         QVERIFY(!engine.isWindowExcluded(QStringLiteral("app|big")));
 
         // Exactly AT the threshold → not excluded (the comparison is strict `<`).
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 200; // == minW
             q.height = 150; // == minH
@@ -197,7 +197,7 @@ private Q_SLOTS:
 
         // OR semantics: width under but height over → excluded (pins that the
         // check is OR, not AND, and that each dimension is evaluated).
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 120; // under 200
             q.height = 600; // over 150
@@ -206,7 +206,7 @@ private Q_SLOTS:
         QVERIFY(engine.isWindowExcluded(QStringLiteral("app|narrow")));
 
         // Symmetric: height under but width over → excluded.
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 800; // over 200
             q.height = 90; // under 150
@@ -218,7 +218,7 @@ private Q_SLOTS:
         // by size when both thresholds are 0 (guards the `> 0` enable check).
         m_settings->setMinimumWindowWidth(0);
         m_settings->setMinimumWindowHeight(0);
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 1;
             q.height = 1;
@@ -251,7 +251,7 @@ private Q_SLOTS:
         m_settings->setMinimumWindowWidth(200);
         m_settings->setMinimumWindowHeight(150);
         // Full query carries a sub-threshold frame → isWindowExcluded is true.
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 80;
             q.height = 60;

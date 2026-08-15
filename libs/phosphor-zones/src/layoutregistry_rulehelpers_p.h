@@ -27,6 +27,7 @@
 namespace PhosphorRules {
 class MatchExpression;
 class Rule;
+struct RuleAction;
 } // namespace PhosphorRules
 
 namespace PhosphorZones::RuleHelpers {
@@ -100,6 +101,13 @@ bool hasTilingAlgorithmAction(const PWR::Rule& rule);
 // Exclude, ...) — admitting it would silently strip those actions
 // through the assignment-rebuild path.
 bool isPureAssignmentRule(const PWR::Rule& rule);
+
+// True for the three action types makeAssignmentActions emits — the slots
+// an assignment rebuild owns and rewrites. Everything else on a rule is
+// somebody else's action and must survive a rebuild verbatim. Shared by
+// flipAssignmentModes and upsertAssignmentRule so the two rebuild paths
+// cannot drift on which actions they preserve.
+bool isAssignmentSlotAction(const PWR::RuleAction& action);
 
 // Shape predicates for the per-screen-base / per-desktop / per-activity
 // context rule families — used by the batch setters to drop one family

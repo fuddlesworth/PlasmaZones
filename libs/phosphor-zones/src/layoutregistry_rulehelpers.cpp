@@ -107,6 +107,13 @@ bool isPureAssignmentRule(const PWR::Rule& rule)
     return true;
 }
 
+bool isAssignmentSlotAction(const PWR::RuleAction& action)
+{
+    return action.type == QLatin1String(PWR::ActionType::SetEngineMode)
+        || action.type == QLatin1String(PWR::ActionType::SetSnappingLayout)
+        || action.type == QLatin1String(PWR::ActionType::SetTilingAlgorithm);
+}
+
 bool matchIsExactContextBase(const PWR::MatchExpression& match)
 {
     return CRB::matchIsExactContextBase(match);

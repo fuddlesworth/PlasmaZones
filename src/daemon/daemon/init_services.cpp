@@ -121,6 +121,21 @@ void Daemon::initLayoutAndSettingsWiring()
         // `ActiveLayout Equals <deleted uuid>` rule keeps matching a layout the
         // user removed. Falling through to empty puts those screens in the
         // no-resolvable-layout state the cascade already handles.
+        //
+        // This duplicates the same dead-id check inside LayoutRegistry::defaultLayout(),
+        // and has to: that one FALLS BACK (to the active layout, then the first
+        // registered one) where this provider must return empty, because the
+        // provider's answer is the published ActiveLayout value.
+        //
+        // Known asymmetry, accepted: layoutForScreen() still routes through
+        // defaultLayout()'s fallback, so after the configured default is deleted
+        // a screen keeps live zones from the first registered layout while
+        // ActiveLayout publishes empty for it. Zones stay usable, and no rule
+        // matches a layout the user deleted.
+        //
+        // Cost: one QUuid parse plus an O(layouts) layoutById scan per cascade
+        // miss, which the drag path hits per resolve. The empty-id early return
+        // above keeps the common unconfigured case off this path entirely.
         const auto uuid = Utils::parseUuid(id);
         if (!uuid || !m_layoutManager->layoutById(*uuid)) {
             return QString();
@@ -145,12 +160,13 @@ void Daemon::initLayoutAndSettingsWiring()
             if (!m_autotileEngine) {
                 return std::nullopt;
             }
-            // const overload: a non-creating lookup that returns nullptr when the
-            // screen has no tiling state. The non-const overload would lazily
-            // CREATE an empty state, both polluting m_screenStates during a pure
-            // resolution query and reporting 0 (not nullopt) for a non-tiling
-            // screen, which would make a TiledWindowCount predicate match there
-            // instead of staying inert.
+            // const overload, as intent: a non-creating lookup that returns
+            // nullptr when the screen has no tiling state, so a TiledWindowCount
+            // predicate stays inert there instead of matching on a reported 0.
+            // (Both overloads are non-creating today — see
+            // AutotileEngine::stateForScreen in autotileengine/facade.cpp — so
+            // the as_const is a statement of intent, not the thing preventing a
+            // create-on-read.)
             const PhosphorEngine::IPlacementState* state = std::as_const(*m_autotileEngine).stateForScreen(screenId);
             if (!state) {
                 return std::nullopt;
@@ -405,6 +421,11 @@ void Daemon::initLayoutAndSettingsWiring()
         // goes stale, which both makes a later rule edit falsely re-resnap those
         // screens and leaves subscribers to activeLayoutForScreenChanged (the
         // KWin effect's ActiveLayout rule matching) pinned to the old layout.
+        //
+        // During init()'s D-Bus retry loop this can run before m_layoutAdaptor
+        // exists: the snapshot advances and the publish is dropped. Harmless —
+        // the adaptor's mirror is seeded by the priming diffActiveAssignments()
+        // in initEngines once the adaptor is up.
         diffActiveAssignments();
     }));
 

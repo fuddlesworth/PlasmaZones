@@ -80,7 +80,7 @@ void AutotileEngine::notifyAlgorithmWindowAdded(PhosphorTiles::TilingState* stat
     }
 }
 
-bool AutotileEngine::insertShouldFloat(const QString& windowId) const
+bool AutotileEngine::insertShouldFloat(const QString& windowId, const QString& screenIdHint) const
 {
     // A window ARRIVING from another state was already managed, so the open-time
     // "Float this app" rule has nothing to say about it — it carries the float
@@ -91,8 +91,11 @@ bool AutotileEngine::insertShouldFloat(const QString& windowId) const
     if (m_migrationArrival && m_migrationArrival->windowId == windowId) {
         return m_migrationArrival->wasFloating;
     }
-    // A genuine open consults the rule.
-    return m_floatPredicate && m_floatPredicate(windowId);
+    // A genuine open consults the rule. The screen hint travels with it because the
+    // daemon's resolver consults the service and the snap engine first (stale snap
+    // state would resolve the wrong screen), and on the insert path nothing has
+    // keyed the window to a screen yet.
+    return m_floatPredicate && m_floatPredicate(windowId, screenIdHint);
 }
 
 bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenId)
@@ -293,7 +296,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                 // autotileRestoreFloatedWindowsOnLogin setting + per-window
                 // RestorePosition rule). When the predicate is unset (tests / no
                 // daemon) the move always fires, preserving historical behaviour.
-                const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+                // Hint with the screen the window is being inserted onto: the
+                // hint stamps the rule query's ScreenId / ActiveLayout, which
+                // ask where the window is landing now. (In this branch the
+                // take() predicate makes restoreScreen equal to screenId, so
+                // the two candidates cannot diverge here anyway.)
+                const bool restorePosition =
+                    !m_restorePositionPredicate || m_restorePositionPredicate(windowId, screenId);
                 if (freeGeo.isValid() && restorePosition) {
                     Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                 }
@@ -329,7 +338,7 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     // a manual float toggle. Guarded on not-already-floating so the
     // placement-record float-restore branch above is not re-applied. onWindowAdded
     // then emits windowFloatingStateSynced so the daemon mirrors the state.
-    if (!state->isFloating(windowId) && insertShouldFloat(windowId)) {
+    if (!state->isFloating(windowId) && insertShouldFloat(windowId, screenId)) {
         state->setFloating(windowId, true);
     }
 

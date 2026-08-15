@@ -471,7 +471,7 @@ void TestNavigationCrossSurface::crossOutput_moveFloatRuledTiledWindow_towardFul
     // tiled a float-ruled app with Meta+F. DP-2 is autotile and already at the
     // cap (b1, b2).
     fx.engine->config()->maxWindows = 2;
-    fx.engine->setFloatPredicate([](const QString& id) {
+    fx.engine->setFloatPredicate([](const QString& id, const QString&) {
         return id == QStringLiteral("float-me") || id == QStringLiteral("a2");
     });
 
@@ -512,7 +512,7 @@ void TestNavigationCrossSurface::crossOutput_moveFloatRuledTiledWindow_keepsItTi
     // and a2 must arrive TILED: the migration carries its live float state across
     // rather than re-running the open-time rule, which would re-float the window
     // the user had explicitly tiled.
-    fx.engine->setFloatPredicate([](const QString& id) {
+    fx.engine->setFloatPredicate([](const QString& id, const QString&) {
         return id == QStringLiteral("a2");
     });
 

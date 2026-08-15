@@ -203,16 +203,15 @@ public:
     /**
      * @brief Frozen-snapshot per-screen mode + disable/lock cascade façade.
      *
-     * Borrowed by the three D-Bus adaptors (SnapAdaptor,
-     * WindowTrackingAdaptor, WindowDragAdaptor) and the daemon's own
-     * navigation / OSD / overlay paths so the cascade
-     * `(modeFor → currentDesktop → currentActivity → isContextDisabled
-     * → isContextLocked)` resolves through one call instead of being
-     * hand-stitched at each site. The pointer is non-null after `init()` and stays
-     * non-null until `stop()` runs. The init-without-start path detaches the
-     * overlay's borrow before its early return, while normal running teardown
-     * also clears every adaptor borrow before resetting the resolver. See
-     * @ref m_contextResolver for the declaration-order invariant.
+     * Borrowed by the three D-Bus adaptors (SnapAdaptor, WindowTrackingAdaptor,
+     * WindowDragAdaptor) and the daemon's own navigation / OSD / overlay paths
+     * so the cascade `(modeFor → currentDesktop → currentActivity →
+     * isContextDisabled → isContextLocked)` resolves through one call instead of
+     * being hand-stitched at each site. The pointer is non-null after `init()`
+     * and stays non-null until `stop()` runs. The init-without-start path
+     * detaches the overlay's borrow before its early return, while normal
+     * running teardown also clears every adaptor borrow before resetting the
+     * resolver. See @ref m_contextResolver for the declaration-order invariant.
      */
     PhosphorContext::ContextResolver* contextResolver() const
     {
@@ -280,24 +279,23 @@ private:
      *        so QML `PhosphorMotionAnimation { profile: "<path>" }` resolves
      *        to the user's active animation settings and live-updates on edit.
      *
-     * Scans the XDG `plasmazones/curves` and `plasmazones/profiles`
-     * directories for user-authored definitions and installs live-reload
-     * watchers (via constructAnimationLoaders); seeds the shell animation
-     * family defaults (`seedShellAnimationFamilies`) and installs their
-     * owner tag as the registry's low-precedence tag so seed entries never
-     * ship in the published motion tree; publishes the three QML statics
+     * Scans the XDG `plasmazones/curves` and `plasmazones/profiles` directories
+     * for user-authored definitions and installs live-reload watchers (via
+     * constructAnimationLoaders); seeds the shell animation family defaults
+     * (`seedShellAnimationFamilies`) and installs their owner tag as the
+     * registry's low-precedence tag so seed entries never ship in the published
+     * motion tree; publishes the three QML statics
      * (`PhosphorCurve::setDefaultRegistry`,
      * `PhosphorProfileRegistry::setDefaultRegistry`,
      * `QtQuickClockManager::setDefaultManager`) that `stop()` clears; and
-     * registers the daemon's active animation Profile under the
-     * settings-driven path set — `ProfilePaths::Global` today
-     * (kSettingsDrivenProfilePaths) — with every other path resolving
-     * through inheritance.
+     * registers the daemon's active animation Profile under the settings-driven
+     * path set — `ProfilePaths::Global` today (kSettingsDrivenProfilePaths) —
+     * with every other path resolving through inheritance.
      *
      * Live updates route through the coalescing 0 ms trampoline
      * `requestAnimationProfilePublish`: `Settings::animationProfileChanged`,
-     * `ProfileLoader::profilesChanged`, and `CurveLoader::curvesChanged` all
-     * arm it, and the publish re-registers only when the registry observes a
+     * `ProfileLoader::profilesChanged`, and `CurveLoader::curvesChanged` all arm
+     * it, and the publish re-registers only when the registry observes a
      * value-or-owner change.
      */
     void setupAnimationProfiles();
@@ -376,14 +374,13 @@ private:
     /**
      * @brief Convenience mode check: routed through m_screenModeRouter.
      *
-     * All daemon navigation/signal paths that need to branch on "is this
-     * screen in autotile mode?" use this method instead of checking the
-     * engine pointer directly. Centralising the lookup behind one call
-     * is how the single-source-of-truth invariant is enforced inside the
-     * daemon. The router itself (src/core/screenmoderouter.cpp) IS the
-     * underlying source and inspects `m_autotileEngine->isActiveOnScreen`
-     * directly — every other caller (navigation/signal/start/osd paths)
-     * routes through `isAutotileScreen` or `m_screenModeRouter->isAutotileMode`.
+     * All daemon navigation/signal paths that need to branch on "is this screen
+     * in autotile mode?" use this method instead of checking the engine pointer
+     * directly, which is how the single-source-of-truth invariant is enforced
+     * inside the daemon. The router itself (src/core/screenmoderouter.cpp) IS
+     * the underlying source and inspects `m_autotileEngine->isActiveOnScreen`
+     * directly — every other caller (navigation/signal/start/osd paths) routes
+     * through `isAutotileScreen` or `m_screenModeRouter->isAutotileMode`.
      */
     bool isAutotileScreen(const QString& screenId) const;
 
@@ -465,54 +462,69 @@ private:
     void migrateStartupScreenAssignments();
 
     /**
-     * @brief Pre-seed autotile engine with zone-ordered windows for one screen
-     *
-     * Prefers the SAVED order from the last mode toggle
-     * (m_lastAutotileOrders, deterministic re-entry) and only falls back to
-     * the zone-ordered window list from WTS. Live filters run before
-     * seeding (filterAutotileSeedOrder): user floats and durable snap-slot
-     * floats are dropped, minimized windows stay as positional placeholders.
-     * The result goes to the autotile engine's setInitialWindowOrder(). Used
-     * by both per-screen toggle and global snapping→autotile transition.
-     *
+     * @brief Pre-seed autotile engine with zone-ordered windows for one screen.
+     *        Prefers the SAVED order from the last mode toggle
+     *        (m_lastAutotileOrders, deterministic re-entry) and only falls back
+     *        to the zone-ordered window list from WTS. Live filters run before
+     *        seeding (filterAutotileSeedOrder): user floats and durable snap-slot
+     *        floats are dropped, minimized windows stay as positional
+     *        placeholders. The result goes to the autotile engine's
+     *        setInitialWindowOrder(). Used by both per-screen toggle and global
+     *        snapping→autotile transition.
      * @param screenId Screen identifier
      */
     void seedAutotileOrderForScreen(const QString& screenId);
 
     /**
-     * @brief Flip every autotile assignment to Snapping; restore each screen's
-     *        saved snap layout; reset autotile-floating state. Caller is
-     *        responsible for the post-conditioning calls
-     *        (updateAutotileScreens, updateLayoutFilter, snap resnap).
+     * @brief Flip every autotile assignment to Snapping and restore each
+     *        screen's saved snap layout. Caller is responsible for the
+     *        post-conditioning calls (updateAutotileScreens, updateLayoutFilter,
+     *        snap resnap). Clears no autotile-floating state of its own: each
+     *        window's cross-mode float lives only in its unified WindowPlacement
+     *        record, which the resnap at the call site consumes (see the tail
+     *        comment in autotile.cpp).
      */
     void handleAutotileDisabled();
 
     /**
-     * @brief Activate autotile on every screen NOT already on an autotile
-     *        assignment. Idempotent for mixed-mode setups: screens already
-     *        running autotile keep their per-screen algorithm customisation.
+     * @brief Activate autotile: restore every neutered context, then convert the
+     *        current-desktop screens still on snapping.
+     *
+     * Runs in three stages. It first presaves snap floats (which must happen
+     * while the contexts still read as Snapping), then performs a GLOBAL
+     * cross-context restore of every context-assignment rule sitting in Snapping
+     * while carrying a tiling algorithm, then converts the effective screens
+     * whose current-desktop assignment is still not autotile. Screens already on
+     * autotile (including ones the restore just flipped) keep their per-screen
+     * algorithm customisation. Not idempotent in the engine sense: a call with
+     * nothing left to restore or convert returns before touching engine state,
+     * a restore-only call leaves the engine's global algorithm alone (restored
+     * contexts carry their own), and the presave runs on every call. The caller
+     * must drive diffActiveAssignments() afterwards — this function deliberately
+     * publishes nothing itself (see the tail of Daemon::handleSnappingToAutotile
+     * in autotile.cpp).
      */
     void handleSnappingToAutotile();
 
     /**
-     * @brief Pre-save snap-mode floating state before entering autotile
-     *
-     * Snapshots every non-autotile-floated floating window into the unified
-     * placement record via captureWindowPlacement (the record's snap slot +
-     * shared free geometry are the single source of truth; there is no
-     * parallel saved-float set). When screenId is provided, only windows on
-     * that screen are captured; when empty, all floating windows (global
-     * autotile enable). Idempotent — content-identical captures no-op.
+     * @brief Pre-save snap-mode floating state before entering autotile.
+     *        Snapshots every non-autotile-floated floating window into the
+     *        unified placement record via captureWindowPlacement (the record's
+     *        snap slot + shared free geometry are the single source of truth;
+     *        there is no parallel saved-float set). When screenId is provided,
+     *        only windows on that screen are captured; when empty, all floating
+     *        windows (global autotile enable). Idempotent — content-identical
+     *        captures no-op.
      */
     void presaveSnapFloats(const QString& screenId = QString());
 
     /**
-     * @brief Capture autotile window order for all autotile screens
-     *
-     * Must be called BEFORE any mode switch that destroys PhosphorTiles::TilingState
-     * (e.g. applyLayoutById, handleAutotileDisabled, updateAutotileScreens).
-     *
-     * @return Map of (screen, desktop, activity) -> ordered window IDs (master first)
+     * @brief Capture autotile window order for all autotile screens. Must be
+     *        called BEFORE any mode switch that destroys
+     *        PhosphorTiles::TilingState (e.g. applyLayoutById,
+     *        handleAutotileDisabled, updateAutotileScreens).
+     * @return Map of (screen, desktop, activity) -> ordered window IDs (master
+     *         first)
      */
     QHash<TilingStateKey, QStringList> captureAutotileOrders() const;
 
@@ -520,15 +532,14 @@ private:
      * @brief Build pre-tile geometry restore entries for autotile-only windows.
      *
      * Iterates m_lastAutotileOrders and produces a `ZoneAssignmentEntry` per
-     * autotile-only window (no zone assignment, never manually snapped).
-     * Returns the batch so the caller can feed it to
-     * `SnapEngine::emitBatchedResnap` — one batched signal per autotile
-     * toggle instead of per-window D-Bus chatter. Zone-snapped windows are
-     * already handled by `SnapAdaptor::resnapCurrentAssignments`.
-     *
-     * @param onlyScreenId When non-empty, restrict to that screen's saved
-     *        orders — the per-screen toggle must not emit restores for
-     *        windows still tiled on other screens.
+     * autotile-only window (no zone assignment, never manually snapped). Returns
+     * the batch so the caller can feed it to `SnapEngine::emitBatchedResnap` —
+     * one batched signal per autotile toggle instead of per-window D-Bus
+     * chatter. Zone-snapped windows are already handled by
+     * `SnapAdaptor::resnapCurrentAssignments`.
+     * @param onlyScreenId When non-empty, restrict to that screen's saved orders
+     *        — the per-screen toggle must not emit restores for windows still
+     *        tiled on other screens.
      */
     QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
                                                              const QString& activity = QString(),
@@ -540,93 +551,101 @@ private:
     void showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenId);
 
     /**
-     * @brief Show OSD for the current desktop's layout/algorithm on desktop or activity switch
-     *
-     * Resolves the focused screen, reads the per-desktop assignment, and shows
-     * the appropriate OSD (layout or algorithm). DRY helper for both
-     * currentDesktopChanged and currentActivityChanged handlers.
-     *
+     * @brief Show OSD for the current desktop's layout/algorithm on desktop or
+     *        activity switch. Resolves the focused screen, reads the per-desktop
+     *        assignment, and shows the appropriate OSD (layout or algorithm).
+     *        DRY helper for both currentDesktopChanged and currentActivityChanged
+     *        handlers.
      * @param activity Current activity ID
      */
     void showDesktopSwitchOsd(const QString& activity);
 
     /**
-     * @brief Per-screen desktop-switch OSD (Plasma 6.7 per-output virtual desktops)
-     *
-     * Shows the desktop-switch OSD only on @p screenId, using that screen's own
-     * current virtual desktop. Driven by the per-screen screenDesktopChanged
-     * handler so a single screen's switch doesn't flash every monitor (#648).
+     * @brief Per-screen desktop-switch OSD (Plasma 6.7 per-output virtual
+     *        desktops). Shows the desktop-switch OSD only on @p screenId, using
+     *        that screen's own current virtual desktop. Driven by the per-screen
+     *        screenDesktopChanged handler so a single screen's switch doesn't
+     *        flash every monitor (#648).
      */
     void showDesktopSwitchOsdForScreen(const QString& screenId, const QString& activity);
 
     /**
-     * @brief Show per-screen OSD for all effective screens
-     *
-     * Iterates effectiveScreenIds, resolves assignment (autotile vs snapping),
-     * and calls showLayoutOsdForAlgorithm or showLayoutOsd per screen inside
-     * a single deferred event-loop pass so all surfaces show simultaneously.
-     * DRY helper shared by showDesktopSwitchOsd and the startup OSD path
-     * (finalizeStartup).
+     * @brief Show per-screen OSD for all effective screens. Iterates
+     *        effectiveScreenIds, resolves assignment (autotile vs snapping), and
+     *        calls showLayoutOsdForAlgorithm or showLayoutOsd per screen inside a
+     *        single deferred event-loop pass so all surfaces show simultaneously.
+     *        DRY helper shared by showDesktopSwitchOsd and the startup OSD path
+     *        (finalizeStartup).
      */
     void showOsdForAllScreens(const QString& activity);
 
     /**
-     * @brief Per-screen OSD for an explicit screen set
-     *
-     * Like showOsdForAllScreens but for the given @p screenIds; each screen uses
-     * its OWN current virtual desktop (per-output virtual desktops). Backs both
-     * showOsdForAllScreens and showDesktopSwitchOsdForScreen.
+     * @brief Per-screen OSD for an explicit screen set. Like
+     *        showOsdForAllScreens but for the given @p screenIds; each screen
+     *        uses its OWN current virtual desktop (per-output virtual desktops).
+     *        Backs both showOsdForAllScreens and showDesktopSwitchOsdForScreen.
      */
     void showOsdForScreens(const QStringList& screenIds, const QString& activity);
 
     /**
-     * @brief Recompute which screens use autotile from layout assignments
-     *
-     * Reads all screen assignments via assignmentIdForScreen(), computes
-     * which screens have autotile IDs, calls setActiveScreens() on engine.
+     * @brief Recompute which screens use autotile from layout assignments. Reads
+     *        all screen assignments via assignmentIdForScreen(), computes which
+     *        screens have autotile IDs, calls setActiveScreens() on engine.
      */
     void updateAutotileScreens();
 
     /**
      * @brief React to a rule change that may have altered active assignments.
      *
-     * The unified rule store emits rulesChanged on any rule edit, but only a
-     * change to the ACTIVE context's resolved assignment needs windows moved.
-     * Diffs each screen's resolved assignment id against the snapshot; for the
-     * screens that changed, retiles autotile screens (updateAutotileScreens
-     * self-diffs) and drives the legacy resnap/OSD path via the LayoutAdaptor
-     * (applyAssignmentChangesFor, which carries this set explicitly rather than
-     * staging into the bus client's save-batch buffer). A no-op when nothing
-     * assignment-affecting changed (appearance / exclude / lock edits, etc.).
+     * The rule store emits rulesChanged on any edit, but only a change to the
+     * ACTIVE context's resolved assignment needs windows moved, so the screens
+     * the diff reports drive the legacy resnap/OSD path via
+     * LayoutAdaptor::applyAssignmentChangesFor, which carries that set
+     * explicitly rather than staging into the bus client's save-batch buffer.
+     * updateAutotileScreens() runs on EVERY call regardless: gap and
+     * tiling-parameter rules move tiled geometry without moving any assignment
+     * id, and it force-retiles the already-active autotile screens for exactly
+     * that case. Only the resnap / OSD apply is gated on the diff result.
+     * Suppressed while @ref m_suppressAssignmentReconcile is set, so this
+     * file's own bulk assignment writers can flip N rules without a full
+     * reconcile per rule.
      */
     void reconcileActiveAssignments();
 
     /**
-     * @brief Recompute each effective screen's active assignment id and return
-     *        the set whose id differs from @ref m_activeAssignmentByScreen, or
-     *        which dropped out of the effective-screen list entirely, updating
-     *        the snapshot to the new values (dropping removed screens).
+     * @brief Recompute each effective screen's active assignment id, publish the
+     *        result, and return the screens whose id changed.
      *
-     * The removed screens are in the returned set because they must be
-     * broadcast as "no longer resolving to any layout" — so a consumer that
-     * treats the result as "screens to resnap" has to tolerate ids that no
-     * longer exist. In practice screenRemoved diffs first, so they are gone by
-     * the time a later rule edit lands.
+     * The returned set is the screens whose id differs from @ref
+     * m_activeAssignmentByScreen plus those that dropped out of the effective
+     * screen list, and the snapshot is updated to the new values with removed
+     * screens dropped. Removed screens are in the set because they must be
+     * broadcast as "no longer resolving to any layout", so a consumer treating
+     * the result as "screens to resnap" has to tolerate ids that no longer
+     * exist (in practice screenRemoved diffs first, so they are gone by the time
+     * a later rule edit lands).
      *
-     * Called by reconcileActiveAssignments (with apply) and, with the result
-     * discarded, to refresh the snapshot after a context switch or a legacy
-     * apply so a later rule edit doesn't falsely re-resnap those screens.
+     * Not a pure query: after updating the snapshot it hands the whole map plus
+     * the changed set to LayoutAdaptor::publishActiveAssignments, refreshing the
+     * adaptor's bus-facing mirror and emitting activeLayoutForScreenChanged once
+     * per changed screen. Callers that only want the snapshot refreshed still
+     * pay that broadcast, which is the point: it is the daemon's single
+     * publication point for which layout is active on which screen. Called by
+     * reconcileActiveAssignments (with apply) and, with the result discarded, to
+     * refresh the snapshot after a context switch or a legacy apply so a later
+     * rule edit doesn't falsely re-resnap those screens.
      */
     QSet<QString> diffActiveAssignments();
 
     /**
-     * @brief Respond to a PhosphorScreens::ScreenManager VS cache change for a physical screen
+     * @brief Respond to a PhosphorScreens::ScreenManager VS cache change for a
+     *        physical screen.
      *
-     * Wired to PhosphorScreens::ScreenManager::virtualScreensChanged. Performs the post-change
-     * fan-out: clears stale resnap buffer, migrates window assignments to the
-     * new VS IDs (when subdivisions exist), prunes stale autotile orders,
-     * refreshes the autotile screen set, recalculates affected zone
-     * geometries inline, resnaps windows on this physical screen and its
+     * Wired to PhosphorScreens::ScreenManager::virtualScreensChanged. Performs
+     * the post-change fan-out: clears stale resnap buffer, migrates window
+     * assignments to the new VS IDs (when subdivisions exist), prunes stale
+     * autotile orders, refreshes the autotile screen set, recalculates affected
+     * zone geometries inline, resnaps windows on this physical screen and its
      * virtual children, and schedules the debounced geometry update for
      * downstream consumers.
      */
@@ -639,12 +658,10 @@ private:
      * Skips migrate/prune/updateAutotileScreens (all no-ops for regions-only)
      * and only recalculates zone geometries and triggers a snap-mode resnap
      * tagged with the vs_reconfigure action so the kwin-effect does not fire
-     * snap-assist.
-     *
-     * The autotile retile is driven by the engine's own handler on
-     * virtualScreenRegionsChanged — the Daemon's path does NOT force-retile
-     * so there is exactly one retile per change (eliminates the "move then
-     * retile" double-pass users observed on VS swap/rotate).
+     * snap-assist. The autotile retile is driven by the engine's own handler on
+     * virtualScreenRegionsChanged — the Daemon's path does NOT force-retile so
+     * there is exactly one retile per change (eliminates the "move then retile"
+     * double-pass users observed on VS swap/rotate).
      */
     void onVirtualScreenRegionsChanged(const QString& physicalScreenId);
 
@@ -655,7 +672,7 @@ private:
      * @brief Emit the float-restore half of m_pendingSnapFloatRestores for the
      *        resnap-buffer paths (picker / quick-layout cycle / KCM apply).
      *
-     * windowsReleased populates m_pendingSnapFloatRestores whenever a screen
+     * windowsReleased fills m_pendingSnapFloatRestores whenever a screen
      * leaves the autotile set, but the resnap-buffer paths
      * (populateResnapBufferForAllScreens + resnapToNewLayout) never consume it
      * — only the mode-toggle and autotile-disable paths do. A window
@@ -1012,32 +1029,32 @@ private:
     bool isCurrentContextLockedForMode(const QString& screenId, PhosphorZones::AssignmentEntry::Mode mode) const;
 
     /**
-     * @brief Sync daemon-side float state when autotile floats/unfloats a window
-     *
-     * Propagates floating state to PhosphorPlacement::WindowTrackingService and KWin effect,
-     * manages autotile-originated vs snap-mode float bookkeeping, restores
-     * pre-tile geometry on float, and shows navigation OSD.
+     * @brief Sync daemon-side float state when autotile floats/unfloats a
+     *        window. Propagates floating state to
+     *        PhosphorPlacement::WindowTrackingService and KWin effect, manages
+     *        autotile-originated vs snap-mode float bookkeeping, restores
+     *        pre-tile geometry on float, and shows navigation OSD.
      */
     void syncAutotileFloatState(const QString& windowId, bool floating, const QString& screenId);
 
     /**
-     * @brief Passively sync daemon-side float state without restoring geometry
+     * @brief Passively sync daemon-side float state without restoring geometry.
      *
      * Handler for AutotileEngine::windowFloatingStateSynced. Mirrors the WTS
      * bookkeeping of syncAutotileFloatState (setWindowFloating, autotileFloated
      * marker, pre-float zone housekeeping) but skips applyGeometryForFloat and
-     * the navigation OSD — this path is invoked when the engine's internal
-     * state diverges from WTS (e.g. a newly-inserted window carrying stale
-     * snap-mode float state), not by a user float toggle. The window already
-     * has a valid position and must not be teleported.
+     * the navigation OSD — this path is invoked when the engine's internal state
+     * diverges from WTS (e.g. a newly-inserted window carrying stale snap-mode
+     * float state), not by a user float toggle. The window already has a valid
+     * position and must not be teleported.
      */
     void syncAutotileFloatStatePassive(const QString& windowId, bool floating, const QString& screenId);
 
     /**
-     * @brief Batch-update daemon-side float state for overflow-floated windows
-     *
-     * Updates WTS state directly without emitting per-window D-Bus signals
-     * (the effect already processed the float from the windowsTileRequested batch).
+     * @brief Batch-update daemon-side float state for overflow-floated windows.
+     *        Updates WTS state directly without emitting per-window D-Bus
+     *        signals (the effect already processed the float from the
+     *        windowsTileRequested batch).
      */
     void syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId);
 
@@ -1143,7 +1160,20 @@ private:
     // screens a rule edit actually moved; refreshed on context switches and
     // after any apply so a later edit doesn't falsely re-resnap. See
     // reconcileActiveAssignments / diffActiveAssignments.
+    //
+    // This map is also the SOURCE of the LayoutAdaptor's published mirror: every
+    // diffActiveAssignments hands it to publishActiveAssignments, which is what
+    // getActiveLayoutsForScreens returns and what activeLayoutForScreenChanged
+    // reports. Writing it outside that function would desync the bus view.
     QHash<QString, QString> m_activeAssignmentByScreen;
+
+    // Raised (RAII, via QScopedValueRollback) around the bulk assignment writes
+    // in autotile.cpp so reconcileActiveAssignments early-returns instead of
+    // running a full reconcile per flipped rule over a half-written set. Scoped
+    // to that ONE consumer deliberately: the rule store stays unblocked so the
+    // exclude refilter, overlay refresh, Settings::onRuleStoreChanged and the
+    // RuleAdaptor D-Bus relay still observe the edit.
+    bool m_suppressAssignmentReconcile = false;
 
     // Last observed tiled-window count per screen, tracked so the engine's
     // placementChanged stream only re-resolves the per-screen tiling algorithm

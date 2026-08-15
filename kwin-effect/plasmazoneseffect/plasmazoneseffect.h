@@ -382,7 +382,10 @@ private:
     // shouldAnimateWindow. Fast-paths on an empty exclusion slice; otherwise
     // resolves through the exclusion evaluator's per-window cache (same
     // freshness contract as the animation verdicts — see the implementation).
-    bool isExcludedBySnappingRule(KWin::EffectWindow* w) const;
+    /// @p sharedQuery (optional): caller-owned memoisation slot, as on
+    /// shouldAnimateWindow. Engaged only when a cache miss forced the build.
+    bool isExcludedBySnappingRule(KWin::EffectWindow* w,
+                                  std::optional<PhosphorRules::WindowQuery>* sharedQuery = nullptr) const;
 
     /// Classify a window's structural kind for the snap-restore consume gate.
     PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
@@ -444,7 +447,12 @@ private:
      * min-size threshold. Defaults preserve the prior behavior (transient on,
      * size off), so a default config decorates exactly what it did before.
      */
-    bool shouldDecorateWindow(KWin::EffectWindow* w) const;
+    /// @p sharedQuery (optional): caller-owned memoisation slot, forwarded to the
+    /// Exclude-rule gate. updateWindowDecoration passes its own slot so the
+    /// exclusion verdict and the rule-action resolve below it build the
+    /// ~30-accessor WindowQuery once per window per sweep instead of twice.
+    bool shouldDecorateWindow(KWin::EffectWindow* w,
+                              std::optional<PhosphorRules::WindowQuery>* sharedQuery = nullptr) const;
 
     /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.
@@ -611,7 +619,13 @@ private:
     /// actions (no slots) WITHOUT caching, matching the resolvers' old
     /// short-circuit (avoids churning the cache for sub-surfaces / proxies). The
     /// per-frame opacity / border resolvers consume the returned ResolvedActions.
-    PhosphorRules::ResolvedActions resolveRuleActions(KWin::EffectWindow* w, const QString& windowId) const;
+    /// @p sharedQuery (optional): caller-owned memoisation slot, as on
+    /// shouldAnimateWindow. A miss reuses an already-built query from the slot and
+    /// otherwise fills it, so a caller that also runs the Exclude gate pays one
+    /// build for both.
+    PhosphorRules::ResolvedActions
+    resolveRuleActions(KWin::EffectWindow* w, const QString& windowId,
+                       std::optional<PhosphorRules::WindowQuery>* sharedQuery = nullptr) const;
 
     /**
      * @brief True if the window is currently snap-managed (tiled into a snap zone).
@@ -1626,10 +1640,12 @@ private:
     /// Those are rule MATCH inputs now, so without this a window stays resolved
     /// at its prior state (e.g. a `WHEN isSnapped` border never reverting on
     /// unsnap). Mirrors slotWindowActivated's focus invalidation. A no-op only when the
-    /// window has nothing that could re-resolve: no rules AND no config-default window
-    /// appearance AND no decoration tree content. The last two matter — a config-default
+    /// window has nothing that could re-resolve (hasPlacementSensitiveRuleWork): no
+    /// rules AND no config-default window appearance AND no decoration tree content AND
+    /// no snapping-exclusion rule set. The last three matter — a config-default
     /// border scoped to tiled windows must still reconcile on a snap flip with an empty
-    /// rule set.
+    /// animation rule set, and an Exclude-only session has to drop its placement-scoped
+    /// exclusion verdicts with nothing appearance-shaped loaded at all.
     void invalidateRuleCacheForStateChange(const QString& windowId);
 
     /// Bulk analog of invalidateRuleCacheForStateChange for placement changes that
@@ -1646,7 +1662,9 @@ private:
     /// pairs this with its own decoration path: daemon loss tears the
     /// decorations down (clearAllDecorations), the daemon-ready re-seeds
     /// schedule a border sweep to re-fold against the fresh placement. No-op
-    /// when there are no animation rules and no rule-held layer snapshots.
+    /// when there are no animation rules, no rule-held layer snapshots and no
+    /// snapping-exclusion rules — the exclusion set is its own term because this
+    /// is the only route that clears the exclusion verdict cache in bulk.
     void invalidateAllRuleCaches();
 
     /// Flush coalesced per-rule-cache invalidations queued by
@@ -1656,6 +1674,15 @@ private:
     /// both windowFloatingChanged AND windowStateChanged) clears the cache once
     /// instead of twice.
     void flushPendingRuleInvalidations();
+
+    /// Re-queue the cross-screen rule invalidations the outputChanged and
+    /// virtual-screen-crossing handlers skipped because a drag was in flight.
+    /// Called from every exit of the endDrag reply handling (outcome applied,
+    /// D-Bus error, rejected payload, daemon timeout) so a drag that carried a
+    /// window across screens always ends with its per-screen match inputs
+    /// (ScreenId, ScreenOrientation, ActiveLayout) re-resolved. Empties the set,
+    /// so the second call in a turn does nothing.
+    void drainDragSuppressedRuleInvalidations();
 
     /// Resolve the per-window-rule SetHideTitleBar override for @p windowId
     /// and forward it to the DecorationManager as a tri-state rule override
@@ -2107,6 +2134,18 @@ private:
     // invalidation a float toggle triggers (windowFloatingChanged + windowStateChanged).
     QSet<QString> m_pendingRuleInvalidations;
 
+    // Window ids whose cross-screen rule invalidation was suppressed because a
+    // drag was in flight when the screen change landed. The outputChanged and
+    // virtual-screen-crossing handlers stamp m_trackedScreenPerWindow
+    // unconditionally, so at drag end the tracked screen already equals the
+    // live one and no comparison there can recover the skipped invalidation.
+    // Each suppressed handler records the id here instead, and callEndDrag
+    // drains the set once the daemon's outcome has been applied. Cleared on
+    // daemon loss, where invalidateAllRuleCaches supersedes it. An id whose
+    // window died meanwhile is harmless: the flush's findWindowById returns
+    // null and skips it.
+    QSet<QString> m_dragSuppressedRuleInvalidations;
+
     // Set while a coalesced border sweep is queued for the end of the turn (see
     // scheduleBorderSweep); collapses a burst of appearance-setting replies into
     // one updateAllDecorations().
@@ -2190,6 +2229,14 @@ private:
     /// Fetch virtual screen configs for all connected physical screens
     void fetchAllVirtualScreenConfigs();
 
+    /// Re-resolve every entry in m_trackedScreenPerWindow (and the autotile
+    /// handler's notified-screen map) against the current virtual-screen
+    /// definitions. Called from every path that changes m_virtualScreenDefs,
+    /// including the removal paths: a subdivided monitor losing its definitions
+    /// strands its windows on "<output>/vs:N" ids that no longer resolve, which
+    /// then reads as a phantom crossing on the next geometry change.
+    void reresolveTrackedScreens();
+
     /// Process window state that depends on virtual screen definitions being loaded.
     /// Called from fetchAllVirtualScreenConfigs completion callback after all
     /// async D-Bus replies have arrived.
@@ -2231,8 +2278,9 @@ private Q_SLOTS:
 
     /// D-Bus signal handler for `LayoutRegistry.activeLayoutForScreenChanged`.
     /// Writes the screen's new active layout id into m_activeLayoutByScreen (an
-    /// empty id removes the entry, so a screen that resolves to no layout leaves
-    /// the ActiveLayout query field unset rather than engaged-empty) and, on a
+    /// empty id removes the entry rather than storing "", which is map hygiene
+    /// only: the ActiveLayout query field is non-optional, so both an absent and
+    /// an empty entry stamp an engaged-empty id) and, on a
     /// real change, drops the placement-scoped verdicts and re-folds every
     /// decorated window. The re-fold is not optional: an appearance slot keyed on
     /// ActiveLayout bakes into the decoration at updateWindowDecoration time, so
@@ -2257,6 +2305,18 @@ private:
     /// persistently failing call cannot spin. Cleared on a successful reply and
     /// on daemon loss (the next bringup gets a fresh attempt).
     bool m_activeLayoutFetchRetried = false;
+
+    /// Holds the single retry of a failed active-layout fetch so daemon loss can
+    /// stop it. A free-standing singleShot would still fire against a daemon that
+    /// went away in the retry delay, re-arming the latch it was just reset from
+    /// and pushing a fetch the isDaemonReady gate can only reject.
+    QTimer m_activeLayoutFetchRetryTimer;
+
+    /// Set while a coalesced bulk rule-cache invalidation is queued for the end of
+    /// the turn (see slotActiveLayoutForScreenChanged); collapses a multi-screen
+    /// activeLayoutForScreenChanged burst into one invalidateAllRuleCaches, whose
+    /// per-window layer reconcile is otherwise paid per broadcast.
+    bool m_activeLayoutInvalidatePending = false;
 
     /// Each screen's resolved active layout id (a layout UUID in braces, or
     /// "autotile:<algo>"), mirroring what the daemon's assignment cascade

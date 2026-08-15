@@ -210,8 +210,9 @@ bool PlasmaZonesEffect::windowOwnKeepAbove(KWin::EffectWindow* w) const
     return it != m_ruleWindowLayerSnapshots.cend() ? it->keepAbove : w->keepAbove();
 }
 
-PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::EffectWindow* w,
-                                                                     const QString& windowId) const
+PhosphorRules::ResolvedActions
+PlasmaZonesEffect::resolveRuleActions(KWin::EffectWindow* w, const QString& windowId,
+                                      std::optional<PhosphorRules::WindowQuery>* sharedQuery) const
 {
     const PhosphorRules::RuleEvaluator& evaluator = m_shaderManager.animationRuleEvaluator();
     // An empty windowId can't key the per-window cache; nothing to resolve.
@@ -224,16 +225,22 @@ PhosphorRules::ResolvedActions PlasmaZonesEffect::resolveRuleActions(KWin::Effec
     if (std::optional<PhosphorRules::ResolvedActions> cached = evaluator.resolveCachedIfPresent(windowId)) {
         return std::move(*cached);
     }
-    // Miss → build the query once and resolve (caching the result). Defensive guard
+    // Miss → build the query once and resolve (caching the result), reusing the
+    // caller's slot when it already holds this window's query (see the header
+    // doc) and filling it otherwise. Defensive guard
     // against a windowless query (no engaged window attribute): it can't fill any
     // slot, so return empty actions WITHOUT caching to avoid a useless cache entry.
     // In practice a non-null w always engages placement/state attributes, so this
     // only ever covers the already-handled empty-windowId case — kept as a belt.
-    const PhosphorRules::WindowQuery query = ruleQuery(w);
-    if (!query.hasWindow()) {
+    std::optional<PhosphorRules::WindowQuery> localQuery;
+    std::optional<PhosphorRules::WindowQuery>& slot = sharedQuery ? *sharedQuery : localQuery;
+    if (!slot) {
+        slot = ruleQuery(w);
+    }
+    if (!slot->hasWindow()) {
         return {};
     }
-    return evaluator.resolveCached(windowId, query);
+    return evaluator.resolveCached(windowId, *slot);
 }
 
 bool PlasmaZonesEffect::isStructurallyUnmanageableWindowType(KWin::EffectWindow* w, QString* rejectReason) const
@@ -377,7 +384,8 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w, QString* rejec
     return true;
 }
 
-bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w) const
+bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w,
+                                                 std::optional<PhosphorRules::WindowQuery>* sharedQuery) const
 {
     // The `isEmpty()` fast path keeps a no-exclusions user at two pointer
     // reads — same cost as the prior list-derived check.
@@ -392,15 +400,26 @@ bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w) const
     // revision-keyed for rule edits and cleared by the same placement /
     // class-swap invalidation paths (flushPendingRuleInvalidations,
     // invalidateAllRuleCaches, the metadataChanged lambda).
+    // Caller-owned memoisation slot (see the header doc): a miss builds the query
+    // into it so the caller's own resolver pass reuses the build instead of
+    // walking the ~30 accessors a second time for the same window.
+    std::optional<PhosphorRules::WindowQuery> localQuery;
+    std::optional<PhosphorRules::WindowQuery>& slot = sharedQuery ? *sharedQuery : localQuery;
+    const auto query = [&]() -> const PhosphorRules::WindowQuery& {
+        if (!slot) {
+            slot = ruleQuery(w);
+        }
+        return *slot;
+    };
     const QString windowId = getWindowId(w);
     if (windowId.isEmpty()) {
-        return m_snappingExclusionEvaluator.resolve(ruleQuery(w)).isExcluded();
+        return m_snappingExclusionEvaluator.resolve(query()).isExcluded();
     }
     if (std::optional<PhosphorRules::ResolvedActions> cached =
             m_snappingExclusionEvaluator.resolveCachedIfPresent(windowId)) {
         return cached->isExcluded();
     }
-    return m_snappingExclusionEvaluator.resolveCached(windowId, ruleQuery(w)).isExcluded();
+    return m_snappingExclusionEvaluator.resolveCached(windowId, query()).isExcluded();
 }
 
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
@@ -557,7 +576,8 @@ bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
     return true;
 }
 
-bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
+bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
+                                             std::optional<PhosphorRules::WindowQuery>* sharedQuery) const
 {
     if (!w) {
         return false;
@@ -609,7 +629,7 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
     // management is not decorated either (preserves prior behavior, since the
     // decoration path used to run through shouldHandleWindow). No dedicated
     // decoration rule slice, so no new rule action.
-    if (isExcludedBySnappingRule(w)) {
+    if (isExcludedBySnappingRule(w, sharedQuery)) {
         return false;
     }
 

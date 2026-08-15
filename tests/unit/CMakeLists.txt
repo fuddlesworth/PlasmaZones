@@ -844,8 +844,28 @@ add_test(NAME test_overlay_helpers COMMAND test_overlay_helpers)
 add_executable(test_wta_convenience dbus/test_wta_convenience.cpp
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
 target_include_directories(test_wta_convenience PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
-target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+# Constructs a real SnapEngine and authors Rules against a real RuleStore,
+# drives the engine-common placement API, and builds LayoutRegistry / Layout /
+# Zone directly, so these four are contractual dependencies rather than the
+# coincidental transitive pull through plasmazones_core.
+target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones)
 add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
+
+# WindowTrackingAdaptor rule-context tests — the screen-derived context fields
+# buildContextualRuleQuery stamps and the consumers that read them. Split out of
+# test_wta_convenience, which had outgrown the file-size ceiling. Same
+# FakeScreenProvider compile-in: the open-path routing cases need real output
+# geometry.
+add_executable(test_wta_rule_context dbus/test_wta_rule_context.cpp
+               ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
+target_include_directories(test_wta_rule_context PRIVATE ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests)
+target_link_libraries(test_wta_rule_context PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorSnapEngine::PhosphorSnapEngine PhosphorRules::PhosphorRules
+                      PhosphorEngine::PhosphorEngine PhosphorZones::PhosphorZones
+                      PhosphorWorkspaces::PhosphorWorkspaces)
+add_test(NAME test_wta_rule_context COMMAND test_wta_rule_context)
 
 add_executable(test_wta_capture_guards dbus/test_wta_capture_guards.cpp
                ${CMAKE_SOURCE_DIR}/libs/phosphor-screens/tests/FakeScreenProvider.cpp)
@@ -998,7 +1018,7 @@ add_test(NAME test_algorithm_blank_scaffold COMMAND test_algorithm_blank_scaffol
 
 # clampName is header-only in src/core/constants.h, so there is no source to
 # compile in beyond the test itself. plasmazones_core supplies LayoutAdaptor
-# (src/dbus/layoutadaptor.cpp), whose duplicateLayout clamp the test drives, and
+# (src/dbus/layoutadaptor/), whose duplicateLayout clamp the test drives, and
 # carries the include chain constants.h pulls (PhosphorEngine, PhosphorLayoutApi,
 # PhosphorZones). PhosphorZones is named for the LayoutRegistry and Layout
 # symbols the duplicate cases construct — duplicateNameSuffix() alone would need
@@ -1386,8 +1406,13 @@ add_test(NAME test_dbus_validation COMMAND test_dbus_validation)
 # the compact layoutPropertyChanged and neither layoutChanged nor
 # layoutListChanged. Also covers the active-layout-per-screen wire.
 add_executable(test_layout_adaptor_signals dbus/test_layout_adaptor_signals.cpp)
+# PhosphorZones for the LayoutRegistry / Layout / Zone the fixture builds, and
+# PhosphorLayoutApi for LayoutId::makeAutotileId — both constructed directly
+# here, so name them rather than relying on the transitive pull through
+# plasmazones_core.
 target_link_libraries(test_layout_adaptor_signals PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
-                      PhosphorTiles::PhosphorTiles)
+                      PhosphorTiles::PhosphorTiles PhosphorZones::PhosphorZones
+                      PhosphorLayoutApi::PhosphorLayoutApi)
 add_test(NAME test_layout_adaptor_signals COMMAND test_layout_adaptor_signals)
 
 # Micro-benchmarks for D-Bus adaptor hot paths. Drives the

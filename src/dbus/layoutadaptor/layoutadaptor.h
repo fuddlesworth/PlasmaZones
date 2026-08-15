@@ -174,10 +174,15 @@ public Q_SLOTS:
                             const QString& snappingLayout, const QString& tilingAlgorithm);
 
     // Suppress screenLayoutChanged D-Bus signals during KCM save batch.
+    // applyAssignmentChanges releases the suppression itself, so a client that
+    // dies mid-batch cannot leave the signal muted for the daemon's lifetime.
     void setSaveBatchMode(bool enabled);
 
     // Trigger resnap/retile + OSD after KCM assignment changes.
     // Called ONCE after all setAssignmentEntry/clear calls complete.
+    // Releases the save-batch suppression first, then applies. A batch that
+    // staged nothing is a no-op beyond that release: downstream an empty set
+    // means EVERY screen, so it must never be forwarded.
     void applyAssignmentChanges();
 
     // Virtual desktop information
@@ -452,11 +457,23 @@ public:
      */
     void applyAssignmentChangesFor(const QSet<QString>& screenIds);
 
-    /// Mark every screen that currently holds a stored assignment as changed,
-    /// before a batch setter replaces the family wholesale. Internal (NOT
-    /// bus-exposed): a screen dropped by absence from the incoming map would
-    /// otherwise never be marked, resnapped, or reported.
-    void markScreensWithStoredAssignments();
+    /// The assignment family a batch setter replaces. Each batch drops and
+    /// rebuilds exactly one of these and leaves the other three alone, so the
+    /// pre-batch marking has to be scoped the same way.
+    enum class AssignmentFamily {
+        Base, ///< Monitor-only rules (setAllScreenAssignments)
+        Desktop, ///< (screen, desktop) rules (setAllDesktopAssignments)
+        Activity, ///< (screen, activity) rules (setAllActivityAssignments)
+        Combined ///< (screen, desktop, activity) rules (setAllCombinedAssignments)
+    };
+
+    /// Mark every screen that currently holds a stored assignment IN @p family
+    /// as changed, before a batch setter replaces that family wholesale.
+    /// Internal (NOT bus-exposed): a screen dropped by absence from the incoming
+    /// map would otherwise never be marked, resnapped, or reported. Scoped to
+    /// the family so a screen whose only stored rule belongs to an untouched
+    /// family does not pay for a resnap and an OSD it cannot need.
+    void markScreensWithStoredAssignments(AssignmentFamily family);
 
     /// Release the save-batch suppression. Internal (NOT bus-exposed): called
     /// from applyAssignmentChanges so a client that dies mid-batch cannot leave
@@ -480,18 +497,22 @@ public:
      *        id. Replaces the previous one wholesale, so a screen that went away
      *        drops out of the readback.
      * @param changedScreenIds The screens whose id actually differs from the
-     *        previous snapshot. Only these are broadcast, so a recompute that
-     *        finds nothing moved is silent on the bus.
+     *        previous snapshot. Only these are broadcast, and each is compared
+     *        against the outgoing snapshot again here, so a value that did not
+     *        move is silent on the bus either way.
      *
      * @note Both parameters are const references and the daemon passes its own
      *       live @c m_activeAssignmentByScreen as @p activeByScreen, so this
      *       method must not do anything that could re-enter the daemon while it
-     *       iterates them. It is safe today because the only subscribers to
-     *       @ref activeLayoutForScreenChanged are out-of-process (the KWin
-     *       effect, over the bus) and the test suite. An in-process subscriber
-     *       that recomputed on the signal would be iterating a container it was
-     *       simultaneously rewriting — take @p activeByScreen by value first if
-     *       one is ever added.
+     *       iterates them. The emission loop reads a local list built before the
+     *       snapshot swap rather than either container, so a re-entrant call
+     *       cannot invalidate the iteration in progress. That is all the local
+     *       list buys: it fixes iteration safety, not emission ORDER. A
+     *       re-entrant call still finishes its own emissions first, so the outer
+     *       loop would then deliver its pre-computed (older) values after the
+     *       newer ones. Theoretical today — nothing in-process subscribes to
+     *       @ref activeLayoutForScreenChanged, and the only remote subscriber is
+     *       the effect, which cannot re-enter the daemon synchronously.
      *
      * @note Each broadcast costs the effect a full rule-cache invalidation and a
      *       stacking-order decoration sweep, which is required (an

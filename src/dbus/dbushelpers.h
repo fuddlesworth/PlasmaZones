@@ -311,10 +311,11 @@ inline bool validateNonEmpty(const QString& value, const QString& paramName, con
  *
  * Desktops are 1-based everywhere in the assignment API; 0 is the wildcard
  * meaning "any desktop" and is only legal on the slots documented to accept it,
- * which pass @p allowZero. Anything negative, and anything above the compositor's
- * desktop count, names a context nothing can ever resolve — persisting an
- * assignment rule for it is a silent leak that also grows the rule set without
- * bound under repeated calls.
+ * which pass @p allowZero. A negative desktop names a context nothing can ever
+ * resolve — persisting an assignment rule for it is a silent leak that also
+ * grows the rule set without bound under repeated calls. The lower bound is the
+ * whole guard: this helper has no view of the compositor's desktop count, so a
+ * too-high desktop passes here and is left to the caller.
  *
  * @param virtualDesktop The desktop number as received.
  * @param operation Operation name for the warning.

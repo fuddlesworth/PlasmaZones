@@ -613,22 +613,26 @@ public:
                                      const QString& activity = QString()) const override;
 
     /// Flip mode to @c Snapping for every entry currently in @c Autotile
-    /// (preserves @c snappingLayout + @c tilingAlgorithm). Emits
-    /// @c layoutAssigned per affected screen; one save at end.
+    /// (preserves @c snappingLayout + @c tilingAlgorithm) and CLEAR the autotile
+    /// quick-layout slots. Emits @c layoutAssigned per affected screen; one save
+    /// at end. The quick-slot wipe is intentional and one-way: it is persisted
+    /// with the save and @ref restoreAutotileAssignments cannot bring it back.
     void clearAutotileAssignments();
 
-    /// Inverse of @ref clearAutotileAssignments: flip mode back to @c Autotile
-    /// for every context-assignment entry sitting in @c Snapping while still
-    /// carrying a @c tilingAlgorithm, which is the state a global disable leaves
-    /// behind. Preserves @c snappingLayout, emits @c layoutAssigned per affected
-    /// screen, one save at end.
+    /// Reverse direction of @ref clearAutotileAssignments FOR THE ASSIGNMENT
+    /// RULES ONLY (the wiped quick-layout slots are NOT restored): flip mode
+    /// back to @c Autotile for every context-assignment entry sitting in
+    /// @c Snapping while still carrying a @c tilingAlgorithm; preserves
+    /// @c snappingLayout, advisory null-layout @c layoutAssigned per affected
+    /// screen, one save at end. Needed because the disable is global across
+    /// every desktop/activity while the daemon's re-enable writes only the
+    /// current desktop per screen. The carried @c tilingAlgorithm is the only
+    /// discriminator and survives a manual switch back to Snapping just as it
+    /// survives the disable, so this revives every context that has ever run
+    /// autotile, hand-switched ones included (see layoutregistry_batch.cpp).
     ///
-    /// Needed because the disable is global across every desktop and activity
-    /// while the daemon's re-enable only writes the current desktop per screen,
-    /// so without this an off/on round trip stranded every other context in
-    /// Snapping permanently.
-    ///
-    /// @return how many entries were flipped back.
+    /// @return how many entries were flipped back — the daemon uses it to tell
+    ///         a reviving global enable apart from one that changed nothing.
     int restoreAutotileAssignments();
 
     /// Batch setters - clear existing, set new, save once at end.
