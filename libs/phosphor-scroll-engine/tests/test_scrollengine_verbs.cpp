@@ -20,6 +20,8 @@
 
 using namespace PhosphorScrollEngine;
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::makeProviderEngine;
 using ScrollTestUtils::RightNeighbourResolver;
 

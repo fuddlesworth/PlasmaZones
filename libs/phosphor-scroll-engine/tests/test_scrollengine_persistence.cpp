@@ -20,6 +20,8 @@
 
 using namespace PhosphorScrollEngine;
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::makeProviderEngine;
 
 class TestScrollEnginePersistence : public QObject

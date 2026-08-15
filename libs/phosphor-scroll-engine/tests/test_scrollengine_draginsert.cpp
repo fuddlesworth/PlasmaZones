@@ -22,6 +22,8 @@
 
 using namespace PhosphorScrollEngine;
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::engineParams;
 using ScrollTestUtils::makeGappedProviderEngine;
 using ScrollTestUtils::makeProviderEngine;

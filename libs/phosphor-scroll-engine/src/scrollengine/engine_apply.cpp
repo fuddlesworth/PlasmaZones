@@ -129,6 +129,18 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // and is threaded through every effective* read here — the accessors'
     // screenId wrappers would otherwise re-fetch it per call on this
     // per-relayout path.
+    // Resolved BEFORE the defaults below and AFTER the work area above, and
+    // both halves of that are load-bearing. It reads params.workArea, which is
+    // not final until the outer-gap adjust and the smart-gaps zeroing have
+    // run: resolving Auto against an unadjusted rect would disagree on a
+    // near-square monitor with asymmetric outer gaps. And the default window
+    // height reads the axis, because a height fraction resolves against the
+    // work area's CROSS extent.
+    //
+    // Resolved PER CALL and never cached: under Auto two screens with no
+    // per-screen key at all resolve differently, so a cached verdict would
+    // hand one monitor the other's axis.
+    params.axis = effectiveStripAxis(overrides, params.workArea);
     params.respectMinimumSize = effectiveRespectMinimumSize(overrides);
     // Each template preset VOCABULARY is likewise parsed once and threaded
     // through: the two default resolvers below resolve a Preset kind against
@@ -136,21 +148,12 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // overloads would validate the override list a second time per relayout.
     params.presetColumnWidths = effectivePresetColumnWidths(overrides);
     params.presetWindowHeights = effectivePresetWindowHeights(overrides);
-    params.defaultWindowHeight = effectiveDefaultWindowHeight(overrides, params.workArea, params.presetWindowHeights);
+    params.defaultWindowHeight =
+        effectiveDefaultWindowHeight(overrides, params.workArea, params.axis, params.presetWindowHeights);
     params.centerFocusedColumn = effectiveCenterFocusedColumn(overrides);
     params.alwaysCenterSingleColumn = effectiveAlwaysCenterSingleColumn(overrides);
     params.defaultColumnWidth = effectiveDefaultColumnWidth(overrides, params.presetColumnWidths);
     params.tabIndicator = effectiveTabIndicator(overrides);
-    // Resolved LAST, and deliberately so: it reads params.workArea, which is
-    // not final until the outer-gap adjust and the smart-gaps zeroing above
-    // have run. Moving this up beside the gap resolve would silently resolve
-    // Auto against an unadjusted rect, and on a near-square monitor with
-    // asymmetric outer gaps the two rects genuinely disagree.
-    //
-    // Resolved PER CALL and never cached: under Auto two screens with no
-    // per-screen key at all resolve differently, so a cached verdict would
-    // hand one monitor the other's axis.
-    params.axis = effectiveStripAxis(overrides, params.workArea);
     return params;
 }
 

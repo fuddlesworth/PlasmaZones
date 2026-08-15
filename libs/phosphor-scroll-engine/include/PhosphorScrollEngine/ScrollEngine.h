@@ -1225,12 +1225,18 @@ private:
     bool effectiveWidthClientDecides(const QVariantMap& overrides) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QString& screenId) const;
     ColumnDisplay effectiveDefaultColumnDisplay(const QVariantMap& overrides) const;
-    /// Height needs the work area: the rule channel's bare fraction is
-    /// committed as Fixed pixels against the live work area.
-    WindowHeight effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const;
-    WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea) const;
-    /// Vocabulary-taking overload — the height twin of the width one above.
+    /// Height needs the work area AND the axis: the rule channel's bare
+    /// fraction is committed as Fixed pixels against the live work area's
+    /// CROSS extent, which is what a window height divides. The axis is a
+    /// parameter rather than re-resolved inside because the caller on the
+    /// layout path has already resolved it for this very work area, and two
+    /// independent resolves of the same question are two things to keep in
+    /// step.
+    WindowHeight effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea, StripAxis axis) const;
     WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
+                                              StripAxis axis) const;
+    /// Vocabulary-taking overload — the height twin of the width one above.
+    WindowHeight effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea, StripAxis axis,
                                               const QList<qreal>& presetHeights) const;
     ScrollInsertPosition effectiveInsertPosition(const QString& screenId) const;
     ScrollInsertPosition effectiveInsertPosition(const QVariantMap& overrides) const;

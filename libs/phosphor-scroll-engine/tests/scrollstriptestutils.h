@@ -173,6 +173,23 @@ inline QString crossTrail()
     return vertical() ? QStringLiteral("right") : QStringLiteral("down");
 }
 
+/// The NAVIGATION token that walks the strip, which is a different vocabulary
+/// from edgeLead/edgeTrail above even though both name the main axis: the
+/// navigation verbs and the neighbour resolver speak up/down/left/right, while
+/// a park edge and a tab indicator speak top/bottom/left/right. On a
+/// horizontal strip the two coincide and the distinction is invisible, which
+/// is exactly why it has to be spelled out here — passing edgeTrail() to
+/// moveFocusedInDirection sends "bottom", which is not a direction token at
+/// all, and the verb answers no_target rather than crossing.
+inline QString navLead()
+{
+    return vertical() ? QStringLiteral("up") : QStringLiteral("left");
+}
+inline QString navTrail()
+{
+    return vertical() ? QStringLiteral("down") : QStringLiteral("right");
+}
+
 inline QLatin1String mainPosKey()
 {
     return vertical() ? QLatin1String("y") : QLatin1String("x");

@@ -27,6 +27,8 @@
 #include "scrollstriptestutils.h"
 
 using PhosphorScrollEngine::ScrollEngine;
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::defaultScreenRect;
 using ScrollTestUtils::makeProviderEngine;
 

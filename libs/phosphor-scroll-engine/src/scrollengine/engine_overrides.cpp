@@ -413,25 +413,31 @@ bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) con
     return m_defaultWidthClientDecides;
 }
 
-WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const
+WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea,
+                                                        StripAxis axis) const
 {
-    return effectiveDefaultWindowHeight(m_perScreenOverrides.value(screenId), workArea);
-}
-
-WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea) const
-{
-    return effectiveDefaultWindowHeight(overrides, workArea, effectivePresetWindowHeights(overrides));
+    return effectiveDefaultWindowHeight(m_perScreenOverrides.value(screenId), workArea, axis);
 }
 
 WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
-                                                        const QList<qreal>& presetHeights) const
+                                                        StripAxis axis) const
 {
-    // Rule channel: a bare work-area fraction, committed as Fixed pixels
-    // against the CURRENT work area (same resolution the adjust verbs use).
+    return effectiveDefaultWindowHeight(overrides, workArea, axis, effectivePresetWindowHeights(overrides));
+}
+
+WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
+                                                        StripAxis axis, const QList<qreal>& presetHeights) const
+{
+    // Rule channel: a bare fraction of the work area's CROSS extent, committed
+    // as Fixed pixels against the CURRENT work area (same resolution the
+    // adjust verbs use). Cross, not physical height: a window height divides
+    // the within-column stack, which runs across the strip whichever way the
+    // strip itself runs.
+    const int crossExtent = axis.crossSize(workArea);
     qreal fraction = 0.0;
-    if (workArea.height() > 0 && overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction)
+    if (crossExtent > 0 && overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction)
         && fraction > 0.0 && fraction <= 1.0) {
-        return WindowHeight::makeFixed(qMax(1, qRound(fraction * workArea.height())));
+        return WindowHeight::makeFixed(qMax(1, qRound(fraction * crossExtent)));
     }
     // Settings channel: the kind trio, resolved per SLOT against the cached
     // global — see effectiveDefaultColumnWidth for why a partial trio is the

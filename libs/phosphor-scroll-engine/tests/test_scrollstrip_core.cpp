@@ -249,7 +249,7 @@ void TestScrollStripCore::focusNeverModePinsEnteredEdge()
     // edge pins to the viewport's left edge.
     QVERIFY(strip.focusFirstColumn(params));
     ResolvedStrip r = strip.relayout(params);
-    QCOMPARE(rectOf(r, QStringLiteral("a")).x(), 0);
+    QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("a"))), 0);
 
     // Focus b: already fully visible — no scroll at all.
     const int viewBefore = r.viewOffset;
@@ -261,7 +261,7 @@ void TestScrollStripCore::focusNeverModePinsEnteredEdge()
     // viewport's right edge.
     QVERIFY(strip.focusLastColumn(params));
     r = strip.relayout(params);
-    QCOMPARE(rectOf(r, QStringLiteral("d")).right() + 1, params.workArea.width());
+    QCOMPARE(Ax::mainEnd(rectOf(r, QStringLiteral("d"))) + 1, Ax::mainLen(params.workArea));
 }
 
 void TestScrollStripCore::focusAlwaysModeCenters()
@@ -275,8 +275,8 @@ void TestScrollStripCore::focusAlwaysModeCenters()
     QVERIFY(strip.focusColumn(1, params));
     const ResolvedStrip r = strip.relayout(params);
     const QRect b = rectOf(r, QStringLiteral("b"));
-    const int centerOffset = (params.workArea.width() - b.width()) / 2;
-    QCOMPARE(b.x(), centerOffset);
+    const int centerOffset = (Ax::mainLen(params.workArea) - Ax::mainLen(b)) / 2;
+    QCOMPARE(Ax::mainPos(b), centerOffset);
 }
 
 void TestScrollStripCore::focusOnOverflowMode()

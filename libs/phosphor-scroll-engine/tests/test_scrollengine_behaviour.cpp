@@ -32,6 +32,8 @@
 
 using namespace PhosphorScrollEngine;
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::kCrossExtent;
 using ScrollTestUtils::kMainExtent;
 using ScrollTestUtils::makeProviderEngine;
@@ -148,12 +150,12 @@ void TestScrollEngineBehaviour::alwaysCenterSingleColumnOverrideIsPerScreen()
 
     const QVector<QRect> centered = engine->visibleTileRects(kS1);
     QCOMPARE(centered.size(), 1);
-    QCOMPARE(centered.first().width(), kMainExtent / 2);
-    QCOMPARE(centered.first().x(), kMainExtent / 4);
+    QCOMPARE(Ax::mainLen(centered.first()), kMainExtent / 2);
+    QCOMPARE(Ax::mainPos(centered.first()), kMainExtent / 4);
 
     const QVector<QRect> anchored = engine->visibleTileRects(kS2);
     QCOMPARE(anchored.size(), 1);
-    QCOMPARE(anchored.first().x(), 0);
+    QCOMPARE(Ax::mainPos(anchored.first()), 0);
 }
 
 void TestScrollEngineBehaviour::centerFocusedColumnOverrideIsPerScreen()
@@ -219,11 +221,11 @@ void TestScrollEngineBehaviour::respectMinimumSizeOverrideIsPerScreen()
 
     const QVector<QRect> clamped = engine->visibleTileRects(kS1);
     QCOMPARE(clamped.size(), 1);
-    QCOMPARE(clamped.first().width(), 800);
+    QCOMPARE(Ax::mainLen(clamped.first()), 800);
 
     const QVector<QRect> unclamped = engine->visibleTileRects(kS2);
     QCOMPARE(unclamped.size(), 1);
-    QCOMPARE(unclamped.first().width(), kMainExtent / 4);
+    QCOMPARE(Ax::mainLen(unclamped.first()), kMainExtent / 4);
 }
 
 void TestScrollEngineBehaviour::smartGapsOverrideIsPerScreen()
@@ -245,13 +247,13 @@ void TestScrollEngineBehaviour::smartGapsOverrideIsPerScreen()
 
     const QVector<QRect> ungapped = engine->visibleTileRects(kS1);
     QCOMPARE(ungapped.size(), 1);
-    QCOMPARE(ungapped.first().x(), 0);
-    QCOMPARE(ungapped.first().width(), kMainExtent);
+    QCOMPARE(Ax::mainPos(ungapped.first()), 0);
+    QCOMPARE(Ax::mainLen(ungapped.first()), kMainExtent);
 
     const QVector<QRect> gapped = engine->visibleTileRects(kS2);
     QCOMPARE(gapped.size(), 1);
-    QCOMPARE(gapped.first().x(), 20);
-    QCOMPARE(gapped.first().width(), kMainExtent - 40);
+    QCOMPARE(Ax::mainPos(gapped.first()), 20);
+    QCOMPARE(Ax::mainLen(gapped.first()), kMainExtent - 40);
 }
 
 void TestScrollEngineBehaviour::insertPositionOverrideIsPerScreen()
@@ -320,11 +322,11 @@ void TestScrollEngineBehaviour::widthClientDecidesOverrideIsPerScreen()
 
     const QVector<QRect> client = engine->visibleTileRects(kS1);
     QCOMPARE(client.size(), 1);
-    QCOMPARE(client.first().width(), 640);
+    QCOMPARE(Ax::mainLen(client.first()), 640);
 
     const QVector<QRect> configured = engine->visibleTileRects(kS2);
     QCOMPARE(configured.size(), 1);
-    QCOMPARE(configured.first().width(), kMainExtent / 4);
+    QCOMPARE(Ax::mainLen(configured.first()), kMainExtent / 4);
 }
 
 void TestScrollEngineBehaviour::outOfRangeWidthRuleDoesNotSuppressClientDecides()
@@ -355,11 +357,11 @@ void TestScrollEngineBehaviour::outOfRangeWidthRuleDoesNotSuppressClientDecides(
 
     const QVector<QRect> clientSized = engine->visibleTileRects(kS1);
     QCOMPARE(clientSized.size(), 1);
-    QCOMPARE(clientSized.first().width(), 640);
+    QCOMPARE(Ax::mainLen(clientSized.first()), 640);
 
     const QVector<QRect> rulePinned = engine->visibleTileRects(kS2);
     QCOMPARE(rulePinned.size(), 1);
-    QCOMPARE(rulePinned.first().width(), qRound(0.75 * kMainExtent));
+    QCOMPARE(Ax::mainLen(rulePinned.first()), qRound(0.75 * kMainExtent));
 }
 
 void TestScrollEngineBehaviour::wrongTypedBehaviourOverridesAreRejected()

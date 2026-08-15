@@ -46,6 +46,8 @@
 
 using namespace PhosphorScrollEngine;
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::defaultScreenRect;
 using ScrollTestUtils::makeProviderEngine;
 
@@ -737,8 +739,8 @@ void TestScrollEngineSmoke::seedAdoptionClampsViewToStripEnd()
 
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              QStringList({QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
-    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|c")).x(), 600);
-    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|b")).x(), 0);
+    QCOMPARE(Ax::mainPos(engine->lastManagedRect(QStringLiteral("app|c"))), 600);
+    QCOMPARE(Ax::mainPos(engine->lastManagedRect(QStringLiteral("app|b"))), 0);
 }
 
 void TestScrollEngineSmoke::parkingAvoidsNeighbourOutputs()
@@ -1152,7 +1154,7 @@ void TestScrollEngineSmoke::aWidthChangeKeepsTheResizedColumnInTheBatch()
 
     const QJsonArray batch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
     QVERIFY(!batch.isEmpty());
-    QVERIFY2(engine->lastManagedRect(QStringLiteral("app|a")).width() != widthBefore.width(),
+    QVERIFY2(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))) != widthBefore.width(),
              qPrintable(
                  QStringLiteral("the width change must land in the managed rect (still %1)").arg(widthBefore.width())));
 
@@ -1168,7 +1170,8 @@ void TestScrollEngineSmoke::aWidthChangeKeepsTheResizedColumnInTheBatch()
             continue;
         }
         sawResized = true;
-        QCOMPARE(o.value(QLatin1String("width")).toInt(), engine->lastManagedRect(QStringLiteral("app|a")).width());
+        QCOMPARE(o.value(QLatin1String("width")).toInt(),
+                 Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))));
     }
     QVERIFY2(sawResized, "the batch must carry the column whose width changed");
 }
@@ -1368,7 +1371,7 @@ void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()
     engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
     engine->consumeWindowIntoColumn(QStringLiteral("S1")); // b joins a's stack
     engine->adjustColumnWidth(10.0, QStringLiteral("S1")); // 600px + 10% of 1200 = 720px
-    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")).width(), 720);
+    QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 720);
 
     // Mode reassignment of the SAME context (no desktop change): teardown.
     engine->setActiveScreens({});
@@ -1383,7 +1386,7 @@ void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")), 0);
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|c")), 1);
-    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")).width(), 720);
+    QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 720);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              QStringList({QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
 }

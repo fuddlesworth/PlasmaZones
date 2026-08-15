@@ -410,11 +410,18 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // pixels are PERSISTED intent, so the error would not self-heal on
         // the next relayout the way a transient anchor does. The override
         // pins the resolve to the post-insert count.
+        //
+        // Resolved against the work area's CROSS extent, which is what a
+        // window height divides — the within-column stack. Physical height on
+        // a vertical strip is the extent the STRIP runs along, so committing
+        // a fraction of it hands the tile an intent that can be larger than
+        // the column it lives in.
         const ScrollLayoutParams postParams = layoutParamsForScreen(screenId, state->strip().columnCount());
-        if (postParams.workArea.height() > 0) {
+        const int crossExtent = postParams.axis.crossSize(postParams.workArea);
+        if (crossExtent > 0) {
             const qreal fraction = qBound<qreal>(MinWindowHeightFraction, *openParams.heightFraction, 1.0);
-            state->strip().setWindowHeightIntent(
-                windowId, WindowHeight::makeFixed(qMax(1, qRound(fraction * postParams.workArea.height()))));
+            state->strip().setWindowHeightIntent(windowId,
+                                                 WindowHeight::makeFixed(qMax(1, qRound(fraction * crossExtent))));
         }
     }
     if (!inserted) {

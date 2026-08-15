@@ -30,18 +30,25 @@ using namespace PhosphorScrollEngine;
 
 namespace {
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::defaultScreenRect;
 using ScrollTestUtils::makeProviderEngine;
 
-/// Two outputs side by side: S1's right neighbour is S2 and S2's left is S1.
+/// Two outputs adjacent ALONG THE STRIP, so the crossing verbs under test are
+/// strip-travel ones on either axis. The direction tokens come from the
+/// harness rather than being spelled "right" and "left": on a vertical strip
+/// the same topology is stacked, and a resolver still answering only to the
+/// horizontal words would make every crossing test pass vacuously by never
+/// finding a neighbour at all.
 struct SideBySideResolver : PhosphorEngine::ICrossSurfaceResolver
 {
     QString neighborOutputInDirection(const QString& screenId, const QString& direction) const override
     {
-        if (direction == QLatin1String("right") && screenId == QLatin1String("S1")) {
+        if (direction == ScrollTestUtils::Ax::navTrail() && screenId == QLatin1String("S1")) {
             return QStringLiteral("S2");
         }
-        if (direction == QLatin1String("left") && screenId == QLatin1String("S2")) {
+        if (direction == ScrollTestUtils::Ax::navLead() && screenId == QLatin1String("S2")) {
             return QStringLiteral("S1");
         }
         return QString();
@@ -92,11 +99,14 @@ private:
         return makeProviderEngine(parent, {QStringLiteral("S1")});
     }
 
-    /// S1 and S2 as adjacent 1200x800 outputs, both scrolling.
+    /// S1 and S2 as adjacent 1200x800 outputs, both scrolling. S2 sits one
+    /// full output further ALONG THE STRIP, which is to the right of S1 on a
+    /// horizontal strip and below it on a vertical one — the same relation
+    /// SideBySideResolver answers with.
     static ScrollEngine* makeTwoScreenEngine(QObject* parent)
     {
         return makeProviderEngine(parent, {QStringLiteral("S1"), QStringLiteral("S2")}, [](const QString& screenId) {
-            return screenId == QLatin1String("S2") ? QRect(1200, 0, 1200, 800) : defaultScreenRect();
+            return screenId == QLatin1String("S2") ? Ax::t(QRect(1200, 0, 1200, 800)) : defaultScreenRect();
         });
     }
 
@@ -534,11 +544,11 @@ void TestScrollEngineZoneNumbers::clippedEdgeTilesKeepTheirNumbers()
     const QVector<ScrollEngine::VisibleTile> tiles = engine->visibleTiles(QStringLiteral("S1"));
     QCOMPARE(tiles.size(), 3);
     QCOMPARE(tiles.at(0).windowId, wid("a"));
-    QCOMPARE(tiles.at(0).rect, QRect(0, 0, 300, 800));
+    QCOMPARE(tiles.at(0).rect, Ax::t(QRect(0, 0, 300, 800)));
     QCOMPARE(tiles.at(1).windowId, wid("b"));
-    QCOMPARE(tiles.at(1).rect, QRect(300, 0, 600, 800));
+    QCOMPARE(tiles.at(1).rect, Ax::t(QRect(300, 0, 600, 800)));
     QCOMPARE(tiles.at(2).windowId, wid("c"));
-    QCOMPARE(tiles.at(2).rect, QRect(900, 0, 300, 800));
+    QCOMPARE(tiles.at(2).rect, Ax::t(QRect(900, 0, 300, 800)));
     QCOMPARE(numberOf(engine, "a"), 1);
     QCOMPARE(numberOf(engine, "b"), 2);
     QCOMPARE(numberOf(engine, "c"), 3);
@@ -550,9 +560,9 @@ void TestScrollEngineZoneNumbers::clippedEdgeTilesKeepTheirNumbers()
     // the effect chain), so the rect itself stops at the boundary; and the
     // clamp applies on edges WITHOUT an adjacent output too, so the two
     // peeks of a centred column look the same on every topology.
-    QCOMPARE(engine->lastManagedRect(wid("b")), QRect(300, 0, 600, 800));
-    QCOMPARE(engine->lastManagedRect(wid("a")), QRect(0, 0, 300, 800));
-    QCOMPARE(engine->lastManagedRect(wid("c")), QRect(900, 0, 300, 800));
+    QCOMPARE(engine->lastManagedRect(wid("b")), Ax::t(QRect(300, 0, 600, 800)));
+    QCOMPARE(engine->lastManagedRect(wid("a")), Ax::t(QRect(0, 0, 300, 800)));
+    QCOMPARE(engine->lastManagedRect(wid("c")), Ax::t(QRect(900, 0, 300, 800)));
 }
 
 void TestScrollEngineZoneNumbers::crossOutputMoveKeepsHeightAndAnnouncesOnDestination()
@@ -576,7 +586,7 @@ void TestScrollEngineZoneNumbers::crossOutputMoveKeepsHeightAndAnnouncesOnDestin
 
     engine->windowFocused(wid("b"), QStringLiteral("S1"));
     engine->cycleWindowPresetHeight(1, QStringLiteral("S1"));
-    const int height = engine->lastManagedRect(wid("b")).height();
+    const int height = Ax::crossLen(engine->lastManagedRect(wid("b")));
     QVERIFY2(height > 0 && height < 800, qPrintable(QStringLiteral("expected a preset height, got %1").arg(height)));
     // Windowed fullscreen is per-tile state the crossing must carry too
     // (niri keeps it across move-column-to-monitor); asserted on the target
@@ -588,8 +598,7 @@ void TestScrollEngineZoneNumbers::crossOutputMoveKeepsHeightAndAnnouncesOnDestin
     // verb acts on the strip's active window and the feedback must name that
     // one. With ctx and the focus coinciding, a boundary arm that reported
     // ctx.windowId would be indistinguishable from the correct one.
-    engine->moveFocusedInDirection(QStringLiteral("right"),
-                                   PhosphorEngine::NavigationContext{wid("a"), QStringLiteral("S1")});
+    engine->moveFocusedInDirection(Ax::navTrail(), PhosphorEngine::NavigationContext{wid("a"), QStringLiteral("S1")});
 
     QCOMPARE(engine->screenForTrackedWindow(wid("b")), QStringLiteral("S2"));
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S2"), wid("b")), 0);
@@ -597,7 +606,7 @@ void TestScrollEngineZoneNumbers::crossOutputMoveKeepsHeightAndAnnouncesOnDestin
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), QStringList({wid("a")}));
     // The height intent crossed with it (insertWindowAt builds a default
     // Auto tile, so this only holds because the crossing re-applies it).
-    QCOMPARE(engine->lastManagedRect(wid("b")).height(), height);
+    QCOMPARE(Ax::crossLen(engine->lastManagedRect(wid("b"))), height);
     // And so did windowed fullscreen, for the same reason.
     auto* targetState = static_cast<ScrollState*>(engine->stateForScreen(QStringLiteral("S2")));
     QVERIFY(targetState);
@@ -606,7 +615,7 @@ void TestScrollEngineZoneNumbers::crossOutputMoveKeepsHeightAndAnnouncesOnDestin
     QCOMPARE(feedback.count(), 1);
     QVERIFY(feedback.last().at(0).toBool());
     QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("move"));
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:") + Ax::navTrail());
     QCOMPARE(feedback.last().at(3).toString(), wid("b"));
     // A crossing names no landing TARGET: the OSD renders the direction, not
     // a zone card, so filling this slot would make it render the wrong one.
@@ -637,7 +646,7 @@ void TestScrollEngineZoneNumbers::crossOutputSwapTradesSlotsWithStackedSource()
 
     engine->windowFocused(wid("p"), QStringLiteral("S2"));
     engine->cycleWindowPresetHeight(1, QStringLiteral("S2"));
-    const int partnerHeight = engine->lastManagedRect(wid("p")).height();
+    const int partnerHeight = Ax::crossLen(engine->lastManagedRect(wid("p")));
     QVERIFY2(partnerHeight > 0 && partnerHeight < 800,
              qPrintable(QStringLiteral("expected a preset height, got %1").arg(partnerHeight)));
 
@@ -654,8 +663,7 @@ void TestScrollEngineZoneNumbers::crossOutputSwapTradesSlotsWithStackedSource()
 
     engine->windowFocused(wid("b"), QStringLiteral("S1"));
     QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
-    engine->swapFocusedInDirection(QStringLiteral("right"),
-                                   PhosphorEngine::NavigationContext{wid("b"), QStringLiteral("S1")});
+    engine->swapFocusedInDirection(Ax::navTrail(), PhosphorEngine::NavigationContext{wid("b"), QStringLiteral("S1")});
 
     QCOMPARE(engine->screenForTrackedWindow(wid("b")), QStringLiteral("S2"));
     QCOMPARE(engine->screenForTrackedWindow(wid("p")), QStringLiteral("S1"));
@@ -673,14 +681,14 @@ void TestScrollEngineZoneNumbers::crossOutputSwapTradesSlotsWithStackedSource()
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S2"), wid("b")), 0);
     // A Preset height resolves against the column height, which is the work
     // area height on both outputs, so the surviving intent reads identically.
-    QCOMPARE(engine->lastManagedRect(wid("p")).height(), partnerHeight);
+    QCOMPARE(Ax::crossLen(engine->lastManagedRect(wid("p"))), partnerHeight);
 
     QCOMPARE(feedback.count(), 1);
     QVERIFY(feedback.last().at(0).toBool());
     QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("swap"));
     // Same reason token as the move twin — the OSD reads the direction out of
     // it, and a swap that reported a bare direction would render as a move.
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:") + Ax::navTrail());
     QCOMPARE(feedback.last().at(3).toString(), wid("b"));
     QVERIFY(feedback.last().at(4).toString().isEmpty());
     QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
