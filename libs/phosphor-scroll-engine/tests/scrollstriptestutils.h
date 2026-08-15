@@ -28,6 +28,8 @@
 #include <PhosphorScrollEngine/StripAxis.h>
 
 #include <QByteArray>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QObject>
 #include <QPoint>
 #include <QRect>
@@ -207,6 +209,32 @@ inline QLatin1String crossLenKey()
     return vertical() ? QLatin1String("width") : QLatin1String("height");
 }
 
+/// Role readers over a windowsTiled batch ENTRY, whose four geometry keys are
+/// physical for the same reason the rects are. Same rule as the rect readers:
+/// x/width are the main quantities on a horizontal strip, y/height the cross
+/// ones, and both swap physical words under a transpose.
+inline int entryMainPos(const QJsonObject& o)
+{
+    return o.value(mainPosKey()).toInt();
+}
+inline int entryMainLen(const QJsonObject& o)
+{
+    return o.value(mainLenKey()).toInt();
+}
+inline int entryCrossPos(const QJsonObject& o)
+{
+    return o.value(crossPosKey()).toInt();
+}
+inline int entryCrossLen(const QJsonObject& o)
+{
+    return o.value(crossLenKey()).toInt();
+}
+/// The entry's INCLUSIVE far main edge, matching QRect::right()/bottom().
+inline int entryMainEnd(const QJsonObject& o)
+{
+    return entryMainPos(o) + entryMainLen(o) - 1;
+}
+
 /// The suite's screen rect for the running axis: 1200x800 horizontally,
 /// 800x1200 vertically, both at the origin. Main stays 1200 either way.
 inline QRect defaultScreenRect()
@@ -374,11 +402,17 @@ inline PhosphorScrollEngine::ScrollEngine* makeGappedProviderEngine(QObject* par
 /// neighbour. Shared by the smoke suite's parking tests and the verbs
 /// suite's horizontal crossings — one definition so the topology the pixel
 /// expectations assume cannot drift between files.
+/// S2 sits one step further ALONG THE STRIP, so a walk that runs off the far
+/// strip edge continues onto it. Answers the navigation token for the main
+/// axis rather than the literal "right": on a vertical strip the same
+/// relation is spelled "down", and a resolver still hearing only "right"
+/// would refuse every crossing and make the tests that exercise them pass by
+/// never crossing at all.
 struct RightNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
 {
     QString neighborOutputInDirection(const QString&, const QString& direction) const override
     {
-        return direction == QLatin1String("right") ? QStringLiteral("S2") : QString();
+        return direction == Ax::navTrail() ? QStringLiteral("S2") : QString();
     }
     int neighborDesktopInDirection(int, const QString&) const override
     {

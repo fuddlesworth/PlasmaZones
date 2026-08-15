@@ -29,6 +29,8 @@
 using PhosphorScrollEngine::ScrollEngine;
 namespace Ax = ScrollTestUtils::Ax;
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::defaultScreenRect;
 using ScrollTestUtils::makeProviderEngine;
 
@@ -199,9 +201,11 @@ QJsonObject lastEntryFor(QSignalSpy& tiled, const QString& windowId)
     return {};
 }
 
+/// The entry's far edge ALONG THE STRIP, inclusive. Delegates to the harness
+/// so it reads whichever physical key is the main one on the running axis.
 int entryRight(const QJsonObject& o)
 {
-    return o.value(QLatin1String("x")).toInt() + o.value(QLatin1String("width")).toInt() - 1;
+    return ScrollTestUtils::Ax::entryMainEnd(o);
 }
 
 } // namespace
@@ -276,7 +280,7 @@ private Q_SLOTS:
         // screen. The clamp bound is the SCREEN edge; a work-area clamp
         // would stop 100px short and this fixture is what tells them apart.
         const QRect screen = defaultScreenRect(); // 0,0 1200x800
-        const QRect inset(100, 0, 1000, 800);
+        const QRect inset = Ax::t(QRect(100, 0, 1000, 800));
         ScrollEngine* engine = makeProviderEngine(
             &owner, {kS1},
             [screen](const QString&) {
@@ -303,11 +307,11 @@ private Q_SLOTS:
         QVERIFY(!a.isEmpty());
         QVERIFY(!c.isEmpty());
         // Clamped exactly at the screen edges — not the work area's.
-        QCOMPARE(a.value(QLatin1String("x")).toInt(), screen.left());
-        QCOMPARE(entryRight(c), screen.right());
+        QCOMPARE(Ax::entryMainPos(a), Ax::mainPos(screen));
+        QCOMPARE(entryRight(c), Ax::mainEnd(screen));
         // And genuinely clamped, i.e. narrower than a full column.
-        QVERIFY(a.value(QLatin1String("width")).toInt() < 500);
-        QVERIFY(c.value(QLatin1String("width")).toInt() < 500);
+        QVERIFY(Ax::entryMainLen(a) < 500);
+        QVERIFY(Ax::entryMainLen(c) < 500);
     }
 
     // Crop mode: the same fixture commits the TRUE rects — the straddlers
@@ -335,10 +339,10 @@ private Q_SLOTS:
         QVERIFY(!a.isEmpty());
         QVERIFY(!c.isEmpty());
         // True 600px columns, overhanging both edges.
-        QCOMPARE(a.value(QLatin1String("width")).toInt(), 600);
-        QCOMPARE(c.value(QLatin1String("width")).toInt(), 600);
-        QVERIFY(a.value(QLatin1String("x")).toInt() < screen.left());
-        QVERIFY(entryRight(c) > screen.right());
+        QCOMPARE(Ax::entryMainLen(a), 600);
+        QCOMPARE(Ax::entryMainLen(c), 600);
+        QVERIFY(Ax::entryMainPos(a) < Ax::mainPos(screen));
+        QVERIFY(entryRight(c) > Ax::mainEnd(screen));
     }
 
     // A remainder below the peek floor parks (with its departure edge)
@@ -373,7 +377,7 @@ private Q_SLOTS:
             b.value(QLatin1String("y")).toInt() > screen.bottom(),
             qPrintable(
                 QStringLiteral("expected a park below the screen, got y=%1").arg(b.value(QLatin1String("y")).toInt())));
-        QCOMPARE(b.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
+        QCOMPARE(b.value(QLatin1String("scrollEdge")).toString(), Ax::edgeTrail());
     }
 
     // Crop mode is a per-SCREEN rule slot, and the emit loop must read the
@@ -416,11 +420,11 @@ private Q_SLOTS:
         QVERIFY(!cropped.isEmpty());
         QVERIFY(!clamped.isEmpty());
         // S1 keeps the true 600px rect, overhanging the left screen edge.
-        QCOMPARE(cropped.value(QLatin1String("width")).toInt(), 600);
-        QVERIFY(cropped.value(QLatin1String("x")).toInt() < screen.left());
+        QCOMPARE(Ax::entryMainLen(cropped), 600);
+        QVERIFY(Ax::entryMainPos(cropped) < Ax::mainPos(screen));
         // S2 is clamped at the edge and narrower for it.
-        QCOMPARE(clamped.value(QLatin1String("x")).toInt(), screen.left());
-        QVERIFY(clamped.value(QLatin1String("width")).toInt() < 600);
+        QCOMPARE(Ax::entryMainPos(clamped), Ax::mainPos(screen));
+        QVERIFY(Ax::entryMainLen(clamped) < 600);
     }
 
     // The park lands below the union of ALL outputs — the headline rule of
@@ -476,11 +480,14 @@ private Q_SLOTS:
         engine->refreshConfigFromSettings();
 
         QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
-        // Two tiles stacked into one column, each with a 600px minimum on an
-        // 800px screen: the min-height clamp lays the second tile out below
-        // the work area (relayout documents the overflow as standing).
-        engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 600);
-        engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 600);
+        // Two tiles stacked into one column, each with a 600px minimum
+        // ACROSS the strip on an 800px cross extent: the min-size clamp lays
+        // the second tile out past the work area (relayout documents the
+        // overflow as standing). The minimum is transposed with the fixture,
+        // because what overflows a stack is the extent the stack divides.
+        const QSize minSize = Ax::t(QSize(0, 600));
+        engine->windowOpened(QStringLiteral("app|a"), kS1, minSize.width(), minSize.height());
+        engine->windowOpened(QStringLiteral("app|b"), kS1, minSize.width(), minSize.height());
         engine->retile(kS1);
         QCoreApplication::processEvents();
 

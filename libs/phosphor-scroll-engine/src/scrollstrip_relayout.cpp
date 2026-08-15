@@ -114,8 +114,11 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
             reservationFloor = params.tabIndicator.reservedThickness(visibleTiles);
         }
         for (const Tile& tile : c.tiles) {
-            if (!tile.minimized && tile.minWidth + reservationFloor > px) {
-                px = tile.minWidth + reservationFloor;
+            // minMain, not minWidth: this is the column's floor ALONG the
+            // strip, which is the client's minimum height on a vertical one.
+            const int tileMinMain = tile.minMain(params.axis);
+            if (!tile.minimized && tileMinMain + reservationFloor > px) {
+                px = tileMinMain + reservationFloor;
             }
         }
     }
@@ -511,9 +514,12 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
             // min-size enforcement decides what overhangs.
             if (params.respectMinimumSize) {
                 for (int vi = 0; vi < n; ++vi) {
+                    // minCross: heights[] divides the column ACROSS the
+                    // strip, so the floor is the client minimum on that axis.
                     const Tile& t = col.tiles.at(visible.at(vi));
-                    if (t.minHeight > 0 && heights[vi] < t.minHeight) {
-                        heights[vi] = qMin(t.minHeight, availH);
+                    const int floorPx = t.minCross(params.axis);
+                    if (floorPx > 0 && heights[vi] < floorPx) {
+                        heights[vi] = qMin(floorPx, availH);
                     }
                 }
                 // The clamp can push the stack past availH again (it has no
@@ -531,14 +537,14 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
                         int slackTotal = 0;
                         for (int vi = 0; vi < n; ++vi) {
                             const Tile& t = col.tiles.at(visible.at(vi));
-                            slackTotal += qMax(0, heights[vi] - qMax(1, t.minHeight));
+                            slackTotal += qMax(0, heights[vi] - qMax(1, t.minCross(params.axis)));
                         }
                         if (slackTotal <= 0) {
                             break;
                         }
                         for (int vi = 0; vi < n && excess > 0; ++vi) {
                             const Tile& t = col.tiles.at(visible.at(vi));
-                            const int slack = qMax(0, heights[vi] - qMax(1, t.minHeight));
+                            const int slack = qMax(0, heights[vi] - qMax(1, t.minCross(params.axis)));
                             if (slack <= 0) {
                                 continue;
                             }

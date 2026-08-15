@@ -249,7 +249,8 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // respectMinimumSize off, relayout stops re-clamping too, so the floor
     // drops to 1 — keeping it would invert the failure (the verb refusing a
     // shrink relayout would happily apply).
-    const int floorPx = params.respectMinimumSize ? qMax(1, tile->minHeight) : 1;
+    // minCross, matching the clamp relayout applies to this same value.
+    const int floorPx = params.respectMinimumSize ? qMax(1, tile->minCross(params.axis)) : 1;
     const int target = qBound(floorPx, currentPx + qRound(deltaPercent / 100.0 * workH), workH);
     if (target == currentPx) {
         return false;

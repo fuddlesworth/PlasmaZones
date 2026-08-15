@@ -645,11 +645,29 @@ struct Tile
     /// Layout ignores this flag entirely — it only rides the apply payload so
     /// the compositor side can flip the client's fullscreen state.
     bool windowedFullscreen = false;
-    /// Client-reported minimum size (0 = unconstrained). Relayout clamps the
-    /// resolved rect to it; a window that cannot honour its slot at all is the
-    /// engine's cue to float it instead.
+    /// Client-reported minimum size (0 = unconstrained), stored PHYSICALLY as
+    /// the compositor reports it. Relayout clamps the resolved rect to it; a
+    /// window that cannot honour its slot at all is the engine's cue to float
+    /// it instead.
+    ///
+    /// Layout wants this by ROLE, so read it through minMain/minCross rather
+    /// than naming a field: on a vertical strip a client's minimum WIDTH is
+    /// what constrains the tile ACROSS the strip, and its minimum HEIGHT is
+    /// what constrains the column ALONG it. Picking by name silently applies
+    /// each constraint to the wrong axis.
     int minWidth = 0;
     int minHeight = 0;
+
+    /// The client minimum along the strip (a column-width floor).
+    int minMain(StripAxis axis) const
+    {
+        return axis.isHorizontal() ? minWidth : minHeight;
+    }
+    /// The client minimum across the strip (a stacked-tile floor).
+    int minCross(StripAxis axis) const
+    {
+        return axis.isHorizontal() ? minHeight : minWidth;
+    }
 };
 
 /// One column: a vertical stack of tiles.

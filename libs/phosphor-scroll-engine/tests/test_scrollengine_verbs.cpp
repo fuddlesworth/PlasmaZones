@@ -27,14 +27,17 @@ using ScrollTestUtils::RightNeighbourResolver;
 
 namespace {
 
-/// S2 sits BELOW everything — the topology the vertical output crossings
-/// need: a focus or move that exhausts its column continues onto the
-/// output below (and the no-neighbour directions still refuse).
+/// S2 sits one step along the CROSS axis — the topology the cross-axis output
+/// crossings need: a focus or move that exhausts its COLUMN continues onto
+/// that output (and the no-neighbour directions still refuse). Cross rather
+/// than main is the whole point of these tests, so the token comes from
+/// crossTrail: on a vertical strip the exhausted-column press is "right", not
+/// "down", and "down" would walk the strip instead.
 struct DownNeighbourResolver : PhosphorEngine::ICrossSurfaceResolver
 {
     QString neighborOutputInDirection(const QString&, const QString& direction) const override
     {
-        return direction == QLatin1String("down") ? QStringLiteral("S2") : QString();
+        return direction == Ax::crossTrail() ? QStringLiteral("S2") : QString();
     }
     int neighborDesktopInDirection(int, const QString&) const override
     {
@@ -136,7 +139,7 @@ void TestScrollEngineVerbs::plainColumnFocusStopsAtTheEdge()
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|b"));
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), true);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("left"));
+    QCOMPARE(feedback.last().at(2).toString(), Ax::navLead());
 
     // An out-of-contract delta is rejected outright, without feedback.
     const int countBefore = feedback.count();
@@ -163,7 +166,7 @@ void TestScrollEngineVerbs::wrapColumnFocusWrapsToTheFarEnd()
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), true);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("right"));
+    QCOMPARE(feedback.last().at(2).toString(), Ax::navTrail());
     // …and left from the first wraps to the last.
     engine->focusColumnWrap(-1, QStringLiteral("S1"));
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
@@ -453,12 +456,12 @@ void TestScrollEngineVerbs::focusCrossesToTheScrollNeighboursEntryWindow()
     ctx.screenId = QStringLiteral("S1");
     // a is S1's only column: the strip refuses, and the crossing enters S2
     // by its LEFT edge — the entry window is b, the leftmost visible tile.
-    engine->focusInDirection(QStringLiteral("right"), ctx);
+    engine->focusInDirection(Ax::navTrail(), ctx);
     QCOMPARE(activate.count(), 1);
     QCOMPARE(activate.last().at(0).toString(), QStringLiteral("app|b"));
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), true);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:") + Ax::navTrail());
     // Announced on the DESTINATION screen, the move arm's convention.
     QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
     // The DESTINATION strip's own focus moved to the entry window and the
@@ -487,19 +490,19 @@ void TestScrollEngineVerbs::verticalFocusCrossesToTheOutputBelow()
     QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
     PhosphorEngine::NavigationContext ctx;
     ctx.screenId = QStringLiteral("S1");
-    engine->focusInDirection(QStringLiteral("down"), ctx);
+    engine->focusInDirection(Ax::crossTrail(), ctx);
     QCOMPARE(activate.count(), 1);
     QCOMPARE(activate.last().at(0).toString(), QStringLiteral("app|b"));
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), true);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:down"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:") + Ax::crossTrail());
     QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
     QCOMPARE(stateFor(engine, QStringLiteral("S2"))->strip().activeWindowId(), QStringLiteral("app|b"));
 
     // With no neighbour in the pressed direction (this resolver only offers
     // "down"), the exhausted walk still answers no_target.
     engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
-    engine->focusInDirection(QStringLiteral("up"), ctx);
+    engine->focusInDirection(Ax::crossLead(), ctx);
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), false);
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
@@ -521,10 +524,10 @@ void TestScrollEngineVerbs::verticalMoveCrossesToTheOutputBelow()
     QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
     PhosphorEngine::NavigationContext ctx;
     ctx.screenId = QStringLiteral("S1");
-    engine->moveFocusedInDirection(QStringLiteral("down"), ctx);
+    engine->moveFocusedInDirection(Ax::crossTrail(), ctx);
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), true);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:down"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:") + Ax::crossTrail());
     QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
     QVERIFY(!stateFor(engine, QStringLiteral("S1"))->strip().containsWindow(QStringLiteral("app|a")));
     QCOMPARE(stateFor(engine, QStringLiteral("S2"))->strip().windowsInOrder(),
@@ -553,11 +556,11 @@ void TestScrollEngineVerbs::verticalSwapCrossesToTheOutputBelow()
     QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
     PhosphorEngine::NavigationContext ctx;
     ctx.screenId = QStringLiteral("S1");
-    engine->swapFocusedInDirection(QStringLiteral("down"), ctx);
+    engine->swapFocusedInDirection(Ax::crossTrail(), ctx);
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), true);
     QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("swap"));
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:down"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:") + Ax::crossTrail());
     QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
     // BOTH windows changed strips, each holding the other's old ground.
     QCOMPARE(stateFor(engine, QStringLiteral("S1"))->strip().windowsInOrder(), (QStringList{QStringLiteral("app|b")}));
@@ -581,17 +584,17 @@ void TestScrollEngineVerbs::emptyScreenFocusCrossesInsteadOfDeadEnding()
     QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
     PhosphorEngine::NavigationContext ctx;
     ctx.screenId = QStringLiteral("S1");
-    engine->focusInDirection(QStringLiteral("right"), ctx);
+    engine->focusInDirection(Ax::navTrail(), ctx);
     QCOMPARE(activate.count(), 1);
     QCOMPARE(activate.last().at(0).toString(), QStringLiteral("app|b"));
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), true);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:") + Ax::navTrail());
     QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
 
     // No neighbour that way and nothing local: the empty screen still
     // answers no_windows (this resolver offers only "right").
-    engine->focusInDirection(QStringLiteral("left"), ctx);
+    engine->focusInDirection(Ax::navLead(), ctx);
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), false);
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_windows"));
@@ -609,7 +612,7 @@ void TestScrollEngineVerbs::focusEdgeWithNoNeighbourReportsNoTarget()
     QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
     PhosphorEngine::NavigationContext ctx;
     ctx.screenId = QStringLiteral("S1");
-    engine->focusInDirection(QStringLiteral("left"), ctx);
+    engine->focusInDirection(Ax::navLead(), ctx);
     QCOMPARE(feedback.count(), 1);
     QCOMPARE(feedback.last().at(0).toBool(), false);
     QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
@@ -635,10 +638,10 @@ void TestScrollEngineVerbs::focusOntoAForeignModeNeighbourDefersToTheDaemon()
     // stays false, so the engine must report no_target on the SOURCE rather
     // than announcing a crossing nothing performed — the empty-neighbour
     // case this contract exists for.
-    engine->focusInDirection(QStringLiteral("right"), ctx);
+    engine->focusInDirection(Ax::navTrail(), ctx);
     QCOMPARE(crossFocus.count(), 1);
     QCOMPARE(crossFocus.last().at(0).toString(), QStringLiteral("S2"));
-    QCOMPARE(crossFocus.last().at(1).toString(), QStringLiteral("right"));
+    QCOMPARE(crossFocus.last().at(1).toString(), Ax::navTrail());
     QCOMPARE(activate.count(), 0);
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), false);
@@ -656,11 +659,11 @@ void TestScrollEngineVerbs::focusOntoAForeignModeNeighbourDefersToTheDaemon()
             }
         },
         Qt::DirectConnection);
-    engine->focusInDirection(QStringLiteral("right"), ctx);
+    engine->focusInDirection(Ax::navTrail(), ctx);
     QCOMPARE(crossFocus.count(), 2);
     QVERIFY(!feedback.isEmpty());
     QCOMPARE(feedback.last().at(0).toBool(), true);
-    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:right"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("screen:") + Ax::navTrail());
     QCOMPARE(feedback.last().at(5).toString(), QStringLiteral("S2"));
     engine->setCrossSurfaceResolver(nullptr);
 }

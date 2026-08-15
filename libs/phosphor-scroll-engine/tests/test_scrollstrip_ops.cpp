@@ -789,13 +789,14 @@ void TestScrollStripOps::minWidthClampsResolvedColumn()
     const auto params = defaultParams();
     ScrollStrip strip;
     QVERIFY(strip.insertWindow(QStringLiteral("narrow"), ColumnWidth::makeProportion(0.1), ColumnDisplay::Normal,
-                               params, /*minWidth=*/400, /*minHeight=*/0));
+                               params, Ax::t(QSize(400, 0)).width(), Ax::t(QSize(400, 0)).height()));
     QVERIFY(strip.insertWindow(QStringLiteral("other"), kHalf, ColumnDisplay::Normal, params));
     const ResolvedStrip resolved = strip.relayout(params);
     QVERIFY(resolveContains(resolved, QStringLiteral("narrow")));
     QCOMPARE(Ax::mainLen(rectOf(resolved, QStringLiteral("narrow"))), 400);
     // setWindowMinimumSize raises it after the fact too.
-    QVERIFY(strip.setWindowMinimumSize(QStringLiteral("narrow"), 500, 0));
+    QVERIFY(strip.setWindowMinimumSize(QStringLiteral("narrow"), Ax::t(QSize(500, 0)).width(),
+                                       Ax::t(QSize(500, 0)).height()));
     QCOMPARE(Ax::mainLen(rectOf(strip.relayout(params), QStringLiteral("narrow"))), 500);
 }
 
@@ -1002,9 +1003,16 @@ void TestScrollStripOps::minHeightClampStaysInBudget()
     // floors demand).
     const auto params = defaultParams();
     ScrollStrip strip;
-    QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params, 0, 400));
-    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params, 0, 400));
-    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params, 0, 200));
+    // The floors are CROSS-axis minimums (they divide the column), so the
+    // physical size handed to the strip transposes with the fixture.
+    const QSize min400 = Ax::t(QSize(0, 400));
+    const QSize min200 = Ax::t(QSize(0, 200));
+    QVERIFY(
+        strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params, min400.width(), min400.height()));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params,
+                                               min400.width(), min400.height()));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params,
+                                               min200.width(), min200.height()));
 
     const ResolvedStrip r = strip.relayout(params);
     // The walk below is the whole assertion, so its shape is pinned first: a
