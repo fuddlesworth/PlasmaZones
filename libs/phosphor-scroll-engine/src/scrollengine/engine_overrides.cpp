@@ -141,6 +141,34 @@ CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QVariantMap
     return m_centerFocusedColumn;
 }
 
+StripAxis ScrollEngine::effectiveStripAxis(const QVariantMap& overrides, const QRect& workArea) const
+{
+    // Reads the TRI-STATE intent (0 auto, 1 horizontal, 2 vertical) and
+    // returns the RESOLVED two-valued axis. Returning the resolved type is
+    // what makes it structurally impossible for Auto to escape into layout
+    // math — there is no third value for a caller to mishandle.
+    //
+    // The two numberings deliberately disagree (config Horizontal is 1, the
+    // protocol's is 0), so this is a switch and never a cast.
+    int intent = 0;
+    if (!overrideInt(overrides, ScrollPerScreenKeys::stripAxis(), intent)) {
+        intent = m_stripAxis;
+    }
+    switch (intent) {
+    case 1:
+        return StripAxis::horizontal();
+    case 2:
+        return StripAxis::vertical();
+    default:
+        break;
+    }
+    // Auto, and anything unrecognised: derive from the work area. An
+    // out-of-range intent degrades to Auto rather than to a fixed axis,
+    // because Auto is the setting's own default and the one answer that is
+    // never wrong for the shape of the screen.
+    return resolveStripAxis(workArea);
+}
+
 // ── behaviour toggles ──
 // One shape for all eight callers (the five behaviour toggles plus the three
 // tab-indicator bools): a rule-written per-screen key wins, an absent key

@@ -188,6 +188,12 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                      {QStringLiteral("always"), PhosphorI18n::tr("Always")},
                      {QStringLiteral("onOverflow"), PhosphorI18n::tr("On overflow")},
                  });
+        t.insert(pairKey(CD::scrollingGroup(), CD::stripAxisKey()),
+                 {
+                     {QStringLiteral("auto"), PhosphorI18n::tr("Match the screen shape")},
+                     {QStringLiteral("horizontal"), PhosphorI18n::tr("Side to side")},
+                     {QStringLiteral("vertical"), PhosphorI18n::tr("Top to bottom")},
+                 });
         t.insert(pairKey(CD::scrollingGroup(), CD::defaultColumnWidthKindKey()),
                  {
                      {QStringLiteral("proportion"), PhosphorI18n::tr("Proportion of the screen")},

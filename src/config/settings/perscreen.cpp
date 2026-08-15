@@ -140,9 +140,10 @@ const QLatin1String kPerScreenScrollingKeys[] = {
     QLatin1String(PerScreenScrollingKey::DefaultWindowHeightKind),
     QLatin1String(PerScreenScrollingKey::DefaultWindowHeightValue),
     QLatin1String(PerScreenScrollingKey::DefaultWindowHeightPresetIndex),
+    QLatin1String(PerScreenScrollingKey::StripAxis),
 };
 
-static_assert(std::size(kPerScreenScrollingKeys) == 7,
+static_assert(std::size(kPerScreenScrollingKeys) == 8,
               "kPerScreenScrollingKeys changed size — the validate ladder, the read ladder, and the engine's "
               "ScrollPerScreenKeys channel each carry one arm per key and have to grow with it");
 
@@ -216,6 +217,9 @@ QVariant validatePerScreenScrollingValue(const QString& key, const QVariant& val
         return boundedDouble(value, ConfigDefaults::scrollingDefaultWindowHeightMin(),
                              ConfigDefaults::scrollingDefaultWindowHeightMax());
     }
+    if (key == QLatin1String(K::StripAxis)) {
+        return closedSetInt(value, ConfigDefaults::isValidScrollingStripAxis);
+    }
     return QVariant();
 }
 
@@ -236,6 +240,8 @@ QVariant readPerScreenScrollingEntry(PhosphorConfig::IGroup& group, const QStrin
         return QVariant(group.readDouble(key, ConfigDefaults::scrollingDefaultWindowHeightValue()));
     if (key == QLatin1String(K::DefaultWindowHeightPresetIndex))
         return QVariant(group.readInt(key, ConfigDefaults::scrollingDefaultWindowHeightPresetIndex()));
+    if (key == QLatin1String(K::StripAxis))
+        return QVariant(group.readInt(key, ConfigDefaults::scrollingStripAxis()));
     return QVariant();
 }
 

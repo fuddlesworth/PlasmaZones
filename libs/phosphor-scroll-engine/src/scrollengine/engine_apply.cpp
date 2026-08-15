@@ -150,7 +150,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // Resolved PER CALL and never cached: under Auto two screens with no
     // per-screen key at all resolve differently, so a cached verdict would
     // hand one monitor the other's axis.
-    params.axis = resolveStripAxis(params.workArea);
+    params.axis = effectiveStripAxis(overrides, params.workArea);
     return params;
 }
 

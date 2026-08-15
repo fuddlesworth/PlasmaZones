@@ -426,6 +426,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     P_CONFIG_KEY(centerFocusedColumnKey, "CenterFocusedColumn")
+    P_CONFIG_KEY(stripAxisKey, "StripAxis")
     P_CONFIG_KEY(alwaysCenterSingleColumnKey, "AlwaysCenterSingleColumn")
     P_CONFIG_KEY(cropStraddlersKey, "CropStraddlers")
     P_CONFIG_KEY(defaultColumnWidthKindKey, "DefaultColumnWidthKind")

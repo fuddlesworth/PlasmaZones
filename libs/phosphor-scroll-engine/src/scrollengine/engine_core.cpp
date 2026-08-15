@@ -777,6 +777,11 @@ void ScrollEngine::refreshConfigFromSettings()
         (center >= 0 && center <= 2) ? static_cast<CenterFocusedColumn>(center) : CenterFocusedColumn::Never;
     m_alwaysCenterSingleColumn = settings->scrollingAlwaysCenterSingleColumn();
     m_cropStraddlers = settings->scrollingCropStraddlers();
+    // The TRI-STATE intent, kept as-is. Auto is deliberately NOT collapsed
+    // here: there is no work area at this point, and collapsing it would
+    // freeze one screen's verdict for every screen.
+    const int axisIntent = settings->scrollingStripAxis();
+    m_stripAxis = (axisIntent >= 0 && axisIntent <= 2) ? axisIntent : 0;
 
     // Guarded cast, matching every sibling enum in this function (center,
     // insertPos, sticky, indicator position): the shared value key can hold

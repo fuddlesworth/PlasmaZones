@@ -75,6 +75,9 @@ P_STORE_GET(int, scrollingCenterFocusedColumn, scrollingGroup, centerFocusedColu
 P_STORE_SET_INT(setScrollingCenterFocusedColumn, scrollingGroup, centerFocusedColumnKey,
                 scrollingCenterFocusedColumnChanged)
 
+P_STORE_GET(int, scrollingStripAxis, scrollingGroup, stripAxisKey, int)
+P_STORE_SET_INT(setScrollingStripAxis, scrollingGroup, stripAxisKey, scrollingStripAxisChanged)
+
 P_STORE_GET(bool, scrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCenterSingleColumnKey, bool)
 P_STORE_SET_BOOL(setScrollingAlwaysCenterSingleColumn, scrollingGroup, alwaysCenterSingleColumnKey,
                  scrollingAlwaysCenterSingleColumnChanged)

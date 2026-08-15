@@ -377,6 +377,27 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return true;
         };
         m_schemas[QStringLiteral("scrollingCenterFocusedColumn")] = QStringLiteral("int");
+        // scrollingStripAxis: enum (0=Auto, 1=Horizontal, 2=Vertical) — same
+        // shape as the mode above, including the refuse-do-not-coerce rule on
+        // a non-numeric payload. The closed-set check matters more here than
+        // usual: a coerced 0 would silently mean Auto and quietly undo the
+        // user's explicit choice.
+        m_getters[QStringLiteral("scrollingStripAxis")] = [concrete]() {
+            return concrete->scrollingStripAxis();
+        };
+        m_setters[QStringLiteral("scrollingStripAxis")] = [concrete](const QVariant& v) {
+            bool axisOk = false;
+            const int axis = v.toInt(&axisOk);
+            if (!axisOk) {
+                return false;
+            }
+            if (!ConfigDefaults::isValidScrollingStripAxis(axis)) {
+                return false;
+            }
+            concrete->setScrollingStripAxis(axis);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingStripAxis")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingAlwaysCenterSingleColumn", scrollingAlwaysCenterSingleColumn,
                                setScrollingAlwaysCenterSingleColumn)
         REGISTER_CONCRETE_BOOL("scrollingCropStraddlers", scrollingCropStraddlers, setScrollingCropStraddlers)

@@ -69,6 +69,36 @@ public:
         return v == scrollingCenterFocusedColumnNever() || v == scrollingCenterFocusedColumnAlways()
             || v == scrollingCenterFocusedColumnOnOverflow();
     }
+    /// Which way the strip runs on a screen. THREE values, and the numbering
+    /// deliberately does NOT match PhosphorProtocol::ScrollAxis (whose
+    /// Horizontal is 0): this is the INTENT, which has an Auto the resolved
+    /// wire enum cannot express, and Auto must be 0 so an absent key reads as
+    /// it. NEVER static_cast between the two — same trap, and the same
+    /// discipline, as DefaultWidthKind vs ColumnWidth::Kind.
+    static constexpr int scrollingStripAxisAuto()
+    {
+        return 0;
+    }
+    static constexpr int scrollingStripAxisHorizontal()
+    {
+        return 1;
+    }
+    static constexpr int scrollingStripAxisVertical()
+    {
+        return 2;
+    }
+    /// StripAxis: 0 = auto (from the work area), 1 = horizontal, 2 = vertical.
+    static constexpr int scrollingStripAxis()
+    {
+        return scrollingStripAxisAuto();
+    }
+    /// Closed-set check, maintained in parallel with the schema's own list —
+    /// see isValidScrollingCenterFocusedColumn's note above.
+    static constexpr bool isValidScrollingStripAxis(int v)
+    {
+        return v == scrollingStripAxisAuto() || v == scrollingStripAxisHorizontal()
+            || v == scrollingStripAxisVertical();
+    }
     static constexpr bool scrollingAlwaysCenterSingleColumn()
     {
         return false;

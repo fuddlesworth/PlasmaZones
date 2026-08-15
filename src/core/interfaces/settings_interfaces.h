@@ -121,6 +121,11 @@ inline constexpr const char DefaultColumnDisplay[] = "DefaultColumnDisplay";
 inline constexpr const char DefaultWindowHeightKind[] = "DefaultWindowHeightKind";
 inline constexpr const char DefaultWindowHeightValue[] = "DefaultWindowHeightValue";
 inline constexpr const char DefaultWindowHeightPresetIndex[] = "DefaultWindowHeightPresetIndex";
+/// Which way this monitor's strip runs. Per-screen because the axis's only
+/// legitimate discriminator IS the monitor's shape, which is exactly what
+/// this store is keyed on — the same argument that puts the sizing defaults
+/// here rather than app-wide.
+inline constexpr const char StripAxis[] = "StripAxis";
 } // namespace PerScreenScrollingKey
 
 // Per-screen snapping overrides carry only the gap keys, spelled by the shared

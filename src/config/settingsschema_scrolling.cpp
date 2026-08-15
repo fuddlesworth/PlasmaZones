@@ -157,6 +157,21 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          intChoices({{static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never), "never"_L1},
                      {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always), "always"_L1},
                      {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::OnOverflow), "onOverflow"_L1}})},
+        // StripAxis. Spelled from the ConfigDefaults accessors rather than an
+        // engine enum, because this is the INTENT space and its Auto has no
+        // engine enumerator — PhosphorProtocol::ScrollAxis is two-valued and
+        // numbers Horizontal 0 where this space numbers it 1. Never cast
+        // between them; the engine translates with an explicit switch.
+        {CD::stripAxisKey(),
+         CD::scrollingStripAxis(),
+         QMetaType::Int,
+         {},
+         validIntOr(
+             {CD::scrollingStripAxisAuto(), CD::scrollingStripAxisHorizontal(), CD::scrollingStripAxisVertical()},
+             CD::scrollingStripAxis()),
+         intChoices({{CD::scrollingStripAxisAuto(), "auto"_L1},
+                     {CD::scrollingStripAxisHorizontal(), "horizontal"_L1},
+                     {CD::scrollingStripAxisVertical(), "vertical"_L1}})},
         {CD::alwaysCenterSingleColumnKey(), CD::scrollingAlwaysCenterSingleColumn(), QMetaType::Bool},
         {CD::cropStraddlersKey(), CD::scrollingCropStraddlers(), QMetaType::Bool},
         // NOTE: the width-kind CONFIG space {0 proportion, 1 fixed,

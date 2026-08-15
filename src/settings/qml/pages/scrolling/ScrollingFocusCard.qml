@@ -30,6 +30,23 @@ SettingsCard {
         spacing: Kirigami.Units.smallSpacing
 
         SettingsRow {
+            title: i18n("Strip direction")
+            searchAnchor: "stripAxis"
+            description: i18nc("the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text", "Which way the strip runs. Match the screen shape runs it top to bottom on a monitor that is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.")
+
+            WideComboBox {
+                Accessible.name: i18n("Strip direction")
+                textRole: "text"
+                valueRole: "value"
+                model: settingsController.valueOptions("Scrolling", "StripAxis")
+                storedValue: appSettings.scrollingStripAxis
+                onActivated: appSettings.scrollingStripAxis = currentValue
+            }
+        }
+
+        SettingsSeparator {}
+
+        SettingsRow {
             title: i18n("Center the focused column")
             searchAnchor: "centerFocusedColumn"
             description: i18nc("the words Never, Always, and On overflow must match the option labels shown in the picker beside this text", "With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.")

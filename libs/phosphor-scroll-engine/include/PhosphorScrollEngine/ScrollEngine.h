@@ -887,6 +887,15 @@ private:
     /// callers must not pass a rect that has not been through the outer-gap
     /// adjust; stripAxisForScreen is the public door.
     StripAxis resolveStripAxis(const QRect& workArea) const;
+
+    /// The tri-state INTENT (per-screen key, else the global setting)
+    /// collapsed to a resolved axis, with Auto derived from @p workArea.
+    StripAxis effectiveStripAxis(const QVariantMap& overrides, const QRect& workArea) const;
+
+    /// Cached tri-state intent from the global config. NEVER the resolved
+    /// axis: under Auto two screens with no per-screen key resolve
+    /// differently, so a cached verdict would hand one monitor the other's.
+    int m_stripAxis = 0;
     /// visibleTiles' real body, taking params the caller already resolved.
     /// The public overload is the thin wrapper; callers that hold params
     /// (the digit path, the normalized-rect walk) use this instead of paying

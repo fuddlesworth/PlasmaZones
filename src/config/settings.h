@@ -385,6 +385,8 @@ public:
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
     Q_PROPERTY(int scrollingCenterFocusedColumn READ scrollingCenterFocusedColumn WRITE setScrollingCenterFocusedColumn
                    NOTIFY scrollingCenterFocusedColumnChanged)
+    Q_PROPERTY(
+        int scrollingStripAxis READ scrollingStripAxis WRITE setScrollingStripAxis NOTIFY scrollingStripAxisChanged)
     Q_PROPERTY(bool scrollingAlwaysCenterSingleColumn READ scrollingAlwaysCenterSingleColumn WRITE
                    setScrollingAlwaysCenterSingleColumn NOTIFY scrollingAlwaysCenterSingleColumnChanged)
     Q_PROPERTY(bool scrollingCropStraddlers READ scrollingCropStraddlers WRITE setScrollingCropStraddlers NOTIFY
@@ -1279,6 +1281,8 @@ public:
     bool scrollingEnabled() const;
     void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;
+    int scrollingStripAxis() const override;
+    void setScrollingStripAxis(int value);
     void setScrollingCenterFocusedColumn(int mode);
     bool scrollingAlwaysCenterSingleColumn() const override;
     void setScrollingAlwaysCenterSingleColumn(bool center);

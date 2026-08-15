@@ -21,6 +21,22 @@ inline QString centerFocusedColumn()
 {
     return QStringLiteral("CenterFocusedColumn");
 }
+/// SETTINGS channel: which way this screen's strip runs, as the TRI-STATE
+/// intent (0 auto, 1 horizontal, 2 vertical) — not the resolved two-valued
+/// PhosphorProtocol::ScrollAxis, whose Horizontal is 0. The two numberings
+/// deliberately disagree and must never be cast into each other.
+///
+/// Settings-channel only, no rule twin: the axis's one legitimate
+/// discriminator is the monitor's physical shape, which is exactly what the
+/// per-screen store is keyed on. A rule form would additionally let a desktop
+/// or activity switch flip the axis on a live populated strip mid-session,
+/// which is cost charged to the flip sweep for a case nobody asked for. The
+/// door stays open — the key is engine-spelled, so a later SetScrollStripAxis
+/// is one action constant and one insert.
+inline QString stripAxis()
+{
+    return QStringLiteral("StripAxis");
+}
 /// RULE channel: a bare work-area fraction (SetScrollDefaultColumnWidth).
 /// Outranks the settings-channel kind trio below — rule > per-screen
 /// setting > global. The settings app never writes this key.
