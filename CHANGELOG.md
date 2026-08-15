@@ -7,6 +7,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.3.8] - 2026-08-15
+
 ### Added
 
 - **The active layout of each monitor is published on the session bus**: `org.plasmazones.LayoutRegistry` gained a `getActiveLayoutsForScreens` readback and an `activeLayoutForScreenChanged` signal, so the compositor and other subscribers can follow which layout each monitor is on ([#921](https://github.com/fuddlesworth/PlasmaZones/pull/921)).
