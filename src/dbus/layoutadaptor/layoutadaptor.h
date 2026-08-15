@@ -7,6 +7,8 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QDBusVariant>
+#include <QJsonObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -147,9 +149,15 @@ public Q_SLOTS:
     QString createLayoutFromJson(const QString& layoutJson);
 
     // Editor launch
-    void openEditor();
-    void openEditorForScreen(const QString& screenId);
-    void openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId);
+    // The four launch verbs answer whether the editor process was actually
+    // spawned, so a caller can surface a missing or broken binary instead of
+    // a silent no-op. Validation refusals answer false too.
+    bool openEditor();
+    bool openEditorForScreen(const QString& screenId);
+    bool openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenId);
+    /// Launch the editor in scrolling-template mode. An empty id opens a new
+    /// template; otherwise the stored template with that id is edited.
+    bool openEditorForScrollingTemplate(const QString& templateId);
 
     // Screen assignments
     QString getLayoutForScreen(const QString& screenId);
@@ -335,7 +343,10 @@ Q_SIGNALS:
      *
      * Emitted by @c updateLayout (the editor's save path) and by active-layout
      * switches, where the client genuinely needs the whole serialized layout.
-     * Carries the complete JSON payload (5–20 KB in prod).
+     * Usually carries the complete layout JSON (5–20 KB in prod); when the
+     * update targeted an AUTOTILE entry the payload is the caller's raw
+     * autotile-override object (id "autotile:&lt;algorithmId&gt;", not a
+     * serialized layout), so subscribers must not blindly parse it as one.
      *
      * @c createLayoutFromJson does NOT emit this — a new layout announces
      * itself with @c layoutCreated(id) instead. An active-layout switch is not
@@ -528,7 +539,9 @@ private:
      * @param args Command line arguments for the editor
      * @param description Description for logging (e.g., "for screen: DP-1")
      */
-    void launchEditor(const QStringList& args, const QString& description);
+    /// Spawn the editor process. False when startDetached failed (missing or
+    /// unexecutable binary) — the four public launch verbs forward this.
+    bool launchEditor(const QStringList& args, const QString& description);
 
     /**
      * @brief Build activity info JSON object
@@ -558,10 +571,10 @@ private:
     /// getLayoutPreview* D-Bus output).
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
 
-    // Suppress screenLayoutChanged D-Bus signal while a KCM-driven batch is
-    // in flight (armed via setSuppressScreenLayoutSignal around any of the
-    // assignment writers) — the KCM initiated the change and doesn't need
-    // the echo back.
+    // Suppress screenLayoutChanged D-Bus signal while a settings-driven save
+    // batch is in flight (armed via the setSaveBatchMode slot around a batch
+    // of assignment writes) — the settings app initiated the change and
+    // doesn't need the echo back.
     bool m_suppressScreenLayoutSignal = false;
 
     // Track which screens had assignments modified during the current batch.

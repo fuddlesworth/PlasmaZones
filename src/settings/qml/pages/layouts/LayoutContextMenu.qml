@@ -119,7 +119,7 @@ Menu {
     // can run before Main.qml assigns the required property (precedent:
     // KeyboardShortcutOverlay.qml).
     readonly property var _cachedScreens: {
-        const s = settingsController ? (settingsController.screens || []) : [];
+        const s = layoutContextMenu.settingsController ? (layoutContextMenu.settingsController.screens || []) : [];
         return s.length > 1 ? s : [];
     }
 
@@ -173,7 +173,7 @@ Menu {
                     Qt.callLater(function () {
                         aspectRatioSubMenu.visible = false;
                         layoutContextMenu.visible = false;
-                        settingsController.setLayoutAspectRatio(layoutId, idx);
+                        layoutContextMenu.settingsController.setLayoutAspectRatio(layoutId, idx);
                     });
                 }
             }
@@ -188,9 +188,6 @@ Menu {
     /// Carries the card kind so the page routes to the template export
     /// dialog without having to infer it from its own view mode.
     signal exportRequested(string layoutId, bool isTemplateExport)
-    /// A template card's Edit — the page routes it to the form editor
-    /// dialog (templates have no canvas editor process).
-    signal editTemplateRequested(string templateId)
 
     function showForLayout(nextLayout) {
         layoutContextMenu.layout = nextLayout;
@@ -230,20 +227,28 @@ Menu {
 
         text: i18n("Edit")
         icon.name: "document-edit"
+        // Both arms route straight to the controller: a template card's Edit
+        // launches the editor process in template mode, so the page-owned
+        // signal hop the old in-process dialog needed is gone.
         onTriggered: {
             if (layoutContextMenu.isTemplate)
-                layoutContextMenu.editTemplateRequested(layoutContextMenu.layoutId);
+                layoutContextMenu.settingsController.editScrollingTemplate(layoutContextMenu.layoutId);
             else
-                settingsController.editLayout(layoutContextMenu.layoutId);
+                layoutContextMenu.settingsController.editLayout(layoutContextMenu.layoutId);
         }
     }
 
     Instantiator {
         id: screenItemInstantiator
 
-        // Per-screen editing opens the canvas editor, which templates have
-        // no counterpart for — the form dialog is screen-agnostic.
-        model: layoutContextMenu.isTemplate ? [] : layoutContextMenu._cachedScreens
+        // The model stays the STABLE cached screen list: folding isTemplate
+        // into it would destroy and recreate every delegate (via
+        // removeItem, which also destroys) on each template-to-layout kind
+        // switch — the churn class the header comment warns about. Template
+        // cards hide the entries declaratively instead (with an explicit
+        // height collapse, belt and braces against the Menu keeping a slot
+        // for an invisible item).
+        model: layoutContextMenu._cachedScreens
         onObjectAdded: function (index, object) {
             // Insert relative to the Edit marker — a future
             // MenuItem inserted before Edit would otherwise shift
@@ -265,6 +270,11 @@ Menu {
             required property var modelData
             readonly property string _screenName: (modelData && modelData.name) ? modelData.name : ""
 
+            // Per-screen entries make no sense for a template: the editor's
+            // template mode is screen-agnostic (openEditorForScrollingTemplate
+            // takes no screen argument; the strip opens under the cursor).
+            visible: !layoutContextMenu.isTemplate
+            height: visible ? implicitHeight : 0
             text: i18n("Edit on %1", (modelData && modelData.displayLabel) || (modelData && modelData.name) || "")
             icon.name: (modelData && modelData.isPrimary) ? "starred-symbolic" : "monitor"
             onClicked: {
@@ -283,7 +293,7 @@ Menu {
                 Qt.callLater(function () {
                     layoutContextMenu.visible = false;
                     if (screenName.length > 0)
-                        settingsController.editLayoutOnScreen(layoutId, screenName);
+                        layoutContextMenu.settingsController.editLayoutOnScreen(layoutId, screenName);
                 });
             }
         }
@@ -300,11 +310,11 @@ Menu {
         icon.name: "document-open"
         onTriggered: {
             if (layoutContextMenu.isTemplate)
-                settingsController.openScrollingTemplateFile(layoutContextMenu.layoutId);
+                layoutContextMenu.settingsController.openScrollingTemplateFile(layoutContextMenu.layoutId);
             else if (layoutContextMenu.isAutotile)
-                settingsController.openAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
+                layoutContextMenu.settingsController.openAlgorithm(layoutContextMenu.settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId));
             else
-                settingsController.openLayoutFile(layoutContextMenu.layoutId);
+                layoutContextMenu.settingsController.openLayoutFile(layoutContextMenu.layoutId);
         }
     }
 
@@ -337,7 +347,7 @@ Menu {
         // the plain set-only item that greys out on the current default.
         text: layoutContextMenu.isTemplate && defaultItem.isFamilyDefault ? i18n("Clear Default") : i18n("Set as Default")
         icon.name: layoutContextMenu.isTemplate && defaultItem.isFamilyDefault ? "edit-clear" : "favorite"
-        enabled: layoutContextMenu.layout && (layoutContextMenu.isTemplate || !defaultItem.isFamilyDefault)
+        enabled: Boolean(layoutContextMenu.layout) && (layoutContextMenu.isTemplate || !defaultItem.isFamilyDefault)
         onTriggered: {
             // The active page here is a library page, which is never dirty
             // (its store writes immediately). Each family's default key is a
@@ -350,17 +360,17 @@ Menu {
             if (!layoutContextMenu.appSettings)
                 return;
             if (layoutContextMenu.isTemplate) {
-                settingsController.beginExternalEdit("scrolling-columns");
+                layoutContextMenu.settingsController.beginExternalEdit("scrolling-columns");
                 layoutContextMenu.appSettings.defaultScrollingTemplate = defaultItem.isFamilyDefault ? "" : layoutContextMenu.layoutId;
-                settingsController.endExternalEdit();
+                layoutContextMenu.settingsController.endExternalEdit();
             } else if (layoutContextMenu.isAutotile) {
-                settingsController.beginExternalEdit("tiling-algorithm");
+                layoutContextMenu.settingsController.beginExternalEdit("tiling-algorithm");
                 layoutContextMenu.appSettings.defaultAutotileAlgorithm = layoutContextMenu.layoutId.replace("autotile:", "");
-                settingsController.endExternalEdit();
+                layoutContextMenu.settingsController.endExternalEdit();
             } else {
-                settingsController.beginExternalEdit("snapping-window-behavior");
+                layoutContextMenu.settingsController.beginExternalEdit("snapping-window-behavior");
                 layoutContextMenu.appSettings.defaultLayoutId = layoutContextMenu.layoutId;
-                settingsController.endExternalEdit();
+                layoutContextMenu.settingsController.endExternalEdit();
             }
         }
     }
@@ -369,7 +379,7 @@ Menu {
         text: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? i18n("Show in Zone Selector") : i18n("Hide from Zone Selector")
         icon.name: layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector ? "view-visible" : "view-hidden"
         visible: !layoutContextMenu.isTemplate
-        onTriggered: settingsController.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
+        onTriggered: layoutContextMenu.settingsController.setLayoutHidden(layoutContextMenu.layoutId, !(layoutContextMenu.layout && layoutContextMenu.layout.hiddenFromSelector))
     }
 
     MenuItem {
@@ -380,7 +390,7 @@ Menu {
         icon.name: (perLayoutAuto || globalAuto) ? "window-duplicate" : "window-new"
         visible: !layoutContextMenu.isAutotile && !layoutContextMenu.isTemplate
         enabled: !globalAuto
-        onTriggered: settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
+        onTriggered: layoutContextMenu.settingsController.setLayoutAutoAssign(layoutContextMenu.layoutId, !perLayoutAuto)
     }
 
     // Sentinel separators that flank the aspect-ratio submenu's
@@ -409,9 +419,9 @@ Menu {
         visible: !layoutContextMenu.isAutotile
         onTriggered: {
             if (layoutContextMenu.isTemplate)
-                settingsController.duplicateScrollingTemplate(layoutContextMenu.layoutId);
+                layoutContextMenu.settingsController.duplicateScrollingTemplate(layoutContextMenu.layoutId);
             else
-                settingsController.duplicateLayout(layoutContextMenu.layoutId);
+                layoutContextMenu.settingsController.duplicateLayout(layoutContextMenu.layoutId);
         }
     }
 
@@ -441,7 +451,7 @@ Menu {
         text: i18n("Duplicate")
         icon.name: "edit-copy"
         visible: layoutContextMenu.isAutotile
-        onTriggered: settingsController.duplicateAlgorithm(settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
+        onTriggered: layoutContextMenu.settingsController.duplicateAlgorithm(layoutContextMenu.settingsController.algorithmIdFromLayoutId(layoutContextMenu.layoutId))
     }
 
     MenuItem {

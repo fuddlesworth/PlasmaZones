@@ -26,6 +26,7 @@
       <li>Per-zone shader effects with live previews</li>
       <li>Per-monitor and per-activity layout assignments</li>
       <li>Import / export layout JSON for sharing</li>
+      <li>Starting columns and size presets for scrolling-mode templates</li>
     </ul>
   </description>
 
@@ -42,6 +43,7 @@
     <keyword>zones</keyword>
     <keyword>layout</keyword>
     <keyword>snap</keyword>
+    <keyword>scrolling</keyword>
   </keywords>
 
   <url type="homepage">https://github.com/fuddlesworth/PlasmaZones</url>

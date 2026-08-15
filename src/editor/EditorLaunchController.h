@@ -22,11 +22,13 @@ class EditorController;
  *
  *   - The `SingleInstanceService` RAII handle for `org.plasmazones.Editor.App`
  *     on the session bus.
- *   - `applyLaunchArgs()` — the CLI-arg → controller-state translation,
- *     shared between the initial launch (main.cpp) and forwarded launches
- *     (`handleLaunchRequest()` via D-Bus).
- *   - The `handleLaunchRequest()` Q_SCRIPTABLE slot that a second launcher
- *     invokes over D-Bus.
+ *   - `applyLaunchArgs()` — the shared launch-args entry point for the
+ *     initial launch (main.cpp) and forwarded launches
+ *     (`handleLaunchRequest()` via D-Bus). It normalizes conflicting shapes
+ *     and forwards; the controller owns what the args mean.
+ *   - `handleLaunchRequest()`, the method `EditorAppAdaptor` forwards a
+ *     second launcher's D-Bus call to (the adaptor carries the bus-facing
+ *     slot so this class needs no D-Bus annotations).
  *
  * Holds a non-owning pointer to the real `EditorController`. The controller
  * must outlive this object (main.cpp guarantees this — it constructs the
@@ -64,17 +66,18 @@ public:
     bool registerDBusService();
 
     /**
-     * @brief Apply command-line launch arguments to the underlying controller.
+     * @brief Apply launch arguments to the underlying controller.
      *
      * Shared entry point for initial launches (called from main.cpp) and
      * forwarded launches (called from `handleLaunchRequest()`). The two
-     * paths cannot drift because they route through this method.
-     *
-     * Preview mode is set *unconditionally* so state from a previous
-     * forwarded launch cannot leak into a subsequent non-preview launch on
-     * the same running instance.
+     * paths cannot drift because they route through this method, and the
+     * bus path gets the same conflicting-shape normalization the CLI parser
+     * applies, so the published exclusivity contract holds for both.
+     * (EditorController::applyLaunch sets preview on every branch, so a
+     * previous forwarded launch's preview state cannot leak forward.)
      */
-    void applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+    void applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                         const QString& templateId, bool newTemplate);
 
     /**
      * @brief Entry point for a forwarded launch.
@@ -89,7 +92,8 @@ public:
      * anything is a no-op — the user has to focus the existing window
      * themselves.
      */
-    void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+    void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                             const QString& templateId, bool newTemplate);
 
 private:
     EditorController* m_controller; ///< Non-owning; must outlive this object.

@@ -32,7 +32,12 @@ public:
     ~EditorAppAdaptor() override;
 
 public Q_SLOTS:
-    void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+    // Hand-maintained trio: this signature, dbus/org.plasmazones.EditorApp.xml,
+    // and the QVariantList forward in src/editor/main.cpp must agree — the
+    // contract test documents EditorApp.xml as out of scope, so nothing
+    // mechanical checks them. Change all three together.
+    void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
+                             const QString& templateId, bool newTemplate);
 
 private:
     EditorLaunchController* m_launcher; ///< Non-owning; parent object, guaranteed non-null.

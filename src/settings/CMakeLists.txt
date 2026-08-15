@@ -523,7 +523,6 @@ qt_add_qml_module(plasmazones-settings
         qml/components/ThemeFallbackColorControl.qml
         qml/components/ThemeFallbackColorRow.qml
         qml/pages/layouts/NewLayoutDialog.qml
-        qml/pages/layouts/ScrollingTemplateEditorDialog.qml
         qml/pages/tiling/NewAlgorithmDialog.qml
         qml/pages/wizard/WizardStepIndicator.qml
         qml/pages/wizard/WizardFooter.qml

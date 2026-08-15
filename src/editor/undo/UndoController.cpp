@@ -100,8 +100,8 @@ void UndoController::onIndexChanged(int idx)
 
 void UndoController::onCleanChanged(bool clean)
 {
-    Q_UNUSED(clean);
     updateProperties();
+    Q_EMIT cleanStateChanged(clean);
 }
 
 void UndoController::updateProperties()

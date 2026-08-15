@@ -11,11 +11,6 @@ namespace PhosphorZones {
 
 namespace {
 
-// Dedupe tolerance for the preset lists, matching the settings parser's
-// treatment of editor float dust (thirds arrive as 0.333333/0.333334).
-// Aliases the exported constant so the template editor can mirror it.
-constexpr qreal kEps = FractionDedupeEpsilon;
-
 QJsonArray fractionsToJson(const QList<qreal>& values)
 {
     QJsonArray out;
@@ -35,16 +30,21 @@ QList<qreal> fractionsFromJson(const QJsonArray& array)
     return out;
 }
 
-/// Clamp to [MinTemplateFraction, 1.0] dropping sub-floor entries, sort ascending,
-/// dedupe within kEps — the same normalization the settings preset parser
-/// applies, so a template list and a settings list obey one contract. The result
-/// is capped at MaxTemplateColumns, the same limit the blueprint obeys: the
-/// engine keeps only that many entries out of a pushed vocabulary, so anything
-/// past it could never be cycled to. Truncating AFTER the sort and dedupe makes
-/// the kept set deterministic and identical to what the engine keeps, the
-/// smallest N distinct fractions.
-QList<qreal> normalizeFractionList(QList<qreal> values)
+} // namespace
+
+// Clamp to [MinTemplateFraction, 1.0] dropping sub-floor entries, sort ascending,
+// dedupe within kEps — the same normalization the settings preset parser
+// applies, so a template list and a settings list obey one contract. The result
+// is capped at MaxTemplateColumns, the same limit the blueprint obeys: the
+// engine keeps only that many entries out of a pushed vocabulary, so anything
+// past it could never be cycled to. Truncating AFTER the sort and dedupe makes
+// the kept set deterministic and identical to what the engine keeps, the
+// smallest N distinct fractions.
+QList<qreal> ScrollingTemplate::normalizePresetList(QList<qreal> values)
 {
+    // Dedupe tolerance, matching the settings parser's treatment of editor
+    // float dust (thirds arrive as 0.333333/0.333334).
+    constexpr qreal kEps = FractionDedupeEpsilon;
     QList<qreal> kept;
     kept.reserve(values.size());
     for (qreal v : values) {
@@ -66,8 +66,6 @@ QList<qreal> normalizeFractionList(QList<qreal> values)
     }
     return out;
 }
-
-} // namespace
 
 bool ScrollingTemplate::normalize()
 {
@@ -103,8 +101,8 @@ bool ScrollingTemplate::normalize()
         defaultColumnDisplay = 0;
     }
 
-    presetColumnWidths = normalizeFractionList(presetColumnWidths);
-    presetWindowHeights = normalizeFractionList(presetWindowHeights);
+    presetColumnWidths = normalizePresetList(presetColumnWidths);
+    presetWindowHeights = normalizePresetList(presetWindowHeights);
     if (presetColumnWidths.isEmpty()) {
         // No vocabulary to index into, whatever the kind. Zero is the only
         // defensible value: the trio is pushed as a unit and round-trips

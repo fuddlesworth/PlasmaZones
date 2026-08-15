@@ -23,8 +23,15 @@ Window {
     property bool hasMultipleSelection: editorWindow._editorController ? editorWindow._editorController.hasMultipleSelection : false
     property string selectionAnchorId: "" // For Shift+click range selection
     readonly property bool previewMode: editorWindow._editorController ? editorWindow._editorController.previewMode : false
+    // Editing mode: 0 = zone layout, 1 = scrolling template (EditorController::ModeScrollingTemplate)
+    readonly property bool templateMode: editorWindow._editorController ? editorWindow._editorController.editorMode === 1 : false
     // Fullscreen editing mode - hides all panels for distraction-free editing
     property bool fullscreenMode: false
+    // Set by intentional close paths that ALREADY resolved unsaved changes
+    // (the confirm dialog's Discard, discardChanges' editorClosed), so the
+    // onClosing guard below lets them through. The clean-session paths need
+    // no flag — the guard checks the dirty state itself.
+    property bool _closeConfirmed: false
     // Zone spacing (between zones) matches zone padding (per-layout override or global setting)
     readonly property real zoneSpacing: {
         if (!editorWindow._editorController)
@@ -216,14 +223,25 @@ Window {
     // is first mapped. We must set the target screen BEFORE showing, otherwise the
     // window always lands on the primary monitor.
     visible: false
-    title: i18nc("@title", "Layout Editor")
+    title: templateMode ? i18nc("@title", "Scrolling Template Editor") : i18nc("@title", "Layout Editor")
+    onClosing: close => {
+        // A compositor-initiated close (Alt+F4, a window-menu close verb)
+        // must honor the same unsaved-changes prompt every in-app close
+        // affordance shows. Intentional dirty closes set _closeConfirmed
+        // first; a clean session passes straight through.
+        if (editorWindow._closeConfirmed || !editorWindow._editorController || !editorWindow._editorController.hasUnsavedChanges)
+            return;
+
+        close.accepted = false;
+        confirmCloseDialog.open();
+    }
     Component.onCompleted: {
         // Initialize selectedZoneId from editorController context property
         if (editorWindow._editorController) {
             editorWindow.selectedZoneId = editorWindow._editorController.selectedZoneId || "";
             editorWindow.pushDefaultZoneColors();
-            // If no layout loaded and not in preview mode, create new
-            if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode)
+            // If no layout loaded and not in preview or template mode, create new
+            if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode && !editorWindow.templateMode)
                 editorWindow._editorController.createNewLayout();
 
             // Set screen and show via C++ Q_INVOKABLE — QML Window.screen assignment
@@ -346,6 +364,7 @@ Window {
         helpDialog: helpDialog
         fullscreenMode: editorWindow.fullscreenMode
         previewMode: editorWindow.previewMode
+        templateMode: editorWindow.templateMode
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
     }
 
@@ -389,6 +408,7 @@ Window {
         exportDialog: exportDialog
         fullscreenMode: editorWindow.fullscreenMode
         previewMode: editorWindow.previewMode
+        templateMode: editorWindow.templateMode
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
 
         Behavior on opacity {
@@ -427,7 +447,7 @@ Window {
 
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.preferredWidth: parent.width - (propertiesPanel.visible ? propertiesPanel.width : 0)
+            Layout.preferredWidth: parent.width - (propertiesPanel.visible ? propertiesPanel.width : 0) - (templatePanelLoader.visible ? templatePanelLoader.width : 0)
             Layout.minimumWidth: Kirigami.Units.gridUnit * 22
 
             // Actual drawing area (zones handle their own gaps via edgeGap and zoneSpacing)
@@ -456,6 +476,11 @@ Window {
                 // Allow standard Tab navigation first
                 Keys.enabled: true
                 Keys.onPressed: function (event) {
+                    if (editorWindow.templateMode) {
+                        if (templateCanvasLoader.item)
+                            templateCanvasLoader.item.handleKeyPress(event);
+                        return;
+                    }
                     keyboardNav.handleKeyPress(event);
                 }
                 Component.onCompleted: _insetsReady = true
@@ -466,7 +491,26 @@ Window {
                 GridOverlay {
                     id: gridCanvas
 
+                    visible: !editorWindow.templateMode
                     editorController: editorWindow._editorController
+                }
+
+                // ═══════════════════════════════════════════════════════════
+                // TEMPLATE STRIP CANVAS - Scrolling-template mode only.
+                // A Loader so layout mode pays nothing for it; sized to the
+                // drawing area like the zone canvas machinery it replaces.
+                // ═══════════════════════════════════════════════════════════
+                Loader {
+                    id: templateCanvasLoader
+
+                    anchors.fill: parent
+                    active: editorWindow.templateMode
+                    z: editorWindow.zoneBaseZ
+
+                    sourceComponent: TemplateStripCanvas {
+                        editorController: editorWindow._editorController
+                        keyFocusTarget: drawingArea
+                    }
                 }
 
                 // Zones - use zone ID for stable selection
@@ -474,7 +518,10 @@ Window {
                 Repeater {
                     id: zonesRepeater
 
-                    model: editorWindow._editorController ? editorWindow._editorController.zones : []
+                    // Empty model in template mode: the zone delegates and every
+                    // subsystem keyed off them (dividers, snapping, resize) stay
+                    // uninstantiated while the strip canvas owns the area.
+                    model: (editorWindow._editorController && !editorWindow.templateMode) ? editorWindow._editorController.zones : []
                     Component.onCompleted: {
                         editorWindow._zonesRepeater = zonesRepeater;
                     }
@@ -560,6 +607,7 @@ Window {
                 DividerManager {
                     id: dividerManager
 
+                    visible: !editorWindow.templateMode
                     editorController: editorWindow._editorController
                     zoneSpacing: editorWindow.zoneSpacing
                     drawingArea: drawingArea
@@ -617,6 +665,8 @@ Window {
                 // CANVAS MOUSE HANDLER - Extracted to CanvasMouseHandler.qml
                 // ═══════════════════════════════════════════════════════════
                 CanvasMouseHandler {
+                    visible: !editorWindow.templateMode
+                    enabled: !editorWindow.templateMode
                     editorWindow: editorWindow
                     editorController: editorWindow._editorController
                     drawingArea: drawingArea
@@ -665,12 +715,33 @@ Window {
         PropertyPanel {
             id: propertiesPanel
 
-            chromeVisible: !editorWindow.fullscreenMode && !editorWindow.previewMode
+            chromeVisible: !editorWindow.fullscreenMode && !editorWindow.previewMode && !editorWindow.templateMode
             editorController: editorWindow._editorController
             selectedZoneId: editorWindow.selectedZoneId
             selectedZone: editorWindow.selectedZone
             selectionCount: editorWindow.selectionCount
             hasMultipleSelection: editorWindow.hasMultipleSelection
+        }
+
+        // Template-mode replacement for the zone property panel: description,
+        // later-column defaults, and the preset vocabularies. A Loader for
+        // the same reason the strip canvas uses one — layout mode pays
+        // nothing for the form, its combos, or its chip editors.
+        Loader {
+            id: templatePanelLoader
+
+            readonly property bool chromeVisible: editorWindow.templateMode && !editorWindow.fullscreenMode
+
+            active: editorWindow.templateMode
+            visible: active && chromeVisible
+            Layout.preferredWidth: chromeVisible ? Kirigami.Units.gridUnit * 20 : 0
+            Layout.maximumWidth: Layout.preferredWidth
+            Layout.fillHeight: true
+
+            sourceComponent: TemplatePropertyPanel {
+                chromeVisible: templatePanelLoader.chromeVisible
+                editorController: editorWindow._editorController
+            }
         }
     }
 
@@ -685,6 +756,7 @@ Window {
         anchors.right: parent.right
         visible: !editorWindow.fullscreenMode
         previewMode: editorWindow.previewMode
+        templateMode: editorWindow.templateMode
         editorController: editorWindow._editorController
         confirmCloseDialog: confirmCloseDialog
         editorWindow: editorWindow
@@ -787,6 +859,10 @@ Window {
             editorWindow.close();
         }
         onDiscarded: {
+            // Discard closes while the controller is still dirty, so it must
+            // mark the close as confirmed or the onClosing guard would
+            // re-open this very dialog.
+            editorWindow._closeConfirmed = true;
             editorWindow.close();
         }
     }
@@ -851,7 +927,7 @@ Window {
         id: confirmLaunchDialog
 
         title: i18nc("@title:window", "Unsaved Changes")
-        subtitle: i18nc("@info", "Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?")
+        subtitle: editorWindow.templateMode ? i18nc("@info", "Opening something else will replace the template you are editing. What would you like to do with your unsaved changes?") : i18nc("@info", "Opening another layout will replace the one you are editing. What would you like to do with your unsaved changes?")
         standardButtons: Kirigami.Dialog.Save | Kirigami.Dialog.Discard | Kirigami.Dialog.Cancel
         preferredWidth: Kirigami.Units.gridUnit * 24
         // Same rule as the screen-switch prompt: apply the parked request only
@@ -918,13 +994,14 @@ Window {
     Kirigami.Dialog {
         id: helpDialog
 
-        title: i18nc("@title:window", "Layout Editor Help")
+        title: editorWindow.templateMode ? i18nc("@title:window", "Template Editor Help") : i18nc("@title:window", "Layout Editor Help")
         standardButtons: Kirigami.Dialog.Close
         preferredWidth: Kirigami.Units.gridUnit * 32
 
         HelpDialogContent {
             editorController: editorWindow._editorController
             editorWindow: editorWindow
+            templateMode: editorWindow.templateMode
         }
     }
 
@@ -960,25 +1037,33 @@ Window {
         // Layout name changed - TopBar Connections should handle this
         // Note: Shortcut sequence change handlers moved to EditorShortcuts.qml
 
+        // The controller reuses the layout signals for template operations
+        // by design, so the MODE picks the noun the user reads — a template
+        // save must not announce "Layout saved".
         function onLayoutSaved() {
-            notifications.showSuccess(i18nc("@info", "Layout saved successfully"));
+            notifications.showSuccess(editorWindow.templateMode ? i18nc("@info", "Template saved") : i18nc("@info", "Layout saved successfully"));
         }
 
         function onLayoutExported() {
             notifications.showSuccess(i18nc("@info", "Layout exported"));
         }
 
+        // The template paths emit self-contained sentences ("That template
+        // is no longer available."), so they show verbatim; the layout paths
+        // emit fragments that need the prefix.
         function onLayoutLoadFailed(error) {
-            // Show error notification
-            notifications.showError(i18nc("@info", "Failed to load layout: %1", error));
+            notifications.showError(editorWindow.templateMode ? error : i18nc("@info", "Failed to load layout: %1", error));
         }
 
         function onLayoutSaveFailed(error) {
-            // Show error notification
-            notifications.showError(i18nc("@info", "Failed to save layout: %1", error));
+            notifications.showError(editorWindow.templateMode ? error : i18nc("@info", "Failed to save layout: %1", error));
         }
 
         function onEditorClosed() {
+            // discardChanges can leave the dirty flag set (a discarded NEW
+            // template has nothing to reload), and the user already chose to
+            // discard, so this close is confirmed by definition.
+            editorWindow._closeConfirmed = true;
             editorWindow.close();
         }
 

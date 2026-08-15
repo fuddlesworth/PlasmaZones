@@ -20,9 +20,9 @@ EditorAppAdaptor::EditorAppAdaptor(EditorLaunchController* launcher)
 EditorAppAdaptor::~EditorAppAdaptor() = default;
 
 void EditorAppAdaptor::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
-                                           bool preview)
+                                           bool preview, const QString& templateId, bool newTemplate)
 {
-    m_launcher->handleLaunchRequest(screenId, layoutId, createNew, preview);
+    m_launcher->handleLaunchRequest(screenId, layoutId, createNew, preview, templateId, newTemplate);
 }
 
 } // namespace PlasmaZones

@@ -27,8 +27,10 @@ Item {
     required property real cellWidth
     required property real cellHeight
     property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile, 2 = Scrolling Templates
-    // The full autotile default ID including prefix, for comparison
-    readonly property string autotileDefaultId: "autotile:" + root.appSettings.defaultAutotileAlgorithm
+    // The full autotile default ID including prefix, for comparison. Only
+    // evaluated for autotile cards so snapping and template cards do not
+    // re-evaluate on an unrelated autotile-default change.
+    readonly property string autotileDefaultId: root.viewMode === 1 ? "autotile:" + root.appSettings.defaultAutotileAlgorithm : ""
     // A template card's zoneCount carries the number of bands its preview
     // draws, and that comes from one of three sources: the template's starting
     // columns, the width presets when it has no starting columns, or the single
@@ -58,7 +60,10 @@ Item {
     property bool contextMenuEnabled: true
 
     // Signals
-    signal selected(int index)
+    // Parameterless on purpose: every consumer routes by the card's id
+    // (modelData.id), and an index parameter invites being mistaken for a
+    // routing key in an id-routed page.
+    signal selected
     signal activated(string layoutId)
     signal deleteRequested(var layout)
     signal contextMenuRequested(var layout)
@@ -103,7 +108,7 @@ Item {
             pg.unregisterSearchAnchor(root._anchorId, root);
     }
 
-    Accessible.name: modelData.displayName || i18n("Unnamed Layout")
+    Accessible.name: modelData.displayName || (root.isTemplateCard ? i18n("Unnamed Template") : (root.viewMode === 1 ? i18n("Unnamed Algorithm") : i18n("Unnamed Layout")))
     Accessible.description: root.isTemplateCard ? i18np("Template with %n width", "Template with %n widths", modelData.zoneCount || 0) : i18np("Layout with %n zone", "Layout with %n zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
     Accessible.focusable: true
@@ -115,22 +120,31 @@ Item {
     // double-click delivers selection then activation) so keyboard activation
     // never leaves a stale selection highlight on another card.
     Keys.onReturnPressed: {
-        root.selected(root.index);
+        root.selected();
         root.activated(root.modelData.id);
     }
     // Numpad Enter alias, matching the sibling card components.
     Keys.onEnterPressed: {
-        root.selected(root.index);
+        root.selected();
         root.activated(root.modelData.id);
     }
     // Space selects without activating (WizardTemplateCard/PositionPicker
     // semantics).
-    Keys.onSpacePressed: root.selected(root.index)
+    Keys.onSpacePressed: root.selected()
     Keys.onDeletePressed: {
         // Only system items are undeletable; user (non-system) algorithms are
         // deletable via the context menu, so keyboard Delete matches that path.
         if (!root.modelData.isSystem)
             root.deleteRequested(root.modelData);
+    }
+    // Keyboard route to the context menu (Menu key / Shift+F10): the menu is
+    // the sole home of several card actions (Duplicate, Export, a template's
+    // Clear Default), so it cannot stay mouse-only.
+    Keys.onMenuPressed: {
+        if (root.contextMenuEnabled) {
+            root.selected();
+            root.contextMenuRequested(root.modelData);
+        }
     }
 
     // HoverHandler for hover state — immune to scale transform geometry changes
@@ -151,10 +165,10 @@ Item {
             // subsequent Return/Delete presses.
             root.forceActiveFocus();
             if (mouse.button === Qt.RightButton) {
-                root.selected(root.index);
+                root.selected();
                 root.contextMenuRequested(root.modelData);
             } else {
-                root.selected(root.index);
+                root.selected();
             }
         }
         onDoubleClicked: mouse => {
@@ -312,6 +326,9 @@ Item {
 
                             if (root.modelData.isSystem)
                                 return i18n("System layout (read-only)");
+
+                            if (root.modelData.isScrollingTemplate)
+                                return i18n("Edited copy of a built-in template. Deleting it brings the built-in one back.");
 
                             return i18n("Modified system layout");
                         }

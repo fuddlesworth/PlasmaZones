@@ -138,6 +138,26 @@ SettingsFlickable {
         return settingsController.urlToLocalFile(url);
     }
 
+    // Seed "<display name>.<suffix>" into a save dialog so an export does
+    // not open with an empty filename the user has to type from scratch.
+    // Filesystem-hostile characters are stripped rather than escaped.
+    function exportFileName(layoutId, suffix) {
+        const all = settingsController.layouts || [];
+        let name = "";
+        for (let i = 0; i < all.length; i++) {
+            if (String(all[i].id) === String(layoutId)) {
+                name = all[i].displayName || "";
+                break;
+            }
+        }
+        // The result is spliced into a QUrl string, so URL-significant
+        // characters (#, %) go with the filesystem-hostile set — the accept
+        // path percent-decodes selectedFile, and an unescaped # would parse
+        // as a fragment and silently truncate the seeded name.
+        name = name.replace(/[\/\\:*?"<>|#%]/g, "").trim();
+        return (name.length > 0 ? name : "export") + "." + suffix;
+    }
+
     function rebuildModel() {
         // Hold the current height across the delegate teardown the model swap
         // below causes, or the page snaps to the top whenever a layout is
@@ -197,7 +217,12 @@ SettingsFlickable {
         } else {
             defaultId = root.settingsBridge.defaultLayoutId;
         }
-        if (defaultId) {
+        // A configured default only wins when its card is actually in the
+        // rebuilt view: a default hidden by the persisted filter state (or
+        // deleted) would otherwise leave no card highlighted and a dead
+        // Return key — the exact failure the fallback below exists to
+        // prevent.
+        if (defaultId && root._ownsLayoutId(defaultId)) {
             root.selectedLayoutId = defaultId;
             return;
         }
@@ -400,7 +425,7 @@ SettingsFlickable {
                 icon.name: "list-add"
                 onClicked: {
                     if (root.viewMode === 2)
-                        templateEditorDialog.openForNew();
+                        settingsController.editScrollingTemplate("");
                     else if (root.viewMode === 0)
                         newLayoutDialog.open();
                     else
@@ -449,11 +474,11 @@ SettingsFlickable {
 
                     return hints.length > 0 ? hints.join("\n") : i18n("Try adjusting your filters or search terms");
                 }
-                // Templates live in the settings app's own store, so an empty
-                // list is a matter of creating or importing one rather than of
-                // the daemon not running.
+                // Importing a template goes through this app's own store, but
+                // CREATING one launches the editor through the daemon, so the
+                // empty state names the daemon like its sibling arms do.
                 if (root.viewMode === 2)
-                    return i18n("Create a new template or import one");
+                    return i18n("Start the PlasmaZones daemon to create a template, or import one");
                 // An empty tiling list means the same thing it means for
                 // snapping: nothing has been loaded yet (the bundled algorithms
                 // arrive with the daemon's layout list).
@@ -529,12 +554,12 @@ SettingsFlickable {
                                 // is undefined; suppress the right-button mask so a
                                 // missing menu doesn't pretend to exist.
                                 contextMenuEnabled: !!(typeof window !== "undefined" && window && window.layoutContextMenu)
-                                onSelected: idx => {
+                                onSelected: {
                                     root.selectedLayoutId = String(modelData.id);
                                 }
                                 onActivated: layoutId => {
                                     if (root.viewMode === 2)
-                                        templateEditorDialog.openForEdit(layoutId);
+                                        settingsController.editScrollingTemplate(layoutId);
                                     else
                                         settingsController.editLayout(layoutId);
                                 }
@@ -671,24 +696,22 @@ SettingsFlickable {
         function onExportRequested(layoutId, isTemplateExport) {
             if (root.viewMode !== root._familyViewMode(layoutId.startsWith("autotile:"), isTemplateExport))
                 return;
+            const seededName = root.exportFileName(layoutId, root.viewMode === 1 ? "luau" : "json");
             if (layoutId.startsWith("autotile:")) {
                 algorithmExportDialog.algorithmId = settingsController.algorithmIdFromLayoutId(layoutId);
+                algorithmExportDialog.selectedFile = algorithmExportDialog.currentFolder + "/" + seededName;
                 algorithmExportDialog.open();
             } else if (isTemplateExport) {
                 // Template ids are UUID-shaped like layouts, so the menu
                 // carries the kind rather than this page inferring it.
                 templateExportDialog.templateId = layoutId;
+                templateExportDialog.selectedFile = templateExportDialog.currentFolder + "/" + seededName;
                 templateExportDialog.open();
             } else {
                 exportDialog.layoutId = layoutId;
+                exportDialog.selectedFile = exportDialog.currentFolder + "/" + seededName;
                 exportDialog.open();
             }
-        }
-
-        function onEditTemplateRequested(templateId) {
-            if (root.viewMode !== 2)
-                return;
-            templateEditorDialog.openForEdit(templateId);
         }
 
         // When LayoutBrowserPage is hosted outside Main.qml (KCM / preview host),
@@ -701,13 +724,6 @@ SettingsFlickable {
     // New Layout wizard dialog
     NewLayoutDialog {
         id: newLayoutDialog
-
-        controller: settingsController
-    }
-
-    // Scrolling template form editor (create + edit share the one dialog)
-    ScrollingTemplateEditorDialog {
-        id: templateEditorDialog
 
         controller: settingsController
     }

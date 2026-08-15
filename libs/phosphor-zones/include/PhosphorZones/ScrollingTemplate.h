@@ -42,9 +42,10 @@ inline constexpr int DefaultWidthKindClientDecides = 2;
 inline constexpr int DefaultWidthKindPreset = 3;
 
 /// Two preset stops closer together than this are the same stop: the
-/// normalization dedupe drops the later one. Exported to the settings UI
-/// through SettingsController::scrollingConstants() so the template editor's
-/// parse mirrors the store exactly.
+/// normalization dedupe drops the later one. Exported to authoring UIs
+/// through EditorTemplateModel::scrollingConstants() (the layout editor's
+/// template mode) and SettingsController::scrollingConstants() (the settings
+/// pages) so both mirror the store exactly.
 inline constexpr qreal FractionDedupeEpsilon = 0.01;
 
 /**
@@ -153,6 +154,11 @@ public:
     /// A user edit shadows the bundled file with a same-id user copy, and
     /// deleting that copy resurfaces the bundled original.
     bool isSystem = false;
+    /// True for a USER copy whose id also exists in a system directory (the
+    /// shadow the isSystem doc describes). Not serialized; stamped by the
+    /// store at load and on a shadowing save. Lets the UI mark an edited
+    /// bundled template as "the built-in one still exists underneath".
+    bool hasSystemOrigin = false;
     /// Absolute path of the file this template was loaded from. Not
     /// serialized; stamped by the store at load (empty for a template that
     /// was never persisted). Feeds the open-in-text-editor affordance.
@@ -174,6 +180,13 @@ public:
     /// the template is unusable even after normalization (invalid id / empty
     /// name).
     bool normalize();
+
+    /// The preset-list half of normalize() (floor at MinTemplateFraction,
+    /// ascending sort, dedupe within FractionDedupeEpsilon, cap at
+    /// MaxTemplateColumns), exposed so authoring surfaces can enforce the
+    /// same contract at their own write boundaries instead of mirroring the
+    /// rules by hand.
+    static QList<qreal> normalizePresetList(QList<qreal> values);
 
     QJsonObject toJson() const;
     /// Parses and normalizes. Returns an invalid template (isValid() false)

@@ -1784,6 +1784,29 @@ add_executable(test_zone_zorder editor/test_zone_zorder.cpp
 target_link_libraries(test_zone_zorder PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_zone_zorder COMMAND test_zone_zorder)
 
+# Scrolling-template edit state: the snapshot/applyState round trip and its
+# per-field signal discipline, the wire payload speaking the library's
+# ScrollingTemplate schema, undo/redo with gesture-scoped merging and the
+# obsolete collapse, and normalizePresetList's floor/sort/dedupe/cap
+# contract. EditorTemplateModel lives in the editor executable rather than a
+# library, so its TU (plus the undo command's) is compiled into the test
+# directly; EditorController is NOT — the test's link stubs cover the two
+# member references the mutation path carries, and every mutation here goes
+# through hand-built commands against a raw QUndoStack. UndoController.cpp
+# rides along only because pushCommand references its push(); the stubs keep
+# it unreached. Qt6::Gui is explicit for QUndoCommand, same rationale as
+# test_zone_zorder above. PhosphorAudio is a compile-time need, not a call:
+# the stubs' TU includes EditorController.h, whose IShaderPreviewBackend base
+# includes <PhosphorAudio/IAudioSpectrumProvider.h>.
+add_executable(test_editor_template_model editor/test_editor_template_model.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/EditorTemplateModel.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/undo/UndoController.cpp
+               ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateTemplateCommand.cpp)
+target_link_libraries(test_editor_template_model PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core
+                                                         PhosphorZones::PhosphorZones
+                                                         PhosphorAudio::PhosphorAudio)
+add_test(NAME test_editor_template_model COMMAND test_editor_template_model)
+
 # The editor's D-Bus client has to read the daemon's ANSWER, not just the reply
 # type: updateLayout is declared bool and a refusal comes back as an ordinary
 # ReplyMessage, which EditorController::saveLayout then treats as a landed write

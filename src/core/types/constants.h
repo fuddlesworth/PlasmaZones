@@ -103,8 +103,7 @@ inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"}
  * @brief Maximum length for user-visible layout and zone names.
  *
  * Client-side cap in the QML text fields that author a name (editor
- * TopBar.qml and PropertyPanel.qml, settings NewLayoutDialog.qml and
- * ScrollingTemplateEditorDialog.qml, all via
+ * TopBar.qml and PropertyPanel.qml, settings NewLayoutDialog.qml, all via
  * @c maximumLength). The UI cap is advisory only: callers can bypass it
  * entirely over D-Bus, and @c QQuickTextInput::maximumLength truncates by
  * UTF-16 code units so even the UI can produce a name that needs repair.
@@ -117,12 +116,13 @@ inline constexpr int MaxLayoutNameLength = 40;
 /**
  * @brief Maximum length for a scrolling template's free-text description.
  *
- * The sibling of @ref MaxLayoutNameLength for the one template field that has
- * no name-length counterpart. The settings-side
- * ScrollingTemplateEditorDialog.qml mirrors this cap client-side via
- * @c maximumLength, and the layout adaptor's D-Bus boundary re-applies it via
- * @ref clampName: a direct D-Bus caller can hand us an unbounded string that
- * then lands in the store's JSON file and in every picker tooltip.
+ * The sibling of @ref MaxLayoutNameLength for the one template field that
+ * has no name-length counterpart. Three points enforce it: the editor's
+ * TemplatePropertyPanel.qml mirrors the cap client-side via
+ * @c maximumLength, EditorTemplateModel::setDescription clamps at the model
+ * setter, and the layout adaptor's D-Bus boundary re-applies it via
+ * @ref clampName — a direct D-Bus caller can hand us an unbounded string
+ * that then lands in the store's JSON file and in every picker tooltip.
  */
 inline constexpr int MaxTemplateDescriptionLength = 500;
 
@@ -144,7 +144,10 @@ inline constexpr int MaxTemplateDescriptionLength = 500;
  * lone (a well-formed pair ends in a LOW surrogate), so dropping it is always
  * correct. Trailing whitespace goes with it, whether the cut exposed it or the
  * name arrived that way: a stored name ending in a space is never what a user
- * meant, and the D-Bus boundary has no other trim. Leading whitespace is the
+ * meant, and the D-Bus boundary has no other trim. The template DESCRIPTION
+ * callers (the adaptor boundary and EditorTemplateModel::setDescription)
+ * route free text through the same trim; that is accepted for them too,
+ * since the description is trimmed at save anyway. Leading whitespace is the
  * callers' sanitizers' concern, not the clamp's. Names that are within the
  * limit and already end well-formed are returned unchanged, without a copy.
  *

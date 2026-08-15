@@ -33,10 +33,13 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
+#include <QUuid>
 
 namespace PlasmaZones {
 
@@ -185,9 +188,9 @@ void SettingsController::loadLayoutsAsync()
         // (layoutCreated/Deleted/Changed/PropertyChanged/ListChanged)
         // coalesce into one reload here, and identical payloads
         // otherwise force every QML binding (LayoutComboBox model,
-        // monitor overview, picker dialogs) to recompute. Skipping
-        // the emit also avoids re-firing the pending-select path
-        // for an already-loaded id.
+        // monitor overview, picker dialogs) to recompute. The
+        // pending-select block below runs regardless of this guard —
+        // a reveal must fire even when the reply matched.
         //
         // Safe even when a local emit was withheld during the round trip: the
         // daemon is the authority on the layout list, and every trigger of this
@@ -338,8 +341,9 @@ void SettingsController::deleteLayout(const QString& layoutId)
     // a layout that was just created (and is still in the
     // create→reply→select pipeline), the trailing layoutAdded() emit
     // would name an id the user just removed.
-    if (m_pendingSelectLayoutId == layoutId)
+    if (m_pendingSelectLayoutId == layoutId) {
         m_pendingSelectLayoutId.clear();
+    }
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("deleteLayout"), {layoutId});
     if (reply.type() == QDBusMessage::ErrorMessage) {
@@ -357,6 +361,11 @@ void SettingsController::duplicateLayout(const QString& layoutId)
         QString newId = reply.arguments().first().toString();
         if (!newId.isEmpty()) {
             m_pendingSelectLayoutId = newId;
+        } else {
+            // A refusal carried in a ReplyMessage minted nothing; a stale
+            // create's id must not stay armed (same reasoning as the error
+            // branch below).
+            m_pendingSelectLayoutId.clear();
         }
     } else if (reply.type() == QDBusMessage::ErrorMessage) {
         qCWarning(lcCore) << "duplicateLayout failed:" << reply.errorMessage();
@@ -388,6 +397,14 @@ void SettingsController::importScrollingTemplate(const QString& filePath)
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file path is not allowed."));
         return;
     }
+    // A fifo or device node reports size 0, so the byte bound below would
+    // pass and readAll() would block or grow unboundedly on the UI thread;
+    // only regular files are templates.
+    if (!QFileInfo(safe).isFile()) {
+        qCWarning(lcCore) << "importScrollingTemplate: not a regular file" << safe;
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("That file is not a scrolling template this app can read."));
+        return;
+    }
     QFile file(safe);
     if (!file.open(QIODevice::ReadOnly)) {
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not read the template file."));
@@ -417,7 +434,7 @@ void SettingsController::importScrollingTemplate(const QString& filePath)
     // persists it; validation failures toast through the shared path.
     // Stash the minted id so the refresh that follows selects the import in
     // the list, the way importLayout and duplicateLayout do.
-    const QString newId = saveScrollingTemplateReturningId(data);
+    const QString newId = saveScrollingTemplate(data);
     if (!newId.isEmpty()) {
         m_pendingSelectLayoutId = newId;
     }
@@ -425,7 +442,14 @@ void SettingsController::importScrollingTemplate(const QString& filePath)
 
 void SettingsController::exportScrollingTemplate(const QString& templateId, const QString& filePath)
 {
-    if (templateId.isEmpty() || !m_localTemplateStore) {
+    // An empty id is a caller bug and stays a bare return; a missing store
+    // is an initialization failure worth a trace, the same reasoning
+    // openScrollingTemplateFile documents.
+    if (templateId.isEmpty()) {
+        return;
+    }
+    if (!m_localTemplateStore) {
+        qCWarning(lcCore) << "exportScrollingTemplate: no local template store";
         return;
     }
     const QString safe = Utils::sanitizeIOPath(filePath);
@@ -482,35 +506,7 @@ void SettingsController::openScrollingTemplateFile(const QString& templateId)
     QDesktopServices::openUrl(QUrl::fromLocalFile(templ.sourcePath));
 }
 
-QVariantMap SettingsController::scrollingTemplateForEditing(const QString& templateId) const
-{
-    // Full template JSON from the LOCAL store (same files the daemon
-    // reads); the editor form needs the columns/defaults the flat layouts
-    // model doesn't carry. Empty map for an unknown id.
-    if (!m_localTemplateStore) {
-        qCWarning(lcCore) << "scrollingTemplateForEditing: no local template store";
-        return {};
-    }
-    const PhosphorZones::ScrollingTemplate templ = m_localTemplateStore->templateById(QUuid::fromString(templateId));
-    if (!templ.isValid()) {
-        // The editor form opens empty on this path, which looks like a blank
-        // template rather than a miss — log the id so a support bundle shows
-        // the local read view was behind the daemon's store.
-        qCWarning(lcCore) << "scrollingTemplateForEditing: unknown template" << templateId;
-        return {};
-    }
-    QVariantMap map = templ.toJson().toVariantMap();
-    map.insert(PhosphorZones::TemplateJsonKeys::IsSystem, templ.isSystem);
-    map.insert(PhosphorZones::TemplateJsonKeys::SourcePath, templ.sourcePath);
-    return map;
-}
-
-bool SettingsController::saveScrollingTemplate(const QVariantMap& templateData)
-{
-    return !saveScrollingTemplateReturningId(templateData).isEmpty();
-}
-
-QString SettingsController::saveScrollingTemplateReturningId(const QVariantMap& templateData)
+QString SettingsController::saveScrollingTemplate(const QVariantMap& templateData)
 {
     // Daemon-first like every layout mutation; the local store refreshes on
     // the scrollingTemplatesChanged subscription.
@@ -534,6 +530,12 @@ QString SettingsController::saveScrollingTemplateReturningId(const QVariantMap& 
 
 void SettingsController::deleteScrollingTemplate(const QString& templateId)
 {
+    // Template ids ride the same pending-select slot as layouts, so mirror
+    // deleteLayout: deleting a just-imported/just-duplicated template must
+    // not leave its reveal armed.
+    if (m_pendingSelectLayoutId == templateId) {
+        m_pendingSelectLayoutId.clear();
+    }
     QDBusMessage reply = DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                                 QStringLiteral("deleteScrollingTemplate"), {templateId});
     if (reply.type() == QDBusMessage::ErrorMessage) {
@@ -568,6 +570,9 @@ void SettingsController::duplicateScrollingTemplate(const QString& templateId)
         // for above.
         qCWarning(lcCore) << "duplicateScrollingTemplate: daemon refused" << templateId;
         Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not duplicate the template."));
+        // Same stale-reveal reasoning as the ErrorMessage branch above: a
+        // refused duplicate minted nothing, so nothing may stay armed.
+        m_pendingSelectLayoutId.clear();
     } else {
         // Select the copy once the refresh lands, the way duplicateLayout does.
         m_pendingSelectLayoutId = reply.arguments().first().toString();
@@ -586,18 +591,42 @@ QVariantMap SettingsController::physicalScreenResolution(const QString& screenId
     return result;
 }
 
+// The three editor launchers used to be one-way calls, which made every
+// failure invisible: a stopped daemon silently discards the message, and a
+// missing or broken editor binary died inside the daemon with only a journal
+// line. The launch verbs now answer whether the process was spawned, so the
+// launchers read the reply and toast the one failure the user can act on.
+void SettingsController::launchEditorViaDaemon(const QString& method, const QVariantList& args)
+{
+    const QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry), method, args);
+    if (reply.type() != QDBusMessage::ReplyMessage) {
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not open the editor. The daemon may not be running."));
+        return;
+    }
+    if (!reply.arguments().value(0).toBool()) {
+        // The daemon answered and refused: the editor binary could not be
+        // started, or the id failed the daemon-side validation.
+        Q_EMIT layoutOperationFailed(PhosphorI18n::tr("Could not open the editor."));
+    }
+}
+
 void SettingsController::editLayout(const QString& layoutId)
 {
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, QString()});
+    launchEditorViaDaemon(QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, QString()});
 }
 
 void SettingsController::editLayoutOnScreen(const QString& layoutId, const QString& screenId)
 {
-    if (layoutId.isEmpty() || screenId.isEmpty())
+    if (layoutId.isEmpty() || screenId.isEmpty()) {
         return;
-    PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::LayoutRegistry,
-                                                QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, screenId});
+    }
+    launchEditorViaDaemon(QStringLiteral("openEditorForLayoutOnScreen"), {layoutId, screenId});
+}
+
+void SettingsController::editScrollingTemplate(const QString& templateId)
+{
+    launchEditorViaDaemon(QStringLiteral("openEditorForScrollingTemplate"), {templateId});
 }
 
 void SettingsController::openLayoutsFolder()

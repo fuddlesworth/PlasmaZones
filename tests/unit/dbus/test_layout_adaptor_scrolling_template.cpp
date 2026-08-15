@@ -10,9 +10,10 @@
  * validation and clear forms, the mode gate on the getter, and the widened
  * {layoutId, scrollingTemplate} value shape of the three flat batch getters.
  * Also covers the two boundary behaviors the template CRUD verbs owe: the
- * description clamp saveScrollingTemplate applies (the editor dialog's
- * maximumLength is advisory, a D-Bus caller skips it entirely) and the
- * quickLayoutSlotsChanged refresh hint deleteScrollingTemplate emits after the
+ * description clamp saveScrollingTemplate applies (the editor's
+ * TemplatePropertyPanel.qml maximumLength is advisory, a D-Bus caller skips
+ * it entirely) and the quickLayoutSlotsChanged refresh hint
+ * deleteScrollingTemplate emits after the
  * id-scrub sweeps a bound quick slot, alongside the resurface guard that keeps
  * that scrub off a shadowed bundled template.
  * Fixture cribbed from test_layout_adaptor_signals.cpp.

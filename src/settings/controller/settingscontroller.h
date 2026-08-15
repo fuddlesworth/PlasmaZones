@@ -465,18 +465,15 @@ public:
     // Native scrolling-template CRUD (daemon-first; the local store is a
     // read view refreshed on scrollingTemplatesChanged). The layouts model
     // already carries the template entries (isScrollingTemplate flag);
-    // scrollingTemplateForEditing answers the full column/default detail the
-    // editor form needs.
-    Q_INVOKABLE QVariantMap scrollingTemplateForEditing(const QString& templateId) const;
+    // editing detail lives in the editor process, which reads its own store.
     /// D-Bus subscription slot: reload the local template store, then run
     /// the debounced layout refresh.
     Q_SLOT void onScrollingTemplatesChanged();
-    Q_INVOKABLE bool saveScrollingTemplate(const QVariantMap& templateData);
-    /// The id-returning form of saveScrollingTemplate, for callers that mint a
-    /// NEW template and want the list to select it once the refresh lands
-    /// (import). Empty on refusal. Not Q_INVOKABLE: QML saves through the bool
-    /// form, which is this one's caller.
-    QString saveScrollingTemplateReturningId(const QVariantMap& templateData);
+    /// Daemon-first template save. Returns the saved id (empty on refusal)
+    /// so a caller that mints a NEW template can select it once the refresh
+    /// lands. Sole caller: importScrollingTemplate — QML no longer saves
+    /// templates, the editor process does.
+    QString saveScrollingTemplate(const QVariantMap& templateData);
     Q_INVOKABLE void deleteScrollingTemplate(const QString& templateId);
     Q_INVOKABLE void duplicateScrollingTemplate(const QString& templateId);
     /// Import mints a fresh id and routes through the daemon-first save;
@@ -487,6 +484,9 @@ public:
     Q_INVOKABLE void openScrollingTemplateFile(const QString& templateId);
     Q_INVOKABLE void editLayout(const QString& layoutId);
     Q_INVOKABLE void editLayoutOnScreen(const QString& layoutId, const QString& screenId);
+    /// Open the editor in scrolling-template mode for the stored template
+    /// with @p templateId; an empty id opens the editor on a new template.
+    Q_INVOKABLE void editScrollingTemplate(const QString& templateId);
     Q_INVOKABLE void openLayoutsFolder();
     Q_INVOKABLE void importLayout(const QString& filePath);
     Q_INVOKABLE void exportLayout(const QString& layoutId, const QString& filePath);
@@ -861,6 +861,9 @@ private Q_SLOTS:
     /// no page manifest can see (the per-screen overrides): latches the
     /// value-based dirty reconcile off until the next clean transition.
     void onValueBlindSettingsChanged();
+    /// Shared body of the three edit* launchers: calls a launch verb, reads
+    /// its spawned verdict, and toasts the failure the user can act on.
+    void launchEditorViaDaemon(const QString& method, const QVariantList& args);
     void loadLayoutsAsync();
     // Debounce slot: all layout-mutation D-Bus signals (layoutCreated,
     // layoutDeleted, layoutChanged, layoutPropertyChanged, layoutListChanged)
