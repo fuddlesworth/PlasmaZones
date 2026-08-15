@@ -22,8 +22,8 @@ vec4 pTransition(vec2 uv, float t) {
         return getStripColor(uv);
     }
     vec4 base = getStripColor(uv);
-    float r = getStripColor(uv + vec2(shift, 0.0)).r;
-    float b = getStripColor(uv - vec2(shift, 0.0)).b;
+    float r = getStripColor(uv + stripAxisOffset(shift)).r;
+    float b = getStripColor(uv - stripAxisOffset(shift)).b;
     // Taking r and b from neighbours while alpha comes from the centre can in
     // principle break the premultiplied invariant (rgb <= a). It cannot today:
     // the strip capture is the composited scene, opaque everywhere the strip

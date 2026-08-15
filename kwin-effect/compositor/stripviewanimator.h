@@ -130,6 +130,16 @@ public:
     /// and the motion sampler, which stay one-dimensional by design.
     qreal offsetAlongAxis(KWin::LogicalOutput* output) const;
 
+    /// Which axis that scalar runs along. Horizontal for an output this class
+    /// has never seen — the historical layout, and the only safe answer when
+    /// no batch has named the axis yet.
+    ///
+    /// Exists so a consumer holding an OUTPUT (the shader pass) can ask
+    /// without first mapping back to a screen id: the effect's own map runs
+    /// screenId -> output, so the reverse lookup would be a second, weaker
+    /// source of the same fact.
+    PhosphorProtocol::ScrollAxis axisFor(KWin::LogicalOutput* output) const;
+
     bool hasActiveAnimations() const;
     bool isAnimatingOn(KWin::LogicalOutput* output) const;
 

@@ -31,5 +31,5 @@ vec4 pTransition(vec2 uv, float t) {
     // exceeds the amplitude the stripEdgeFade budget above was sized for.
     float sy = stripUv(uv).y;
     float prof = pow(min(abs(sy - 0.5) * 2.0, 1.0), 2.0);
-    return getStripColor(uv + vec2(lag * prof, 0.0));
+    return getStripColor(uv + stripAxisOffset(lag * prof));
 }

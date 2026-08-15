@@ -122,6 +122,7 @@ StripTransitionManager::CompiledStripShader* StripTransitionManager::compiledSha
         compiled.iResolutionLoc = shader->uniformLocation("iResolution");
         compiled.iFrameLoc = shader->uniformLocation("iFrame");
         compiled.iStripMotionLoc = shader->uniformLocation("iStripMotion");
+        compiled.iStripAxisLoc = shader->uniformLocation("iStripAxis");
         compiled.iStripRectLoc = shader->uniformLocation("iStripRect");
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
             compiled.customParamsLoc[slot] = shader->uniformLocation(ShaderInternal::kCustomParamsElementNames[slot]);

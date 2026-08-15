@@ -206,6 +206,7 @@ private:
         int iResolutionLoc = -1;
         int iFrameLoc = -1;
         int iStripMotionLoc = -1;
+        int iStripAxisLoc = -1;
         int iStripRectLoc = -1;
         // Filled with -1 rather than left value-initialised: `{}` would
         // default every slot to 0, a VALID location — see the identical note

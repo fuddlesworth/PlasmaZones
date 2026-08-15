@@ -95,6 +95,27 @@ uniform vec4 iStripMotion;
 // returns 1.0 everywhere (mask nothing rather than everything).
 uniform vec4 iStripRect;
 
+// vec2 iStripAxis — a unit vector along the strip's own travel axis for THIS
+// output: (1,0) horizontal, (0,1) vertical. Pushed every frame beside
+// iStripMotion.
+//
+// It exists because iStripMotion's lanes are SIGNED SCALARS ALONG THE STRIP,
+// not along x. On a portrait monitor the strip runs top to bottom and the
+// same velocity displaces content vertically. A pack that hardcodes a
+// horizontal displacement still COMPILES and still looks right on a
+// horizontal strip; it simply smears the wrong way on a vertical one.
+//
+// Multiply displacements by this (or use stripAxisOffset below) instead of
+// writing vec2(amount, 0.0). Note .z/.w of iStripMotion are normalized by the
+// output's extent ALONG THIS AXIS, so they stay comparable across both.
+uniform vec2 iStripAxis;
+
+// A displacement of `amount` uv units along the strip's travel axis. This is
+// the axis-correct replacement for vec2(amount, 0.0).
+vec2 stripAxisOffset(float amount) {
+    return iStripAxis * amount;
+}
+
 // The captured scene FBO is KWin Y-up (origin bottom-left), while the
 // full-screen quad hands us a top-down uv, so flip Y on the sample — same
 // convention as getFromColor/getToColor on the desktop pass.
@@ -119,13 +140,17 @@ float stripMask(vec2 uv, float feather) {
     return inX * inY;
 }
 
-// 1.0 well inside the output, falling to 0.0 at the LEFT and RIGHT screen
-// edges over `span` uv units OF THE OUTPUT WIDTH (unlike stripMask's feather,
-// which is measured on the shorter axis — an easy mismatch to carry between
-// the two on a wide output). Content beyond the output edge does not exist
-// in the capture: uStrip is CLAMP_TO_EDGE, so a sample past the edge repeats
-// the last pixel column and any displaced sample there smears/stretches the
-// edge.
+// 1.0 well inside the output, falling to 0.0 at the two screen edges the
+// strip TRAVELS TOWARD — left/right on a horizontal strip, top/bottom on a
+// vertical one — over `span` uv units of the output extent along that axis
+// (unlike stripMask's feather, which is measured on the shorter axis — an
+// easy mismatch to carry between the two). Content beyond the output edge
+// does not exist in the capture: uStrip is CLAMP_TO_EDGE, so a sample past
+// the edge repeats the last pixel row/column and any displaced sample there
+// smears/stretches the edge.
+//
+// Following the axis is what makes this helper protect an UNPORTED pack for
+// free: the fade dies out in the direction the displacement actually goes.
 //
 // Every pack that displaces its sample horizontally MUST handle that edge one
 // of two ways. Either scale the displacement by this fade, with `span` at
@@ -136,7 +161,10 @@ float stripMask(vec2 uv, float feather) {
 // allowed is displacing into the clamp and showing the result.
 float stripEdgeFade(vec2 uv, float span) {
     float s = max(span, 1.0e-4);
-    return smoothstep(0.0, s, uv.x) * (1.0 - smoothstep(1.0 - s, 1.0, uv.x));
+    // The coordinate along the travel axis. dot() with the unit axis picks
+    // uv.x horizontally and uv.y vertically without a branch.
+    float along = dot(uv, iStripAxis);
+    return smoothstep(0.0, s, along) * (1.0 - smoothstep(1.0 - s, 1.0, along));
 }
 
 // The uv remapped into the strip work area: (0,0) at the rect's top-left,

@@ -34,17 +34,28 @@ vec4 pTransition(vec2 uv, float t) {
         centreX = (iStripRect.x + iStripRect.z * 0.5) / max(iResolution.x, 1.0);
         centreY = (iStripRect.y + iStripRect.w * 0.5) / max(iResolution.y, 1.0);
     }
-    float sx = uv.x - centreX;
+    // The drum turns about the axis the strip TRAVELS on, so the whole warp is
+    // written in along/across terms rather than x/y. iStripAxis is the unit
+    // vector along travel; its perpendicular is the across direction. For a
+    // horizontal strip these reduce to exactly the old uv.x / uv.y.
+    vec2 axisPerp = vec2(iStripAxis.y, iStripAxis.x);
+    vec2 centre = vec2(centreX, centreY);
+    float along = dot(uv, iStripAxis);
+    float across = dot(uv, axisPerp);
+    float centreAlong = dot(centre, iStripAxis);
+    float centreAcross = dot(centre, axisPerp);
+
+    float sx = along - centreAlong;
     float depth = 1.0 + tilt * sx * 2.0;
     // Sampling FURTHER from the centre means the content reads as compressed,
-    // so the receding side (tilt * sx > 0) squeezes horizontally. The vertical
-    // taper only ever swells the NEAR side: letting the receding side sample
-    // outward too would run the sample off the top and bottom of the capture
-    // and band those rows black, and the horizontal squeeze plus the shading
-    // below already carry the drum.
-    vec2 warped;
-    warped.x = centreX + sx * depth;
-    warped.y = centreY + (uv.y - centreY) * (1.0 + min(tilt * sx, 0.0) * 0.9);
+    // so the receding side (tilt * sx > 0) squeezes ALONG the strip. The
+    // across taper only ever swells the NEAR side: letting the receding side
+    // sample outward too would run the sample off the far edges of the capture
+    // and band those rows black, and the along squeeze plus the shading below
+    // already carry the drum.
+    float warpedAlong = centreAlong + sx * depth;
+    float warpedAcross = centreAcross + (across - centreAcross) * (1.0 + min(tilt * sx, 0.0) * 0.9);
+    vec2 warped = iStripAxis * warpedAlong + axisPerp * warpedAcross;
     vec2 su = mix(uv, warped, m);
     vec4 c = getStripColor(su);
     // Depth cue: the compressed side falls into shade, scaled with the same

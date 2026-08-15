@@ -44,7 +44,7 @@ vec4 pTransition(vec2 uv, float t) {
             continue;
         }
         float tap = (float(i) / float(kTaps - 1) - 0.5) * 2.0;
-        acc += getStripColor(uv + vec2(tap * smear, 0.0));
+        acc += getStripColor(uv + stripAxisOffset(tap * smear));
     }
     return acc / float(kTaps);
 }

@@ -372,7 +372,19 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     const qreal scale = screen->scale();
     const float offsetDevice = float(offsetLogical * scale);
     const float velocityDevice = float(velocityLogical * scale);
-    const float deviceW = float(deviceSize.width() > 0 ? deviceSize.width() : 1);
+    // Normalized by the output's extent ALONG THE STRIP AXIS, not always its
+    // width. iStripMotion .z/.w are documented as "offset/velocity as a
+    // fraction of the output", and on a vertical strip that fraction is of the
+    // height — dividing by width there would hand a pack a figure scaled by
+    // the aspect ratio, so a tuned displacement would be visibly wrong rather
+    // than merely rotated.
+    // Taken from the animator, which already holds the axis per OUTPUT and is
+    // the same source the paint translation uses. Going through a screen id
+    // would need a reverse lookup the effect's map does not provide, and would
+    // be a second source of one fact.
+    const bool vertical = m_effect->m_stripViewAnimator->axisFor(screen) == PhosphorProtocol::ScrollAxis::Vertical;
+    const float deviceAlong = vertical ? float(deviceSize.height() > 0 ? deviceSize.height() : 1)
+                                       : float(deviceSize.width() > 0 ? deviceSize.width() : 1);
 
     // The strip's work area (panels/docks excluded), output-local device px.
     // clientArea(MaximizeArea) is the same panel-excluded rect the daemon's
@@ -440,7 +452,14 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         if (cs->iStripMotionLoc >= 0) {
             cs->shader->setUniform(
                 cs->iStripMotionLoc,
-                QVector4D(offsetDevice, velocityDevice, offsetDevice / deviceW, velocityDevice / deviceW));
+                QVector4D(offsetDevice, velocityDevice, offsetDevice / deviceAlong, velocityDevice / deviceAlong));
+        }
+        if (cs->iStripAxisLoc >= 0) {
+            // Unit vector along this output's travel axis. The motion lanes
+            // above are scalars ALONG it, so a pack needs both to displace
+            // correctly — and the normalization divisor below follows the
+            // same axis for the same reason.
+            cs->shader->setUniform(cs->iStripAxisLoc, vertical ? QVector2D(0.0F, 1.0F) : QVector2D(1.0F, 0.0F));
         }
         if (cs->iStripRectLoc >= 0) {
             cs->shader->setUniform(cs->iStripRectLoc, stripRect);

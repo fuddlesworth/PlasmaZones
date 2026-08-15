@@ -140,6 +140,15 @@ qreal StripViewAnimator::offsetAlongAxis(KWin::LogicalOutput* output) const
     return it->second.committed - it->second.animation.value();
 }
 
+PhosphorProtocol::ScrollAxis StripViewAnimator::axisFor(KWin::LogicalOutput* output) const
+{
+    if (!output) {
+        return PhosphorProtocol::ScrollAxis::Horizontal;
+    }
+    const auto it = m_motions.find(output);
+    return it == m_motions.end() ? PhosphorProtocol::ScrollAxis::Horizontal : it->second.axis;
+}
+
 QPointF StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
 {
     const qreal along = offsetAlongAxis(output);
