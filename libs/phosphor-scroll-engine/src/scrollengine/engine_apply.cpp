@@ -353,6 +353,40 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     const bool dragPreviewSteersView = m_dragInsertPreview
         && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
 
+    // AXIS FLIP SWEEP, before anything reads the anchor.
+    //
+    // Written as a pure function of observed state rather than hooked to a
+    // signal, which buys four properties an event hook cannot have: it is
+    // IDEMPOTENT (a redundant retile converts nothing, since the predicate is
+    // axis inequality against the recorded basis), ORDER-FREE (whichever of
+    // the geometry change and the override push lands first, the next
+    // applyLayout sees the final params), COALESCING-SAFE (a rotate and
+    // rotate-back inside one debounce window collapses to zero work), and it
+    // handles BACKGROUND contexts lazily — a background desktop's strip
+    // converts when you switch to it, because its own recorded basis still
+    // says the old axis until then.
+    if (state->hasResolvedAxis() && state->resolvedAxis() != params.axis) {
+        // The anchor is main-axis pixels measured against a viewport extent
+        // that just changed meaning. Out-of-range anchors are LEGITIMATE under
+        // the current axis (a centred anchor implies one by design, which is
+        // why restoreViewAnchor refuses to clamp), so after a flip there is no
+        // way to tell a legitimate one from garbage. Re-derive instead of
+        // converting: centre the active column, which is the one derivation
+        // well-defined without the old viewport and puts the focused window
+        // where the user is looking.
+        state->strip().centerActiveColumn(params);
+        // Every remembered departure edge names a side of the OLD axis, so it
+        // would anchor the next arrival animation to a side the strip no
+        // longer has. Same reasoning as the float, handoff and re-adoption
+        // paths that already evict it. Screen-scoped through this state's own
+        // windows, because the map is engine-level and keyed by window id.
+        const QStringList flipped = state->strip().windowsInOrder();
+        for (const QString& windowId : flipped) {
+            m_parkedScrollEdge.remove(windowId);
+        }
+    }
+    state->setResolvedAxis(params.axis);
+
     // Re-apply the centering policy before resolving: a work-area change
     // (resolution, panels, outer gaps) or a centering-settings flip leaves
     // the stored anchor relative to the OLD width, and nothing else
@@ -490,7 +524,15 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // change while a gap slider is being dragged. The batch that follows a
     // work-area change is placing windows in a new geometry anyway, which is
     // the same situation as the first batch for a context.
-    const bool sameBasis = state->hasLastAppliedViewOffset() && state->lastAppliedWorkArea() == params.workArea;
+    // The AXIS is part of the basis, and its term is NOT redundant with the
+    // work-area compare. A rotation changes the rect's shape, so that compare
+    // already catches it — but a FLIP WITH NO GEOMETRY CHANGE does not: a
+    // settings toggle, an axis rule or a template pick routes through
+    // applyPerScreenConfig with a byte-identical work area. Without this term
+    // such a flip springs a delta measured along the old axis and the whole
+    // strip lurches.
+    const bool sameBasis = state->hasLastAppliedViewOffset() && state->lastAppliedWorkArea() == params.workArea
+        && state->lastAppliedAxis() == params.axis;
     const int rawViewDelta = sameBasis ? resolved.viewOffset - state->lastAppliedViewOffset() : 0;
     // Zero also when the viewOffset moved WITHOUT carrying anything — a width
     // change to a column LEFT of the active one shifts strip coordinates and
@@ -819,7 +861,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // batch suppressed just above leaves the compositor showing the
         // previous positions, and a baseline that moved anyway would make the
         // next batch's delta describe a slide that never happened.
-        state->setLastAppliedViewOffset(resolved.viewOffset, params.workArea);
+        state->setLastAppliedViewOffset(resolved.viewOffset, params.workArea, params.axis);
         Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
     }
 

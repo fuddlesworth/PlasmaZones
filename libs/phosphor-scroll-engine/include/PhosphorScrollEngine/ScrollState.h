@@ -140,10 +140,41 @@ public:
     {
         return m_lastAppliedWorkArea;
     }
-    void setLastAppliedViewOffset(int viewOffset, const QRect& workArea)
+    /// The AXIS the baseline was measured along. Part of the basis, not a
+    /// decoration: the view offset is a coordinate ALONG the strip, so two
+    /// offsets taken on different axes are not comparable at all.
+    StripAxis lastAppliedAxis() const
+    {
+        return m_lastAppliedAxis;
+    }
+
+    /// The axis this state was last RESOLVED against, which is a different
+    /// question from lastAppliedAxis above.
+    ///
+    /// The applied basis is stamped only on an EMITTED batch, deliberately,
+    /// so it keeps describing what the compositor is actually showing. A flip
+    /// sweep cannot key on that: a relayout suppressed by the emit-on-change
+    /// gate would leave the old axis standing and the sweep would fire again
+    /// later against a basis it already converted. This one advances on every
+    /// resolve.
+    bool hasResolvedAxis() const
+    {
+        return m_hasResolvedAxis;
+    }
+    StripAxis resolvedAxis() const
+    {
+        return m_resolvedAxis;
+    }
+    void setResolvedAxis(StripAxis axis)
+    {
+        m_resolvedAxis = axis;
+        m_hasResolvedAxis = true;
+    }
+    void setLastAppliedViewOffset(int viewOffset, const QRect& workArea, StripAxis axis)
     {
         m_lastAppliedViewOffset = viewOffset;
         m_lastAppliedWorkArea = workArea;
+        m_lastAppliedAxis = axis;
         m_hasLastAppliedViewOffset = true;
     }
     /// Invalidate the baseline entirely: the next emitted batch takes the
@@ -156,6 +187,7 @@ public:
     {
         m_lastAppliedViewOffset = 0;
         m_lastAppliedWorkArea = QRect();
+        m_lastAppliedAxis = StripAxis::horizontal();
         m_hasLastAppliedViewOffset = false;
     }
 
@@ -265,6 +297,9 @@ private:
     bool m_floatingHasFocus = false;
     int m_lastAppliedViewOffset = 0;
     QRect m_lastAppliedWorkArea;
+    StripAxis m_lastAppliedAxis;
+    StripAxis m_resolvedAxis;
+    bool m_hasResolvedAxis = false;
     bool m_hasLastAppliedViewOffset = false;
     int m_blueprintCursor = 0;
 };

@@ -216,6 +216,53 @@ private Q_SLOTS:
         AX_GUARD_SUITE();
     }
 
+    /// A monitor that ROTATES while the strip is populated. The geometry
+    /// provider hands back a portrait rect on the second pass, so Auto
+    /// resolves the other axis and the engine must not carry any old-axis
+    /// state across the flip.
+    ///
+    /// Runs on both arms: the fixture flips whichever axis it started on, so
+    /// there is nothing horizontal-specific to gate.
+    void aRotationFlipsTheAxisAndDropsOldAxisState()
+    {
+        QObject owner;
+        // Mutable geometry: the provider answers landscape until the test
+        // rotates it, which is what a real output change looks like to the
+        // engine (it subscribes to no screen signal and re-reads at relayout).
+        auto geometry = std::make_shared<QRect>(QRect(0, 0, 1200, 800));
+        ScrollEngine* engine = makeProviderEngine(&owner, {kS1}, [geometry](const QString&) {
+            return *geometry;
+        });
+
+        QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+        engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+        engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+        engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+        QVERIFY(tiled.count() > 0);
+
+        const auto rectOfEntry = [](const QJsonObject& o) {
+            return QRect(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
+                         o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
+        };
+        const QRect landscapeA = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
+        QVERIFY2(!landscapeA.isEmpty(), "precondition: a is committed before the rotation");
+        QVERIFY2(landscapeA.height() >= landscapeA.width(),
+                 "precondition: a full-height column on a landscape strip is taller than it is wide");
+
+        // Rotate. Same screen, transposed geometry.
+        *geometry = QRect(0, 0, 800, 1200);
+        engine->retile(kS1);
+
+        const QRect portraitA = rectOfEntry(lastEntryFor(tiled, QStringLiteral("app|a")));
+        QVERIFY2(!portraitA.isEmpty(), "a must still be committed after the rotation");
+        // A column on a VERTICAL strip spans the full width and takes a share
+        // of the height, so the aspect relationship inverts.
+        QVERIFY2(portraitA.width() >= portraitA.height(),
+                 qPrintable(QStringLiteral("expected a full-width row after the flip, got %1x%2")
+                                .arg(portraitA.width())
+                                .arg(portraitA.height())));
+    }
+
     // Default mode: BOTH neighbours of a centered column straddle, and both
     // are committed clamped at the SCREEN edge — deleting either clamp
     // branch, or substituting the work area for the screen rect, fails this.
