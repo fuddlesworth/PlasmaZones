@@ -27,8 +27,8 @@ class TestScrollEngineSnapshot : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    /// Proves the vertical arm really is transposed, then skips while the
-    /// engine is horizontal-only.
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
     void initTestCase()
     {
         AX_GUARD_SUITE();
@@ -49,7 +49,7 @@ private Q_SLOTS:
     void excludeSoloWindowLeavesNoActiveColumn();
     void overWideColumnClampsFractionToOne();
     void invalidWorkAreaAnswersInvalid();
-    void gapsShareTheColumnHeight();
+    void gapsShareTheColumnCrossExtent();
     void livePreviewOmitsDraggedWindow();
 
 private:
@@ -382,12 +382,15 @@ void TestScrollEngineSnapshot::invalidWorkAreaAnswersInvalid()
     QVERIFY(!snap.valid);
 }
 
-void TestScrollEngineSnapshot::gapsShareTheColumnHeight()
+void TestScrollEngineSnapshot::gapsShareTheColumnCrossExtent()
 {
     // The zero-gap fixture cannot observe a gap-dependent defect (its own
     // header says so, and that blind spot hid a real drop-indicator bug), so
     // pin the rel math under a NON-ZERO gap: two stacked tiles must NOT sum
-    // to the full column height — the gap between them takes its share.
+    // to the column's full CROSS extent — the gap between them takes its
+    // share. relRect is ROLE-normalized (x/width along the strip, y/height
+    // across it), so the .height() reads below mean the cross fraction on
+    // either axis.
     QObject owner;
     ScrollEngine* engine = ScrollTestUtils::makeGappedProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
@@ -401,13 +404,14 @@ void TestScrollEngineSnapshot::gapsShareTheColumnHeight()
     QCOMPARE(snap.columns.size(), 2);
     const ScrollStripSnapshotColumn& stacked = snap.columns.at(1);
     QCOMPARE(stacked.tiles.size(), 2);
-    const qreal topHeight = stacked.tiles.at(0).relRect.height();
-    const qreal bottomHeight = stacked.tiles.at(1).relRect.height();
-    QVERIFY(topHeight > 0.0);
-    QVERIFY(bottomHeight > 0.0);
-    QVERIFY2(topHeight + bottomHeight < 1.0, "the inner gap must take its share of the column height");
-    // And the second tile starts BELOW the first plus the gap, not flush.
-    QVERIFY(stacked.tiles.at(1).relRect.y() > topHeight);
+    const qreal leadCross = stacked.tiles.at(0).relRect.height();
+    const qreal trailCross = stacked.tiles.at(1).relRect.height();
+    QVERIFY(leadCross > 0.0);
+    QVERIFY(trailCross > 0.0);
+    QVERIFY2(leadCross + trailCross < 1.0, "the inner gap must take its share of the column's cross extent");
+    // And the second tile starts past the first plus the gap ACROSS the
+    // column, not flush against it.
+    QVERIFY(stacked.tiles.at(1).relRect.y() > leadCross);
 }
 
 void TestScrollEngineSnapshot::livePreviewOmitsDraggedWindow()

@@ -8,6 +8,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 #include <QMetaObject>
@@ -311,7 +312,16 @@ StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
     // every relayout, where the applied basis only advances on an emitted
     // batch and would be stale for a strip whose last pass the emit gate
     // suppressed.
-    out.axis = state->hasResolvedAxis() ? state->resolvedAxis().axis() : PhosphorProtocol::ScrollAxis::Horizontal;
+    //
+    // A state that has never been through applyLayout has no resolved axis
+    // yet, and that is reachable — applyLayout is deferred to the end of an
+    // arrival burst, so a save landing mid-burst sees exactly this. Resolve
+    // the screen's LIVE axis rather than assuming Horizontal, which on a
+    // portrait screen would mis-stamp the stash and make the restore drop a
+    // view anchor that was in fact still meaningful. Degrades safely either
+    // way (a wrong stamp only costs the anchor), so the fallback stays a
+    // single resolve with no state of its own.
+    out.axis = state->hasResolvedAxis() ? state->resolvedAxis().axis() : stripAxisForScreen(state->screenId()).axis();
     return out;
 }
 
@@ -796,7 +806,11 @@ void ScrollEngine::refreshConfigFromSettings()
     const qreal widthValue = settings->scrollingDefaultColumnWidthValue();
     m_defaultWidthClientDecides = (widthKind == DefaultWidthKind::ClientDecides);
     if (widthKind == DefaultWidthKind::Fixed) {
-        m_defaultColumnWidth = ColumnWidth::makeFixed(qMax(1, qRound(widthValue)));
+        // Bounded before the round, symmetric with the Proportion arm's qBound
+        // below: ISettings is an injected interface an embedder implements, so
+        // the value is untrusted, and qRound of a double past int's range is
+        // undefined.
+        m_defaultColumnWidth = ColumnWidth::makeFixed(qRound(qBound(1.0, widthValue, kMaxFixedExtentPx)));
     } else if (widthKind == DefaultWidthKind::Preset) {
         // Config stays index-based (the spin names a slot in the list the
         // user edits on the same page); the VALUE anchor is resolved here,
@@ -814,7 +828,9 @@ void ScrollEngine::refreshConfigFromSettings()
     // (Auto/Fixed/Preset, see DefaultHeightKind), so a guarded cast is fine.
     const int heightKind = settings->scrollingDefaultWindowHeightKind();
     if (heightKind == static_cast<int>(DefaultHeightKind::Fixed)) {
-        m_defaultWindowHeight = WindowHeight::makeFixed(qMax(1, qRound(settings->scrollingDefaultWindowHeightValue())));
+        // Bounded before the round, for the width twin's reason.
+        m_defaultWindowHeight = WindowHeight::makeFixed(
+            qRound(qBound(1.0, settings->scrollingDefaultWindowHeightValue(), kMaxFixedExtentPx)));
     } else if (heightKind == static_cast<int>(DefaultHeightKind::Preset)) {
         // Same idx-to-value resolution as the width twin above.
         m_defaultWindowHeight = WindowHeight::makePreset(m_presetWindowHeights.at(

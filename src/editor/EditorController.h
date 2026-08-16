@@ -1,6 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned), CEILING 1250 LINES: this is one Q_OBJECT
+// class declaration, and moc needs the whole class in a single header, so the
+// only available "split" would fragment one class across several headers and
+// cost every reader the hunt for where a property lives (the settings.h and
+// settingscontroller.h precedent). The bulk here is the Q_PROPERTY /
+// Q_INVOKABLE surface QML binds to, which cannot move without rewriting every
+// binding in src/editor/qml. The IMPLEMENTATION is already split by concern
+// under src/editor/controller/ (settings.cpp, scrollingtemplate.cpp, and
+// siblings), which is where the real per-concern boundary is.
+//
+// The ceiling is a budget, not a description of where the file sits: a new
+// declaration that would pass it has to buy its room by retiring another. Long
+// rationale belongs on the definition in the matching controller/*.cpp when it
+// will not fit here.
+
 #pragma once
 
 #include <QHash>
@@ -1066,6 +1081,15 @@ private:
     /// Per-screen StripAxis overrides, keyed by the screen id or name the
     /// group was stored under. Absent screen means "use the global value".
     QHash<QString, int> m_perScreenStripAxis;
+    /// Last value templatePreviewVertical() resolved to. The getter stamps it
+    /// on every call (hence mutable), so it is seeded by the first read and
+    /// refreshTemplatePreviewVertical() can tell a real flip from an input
+    /// change that resolves the same way.
+    mutable bool m_templatePreviewVertical = false;
+    /// Re-resolve the preview axis and emit the change signal only when the
+    /// answer actually flipped. Every input that feeds the axis routes here
+    /// rather than emitting directly.
+    void refreshTemplatePreviewVertical();
     /// Launch arguments parked by requestLaunch() while unsaved edits are
     /// pending. nullopt when nothing is awaiting confirmation.
     struct PendingLaunch

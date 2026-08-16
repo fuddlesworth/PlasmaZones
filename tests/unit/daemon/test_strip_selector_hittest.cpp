@@ -49,11 +49,17 @@ private Q_SLOTS:
         const QVector<bool> tabbed{false, false};
         const qreal inflate = 4.0;
 
-        // A point in the FIRST card's leading half. Horizontally that is the
-        // top half; transposed it is the left half, and it must still mean
-        // "join at tile index 0".
+        // A point in the FIRST card's leading half, which transposed is its
+        // LEFT half, and must still mean "join at tile index 0".
+        //
+        // Deliberately in the card's bottom-left corner rather than on its
+        // centre line. The half split reads x under the transpose and y
+        // without it, so a probe at y = 50 (this card's exact midline, which
+        // the `<=` awards to the top half) answers half 0 under BOTH readings
+        // and discriminates nothing. At y = 70 the un-transposed reading calls
+        // it half 1, so leaving the classification horizontal fails here.
         const StripSelectorHit lead =
-            classifyStripSelectorPoint(vertical, tabbed, QPointF(10, 50), inflate, /*verticalAxis=*/true);
+            classifyStripSelectorPoint(vertical, tabbed, QPointF(10, 70), inflate, /*verticalAxis=*/true);
         QCOMPARE(lead.columnIndex, 0);
         QCOMPARE(lead.half, 0);
 

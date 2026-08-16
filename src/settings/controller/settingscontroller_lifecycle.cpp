@@ -20,7 +20,6 @@
 //   * defaults()  — restore factory defaults, stage the daemon-backed
 //                   clears the config reset cannot cover, and recompute
 //                   the dirty set.
-//   * launchEditor() — fork the zone editor process.
 //   * onSettingsPropertyChanged / onExternalSettingsChanged — the
 //     two ISettings change-tracking hooks that flow into setNeedsSave.
 //
@@ -34,12 +33,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 
 #include "core/platform/logging.h"
-#include "core/types/constants.h"
 
-#include <QCoreApplication>
-#include <QFileInfo>
-#include <QProcess>
-#include <QProcessEnvironment>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -456,40 +450,6 @@ void SettingsController::defaults()
         // Through the wrapper (not a bare emit) so this path honours the
         // DirtyEmitScope coalescing like every other membership change.
         emitDirtyPagesChanged();
-    }
-}
-
-void SettingsController::launchEditor()
-{
-    // Prefer the editor next to our own executable (handles
-    // build-tree runs + non-PATH installs); fall back to a PATH
-    // lookup if not present. Logs the failure so a missing/broken
-    // editor doesn't silently produce a no-op click in the UI.
-    const QString colocated = QCoreApplication::applicationDirPath() + QLatin1String("/plasmazones-editor");
-    QString program = QFileInfo::exists(colocated) ? colocated : QStringLiteral("plasmazones-editor");
-    // Same GPU-var scrub contract as every spawn site in a GPU-exporting
-    // binary (see PGpuExportedVarsProperty in core/types/constants.h; the
-    // systemsettings-hosted KCM launcher exports nothing and stays on the
-    // plain static call). The settings
-    // app exports no GPU variables itself, so both properties are unset here
-    // and this is a no-op today — applied anyway so the spawn contract stays
-    // uniform rather than depending on the unstated who-exports-what chain.
-    QProcess process;
-    process.setProgram(program);
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    if (QCoreApplication::instance()) {
-        const QStringList gpuVars = QCoreApplication::instance()->property(PGpuExportedVarsProperty).toStringList();
-        for (const QString& var : gpuVars) {
-            env.remove(var);
-        }
-        const QVariantMap cleared = QCoreApplication::instance()->property(PGpuClearedVarsProperty).toMap();
-        for (auto it = cleared.constBegin(); it != cleared.constEnd(); ++it) {
-            env.insert(it.key(), it.value().toString());
-        }
-    }
-    process.setProcessEnvironment(env);
-    if (!process.startDetached()) {
-        qCWarning(lcCore) << "launchEditor: failed to start" << program << "— editor binary missing or not executable?";
     }
 }
 

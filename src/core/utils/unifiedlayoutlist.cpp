@@ -111,8 +111,12 @@ LayoutPreview noScrollingTemplatePreview()
 /// above. Templates have no hidden/allow-list/aspect axes today, so no context
 /// filtering applies — which also satisfies the active-selection exemption
 /// trivially (the context's assigned template is always in the list).
+///
+/// @p verticalAxis is the strip axis of the screen these rows are being built
+/// for, and it only reaches the per-screen overload. The flat management list
+/// is screen-agnostic by design, so it keeps the horizontal depiction.
 void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones::ScrollingTemplateStore* store,
-                                     bool includeNoTemplateRow)
+                                     bool includeNoTemplateRow, bool verticalAxis)
 {
     // The None row does NOT depend on the store: "use no template" is offered
     // even where there are no templates to choose between, because a screen
@@ -126,7 +130,7 @@ void appendScrollingTemplatePreviews(QVector<LayoutPreview>& list, PhosphorZones
     const QList<PhosphorZones::ScrollingTemplate> templates = store->templates();
     list.reserve(list.size() + templates.size());
     for (const PhosphorZones::ScrollingTemplate& templ : templates) {
-        LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ);
+        LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ, verticalAxis);
         preview.sectionKey = QStringLiteral("scrolling-templates");
         preview.sectionLabel = PhosphorI18n::tr("Scrolling Templates");
         preview.sectionOrder = 10;
@@ -310,8 +314,10 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry
 
     // No None row on this overload: it is the flat management list (the
     // settings app's catalogue over D-Bus), where a row standing for the
-    // absence of a template has nothing to manage.
-    appendScrollingTemplatePreviews(list, templateStore, false);
+    // absence of a template has nothing to manage. It is screen-agnostic for
+    // the same reason, so its template cards keep the horizontal depiction —
+    // there is no screen here whose axis they could mirror.
+    appendScrollingTemplatePreviews(list, templateStore, false, /*verticalAxis=*/false);
 
     sortPreviews(list, customOrder);
 
@@ -323,7 +329,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(
     const QString& screenId, int virtualDesktop, const QString& activity, bool includeManual, bool includeAutotile,
     qreal screenAspectRatio, bool filterByAspectRatio, const QStringList& customOrder,
     PhosphorLayout::ILayoutSource* autotileSource, QSize autotilePreviewCanvas, bool includeScrollingTemplates,
-    PhosphorZones::ScrollingTemplateStore* templateStore, bool includeNoTemplateRow)
+    PhosphorZones::ScrollingTemplateStore* templateStore, bool includeNoTemplateRow, bool stripVerticalAxis)
 {
     QVector<LayoutPreview> list;
 
@@ -426,7 +432,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(
     }
 
     if (includeScrollingTemplates) {
-        appendScrollingTemplatePreviews(list, templateStore, includeNoTemplateRow);
+        appendScrollingTemplatePreviews(list, templateStore, includeNoTemplateRow, stripVerticalAxis);
     }
 
     sortPreviews(list, customOrder);

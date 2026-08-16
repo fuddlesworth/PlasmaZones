@@ -16,8 +16,9 @@
 
 vec4 pTransition(vec2 uv, float t) {
     float m = stripMask(uv, p_edgeFeather);
-    // Signed velocity in output-widths per second, saturating at ~4% of the
-    // output width of bow at full wobble.
+    // Signed velocity in output-extents along the travel axis per second,
+    // saturating at ~4% of the output extent along that axis of bow at full
+    // wobble.
     float lag = clamp(iStripMotion.w * 0.06 * p_wobble, -0.04, 0.04) * m;
     // Die out before the lagged rows can sample past the screen edge, where
     // the clamped capture would stretch the last column (see stripEdgeFade).

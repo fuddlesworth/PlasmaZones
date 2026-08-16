@@ -9,10 +9,11 @@
 // size ceiling; the engine fixture is the suite-wide one in
 // scrollstriptestutils.h.
 //
-// Geometry throughout: a 1200x800 work area with no IScrollSettings (so the
-// inner gap is 0) and a 600px default column, which makes exactly two columns
-// fit — a third is parked off-screen and carries no number, which several of
-// these tests lean on.
+// Geometry throughout: the suite's shared work area, 1200 ALONG the strip and
+// 800 ACROSS it on either axis, with no IScrollSettings (so the inner gap is 0)
+// and a 600px default column, which makes exactly two columns fit. A third is
+// parked off-screen and carries no number, which several of these tests lean
+// on.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorEngine/NavigationContext.h>
@@ -71,8 +72,8 @@ class TestScrollEngineZoneNumbers : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    /// Proves the vertical arm really is transposed, then skips while the
-    /// engine is horizontal-only.
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
     void initTestCase()
     {
         AX_GUARD_SUITE();
@@ -93,16 +94,17 @@ private Q_SLOTS:
     void windowedFullscreenFeedbackPinsOnOffTokens();
 
 private:
-    /// One 1200x800 scrolling output, geometry-provider seam wired.
+    /// One scrolling output on the suite's shared geometry (1200 along the
+    /// strip, 800 across it), geometry-provider seam wired.
     static ScrollEngine* oneScreenEngine(QObject* parent)
     {
         return makeProviderEngine(parent, {QStringLiteral("S1")});
     }
 
-    /// S1 and S2 as adjacent 1200x800 outputs, both scrolling. S2 sits one
-    /// full output further ALONG THE STRIP, which is to the right of S1 on a
-    /// horizontal strip and below it on a vertical one — the same relation
-    /// SideBySideResolver answers with.
+    /// S1 and S2 as adjacent outputs on the suite's shared geometry, both
+    /// scrolling. S2 sits one full output further ALONG THE STRIP, which is to
+    /// the right of S1 on a horizontal strip and below it on a vertical one —
+    /// the same relation SideBySideResolver answers with.
     static ScrollEngine* makeTwoScreenEngine(QObject* parent)
     {
         return makeProviderEngine(parent, {QStringLiteral("S1"), QStringLiteral("S2")}, [](const QString& screenId) {
@@ -137,14 +139,14 @@ private:
 void TestScrollEngineZoneNumbers::zoneNumbersAreViewportRelativeVisibleSlots()
 {
     // Zone numbers are VIEWPORT-relative visible TILE slots, not strip
-    // indices: tiles are numbered sequentially in strip order (columns left
-    // to right, tiles top to bottom), the leftmost on-screen tile is 1
-    // regardless of how many columns are parked off-screen to its left, and
-    // a parked column's tiles have no number at all. visibleTiles is the
-    // single source: the preview rect walk, the per-window query and the
-    // Snap-to-Zone digit target all derive from it, so every visible window
-    // carries its own distinct number and every consumer addresses the same
-    // tile.
+    // indices: tiles are numbered sequentially in strip order (columns lead to
+    // trail, tiles cross-lead to cross-trail within each), the leadmost
+    // on-screen tile is 1 regardless of how many columns are parked off-screen
+    // behind it, and a parked column's tiles have no number at all.
+    // visibleTiles is the single source: the preview rect walk, the per-window
+    // query and the Snap-to-Zone digit target all derive from it, so every
+    // visible window carries its own distinct number and every consumer
+    // addresses the same tile.
     QObject owner;
     ScrollEngine* engine = oneScreenEngine(&owner);
     engine->windowOpened(wid("a"), QStringLiteral("S1"), 0, 0);
@@ -153,7 +155,7 @@ void TestScrollEngineZoneNumbers::zoneNumbersAreViewportRelativeVisibleSlots()
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")).size(), 3);
 
     // Opening focuses the newest column, so the view shows [b, c] and a is
-    // the one parked off the left. Pinned PER WINDOW: a sorted multiset of
+    // the one parked off the LEAD end. Pinned PER WINDOW: a sorted multiset of
     // {-1, 1, 2} never said WHICH window was parked, so parking the focused
     // column instead passed.
     QCOMPARE(numberOf(engine, "a"), -1);
@@ -185,7 +187,7 @@ void TestScrollEngineZoneNumbers::zoneNumbersAreViewportRelativeVisibleSlots()
     // rendered duplicate labels in every preview).
     // Focus pinned explicitly: consumeOrExpel acts on the ACTIVE column, and
     // the assertions below hold only because c's column is the consumer
-    // (it pulls its left neighbour b into the stack).
+    // (it pulls its LEAD neighbour b into the stack).
     engine->windowFocused(wid("c"), QStringLiteral("S1"));
     engine->consumeOrExpelWindow(-1, QStringLiteral("S1"));
     const QVector<ScrollEngine::VisibleTile> stacked = engine->visibleTiles(QStringLiteral("S1"));
@@ -198,11 +200,13 @@ void TestScrollEngineZoneNumbers::zoneNumbersAreViewportRelativeVisibleSlots()
     // single column's tile comes first, then the pair back to back.
     QVERIFY(stacked.at(0).columnIndex != stacked.at(1).columnIndex);
     QCOMPARE(stacked.at(1).columnIndex, stacked.at(2).columnIndex);
-    // Left to right: neither columnIndex nor rect.x ever decreases along the
-    // walk, so a reversed iteration fails here.
+    // Lead to trail: neither columnIndex nor the MAIN position ever decreases
+    // along the walk, so a reversed iteration fails here. Read by role, not as
+    // rect.x(): on a vertical strip every column shares an x, and a physical
+    // read makes this vacuous for a strip of solo columns.
     for (int i = 1; i < stacked.size(); ++i) {
         QVERIFY(stacked.at(i).columnIndex >= stacked.at(i - 1).columnIndex);
-        QVERIFY(stacked.at(i).rect.x() >= stacked.at(i - 1).rect.x());
+        QVERIFY(Ax::mainPos(stacked.at(i).rect) >= Ax::mainPos(stacked.at(i - 1).rect));
     }
 
     // The normalized twin walks the same tiles, and every rect is inside
@@ -281,13 +285,13 @@ void TestScrollEngineZoneNumbers::intraColumnDigitReordersStackMate()
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), QStringList({wid("a"), wid("x"), wid("y")}));
     QCOMPARE(engine->visibleTiles(QStringLiteral("S1")).size(), 3);
 
-    // Downward: the top tile onto the bottom slot.
+    // Cross-trailward: the cross-lead tile onto the cross-trail slot.
     engine->windowFocused(wid("a"), QStringLiteral("S1"));
     engine->moveFocusedToPosition(3, ctxFor("a"));
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), QStringList({wid("x"), wid("y"), wid("a")}));
     QCOMPARE(numberOf(engine, "a"), 3);
 
-    // Upward: and back to the top.
+    // Cross-leadward: and back to the head of the stack.
     engine->moveFocusedToPosition(1, ctxFor("a"));
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), QStringList({wid("a"), wid("x"), wid("y")}));
     QCOMPARE(numberOf(engine, "a"), 1);
@@ -332,7 +336,7 @@ void TestScrollEngineZoneNumbers::minimizedTileCarriesNoNumberAndIsSteppedOver()
     QCOMPARE(numberOf(engine, "a"), 1);
     QCOMPARE(numberOf(engine, "y"), 2);
 
-    // Press 2 from the top tile: one non-minimized step separates them, so
+    // Press 2 from the cross-lead tile: one non-minimized step separates them, so
     // the move lands a on the slot it named. Counting x as a step would ask
     // for two, run off the end of the stack, and refuse.
     engine->windowFocused(wid("a"), QStringLiteral("S1"));
@@ -531,8 +535,9 @@ void TestScrollEngineZoneNumbers::clippedEdgeTilesKeepTheirNumbers()
     // the screen, a remainder below the peek floor parks while keeping its
     // number, and crop mode applies the true rect.
     //
-    // Work area is 1200 wide with 600px columns: centering the middle one
-    // puts it at 300..900, leaving the outer two at -300..300 and 900..1500.
+    // Work area runs 1200 ALONG the strip with 600px columns: centering the
+    // middle one puts it at main 300..900, leaving the outer two at -300..300
+    // and 900..1500.
     QObject owner;
     ScrollEngine* engine = oneScreenEngine(&owner);
     engine->windowOpened(wid("a"), QStringLiteral("S1"), 0, 0);
@@ -567,8 +572,8 @@ void TestScrollEngineZoneNumbers::clippedEdgeTilesKeepTheirNumbers()
 
 void TestScrollEngineZoneNumbers::crossOutputMoveKeepsHeightAndAnnouncesOnDestination()
 {
-    // Moving off the strip's right edge migrates the window to the adjacent
-    // scrolling output: it enters at the facing edge (column 0 for a "right"
+    // Moving off the strip's TRAIL edge migrates the window to the adjacent
+    // scrolling output: it enters at the facing edge (column 0 for a trailward
     // crossing), keeps the user's height intent, and the success feedback
     // names the DESTINATION screen — the source no longer holds the window
     // the OSD is about.
@@ -679,8 +684,10 @@ void TestScrollEngineZoneNumbers::crossOutputSwapTradesSlotsWithStackedSource()
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), wid("p")), 0);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")), QStringList({wid("a"), wid("p")}));
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S2"), wid("b")), 0);
-    // A Preset height resolves against the column height, which is the work
-    // area height on both outputs, so the surviving intent reads identically.
+    // A Preset height resolves against the column's CROSS extent, which is the
+    // work area's cross extent on both outputs, so the surviving intent reads
+    // identically. Compared through Ax::crossLen for that reason: on a vertical
+    // strip the column's cross extent is its physical WIDTH.
     QCOMPARE(Ax::crossLen(engine->lastManagedRect(wid("p"))), partnerHeight);
 
     QCOMPARE(feedback.count(), 1);

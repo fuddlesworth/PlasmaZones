@@ -352,6 +352,13 @@ SettingsFlickable {
             root._refresh();
         }
 
+        // The empty-strip sketch is drawn along the selected screen's resolved
+        // strip axis, and a per-monitor StripAxis override changes that answer
+        // without touching anything else this page reads.
+        function onPerScreenOverridesChanged() {
+            root._revision++;
+        }
+
         // The daemon going away mid-session leaves the last read on screen
         // with nothing saying it is stale, and coming back leaves it stale the
         // other way. Either transition is worth one re-read (which _refresh
@@ -519,44 +526,56 @@ SettingsFlickable {
             // daemon mode is not scrolling, so what is retained is always
             // THIS context's last strip.
             property var scrollingStripZones: []
+            // Which way the selected screen's strip runs, resolved through the
+            // same ladder the engine walks (per-screen override, global value,
+            // then the Auto rule). The invokable is opaque to the binding, so
+            // the global setting is read here explicitly and the per-monitor
+            // override arrives through the _revision bump on
+            // perScreenOverridesChanged.
+            readonly property bool stripVertical: {
+                void root._revision;
+                void appSettings.scrollingStripAxis;
+                return settingsController.scrollingStripVerticalForScreen(root._selectedScreen);
+            }
             // Representative endless strip: a full column mid-view with a
             // clipped column at each edge, so the sketch reads as a window
-            // onto a longer strip rather than a fixed zone layout.
-            readonly property var scrollingFallbackZones: [
-                {
-                    "id": "strip:fallback:0",
-                    "name": "",
-                    "useCustomColors": false,
-                    "relativeGeometry": {
-                        "x": 0,
-                        "y": 0,
-                        "width": 0.1,
-                        "height": 1
+            // onto a longer strip rather than a fixed zone layout. The three
+            // fractions and their transposition are the twin of
+            // StripZones::sketchRects (src/daemon/daemon/stripzones.h), so the
+            // Monitors page and the OSD card draw the same shape for the same
+            // empty strip. On a vertical strip the same three bands stack
+            // instead of sitting in a row: drawing the horizontal sketch there
+            // would depict a direction that screen never takes.
+            readonly property var scrollingFallbackZones: {
+                const spans = [
+                    {
+                        "offset": 0,
+                        "extent": 0.1
+                    },
+                    {
+                        "offset": 0.115,
+                        "extent": 0.5
+                    },
+                    {
+                        "offset": 0.63,
+                        "extent": 0.37
                     }
-                },
-                {
-                    "id": "strip:fallback:1",
-                    "name": "",
-                    "useCustomColors": false,
-                    "relativeGeometry": {
-                        "x": 0.115,
-                        "y": 0,
-                        "width": 0.5,
-                        "height": 1
-                    }
-                },
-                {
-                    "id": "strip:fallback:2",
-                    "name": "",
-                    "useCustomColors": false,
-                    "relativeGeometry": {
-                        "x": 0.63,
-                        "y": 0,
-                        "width": 0.37,
-                        "height": 1
-                    }
-                }
-            ]
+                ];
+                const vertical = stateView.stripVertical;
+                return spans.map(function (span, index) {
+                    return {
+                        "id": "strip:fallback:" + index,
+                        "name": "",
+                        "useCustomColors": false,
+                        "relativeGeometry": {
+                            "x": vertical ? 0 : span.offset,
+                            "y": vertical ? span.offset : 0,
+                            "width": vertical ? 1 : span.extent,
+                            "height": vertical ? span.extent : 1
+                        }
+                    };
+                });
+            }
 
             // Fetch the live strip for the current selection. The daemon's
             // strip is briefly empty while a mode flip's re-announce batch is

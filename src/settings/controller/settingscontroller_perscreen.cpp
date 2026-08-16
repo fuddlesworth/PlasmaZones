@@ -20,9 +20,15 @@
 
 #include "settingscontroller.h"
 
+#include "config/configdefaults.h"
 #include "config/settings.h"
+#include "core/interfaces/settings_interfaces.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
+#include <PhosphorScreens/ScreenIdentity.h>
+
+#include <QScreen>
 
 namespace PlasmaZones {
 
@@ -105,6 +111,43 @@ void SettingsController::clearPerScreenScrollingSizingSettings(const QString& sc
 bool SettingsController::hasPerScreenScrollingSizingSettings(const QString& screenName) const
 {
     return m_settings.hasPerScreenScrollingSizingSettings(screenName);
+}
+
+bool SettingsController::scrollingStripVerticalForScreen(const QString& screenName) const
+{
+    // The same ladder the engine walks (per-screen override, then the global
+    // value, then the Auto rule), so a preview cannot claim a direction the
+    // strip will not take. The Auto arm is measured against the screen rect
+    // rather than the gap-adjusted work area the engine uses: the settings app
+    // does not resolve per-screen gaps, and the two disagree only for a screen
+    // whose reserved panels are deep enough to flip the longer side. Same
+    // approximation EditorController::templatePreviewVertical() makes for the
+    // template preview.
+    //
+    // The override is looked up under EVERY spelling of the screen (id and
+    // connector name): per-screen groups are stored under whichever the user's
+    // config carried, and callers here pass whichever they hold.
+    QVariant axisOverride;
+    const QStringList spellings = PhosphorScreens::ScreenIdentity::variantsFor(screenName);
+    for (const QString& spelling : spellings) {
+        const QVariantMap overrides = m_settings.getPerScreenScrollingSettings(spelling);
+        axisOverride = overrides.value(QLatin1String(PerScreenScrollingKey::StripAxis));
+        if (axisOverride.isValid())
+            break;
+    }
+    const int configured = axisOverride.isValid() ? axisOverride.toInt() : m_settings.scrollingStripAxis();
+
+    if (configured == ConfigDefaults::scrollingStripAxisVertical())
+        return true;
+    if (configured == ConfigDefaults::scrollingStripAxisHorizontal())
+        return false;
+
+    // Auto, and any out-of-range value a hand-edited config could carry.
+    QScreen* screen = PhosphorScreens::ScreenIdentity::findByIdOrName(screenName);
+    if (!screen)
+        return false;
+    const QSize size = screen->geometry().size();
+    return PhosphorProtocol::autoScrollAxisFor(size.width(), size.height()) == PhosphorProtocol::ScrollAxis::Vertical;
 }
 
 // ── Per-screen gap overrides (config-backed) ─────────────────────────────

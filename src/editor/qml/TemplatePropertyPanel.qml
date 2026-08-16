@@ -182,7 +182,7 @@ Rectangle {
                     valueRole: "value"
                     model: [
                         {
-                            "text": i18nc("@item:inlistbox default width kind", "Fraction of the strip"),
+                            "text": i18nc("@item:inlistbox default width kind", "Proportion of the strip"),
                             "value": templatePanel.constants.kindProportion
                         },
                         {
@@ -215,7 +215,20 @@ Rectangle {
                     from: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMin) : templatePanel.proportionMinPercent
                     to: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMax) : templatePanel.proportionMaxPercent
                     textFromValue: (value, locale) => defaultWidthValueSpin.isFixed ? String(value) : i18nc("@info:spinbox width percentage", "%1%", value)
-                    valueFromText: (text, locale) => parseInt(text)
+                    // Locale-aware on purpose: parseInt reads only ASCII
+                    // digits and a locale that writes its numbers any other
+                    // way would parse as NaN and poison the value. The percent
+                    // sign textFromValue adds is stripped first, and text the
+                    // locale cannot parse keeps the current value rather than
+                    // committing NaN.
+                    valueFromText: (text, locale) => {
+                        const trimmed = text.replace(locale.percent, "").trim();
+                        try {
+                            return Math.round(Number.fromLocaleString(locale, trimmed));
+                        } catch (e) {
+                            return defaultWidthValueSpin.value;
+                        }
+                    }
                     onActiveFocusChanged: {
                         // A fresh focus session is a fresh undo gesture: the
                         // model merges consecutive value commits under one

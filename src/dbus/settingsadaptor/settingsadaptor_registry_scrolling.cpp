@@ -382,6 +382,13 @@ void SettingsAdaptor::initializeRegistryScrolling()
         // a non-numeric payload. The closed-set check matters more here than
         // usual: a coerced 0 would silently mean Auto and quietly undo the
         // user's explicit choice.
+        //
+        // Registered in the CONCRETE block only because the SETTER is
+        // concrete-only; the getter is already an IScrollSettings virtual. That
+        // is the pattern isettings.h calls "a backlog to hoist, not a second
+        // sanctioned pattern", so this entry belongs on that hoist backlog:
+        // once ISettings carries a setScrollingStripAxis virtual it moves up to
+        // the ISettings-level block above with its siblings.
         m_getters[QStringLiteral("scrollingStripAxis")] = [concrete]() {
             return concrete->scrollingStripAxis();
         };

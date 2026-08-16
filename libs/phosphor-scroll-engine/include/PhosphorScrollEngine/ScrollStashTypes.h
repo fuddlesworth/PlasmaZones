@@ -6,6 +6,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 
 #include <QString>

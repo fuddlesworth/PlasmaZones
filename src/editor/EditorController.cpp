@@ -70,10 +70,12 @@ EditorController::EditorController(QObject* parent)
 
     // The template preview's axis is derived from the target screen (its
     // per-screen override, and its size under Auto), so it re-resolves
-    // whenever the target moves. The settings-load path emits this too, for
-    // the other input: the config values themselves.
-    connect(this, &EditorController::targetScreenChanged, this, &EditorController::templatePreviewVerticalChanged);
-    connect(this, &EditorController::targetScreenSizeChanged, this, &EditorController::templatePreviewVerticalChanged);
+    // whenever the target moves. The settings-load path re-resolves it too,
+    // for the other input: the config values themselves. Both go through the
+    // refresh rather than straight at the signal, so an input change that
+    // resolves to the same axis announces nothing.
+    connect(this, &EditorController::targetScreenChanged, this, &EditorController::refreshTemplatePreviewVertical);
+    connect(this, &EditorController::targetScreenSizeChanged, this, &EditorController::refreshTemplatePreviewVertical);
 
     // Begin watching rules.json for external writes. The editor has no
     // D-Bus rules-reload path, so without this its m_localRuleStore would serve

@@ -190,21 +190,27 @@ private Q_SLOTS:
     void aThinRemainderParksInsteadOfPeeking_data()
     {
         QTest::addColumn<int>("axisValue");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+        QTest::addColumn<QString>("expectedEdge");
+        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal) << QStringLiteral("right");
+        QTest::newRow("vertical") << int(ScrollAxis::Vertical) << QStringLiteral("bottom");
     }
 
     /// Below the peek floor the straddler parks rather than committing a
-    /// sliver the client's minimum would immediately fight.
+    /// sliver the client's minimum would immediately fight. The edge is
+    /// pinned, not merely required non-empty: this tile straddles the TRAILING
+    /// end, so an arm that parks it with the leading edge is as wrong as one
+    /// that emits nothing, and only the exact value tells them apart.
     void aThinRemainderParksInsteadOfPeeking()
     {
         QFETCH(int, axisValue);
+        QFETCH(QString, expectedEdge);
         const auto a = static_cast<ScrollAxis>(axisValue);
 
         // Only 10px of main extent left on screen, under the 48px floor.
         const ParkResult r = resolveTilePlacement(inputsFor(a, roleRect(a, 1190, 400)), QString());
         QVERIFY(r.parked);
-        QVERIFY(!r.emittedEdge.isEmpty());
+        QCOMPARE(r.emittedEdge, expectedEdge);
+        QCOMPARE(r.rememberedEdge.value_or(QString()), expectedEdge);
     }
 
     void arrivingOnScreenConsumesTheRememberedEdge_data()
@@ -255,16 +261,47 @@ private Q_SLOTS:
         QCOMPARE(r.rememberedEdge.value_or(QString()), QStringLiteral("carried"));
     }
 
-    /// parkRect is deliberately physical on both axes: its safety claim is
-    /// "below every output", which is about the desktop, not the strip.
-    void parkIsPhysicalOnBothAxes()
+    /// parkRect is deliberately physical: its safety claim is "below every
+    /// output", which is about the desktop, not the strip. It takes no axis
+    /// at all, so there is nothing here to run twice.
+    ///
+    /// The horizontal-span half of its contract is asserted too. Dropping to
+    /// parkTop alone would satisfy the vertical claim while leaving a parked
+    /// rect hanging off the side of its own screen, which is the case that
+    /// puts it under a NEIGHBOUR output instead of under nothing.
+    void parkIsPhysicalAndStaysInItsScreensSpan()
     {
-        for (const auto a : {ScrollAxis::Horizontal, ScrollAxis::Vertical}) {
-            QRect rect(100, 100, 300, 200);
-            parkRect(rect, screenFor(a), 5000);
-            QCOMPARE(rect.top(), 5000);
-            QCOMPARE(rect.size(), QSize(300, 200));
-        }
+        const QRect screen = screenFor(ScrollAxis::Horizontal);
+
+        // Already inside the span: only the vertical move happens.
+        QRect inside(100, 100, 300, 200);
+        parkRect(inside, screen, 5000);
+        QCOMPARE(inside.top(), 5000);
+        QCOMPARE(inside.left(), 100);
+        QCOMPARE(inside.size(), QSize(300, 200));
+
+        // Hanging off the trailing side: pulled back so its far edge sits on
+        // the screen's, size untouched.
+        QRect offTrail(1100, 100, 300, 200);
+        parkRect(offTrail, screen, 5000);
+        QCOMPARE(offTrail.top(), 5000);
+        QCOMPARE(offTrail.right(), screen.right());
+        QCOMPARE(offTrail.size(), QSize(300, 200));
+
+        // Hanging off the leading side: pushed back to the screen's near edge.
+        QRect offLead(-500, 100, 300, 200);
+        parkRect(offLead, screen, 5000);
+        QCOMPARE(offLead.top(), 5000);
+        QCOMPARE(offLead.left(), screen.left());
+        QCOMPARE(offLead.size(), QSize(300, 200));
+
+        // Wider than the screen: it cannot fit, so the near edge wins and the
+        // rect is never shrunk to make it fit.
+        QRect oversized(-100, 100, 1500, 200);
+        parkRect(oversized, screen, 5000);
+        QCOMPARE(oversized.top(), 5000);
+        QCOMPARE(oversized.left(), screen.left());
+        QCOMPARE(oversized.size(), QSize(1500, 200));
     }
 };
 

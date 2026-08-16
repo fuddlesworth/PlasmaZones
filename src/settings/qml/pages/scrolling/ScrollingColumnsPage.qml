@@ -16,10 +16,9 @@ import "../../js/PresetList.js" as PresetList
  * (the Columns sub-domain of the per-screen scrolling map). Templates own
  * both the preset vocabularies the cycling shortcuts step through and the
  * DEFAULT template itself, so neither is edited here: a template is made
- * default from its card's context menu on the Layouts page, beside the
- * default zone layout and the default tiling algorithm. Every row on this
- * page answers only for screens whose template does not override it, which
- * is what the width and display descriptions say.
+ * default from its card's context menu on Scrolling → Templates. Every row
+ * on this page answers only for screens whose template does not override it,
+ * which is what the width and display descriptions say.
  *
  * This page decides WHICH columns open tabbed (the display row on the New
  * columns card). How a tabbed column's indicator is drawn is the Tabs leaf.
@@ -193,7 +192,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Fixed width")
                     searchAnchor: "defaultColumnWidthFixed"
-                    description: i18n("How many pixels wide a new column is")
+                    description: i18n("How many pixels a new column takes along the strip")
                     enabled: newColumnsCard.effectiveWidthKind === root.widthKindFixed
                     visible: true
 
@@ -291,7 +290,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Fixed height")
                     searchAnchor: "defaultWindowHeightFixed"
-                    description: i18n("How many pixels tall a new window is")
+                    description: i18n("How many pixels a new window takes across the strip")
                     enabled: newColumnsCard.effectiveHeightKind === root.heightKindFixed
                     visible: true
 
@@ -375,7 +374,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Column widths")
                     searchAnchor: "presetColumnWidths"
-                    description: i18n("Percentages of the work area width, cycled in this order by the preset shortcuts")
+                    description: i18n("Percentages of the work area along the strip, cycled in this order by the preset shortcuts")
                 }
 
                 PresetListEditor {
@@ -397,7 +396,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Window heights")
                     searchAnchor: "presetWindowHeights"
-                    description: i18n("Percentages of the work area height, cycled in this order by the preset shortcuts")
+                    description: i18n("Percentages of the work area across the strip, cycled in this order by the preset shortcuts")
                 }
 
                 PresetListEditor {

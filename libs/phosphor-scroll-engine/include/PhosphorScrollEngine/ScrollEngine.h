@@ -24,12 +24,14 @@
 
 #include <QHash>
 #include <QJsonObject>
+#include <QList>
 #include <QObject>
 #include <QRect>
 #include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
+#include <QVector>
 
 #include <functional>
 #include <optional>
@@ -51,8 +53,9 @@ namespace PhosphorScrollEngine {
  *
  * Implements IPlacementEngine for screens assigned to Scrolling mode. Each
  * (screen, virtual desktop, activity) context owns one ScrollState wrapping a
- * ScrollStrip — an ordered list of columns on an unbounded horizontal strip
- * viewed through the screen's work area. The defining invariant: OPENING A
+ * ScrollStrip — an ordered list of columns on an unbounded strip, running
+ * whichever way that screen's axis resolves, viewed through the screen's work
+ * area. The defining invariant: OPENING A
  * WINDOW INSERTS A NEW COLUMN AND RESIZES NOTHING; only the viewport scrolls.
  *
  * Geometry leaves the engine as the same windowsTiled JSON contract the
@@ -207,7 +210,8 @@ public:
     void moveColumnToLast(const QString& screenId);
     void consumeWindowIntoColumn(const QString& screenId);
     void expelWindowFromColumn(const QString& screenId);
-    /// delta -1 = left, +1 = right (niri consume-or-expel-window-left/right).
+    /// delta -1 = towards the strip's start, +1 = towards its end (niri
+    /// consume-or-expel-window-left/right).
     void consumeOrExpelWindow(int delta, const QString& screenId);
     void centerColumn(const QString& screenId);
     void toggleColumnTabbed(const QString& screenId);
@@ -223,7 +227,7 @@ public:
     void reapplyWindowGeometry(const QString& windowId);
     /// delta -1/+1 through the preset width list.
     void cycleColumnPresetWidth(int delta, const QString& screenId);
-    /// deltaPercent of the work-area width (e.g. +10 / -10).
+    /// deltaPercent of the work area's MAIN extent (e.g. +10 / -10).
     void adjustColumnWidth(qreal deltaPercent, const QString& screenId);
     void toggleMaximizeColumn(const QString& screenId);
     void expandColumnToAvailableWidth(const QString& screenId);
@@ -252,6 +256,34 @@ public:
     /// with an absolute value). D-Bus surface; no shortcut carries a value.
     void setColumnWidth(const ColumnWidth& width, const QString& screenId);
     void setWindowHeight(const WindowHeight& height, const QString& screenId);
+
+    /// Which way @p screenId's strip runs, resolved live.
+    ///
+    /// THE single source of the resolved axis for everything outside the
+    /// layout path — the daemon publishes it to the effect, and the strip
+    /// selector draws its miniature with it. Neither may derive an aspect
+    /// ratio of its own: two independent derivations can disagree on a
+    /// near-square monitor, and that disagreement is invisible in tests and
+    /// intermittent in the field.
+    ///
+    /// Resolves the work area LIVE. The engine subscribes to no ScreenManager
+    /// signal, so answering from a snapshot taken at the last relayout would
+    /// hand out the PRE-rotation axis at exactly the moment a rotation makes
+    /// someone ask.
+    StripAxis stripAxisForScreen(const QString& screenId) const;
+
+    /// Focus the previous/next column ALONG THE STRIP, for callers holding a
+    /// strip-relative intent rather than a physical direction. The wheel is
+    /// the one that matters: the effect collapses both physical wheel axes
+    /// onto a single +/-1 before it ever reaches D-Bus.
+    ///
+    /// The physical token is synthesized HERE from the screen's own axis,
+    /// which is the whole point — a caller that spelled "left"/"right" itself
+    /// would walk the STACK on a vertical strip. Deliberately not routed
+    /// through focusColumnPlain: that verb stops at the strip edge, and the
+    /// wheel's documented contract is that a notch at the edge crosses onto
+    /// the adjacent output.
+    void focusColumnByDelta(int delta, const QString& screenId);
 
     // ═══════════════════════════════════════════════════════════════════════
     // State access / ordering / tracking
@@ -282,7 +314,8 @@ public:
     /// number order. Not every on-screen window is here: hidden tabs of a
     /// tabbed column, minimized tiles, parked columns, and tiles whose
     /// intersection with the work area is EMPTY (a stack whose min heights
-    /// overflow the work area resolves its tail below the bottom edge) all
+    /// overflow the work area resolves its tail beyond the work area's far
+    /// cross edge) all
     /// carry no number and cannot be reached by a digit. Partially-visible
     /// columns are CLIPPED, not dropped: an arbitrarily thin sliver still
     /// carries its own number, because the cut-off edge is what tells the
@@ -382,11 +415,15 @@ public:
     int pruneStaleWindows(const QSet<QString>& aliveWindowIds) override;
 
     // Layout capability (see IPlacementEngine's Layout capability section)
-    /// The strip consumes layouts as sizing TEMPLATES: a layout's zone
-    /// x-extents become the screen's preset column-width vocabulary (and its
-    /// stacked-zone heights the height vocabulary, when it defines any),
-    /// never window placement. Explicit override — the capability is load-bearing
-    /// for the daemon's layout-selection gates, not an inherited absence.
+    /// The strip consumes layouts as sizing TEMPLATES, never as window
+    /// placement: the screen's assigned ScrollingTemplate is the sizing
+    /// vocabulary. Its STORED preset lists (presetColumnWidths /
+    /// presetWindowHeights) become the screen's preset column-width and
+    /// window-height vocabularies, pushed straight through by the daemon, and
+    /// its seed blueprint prescribes the columns the strip opens with. No
+    /// geometry is derived from a layout's zones. Explicit override — the
+    /// capability is load-bearing for the daemon's layout-selection gates, not
+    /// an inherited absence.
     LayoutSupport layoutSupport() const override
     {
         return LayoutSupport::Templates;
@@ -489,14 +526,15 @@ public:
     /// `primary` = column index; `newSlot` true opens a NEW column at
     /// `primary`; otherwise the window joins column `primary` as tile
     /// `secondary` (a MODEL-column tile index — minimized tiles count).
-    /// Zone map, symmetric by construction: a visible column's SIDE bands
-    /// open a new column at that column's own spot (it steps aside and the
-    /// indicator covers it), its middle joins it, and each inter-column
-    /// boundary belongs to exactly one band — the right neighbour's left
-    /// band. Only the view's two extremes differ: the first visible
-    /// column's left band (plus everything left of it) aims the leading
-    /// slot as a past-the-edge hint (`leadingEdge`), and the last visible
-    /// column's right band (plus everything right of it) appends after the
+    /// Zone map, symmetric by construction: a visible column's two END bands
+    /// along the strip open a new column at that column's own spot (it steps
+    /// aside and the indicator covers it), its middle joins it, and each
+    /// inter-column boundary belongs to exactly one band — the following
+    /// neighbour's LEADING band. Only the view's two extremes differ: the
+    /// first visible column's LEADING band (plus everything before it along
+    /// the strip) aims the leading slot as a past-the-edge hint
+    /// (`leadingEdge`), and the last visible column's TRAILING band (plus
+    /// everything after it) appends after the
     /// strip. The dragged window is DETACHED while a preview is live, so
     /// the strip hit-tested here is stable across ticks and no own-slot
     /// special case exists (nothing the cursor hovers can be the dragged
@@ -747,35 +785,6 @@ Q_SIGNALS:
     /// urgency, adds the paint settings, and drives the overlay.
     void tabStripsChanged(const QString& screenId, const QString& stripsJson);
 
-public:
-    /// Which way @p screenId's strip runs, resolved live.
-    ///
-    /// THE single source of the resolved axis for everything outside the
-    /// layout path — the daemon publishes it to the effect, and the strip
-    /// selector draws its miniature with it. Neither may derive an aspect
-    /// ratio of its own: two independent derivations can disagree on a
-    /// near-square monitor, and that disagreement is invisible in tests and
-    /// intermittent in the field.
-    ///
-    /// Resolves the work area LIVE. The engine subscribes to no ScreenManager
-    /// signal, so answering from a snapshot taken at the last relayout would
-    /// hand out the PRE-rotation axis at exactly the moment a rotation makes
-    /// someone ask.
-    StripAxis stripAxisForScreen(const QString& screenId) const;
-
-    /// Focus the previous/next column ALONG THE STRIP, for callers holding a
-    /// strip-relative intent rather than a physical direction. The wheel is
-    /// the one that matters: the effect collapses both physical wheel axes
-    /// onto a single +/-1 before it ever reaches D-Bus.
-    ///
-    /// The physical token is synthesized HERE from the screen's own axis,
-    /// which is the whole point — a caller that spelled "left"/"right" itself
-    /// would walk the STACK on a vertical strip. Deliberately not routed
-    /// through focusColumnPlain: that verb stops at the strip edge, and the
-    /// wheel's documented contract is that a notch at the edge crosses onto
-    /// the adjacent output.
-    void focusColumnByDelta(int delta, const QString& screenId);
-
 private:
     // engine_core.cpp
     QString canonicalizeForLookup(const QString& rawWindowId) const;
@@ -892,10 +901,6 @@ private:
     /// collapsed to a resolved axis, with Auto derived from @p workArea.
     StripAxis effectiveStripAxis(const QVariantMap& overrides, const QRect& workArea) const;
 
-    /// Cached tri-state intent from the global config. NEVER the resolved
-    /// axis: under Auto two screens with no per-screen key resolve
-    /// differently, so a cached verdict would hand one monitor the other's.
-    int m_stripAxis = 0;
     /// visibleTiles' real body, taking params the caller already resolved.
     /// The public overload is the thin wrapper; callers that hold params
     /// (the digit path, the normalized-rect walk) use this instead of paying
@@ -1034,6 +1039,10 @@ private:
     QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0};
     QList<qreal> m_presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0};
     CenterFocusedColumn m_centerFocusedColumn = CenterFocusedColumn::Never;
+    /// Cached tri-state intent from the global config. NEVER the resolved
+    /// axis: under Auto two screens with no per-screen key resolve
+    /// differently, so a cached verdict would hand one monitor the other's.
+    int m_stripAxis = 0;
     bool m_alwaysCenterSingleColumn = false;
     /// Crop mode: keep TRUE rects for partial edge columns and rely on the
     /// effect forcing GL composition + per-output culling to crop the
@@ -1078,9 +1087,12 @@ private:
     /// rect memory forces an emit, and that batch carries the current
     /// model flag.
     QSet<QString> m_lastAppliedWindowedFs;
-    /// Which screen edge each currently-parked window went out by ("left" /
-    /// "right"), so that when it scrolls back INTO the viewport the batch can
-    /// tell the effect which side to animate it in from. Remembered rather
+    /// Which screen edge each currently-parked window went out by — one of
+    /// "left", "right", "top" or "bottom". Which PAIR is in play is decided by
+    /// the screen's strip axis: a horizontal strip goes out left/right, a
+    /// vertical one top/bottom. So that when the window scrolls back INTO the
+    /// viewport the batch can tell the effect which side to animate it in
+    /// from. Remembered rather
     /// than derived: the park position is direction-agnostic, so the parked
     /// rect cannot answer. The write/consume/eviction contract (including
     /// the two deliberate rect-drop exceptions) is documented at the park

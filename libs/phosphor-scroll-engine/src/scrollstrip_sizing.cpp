@@ -107,6 +107,14 @@ bool ScrollStrip::toggleMaximizeActiveColumn(const ScrollLayoutParams& params)
     if (!col) {
         return false;
     }
+    // Degenerate work area, the same bail its three sibling width verbs take.
+    // This one writes PERSISTED intent: with a zero main extent the
+    // full-width compare below reads true for anything, and the branch would
+    // overwrite the column's stored width with a half-work-area proportion
+    // and report success against a viewport that does not exist.
+    if (params.axis.mainSize(params.workArea) <= 0) {
+        return false;
+    }
     const ColumnWidth full = ColumnWidth::makeProportion(1.0);
     if (m_preMaximizeColumnIdx == m_activeColumnIdx && col->width == full) {
         col->width = m_preMaximizeWidth;

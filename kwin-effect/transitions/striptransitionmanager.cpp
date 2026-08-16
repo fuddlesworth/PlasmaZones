@@ -55,7 +55,7 @@ StripTransitionManager::~StripTransitionManager()
 }
 
 void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params,
-                                       int viewDelta)
+                                       int viewDelta, PhosphorProtocol::ScrollAxis axis)
 {
     if (!output) {
         return;
@@ -91,8 +91,16 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
     }
     // This runs BEFORE the batch's applyBatchDelta (the caller's ordering
     // contract, see the header), so "spring not live" here means a FRESH
-    // leg is about to start rather than a retarget of a running one.
+    // leg is about to start rather than a retarget of a running one — and
+    // axisFor() still reports the axis the spring was built on, which is the
+    // only moment the two can be compared.
     const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(output);
+    // An axis FLIP is a fresh leg, not a retarget: applyBatchDelta is about to
+    // cancel the spring and zero its accumulator rather than retarget it, so
+    // the sampler's baseline (measured along the old axis) has nothing left to
+    // be compensated against and the next sample would read the discontinuity
+    // as velocity.
+    const bool axisFlipped = axis != m_effect->m_stripViewAnimator->axisFor(output);
     if (it == m_active.end()) {
         OutputStripPass pass;
         pass.effectId = effectId;
@@ -101,12 +109,12 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
         return;
     }
     OutputStripPass& pass = it->second;
-    if (!springLive || pass.effectId != effectId) {
+    if (!springLive || axisFlipped || pass.effectId != effectId) {
         // Fresh leg on a stale armed entry (spring cleared outside the
-        // paint bracket: animations toggled, teardown races), or a pack
-        // SWAP mid-flight — either way the new pass must not inherit the
-        // old one's clock, frame count or velocity. The capture texture
-        // stays (size/format revalidation owns its lifetime).
+        // paint bracket: animations toggled, teardown races), an AXIS FLIP,
+        // or a pack SWAP mid-flight — in every case the new pass must not
+        // inherit the old one's clock, frame count or velocity. The capture
+        // texture stays (size/format revalidation owns its lifetime).
         pass.motion.reset();
         pass.frameCount = 0;
     } else {
@@ -164,7 +172,15 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     if (it == m_active.end()) {
         return false;
     }
-    OutputStripPass& pass = it->second;
+    // POINTER, not a reference, and re-seated after the capture below: the
+    // capture re-enters the scene through KWin::effects->paintScreen, and
+    // nothing may hold an m_active reference across that. No mutator of
+    // m_active is reachable from inside the nested walk today (the walk only
+    // re-enters our paintWindow), so this is structural rather than a live
+    // fix — but every other `it`/`pass` lifetime in this function is spelled
+    // out for the same reason, and an invalidation here would be a
+    // use-after-free in the paint path.
+    OutputStripPass* pass = &it->second;
     // Pinned per-pass clock (one timestamp per output pass; re-sampling per
     // call is the multi-pass ghosting trap the pin exists for). -1 means a
     // caller outside any bracket, which cannot happen from paintScreen, but
@@ -174,7 +190,7 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         nowMs = ShaderInternal::shaderClockNowMs();
     }
     const bool springLive = m_effect->m_stripViewAnimator->isAnimatingOn(screen);
-    if (!springLive && !pass.motion.holdsAfterSettle(nowMs)) {
+    if (!springLive && !pass->motion.holdsAfterSettle(nowMs)) {
         // Settled with the fade closed (or killed while idle) — fall
         // through to the normal scene THIS frame; reapSettled frees the
         // entry from postPaintScreen.
@@ -186,7 +202,7 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // pass only to throw it away when the shader turns out not to compile —
     // and the failure sentinel stops re-COMPILES, not re-captures, so that
     // waste would repeat every frame for the rest of the leg.
-    CompiledStripShader* cs = compiledShader(pass.effectId);
+    CompiledStripShader* cs = compiledShader(pass->effectId);
     if (!cs || !cs->shader) {
         // Compile failed — abandon the pass rather than paint a black
         // output; the normal scene (the plain translation) paints instead,
@@ -202,21 +218,21 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // device size and on-screen format (output scale/mode change, HDR flip).
     const QSize deviceSize = viewport.deviceSize();
     const GLenum captureFormat = TransitionPass::captureFormatFor(renderTarget);
-    if (pass.captureTex
-        && (pass.captureTex->size() != deviceSize || pass.captureTex->internalFormat() != captureFormat)) {
-        pass.captureFbo.reset();
-        pass.captureTex.reset();
+    if (pass->captureTex
+        && (pass->captureTex->size() != deviceSize || pass->captureTex->internalFormat() != captureFormat)) {
+        pass->captureFbo.reset();
+        pass->captureTex.reset();
     }
-    if (!pass.captureTex) {
-        pass.captureTex = TransitionPass::allocateOutputTexture(deviceSize, captureFormat);
-        if (pass.captureTex) {
-            pass.captureFbo = std::make_unique<KWin::GLFramebuffer>(pass.captureTex.get());
-            if (!pass.captureFbo->valid()) {
-                pass.captureFbo.reset();
-                pass.captureTex.reset();
+    if (!pass->captureTex) {
+        pass->captureTex = TransitionPass::allocateOutputTexture(deviceSize, captureFormat);
+        if (pass->captureTex) {
+            pass->captureFbo = std::make_unique<KWin::GLFramebuffer>(pass->captureTex.get());
+            if (!pass->captureFbo->valid()) {
+                pass->captureFbo.reset();
+                pass->captureTex.reset();
             }
         }
-        if (!pass.captureTex) {
+        if (!pass->captureTex) {
             // Allocation failed — abandon this LEG rather than retry per
             // frame. A later wheel batch re-arms via notifyLeg and retries
             // the allocation once per batch, which is the wanted behaviour
@@ -237,9 +253,9 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // foreign-output cull behaves identically to the on-screen path.
     {
         const ShaderInternal::ScopedGlState glStateGuard;
-        KWin::RenderTarget captureTarget(pass.captureFbo.get(), renderTarget.colorDescription());
+        KWin::RenderTarget captureTarget(pass->captureFbo.get(), renderTarget.colorDescription());
         KWin::RenderViewport captureViewport(screen->geometryF(), screen->scale(), captureTarget, QPoint());
-        KWin::GLFramebuffer::pushFramebuffer(pass.captureFbo.get());
+        KWin::GLFramebuffer::pushFramebuffer(pass->captureFbo.get());
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         // Exclude everything stacked ABOVE the strip from the capture (OSDs,
@@ -353,6 +369,22 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         skippedUnwindGuard.dismiss(); // normal exit: the composite tail consumes the list
     }
 
+    // Re-seat across the nested scene walk. `pass` was obtained before
+    // paintScreen re-entered the scene, so re-find it by key rather than
+    // trusting the old address; the tail below reads the sampler, the frame
+    // counter and the capture texture through it.
+    it = m_active.find(screen);
+    if (it == m_active.end()) {
+        // Unreachable today (nothing inside the walk mutates m_active), but if
+        // it ever happens the recorded list must not outlive the frame — the
+        // unwind guard was dismissed on the assumption the tail consumes it,
+        // and that tail is now skipped. No framebuffer has been pushed yet at
+        // this point, so there is nothing else to unwind.
+        m_effect->m_stripCaptureSkippedWindows.clear();
+        return false;
+    }
+    pass = &it->second;
+
     // Motion sample, on the pinned per-pass clock captured at the top of
     // this function. Live legs run the finite-difference estimator; a leg
     // whose spring has settled runs the settle fade instead — the frozen
@@ -364,7 +396,7 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // way that axis points reaches the shader as a separate uniform.
     const qreal offsetLogical = m_effect->m_stripViewAnimator->offsetAlongAxis(screen);
     const qreal velocityLogical =
-        springLive ? pass.motion.sampleLive(offsetLogical, nowMs) : pass.motion.sampleSettleFade(nowMs);
+        springLive ? pass->motion.sampleLive(offsetLogical, nowMs) : pass->motion.sampleSettleFade(nowMs);
     if (!springLive) {
         KWin::effects->addRepaint(screen->geometry());
     }
@@ -433,7 +465,7 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
             // transition, DPMS) adds nothing, so a time-driven pack resumes
             // where it left off instead of leaping by the gap. NOT
             // progress; see strip_transition.glsl.
-            cs->shader->setUniform(cs->iTimeLoc, float(qreal(pass.motion.timeAccumMs) / 1000.0));
+            cs->shader->setUniform(cs->iTimeLoc, float(qreal(pass->motion.timeAccumMs) / 1000.0));
         }
         if (cs->iResolutionLoc >= 0) {
             // The CAPTURE's size (viewport.deviceSize()), deliberately not
@@ -446,9 +478,9 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                                    QVector2D(float(deviceSize.width()), float(deviceSize.height())));
         }
         if (cs->iFrameLoc >= 0) {
-            cs->shader->setUniform(cs->iFrameLoc, pass.frameCount);
+            cs->shader->setUniform(cs->iFrameLoc, pass->frameCount);
         }
-        ++pass.frameCount;
+        ++pass->frameCount;
         if (cs->iStripMotionLoc >= 0) {
             cs->shader->setUniform(
                 cs->iStripMotionLoc,
@@ -466,18 +498,18 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         }
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomParams; ++slot) {
             if (cs->customParamsLoc[slot] >= 0) {
-                cs->shader->setUniform(cs->customParamsLoc[slot], pass.customParams[slot]);
+                cs->shader->setUniform(cs->customParamsLoc[slot], pass->customParams[slot]);
             }
         }
         for (int slot = 0; slot < PhosphorAnimationShaders::AnimationShaderContract::kMaxCustomColors; ++slot) {
             if (cs->customColorsLoc[slot] >= 0) {
-                cs->shader->setUniform(cs->customColorsLoc[slot], pass.customColors[slot]);
+                cs->shader->setUniform(cs->customColorsLoc[slot], pass->customColors[slot]);
             }
         }
         if (cs->uStripLoc >= 0) {
             cs->shader->setUniform(cs->uStripLoc, 0);
             glActiveTexture(GL_TEXTURE0);
-            pass.captureTex->bind();
+            pass->captureTex->bind();
         }
 
         TransitionPass::drawOutputQuad(viewport);

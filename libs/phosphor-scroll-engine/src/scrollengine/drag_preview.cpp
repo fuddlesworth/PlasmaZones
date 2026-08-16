@@ -567,16 +567,16 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // column, and the within-column stack's direction picks the tile slot.
     // Reading x and y directly would ask a vertical strip's columns to be
     // ordered by x, which they are not.
-    const int cursorMain = params.axis.isHorizontal() ? cursorPos.x() : cursorPos.y();
-    const int cursorCross = params.axis.isHorizontal() ? cursorPos.y() : cursorPos.x();
+    const int cursorMain = params.axis.mainPos(cursorPos);
+    const int cursorCross = params.axis.crossPos(cursorPos);
     for (int vi = 0; vi < visibleColumns.size(); ++vi) {
         const ResolvedColumn& column = *visibleColumns.at(vi);
         const bool isFirstVisible = vi == 0;
         const bool isLastVisible = vi == visibleColumns.size() - 1;
-        // Cursor left of this visible column's span: the gap before it (or
-        // the strip's visible left edge) → a new column at its index. From
-        // the leading edge that is "insert left of everything I can see",
-        // rendered as a past-the-edge hint.
+        // Cursor before this visible column's main-axis span: the gap ahead
+        // of it (or the strip's visible leading edge) → a new column at its
+        // index. From the leading edge that is "insert ahead of everything I
+        // can see", rendered as a past-the-edge hint.
         if (cursorMain < params.axis.mainLow(column.rect)) {
             target.primary = column.columnIndex;
             target.newSlot = true;
@@ -586,13 +586,14 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
         if (cursorMain > params.axis.mainHigh(column.rect)) {
             continue;
         }
-        // Inside this column's x-span: the side bands open a new column at
-        // THIS column's spot (the column steps aside and the indicator
-        // covers it), the middle joins it as a tile at the y-resolved slot.
-        // Symmetric by construction: each boundary belongs to exactly one
-        // band — the right neighbour's left band — and only the view's two
-        // extremes differ, hinting past their screen edge instead (the
-        // first visible column's left band and the last one's right band).
+        // Inside this column's main-axis span: the two end bands open a new
+        // column at THIS column's spot (the column steps aside and the
+        // indicator covers it), the middle joins it as a tile at the
+        // cross-resolved slot. Symmetric by construction: each boundary
+        // belongs to exactly one band — the trailing neighbour's leading band
+        // — and only the view's two extremes differ, hinting past their
+        // screen edge instead (the first visible column's leading band and
+        // the last one's trailing band).
         // Floor of 1 so integer division on a degenerate sliver still
         // leaves bands.
         const int band = std::clamp(params.axis.mainSize(column.rect) / kEdgeBandDivisor, 1, kEdgeBandMaxPx);
@@ -774,7 +775,7 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
             if (tile.windowId == p.windowId) {
                 // Along the strip: the view only ever slides that way.
                 QRect rect = params.axis.translatedMain(tile.rect, shiftToLiveView);
-                // A LEADING-EDGE aim ("insert left of everything I can see",
+                // A LEADING-EDGE aim ("insert ahead of everything I can see",
                 // tagged by the hit-test) mirrors the after-the-last one:
                 // its raw promise is the current position of the first
                 // visible column, so it would cover that column at full

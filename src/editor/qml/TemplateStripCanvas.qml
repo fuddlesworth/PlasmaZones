@@ -240,7 +240,9 @@ Item {
     // ─── Empty state ─────────────────────────────────────────────────────
     Kirigami.PlaceholderMessage {
         anchors.centerIn: parent
-        width: parent.width - Kirigami.Units.gridUnit * 8
+        // Floored at zero: a canvas narrower than the inset would otherwise
+        // hand the message a negative width.
+        width: Math.max(0, parent.width - Kirigami.Units.gridUnit * 8)
         visible: stripCanvas.columnCount === 0
         icon.name: stripCanvas.verticalAxis ? "view-split-top-bottom" : "view-split-left-right"
         text: i18nc("@info:placeholder", "This template starts no columns")
@@ -354,6 +356,22 @@ Item {
                     property real dragFraction: 0
                     readonly property real displayFraction: resizing ? dragFraction : widthFraction
 
+                    // An axis flip re-bases every coordinate the gesture is
+                    // measured in: startMain was captured along the OLD main
+                    // axis and the next move would read the new one, so the
+                    // delta would span two bases. Discard the gesture instead,
+                    // the same thing a cancelled grab does. No UI path reaches
+                    // this today (the axis re-resolves on a target-screen
+                    // change or a settings reload, and the drag holds the
+                    // grab), so this is a guard, not a live fix.
+                    Connections {
+                        function onVerticalAxisChanged() {
+                            band.resizing = false;
+                        }
+
+                        target: stripCanvas
+                    }
+
                     // Extent along the strip. No floor: the rendered edge must
                     // stay exactly at fraction * the canvas's main extent or
                     // the drag math and the screen-edge marker both lie. A
@@ -410,7 +428,9 @@ Item {
                     GridLayout {
                         anchors.fill: parent
                         anchors.margins: Kirigami.Units.largeSpacing
-                        rows: stripCanvas.verticalAxis ? 1 : 3
+                        // Column count alone drives the transposition: this is
+                        // Layouts, not the Grid positioner above, and its
+                        // default LeftToRight flow reads only `columns`.
                         columns: stripCanvas.verticalAxis ? 3 : 1
                         rowSpacing: Kirigami.Units.smallSpacing
                         columnSpacing: Kirigami.Units.smallSpacing
@@ -423,7 +443,7 @@ Item {
                             Layout.fillWidth: !stripCanvas.verticalAxis
                             Layout.fillHeight: stripCanvas.verticalAxis
                             visible: band.isTabbed
-                            rows: stripCanvas.verticalAxis ? 3 : 1
+                            // Column count alone, as above.
                             columns: stripCanvas.verticalAxis ? 1 : 3
                             rowSpacing: Kirigami.Units.smallSpacing / 2
                             columnSpacing: Kirigami.Units.smallSpacing / 2
@@ -589,7 +609,9 @@ Item {
                     Rectangle {
                         id: dragHandle
 
-                        readonly property real handleThickness: Math.max(stripCanvas.bandSpacing, Kirigami.Units.smallSpacing)
+                        // The handle fills the gap it lives in, which is a
+                        // full grid unit (see bandSpacing).
+                        readonly property real handleThickness: stripCanvas.bandSpacing
                         readonly property bool isDragging: band.resizing
 
                         anchors.horizontalCenter: stripCanvas.verticalAxis ? parent.horizontalCenter : parent.right

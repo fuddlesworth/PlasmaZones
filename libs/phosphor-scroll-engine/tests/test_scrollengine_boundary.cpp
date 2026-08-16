@@ -29,8 +29,6 @@
 using PhosphorScrollEngine::ScrollEngine;
 namespace Ax = ScrollTestUtils::Ax;
 
-namespace Ax = ScrollTestUtils::Ax;
-
 using ScrollTestUtils::defaultScreenRect;
 using ScrollTestUtils::makeProviderEngine;
 
@@ -201,13 +199,6 @@ QJsonObject lastEntryFor(QSignalSpy& tiled, const QString& windowId)
     return {};
 }
 
-/// The entry's far edge ALONG THE STRIP, inclusive. Delegates to the harness
-/// so it reads whichever physical key is the main one on the running axis.
-int entryRight(const QJsonObject& o)
-{
-    return ScrollTestUtils::Ax::entryMainEnd(o);
-}
-
 } // namespace
 
 class TestScrollEngineBoundary : public QObject
@@ -215,8 +206,8 @@ class TestScrollEngineBoundary : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    /// Proves the vertical arm really is transposed, then skips while the
-    /// engine is horizontal-only.
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
     void initTestCase()
     {
         AX_GUARD_SUITE();
@@ -227,8 +218,11 @@ private Q_SLOTS:
     /// resolves the other axis and the engine must not carry any old-axis
     /// state across the flip.
     ///
-    /// Runs on both arms: the fixture flips whichever axis it started on, so
-    /// there is nothing horizontal-specific to gate.
+    /// Both geometries are hardcoded PHYSICAL rects and neither is transposed
+    /// with the fixture, so the two arms run this identically: it always
+    /// starts landscape and always rotates to portrait. That is on purpose —
+    /// what is under test is the ENGINE re-resolving Auto from the new
+    /// geometry, which has nothing to do with the harness's axis.
     void aRotationFlipsTheAxisAndDropsOldAxisState()
     {
         QObject owner;
@@ -296,7 +290,7 @@ private Q_SLOTS:
         engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
         engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
         engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
-        // Center b: a straddles the left screen edge, c the right one
+        // Center b: a straddles the LEAD screen edge, c the TRAIL one
         // (columns are 500px on the 1000px work area).
         engine->windowFocused(QStringLiteral("app|b"), kS1);
         engine->retile(kS1);
@@ -308,7 +302,7 @@ private Q_SLOTS:
         QVERIFY(!c.isEmpty());
         // Clamped exactly at the screen edges — not the work area's.
         QCOMPARE(Ax::entryMainPos(a), Ax::mainPos(screen));
-        QCOMPARE(entryRight(c), Ax::mainEnd(screen));
+        QCOMPARE(Ax::entryMainEnd(c), Ax::mainEnd(screen));
         // And genuinely clamped, i.e. narrower than a full column.
         QVERIFY(Ax::entryMainLen(a) < 500);
         QVERIFY(Ax::entryMainLen(c) < 500);
@@ -342,7 +336,7 @@ private Q_SLOTS:
         QCOMPARE(Ax::entryMainLen(a), 600);
         QCOMPARE(Ax::entryMainLen(c), 600);
         QVERIFY(Ax::entryMainPos(a) < Ax::mainPos(screen));
-        QVERIFY(entryRight(c) > Ax::mainEnd(screen));
+        QVERIFY(Ax::entryMainEnd(c) > Ax::mainEnd(screen));
     }
 
     // A remainder below the peek floor parks (with its departure edge)
@@ -356,8 +350,8 @@ private Q_SLOTS:
         engine->refreshConfigFromSettings();
 
         // Every new column opens at 0.98 of the work area (the per-screen
-        // rule channel): centering a leaves b a 12px sliver at the right
-        // edge, under the 48px floor.
+        // rule channel): centering a leaves b a 12px sliver at the TRAIL
+        // strip edge, under the 48px floor.
         QVariantMap wide;
         wide.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultColumnWidth(), 0.98);
         engine->applyPerScreenConfig(kS1, wide);
@@ -419,7 +413,7 @@ private Q_SLOTS:
         const QJsonObject clamped = lastEntryFor(tiled, QStringLiteral("app|b1"));
         QVERIFY(!cropped.isEmpty());
         QVERIFY(!clamped.isEmpty());
-        // S1 keeps the true 600px rect, overhanging the left screen edge.
+        // S1 keeps the true 600px rect, overhanging the LEAD screen edge.
         QCOMPARE(Ax::entryMainLen(cropped), 600);
         QVERIFY(Ax::entryMainPos(cropped) < Ax::mainPos(screen));
         // S2 is clamped at the edge and narrower for it.
@@ -435,8 +429,14 @@ private Q_SLOTS:
         QObject owner;
         auto* settings = new BoundaryStubSettings(&owner);
         settings->centerFocused = 0; // plain edge-aligned view
-        const QRect top = defaultScreenRect(); // 0,0 1200x800
-        const QRect bottom(0, 800, 1200, 800); // stacked beneath, bottom = 1599
+        const QRect top = defaultScreenRect();
+        // Stacked directly BENEATH the primary, keyed off it rather than
+        // hardcoded. Ax::t() would be wrong here: transposing puts the second
+        // output to the SIDE instead, the union's lower edge collapses back
+        // onto the primary's, and the test stops discriminating a
+        // below-the-union park from a below-this-screen one. The claim under
+        // test is physical ("below every output"), so the fixture is too.
+        const QRect bottom(top.left(), top.bottom() + 1, top.width(), top.height());
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1}, [top](const QString&) {
             return top;
         });
@@ -462,12 +462,12 @@ private Q_SLOTS:
                      QStringLiteral("park y=%1 must clear the lower output (bottom=%2)").arg(y).arg(bottom.bottom())));
     }
 
-    // Vertical enforcement runs in BOTH modes: crop mode opts out of the
-    // horizontal straddler clamp only, and a stacked column whose minimum
-    // heights overflow the work area still has its below-floor tail parked
-    // (not committed onto whatever sits beneath the screen). The park is
-    // edge-less — vertical overflow is stack layout, not strip motion.
-    void verticalOverflowParksEvenInCropMode()
+    // Cross-axis enforcement runs in BOTH modes: crop mode opts out of the
+    // MAIN-axis straddler clamp only, and a stacked column whose minimum
+    // cross extents overflow the work area still has its below-floor tail
+    // parked (not committed onto whatever sits beneath the screen). The park
+    // is edge-less — a stack overflow is stack layout, not strip motion.
+    void crossOverflowParksEvenInCropMode()
     {
         QObject owner;
         auto* settings = new BoundaryStubSettings(&owner);
@@ -495,10 +495,10 @@ private Q_SLOTS:
         const QJsonObject b = lastEntryFor(tiled, QStringLiteral("app|b"));
         QVERIFY(!b.isEmpty());
         QVERIFY2(b.value(QLatin1String("y")).toInt() > screen.bottom(),
-                 qPrintable(QStringLiteral("expected a vertical park below the screen even in crop mode, got y=%1")
+                 qPrintable(QStringLiteral("expected a cross-axis park below the screen even in crop mode, got y=%1")
                                 .arg(b.value(QLatin1String("y")).toInt())));
         QVERIFY2(!b.contains(QLatin1String("scrollEdge")),
-                 "a vertical park carries no scrollEdge (there is no side to animate from)");
+                 "a cross-axis park carries no scrollEdge (there is no side to animate from)");
     }
 
     // A tabbed column's hidden tiles are parked so they cannot take input from
@@ -533,7 +533,7 @@ private Q_SLOTS:
 
         // The discriminating leg: with a fallback edge recorded above, this
         // switch consumed it and slid the newly shown tab in from off the
-        // right, a move the column never made.
+        // TRAIL strip edge, a move the column never made.
         tiled.clear();
         engine->windowFocused(QStringLiteral("app|b"), kS1);
         QCoreApplication::processEvents();
@@ -561,7 +561,7 @@ private Q_SLOTS:
 
         // Same generator as peekFloorParksAThinRemainder: every column opens
         // at 0.98 of the work area, so centering the first leaves the second a
-        // 12px sliver at the right edge, under the 48px floor.
+        // 12px sliver at the TRAIL strip edge, under the 48px floor.
         QVariantMap wide;
         wide.insert(PhosphorScrollEngine::ScrollPerScreenKeys::defaultColumnWidth(), 0.98);
         engine->applyPerScreenConfig(kS1, wide);

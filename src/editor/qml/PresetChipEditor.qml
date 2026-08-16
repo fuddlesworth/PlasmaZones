@@ -216,7 +216,19 @@ ColumnLayout {
                 editable: true
                 enabled: !chipEditor.full
                 textFromValue: (value, locale) => i18nc("@info preset percentage", "%1%", value)
-                valueFromText: (text, locale) => parseInt(text)
+                // Locale-aware, the twin of TemplatePropertyPanel's width
+                // spin: parseInt reads only ASCII digits, so a locale that
+                // writes its numbers any other way parsed as NaN. The percent
+                // sign textFromValue adds is stripped first, and text the
+                // locale cannot parse keeps the current value.
+                valueFromText: (text, locale) => {
+                    const trimmed = text.replace(locale.percent, "").trim();
+                    try {
+                        return Math.round(Number.fromLocaleString(locale, trimmed));
+                    } catch (e) {
+                        return addSpin.value;
+                    }
+                }
                 Accessible.name: i18nc("@label:spinbox", "New preset percentage for %1", chipEditor.accessibleLabel)
             }
 

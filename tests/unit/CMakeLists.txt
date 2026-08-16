@@ -1725,6 +1725,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 #   test_tiling_state: TilingStateHelpers + WindowId tests
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
 #   test_strip_view_animator: StripViewAnimator per-output view-spring behaviour
+#   test_strip_motion_sampler: StripMotionSampler distance/speed sampling
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wire_types compositor-common/test_wire_types.cpp)
 target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
@@ -1760,6 +1761,14 @@ target_include_directories(test_strip_motion_sampler PRIVATE ${CMAKE_SOURCE_DIR}
 target_link_libraries(test_strip_motion_sampler PRIVATE Qt6::Test)
 add_test(NAME test_strip_motion_sampler COMMAND test_strip_motion_sampler)
 
+add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
+target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# shadervalidate/ - Offline Pack Validator Tests
+#   test_pack_validators: metadata lints + the multipass buffer-pass bake
+# ═══════════════════════════════════════════════════════════════════════════════
 # The offline pack validator's metadata lints. The bundled-pack gate
 # (shader_validate_animations) only proves the shipped packs are clean; this
 # builds deliberately-broken packs in a temp dir and asserts the diagnostic.
@@ -1782,10 +1791,6 @@ target_link_libraries(test_pack_validators
 )
 target_compile_definitions(test_pack_validators PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_pack_validators COMMAND test_pack_validators)
-
-add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
-target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
-add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # editor/ - Zone z-order

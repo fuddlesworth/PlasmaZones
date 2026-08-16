@@ -78,6 +78,7 @@ class TestStripViewAnimator : public QObject
 private Q_SLOTS:
     void init();
     void offsetResolvesOntoTheOutputsOwnAxis();
+    void axisForAnswersPerOutputAndOutlivesTheLeg();
     void anAxisFlipCancelsRatherThanRetargets();
     void offsetStartsAtDeltaAndSettlesToZero();
     void secondDeltaMidFlightAccumulatesWithoutJumping();
@@ -180,9 +181,66 @@ void TestStripViewAnimator::offsetResolvesOntoTheOutputsOwnAxis()
     QCOMPARE(m_animator->offsetFor(fakeOutputB()), QPointF());
 }
 
+/// axisFor is not an accessor nobody reads: the strip shader pass asks it for
+/// every screen it draws and binds the answer as `iStripAxis`, which is what
+/// every ported pack multiplies its displacement by. A wrong answer smears the
+/// whole pack along the axis the strip does not have, with no error anywhere.
+///
+/// The half that is easy to get wrong is the RESTING one. offsetAlongAxis and
+/// offsetFor both go quiet once a leg settles, so it would look reasonable for
+/// the axis to go quiet with them — but the map entry deliberately outlives the
+/// leg (only forgetOutput, reset and the clock reap erase it), and the shader
+/// pass keeps drawing for as long as its own fade runs. A settled vertical
+/// strip that started answering Horizontal would flip the pack mid-fade.
+void TestStripViewAnimator::axisForAnswersPerOutputAndOutlivesTheLeg()
+{
+    // Never seen: Horizontal, the historical layout and the only safe answer
+    // before any batch has named an axis.
+    QCOMPARE(m_animator->axisFor(fakeOutputA()), PhosphorProtocol::ScrollAxis::Horizontal);
+    QCOMPARE(m_animator->axisFor(nullptr), PhosphorProtocol::ScrollAxis::Horizontal);
+
+    scroll(fakeOutputA(), 600, PhosphorProtocol::ScrollAxis::Vertical);
+    latch();
+    QCOMPARE(m_animator->axisFor(fakeOutputA()), PhosphorProtocol::ScrollAxis::Vertical);
+    // Per output, not global: a landscape monitor beside the portrait one keeps
+    // its own answer, which is the whole reason the axis is held in the map.
+    QCOMPARE(m_animator->axisFor(fakeOutputB()), PhosphorProtocol::ScrollAxis::Horizontal);
+    scroll(fakeOutputB(), 600, PhosphorProtocol::ScrollAxis::Horizontal);
+    latch();
+    QCOMPARE(m_animator->axisFor(fakeOutputA()), PhosphorProtocol::ScrollAxis::Vertical);
+    QCOMPARE(m_animator->axisFor(fakeOutputB()), PhosphorProtocol::ScrollAxis::Horizontal);
+
+    // The leg settles; the axis does not.
+    tick(1000);
+    QVERIFY2(!m_animator->isAnimatingOn(fakeOutputA()), "precondition: the leg has settled");
+    QCOMPARE(m_animator->axisFor(fakeOutputA()), PhosphorProtocol::ScrollAxis::Vertical);
+
+    // Disconnect drops the entry, so the next answer is the never-seen one
+    // again — a hotplug landing a new output at the freed address must not
+    // inherit the old one's orientation.
+    m_animator->forgetOutput(fakeOutputA());
+    QCOMPARE(m_animator->axisFor(fakeOutputA()), PhosphorProtocol::ScrollAxis::Horizontal);
+
+    // reset() (daemon loss) clears every output's axis the same way.
+    scroll(fakeOutputA(), 400, PhosphorProtocol::ScrollAxis::Vertical);
+    latch();
+    QCOMPARE(m_animator->axisFor(fakeOutputA()), PhosphorProtocol::ScrollAxis::Vertical);
+    m_animator->reset();
+    QCOMPARE(m_animator->axisFor(fakeOutputA()), PhosphorProtocol::ScrollAxis::Horizontal);
+}
+
 /// An axis flip under a LIVE leg cancels it. Retargeting would carry sideways
 /// momentum into a vertical slide, and the accumulated view coordinate would
 /// keep measuring distance along an axis the strip no longer has.
+///
+/// What is pinned here is the CANCEL, and only the cancel. The flip arm also
+/// resets the accumulator to zero, and no assertion below can see that: the
+/// accumulator's origin is arbitrary by construction (a leg always runs from
+/// the previous committed value to the new one, and every reader takes the
+/// DIFFERENCE `committed - animated`), so dropping `motion.committed = 0.0`
+/// leaves every number in this test byte-identical. That line is unobservable
+/// through the public surface rather than untested through an oversight, which
+/// is why no leg is constructed for it.
 void TestStripViewAnimator::anAxisFlipCancelsRatherThanRetargets()
 {
     scroll(fakeOutputA(), 600, PhosphorProtocol::ScrollAxis::Horizontal);
@@ -305,7 +363,7 @@ void TestStripViewAnimator::missingClockLeavesViewAtRest()
 
 void TestStripViewAnimator::absurdDeltaIsClamped()
 {
-    // The wire deliberately does not validate viewDeltaX — it is a motion
+    // The wire deliberately does not validate viewDelta — it is a motion
     // hint, and rejecting a tile request over it would drop a valid placement
     // — so this is the only thing standing between a garbled value and a
     // strip flung somewhere it takes seconds to spring back from.
@@ -313,9 +371,15 @@ void TestStripViewAnimator::absurdDeltaIsClamped()
     QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx));
 
     // The rail is symmetric, and a scroll the other way is not an exotic
-    // input — it is half of ordinary use.
-    scroll(fakeOutputB(), std::numeric_limits<int>::min());
+    // input — it is half of ordinary use. Run this half VERTICALLY and read
+    // it back through offsetFor: that is what the paint path calls, and it
+    // does its own axis lookup, so a clamp applied on the scalar path alone
+    // would leave the point path flinging the strip off the bottom of the
+    // screen while the assertion above still passed.
+    scroll(fakeOutputB(), std::numeric_limits<int>::min(), PhosphorProtocol::ScrollAxis::Vertical);
     QCOMPARE(m_animator->offsetAlongAxis(fakeOutputB()), -static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx));
+    QCOMPARE(m_animator->offsetFor(fakeOutputB()),
+             QPointF(0.0, -static_cast<qreal>(StripViewAnimator::kMaxViewDeltaPx)));
 }
 
 void TestStripViewAnimator::repaintsAreRequestedWhileInFlight()

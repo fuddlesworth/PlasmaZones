@@ -251,6 +251,12 @@ QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId)
     return effectivePresetWindowHeights(m_perScreenOverrides.value(screenId));
 }
 
+QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QVariantMap& overrides) const
+{
+    return presetListFromOverride(overrides, ScrollPerScreenKeys::presetWindowHeights(), MinWindowHeightFraction,
+                                  m_presetWindowHeights);
+}
+
 ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& screenId) const
 {
     ScrollBlueprintProgress progress;
@@ -285,12 +291,6 @@ ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& 
     const int spent = qMax(state->blueprintCursor(), int(state->strip().columns().size()));
     progress.used = qMin(spent, progress.total);
     return progress;
-}
-
-QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QVariantMap& overrides) const
-{
-    return presetListFromOverride(overrides, ScrollPerScreenKeys::presetWindowHeights(), MinWindowHeightFraction,
-                                  m_presetWindowHeights);
 }
 
 ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
@@ -352,7 +352,11 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
                 ? slotValue
                 : (m_defaultColumnWidth.kind == ColumnWidth::Fixed ? qreal(m_defaultColumnWidth.fixedPx) : 0.0);
             if (value >= 1.0) {
-                return ColumnWidth::makeFixed(qRound(value));
+                // Bounded before the round, like every other numeric slot
+                // resolved out of this map: the value arrives unvalidated
+                // from applyPerScreenConfig, and qRound of a double past
+                // int's range is undefined.
+                return ColumnWidth::makeFixed(qRound(qBound(1.0, value, kMaxFixedExtentPx)));
             }
         }
         if (kind == static_cast<int>(DefaultWidthKind::Preset)) {
@@ -455,7 +459,8 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
                 ? slotValue
                 : (m_defaultWindowHeight.kind == WindowHeight::Fixed ? qreal(m_defaultWindowHeight.fixedPx) : 0.0);
             if (value >= 1.0) {
-                return WindowHeight::makeFixed(qRound(value));
+                // Bounded before the round, for the width twin's reason.
+                return WindowHeight::makeFixed(qRound(qBound(1.0, value, kMaxFixedExtentPx)));
             }
         } else if (kind == static_cast<int>(DefaultHeightKind::Preset)) {
             // Same spin-to-value resolution as the width twin above.

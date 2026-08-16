@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// FILE-SIZE EXCEPTION: this header is over 1400 lines, past the 1150 hard
-// ceiling.
+// FILE-SIZE EXCEPTION: this header is well past the 1150 hard ceiling (about
+// 1700 lines and still growing with each overlay surface). No exact figure is
+// quoted: it went stale within a release of being written, and the case below
+// is what the exception rests on, not a number.
 // The exception was granted in the same pull request that carried the file
 // past the ceiling (the scroll tab strip), so it is a live decision rather
 // than settled precedent, and it is recorded here for that reason.
@@ -394,6 +396,8 @@ public:
     /// not know engine types.
     ///
     /// Absent provider answers false — horizontal, the historical layout.
+    ///
+    /// Same clear-before-destroy contract as the other injected closures.
     using StripAxisProvider = std::function<bool(const QString& screenId)>;
     void setStripAxisProvider(StripAxisProvider provider)
     {

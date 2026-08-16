@@ -26,7 +26,7 @@ namespace {
 void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, QObject* window, QScreen* screen,
                                           const QString& virtualScreenId, const ZoneSelectorConfig& config,
                                           ISettings* settings, const ZoneSelectorLayout& layout,
-                                          PhosphorZones::IZoneLayoutRegistry* layoutRegistry)
+                                          PhosphorZones::IZoneLayoutRegistry* layoutRegistry, bool stripVerticalAxis)
 {
     if (!window || !screen) {
         return;
@@ -34,11 +34,17 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
 
     // Use virtual screen geometry if available, falling back to physical
     const QRect screenGeom = resolveScreenGeometry(mgr, virtualScreenId);
-    const int screenWidth = screenGeom.width();
-    const int indicatorWidth = layout.indicatorWidth;
 
-    // Compute previewScale
-    const qreal previewScale = screenWidth > 0 ? static_cast<qreal>(indicatorWidth) / screenWidth : 0.09375;
+    // previewScale is "how many miniature pixels one screen pixel becomes",
+    // and it is read against the extent the card is sized along. A vertical
+    // strip's cards take their preview extent from indicatorHeight (see the
+    // vertical arm of computeZoneSelectorLayout and its QML twin), so scaling
+    // against the screen WIDTH there would size the padding, border width and
+    // corner radius against an extent the card never uses — badly wrong on a
+    // portrait monitor, where the two differ by more than the aspect ratio.
+    const int screenExtent = stripVerticalAxis ? screenGeom.height() : screenGeom.width();
+    const int indicatorExtent = stripVerticalAxis ? layout.indicatorHeight : layout.indicatorWidth;
+    const qreal previewScale = screenExtent > 0 ? static_cast<qreal>(indicatorExtent) / screenExtent : 0.09375;
     writeQmlProperty(window, QStringLiteral("previewScale"), previewScale);
 
     // Compute positionIsVertical from per-screen config
@@ -144,14 +150,26 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     const QRect screenGeom = resolveScreenGeometry(m_screenManager, screenId);
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+    // Clamped symmetrically about 1:1 — the lower bound is the inverse of the
+    // upper. A 0.5 floor reported a rotated 21:9 (about 0.43) as 1:2, and the
+    // preview box was then drawn in a shape no window on that screen has.
+    // Rotated ultrawides are exactly the monitors the vertical strip serves.
+    aspectRatio = qBound(0.25, aspectRatio, 4.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
     // Build resolved per-screen config. Strip-selector screens resolve the
-    // scrolling variant, whose resolver stamps LayoutMode = Horizontal so
-    // computeZoneSelectorLayout lays a single card row with zero changes.
+    // scrolling variant, whose resolver stamps LayoutMode = Horizontal. That
+    // stamp stands for "the user picks no form here": the popup mirrors the
+    // strip, so its one row of cards runs whichever way the ENGINE resolved
+    // the axis, and computeZoneSelectorLayout takes that axis as its own
+    // argument rather than from the config.
     const bool stripMode = isStripSelectorScreen(screenId);
+    // Resolved once for the whole update: the axis reaches QML, the layout
+    // computation and the preview scale, and asking the provider three times
+    // per rebuild would let a rotation landing mid-update answer differently
+    // to each of them.
+    const bool stripVerticalAxis = stripMode && stripIsVertical(screenId);
     const ZoneSelectorConfig config = m_settings
         ? (stripMode ? m_settings->resolvedScrollingZoneSelectorConfig(screenId)
                      : m_settings->resolvedZoneSelectorConfig(screenId))
@@ -210,7 +228,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // Pushed even when this screen is not in strip mode: the property is a
     // plain bool and a stale true would transpose the next strip popup on a
     // screen that had since gone horizontal.
-    writeQmlProperty(window, QStringLiteral("stripVerticalAxis"), stripMode && stripIsVertical(screenId));
+    writeQmlProperty(window, QStringLiteral("stripVerticalAxis"), stripVerticalAxis);
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
     // Global "Auto-assign for all layouts" master toggle (#370) - when on, every
@@ -247,8 +265,8 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // down the popup on a vertical strip, so sizing the container as one
     // horizontal card row would clip the tail cards away, and the hit-test
     // reads rendered rects back and would find them empty.
-    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions,
-                                                                stripMode && stripIsVertical(screenId));
+    const ZoneSelectorLayout layout =
+        computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions, stripVerticalAxis);
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
     // containerWidth/Height, so it has to be correct before we apply the layout.
@@ -261,7 +279,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
 
     // Update computed properties that depend on layout and settings
     updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout,
-                                         m_layoutManager);
+                                         m_layoutManager, stripVerticalAxis);
 
     // Positioning is entirely QML-internal: ZoneSelectorContent.qml's
     // selectorPosition state anchors the inner container to the requested

@@ -52,9 +52,6 @@ public Q_SLOTS:
     }
 };
 
-/// Echoes an a{sv} map. Callers that read such a reply with QVariant::toMap()
-/// silently get an empty map, so this object exists to pin the demarshalling
-/// idiom the settings app relies on (getAllQuickLayoutSlots and its peers).
 /// Echoes a SwapTargetResult — the highest-transposition-risk wire struct
 /// (18 fields with two interleaved int quadruples and five trailing
 /// strings): a swap introduced in operator>> alone keeps the signature
@@ -70,6 +67,9 @@ public Q_SLOTS:
     }
 };
 
+/// Echoes an a{sv} map. Callers that read such a reply with QVariant::toMap()
+/// silently get an empty map, so this object exists to pin the demarshalling
+/// idiom the settings app relies on (getAllQuickLayoutSlots and its peers).
 class VariantMapEcho : public QObject
 {
     Q_OBJECT

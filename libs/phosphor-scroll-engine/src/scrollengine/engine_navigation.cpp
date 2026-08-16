@@ -114,16 +114,27 @@ void ScrollEngine::focusColumnByDelta(int delta, const QString& screenId)
     if (delta == 0) {
         return;
     }
+    // Resolved ONCE, so the axis that picks the token and the screen
+    // focusInDirection walks name the same output: resolveOperationScreen can
+    // answer a different one than the caller did (an empty or non-scrolling id
+    // falls back to the active screen), and a token derived from the RAW id
+    // could then be horizontal for a portrait strip. Feeding the resolved id
+    // back in is stable, since a scrolling screen resolves to itself. An EMPTY
+    // resolve (no scrolling screen at all) deliberately does NOT bail —
+    // focusInDirection owns that state, including its empty-screen crossing and
+    // no_windows feedback. The raw id is the axis source there, and only there.
+    const QString screen = resolveOperationScreen(screenId);
+    const QString axisScreen = screen.isEmpty() ? screenId : screen;
     // Synthesized against the TARGET screen's axis, so a strip-relative
     // caller (the wheel) walks the strip on both orientations. Spelling the
     // token at the call site — which is what the D-Bus adaptor used to do —
-    // walks the STACK on a vertical strip, and at the stack's end tries to
-    // cross to the physically-left monitor.
-    const QString token = Detail::physicalTokenForMain(delta, stripAxisForScreen(screenId));
+    // walks the STACK on a vertical strip, and at its end tries to cross to
+    // the physically-left monitor.
+    const QString token = Detail::physicalTokenForMain(delta, stripAxisForScreen(axisScreen));
     if (token.isEmpty()) {
         return;
     }
-    focusInDirection(token, PhosphorEngine::NavigationContext{QString(), screenId});
+    focusInDirection(token, PhosphorEngine::NavigationContext{QString(), screen});
 }
 
 void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngine::NavigationContext& ctx)
@@ -133,8 +144,8 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
     // Role steps, not physical ones: on a vertical strip up/down walk the
     // COLUMNS and left/right walk the stack. params carries this screen's
     // axis, and P_SCROLL_RESOLVE has already bound it.
-    const int h = mainDelta(direction, params.axis);
-    const int v = crossDelta(direction, params.axis);
+    const int mainStep = mainDelta(direction, params.axis);
+    const int crossStep = crossDelta(direction, params.axis);
     if (!state || state->strip().isEmpty()) {
         // An EMPTY screen still crosses (niri parity): a directional focus
         // press on a monitor with no strip walks onto the neighbour instead
@@ -146,8 +157,9 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
         // garbage token must not teleport focus off an empty screen.
         // Token validity only, checked WITHOUT the axis: there is no state
         // here, so P_SCROLL_RESOLVE left params default-constructed and its
-        // axis is a meaningless Horizontal. h and v happen to be correct for
-        // either axis (exactly one is non-zero for any of the four tokens),
+        // axis is a meaningless Horizontal. mainStep and crossStep happen to
+        // be correct for either axis (exactly one is non-zero for any of the
+        // four tokens),
         // but reading them here would look axis-dependent over a garbage
         // value, so ask the question that is actually being asked.
         if (isDirectionToken(direction) && focusAcrossBoundary(screen, direction, QString())) {
@@ -160,8 +172,8 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
     // can be empty on a screen-hinted press, and the feedback's source slot
     // should name the window focus is leaving, not whatever the caller knew.
     const QString focusedBefore = state->strip().activeWindowId();
-    const bool moved =
-        (h != 0) ? state->strip().focusAdjacentColumn(h, params) : (v != 0 && state->strip().focusAdjacentTile(v));
+    const bool moved = (mainStep != 0) ? state->strip().focusAdjacentColumn(mainStep, params)
+                                       : (crossStep != 0 && state->strip().focusAdjacentTile(crossStep));
     if (moved) {
         applyLayout(screen, true);
         // Focus is PERSISTED state: serializeStripState writes focusedWindow
@@ -184,7 +196,7 @@ void ScrollEngine::focusInDirection(const QString& direction, const PhosphorEngi
     // resolver answers "up"/"down" neighbours and entryWindowForCrossing's
     // vertical arm stands the target's own focused window in for the strip
     // edge a vertical press does not have.
-    if ((h != 0 || v != 0) && focusAcrossBoundary(screen, direction, focusedBefore)) {
+    if ((mainStep != 0 || crossStep != 0) && focusAcrossBoundary(screen, direction, focusedBefore)) {
         return;
     }
     Q_EMIT navigationFeedback(false, action, QStringLiteral("no_target"), ctx.windowId, QString(), screen);
@@ -278,10 +290,10 @@ void ScrollEngine::moveFocusedInDirection(const QString& direction, const Phosph
     // arms name the same thing this way (the in-strip arm used to read the
     // post-move active window, the boundary arm ctx.windowId).
     const QString focused = state->strip().activeWindowId();
-    const int h = mainDelta(direction, params.axis);
-    const int v = crossDelta(direction, params.axis);
-    const bool moved =
-        (h != 0) ? state->strip().moveActiveColumn(h, params) : (v != 0 && state->strip().moveActiveTile(v));
+    const int mainStep = mainDelta(direction, params.axis);
+    const int crossStep = crossDelta(direction, params.axis);
+    const bool moved = (mainStep != 0) ? state->strip().moveActiveColumn(mainStep, params)
+                                       : (crossStep != 0 && state->strip().moveActiveTile(crossStep));
     if (moved) {
         applyLayout(screen, true);
         Q_EMIT placementChanged(screen);
@@ -294,7 +306,8 @@ void ScrollEngine::moveFocusedInDirection(const QString& direction, const Phosph
     // when one exists. A vertical crossing enters the target as an appended
     // column (no strip edge to enter from; the handoffReceive convention).
     QString landingScreen;
-    if ((h != 0 || v != 0) && moveActiveWindowAcrossBoundary(state, screen, direction, false, &landingScreen)) {
+    if ((mainStep != 0 || crossStep != 0)
+        && moveActiveWindowAcrossBoundary(state, screen, direction, false, &landingScreen)) {
         // Same "screen:<dir>" spelling as autotile's cross-output move, and
         // announced on the DESTINATION screen (the snap convention): the
         // source output no longer holds the window the OSD is about.
@@ -685,10 +698,10 @@ void ScrollEngine::swapFocusedInDirection(const QString& direction, const Phosph
     // Pre-move focused window, for the same reason moveFocusedInDirection
     // captures one: both success arms must name the same window.
     const QString focused = state->strip().activeWindowId();
-    const int h = mainDelta(direction, params.axis);
-    const int v = crossDelta(direction, params.axis);
-    const bool moved =
-        (h != 0) ? state->strip().moveActiveColumn(h, params) : (v != 0 && state->strip().moveActiveTile(v));
+    const int mainStep = mainDelta(direction, params.axis);
+    const int crossStep = crossDelta(direction, params.axis);
+    const bool moved = (mainStep != 0) ? state->strip().moveActiveColumn(mainStep, params)
+                                       : (crossStep != 0 && state->strip().moveActiveTile(crossStep));
     if (moved) {
         applyLayout(screen, true);
         Q_EMIT placementChanged(screen);
@@ -697,7 +710,8 @@ void ScrollEngine::swapFocusedInDirection(const QString& direction, const Phosph
         return;
     }
     QString landingScreen;
-    if ((h != 0 || v != 0) && moveActiveWindowAcrossBoundary(state, screen, direction, true, &landingScreen)) {
+    if ((mainStep != 0 || crossStep != 0)
+        && moveActiveWindowAcrossBoundary(state, screen, direction, true, &landingScreen)) {
         // Destination screen, like the move twin: the traded-in partner is
         // what the source output now shows.
         Q_EMIT navigationFeedback(true, action, QStringLiteral("screen:") + direction, focused, QString(),

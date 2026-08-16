@@ -196,7 +196,7 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                  });
         t.insert(pairKey(CD::scrollingGroup(), CD::defaultColumnWidthKindKey()),
                  {
-                     {QStringLiteral("proportion"), PhosphorI18n::tr("Proportion of the screen")},
+                     {QStringLiteral("proportion"), PhosphorI18n::tr("Proportion of the strip")},
                      {QStringLiteral("fixed"), PhosphorI18n::tr("Fixed width")},
                      {QStringLiteral("clientDecides"), PhosphorI18n::tr("Window decides")},
                      {QStringLiteral("preset"), PhosphorI18n::tr("Preset width")},

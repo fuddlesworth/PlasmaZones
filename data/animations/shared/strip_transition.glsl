@@ -59,6 +59,15 @@
 //     constant 0.0 on every fragment of every strip pass. A pack that varies
 //     anything per-surface through it gets no variation at all. Seed off
 //     iTime or the uv instead.
+//   - iStripAxis is bound by StripTransitionManager, and it is the one uniform
+//     here whose zero default is catastrophic rather than merely wrong. At
+//     vec2(0) stripAxisOffset() returns vec2(0), so every displacing pack
+//     renders the identity image and looks like it does nothing at all, and
+//     stripEdgeFade()'s dot(uv, vec2(0)) is 0 on every fragment, so every fade
+//     collapses to zero and takes the effect it scales with it. Any NEW
+//     consumer of this pass (the preview renderer, the thumbnail path) must
+//     bind it before it binds anything else here, or every strip pack it
+//     renders comes out blank rather than merely mis-oriented.
 //   oldColor() lives in shared/old_content.glsl, which no strip pack
 //     includes, so reaching for it is a COMPILE error — the manager caches a
 //     null-shader sentinel, abandons the pass (the plain translation shows),

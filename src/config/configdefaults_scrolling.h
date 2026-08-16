@@ -873,6 +873,8 @@ static_assert(ConfigDefaultsScrolling::scrollingDefaultColumnWidthFixedPx()
 static_assert(ConfigDefaultsScrolling::isValidScrollingCenterFocusedColumn(
                   ConfigDefaultsScrolling::scrollingCenterFocusedColumn()),
               "ConfigDefaults::scrollingCenterFocusedColumn() is not in its own closed set");
+static_assert(ConfigDefaultsScrolling::isValidScrollingStripAxis(ConfigDefaultsScrolling::scrollingStripAxis()),
+              "ConfigDefaults::scrollingStripAxis() is not in its own closed set");
 static_assert(
     ConfigDefaultsScrolling::isValidScrollingWidthKind(ConfigDefaultsScrolling::scrollingDefaultColumnWidthKind()),
     "ConfigDefaults::scrollingDefaultColumnWidthKind() is not in its own closed set");

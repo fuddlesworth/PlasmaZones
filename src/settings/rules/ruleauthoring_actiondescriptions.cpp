@@ -126,7 +126,7 @@ QString actionDescription(const QString& type)
         return PhosphorI18n::tr("Sets how much of the strip a matching window's column takes on a scrolling screen.");
     }
     if (type == ActionType::OpenWindowHeight) {
-        return PhosphorI18n::tr("Sets the height a matching window takes inside its column when it opens.");
+        return PhosphorI18n::tr("Sets how much of its column a matching window takes when it opens.");
     }
     if (type == ActionType::OpenTabbed) {
         return PhosphorI18n::tr(
@@ -138,8 +138,8 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::OpenMaximized) {
         return PhosphorI18n::tr(
-            "Opens matching windows maximized, so their column fills the full width of the work "
-            "area when they first appear.");
+            "Opens matching windows maximized, so their column fills the work area along the "
+            "strip when they first appear.");
     }
     if (type == ActionType::OpenFocused) {
         return PhosphorI18n::tr(
@@ -310,15 +310,15 @@ QString actionDescription(const QString& type)
             "context.");
     }
     if (type == ActionType::SetScrollDefaultColumnDisplay) {
-        return PhosphorI18n::tr("Chooses whether new columns open side by side or tabbed on the matched context.");
+        return PhosphorI18n::tr(
+            "Chooses whether new columns show their windows divided across the strip or tabbed on "
+            "the matched context.");
     }
     if (type == ActionType::SetScrollInsertPosition) {
         return PhosphorI18n::tr("Chooses where a new window's column enters the strip for the matched context.");
     }
     if (type == ActionType::SetScrollDefaultWindowHeight) {
-        return PhosphorI18n::tr(
-            "Sets the height newly opened windows take inside their column for the matched "
-            "context.");
+        return PhosphorI18n::tr("Sets how much of their column newly opened windows take for the matched context.");
     }
     if (type == ActionType::SetScrollAlwaysCenterSingleColumn) {
         return PhosphorI18n::tr(
@@ -327,8 +327,8 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SetScrollRespectMinimumSize) {
         return PhosphorI18n::tr(
-            "Keeps columns on the matched context at least as wide as each window asks to be. "
-            "Off lets a column go narrower, which the compositor then clamps on its own.");
+            "Keeps columns on the matched context at least as large as each window asks to be. "
+            "Off lets a column go smaller, which the compositor then clamps on its own.");
     }
     if (type == ActionType::SetScrollCropStraddlers) {
         return PhosphorI18n::tr(

@@ -217,7 +217,9 @@ QVector<ScrollEngine::VisibleTile> ScrollEngine::visibleTiles(const QString& scr
     }
     out.reserve(resolvedTiles);
     // THE zone-number walk (see VisibleTile): sequential over what is on
-    // screen, columns left to right, tiles top to bottom. Every consumer of
+    // screen, columns in strip order, tiles in within-column order (which
+    // reads as left to right and top to bottom on a horizontal strip, and is
+    // orientation-neutral otherwise). Every consumer of
     // the number space — preview labels, Snap-to-Zone digits, the
     // navigation OSD's per-window number, the cross-mode entry window —
     // derives from this list, so a change to the walk changes all of them
@@ -354,6 +356,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     const bool dragPreviewSteersView = m_dragInsertPreview
         && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
 
+    // Captured before the axis-flip sweep, not after: that sweep re-centres
+    // the active column, and a baseline taken downstream of it would already
+    // hold the re-centred value, making the flip's own anchor move invisible
+    // to the anchorMoved test below and losing the persist for it.
+    const int anchorBefore = state->strip().viewAnchor();
+
     // AXIS FLIP SWEEP, before anything reads the anchor.
     //
     // Written as a pure function of observed state rather than hooked to a
@@ -393,7 +401,6 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // the stored anchor relative to the OLD width, and nothing else
     // re-derives it until the next focus move. Idempotent for a settled
     // strip (a fully-visible column stays put under Never/OnOverflow).
-    const int anchorBefore = state->strip().viewAnchor();
     if (!dragPreviewSteersView) {
         state->strip().updateViewForFocus(params);
     }
@@ -629,6 +636,19 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         const auto it = m_lastAppliedRect.constFind(windowId);
         return it != m_lastAppliedRect.constEnd() && it->top() < parkTop;
     };
+    // Minimum sizes for the whole batch in ONE pass over the model. Asking
+    // the strip per tile inside the emit loop costs a columnOfWindow scan
+    // plus an indexOfWindow per window, which is quadratic in the strip's
+    // window count; walking the columns directly is linear. Only built when
+    // the park actually consumes it.
+    QHash<QString, QSize> tileMinSizes;
+    if (params.respectMinimumSize) {
+        for (const Column& column : state->strip().columns()) {
+            for (const Tile& tile : column.tiles) {
+                tileMinSizes.insert(tile.windowId, QSize(tile.minWidth, tile.minHeight));
+            }
+        }
+    }
     for (const ResolvedColumn& column : resolved.columns) {
         // TAB SWITCH pairing. A tabbed column shows one tile and parks the
         // rest, so activating a tab is two commits that share one rect: the
@@ -695,7 +715,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             parkIn.columnRect = column.rect;
             parkIn.workArea = params.workArea;
             parkIn.screenRect = screenRect;
-            parkIn.tileMin = params.respectMinimumSize ? state->strip().windowMinimumSize(tile.windowId) : QSize();
+            parkIn.tileMin = params.respectMinimumSize ? tileMinSizes.value(tile.windowId, QSize(0, 0)) : QSize();
             parkIn.axis = params.axis;
             parkIn.parkTop = parkTop;
             parkIn.hidden = tile.hidden;
@@ -790,15 +810,15 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // view offset — so it travels with the rest of the strip instead of
             // vanishing the instant it leaves the viewport.
             //
-            // Horizontal parks only, and the departure edge is what says so.
-            // Both other parks deliberately carry no edge: a vertical
-            // stack-overflow park clears it ("the park is vertical, so there is
-            // no side to animate from") because that is layout rather than
-            // strip motion, and a hidden tab of an ON-SCREEN tabbed column
-            // records none because it is parked to keep it from stealing input,
-            // not because the strip carried it away. Painting either back would
-            // put a tile on screen that nothing scrolled: the vertical one
-            // returns from below the floor the layout pushed it past, and the
+            // MAIN-AXIS (strip) parks only, and the departure edge is what says
+            // so. Both other parks deliberately carry no edge: a CROSS-AXIS
+            // stack-overflow park clears it ("the park is across the strip, so
+            // there is no strip side to animate from") because that is layout
+            // rather than strip motion, and a hidden tab of an ON-SCREEN tabbed
+            // column records none because it is parked to keep it from stealing
+            // input, not because the strip carried it away. Painting either back
+            // would put a tile on screen that nothing scrolled: the cross-axis
+            // one returns from past the stack edge the layout pushed it over, and the
             // hidden tab shares the active tab's rect, so every inactive tab of
             // every tabbed column would be drawn stacked on the visible one,
             // permanently, on a strip that is not even moving.

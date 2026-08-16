@@ -103,7 +103,7 @@ public:
     /// DELTA: how far the whole strip slid, as opposed to how far any one
     /// window moved. The effect springs that delta once per output and lets
     /// every carried window ride it, instead of starting an independent
-    /// per-window spring each (see the `viewDeltaX` field on the tile-request
+    /// per-window spring each (see the `viewDelta` field on the tile-request
     /// wire).
     ///
     /// TRANSIENT — deliberately not serialized. A restored or freshly created

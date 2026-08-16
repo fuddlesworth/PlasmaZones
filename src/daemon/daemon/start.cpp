@@ -276,10 +276,22 @@ void Daemon::connectScreenSignals()
                 m_geometryUpdateTimer.start();
             });
 
-    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this, [this] {
-        m_geometryUpdatePending = true;
-        m_geometryUpdateTimer.start();
-    });
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this,
+            [this](const PhosphorScreens::PhysicalScreen& screen) {
+                // Same cancel-before-context-change rule as the screen-removed,
+                // desktop-switch and activity handlers: a rotation or a
+                // resolution change reshapes the strip this output's live
+                // preview was detached into, so the view slides under a
+                // stationary cursor and the drag's detach-once invariant no
+                // longer holds. Scoped to the output that changed, keyed on
+                // its identifier the way the removal path is, so a rotation of
+                // monitor A leaves monitor B's preview alone.
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(screen.identifier);
+                }
+                m_geometryUpdatePending = true;
+                m_geometryUpdateTimer.start();
+            });
 
     // Connect to available geometry changes (panels added/removed/resized)
     // This is reactive - the sensor windows automatically track panel changes

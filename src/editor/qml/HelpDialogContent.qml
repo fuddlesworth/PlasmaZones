@@ -21,6 +21,11 @@ ScrollView {
     // Template mode swaps the zone-only groups for the strip's own bindings;
     // the always-live groups (save, undo, fullscreen, help) stay.
     property bool templateMode: false
+    // The strip canvas binds only ONE arrow pair, the one running along the
+    // strip, and lets the cross-axis arrows fall through. The column rows name
+    // that pair rather than promising all four arrows.
+    readonly property bool stripVertical: editorController ? editorController.templatePreviewVertical : false
+    readonly property string stripArrows: stripVertical ? i18nc("@shortcut arrow pair", "Up/Down") : i18nc("@shortcut arrow pair", "Left/Right")
 
     clip: true
     contentWidth: availableWidth
@@ -174,19 +179,19 @@ ScrollView {
                 ShortcutLabel {
                     visible: helpContent.templateMode
                     action: i18nc("@action", "Select column")
-                    shortcut: i18n("Arrow keys")
+                    shortcut: helpContent.stripArrows
                 }
 
                 ShortcutLabel {
                     visible: helpContent.templateMode
                     action: i18nc("@action", "Resize column 1%")
-                    shortcut: i18n("Shift+Arrows")
+                    shortcut: i18nc("@shortcut; %1 is an arrow pair such as Left/Right", "Shift+%1", helpContent.stripArrows)
                 }
 
                 ShortcutLabel {
                     visible: helpContent.templateMode
                     action: i18nc("@action", "Reorder column")
-                    shortcut: i18nc("@shortcut", "Ctrl+Arrows")
+                    shortcut: i18nc("@shortcut; %1 is an arrow pair such as Left/Right", "Ctrl+%1", helpContent.stripArrows)
                 }
 
                 ShortcutLabel {
@@ -288,7 +293,7 @@ ScrollView {
                 ShortcutLabel {
                     visible: helpContent.templateMode
                     action: i18nc("@action", "Resize column")
-                    shortcut: i18nc("@info mouse gesture", "Drag its right divider")
+                    shortcut: i18nc("@info mouse gesture", "Drag the divider after it")
                 }
 
                 ShortcutLabel {

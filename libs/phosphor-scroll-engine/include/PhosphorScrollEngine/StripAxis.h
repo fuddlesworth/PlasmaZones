@@ -57,6 +57,14 @@ public:
     {
         return m_axis == PhosphorProtocol::ScrollAxis::Horizontal;
     }
+    /// The negative of isHorizontal, spelled out. Callers that want the
+    /// vertical case were reaching through axis() to compare the wire enum,
+    /// which puts the protocol type in the middle of a question this object
+    /// already answers.
+    constexpr bool isVertical() const
+    {
+        return m_axis == PhosphorProtocol::ScrollAxis::Vertical;
+    }
     /// Main and cross exchanged, for the few sites that reason about the CROSS
     /// axis in main-axis vocabulary.
     constexpr StripAxis transposed() const
@@ -133,31 +141,39 @@ public:
     /// so it changes both position and extent. setMainHigh is the mirror. That
     /// asymmetry is QRect's own, and it is load-bearing for the straddle
     /// clamp's pinned-position test — do not "fix" either into a move.
-    void setMainLow(QRect& r, int v) const
+    constexpr void setMainLow(QRect& r, int v) const
     {
-        isHorizontal() ? r.setLeft(v) : r.setTop(v);
+        if (isHorizontal()) {
+            r.setLeft(v);
+        } else {
+            r.setTop(v);
+        }
     }
-    void setMainHigh(QRect& r, int v) const
+    constexpr void setMainHigh(QRect& r, int v) const
     {
-        isHorizontal() ? r.setRight(v) : r.setBottom(v);
+        if (isHorizontal()) {
+            r.setRight(v);
+        } else {
+            r.setBottom(v);
+        }
     }
-    void setCrossLow(QRect& r, int v) const
+    constexpr void setCrossHigh(QRect& r, int v) const
     {
-        isHorizontal() ? r.setTop(v) : r.setLeft(v);
-    }
-    void setCrossHigh(QRect& r, int v) const
-    {
-        isHorizontal() ? r.setBottom(v) : r.setRight(v);
+        if (isHorizontal()) {
+            r.setBottom(v);
+        } else {
+            r.setRight(v);
+        }
     }
 
     /// Reposition without resizing, unlike the setters above.
-    void moveMain(QRect& r, int v) const
+    constexpr void moveMain(QRect& r, int v) const
     {
-        isHorizontal() ? r.moveLeft(v) : r.moveTop(v);
-    }
-    void moveCross(QRect& r, int v) const
-    {
-        isHorizontal() ? r.moveTop(v) : r.moveLeft(v);
+        if (isHorizontal()) {
+            r.moveLeft(v);
+        } else {
+            r.moveTop(v);
+        }
     }
 
     /// Translate along the MAIN axis only — the view slide. The cross

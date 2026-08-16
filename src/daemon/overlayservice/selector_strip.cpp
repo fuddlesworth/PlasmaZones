@@ -161,7 +161,18 @@ void OverlayService::updateStripSelectorHit(QQuickItem* slot, int localX, int lo
         // two MUST agree: a horizontal classification over a vertical row
         // reverses which half of a card means "first tile" versus "append",
         // silently and with no visual tell.
-        hit = classifyStripSelectorPoint(cardRects, tabbed, pos, spacing * 0.75, stripIsVertical(screenId));
+        //
+        // Read back off the SLOT rather than asked of the axis provider, the
+        // same one-source-of-truth rule the card rects above follow: this
+        // property is the axis updateZoneSelectorWindow laid the row out with,
+        // so the classification always matches the geometry it is classifying
+        // even on the tick where a rotation has already moved the engine's
+        // answer but the popup has not been rebuilt yet. It also keeps the
+        // per-cursor-tick path off stripAxisForScreen, which resolves a full
+        // work area and gap cascade for one bool — the cost
+        // m_stripCardFractionsCache exists to avoid.
+        const bool verticalAxis = slot->property("stripVerticalAxis").toBool();
+        hit = classifyStripSelectorPoint(cardRects, tabbed, pos, spacing * 0.75, verticalAxis);
     }
 
     SelectorStripTarget target;

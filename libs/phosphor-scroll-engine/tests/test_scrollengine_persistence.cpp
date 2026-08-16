@@ -20,8 +20,6 @@
 
 using namespace PhosphorScrollEngine;
 
-namespace Ax = ScrollTestUtils::Ax;
-
 using ScrollTestUtils::makeProviderEngine;
 
 class TestScrollEnginePersistence : public QObject
@@ -29,8 +27,8 @@ class TestScrollEnginePersistence : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    /// Proves the vertical arm really is transposed, then skips while the
-    /// engine is horizontal-only.
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
     void initTestCase()
     {
         AX_GUARD_SUITE();
@@ -68,17 +66,17 @@ private:
         return static_cast<ScrollState*>(engine->stateForScreen(screenId));
     }
 
-    /// The column index @p windowId holds on S1, asserted to be a REAL slot
-    /// first: columnIndexForWindow answers -1 for an untracked window, and a
-    /// bare `!=` between two -1s is a comparison that passes for the wrong
-    /// reason on exactly the regression these tests exist to catch.
+    /// The column index @p windowId holds on S1, or -1 when it holds none.
+    ///
+    /// The check belongs at the CALL SITE, not in here: QVERIFY expands to a
+    /// `return`, so a verify inside this helper would only return from the
+    /// helper and hand the caller the -1 anyway. Every caller asserts
+    /// `>= 0` before comparing or indexing, because a bare `!=` between two
+    /// -1s passes for the wrong reason on exactly the regression these tests
+    /// exist to catch, and `columns().at(-1)` aborts the whole binary.
     static int columnOf(ScrollEngine* engine, const QString& windowId)
     {
-        const int col = engine->columnIndexForWindow(QStringLiteral("S1"), windowId);
-        [&]() {
-            QVERIFY2(col >= 0, qPrintable(QStringLiteral("%1 holds no column").arg(windowId)));
-        }();
-        return col;
+        return engine->columnIndexForWindow(QStringLiteral("S1"), windowId);
     }
 };
 
@@ -208,6 +206,7 @@ void TestScrollEnginePersistence::stashedShapeOutranksTheOpenHeightRule()
     // and not an inert resolver.
     engine2->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
     const int freshCol = columnOf(engine2, QStringLiteral("app|n2"));
+    QVERIFY2(freshCol >= 0, "app|n2 holds no column");
     const Column& fresh = state->strip().columns().at(freshCol);
     QCOMPARE(fresh.width.kind, ColumnWidth::Proportion);
     QCOMPARE(fresh.width.proportion, 0.9);
@@ -524,6 +523,7 @@ void TestScrollEnginePersistence::pruneSpareStashStagedFromPersistence()
     engine3->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
     const int m1Col = columnOf(engine3, QStringLiteral("app|m1"));
     const int n2Col = columnOf(engine3, QStringLiteral("app|n2"));
+    QVERIFY2(m1Col >= 0 && n2Col >= 0, "both windows must hold a real column, or the equality below is two -1s");
     QVERIFY2(m1Col == n2Col,
              "a claim on one staged tile must not expose its unclaimed co-tenant's slot to the aliveness sweep");
 
@@ -590,7 +590,10 @@ void TestScrollEnginePersistence::unclaimedStashTilesExpireAfterThreeSessions()
     control->restoreStripState(penultimate);
     control->windowOpened(QStringLiteral("app|c1"), QStringLiteral("S1"), 0, 0);
     control->windowOpened(QStringLiteral("app|c2"), QStringLiteral("S1"), 0, 0);
-    QCOMPARE(columnOf(control, QStringLiteral("app|c1")), columnOf(control, QStringLiteral("app|c2")));
+    const int c1Col = columnOf(control, QStringLiteral("app|c1"));
+    const int c2Col = columnOf(control, QStringLiteral("app|c2"));
+    QVERIFY2(c1Col >= 0 && c2Col >= 0, "both windows must hold a real column, or the equality below is two -1s");
+    QCOMPARE(c1Col, c2Col);
 
     // The last blob carries age 3: restore drops both tiles, so the arrivals
     // find no staged slots and open plainly, one column each.
@@ -601,6 +604,7 @@ void TestScrollEnginePersistence::unclaimedStashTilesExpireAfterThreeSessions()
     engine5->windowOpened(QStringLiteral("app|x2"), QStringLiteral("S1"), 0, 0);
     const int x1Col = columnOf(engine5, QStringLiteral("app|x1"));
     const int x2Col = columnOf(engine5, QStringLiteral("app|x2"));
+    QVERIFY2(x1Col >= 0 && x2Col >= 0, "both windows must hold a real column before the slots can be compared");
     QVERIFY2(x1Col != x2Col, "an expired stash tile must not capture a later same-app arrival");
 }
 
@@ -662,6 +666,7 @@ void TestScrollEnginePersistence::coTenantClaimDoesNotRenewSiblingLease()
     engine5->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
     const int aCol = columnOf(engine5, QStringLiteral("app|a"));
     const int bCol = columnOf(engine5, QStringLiteral("app|b"));
+    QVERIFY2(aCol >= 0 && bCol >= 0, "both windows must hold a real column before the slots can be compared");
     QVERIFY2(aCol != bCol, "a returning co-tenant's claim must not renew the dead sibling tile's lease");
 }
 

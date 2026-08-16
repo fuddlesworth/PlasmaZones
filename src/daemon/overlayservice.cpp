@@ -1104,7 +1104,11 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
         // The None row: this list is a PICKER of the context's template, so it
         // carries the opt-out alongside the templates themselves. Mirrored in
         // visibleLayoutCount below, which must agree with this row for row.
-        inc.templates);
+        inc.templates,
+        // Template cards depict the columns this screen's strip will hold, so
+        // they follow the screen's strip axis. Count-neutral, which is why
+        // visibleLayoutCount does not pay for the same resolve.
+        stripIsVertical(resolvedId));
     return PlasmaZones::toVariantList(entries);
 }
 
@@ -1176,7 +1180,12 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
         // the row-for-row agreement the header of that function calls out: a
         // count short by one here would size the popup for fewer cards than
         // it draws.
-        inc.templates);
+        inc.templates
+        // No strip axis: this function is asked per cursor tick by the
+        // trigger-edge probe, and the axis only transposes each card's bands.
+        // It cannot add or drop a row, so taking the default here leaves the
+        // row-for-row agreement above intact at no per-tick cost.
+    );
     return entries.size();
 }
 

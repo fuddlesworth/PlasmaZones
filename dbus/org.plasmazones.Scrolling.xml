@@ -13,7 +13,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </property>
 
         <property name="scrollEffectBehaviour" type="a{sv}" access="read">
-            <annotation name="org.gtk.GDBus.DocString" value="The two scrolling behaviours the COMPOSITOR owns, as already-resolved screen-id lists: {'focusFollowsMouse': as, 'cropStraddlers': as}. Both are per-context rule slots (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) whose consumer lives in the KWin effect rather than the scroll engine, so unlike their four sibling behaviour slots they cannot ride the engine's per-screen override map. The daemon resolves rule-then-config per scrolling screen and publishes the RESOLVED membership, which keeps the effect free of any config knowledge: it answers each question with a set lookup and holds no fallback of its own. A screen absent from a list has that behaviour off; a screen that is not scrolling appears in neither. Both lists are sorted, matching the scrollEffectBehaviourChanged payload. One map rather than two list properties so the compositor pays a single bring-up query and a single subscription. Changes are announced on scrollEffectBehaviourChanged below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
+            <annotation name="org.gtk.GDBus.DocString" value="The three scrolling facts the COMPOSITOR owns, as already-resolved screen-id lists: {'focusFollowsMouse': as, 'cropStraddlers': as, 'verticalAxis': as}. The first two are per-context rule slots (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) whose consumer lives in the KWin effect rather than the scroll engine, so unlike their four sibling behaviour slots they cannot ride the engine's per-screen override map. verticalAxis is membership rather than a per-screen value: a screen IN that list runs its strip VERTICALLY, and absence means horizontal, so an absent key and an empty list mean the same safe thing and a compositor that predates the axis reads the whole desktop as horizontal. The daemon resolves rule-then-config per scrolling screen and publishes the RESOLVED membership, which keeps the effect free of any config knowledge: it answers each question with a set lookup and holds no fallback of its own. A screen absent from a list has that behaviour off (or, for verticalAxis, a horizontal strip); a screen that is not scrolling appears in none of the three. All three lists are sorted, matching the scrollEffectBehaviourChanged payload. One map rather than three list properties so the compositor pays a single bring-up query and a single subscription. Changes are announced on scrollEffectBehaviourChanged below, not through org.freedesktop.DBus.Properties.PropertiesChanged, which this property does not emit."/>
         </property>
 
         <method name="focusColumn">
@@ -22,7 +22,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
                 <annotation name="org.gtk.GDBus.DocString" value="Screen whose strip should move (the cursor's screen). An empty string is ignored."/>
             </arg>
             <arg name="delta" type="i" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="-1 focuses the column to the left, +1 to the right. Any other value is ignored."/>
+                <annotation name="org.gtk.GDBus.DocString" value="-1 focuses the previous column along the strip, +1 the next one (left/right on a horizontal strip, up/down on a vertical one). Any other value is ignored."/>
             </arg>
         </method>
 

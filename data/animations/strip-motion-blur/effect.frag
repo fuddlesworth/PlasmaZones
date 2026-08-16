@@ -5,8 +5,9 @@
 //
 // Strip contract (see strip_transition.glsl): iTime is SECONDS, not progress;
 // there is no from/to pair; intensity keys off iStripMotion, which converges
-// to zero at settle — the identity contract. The horizontal N-tap smear is
-// proportional to the velocity in output-widths per second (iStripMotion.w),
+// to zero at settle — the identity contract. The N-tap smear runs along the
+// strip's travel axis and is proportional to the velocity in output-extents
+// along the travel axis per second (iStripMotion.w),
 // saturating so a violent fling cannot smear the whole screen, and masked to
 // the strip's work area so panels stay sharp. The kernel is symmetric, so
 // scroll direction changes nothing: a smear reads the same either way.
@@ -19,8 +20,9 @@ vec4 pTransition(vec2 uv, float t) {
     vec4 base = getStripColor(uv);
     float mask = stripMask(uv, p_edgeFeather);
     // Half-width of the smear kernel in uv units. The 3.5% clamp is what
-    // binds in practice: it is reached at roughly 0.6 output-widths per
-    // second at full strength, and a wheel fling runs well past that. The
+    // binds in practice: it is reached at roughly 0.6 output-extents along the
+    // travel axis per second at full strength, and a wheel fling runs well
+    // past that. The
     // 0.06 slope only shapes the ramp below that speed.
     //
     // The work-area mask scales the kernel itself rather than blending the

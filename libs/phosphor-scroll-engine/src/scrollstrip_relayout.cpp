@@ -127,15 +127,15 @@ int ScrollStrip::columnExtentPx(const Column& c, const ScrollLayoutParams& param
 
 int ScrollStrip::columnStripPos(int columnIndex, const ScrollLayoutParams& params) const
 {
-    int x = 0;
+    int mainPos = 0;
     const int end = qBound(0, columnIndex, m_columns.size());
     for (int i = 0; i < end; ++i) {
-        const int w = columnExtentPx(m_columns.at(i), params);
-        if (w > 0) {
-            x += w + params.gap;
+        const int extent = columnExtentPx(m_columns.at(i), params);
+        if (extent > 0) {
+            mainPos += extent + params.gap;
         }
     }
-    return x;
+    return mainPos;
 }
 
 int ScrollStrip::stripExtentPx(const ScrollLayoutParams& params) const
@@ -164,12 +164,12 @@ int ScrollStrip::centeredAnchorFor(int columnIndex, const ScrollLayoutParams& pa
         return 0;
     }
     // Degenerate-area guard, same as clampedAnchor's (the rationale lives
-    // there): a centered anchor computed against a 0-width area is 0.
+    // there): a centered anchor computed against a 0-extent area is 0.
     if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
-    const int colW = columnExtentPx(m_columns.at(columnIndex), params);
-    return (mainExtent(params) - colW) / 2;
+    const int colMain = columnExtentPx(m_columns.at(columnIndex), params);
+    return (mainExtent(params) - colMain) / 2;
 }
 
 int ScrollStrip::keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params) const
@@ -210,13 +210,14 @@ int ScrollStrip::clampedAnchor(int anchor, const ScrollLayoutParams& params) con
     if (mainExtent(params) <= 0) {
         return m_viewAnchor;
     }
-    const int workW = mainExtent(params);
-    const int stripW = stripExtentPx(params);
-    const int stripX = columnStripPos(m_activeColumnIdx, params);
-    // anchor = stripX - viewOffset; viewOffset must stay within [0, max(0, stripW - workW)].
-    const int maxViewOffset = qMax(0, stripW - workW);
-    const int viewOffset = qBound(0, stripX - anchor, maxViewOffset);
-    return stripX - viewOffset;
+    const int viewMain = mainExtent(params);
+    const int stripMain = stripExtentPx(params);
+    const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
+    // anchor = activeMainPos - viewOffset; viewOffset must stay within
+    // [0, max(0, stripMain - viewMain)].
+    const int maxViewOffset = qMax(0, stripMain - viewMain);
+    const int viewOffset = qBound(0, activeMainPos - anchor, maxViewOffset);
+    return activeMainPos - viewOffset;
 }
 
 void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const ScrollLayoutParams& params)
@@ -230,17 +231,17 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
     if (mainExtent(params) <= 0) {
         return;
     }
-    const int workW = mainExtent(params);
-    const int colW = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
-    const int stripX = columnStripPos(m_activeColumnIdx, params);
+    const int viewMain = mainExtent(params);
+    const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
+    const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
 
     const bool centerLoneColumn = params.alwaysCenterSingleColumn && m_columns.size() == 1;
     bool center = centerLoneColumn || params.centerFocusedColumn == CenterFocusedColumn::Always;
 
     if (!center && params.centerFocusedColumn == CenterFocusedColumn::OnOverflow && prevIdx >= 0
         && prevIdx < m_columns.size() && prevIdx != m_activeColumnIdx) {
-        const int prevW = columnExtentPx(m_columns.at(prevIdx), params);
-        if (colW + params.gap + prevW > workW) {
+        const int prevMain = columnExtentPx(m_columns.at(prevIdx), params);
+        if (colMain + params.gap + prevMain > viewMain) {
             center = true;
         }
     }
@@ -252,14 +253,14 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewOffset, const
 
     // CenterFocusedColumn::Never — scroll the minimum amount that makes the
     // focused column fully visible, pinning it to the edge it entered from.
-    int pos = stripX - oldViewOffset;
-    if (colW >= workW) {
-        // Wider than the viewport: pin the entering edge.
-        pos = (prevIdx >= 0 && m_activeColumnIdx < prevIdx) ? workW - colW : 0;
+    int pos = activeMainPos - oldViewOffset;
+    if (colMain >= viewMain) {
+        // Longer than the viewport along the strip: pin the entering edge.
+        pos = (prevIdx >= 0 && m_activeColumnIdx < prevIdx) ? viewMain - colMain : 0;
     } else if (pos < 0) {
         pos = 0;
-    } else if (pos + colW > workW) {
-        pos = workW - colW;
+    } else if (pos + colMain > viewMain) {
+        pos = viewMain - colMain;
     }
     m_viewAnchor = clampedAnchor(pos, params);
 }
@@ -285,10 +286,10 @@ void ScrollStrip::updateViewForFocus(const ScrollLayoutParams& params)
     // reclaim removeWindowInternal's deliberate right-edge dead space.
     const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
     if (!centerLone && params.centerFocusedColumn != CenterFocusedColumn::Always && m_activeColumnIdx >= 0) {
-        const int workW = mainExtent(params);
-        const int colW = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
+        const int viewMain = mainExtent(params);
+        const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const int pos = columnStripPos(m_activeColumnIdx, params) - viewOffsetFor(params);
-        if (pos >= 0 && pos + colW <= workW) {
+        if (pos >= 0 && pos + colMain <= viewMain) {
             return;
         }
     }
@@ -319,28 +320,28 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     if (mainExtent(params) <= 0) {
         return false;
     }
-    const int workW = mainExtent(params);
+    const int viewMain = mainExtent(params);
     const int viewOffset = viewOffsetFor(params);
     // FULLY visible columns only (niri center-visible-columns): a partially
     // clipped edge column is exactly what the verb pushes out of the way, so
-    // it must not drag the span. Zero-width (fully minimized) columns carry
+    // it must not drag the span. Zero-extent (fully minimized) columns carry
     // no strip position and are skipped the same way stripExtentPx skips them.
     int spanStart = -1;
     int spanEnd = -1;
     for (int i = 0; i < m_columns.size(); ++i) {
-        const int w = columnExtentPx(m_columns.at(i), params);
-        if (w <= 0) {
+        const int colMain = columnExtentPx(m_columns.at(i), params);
+        if (colMain <= 0) {
             continue;
         }
-        const int stripX = columnStripPos(i, params);
-        const int pos = stripX - viewOffset;
-        if (pos < 0 || pos + w > workW) {
+        const int colMainPos = columnStripPos(i, params);
+        const int pos = colMainPos - viewOffset;
+        if (pos < 0 || pos + colMain > viewMain) {
             continue;
         }
         if (spanStart < 0) {
-            spanStart = stripX;
+            spanStart = colMainPos;
         }
-        spanEnd = stripX + w;
+        spanEnd = colMainPos + colMain;
     }
     if (spanStart < 0) {
         // Nothing fully visible (a lone over-wide column, or a viewport mid
@@ -352,7 +353,7 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     // expressed through it. Deliberately unclamped, like centerActiveColumn:
     // a centered span near the strip's edge implies out-of-range viewOffset by
     // design, and later structural inserts re-clamp when needed.
-    const int newViewOffset = spanStart - (workW - (spanEnd - spanStart)) / 2;
+    const int newViewOffset = spanStart - (viewMain - (spanEnd - spanStart)) / 2;
     const int anchor = columnStripPos(m_activeColumnIdx, params) - newViewOffset;
     if (anchor == m_viewAnchor) {
         return false;

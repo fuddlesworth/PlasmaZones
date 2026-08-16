@@ -6,6 +6,7 @@
 #include "stripmotionsampler.h"
 
 #include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams / kMaxCustomColors
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 
 #include <QHash> // std::hash<QString> specialization (used by the unordered_map key below)
 #include <QString>
@@ -109,7 +110,21 @@ public:
     ///     no inherited velocity.
     ///   • PACK SWAP (different @p effectId): the sampler resets too — pack
     ///     B must not begin at pack A's accumulated clock and frame count.
-    void notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params, int viewDelta);
+    ///   • AXIS FLIP (@p axis differs from the animator's current axis for
+    ///     this output): same arm as a pack swap. The spring may well be live
+    ///     at call time, but applyBatchDelta is about to CANCEL it rather than
+    ///     retarget it (an in-flight motion along the old axis has no velocity
+    ///     worth keeping), so treating this as a retarget would compensate the
+    ///     sampler's baseline against a measurement taken on the old axis and
+    ///     then hand the pack a spurious velocity spike on the next sample.
+    ///     The comparison is only meaningful because of the ordering contract
+    ///     above: running BEFORE applyBatchDelta is what leaves
+    ///     StripViewAnimator::axisFor() still reporting the PRE-batch axis.
+    ///
+    /// @p axis is the batch's strip axis for this output, the same value the
+    /// caller passes to applyBatchDelta.
+    void notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params, int viewDelta,
+                   PhosphorProtocol::ScrollAxis axis);
 
     /// True while any armed output's view spring is live OR its settle fade
     /// is open. Feeds PlasmaZonesEffect::isActive() and

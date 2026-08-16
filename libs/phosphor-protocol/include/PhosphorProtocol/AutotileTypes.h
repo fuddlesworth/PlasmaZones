@@ -37,8 +37,11 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// Overlap-layout stacking direction: "firstOnTop" or "lastOnTop".
     /// Empty for non-overlap layouts (the effect leaves z-order alone).
     QString stacking;
-    /// Scrolling mode: which screen edge this window's motion is anchored to,
-    /// "left" or "right". Empty for every other placement.
+    /// Scrolling mode: which screen edge this window's motion is anchored to.
+    /// One of "left", "right", "top" or "bottom"; empty for every other
+    /// placement. Which PAIR is in play follows the screen's strip axis — a
+    /// horizontal strip uses left/right, a vertical one top/bottom. The
+    /// validator in types.cpp is the authority on the accepted set.
     ///
     /// This exists because a scrolling strip's off-viewport columns have to be
     /// committed somewhere, and where they are committed must NOT decide which

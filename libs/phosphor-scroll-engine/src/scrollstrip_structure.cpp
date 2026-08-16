@@ -360,21 +360,21 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // bookkeeping is skipped, and the first relayout against a real area
     // re-clamps whatever survived.
     if (params.axis.mainSize(params.workArea) > 0) {
-        const int stripX = columnStripPos(m_activeColumnIdx, params);
-        int anchor = removedLeftOfActive ? m_viewAnchor : stripX - oldViewOffset;
-        if (stripX - anchor < 0) {
-            anchor = stripX;
+        const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
+        int anchor = removedLeftOfActive ? m_viewAnchor : activeMainPos - oldViewOffset;
+        if (activeMainPos - anchor < 0) {
+            anchor = activeMainPos;
         }
         m_viewAnchor = anchor;
     }
 
     if (refocus) {
-        const int workW = params.axis.mainSize(params.workArea);
-        const int colW = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
+        const int viewMain = params.axis.mainSize(params.workArea);
+        const int colMain = columnExtentPx(m_columns.at(m_activeColumnIdx), params);
         const bool centerLone = params.alwaysCenterSingleColumn && m_columns.size() == 1;
         if (centerLone || params.centerFocusedColumn == CenterFocusedColumn::Always) {
             m_viewAnchor = centeredAnchorFor(m_activeColumnIdx, params);
-        } else if (m_viewAnchor < 0 || m_viewAnchor + colW > workW) {
+        } else if (m_viewAnchor < 0 || m_viewAnchor + colMain > viewMain) {
             // The newly-focused column is (partly) out of view — scroll it
             // in per the centering policy. A fully visible column stays put
             // even if that leaves empty strip on the right; the next focus
@@ -772,23 +772,23 @@ QVector<int> ScrollStrip::visibleColumnIndices(const ScrollLayoutParams& params)
     // Visible = the column's strip span intersects the viewport. Fully
     // minimized columns resolve to zero width and never qualify.
     const int viewOffset = viewOffsetFor(params);
-    const int workW = params.axis.mainSize(params.workArea);
+    const int viewMain = params.axis.mainSize(params.workArea);
     QVector<int> visible;
-    // Strip x accumulated in the walk rather than re-derived per index: the
-    // accumulation is columnStripPos's own body (skip zero-width columns, else
-    // advance by width + gap), and calling it per index re-resolved every
-    // earlier column's width on every step.
-    int stripX = 0;
+    // Strip position accumulated in the walk rather than re-derived per index:
+    // the accumulation is columnStripPos's own body (skip zero-extent columns,
+    // else advance by extent + gap), and calling it per index re-resolved every
+    // earlier column's extent on every step.
+    int stripMainPos = 0;
     for (int i = 0; i < m_columns.size(); ++i) {
-        const int w = columnExtentPx(m_columns.at(i), params);
-        if (w <= 0) {
+        const int colMain = columnExtentPx(m_columns.at(i), params);
+        if (colMain <= 0) {
             continue;
         }
-        const int x = stripX - viewOffset;
-        if (x < workW && x + w > 0) {
+        const int viewPos = stripMainPos - viewOffset;
+        if (viewPos < viewMain && viewPos + colMain > 0) {
             visible.append(i);
         }
-        stripX += w + params.gap;
+        stripMainPos += colMain + params.gap;
     }
     return visible;
 }

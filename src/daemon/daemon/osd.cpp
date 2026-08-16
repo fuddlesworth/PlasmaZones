@@ -97,7 +97,7 @@ QVector<StripZones::VisibleTile> visibleStripTiles(const PhosphorEngine::Placeme
 /// sketch — as does a screen whose geometry cannot be resolved, since the
 /// rects cannot be placed in the card's full-screen-shaped box without it.
 void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManager* screens, const QString& screenId,
-                           const QVector<StripZones::VisibleTile>& tiles)
+                           const QVector<StripZones::VisibleTile>& tiles, bool verticalAxis)
 {
     if (!overlay) {
         return;
@@ -119,7 +119,10 @@ void pushScrollingStripOsd(OverlayService* overlay, PhosphorScreens::ScreenManag
             qCWarning(lcDaemon) << "Strip preview OSD: no geometry for screen=" << screenId << "tiles=" << tiles.size()
                                 << "— falling back to the sketch";
         }
-        zones = StripZones::sketchZoneMaps(screenId);
+        // The LIVE arm needs no axis: those rects are the engine's own tiles,
+        // already laid the way the strip runs. Only the sketch is drawn from
+        // nothing and has to be told.
+        zones = StripZones::sketchZoneMaps(screenId, verticalAxis);
     }
     // Autotile category: the renderer treats it as "generated, not
     // editable", which is exactly what a live strip snapshot is.
@@ -510,7 +513,9 @@ void Daemon::showScrollingModeOsd(const QString& screenId, OsdTrigger trigger, S
             // would land a second, identical card a beat later.
             stopScrollingOsdSettleTimer(screenId);
             recordAnnouncedScrollingTemplate(screenId);
-            pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId, tiles);
+            const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+            pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId, tiles,
+                                  scroll && scroll->stripAxisForScreen(screenId).isVertical());
             return;
         }
         // A mode toggle announces BEFORE the effect's re-announce batch
@@ -583,8 +588,13 @@ void Daemon::showScrollingStripPreviewOsd(const QString& screenId)
     // return without rendering, and the template in force at dispatch is the
     // one this card actually shows.
     recordAnnouncedScrollingTemplate(screenId);
+    // The engine's axis for this screen, for the empty-strip sketch inside:
+    // the same downcast idiom the axis walk in daemon/scrolling.cpp uses, and
+    // an absent engine falls back to the horizontal sketch.
+    const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
     pushScrollingStripOsd(m_overlayService.get(), m_screenManager.get(), screenId,
-                          visibleStripTiles(m_scrollEngine.get(), screenId));
+                          visibleStripTiles(m_scrollEngine.get(), screenId),
+                          scroll && scroll->stripAxisForScreen(screenId).isVertical());
 }
 
 void Daemon::stopScrollingOsdSettleTimer(const QString& screenId)
@@ -623,11 +633,21 @@ void Daemon::showScrollingTemplateOsd(const PhosphorZones::ScrollingTemplate& te
     // ONE projection for every surface that draws a template:
     // previewFromScrollingTemplate lays the blueprint columns (or, for a
     // vocabulary-only template, its preset widths, or, for a defaults-only
-    // template, a single column) left to right as full-height bands and
-    // truncates the last band at the right edge. Re-deriving the walk here
-    // is how the OSD and the picker card end up disagreeing about the same
-    // template, so this only reshapes the result into the QML payload.
-    const PhosphorLayout::LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ);
+    // template, a single column) as bands along the strip axis and truncates
+    // the last band at the far edge. Re-deriving the walk here is how the OSD
+    // and the picker card end up disagreeing about the same template, so this
+    // only reshapes the result into the QML payload.
+    //
+    // The axis comes from the ENGINE's resolution for THIS screen, never from
+    // a second aspect-ratio derivation here: the card is a picture of what the
+    // strip will look like, so on a vertical strip the bands have to stack the
+    // way the engine will actually lay the columns. The downcast is the
+    // in-tree idiom for reaching a scrolling-only accessor off the base engine
+    // pointer (see the axis walk in daemon/scrolling.cpp); a null cast or an
+    // absent engine answers horizontal, the historical depiction.
+    const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    const bool verticalAxis = scroll && scroll->stripAxisForScreen(screenId).isVertical();
+    const PhosphorLayout::LayoutPreview preview = PhosphorZones::previewFromScrollingTemplate(templ, verticalAxis);
     QVariantList zones;
     zones.reserve(preview.zones.size());
     for (int i = 0; i < preview.zones.size(); ++i) {

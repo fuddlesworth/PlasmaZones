@@ -95,6 +95,52 @@ QJsonObject basePack(const QString& id)
     return obj;
 }
 
+/// A bundled shared helper's CODE, with its `//` comments removed. The strip
+/// helper's prose names iStripAxis a dozen times, so an assertion about what
+/// the helper computes has to read past it or a commented-out body would
+/// satisfy it.
+///
+/// Returns an empty string when the source tree is not available, the same
+/// skip cue as linkSharedIncludes.
+QString sharedHelperCode(const QString& fileName)
+{
+    QFile file(QStringLiteral(P_SOURCE_DIR "/data/animations/shared/") + fileName);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+    QString code;
+    const QString text = QString::fromUtf8(file.readAll());
+    for (const QString& line : text.split(QLatin1Char('\n'))) {
+        code += line.section(QLatin1String("//"), 0, 0) + QLatin1Char('\n');
+    }
+    return code;
+}
+
+/// The body of the GLSL function named @p name in @p code, between its opening
+/// brace and the matching close. Empty when the function is absent.
+QString glslFunctionBody(const QString& code, const QString& name)
+{
+    const int signature = code.indexOf(name + QLatin1Char('('));
+    if (signature < 0) {
+        return QString();
+    }
+    const int open = code.indexOf(QLatin1Char('{'), signature);
+    if (open < 0) {
+        return QString();
+    }
+    int depth = 0;
+    for (int i = open; i < code.size(); ++i) {
+        if (code.at(i) == QLatin1Char('{')) {
+            ++depth;
+        } else if (code.at(i) == QLatin1Char('}')) {
+            if (--depth == 0) {
+                return code.mid(open + 1, i - open - 1);
+            }
+        }
+    }
+    return QString();
+}
+
 QJsonArray toArray(const QStringList& values)
 {
     QJsonArray arr;
@@ -138,6 +184,41 @@ private Q_SLOTS:
         QVERIFY2(rejected.isEmpty(),
                  qPrintable(QStringLiteral("the lint rejects token(s) the parser accepts: ")
                             + rejected.join(QLatin1String(", "))));
+    }
+
+    /// The strip helpers must resolve through the bound axis uniform rather
+    /// than through a hardcoded x.
+    ///
+    /// Nothing else can catch this. Strip packs are compositor-only, so the
+    /// validator skips their stage compile entirely and the bundled-pack gate
+    /// never reads a line of their GLSL — a stripAxisOffset reverted to
+    /// `vec2(amount, 0.0)` compiles, links, bakes and ships, and every one of
+    /// the four packs that displace through it smears sideways on a vertical
+    /// strip with no diagnostic anywhere. The helper is the single point every
+    /// one of them goes through, which is what makes a source assertion worth
+    /// making here instead of per pack.
+    void stripHelpersDisplaceAlongTheBoundAxis()
+    {
+        const QString code = sharedHelperCode(QStringLiteral("strip_transition.glsl"));
+        if (code.isEmpty())
+            QSKIP("data/animations/shared not found — running outside source tree");
+
+        const QString offset = glslFunctionBody(code, QStringLiteral("stripAxisOffset"));
+        QVERIFY2(!offset.isEmpty(), "stripAxisOffset is missing from shared/strip_transition.glsl");
+        QVERIFY2(
+            offset.contains(QLatin1String("iStripAxis")),
+            qPrintable(QStringLiteral("stripAxisOffset does not multiply by the bound axis: ") + offset.simplified()));
+
+        // The perpendicular is the axis SWAP, not a rotation: vec2(-y, x)
+        // would hand a vertical strip (-1, 0) and mirror every across
+        // coordinate against the horizontal case, which is a sign error no
+        // horizontal-only test can see.
+        const QString perp = glslFunctionBody(code, QStringLiteral("stripAxisPerp"));
+        QVERIFY2(!perp.isEmpty(), "stripAxisPerp is missing from shared/strip_transition.glsl");
+        QVERIFY2(perp.contains(QLatin1String("iStripAxis.y")) && perp.contains(QLatin1String("iStripAxis.x")),
+                 qPrintable(QStringLiteral("stripAxisPerp is not the plain component swap: ") + perp.simplified()));
+        QVERIFY2(!perp.contains(QLatin1String("-iStripAxis")),
+                 qPrintable(QStringLiteral("stripAxisPerp negates a component: ") + perp.simplified()));
     }
 
     /// The complement: an unknown token IS linted, and the message names the

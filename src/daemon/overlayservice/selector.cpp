@@ -592,6 +592,11 @@ void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
             m_selectedStripTarget = {};
             m_selectedStripScreenId.clear();
         }
+        // The memoized card fractions go with the target, for the same reason
+        // the rekey path drops both: this screen's popup is gone, so the cached
+        // row shape describes cards nobody can see, and a screen that comes
+        // back must rebuild it from the live strip.
+        m_stripCardFractionsCache.remove(screenId);
         // If this screen was the active zone-selector source, clear the
         // global visible flag so a fresh show after hot-plug isn't
         // gated out by the early-return at showZoneSelector's top.

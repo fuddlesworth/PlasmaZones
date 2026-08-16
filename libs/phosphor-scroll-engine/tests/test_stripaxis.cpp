@@ -80,14 +80,21 @@ private Q_SLOTS:
         QCOMPARE(v.x(), r.x());
     }
 
-    /// setMainLow MOVES the low edge while HOLDING the high edge, so it
-    /// resizes; moveMain repositions without resizing. The straddle clamp
-    /// depends on that difference, so pin it rather than leaving it to
-    /// whoever next reads QRect's documentation.
-    void lowEdgeSettersResizeWhileMoversDoNot()
+    /// Every edge SETTER resizes while HOLDING the opposite edge; moveMain
+    /// repositions without resizing. The straddle clamp and the stack-overflow
+    /// clamp both depend on that difference, so pin it rather than leaving it
+    /// to whoever next reads QRect's documentation.
+    ///
+    /// All four writers on both axes, not just the pair the clamp reads today:
+    /// this file exists so a compensating error INSIDE the mapper cannot hide,
+    /// and a writer with no row here is exactly where such an error would sit.
+    /// (There is no setCrossLow and no moveCross — StripAxis exposes no
+    /// cross-axis low setter or mover, so there is nothing to cover.)
+    void edgeSettersResizeWhileMoversDoNot()
     {
         const QRect start(10, 20, 300, 400);
 
+        // setMainLow: horizontal moves left, holds right.
         QRect resized = start;
         StripAxis::horizontal().setMainLow(resized, 60);
         QCOMPARE(resized, QRect(60, 20, 250, 400));
@@ -105,6 +112,29 @@ private Q_SLOTS:
         QRect movedV = start;
         StripAxis::vertical().moveMain(movedV, 70);
         QCOMPARE(movedV, QRect(10, 70, 300, 400));
+
+        // setMainHigh: the mirror. Holds the LOW edge and trims the extent.
+        QRect highH = start;
+        StripAxis::horizontal().setMainHigh(highH, 200);
+        QCOMPARE(highH, QRect(10, 20, 191, 400));
+        QCOMPARE(highH.left(), start.left());
+
+        QRect highV = start;
+        StripAxis::vertical().setMainHigh(highV, 200);
+        QCOMPARE(highV, QRect(10, 20, 300, 181));
+        QCOMPARE(highV.top(), start.top());
+
+        // setCrossHigh: the same shape one axis over, which is what the
+        // stack-overflow clamp writes.
+        QRect crossH = start;
+        StripAxis::horizontal().setCrossHigh(crossH, 200);
+        QCOMPARE(crossH, QRect(10, 20, 300, 181));
+        QCOMPARE(crossH.top(), start.top());
+
+        QRect crossV = start;
+        StripAxis::vertical().setCrossHigh(crossV, 200);
+        QCOMPARE(crossV, QRect(10, 20, 191, 400));
+        QCOMPARE(crossV.left(), start.left());
     }
 
     void sizeAndPointOverloadsFollowTheSameRoles()
@@ -128,6 +158,18 @@ private Q_SLOTS:
         QCOMPARE(StripAxis::horizontal().transposed(), StripAxis::vertical());
         QCOMPARE(StripAxis::vertical().transposed(), StripAxis::horizontal());
         QCOMPARE(StripAxis::vertical().transposed().transposed(), StripAxis::vertical());
+    }
+
+    /// operator!= is not the compiler's, so it can disagree with operator==
+    /// independently. Half the suite's axis assertions are inequality tests
+    /// on params, so both directions are pinned.
+    void comparisonAgreesInBothDirections()
+    {
+        QVERIFY(StripAxis::horizontal() == StripAxis::horizontal());
+        QVERIFY(!(StripAxis::horizontal() != StripAxis::horizontal()));
+        QVERIFY(StripAxis::horizontal() != StripAxis::vertical());
+        QVERIFY(!(StripAxis::horizontal() == StripAxis::vertical()));
+        QVERIFY(StripAxis::vertical() != StripAxis::horizontal());
     }
 
     /// Horizontal must be the default-constructed value and must be zero.

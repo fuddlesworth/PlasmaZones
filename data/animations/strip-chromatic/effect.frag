@@ -12,7 +12,8 @@
 
 vec4 pTransition(vec2 uv, float t) {
     float m = stripMask(uv, p_edgeFeather);
-    // Signed velocity in output-widths per second, saturating so a violent
+    // Signed velocity in output-extents along the travel axis per second,
+    // saturating so a violent
     // fling cannot pull the channels apart by more than ~1.4% of the output.
     float shift = clamp(iStripMotion.w * 0.02 * p_strength, -0.014, 0.014) * m;
     // Die out before the shifted channels can sample past the screen edge,

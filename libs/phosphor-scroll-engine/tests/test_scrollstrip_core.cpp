@@ -26,8 +26,7 @@ class TestScrollStripCore : public QObject
 private Q_SLOTS:
     /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
     /// property cannot leave it silently re-running the horizontal suite
-    /// under a name claiming otherwise, then skips while the engine is
-    /// horizontal-only.
+    /// under a name claiming otherwise.
     void initTestCase()
     {
         AX_GUARD_SUITE();
@@ -51,17 +50,30 @@ private Q_SLOTS:
         // one carrying a client minimum, and a stack holding an Auto/Fixed
         // split. Each resolves through a different arm of the sizing code, so
         // a missed axis read in any single arm breaks this.
-        const auto build = [](const ScrollLayoutParams& p) {
+        //
+        // The client minimum is TRANSPOSED with the rest of the fixture, and it
+        // has to be: minWidth/minHeight are physical screen-space facts about
+        // the window, so passing the same pair to both builds makes them not
+        // transposes of each other, and this test's whole claim is that they
+        // are. It is also raised above the preset column's resolved main
+        // extent (595px), so the min-size clamp genuinely BITES on both arms.
+        // At the old (250, 0) the minimum was inert against a 595px column and
+        // the arm resolving it was never exercised at all.
+        const auto build = [](const ScrollLayoutParams& p, const QSize& clientMin) {
             ScrollStrip s;
             s.insertWindow(QStringLiteral("a"), ColumnWidth::makeProportion(0.5), ColumnDisplay::Normal, p);
             s.insertWindow(QStringLiteral("b"), ColumnWidth::makeFixed(300), ColumnDisplay::Normal, p);
-            s.insertWindow(QStringLiteral("c"), ColumnWidth::makePreset(0.5), ColumnDisplay::Normal, p, 250, 0);
+            s.insertWindow(QStringLiteral("c"), ColumnWidth::makePreset(0.5), ColumnDisplay::Normal, p,
+                           clientMin.width(), clientMin.height());
             s.focusColumn(2, p);
             s.insertWindowIntoActiveColumn(QStringLiteral("d"), kHalf, std::nullopt, p);
             s.setWindowHeightIntent(QStringLiteral("d"), WindowHeight::makeFixed(220));
             s.focusColumn(1, p);
             return s;
         };
+
+        /// Above the 595px the preset resolves to, so the clamp has to run.
+        constexpr int kBitingMainMinimum = 700;
 
         ScrollLayoutParams h;
         h.workArea = QRect(0, 0, 1200, 800);
@@ -72,14 +84,27 @@ private Q_SLOTS:
         v.workArea = QRect(0, 0, 800, 1200); // T(workArea)
         v.axis = StripAxis::vertical();
 
-        ScrollStrip hs = build(h);
-        ScrollStrip vs = build(v);
+        ScrollStrip hs = build(h, QSize(kBitingMainMinimum, 0));
+        ScrollStrip vs = build(v, QSize(0, kBitingMainMinimum)); // T(clientMin)
         const ResolvedStrip hr = hs.relayout(h);
         const ResolvedStrip vr = vs.relayout(v);
 
         QCOMPARE(vr.stripExtent, hr.stripExtent);
         QCOMPARE(vr.viewOffset, hr.viewOffset);
         QCOMPARE(vr.columns.size(), hr.columns.size());
+
+        // The premise of the biting minimum, pinned so the fixture cannot
+        // drift back into an inert one: c's Preset(0.5) asks for 595px, and
+        // its column resolved WIDER than that because the client minimum
+        // overrode it. Both are literals, never the code under test's own
+        // answer used as its own expectation.
+        QCOMPARE(hr.columns.size(), 3);
+        QCOMPARE(hr.columns.at(2).tiles.first().windowId, QStringLiteral("c"));
+        QVERIFY2(hr.columns.at(2).rect.width() >= kBitingMainMinimum,
+                 qPrintable(QStringLiteral("c's column must be widened by its %1px minimum past the 595px its preset "
+                                           "asks for, got %2")
+                                .arg(kBitingMainMinimum)
+                                .arg(hr.columns.at(2).rect.width())));
 
         const auto transposed = [](const QRect& r) {
             return QRect(r.y(), r.x(), r.height(), r.width());
@@ -129,7 +154,7 @@ private Q_SLOTS:
     void fullyMinimizedColumnCollapses();
     void externalFocusFollowsWindow();
     void stripsAreIndependent();
-    void viewAnchorSurvivesLeftInsert();
+    void viewAnchorSurvivesLeadInsert();
     void tabIndicatorResolvesOnlyForTabbedColumns();
     void tabIndicatorHidesForASingleTab();
     void tabIndicatorSitsOutsideTheColumnByDefault();
@@ -162,14 +187,20 @@ void TestScrollStripCore::openInsertsColumnAndResizesNothing()
     // The §0 invariant: a's geometry is untouched — same size, same position.
     QCOMPARE(rectOf(after, QStringLiteral("a")), aBefore);
     QCOMPARE(Ax::mainPos(rectOf(after, QStringLiteral("b"))), 410);
-    QCOMPARE(Ax::mainLen(rectOf(after, QStringLiteral("b"))), ScrollStrip::resolveColumnWidthPx(kHalf, params));
+    // 595, the literal, NOT resolveColumnWidthPx: computing the expectation
+    // with the code under test makes the assertion agree with any answer that
+    // function gives, which is the antipattern test_scrollstrip_ops calls out.
+    QCOMPARE(Ax::mainLen(rectOf(after, QStringLiteral("b"))), 595);
 }
 
 void TestScrollStripCore::openScrollsOnlyWhenNeeded()
 {
     ScrollStrip strip;
     const auto params = defaultParams();
-    const int halfPx = ScrollStrip::resolveColumnWidthPx(kHalf, params); // 595
+    // The literal a half-width column resolves to on the 1200px main extent at
+    // gap 10, spelled out rather than fetched from resolveColumnWidthPx: an
+    // expectation computed by the code under test cannot disagree with it.
+    const int halfPx = 595;
 
     QVERIFY(strip.insertWindow(QStringLiteral("a"), kHalf, ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
@@ -200,7 +231,7 @@ void TestScrollStripCore::closeKeepsNeighboursAnchored()
     QVERIFY(strip.insertWindow(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
 
     const QRect bBefore = rectOf(strip.relayout(params), QStringLiteral("b"));
-    // Closing the focused rightmost column: focus falls to b, which must not
+    // Closing the focused trail-most column: focus falls to b, which must not
     // jump on screen.
     QVERIFY(strip.removeWindow(QStringLiteral("c"), params));
     QCOMPARE(strip.activeWindowId(), QStringLiteral("b"));
@@ -215,7 +246,7 @@ void TestScrollStripCore::closeSelectsSensibleFocus()
     QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindow(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
 
-    // Focus the middle column and close it: the right neighbour takes focus.
+    // Focus the middle column and close it: the TRAIL neighbour takes focus.
     QVERIFY(strip.focusColumn(1, params));
     QVERIFY(strip.removeWindow(QStringLiteral("b"), params));
     QCOMPARE(strip.activeWindowId(), QStringLiteral("c"));
@@ -245,8 +276,8 @@ void TestScrollStripCore::focusNeverModePinsEnteredEdge()
     for (const QString& id : {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d")}) {
         QVERIFY(strip.insertWindow(id, kHalf, ColumnDisplay::Normal, params));
     }
-    // Focused d (rightmost). Focus a: it enters from the left, so its left
-    // edge pins to the viewport's left edge.
+    // Focused d (trail-most). Focus a: it enters from the LEAD end, so its
+    // lead edge pins to the viewport's lead edge.
     QVERIFY(strip.focusFirstColumn(params));
     ResolvedStrip r = strip.relayout(params);
     QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("a"))), 0);
@@ -257,8 +288,8 @@ void TestScrollStripCore::focusNeverModePinsEnteredEdge()
     r = strip.relayout(params);
     QCOMPARE(r.viewOffset, viewBefore);
 
-    // Focus d again: enters from the right, so its right edge pins to the
-    // viewport's right edge.
+    // Focus d again: enters from the TRAIL end, so its trail edge pins to the
+    // viewport's trail edge.
     QVERIFY(strip.focusLastColumn(params));
     r = strip.relayout(params);
     QCOMPARE(Ax::mainEnd(rectOf(r, QStringLiteral("d"))) + 1, Ax::mainLen(params.workArea));
@@ -398,7 +429,7 @@ void TestScrollStripCore::stripsAreIndependent()
     QCOMPARE(right.activeWindowId(), QStringLiteral("b"));
 }
 
-void TestScrollStripCore::viewAnchorSurvivesLeftInsert()
+void TestScrollStripCore::viewAnchorSurvivesLeadInsert()
 {
     ScrollStrip strip;
     const auto params = defaultParams();
@@ -406,7 +437,7 @@ void TestScrollStripCore::viewAnchorSurvivesLeftInsert()
     QVERIFY(strip.insertWindow(QStringLiteral("b"), kHalf, ColumnDisplay::Normal, params));
     QVERIFY(strip.insertWindow(QStringLiteral("c"), kHalf, ColumnDisplay::Normal, params));
 
-    // Restore-insert a column at index 0 (left of everything): the focused
+    // Restore-insert a column at index 0 (LEAD of everything): the focused
     // column c must not move on screen.
     const QRect cBefore = rectOf(strip.relayout(params), QStringLiteral("c"));
     QVERIFY(strip.insertWindowAt(0, QStringLiteral("z"), kHalf, ColumnDisplay::Normal, params));
@@ -417,8 +448,12 @@ void TestScrollStripCore::viewAnchorSurvivesLeftInsert()
 // ── tab indicator ───────────────────────────────────────────────────────────
 // The indicator's geometry is resolved by the relayout, not by the overlay, so
 // these assert against the ResolvedColumn the strip hands back. The pixel
-// numbers all derive from the shared 1200x800 / 10px-gap fixture: a half-width
-// column is 595 px wide (1200 halved, minus half the gap), full height 800.
+// numbers all derive from the shared 1200x800 / 10px-gap fixture, stated in
+// ROLE terms because the fixture transposes: a half-width column takes 595 px
+// ALONG the strip (1200 halved, minus half the gap) and the full 800 px
+// ACROSS it. The assertions below stay in PHYSICAL vocabulary on purpose —
+// TabIndicatorPosition is a screen-edge vocabulary by design, so a Left
+// indicator means the left of the user's screen on either axis.
 
 namespace {
 

@@ -61,8 +61,8 @@ class TestScrollEngineBehaviour : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    /// Proves the vertical arm really is transposed, then skips while the
-    /// engine is horizontal-only.
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
     void initTestCase()
     {
         AX_GUARD_SUITE();
@@ -135,8 +135,8 @@ void TestScrollEngineBehaviour::focusNewWindowsOverrideIsPerScreen()
 
 void TestScrollEngineBehaviour::alwaysCenterSingleColumnOverrideIsPerScreen()
 {
-    // A lone column narrower than the work area: centered on the overridden
-    // screen, left-anchored on the other.
+    // A lone column narrower than the work area's main extent: centered on
+    // the overridden screen, LEAD-anchored on the other.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->alwaysCenterSingleColumn = false;
@@ -181,7 +181,7 @@ void TestScrollEngineBehaviour::centerFocusedColumnOverrideIsPerScreen()
     engine->windowFocused(QStringLiteral("app|a1"), kS1);
     engine->windowFocused(QStringLiteral("app|b1"), kS2);
 
-    // Centered: a 600px column on a 1200px work area sits at x=300. The
+    // Centered: a 600px column on a 1200px main extent sits at main 300. The
     // found flag keeps each assertion honest — a tile missing from the walk
     // would otherwise satisfy the loop vacuously.
     bool sawCentered = false;
@@ -262,7 +262,7 @@ void TestScrollEngineBehaviour::smartGapsOverrideIsPerScreen()
 void TestScrollEngineBehaviour::insertPositionOverrideIsPerScreen()
 {
     // Global right-of-active. S1 is scoped to First, so its second window
-    // opens LEFTMOST while S2's opens to the right of the active column.
+    // opens LEADMOST while S2's opens trailward of the active column.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->insertPosition = static_cast<int>(ScrollInsertPosition::RightOfActive);
@@ -416,10 +416,11 @@ void TestScrollEngineBehaviour::wrongTypedBehaviourOverridesAreRejected()
     engine->windowOpened(QStringLiteral("app|a2"), kS1, 0, 0);
     QCOMPARE(activeWindowOn(engine, kS1), QStringLiteral("app|a2"));
 
-    // Insert position stays First, so the arrival lands LEFT of the existing
-    // column. A coerced garbage value would be RightOfActive and put it on the
-    // right, so this ordering is what discriminates. Centering stays Always,
-    // so the focused column sits centered rather than at the left edge.
+    // Insert position stays First, so the arrival lands on the LEAD side of
+    // the existing column. A coerced garbage value would be RightOfActive and
+    // put it trailward, so this ordering is what discriminates. Centering
+    // stays Always, so the focused column sits centered rather than at the
+    // lead edge.
     QCOMPARE(orderOn(engine, kS1), QStringList({QStringLiteral("app|a2"), QStringLiteral("app|a1")}));
     bool sawActive = false;
     for (const ScrollEngine::VisibleTile& tile : engine->visibleTiles(kS1)) {

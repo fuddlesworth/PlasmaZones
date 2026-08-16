@@ -291,9 +291,22 @@ void EditorController::loadEditorSettings()
             axisChanged = true;
         }
 
+        // Through the refresh, not a bare emit: a config-input change does not
+        // have to change the ANSWER (a per-screen override for some other
+        // monitor, an Auto value that resolves the same way), and the property
+        // must only announce a real flip.
         if (axisChanged)
-            Q_EMIT templatePreviewVerticalChanged();
+            refreshTemplatePreviewVertical();
     }
+}
+
+void EditorController::refreshTemplatePreviewVertical()
+{
+    // templatePreviewVertical() re-stamps m_templatePreviewVertical, so the
+    // previous answer has to be taken before the call.
+    const bool previous = m_templatePreviewVertical;
+    if (templatePreviewVertical() != previous)
+        Q_EMIT templatePreviewVerticalChanged();
 }
 
 bool EditorController::templatePreviewVertical() const
@@ -316,14 +329,21 @@ bool EditorController::templatePreviewVertical() const
             configured = byName.value();
     }
 
-    if (configured == ConfigDefaults::scrollingStripAxisHorizontal())
-        return false;
-    if (configured == ConfigDefaults::scrollingStripAxisVertical())
-        return true;
+    // Auto (and any out-of-range value a hand-edited config could carry) falls
+    // through to the size rule.
+    bool vertical = false;
+    if (configured == ConfigDefaults::scrollingStripAxisVertical()) {
+        vertical = true;
+    } else if (configured != ConfigDefaults::scrollingStripAxisHorizontal()) {
+        const QSize size = targetScreenSize();
+        vertical =
+            PhosphorProtocol::autoScrollAxisFor(size.width(), size.height()) == PhosphorProtocol::ScrollAxis::Vertical;
+    }
 
-    // Auto (and any out-of-range value a hand-edited config could carry).
-    const QSize size = targetScreenSize();
-    return PhosphorProtocol::autoScrollAxisFor(size.width(), size.height()) == PhosphorProtocol::ScrollAxis::Vertical;
+    // Stamp the cache on every read so refreshTemplatePreviewVertical() always
+    // compares against the answer the last reader actually saw.
+    m_templatePreviewVertical = vertical;
+    return vertical;
 }
 
 void EditorController::saveEditorSettings()

@@ -252,7 +252,10 @@ ToolBar {
             }
 
             Label {
-                text: i18nc("@info", "Drag a column's right edge to resize it. Click a column to reorder it, switch it to tabs, or remove it.")
+                // Axis-neutral on purpose: the drag handle sits after the
+                // column ALONG the strip, which is its right edge on a
+                // horizontal strip and its bottom edge on a vertical one.
+                text: i18nc("@info", "Drag the divider after a column to resize it. Click a column to reorder it, switch it to tabs, or remove it.")
                 color: Kirigami.Theme.disabledTextColor
                 elide: Text.ElideRight
                 Layout.maximumWidth: Kirigami.Units.gridUnit * 24

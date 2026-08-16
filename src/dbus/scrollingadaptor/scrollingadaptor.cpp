@@ -95,7 +95,7 @@ QStringList ScrollingAdaptor::scrollingScreens() const
 QVariantMap ScrollingAdaptor::scrollEffectBehaviour() const
 {
     // No engine gate, unlike scrollingScreens above: this map is daemon-built
-    // (the engine never sees the two effect-owned behaviours), so a cleared
+    // (the engine never sees the three effect-owned facts), so a cleared
     // engine pointer during shutdown does not invalidate it. The last
     // published value stands until the daemon pushes another.
     return m_scrollEffectBehaviour;
@@ -106,7 +106,7 @@ void ScrollingAdaptor::setScrollEffectBehaviour(const QStringList& focusFollowsM
                                                 const QStringList& verticalAxisScreens)
 {
     // Canonicalized HERE, not assumed: the published contract (the XML
-    // DocString and the property doc) says both lists are sorted, and the
+    // DocString and the property doc) says all three lists are sorted, and the
     // change compare below is a LIST compare, so an unsorted producer would
     // both break the documented wire shape and make the emit-on-change gate
     // order-sensitive — the same membership arriving in a different order
@@ -389,7 +389,7 @@ void ScrollingAdaptor::clearEngine()
     // gate (scrollEffectBehaviour documents why), so the last published value
     // stays the honest answer for as long as this object exists — clearing it
     // would replace a true answer with an empty one that reads as "no screen
-    // has either behaviour".
+    // has any of the three".
     //
     // Terminal latch: the overlay-service connection that feeds
     // setScrollTabSurface has the ADAPTOR as its context object, so it

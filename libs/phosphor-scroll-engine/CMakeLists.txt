@@ -3,8 +3,8 @@
 #
 # PhosphorScrollEngine — niri-style scrolling placement engine.
 #
-# Provides the pure ScrollStrip model (columns on an unbounded horizontal
-# strip, unit-testable in isolation) and the ScrollEngine that drives it
+# Provides the pure ScrollStrip model (columns on an unbounded strip,
+# unit-testable in isolation) and the ScrollEngine that drives it
 # against the IPlacementEngine contract from phosphor-engine.
 
 cmake_minimum_required(VERSION 3.16)

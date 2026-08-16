@@ -9,8 +9,9 @@ import "../../js/PresetList.js" as PresetList
 /**
  * @brief Simple-mode Scrolling page: the everyday decisions (default column
  * width, and whether tabbed columns are marked and how) plus the shared Window
- * Handling and Focus and view cards, the latter carrying the centering and
- * wheel rows. The advanced counterpart is the Columns page
+ * Handling and Focus and view cards, the latter carrying the strip direction
+ * along with the centering and wheel rows, so simple mode does expose which
+ * way the strip runs. The advanced counterpart is the Columns page
  * (scrolling-columns); dirtiness, Reset, and Discard delegate to all three
  * advanced leaves via simplePageBackingPages.
  *
@@ -159,7 +160,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Fixed width")
                     searchAnchor: "simpleDefaultColumnWidthFixed"
-                    description: i18n("How many pixels wide a new column is")
+                    description: i18n("How many pixels a new column takes along the strip")
                     enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindFixed
                     visible: true
 
@@ -186,7 +187,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset width")
                     searchAnchor: "simpleDefaultColumnWidthPresetIndex"
-                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template set on Scrolling → Columns, and with no template at all the built-in width steps apply.")
+                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in width steps apply.")
                     enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindPreset
                     visible: true
 

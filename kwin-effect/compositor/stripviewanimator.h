@@ -120,10 +120,9 @@ public:
                          const PhosphorAnimation::Profile& profile);
 
     /// Paint translation for a window carried by @p output's view, in logical
-    /// pixels. Zero when nothing is in flight, which is the resting state and
-    /// the common case.
-    /// The paint translation, already resolved onto the output's own axis, so
-    /// a caller cannot put it in the wrong component.
+    /// pixels, already resolved onto that output's own strip axis so a caller
+    /// cannot put it in the wrong component. A null point when nothing is in
+    /// flight, which is the resting state and the common case.
     QPointF offsetFor(KWin::LogicalOutput* output) const;
 
     /// The same value as a signed scalar along that axis, for the shader pass

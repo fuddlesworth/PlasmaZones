@@ -278,13 +278,17 @@ void TilingHandler::fetchScrollingScreens()
             });
 }
 
-// The two scrolling behaviours the compositor owns, published by the daemon
-// as ALREADY-RESOLVED screen-id lists (rule ?? config decided daemon-side).
+// The three scrolling behaviours the compositor owns, published by the daemon
+// as ALREADY-RESOLVED screen-id lists (rule ?? config decided daemon-side):
+// focus-follows-mouse, straddler crop, and the vertical-strip axis.
 // Bring-up fetch with the same bounded retry as the scrolling-screens query
-// above; a failed Get leaves both sets empty, which reads as "off everywhere"
-// — the historical behaviour before either was per-screen, and the safe
-// direction: focus-follows-mouse stays quiet and no column is cropped until
-// the daemon answers.
+// above; a failed Get leaves all three sets empty, which reads as "off
+// everywhere" — the historical behaviour before any of them was per-screen,
+// and the safe direction at bring-up: focus-follows-mouse stays quiet, no
+// column is cropped, and every strip runs horizontally until the daemon
+// answers. (An empty axis set is only safe HERE, before any strip has been
+// laid out. Once a session is running, a malformed axis value keeps the
+// current membership instead — see applyScrollEffectBehaviour.)
 void TilingHandler::fetchScrollEffectBehaviour()
 {
     QDBusMessage msg =
@@ -312,8 +316,14 @@ void TilingHandler::fetchScrollEffectBehaviour()
             // per-screen focus-follows-mouse and straddler cropping never
             // populated at bring-up.
             applyScrollEffectBehaviour(qdbus_cast<QVariantMap>(reply.value().variant()));
+            // The axis set is logged too: a wrong crop or focus-follows-mouse
+            // membership at least announces itself as a behaviour that does
+            // not happen, but a wrong axis is silent on screen — the strip
+            // just shears along the wrong component for the length of every
+            // leg — so bring-up is the one place it can be confirmed.
             qCInfo(lcEffect) << "Loaded scrolling effect behaviour: ffm=" << m_scrollFocusFollowsMouseScreens
-                             << "crop=" << m_scrollCropStraddlerScreens;
+                             << "crop=" << m_scrollCropStraddlerScreens
+                             << "verticalAxis=" << m_scrollVerticalAxisScreens;
         } else {
             qCDebug(lcEffect) << "Scrolling effect behaviour: query failed, daemon may not be running";
             if (m_scrollEffectBehaviourFetchRetriesLeft > 0) {

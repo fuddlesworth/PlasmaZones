@@ -1288,9 +1288,9 @@ public:
     bool scrollingEnabled() const;
     void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;
+    void setScrollingCenterFocusedColumn(int mode);
     int scrollingStripAxis() const override;
     void setScrollingStripAxis(int value);
-    void setScrollingCenterFocusedColumn(int mode);
     bool scrollingAlwaysCenterSingleColumn() const override;
     void setScrollingAlwaysCenterSingleColumn(bool center);
     bool scrollingCropStraddlers() const override;

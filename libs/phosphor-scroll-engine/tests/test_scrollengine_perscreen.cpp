@@ -1,6 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): around 1370 lines, past the 1150 hard
+// ceiling.
+//
+// The case for it: this file's concern is a single resolution cascade —
+// rule > per-screen settings trio > cached global, plus the template channel
+// that replaces the preset LISTS those kinds index into. The channels are not
+// independent of each other; every test here is a PRECEDENCE claim between two
+// or more of them, and each is written as a paired two-screen fixture because
+// a one-screen assertion passes just as happily when the engine reads the
+// global everywhere. Splitting by channel would put the two halves of a
+// precedence pair in different files and leave neither able to state the
+// ordering it exists to pin. Splitting by default (width here, height there)
+// would duplicate the whole fixture layer and split the trio's per-slot
+// fall-back rule, which is one rule applying identically to both.
+//
+// If a channel is ever added that resolves INDEPENDENTLY of these three, it
+// takes a sibling rather than growing this file.
+
 // Per-screen default-width / default-height resolution.
 //
 // The engine reads three channels for each of the two defaults, in order:
@@ -60,8 +78,8 @@ class TestScrollEnginePerScreen : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    /// Proves the vertical arm really is transposed, then skips while the
-    /// engine is horizontal-only.
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
     void initTestCase()
     {
         AX_GUARD_SUITE();
@@ -333,10 +351,10 @@ void TestScrollEnginePerScreen::absentTrioSlotsFallBackPerSlotToTheGlobal()
     engine->applyPerScreenConfig(kS1, kindOnly);
 
     // The other direction of the same rule: the per-screen KIND is honoured
-    // even when the global's kind differs, and the value slot it needs is the
-    // one that falls back. Proportion here, against a Preset global, so the
-    // proportion slot has no global twin to inherit and resolves to the
-    // documented fall-through instead.
+    // even when the global's kind differs, PROVIDED the layer also wrote the
+    // value slot that kind needs. Proportion here, against a Preset global.
+    // The value-ABSENT twin of this case is exercised at the tail of this
+    // test, where the proportion slot has no global twin to inherit from.
     QVariantMap differingKind;
     differingKind.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::Proportion));
     differingKind.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.6);
@@ -360,6 +378,24 @@ void TestScrollEnginePerScreen::absentTrioSlotsFallBackPerSlotToTheGlobal()
     const ColumnWidth kindHonoured = openedWidth(engine, kS2, QStringLiteral("app|b"));
     QCOMPARE(kindHonoured.kind, ColumnWidth::Proportion);
     QCOMPARE(kindHonoured.proportion, 0.6);
+
+    // The value-ABSENT arm, which had no coverage anywhere: a per-screen
+    // Proportion kind with NO value slot, against a PRESET global. The
+    // per-slot inheritance has nothing to inherit — the global is not a
+    // proportion, so its value slot is not a proportion either — and the
+    // resolver falls all the way through to the whole global rather than
+    // committing a zero proportion. That whole-global fall-through is the one
+    // documented case where the per-screen kind does NOT survive, and pinning
+    // it is what stops a "helpful" zero or an arbitrary clamp being added.
+    QVariantMap kindWithoutValue;
+    kindWithoutValue.insert(ScrollPerScreenKeys::defaultColumnWidthKind(),
+                            static_cast<int>(DefaultWidthKind::Proportion));
+    engine->applyPerScreenConfig(kS2, kindWithoutValue);
+    engine->windowOpened(QStringLiteral("app|b2"), kS2, 0, 0);
+    QVERIFY(columnExists(engine, kS2, QStringLiteral("app|b2")));
+    const ColumnWidth fellThrough = openedWidth(engine, kS2, QStringLiteral("app|b2"));
+    QCOMPARE(fellThrough.kind, ColumnWidth::Preset);
+    QCOMPARE(fellThrough.presetFraction, 0.75);
 }
 
 void TestScrollEnginePerScreen::presetIndexIsClampedToTheLivePresetList()
@@ -440,7 +476,13 @@ void TestScrollEnginePerScreen::fixedKindWithAProportionValueFallsThroughToTheGl
     const ColumnWidth committed = openedWidth(engine, kS2, QStringLiteral("app|b"));
     QCOMPARE(committed.kind, ColumnWidth::Fixed);
     QCOMPARE(committed.fixedPx, 640);
-    QVERIFY(committed.fixedPx < kMainExtent); // the fixture's own sanity check
+    // Promoted from a compile-time `640 < 1200` (which caught no mutation) to
+    // the thing that actually matters: the committed INTENT reaches the
+    // RESOLVED rect's main extent. A Fixed width that never made it into the
+    // layout would satisfy the intent assertion above on its own.
+    const QVector<QRect> committedRects = engine->visibleTileRects(kS2);
+    QCOMPARE(committedRects.size(), 1);
+    QCOMPARE(ScrollTestUtils::Ax::mainLen(committedRects.first()), 640);
 
     const ColumnWidth rejectedFraction = openedWidth(engine, kS3, QStringLiteral("app|c"));
     QCOMPARE(rejectedFraction.kind, ColumnWidth::Proportion);

@@ -6,8 +6,9 @@
 // recedes (compressed and shaded), the other side comes forward, and the
 // drum flattens back to the identity image as the spring settles.
 //
-// The perspective is a cheap screen-space fake (nonlinear horizontal
-// remap plus a vertical taper toward the receding side), not a projection.
+// The perspective is a cheap screen-space fake (a nonlinear remap along the
+// travel axis plus a taper across it toward the receding side), not a
+// projection.
 // The displacement is masked by the strip's work area so panels and the
 // wallpaper margins stay put.
 //
@@ -17,7 +18,8 @@
 
 vec4 pTransition(vec2 uv, float t) {
     float m = stripMask(uv, p_edgeFeather);
-    // Signed velocity in output-widths per second. The tilt saturates well
+    // Signed velocity in output-extents along the travel axis per second. The
+    // tilt saturates well
     // before anything folds over.
     float tilt = clamp(iStripMotion.w * 0.35 * p_tilt, -0.22, 0.22);
     if (abs(tilt) < 1.0e-4 || m < 1.0e-3) {

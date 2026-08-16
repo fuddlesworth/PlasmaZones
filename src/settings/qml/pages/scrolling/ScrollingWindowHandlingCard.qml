@@ -137,7 +137,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Height adjustment step")
             searchAnchor: "scrollingWindowHeightStep"
-            description: i18n("How far the increase and decrease window height shortcuts resize a window per press, as a share of the screen height")
+            description: i18n("How far the increase and decrease window height shortcuts resize a window per press, as a share of the work area across the strip")
 
             SettingsSlider {
                 accessibleName: i18n("Window height adjustment step")

@@ -126,6 +126,14 @@ void SettingsController::stageScrollingTemplate(const QString& screenName, int v
     setNeedsSave(true);
 }
 
+// Removes any staged entry for the (screen × desktop × activity) assignment
+// context — a true unstage, so on Apply the context's daemon-side assignment is
+// left untouched.
+//
+// No QML page calls this today. It is kept as the staging surface's inverse:
+// stageAssignmentEntry is the only way in, and a page that stages a pick and
+// then wants to take it back (rather than stage the opposite) has no other
+// route. Deleting it would leave the surface one-way.
 void SettingsController::removeStagedAssignment(const QString& screenName, int virtualDesktop,
                                                 const QString& activityId)
 {

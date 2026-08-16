@@ -146,7 +146,7 @@ QString TileRequestEntry::validationError() const
     if (windowedFullscreen && monocle) {
         return QStringLiteral("TileRequestEntry: windowedFullscreen on a monocle entry (windowId=%1)").arg(windowId);
     }
-    // viewDeltaX, visualX, visualY and hasVisualPos are deliberately NOT
+    // viewDelta, visualX, visualY and hasVisualPos are deliberately NOT
     // validated here, unlike their neighbours. All four are PAINT hints rather
     // than placement inputs: the committed rect stands on its own whatever they
     // say, so an absurd value costs one wild slide or one column drawn in the

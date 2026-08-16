@@ -723,10 +723,11 @@ void Daemon::stop()
     // so the final shutdown save (further down, before the engine is
     // destroyed) would drop every strip mutation from the last debounce
     // window. It is cleared immediately before m_scrollEngine.reset() instead.
-    // The one remaining `this`-capturing closure on the overlay service. It
-    // is safe today (the lambda re-resolves m_scrollEngine and null-checks
-    // it), but leaving it installed breaks the grep-discoverable
-    // clear-before-teardown contract its siblings below rely on.
+    // The `this`-capturing closures on the overlay service. Each is safe today
+    // (every lambda re-resolves its dependency off the Daemon and null-checks
+    // it), but leaving any of them installed breaks the grep-discoverable
+    // clear-before-teardown contract the whole block exists for — so a new
+    // provider joins this list rather than relying on its own null check.
     if (m_overlayService) {
         m_overlayService->setScrollZonesProvider({});
         // Same contract: the layouts-provided resolver captures `this` and
@@ -734,6 +735,7 @@ void Daemon::stop()
         m_overlayService->setLayoutSupportResolver({});
         m_overlayService->setDragInsertSelectorResolver({});
         m_overlayService->setStripCardsProvider({});
+        m_overlayService->setStripAxisProvider({});
         // Symmetric clear of the late-bound drag-exclusion id: a stop() that
         // lands mid-drag never reaches the adaptor's resetDragState, and the
         // overlay service outlives this teardown.

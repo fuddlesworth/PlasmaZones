@@ -3,8 +3,9 @@
 
 // Per-session screen and behaviour state for TilingHandler: which screens the
 // daemon manages, which of those run the scrolling engine, the active layout
-// per screen, the focus-follows-mouse and wheel-focus settings, and the wheel
-// shortcut registration those settings drive.
+// per screen, the daemon-resolved per-screen scroll behaviours (focus-follows-
+// mouse, straddler crop, strip axis), the focus-follows-mouse and wheel-focus
+// settings, and the wheel shortcut registration those settings drive.
 //
 // What unites this file is that every member here is published BY the daemon
 // and consumed by the effect, so all of it is per-session and all of it is
@@ -35,6 +36,8 @@
 #include <QLoggingCategory>
 #include <QMetaType>
 #include <QVariant>
+
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -120,16 +123,25 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // straight replace is correct even if a previous signal was missed.
     //
     // Boundary validation, mirroring slotActiveLayoutsChanged: this map
-    // crosses D-Bus from another process, and both halves decide compositor
-    // behaviour (focus stealing, forced composition). An a{sv} value arrives
+    // crosses D-Bus from another process, and every half of it decides
+    // compositor behaviour (focus stealing, forced composition, which way the
+    // strip slides). An a{sv} value arrives
     // either already demarshalled (the property Get path, which qdbus_cast
     // unwraps) or still wrapped in a QDBusVariant (a signal delivered without
     // a registered argument type) — unwrap one level before the type test, or
-    // every live update silently clears BOTH sets. Empty screen ids are
+    // every live update silently clears all three sets. Empty screen ids are
     // dropped: no window resolves to one, and they only defeat the change
     // gate below. A wire regression is warned about rather than being
     // indistinguishable from a legitimately-off session.
-    const auto toSet = [](const QVariant& raw, QLatin1StringView key) {
+    //
+    // The return is OPTIONAL so the three keys can take different directions
+    // on a MALFORMED value (as opposed to an absent one, which is a legitimate
+    // publish and reads as an empty set for all three). Empty is the safe
+    // direction for focus-follows-mouse and crop — both are behaviours that
+    // simply stay off — but it is the WRONG direction for the axis, where it
+    // silently re-lays every vertical strip horizontally in the paint path.
+    // The axis arm below keeps the previous membership instead.
+    const auto toSet = [](const QVariant& raw, QLatin1StringView key) -> std::optional<QSet<QString>> {
         QVariant v = raw;
         if (v.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
             v = qvariant_cast<QDBusVariant>(v).variant();
@@ -138,7 +150,7 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
         // container it did not special-case arrives as a raw QDBusArgument —
         // which converts to nothing and would read as "off everywhere". Demarshal
         // it explicitly rather than letting a transport-shape change silently
-        // disable both behaviours.
+        // disable every behaviour in the map.
         if (v.typeId() == QMetaType::fromType<QDBusArgument>().id()) {
             v = QVariant::fromValue(qdbus_cast<QStringList>(v));
         }
@@ -152,7 +164,7 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
         if (!v.canConvert<QStringList>()) {
             qCWarning(lcEffect) << "scrollEffectBehaviour: dropping non-list value for" << key << "type"
                                 << v.typeName();
-            return out;
+            return std::nullopt;
         }
         const QStringList list = v.toStringList();
         out.reserve(list.size());
@@ -166,14 +178,24 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
         return out;
     };
     const QSet<QString> ffm =
-        toSet(behaviour.value(QStringLiteral("focusFollowsMouse")), QLatin1String("focusFollowsMouse"));
-    const QSet<QString> crop =
-        toSet(behaviour.value(QStringLiteral("cropStraddlers")), QLatin1String("cropStraddlers"));
-    // Membership: a screen IN the list runs its strip vertically. An absent
-    // key reads as an empty set, which means horizontal everywhere — the
-    // historical layout, and the same safe direction the two siblings take.
+        toSet(behaviour.value(QStringLiteral("focusFollowsMouse")), QLatin1String("focusFollowsMouse"))
+            .value_or(QSet<QString>());
+    const QSet<QString> crop = toSet(behaviour.value(QStringLiteral("cropStraddlers")), QLatin1String("cropStraddlers"))
+                                   .value_or(QSet<QString>());
+    // Membership: a screen IN the list runs its strip vertically. An ABSENT
+    // key reads as an empty set, which means horizontal everywhere — that is
+    // what the daemon publishes on a session with no vertical strip.
+    //
+    // A MALFORMED value keeps the CURRENT membership rather than emptying it.
+    // The two siblings can fail to an empty set because empty means their
+    // behaviour is off; this one has no off, and empty means "horizontal",
+    // which is an active claim about geometry the engine has already committed
+    // the other way. Falling to it would shear every vertical strip for the
+    // rest of the session with no batch coming to correct it, and the last
+    // good membership is a strictly better guess than the historical default.
     const QSet<QString> verticalAxis =
-        toSet(behaviour.value(QStringLiteral("verticalAxis")), QLatin1String("verticalAxis"));
+        toSet(behaviour.value(QStringLiteral("verticalAxis")), QLatin1String("verticalAxis"))
+            .value_or(m_scrollVerticalAxisScreens);
     // Seeded BEFORE the change gate, the m_activeLayoutsSeeded shape: an
     // identical map is still a real map, and the daemon's first publish is
     // legitimately all-empty on a session with no scrolling screen. Gating the
@@ -223,6 +245,15 @@ void TilingHandler::clearScrollEffectBehaviourForTeardown()
         // cursor position from before the teardown.
         m_ffmSuppressPending = false;
     }
+    // ABOVE the crop early return, not after it: cropping is off by default,
+    // so an all-empty crop set is the common case and a clear appended at the
+    // tail would never run there — the axis set would outlive the session that
+    // published it and answer Vertical for a screen the next daemon may run
+    // horizontally. No repaint bookend of its own, unlike the crop set: the
+    // axis the paint path reads is StripViewAnimator's per-output copy, not
+    // this set, and no batch lands with the daemon gone, so the painted half
+    // is StripViewAnimator::reset()'s to undo.
+    m_scrollVerticalAxisScreens.clear();
     if (m_scrollCropStraddlerScreens.isEmpty()) {
         return;
     }
@@ -548,8 +579,11 @@ void TilingHandler::updateScrollWheelShortcuts()
         qCInfo(lcEffect) << "Scroll wheel shortcuts unregistered (no scrolling screens)";
         return;
     }
-    // niri's default Mod+wheel bindings: wheel down / right focuses the
-    // next column to the right, wheel up / left the previous one. The
+    // niri's default Mod+wheel bindings: wheel down / right focuses the next
+    // column along the screen's strip axis, wheel up / left the previous one.
+    // The chord carries a signed delta only — which way that points on screen
+    // is the engine's call, resolved against the screen's own axis — so one
+    // registration serves a horizontal and a vertical strip alike. The
     // horizontal pair covers tilted wheels, and horizontal touchpad scrolls
     // once the accumulated delta clears KWin's 1.0 threshold (processAxis
     // only fires on |delta| >= 1.0).
@@ -574,10 +608,10 @@ void TilingHandler::updateScrollWheelShortcuts()
         KWin::effects->registerAxisShortcut(mods, axis, action);
         m_scrollWheelActions.append(action);
     };
-    add(Qt::MetaModifier, KWin::PointerAxisDown, 1, QStringLiteral("pz-scroll-column-right"));
-    add(Qt::MetaModifier, KWin::PointerAxisUp, -1, QStringLiteral("pz-scroll-column-left"));
-    add(Qt::MetaModifier, KWin::PointerAxisRight, 1, QStringLiteral("pz-scroll-column-right-h"));
-    add(Qt::MetaModifier, KWin::PointerAxisLeft, -1, QStringLiteral("pz-scroll-column-left-h"));
+    add(Qt::MetaModifier, KWin::PointerAxisDown, 1, QStringLiteral("pz-scroll-column-next"));
+    add(Qt::MetaModifier, KWin::PointerAxisUp, -1, QStringLiteral("pz-scroll-column-prev"));
+    add(Qt::MetaModifier, KWin::PointerAxisRight, 1, QStringLiteral("pz-scroll-column-next-h"));
+    add(Qt::MetaModifier, KWin::PointerAxisLeft, -1, QStringLiteral("pz-scroll-column-prev-h"));
     qCInfo(lcEffect) << "Scroll wheel shortcuts registered (Meta+wheel focuses columns)";
 }
 
