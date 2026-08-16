@@ -212,11 +212,12 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     if (ffmOffEverywhere()) {
         m_ffmSuppressPending = false;
     }
-    // BOTH painted sets take part in the gate. Testing crop alone would drop
-    // an axis-only change on the floor — which is exactly what a monitor
-    // rotation produces when the crop membership happens not to move, and it
-    // would leave the effect sliding the strip along the old axis with no
-    // batch coming to correct it.
+    // BOTH sets take part in the gate. Testing crop alone would drop an
+    // axis-only change on the floor — which is exactly what a monitor rotation
+    // produces when the crop membership happens not to move, and it would
+    // leave the effect sliding the strip along the old axis with no batch
+    // coming to correct it. (Only crop is painted state; see the repaint
+    // below for what the axis half of this gate is actually for.)
     const bool cropChanged = crop != m_scrollCropStraddlerScreens;
     const bool axisChanged = verticalAxis != m_scrollVerticalAxisScreens;
     if (!cropChanged && !axisChanged) {

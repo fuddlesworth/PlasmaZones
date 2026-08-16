@@ -813,7 +813,12 @@ void TestScrollEngineSmoke::parkingAvoidsNeighbourOutputs()
     QVERIFY2(parked.top() > screen.bottom(),
              qPrintable(QStringLiteral("expected a park below the screen, got y=%1").arg(parked.y())));
     // parkRect clamps the PHYSICAL x only (it is deliberately physical on both
-    // axes), so the span claim below holds on either arm.
+    // axes). This is a SHAPE pin, not the screen-vs-work-area discriminator:
+    // qBound guarantees the lower half on either arm, and on the vertical arm
+    // the column already spans the full screen width so the upper half is true
+    // by construction too. The screen-vs-work-area claim is carried on both
+    // arms by the ungated `parked.top() > screen.bottom()` above, since a
+    // work-area-derived parkTop would sit above the screen's bottom edge.
     QVERIFY2(parked.left() >= screen.left() && parked.right() <= screen.right(),
              qPrintable(QStringLiteral("parked rect must stay within the screen's horizontal span, got x=%1 w=%2")
                             .arg(parked.x())

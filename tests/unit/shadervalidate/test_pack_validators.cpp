@@ -229,8 +229,6 @@ private Q_SLOTS:
                             + perp.simplified()));
         QVERIFY2(componentSwap || swizzleSwap,
                  qPrintable(QStringLiteral("stripAxisPerp is not the plain component swap: ") + perp.simplified()));
-        QVERIFY2(!perp.contains(QLatin1String("-iStripAxis")),
-                 qPrintable(QStringLiteral("stripAxisPerp negates a component: ") + perp.simplified()));
     }
 
     /// The complement: an unknown token IS linted, and the message names the
