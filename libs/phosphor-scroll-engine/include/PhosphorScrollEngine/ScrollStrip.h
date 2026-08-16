@@ -337,6 +337,16 @@ public:
     /// @p params. Pure function of the current model state; does not mutate.
     ResolvedStrip relayout(const ScrollLayoutParams& params) const;
 
+    /// True when the whole strip already fits the viewport, i.e. there is
+    /// nothing off screen to scroll to. A degenerate work area counts as
+    /// fitting, so a caller cannot scroll a screen that is going away.
+    ///
+    /// Exists so a per-frame caller can ask the question without paying for a
+    /// full relayout: the edge auto-scroll tick needs only this predicate
+    /// before its band test, and relayout() allocates a ResolvedColumn (with a
+    /// nested tile vector) per column.
+    bool stripFitsViewport(const ScrollLayoutParams& params) const;
+
     // ── Pixel resolution helpers (shared with the engine/tests) ─────────────
     /// The pixel width @p width resolves to under @p params (gap-aware
     /// proportions, preset lookup; no min-width clamp).

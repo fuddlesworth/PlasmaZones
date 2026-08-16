@@ -89,9 +89,11 @@ public:
     // window near either edge of the work area scrolls the strip, so the
     // drop can reach a column that is off screen. Speed ramps linearly from
     // zero at the band's inner edge to the maximum at the work area's edge.
-    // The engine keeps its own copy of these three figures as the
-    // IScrollSettings defaults; the static_asserts in settings/scrolling.cpp
-    // pin the two sides together.
+    // The engine holds the same four figures as the IScrollSettings
+    // defaults, so a stub that never heard of this schema still scrolls the
+    // way niri does. The static_asserts in settings/scrolling.cpp compare the
+    // two sides directly rather than against copied literals, so an edit to
+    // EITHER file fails the build and there is no manual sync to remember.
     static constexpr bool scrollingDragScrollEnabled()
     {
         return true;
@@ -1003,5 +1005,24 @@ static_assert(ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadius()
                   && ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadius()
                       <= ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadiusMax(),
               "ConfigDefaults::scrollingDropIndicatorBorderRadius() outside the declared [min, max] range");
+
+// Edge auto-scroll, same guard as every other ranged default here. Without
+// these a retuned default outside its own declared range would not fail the
+// build; it would be silently snapped by the schema's clamp on first read.
+static_assert(ConfigDefaultsScrolling::scrollingDragScrollTriggerWidth()
+                      >= ConfigDefaultsScrolling::scrollingDragScrollTriggerWidthMin()
+                  && ConfigDefaultsScrolling::scrollingDragScrollTriggerWidth()
+                      <= ConfigDefaultsScrolling::scrollingDragScrollTriggerWidthMax(),
+              "ConfigDefaults::scrollingDragScrollTriggerWidth() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingDragScrollDelayMs()
+                      >= ConfigDefaultsScrolling::scrollingDragScrollDelayMsMin()
+                  && ConfigDefaultsScrolling::scrollingDragScrollDelayMs()
+                      <= ConfigDefaultsScrolling::scrollingDragScrollDelayMsMax(),
+              "ConfigDefaults::scrollingDragScrollDelayMs() outside the declared [min, max] range");
+static_assert(ConfigDefaultsScrolling::scrollingDragScrollMaxSpeed()
+                      >= ConfigDefaultsScrolling::scrollingDragScrollMaxSpeedMin()
+                  && ConfigDefaultsScrolling::scrollingDragScrollMaxSpeed()
+                      <= ConfigDefaultsScrolling::scrollingDragScrollMaxSpeedMax(),
+              "ConfigDefaults::scrollingDragScrollMaxSpeed() outside the declared [min, max] range");
 
 } // namespace PlasmaZones

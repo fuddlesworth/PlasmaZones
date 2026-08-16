@@ -487,6 +487,51 @@ private Q_SLOTS:
         QVERIFY2(dropFailures.isEmpty(), qPrintable(dropFailures.join(QStringLiteral("; "))));
     }
 
+    /// Scrolling.Behavior.DragScroll, the edge auto-scroll group. Same shape
+    /// as the indicator groups above: every default pinned against its
+    /// ConfigDefaults accessor, and both ends of every clampInt range pinned,
+    /// so a pasted-wrong bound or a default that drifts from ConfigDefaults
+    /// fails here instead of shipping. The engine keeps its own copy of these
+    /// four defaults as the IScrollSettings bodies, which a static_assert in
+    /// settings/scrolling.cpp ties to the ConfigDefaults side — this slot is
+    /// what ties the SCHEMA side to it.
+    void scrollingDragScrollSchemaValidates()
+    {
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        const QString group = ConfigDefaults::scrollingDragScrollGroup();
+
+        const auto* enabled = findKey(schema, group, ConfigDefaults::enabledKey());
+        QVERIFY(enabled);
+        QCOMPARE(enabled->defaultValue.toBool(), ConfigDefaults::scrollingDragScrollEnabled());
+
+        const auto* triggerWidth = findKey(schema, group, ConfigDefaults::triggerWidthKey());
+        QVERIFY(triggerWidth && triggerWidth->validator);
+        QCOMPARE(triggerWidth->defaultValue.toInt(), ConfigDefaults::scrollingDragScrollTriggerWidth());
+        QCOMPARE(triggerWidth->validator(-5).toInt(), ConfigDefaults::scrollingDragScrollTriggerWidthMin());
+        QCOMPARE(triggerWidth->validator(99999).toInt(), ConfigDefaults::scrollingDragScrollTriggerWidthMax());
+        // The floor is at least 1, so the UI cannot offer a zero-width band.
+        // Pinned directly rather than round-tripped through the validator,
+        // which would compare the Min accessor against itself and pass even
+        // if the floor were lowered to zero. (The engine does not depend on
+        // this: drag_autoscroll.cpp clamps the ramp's divisor to >= 1 itself.)
+        QVERIFY(ConfigDefaults::scrollingDragScrollTriggerWidthMin() >= 1);
+
+        const auto* delayMs = findKey(schema, group, ConfigDefaults::delayMsKey());
+        QVERIFY(delayMs && delayMs->validator);
+        QCOMPARE(delayMs->defaultValue.toInt(), ConfigDefaults::scrollingDragScrollDelayMs());
+        QCOMPARE(delayMs->validator(-5).toInt(), ConfigDefaults::scrollingDragScrollDelayMsMin());
+        QCOMPARE(delayMs->validator(99999).toInt(), ConfigDefaults::scrollingDragScrollDelayMsMax());
+        // Zero IS legal here and means "start immediately", so it must come
+        // back untouched rather than being floored to some minimum dwell.
+        QCOMPARE(delayMs->validator(0).toInt(), 0);
+
+        const auto* maxSpeed = findKey(schema, group, ConfigDefaults::maxSpeedKey());
+        QVERIFY(maxSpeed && maxSpeed->validator);
+        QCOMPARE(maxSpeed->defaultValue.toInt(), ConfigDefaults::scrollingDragScrollMaxSpeed());
+        QCOMPARE(maxSpeed->validator(0).toInt(), ConfigDefaults::scrollingDragScrollMaxSpeedMin());
+        QCOMPARE(maxSpeed->validator(999999).toInt(), ConfigDefaults::scrollingDragScrollMaxSpeedMax());
+    }
+
     /// The Scrolling group's numeric-range keys, which DO clamp (clampInt /
     /// clampDouble) rather than falling back to the default like the enums
     /// above: both preset indices and the fixed window height. Both ends of

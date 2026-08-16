@@ -78,30 +78,44 @@ public:
     // defaults are the right answer for every implementor that has not
     // heard of the option, the test stubs included.
 
+    // niri's four figures, named so the defaulted bodies below and
+    // ScrollEngine's pre-refresh member cache read the SAME constants rather
+    // than three hand-copied sets. src/config/settings/scrolling.cpp
+    // static_asserts ConfigDefaults against these, which is what keeps the
+    // config layer and the engine layer agreeing.
+    static constexpr bool kDragScrollEnabledDefault = true;
+    static constexpr int kDragScrollTriggerWidthDefault = 30;
+    static constexpr int kDragScrollDelayMsDefault = 100;
+    static constexpr int kDragScrollMaxSpeedDefault = 1500;
+    /// Upper bound the engine enforces on the speed. The config schema clamps
+    /// there too, but the schema only governs the daemon's own settings
+    /// object, and an unbounded speed teleports the strip in a single tick.
+    static constexpr int kDragScrollMaxSpeedCeiling = 10000;
+
     /// Master switch. Off, the edge bands are inert and the drag behaves
     /// exactly as it did before the feature existed.
     virtual bool scrollingDragScrollEnabled() const
     {
-        return true;
+        return kDragScrollEnabledDefault;
     }
     /// Width of the band inside each work-area edge that arms the scroll,
     /// in logical pixels. Speed ramps linearly from zero at the band's
     /// inner edge to the maximum at the work area's edge.
     virtual int scrollingDragScrollTriggerWidth() const
     {
-        return 30;
+        return kDragScrollTriggerWidthDefault;
     }
     /// How long the cursor must sit inside the band before the strip starts
     /// moving. Stops a drag that merely passes near an edge from scrolling.
     virtual int scrollingDragScrollDelayMs() const
     {
-        return 100;
+        return kDragScrollDelayMsDefault;
     }
     /// Scroll speed at the very edge of the work area, in logical pixels
     /// per second.
     virtual int scrollingDragScrollMaxSpeed() const
     {
-        return 1500;
+        return kDragScrollMaxSpeedDefault;
     }
     /// Preset proportion lists, serialized as decimal strings. These are the
     /// FALLBACK vocabulary: a screen whose context resolves a template layout

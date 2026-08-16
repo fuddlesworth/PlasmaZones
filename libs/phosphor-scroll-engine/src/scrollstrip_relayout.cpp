@@ -226,7 +226,11 @@ void ScrollStrip::reanchorAfterFocusChange(int prevIdx, int oldViewX, const Scro
     // focused column fully visible, pinning it to the edge it entered from.
     int pos = stripX - oldViewX;
     if (colW >= workW) {
-        // Wider than the viewport: pin the entering edge.
+        // Exactly the viewport's width, never wider: columnWidthPx caps every
+        // column at the work area, so this is the equality case and both arms
+        // resolve to the same zero offset. Kept as a branch because the cap
+        // lives in another function and a future width kind that opted out of
+        // it would land here needing the entering-edge pin.
         pos = (prevIdx >= 0 && m_activeColumnIdx < prevIdx) ? workW - colW : 0;
     } else if (pos < 0) {
         pos = 0;
@@ -348,12 +352,37 @@ bool ScrollStrip::scrollViewBy(int dx, const ScrollLayoutParams& params)
     // means shrinking the anchor by dx. Clamped, unlike the centering
     // mutators: this one scrolls to a place the user pointed at rather than
     // to a computed position, so running past either end must simply stop.
-    const int anchor = clampedAnchor(m_viewAnchor - dx, params);
+    //
+    // The clamp is on the DELTA, not on the absolute position, and that
+    // distinction is load-bearing. centerActiveColumn and centerVisibleColumns
+    // deliberately store an anchor whose derived viewX is out of range (their
+    // comments say so), and applyLayout skips updateViewForFocus for the whole
+    // drag, so such an anchor survives untouched into the first tick. Running
+    // it through clampedAnchor would snap the view the entire way back into
+    // range in one tick — hundreds of pixels, in the direction OPPOSITE to the
+    // requested scroll on the leading band. Clamping the delta instead lets an
+    // out-of-range view walk back one tick's worth at a time and never snaps.
+    const int workW = params.workArea.width();
+    const int stripX = columnStripX(m_activeColumnIdx, params);
+    const int maxViewX = qMax(0, stripWidthPx(params) - workW);
+    const int viewX = stripX - m_viewAnchor;
+    // qMax/qMin against viewX itself so an already-out-of-range view is never
+    // pushed FURTHER out, but is free to travel back towards the range.
+    const int target = dx > 0 ? qMin(viewX + dx, qMax(viewX, maxViewX)) : qMax(viewX + dx, qMin(viewX, 0));
+    const int anchor = stripX - target;
     if (anchor == m_viewAnchor) {
         return false;
     }
     m_viewAnchor = anchor;
     return true;
+}
+
+bool ScrollStrip::stripFitsViewport(const ScrollLayoutParams& params) const
+{
+    if (params.workArea.width() <= 0) {
+        return true;
+    }
+    return stripWidthPx(params) <= params.workArea.width();
 }
 
 ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const

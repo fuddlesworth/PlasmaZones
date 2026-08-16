@@ -41,6 +41,11 @@ namespace PlasmaZones {
 // conversion at the Integration::IAdhocRegistrar boundary (QString accepts it implicitly).
 static constexpr auto kCancelOverlayId = QLatin1String("cancel_overlay_during_drag");
 
+// Sampling interval of the drag edge auto-scroll heartbeat, ~60 Hz. Not a
+// tunable: it sets how finely the strip is sampled, never how fast it
+// travels, because the engine integrates against the real elapsed time.
+static constexpr int kDragScrollTickMs = 16;
+
 WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
                                      PhosphorZones::LayoutRegistry* layoutManager,
                                      PhosphorScreens::ScreenManager* screenManager, ISettings* settings,
@@ -286,11 +291,11 @@ void WindowDragAdaptor::ensureDragScrollTimerRunning(const QString& windowId)
 {
     if (!m_dragScrollTimer) {
         m_dragScrollTimer = new QTimer(this);
-        // ~60 Hz. The engine integrates against the REAL elapsed time, so
-        // this figure only sets how finely the strip is sampled, not how
-        // fast it travels.
-        m_dragScrollTimer->setInterval(16);
-        connect(m_dragScrollTimer, &QTimer::timeout, this, &WindowDragAdaptor::onDragScrollTick);
+        // The engine integrates against the REAL elapsed time, so this
+        // figure only sets how finely the strip is sampled, not how fast it
+        // travels.
+        m_dragScrollTimer->setInterval(kDragScrollTickMs);
+        connect(m_dragScrollTimer, &QTimer::timeout, this, &WindowDragAdaptor::advanceDragScroll);
     }
     if (m_dragScrollWindowId != windowId) {
         // A different drag owns the timer now: restart the elapsed clock so
@@ -314,7 +319,7 @@ void WindowDragAdaptor::stopDragScrollTimer()
     m_dragScrollElapsed.invalidate();
 }
 
-void WindowDragAdaptor::onDragScrollTick()
+void WindowDragAdaptor::advanceDragScroll()
 {
     PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
     // Self-terminating: five engine-side paths cancel a preview without
@@ -324,14 +329,14 @@ void WindowDragAdaptor::onDragScrollTick()
         stopDragScrollTimer();
         return;
     }
+    // A dt of zero on the first tick of an arming is not a special case, only
+    // a zero-length interval: the engine still needs the tick to arm its
+    // start delay, and it clamps dt into [0, ceiling] itself. Resolved and
+    // dispatched once so both arms share the same screen id and the same
+    // post-condition — an earlier split let the first tick silently drop a
+    // repaint the engine had asked for.
     const qreal dt = m_dragScrollElapsed.isValid() ? qreal(m_dragScrollElapsed.nsecsElapsed()) / 1'000'000'000.0 : 0.0;
     m_dragScrollElapsed.restart();
-    if (dt <= 0.0) {
-        // First tick of this arming: no interval to integrate yet. The
-        // engine still needs it to arm its start delay, so tick with zero.
-        engine->dragAutoScrollTick(engine->dragInsertPreviewScreenId(), m_lastDragCursorPos, 0.0);
-        return;
-    }
     const QString screenId = engine->dragInsertPreviewScreenId();
     if (!engine->dragAutoScrollTick(screenId, m_lastDragCursorPos, dt)) {
         return;
@@ -384,6 +389,12 @@ void WindowDragAdaptor::clearScrollDropIndicator()
 
 void WindowDragAdaptor::cancelDragInsertIfActive()
 {
+    // Stopped FIRST, matching settleDragInsertPreviewAt: no scroll tick may
+    // land between the decision to end the preview and the teardown below.
+    // Neither call here spins the event loop today, so the order is currently
+    // unobservable, but the two sites encoding opposite orders is how that
+    // stops being true without anyone noticing.
+    stopDragScrollTimer();
     // At most one engine holds a preview, but sweep both — a stale second
     // preview would otherwise be unreachable by every cleanup path.
     if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
@@ -393,7 +404,6 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
         m_scrollEngine->cancelDragInsertPreview();
     }
     clearScrollDropIndicator();
-    stopDragScrollTimer();
 }
 
 void WindowDragAdaptor::cancelDragInsertPreviews()
@@ -436,6 +446,19 @@ void WindowDragAdaptor::cancelDragInsertPreviewsForScreen(const QString& screenI
         && PhosphorIdentity::VirtualScreenId::samePhysical(m_dropIndicatorScreenId, screenId)) {
         clearScrollDropIndicator();
     }
+    // Stop the heartbeat only when NO preview is left anywhere, never
+    // unconditionally. This function is per-output and runs on paths (a
+    // desktop switch, an output reconfigure) that routinely fire while a
+    // preview is live on a DIFFERENT monitor, where `affected` is false and
+    // nothing above cancelled anything. An unconditional stop there would
+    // kill a scroll that is legitimately running on the other screen, and
+    // nothing would restart it: the only arm site is inside dragMoved, so a
+    // cursor parked in the band — the entire gesture this serves — never
+    // gets another chance. Same non-interference rule as this function's own
+    // TARGET-or-PRIOR test.
+    if (!dragInsertPreviewEngine()) {
+        stopDragScrollTimer();
+    }
 }
 
 bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, const QString& windowId)
@@ -443,10 +466,34 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
     PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
     const QString releaseScreenId = resolveScreenAt(QPointF(cursorX, cursorY)).screenId;
 
+    // One last tick at the RELEASE position, before the timer stops. The
+    // engine's ownership latch is cleared by the tick, not by pointer motion,
+    // so a flick out of the band followed by a quick release could otherwise
+    // land inside the gap between the two (dragMoved is throttled to ~32 ms,
+    // the heartbeat is ~16 ms) with the latch still set — and a latched
+    // target is the edge slot, not the slot under the cursor. Ticking here
+    // runs the band test against where the button actually came up: still in
+    // the band keeps the edge promise, out of it hands the target back and
+    // repairs it. dt is zero, so this samples without advancing the scroll.
+    //
+    // Gated on the engine ALREADY owning the target. The tick is not a pure
+    // sampler: with the cursor inside a band it arms, and once the delay has
+    // elapsed it TAKES ownership and overwrites the target with an edge slot.
+    // Running it from a state that does not already own would therefore
+    // manufacture the very ownership the popup gate below honours, and the
+    // drop would land at the strip edge instead of under the cursor. Gating
+    // on the flag rather than on the timer being active closes that
+    // completely instead of narrowing it: a delay that happens to elapse
+    // between the last heartbeat and the release cannot promote here.
+    // Ownership is exactly the precondition the repair needs anyway — with
+    // nothing owned there is no edge slot to undo.
+    if (engine && engine->dragAutoScrollActive()) {
+        engine->dragAutoScrollTick(engine->dragInsertPreviewScreenId(), QPoint(cursorX, cursorY), 0.0);
+    }
     // The drag is over: every arm below either commits, cancels or finds
     // nothing, and none of them wants a scroll tick landing between the
-    // decision and the structural insert. Stopped first, before any arm can
-    // return early.
+    // decision and the structural insert. Stopped before any arm can return
+    // early, and after the settling tick above.
     stopDragScrollTimer();
 
     // A cancelled drag must stay cancelled. endDrag's cancel arm relies on
@@ -517,7 +564,13 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
         clearScrollDropIndicator();
         return false;
     }
-    if (popupOwns && engine->providesDragInsertSelector()) {
+    // The popup's stored pick loses to a live auto-scroll, exactly as it does
+    // during the drag: dragMoved stops feeding the popup branch once the
+    // engine owns the target, so letting it win here would commit a card the
+    // user stopped steering with while they watched the edge slot instead.
+    // The settling tick above has already given ownership back if the release
+    // landed outside the band, so this only bites for a release still in it.
+    if (popupOwns && engine->providesDragInsertSelector() && !engine->dragAutoScrollActive()) {
         engine->updateDragInsertPreview(popupTarget);
     }
     engine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
@@ -836,6 +889,16 @@ void WindowDragAdaptor::hideOverlayAndSelector()
 void WindowDragAdaptor::clearForCompositorReconnect()
 {
     hideOverlayAndClearZoneState();
+    // A live drag-insert preview belongs to the dead session too, and nothing
+    // else here reaches it. hideOverlayAndClearZoneState() does NOT cover it:
+    // OverlayService::hide() only touches slots carrying the overlay's own
+    // physical-screen sentinel and never the ScrollDropIndicator slot, so
+    // without this the drop-indicator rectangle stays PAINTED after the
+    // reconnect with no drag left to dismiss it, and the engine keeps a
+    // preview whose window stays structurally detached. This is the call the
+    // "every preview-end path" contract on cancelDragInsertIfActive's
+    // declaration asks every new teardown to add.
+    cancelDragInsertIfActive();
     // The zone selector popup and its stored selection belong to the dead
     // session too: resetDragState clears neither, and with the compositor
     // gone no drag-end ever will. A surviving shown-flag pair plus the

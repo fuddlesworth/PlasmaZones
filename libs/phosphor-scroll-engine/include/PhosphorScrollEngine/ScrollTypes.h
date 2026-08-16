@@ -779,4 +779,23 @@ struct ResolvedStrip
     int stripWidth = 0;
 };
 
+/// The columns of @p resolved that intersect @p workArea, in strip order.
+///
+/// Single definition of "visible" on purpose. The drag-insert hit-test and
+/// the edge auto-scroll's target writer both need it, and the auto-scroll's
+/// owned target is only coherent with the hit-test while the two agree: if
+/// one drifted, the owned target would name a column the hit-test does not
+/// consider visible and the painted indicator would disagree with the drop.
+/// The returned pointers alias @p resolved and are valid only as long as it is.
+inline QVector<const ResolvedColumn*> visibleColumnsOf(const ResolvedStrip& resolved, const QRect& workArea)
+{
+    QVector<const ResolvedColumn*> visible;
+    for (const ResolvedColumn& column : resolved.columns) {
+        if (column.rect.intersects(workArea)) {
+            visible.append(&column);
+        }
+    }
+    return visible;
+}
+
 } // namespace PhosphorScrollEngine

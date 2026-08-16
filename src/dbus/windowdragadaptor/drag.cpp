@@ -698,6 +698,12 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // a begin that fails, or a new screen with no valid target
                 // yet, would leave it lit in the meantime.
                 clearScrollDropIndicator();
+                // The heartbeat was armed against the departed preview, and
+                // its elapsed clock has been running across the crossing.
+                // Stopping here makes the re-arm below take the fresh-drag
+                // branch, so the first tick on the new screen integrates from
+                // zero instead of from a gap that spans the screen change.
+                stopDragScrollTimer();
             }
             if (!insertEngine->hasDragInsertPreview()) {
                 const bool began = insertEngine->beginDragInsertPreview(windowId, insertScreenId);
@@ -731,7 +737,13 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // begins. Runs BEFORE the target resolve so a hit stored
                 // this tick feeds this tick's preview.
                 const bool stripSelector = insertEngine->providesDragInsertSelector();
-                if (stripSelector) {
+                // Skipped while the auto-scroll owns the target: this is what
+                // STORES the popup's pick, and a pick stored now is a pick the
+                // drop would commit even though the branch below has stopped
+                // consuming it. Suppressing only the consumer would leave the
+                // producer quietly overwriting the target behind the edge slot
+                // the user is actually watching.
+                if (stripSelector && !insertEngine->dragAutoScrollActive()) {
                     checkZoneSelectorTrigger(cursorX, cursorY);
                 }
                 // Per-tick preview ownership: while the popup holds a valid
@@ -748,7 +760,34 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // cannot scroll (autotile's interface default) or when the
                 // strip already fits the viewport.
                 m_lastDragCursorPos = QPoint(cursorX, cursorY);
-                ensureDragScrollTimerRunning(windowId);
+                // The strip popup and the edge bands are alternative ways to
+                // aim, and while the popup is up it is the one the user is
+                // using. They also physically overlap: the popup's bar spans
+                // most of the work area and can be anchored left or right, so
+                // its OUTERMOST cards sit inside the edge band. Arming there
+                // would take the target away from the card under the cursor
+                // and scroll the strip out from under it. Not armed while the
+                // popup is shown on this screen, and stopped if it came up
+                // after the arm. The two states cannot both hold: the popup's
+                // own trigger check is skipped while the scroll owns the
+                // target, so it cannot appear mid-scroll, and this gate stops
+                // the scroll arming under an already-visible popup. That is
+                // what makes the stop below safe — there is never an owned
+                // target here to strand.
+                const bool selectorOwnsAiming = m_zoneSelectorShown
+                    && PhosphorScreens::ScreenIdentity::screensMatch(m_zoneSelectorShownOn, insertScreenId);
+                if (selectorOwnsAiming) {
+                    // The engine is disarmed as well as the timer stopped.
+                    // stopDragScrollTimer touches only daemon state, so an
+                    // armed band would keep its start-delay clock running
+                    // behind the popup and the first tick after the popup
+                    // hides would find the delay long since elapsed and lurch
+                    // the strip with no dwell at all.
+                    insertEngine->cancelDragAutoScroll();
+                    stopDragScrollTimer();
+                } else {
+                    ensureDragScrollTimerRunning(windowId);
+                }
 
                 PhosphorEngine::IPlacementEngine::DragInsertTarget target;
                 // While the auto-scroll is running it OWNS the target — it
@@ -778,11 +817,17 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 // because the overlay change-gates on the rect itself, so a
                 // repeat costs a compare. Empty for autotile by interface
                 // default, which is correct — its live restructure already
-                // shows the target. The push is always animated: it follows a
-                // CURSOR MOVE, so any rect change here is the user aiming
-                // somewhere new, which is exactly what the transitions exist
-                // to make legible.
-                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId));
+                // shows the target. Animated, because it follows a CURSOR
+                // MOVE and any rect change here is the user aiming somewhere
+                // new, which is exactly what the transitions exist to make
+                // legible — EXCEPT while the auto-scroll is running. There the
+                // heartbeat is already pushing un-animated rects at ~60 Hz
+                // against a rect that is moving on its own, and interleaving
+                // an animated push retargets a transition that has not
+                // settled, which stretches the indicator instead of sliding
+                // it. That is the case the animate flag was added for.
+                pushScrollDropIndicator(insertScreenId, insertEngine->dragInsertIndicatorRect(insertScreenId),
+                                        /*animate=*/!insertEngine->dragAutoScrollActive());
                 // The early return below starves the activation and
                 // zone-span rising-edge latches for as long as the preview
                 // lives; keep them fed here so a release→press performed

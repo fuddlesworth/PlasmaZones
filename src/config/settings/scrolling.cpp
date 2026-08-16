@@ -6,6 +6,10 @@
 #include "config/configdefaults.h"
 #include "core/platform/logging.h"
 
+// For the bidirectional default asserts below: the interface names the four
+// edge auto-scroll defaults, so both sides are compared rather than copied.
+#include <PhosphorScrollEngine/IScrollSettings.h>
+
 namespace PlasmaZones {
 
 // ── Scrolling (PhosphorConfig::Store-backed) ────────────────────────────────
@@ -39,17 +43,29 @@ static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
 // same pin, different interface and direction.
 static_assert(!ConfigDefaults::scrollingCropStraddlers(),
               "IScrollSettings::scrollingCropStraddlers defaults to false — update it with this default");
-// The edge auto-scroll block, same class and direction: IScrollSettings
-// carries niri's four figures as defaulted bodies so a stub scrolls the way
-// niri does without knowing this schema exists.
-static_assert(ConfigDefaults::scrollingDragScrollEnabled(),
-              "IScrollSettings::scrollingDragScrollEnabled defaults to true — update it with this default");
-static_assert(ConfigDefaults::scrollingDragScrollTriggerWidth() == 30,
-              "IScrollSettings::scrollingDragScrollTriggerWidth defaults to 30 — update it with this default");
-static_assert(ConfigDefaults::scrollingDragScrollDelayMs() == 100,
-              "IScrollSettings::scrollingDragScrollDelayMs defaults to 100 — update it with this default");
-static_assert(ConfigDefaults::scrollingDragScrollMaxSpeed() == 1500,
-              "IScrollSettings::scrollingDragScrollMaxSpeed defaults to 1500 — update it with this default");
+// The edge auto-scroll block, same class but BIDIRECTIONAL, unlike the
+// literal-compare asserts above and below: IScrollSettings names its four
+// defaults as constants, so these compare the two sides directly and an edit
+// to EITHER file breaks the build. That is the property the surrounding
+// asserts only approximate.
+static_assert(ConfigDefaults::scrollingDragScrollEnabled()
+                  == PhosphorEngine::IScrollSettings::kDragScrollEnabledDefault,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll master switch default");
+static_assert(ConfigDefaults::scrollingDragScrollTriggerWidth()
+                  == PhosphorEngine::IScrollSettings::kDragScrollTriggerWidthDefault,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll trigger width default");
+static_assert(ConfigDefaults::scrollingDragScrollDelayMs()
+                  == PhosphorEngine::IScrollSettings::kDragScrollDelayMsDefault,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll start delay default");
+static_assert(ConfigDefaults::scrollingDragScrollMaxSpeed()
+                  == PhosphorEngine::IScrollSettings::kDragScrollMaxSpeedDefault,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll maximum speed default");
+// The schema's ceiling and the engine's own ceiling have to be the same
+// number, or a value the settings UI accepts would be silently re-clamped a
+// second time on the way into the engine.
+static_assert(ConfigDefaults::scrollingDragScrollMaxSpeedMax()
+                  == PhosphorEngine::IScrollSettings::kDragScrollMaxSpeedCeiling,
+              "ConfigDefaults and IScrollSettings disagree on the edge auto-scroll maximum speed ceiling");
 // The tab indicator's paint half carries the same interface-side defaults, for
 // the same reason: the overlay service reads them through ISettings.
 static_assert(ConfigDefaults::scrollingTabIndicatorStyle() == 1,

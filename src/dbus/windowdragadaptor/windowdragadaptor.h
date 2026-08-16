@@ -753,15 +753,28 @@ private:
     // only supplies a heartbeat, the last known cursor and the real elapsed
     // time between ticks.
 
-    /// ~60 Hz while a drag-insert preview is live on an engine that can
-    /// auto-scroll. Created lazily, stopped by every preview-end path and
-    /// by the tick itself when it finds no preview left.
+    /// ~60 Hz while ANY drag-insert preview is live, including on an engine
+    /// that cannot auto-scroll — the arm does not test the engine, because
+    /// the tick's own interface default answers "not me" for free. The one
+    /// exception is the strip selector popup: while it is up on the preview's
+    /// screen it owns aiming, so the arm is skipped and the engine disarmed.
+    /// Created
+    /// lazily. Most preview-end paths stop it explicitly; the per-output
+    /// cancel stops it only once no preview is left anywhere, since it must
+    /// not disturb a scroll running on another monitor. The tick itself is
+    /// the backstop and stops when it finds no preview.
     QTimer* m_dragScrollTimer = nullptr;
     /// Wall time since the previous tick, so the engine's speed ramp is
     /// frame-rate independent and a late timer cannot lurch the strip.
     QElapsedTimer m_dragScrollElapsed;
-    /// Last cursor position dragMoved saw, in screen pixels. The timer has
-    /// no cursor of its own.
+    /// Cursor position from the last dragMoved that had a live drag-insert
+    /// preview on the cursor's own engine screen, in screen pixels. NOT every
+    /// pointer move: the single write sits inside that branch, immediately
+    /// before the only site that arms the timer. That ordering is what makes
+    /// it safe to leave uncleared — no tick can read a previous drag's parked
+    /// cursor, because arming always re-writes it first. Do not "fix" it with
+    /// a clear: a default QPoint is (0, 0), which is inside the leading band
+    /// on most work areas, and the timer reads this.
     QPoint m_lastDragCursorPos;
     /// The drag the timer was armed for. A tick is at most 16 ms from
     /// firing when a drag ends, which is long enough for the next drag's
@@ -770,7 +783,13 @@ private:
     QString m_dragScrollWindowId;
     void ensureDragScrollTimerRunning(const QString& windowId);
     void stopDragScrollTimer();
-    void onDragScrollTick();
+    /// One heartbeat. Named as a verb rather than `onDragScrollTick`: the
+    /// `on*` prefix in this class marks a Qt slot (onLayoutChanged,
+    /// onSnapAssistDismissed, both under `private Q_SLOTS:`), and this is a
+    /// plain member reached through the pointer-to-member connect overload,
+    /// which needs no slot marking. Keeping it off the slot surface also
+    /// keeps it off the adaptor's introspected bus interface.
+    void advanceDragScroll();
 
     // DRY helper: cancel any active drag-insert preview on either engine.
     void cancelDragInsertIfActive();

@@ -20,11 +20,11 @@
  * to link the whole SettingsController topology TU. This file is that guard.
  * It is scoped to what can be checked cheaply and exactly: the one-owner rule
  * across the WHOLE manifest, and complete coverage of a swept subset of
- * schema groups. The swept set is the five scrolling groups (Scrolling,
- * Scrolling.Behavior, Scrolling.TabIndicator, Scrolling.DropIndicator and
- * Scrolling.ZoneSelector, whose page manifests are the newest and least
- * exercised) plus Rendering, whose Gpu key once shipped with no manifest
- * owner.
+ * schema groups. The swept set is the six scrolling groups (Scrolling,
+ * Scrolling.Behavior, Scrolling.TabIndicator, Scrolling.DropIndicator,
+ * Scrolling.ZoneSelector and Scrolling.Behavior.DragScroll, whose page
+ * manifests are the newest and least exercised) plus Rendering, whose Gpu
+ * key once shipped with no manifest owner.
  */
 
 #include <QSet>
@@ -171,7 +171,7 @@ private Q_SLOTS:
 
         QStringList unowned;
         int checked = 0;
-        // All FIVE scrolling schema groups. The two indicator groups were
+        // All SIX scrolling schema groups. The two indicator groups were
         // outside this sweep, so a key added to either could drop out of
         // per-page Reset with nothing failing — which is the exact class of
         // regression this file exists to catch, and the DropIndicator group
@@ -182,7 +182,8 @@ private Q_SLOTS:
         for (const QString& group :
              {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
               ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
-              ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::renderingGroup()}) {
+              ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::scrollingDragScrollGroup(),
+              ConfigDefaults::renderingGroup()}) {
             const auto it = schema.groups.constFind(group);
             QVERIFY2(it != schema.groups.constEnd(), qPrintable(group));
             for (const PhosphorConfig::KeyDef& def : *it) {

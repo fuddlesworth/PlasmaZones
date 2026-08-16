@@ -13,11 +13,16 @@ import org.kde.kirigami as Kirigami
  * follows while it runs.
  *
  * The three numbers are niri's dnd-edge-view-scroll vocabulary: how wide the
- * band at the screen edge is, how long the cursor must sit in it before the
- * strip starts moving, and how fast the strip travels once the cursor
- * reaches the very edge. Speed ramps from nothing at the band's inner edge
- * up to the maximum, so where the cursor rests inside the band is the
+ * band at the working area's edge is, how long the pointer must sit in it
+ * before the strip starts moving, and how fast the strip travels once the
+ * pointer reaches the very edge. Speed ramps from nothing at the band's inner
+ * edge up to the maximum, so where the pointer rests inside the band is the
  * throttle.
+ *
+ * The engine measures the POINTER against the WORKING AREA, not the dragged
+ * window against the screen, so the row descriptions must say so: a drag grab
+ * can hold the window far from the pointer, and a panel insets the working
+ * area from the screen edge.
  */
 SettingsCard {
     id: root
@@ -44,8 +49,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Trigger width")
             searchAnchor: "scrollingDragScrollTriggerWidth"
-            description: i18n("How close to the edge of the screen a dragged window has to be before the strip starts scrolling.")
-            enabled: appSettings.scrollingDragScrollEnabled
+            description: i18n("How close to the edge of the working area the pointer has to be before the strip starts scrolling.")
 
             SettingsSpinBox {
                 id: triggerWidthSpin
@@ -53,8 +57,9 @@ SettingsCard {
                 accessibleName: i18n("Edge auto-scroll trigger width")
                 from: root._scrollConsts.dragScrollTriggerWidthMin
                 to: root._scrollConsts.dragScrollTriggerWidthMax
+                stepSize: 5
                 onValueModified: value => {
-                    return appSettings.scrollingDragScrollTriggerWidth = value;
+                    appSettings.scrollingDragScrollTriggerWidth = value;
                 }
                 // Guarded Binding rather than a plain `value:` binding, which
                 // SettingsSpinBox's own edit echo destroys after the first
@@ -67,25 +72,23 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: appSettings.scrollingDragScrollEnabled
-        }
+        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Start delay")
-            searchAnchor: "scrollingDragScrollDelay"
-            description: i18n("How long the window has to stay near the edge before the strip moves, in milliseconds. Stops a drag that only passes by an edge from scrolling.")
-            enabled: appSettings.scrollingDragScrollEnabled
+            searchAnchor: "scrollingDragScrollDelayMs"
+            description: i18n("How long the pointer has to stay near the edge before the strip moves. Stops a drag that only passes by an edge from scrolling.")
 
             SettingsSpinBox {
                 id: delaySpin
 
                 accessibleName: i18n("Edge auto-scroll start delay")
+                unitText: i18nc("milliseconds unit suffix in a spin box", "ms")
                 from: root._scrollConsts.dragScrollDelayMsMin
                 to: root._scrollConsts.dragScrollDelayMsMax
                 stepSize: 10
                 onValueModified: value => {
-                    return appSettings.scrollingDragScrollDelayMs = value;
+                    appSettings.scrollingDragScrollDelayMs = value;
                 }
                 Binding on value {
                     value: appSettings.scrollingDragScrollDelayMs
@@ -95,25 +98,23 @@ SettingsCard {
             }
         }
 
-        SettingsSeparator {
-            enabled: appSettings.scrollingDragScrollEnabled
-        }
+        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Maximum speed")
             searchAnchor: "scrollingDragScrollMaxSpeed"
-            description: i18n("How fast the strip scrolls with the window held right at the edge, in pixels per second. It moves more slowly the further from the edge the window sits.")
-            enabled: appSettings.scrollingDragScrollEnabled
+            description: i18n("How fast the strip scrolls with the pointer held right at the edge. It moves more slowly the further from the edge the pointer sits.")
 
             SettingsSpinBox {
                 id: maxSpeedSpin
 
                 accessibleName: i18n("Edge auto-scroll maximum speed")
+                unitText: i18nc("pixels per second unit suffix in a spin box", "px/s")
                 from: root._scrollConsts.dragScrollMaxSpeedMin
                 to: root._scrollConsts.dragScrollMaxSpeedMax
                 stepSize: 50
                 onValueModified: value => {
-                    return appSettings.scrollingDragScrollMaxSpeed = value;
+                    appSettings.scrollingDragScrollMaxSpeed = value;
                 }
                 Binding on value {
                     value: appSettings.scrollingDragScrollMaxSpeed

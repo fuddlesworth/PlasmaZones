@@ -555,7 +555,13 @@ public:
     /// motion events stop arriving the moment the hand stops. @p dtSeconds
     /// is the real elapsed time since the previous tick, so the speed ramp
     /// is frame-rate independent and a stalled timer cannot lurch.
-    /// Returns true when the view actually moved.
+    ///
+    /// Returns true when the caller should REPAINT the drop indicator, which
+    /// is not the same as "the view moved". A tick that is pinned at a strip
+    /// end moves nothing yet still rewrites the owned target, and a tick that
+    /// carries the cursor out of the band hands the target back and repairs
+    /// it — both need the indicator redrawn. An implementation that returned
+    /// true only for actual view motion would drop those repaints.
     ///
     /// While this is scrolling, the implementation OWNS the drop target: it
     /// writes the edge slot itself and the caller must not re-hit-test (see
@@ -570,13 +576,37 @@ public:
         return false;
     }
 
-    /// Whether edge auto-scroll currently owns the drop target. True from
-    /// the moment the band's delay elapses until the cursor leaves the band
-    /// or the strip hits an end. While true the caller keeps pushing the
-    /// indicator but must leave computeDragInsertTargetAtPoint alone.
+    /// Whether edge auto-scroll currently owns the drop target. True from the
+    /// moment the band's delay elapses until the cursor leaves the band, the
+    /// preview ends, the strip shrinks to fit the viewport, the feature is
+    /// switched off, or any other condition that makes the scroll incoherent
+    /// (the implementation's disarm paths are the full list — a vanished
+    /// state, a dead work area, no visible column, a foreign screen). Not an
+    /// exhaustive contract, so do not read it as one.
+    /// Reaching a strip end does NOT end ownership: the view is
+    /// pinned but the cursor is still asking to insert past that edge, and
+    /// that edge slot stays the promise. Handing the target back there would
+    /// resume per-column hit-testing the instant the strip pins, which is the
+    /// churn this whole mechanism exists to prevent.
+    ///
+    /// While true the caller keeps pushing the indicator but must leave
+    /// computeDragInsertTargetAtPoint alone.
     virtual bool dragAutoScrollActive() const
     {
         return false;
+    }
+
+    /// Give the drop target back and forget any armed band, WITHOUT moving
+    /// the view or re-aiming. For a caller that is taking over aiming by
+    /// another route (the strip selector popup) and needs the engine to stop
+    /// owning the target and to serve a fresh start delay next time.
+    ///
+    /// Distinct from letting a tick disarm on its own: a tick reads the
+    /// cursor, so it can only release ownership when the cursor has actually
+    /// left the band, and it can just as easily TAKE ownership. This never
+    /// takes it.
+    virtual void cancelDragAutoScroll()
+    {
     }
 
     /// The rect the dragged window would occupy if the live preview were

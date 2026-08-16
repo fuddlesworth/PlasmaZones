@@ -556,12 +556,7 @@ ScrollEngine::computeDragInsertTargetAtPoint(const QString& screenId, const QPoi
     // Visible columns gathered up front: the band mapping below needs to
     // know whether a column is the first or last visible one, which a
     // single streaming pass cannot answer at the column being tested.
-    QVector<const ResolvedColumn*> visibleColumns;
-    for (const ResolvedColumn& column : resolved.columns) {
-        if (column.rect.intersects(params.workArea)) {
-            visibleColumns.append(&column);
-        }
-    }
+    const QVector<const ResolvedColumn*> visibleColumns = visibleColumnsOf(resolved, params.workArea);
     const ResolvedColumn* lastVisible = visibleColumns.isEmpty() ? nullptr : visibleColumns.constLast();
     for (int vi = 0; vi < visibleColumns.size(); ++vi) {
         const ResolvedColumn& column = *visibleColumns.at(vi);
@@ -849,6 +844,15 @@ void ScrollEngine::dropClosedWindowFromDragPreview(const QString& windowId)
     const auto it = m_states.windowKeys().constFind(windowId);
     if (it != m_states.windowKeys().constEnd() && it.value() == m_dragInsertPreview->targetKey) {
         m_dragInsertPreview->lastTarget = DragInsertTarget{};
+        // Give the edge auto-scroll's ownership back along with the target it
+        // was writing. Clearing lastTarget alone would not hold at all: the
+        // very next heartbeat re-writes the edge slot and re-lights the
+        // indicator within a frame. Disarming does not make the promise above
+        // literally true either — a cursor still in the band re-arms and
+        // re-lights after a fresh start delay — but it turns an immediate
+        // relight into a deliberate one, and it stops the ownership latch
+        // outliving the target it was justifying.
+        cancelDragAutoScroll();
     }
 }
 
