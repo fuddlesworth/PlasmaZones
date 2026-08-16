@@ -1637,9 +1637,22 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                             if (atScrollPark(snap.window)) {
                                 originOverride = QRectF(committedGeo);
                             } else {
+                                // viewDelta is a signed scalar ALONG this
+                                // screen's strip axis, so the origin has to
+                                // back out along that same axis. Subtracting
+                                // it from x unconditionally would, on a
+                                // vertical strip, displace the origin across
+                                // the axis the paint offset moves along, and
+                                // the leg would stop being degenerate: frame
+                                // zero would land a full delta away in BOTH
+                                // components instead of on the window.
                                 const KWin::RectF cur = snap.window->frameGeometry();
-                                originOverride = QRectF(QRect(qRound(cur.x()) - snap.viewDelta, qRound(cur.y()),
-                                                              qRound(cur.width()), qRound(cur.height())));
+                                const bool vertical =
+                                    scrollAxisForScreen(snap.screenId) == PhosphorProtocol::ScrollAxis::Vertical;
+                                const int originX = qRound(cur.x()) - (vertical ? 0 : snap.viewDelta);
+                                const int originY = qRound(cur.y()) - (vertical ? snap.viewDelta : 0);
+                                originOverride =
+                                    QRectF(QRect(originX, originY, qRound(cur.width()), qRound(cur.height())));
                             }
                         }
                     } else if (!snap.scrollEdge.isEmpty()) {
@@ -1660,13 +1673,25 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                                 atEdge =
                                     QRect(qRound(cur.x()), qRound(cur.y()), qRound(cur.width()), qRound(cur.height()));
                             }
+                            // Four departure edges since v12: "left"/"right"
+                            // on a horizontal strip, "top"/"bottom" on a
+                            // vertical one. Folding the two vertical tokens
+                            // into an else would anchor them past the RIGHT
+                            // screen edge and slide every vertical park
+                            // sideways across the neighbouring output.
+                            //
+                            // QRect::right()/bottom() are x+width-1 and
+                            // y+height-1, so +1 sits one past the edge.
+                            // screenRect must stay a QRect (KWin::Rect's
+                            // right()/bottom() are x+width and y+height and
+                            // would shift the slide by a pixel).
                             if (snap.scrollEdge == QLatin1String("left")) {
                                 atEdge.moveLeft(screenRect.left() - atEdge.width());
+                            } else if (snap.scrollEdge == QLatin1String("top")) {
+                                atEdge.moveTop(screenRect.top() - atEdge.height());
+                            } else if (snap.scrollEdge == QLatin1String("bottom")) {
+                                atEdge.moveTop(screenRect.bottom() + 1);
                             } else {
-                                // QRect::right() is x+width-1, so +1 sits one
-                                // past the edge. screenRect must stay a QRect
-                                // (KWin::Rect::right() is x+width and would
-                                // shift the slide by a pixel).
                                 atEdge.moveLeft(screenRect.right() + 1);
                             }
                             if (arriving) {

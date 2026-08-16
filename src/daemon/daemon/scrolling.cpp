@@ -149,12 +149,6 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // membership.
     QStringList ffmScreens;
     QStringList cropScreens;
-    // The axis rides the same walk and the same single push. Computing it here
-    // rather than in a second pass is what keeps it correctly ordered on BOTH
-    // paths into this function — the settings path and the debounced
-    // geometry/rotation path — because the push happens before any
-    // scheduleRetileForScreen, which always coalesces onto a later turn.
-    QStringList verticalAxisScreens;
     for (const QString& screenId : scrollingScreens) {
         QVariantMap overrides = m_settings->getPerScreenScrollingSettings(screenId);
         if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
@@ -230,14 +224,8 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // derivation in the daemon could disagree with it on a near-square
         // monitor — a disagreement that is intermittent, geometry-dependent
         // and invisible in tests, which is the worst shape a bug can have.
-        // The base pointer does not carry the accessor: the axis is a
-        // scrolling concept and deliberately not on IPlacementEngine, so this
-        // is a downcast rather than a widening of the shared contract.
-        if (const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
-            if (scroll->stripAxisForScreen(screenId).axis() == PhosphorProtocol::ScrollAxis::Vertical) {
-                verticalAxisScreens.append(screenId);
-            }
-        }
+        // The collection itself runs in a second walk below, once every
+        // screen's override map is installed.
         // TEMPLATE channel: the context's resolved native ScrollingTemplate
         // (cascade entry, else the default-template setting) pushes its
         // whole shape. Precedence is rule > template > settings > engine
@@ -411,6 +399,41 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             m_overlayService->setScrollDropIndicatorOverrides(screenId, drop);
         }
     }
+
+    // The axis is collected in a SECOND walk, after the loop above has
+    // installed every screen's override map. stripAxisForScreen resolves
+    // through the engine's CURRENT per-screen map, and the settings-channel
+    // StripAxis intent is read into `overrides` at the top of that loop but
+    // only handed to the engine at its bottom — so reading the axis inside
+    // the walk answers from the PREVIOUS pass's map. That staleness is
+    // sticky: applyPerScreenConfig early-returns on an unchanged map, so
+    // nothing republishes and the wire keeps the wrong membership until some
+    // unrelated event re-runs this function.
+    //
+    // Hoisting the apply above the read instead would install an INCOMPLETE
+    // map, because the template and tab-indicator channels write into
+    // `overrides` further down the same iteration.
+    //
+    // Only the settings channel was late. The GEOMETRY term never was:
+    // layoutParamsForScreen resolves the work area live from the
+    // ScreenManager and caches nothing, so a rotation is visible on the first
+    // read either way. Ordering is unchanged — this still runs before the
+    // single push, which still precedes setActiveScreens and every
+    // scheduleRetileForScreen, all of which coalesce onto a later turn.
+    //
+    // The base pointer does not carry the accessor: the axis is a scrolling
+    // concept and deliberately not on IPlacementEngine, so this is a downcast
+    // rather than a widening of the shared contract. It is loop-invariant, so
+    // it is resolved once rather than per screen.
+    QStringList verticalAxisScreens;
+    if (const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
+        for (const QString& screenId : scrollingScreens) {
+            if (scroll->stripAxisForScreen(screenId).axis() == PhosphorProtocol::ScrollAxis::Vertical) {
+                verticalAxisScreens.append(screenId);
+            }
+        }
+    }
+
     // Publish the effect-owned pair in ONE push, after the walk. SORTED here,
     // not by construction: the walk iterates a QSet, whose order is hash order
     // and is not stable across insertions, so the same membership could be

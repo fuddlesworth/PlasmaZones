@@ -315,7 +315,10 @@ void TestScrollEngineBehaviour::widthClientDecidesOverrideIsPerScreen()
     settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
     settings->widthValue = 0.25;
     auto* tracker = new StubWindowTracking(&owner);
-    tracker->unmanagedGeometry = QRect(0, 0, 640, 400);
+    // Transposed with the arm: the client's MAIN extent must be 640 on both
+    // axes, so the 640 the assertions expect is the column's length along the
+    // strip rather than a number that happens to match a physical width.
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
     ScrollEngine* engine = makeEngine(&owner, settings, tracker);
     engine->applyPerScreenConfig(
         kS1, onlyKey(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::ClientDecides)));
@@ -342,7 +345,10 @@ void TestScrollEngineBehaviour::outOfRangeWidthRuleDoesNotSuppressClientDecides(
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     auto* tracker = new StubWindowTracking(&owner);
-    tracker->unmanagedGeometry = QRect(0, 0, 640, 400);
+    // Transposed with the arm: the client's MAIN extent must be 640 on both
+    // axes, so the 640 the assertions expect is the column's length along the
+    // strip rather than a number that happens to match a physical width.
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
     ScrollEngine* engine = makeEngine(&owner, settings, tracker);
 
     QVariantMap rejected;

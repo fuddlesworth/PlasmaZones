@@ -189,7 +189,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     const ScrollLayoutParams params = layoutParamsForScreen(ctx.toScreenId);
     ColumnWidth width = effectiveDefaultColumnWidth(ctx.toScreenId);
     if (ctx.sourceGeometry.isValid()) {
-        width = ColumnWidth::makeFixed(ctx.sourceGeometry.width());
+        // sourceGeometry is the window's PHYSICAL frame at handoff time, so
+        // decode it by the TARGET strip's role: the value being minted is an
+        // intent for the strip receiving the window. Reading .width() feeds a
+        // cross extent into a main-axis intent on a vertical target.
+        width = ColumnWidth::makeFixed(params.axis.mainSize(ctx.sourceGeometry.size()));
     }
     // Entry position comes from the CALLER: the cross-mode dispatcher
     // derives insertIndex from the crossing direction (0 when entering from

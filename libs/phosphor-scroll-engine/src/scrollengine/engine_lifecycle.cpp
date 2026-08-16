@@ -204,7 +204,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
         if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
-            width = ColumnWidth::makeFixed(geo->width());
+            // The tracked geometry is a PHYSICAL rect from the compositor, so
+            // it has to be decoded by role. Reading .width() unconditionally
+            // would, on a vertical strip, feed the client's cross extent into
+            // the column's MAIN intent and open every client-sized window at
+            // the wrong length along the strip.
+            width = ColumnWidth::makeFixed(params.axis.mainSize(geo->size()));
         }
     }
 
