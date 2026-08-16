@@ -221,6 +221,29 @@ void Settings::setTilingAlgorithmOrder(const QStringList& order)
     Q_EMIT settingsChanged();
 }
 
+QStringList Settings::scrollingTemplateOrder() const
+{
+    return parseCommaList(
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::scrollingTemplateOrderKey()));
+}
+
+void Settings::setScrollingTemplateOrder(const QStringList& order)
+{
+    // See setSnappingLayoutOrder — post-write compare against the canonical
+    // form avoids spurious change signals for equivalent non-canonical input.
+    const QString before =
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::scrollingTemplateOrderKey());
+    m_store->write(ConfigDefaults::orderingGroup(), ConfigDefaults::scrollingTemplateOrderKey(),
+                   order.join(QLatin1Char(',')));
+    const QString after =
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::scrollingTemplateOrderKey());
+    if (before == after) {
+        return;
+    }
+    Q_EMIT scrollingTemplateOrderChanged();
+    Q_EMIT settingsChanged();
+}
+
 // ── Animations (PhosphorConfig::Store-backed) ───────────────────────────────
 // Snapping + autotile geometry-change transitions. Phase 4 sub-commit 6
 // migrated the on-disk format from five per-field keys to a single

@@ -118,9 +118,14 @@ PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview> buildUnifiedLayoutList
 
 /**
  * @brief Build a combined custom order list from settings
+ *
+ * Each flag mirrors the matching include* argument of buildUnifiedLayoutList:
+ * pass the same values so the order list covers exactly the families the
+ * preview list carries. Template ids need no namespace prefix (the order and
+ * the previews both use the braced-UUID string), unlike the tiling arm.
  */
 PLASMAZONES_EXPORT QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual,
-                                                bool includeAutotile);
+                                                bool includeAutotile, bool includeScrollingTemplates = false);
 
 /**
  * @brief Find a preview by ID in the list

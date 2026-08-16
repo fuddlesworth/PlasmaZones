@@ -31,6 +31,9 @@ OrderingPageKind orderingPageKind(const QString& page)
     if (page == QLatin1String("tiling-ordering")) {
         return OrderingPageKind::Tiling;
     }
+    if (page == QLatin1String("scrolling-ordering")) {
+        return OrderingPageKind::Scrolling;
+    }
     return OrderingPageKind::None;
 }
 

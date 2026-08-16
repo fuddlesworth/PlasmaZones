@@ -183,7 +183,8 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             m_includeManualLayouts, m_includeAutotileLayouts,
             Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
-            PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
+            PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts,
+                                                         m_includeScrollingTemplates),
             m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, m_includeScrollingTemplates,
             m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
             // The None row has to be in THIS list too, not just the popup's:

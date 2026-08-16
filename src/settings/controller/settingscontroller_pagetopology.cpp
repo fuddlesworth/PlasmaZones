@@ -150,10 +150,14 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QString kScrollingColumns = QStringLiteral("scrolling-columns");
     static const QString kScrollingTabs = QStringLiteral("scrolling-tabs");
     static const QString kScrollingWindow = QStringLiteral("scrolling-window");
-    static const QString kScrollingShortcuts = QStringLiteral("scrolling-shortcuts");
     static const QString kScrollingZoneSelector = QStringLiteral("scrolling-zoneselector");
-    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingColumns,   kScrollingTabs,
-                                                   kScrollingWindow, kScrollingShortcuts, kScrollingZoneSelector};
+    static const QSet<QString> kScrollingConfigChildren{
+        QStringLiteral("scrolling-ordering"),
+        QStringLiteral("scrolling-shortcuts"),
+    };
+    static const QSet<QString> kScrollingAllLeaves =
+        QSet<QString>{kScrollingSimple, kScrollingColumns, kScrollingTabs, kScrollingWindow, kScrollingZoneSelector}
+        + kScrollingConfigChildren;
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -165,6 +169,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("snapping-overlay-cat"), kSnappingOverlayChildren},
         {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
         {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
+        {QStringLiteral("scrolling-config-cat"), kScrollingConfigChildren},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-transitions"), kAnimationsTransitionsChildren},
         {QStringLiteral("animations-motion"), kAnimationsMotionChildren},
@@ -682,6 +687,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("scrolling-zoneselector"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
+        QStringLiteral("scrolling-ordering"),
         QStringLiteral("window-appearance"),
         QStringLiteral("decorations-windows"),
         QStringLiteral("decorations-osds"),

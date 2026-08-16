@@ -58,6 +58,16 @@ void SettingsAdaptor::initializeRegistryScrolling()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("int");
 
+#define REGISTER_STRINGLIST_SETTING(name, getter, setter)                                                              \
+    m_getters[QStringLiteral(name)] = [this]() {                                                                       \
+        return m_settings->getter();                                                                                   \
+    };                                                                                                                 \
+    m_setters[QStringLiteral(name)] = [this](const QVariant& v) {                                                      \
+        m_settings->setter(v.toStringList());                                                                          \
+        return true;                                                                                                   \
+    };                                                                                                                 \
+    m_schemas[QStringLiteral(name)] = QStringLiteral("stringlist");
+
 #define REGISTER_DOUBLE_SETTING(name, getter, setter)                                                                  \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
@@ -196,6 +206,12 @@ void SettingsAdaptor::initializeRegistryScrolling()
     m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("stringlist");
 
     REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
+
+    // The template priority order (IOrderingSettings) — the scrolling twin of
+    // the snapping/tiling order keys. The daemon consumes it in-process via
+    // buildCustomOrder; this registration keeps the every-scrolling-property
+    // D-Bus contract complete (test_settings_registry_contract).
+    REGISTER_STRINGLIST_SETTING("scrollingTemplateOrder", scrollingTemplateOrder, setScrollingTemplateOrder)
 
     // The scrolling twin of the snap / autotile restore-floated pair, plus the
     // tab-strip toggle. All three are ISettings virtuals with defaults, so they
@@ -611,6 +627,7 @@ void SettingsAdaptor::initializeRegistryScrolling()
 // Clean up macros (local scope; unity-batch hygiene)
 #undef REGISTER_BOOL_SETTING
 #undef REGISTER_INT_SETTING
+#undef REGISTER_STRINGLIST_SETTING
 #undef REGISTER_DOUBLE_SETTING
 #undef REGISTER_THEME_FALLBACK_COLOR_SETTING
 #undef REGISTER_COLOR_SETTING

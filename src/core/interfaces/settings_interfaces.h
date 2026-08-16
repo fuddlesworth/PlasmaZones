@@ -531,6 +531,8 @@ public:
     virtual void setSnappingLayoutOrder(const QStringList& order) = 0;
     virtual QStringList tilingAlgorithmOrder() const = 0;
     virtual void setTilingAlgorithmOrder(const QStringList& order) = 0;
+    virtual QStringList scrollingTemplateOrder() const = 0;
+    virtual void setScrollingTemplateOrder(const QStringList& order) = 0;
 };
 
 /**

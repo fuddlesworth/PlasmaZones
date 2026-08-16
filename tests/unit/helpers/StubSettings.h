@@ -1758,6 +1758,18 @@ public:
         Q_EMIT tilingAlgorithmOrderChanged();
         Q_EMIT settingsChanged();
     }
+    QStringList scrollingTemplateOrder() const override
+    {
+        return m_scrollingTemplateOrder;
+    }
+    void setScrollingTemplateOrder(const QStringList& order) override
+    {
+        if (m_scrollingTemplateOrder == order)
+            return;
+        m_scrollingTemplateOrder = order;
+        Q_EMIT scrollingTemplateOrderChanged();
+        Q_EMIT settingsChanged();
+    }
 
     // Animation settings (ISettings)
     bool animationsEnabled() const override
@@ -2633,6 +2645,7 @@ private:
     bool m_snappingFocusFollowsMouse = ConfigDefaults::snappingFocusFollowsMouse();
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
+    QStringList m_scrollingTemplateOrder;
     // Seeded from ConfigDefaults like every sibling trigger list: production
     // defaults to a single Alt trigger, and an empty stub baseline would
     // hand activation-gated tests a "no trigger configured" world the real

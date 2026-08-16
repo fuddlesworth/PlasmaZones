@@ -632,14 +632,19 @@ public:
     // ── Ordering helpers (staged — flushed to settings on save) ────────────
     Q_INVOKABLE QVariantList resolvedSnappingOrder() const;
     Q_INVOKABLE QVariantList resolvedTilingOrder() const;
+    Q_INVOKABLE QVariantList resolvedScrollingOrder() const;
     Q_INVOKABLE void moveSnappingLayout(int fromIndex, int toIndex);
     Q_INVOKABLE void moveTilingAlgorithm(int fromIndex, int toIndex);
+    Q_INVOKABLE void moveScrollingTemplate(int fromIndex, int toIndex);
     Q_INVOKABLE void resetSnappingOrder();
     Q_INVOKABLE void resetTilingOrder();
+    Q_INVOKABLE void resetScrollingOrder();
     Q_INVOKABLE bool hasCustomSnappingOrder() const;
     Q_INVOKABLE bool hasCustomTilingOrder() const;
+    Q_INVOKABLE bool hasCustomScrollingOrder() const;
     Q_INVOKABLE QStringList effectiveSnappingOrder() const;
     Q_INVOKABLE QStringList effectiveTilingOrder() const;
+    Q_INVOKABLE QStringList effectiveScrollingOrder() const;
 
     // ── Algorithm helpers ────────────────────────────────────────────────────
     // Q_PROPERTY for reactive QML bindings; Q_INVOKABLE retained for legacy
@@ -849,6 +854,7 @@ Q_SIGNALS:
     // Ordering staged signals
     void stagedSnappingOrderChanged();
     void stagedTilingOrderChanged();
+    void stagedScrollingOrderChanged();
 
     // Internal forwarder for the Settings-NOTIFY meta-object loop —
     // see ctor for rationale (QMetaMethod::fromSignal vs indexOfSlot).
@@ -1260,6 +1266,7 @@ private:
     // Staged ordering changes (flushed to m_settings on save)
     std::optional<QStringList> m_stagedSnappingOrder;
     std::optional<QStringList> m_stagedTilingOrder;
+    std::optional<QStringList> m_stagedScrollingOrder;
 
     // PhosphorControl integration — owns the PageRegistry the framework's
     // SettingsAppWindow chrome consumes. Constructed in buildApplicationController()

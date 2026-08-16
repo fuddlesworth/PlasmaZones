@@ -254,13 +254,8 @@ void sortPreviews(QVector<LayoutPreview>& list, const QStringList& customOrder =
 
 } // namespace
 
-// Scrolling templates contribute nothing here on purpose: there is no
-// user-facing template order setting yet, so their ids miss the order map in
-// sortPreviews and resolve to INT_MAX, which parks them after the ordered
-// entries. They share that INT_MAX with every other unordered id, so
-// defaultPreviewLessThan sorts them against those rows as well, not only
-// against each other.
-QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual, bool includeAutotile)
+QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual, bool includeAutotile,
+                             bool includeScrollingTemplates)
 {
     QStringList order;
     if (!settings) {
@@ -281,6 +276,13 @@ QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManu
         for (const QString& algoId : algoOrder) {
             order.append(PhosphorLayout::LayoutId::makeAutotileId(algoId));
         }
+    }
+    if (includeScrollingTemplates) {
+        // Template previews are keyed by the template's braced-UUID string
+        // (previewFromScrollingTemplate), which is also what the order stores,
+        // so no namespace prefix is needed. The None row deliberately has no
+        // order entry: defaultPreviewLessThan pins it last regardless.
+        order.append(settings->scrollingTemplateOrder());
     }
     return order;
 }

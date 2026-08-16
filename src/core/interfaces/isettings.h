@@ -885,6 +885,7 @@ Q_SIGNALS:
     // Ordering
     void snappingLayoutOrderChanged();
     void tilingAlgorithmOrderChanged();
+    void scrollingTemplateOrderChanged();
     // Animation settings (general)
     void animationsEnabledChanged();
     void animationDurationChanged();

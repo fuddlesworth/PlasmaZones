@@ -186,14 +186,14 @@ SettingsFlickable {
             filtered = Logic.applyTilingFilters(filtered, search, filterBar);
         let groups = root.buildGroups(filtered, filterBar.groupByIndex);
         // The priority order stores ids in each mode's own namespace: snapping
-        // layouts by bare UUID (matches the cards), tiling algorithms by bare
-        // algorithm id ("bsp"). The tiling cards are keyed "autotile:<id>", so
-        // prefix the tiling order to the card namespace before matching, or the
-        // Priority sort silently no-ops for the tiling view.
+        // layouts and scrolling templates by bare UUID (matches the cards),
+        // tiling algorithms by bare algorithm id ("bsp"). The tiling cards are
+        // keyed "autotile:<id>", so prefix the tiling order to the card
+        // namespace before matching, or the Priority sort silently no-ops for
+        // the tiling view.
         // Template sort indexes deliberately alias the shared comparators:
-        // 0 = Name, 1 = zoneCount (a template's width count). No custom
-        // order exists for templates, so the Priority arm never engages.
-        let customOrder = root.viewMode === 2 ? [] : (root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id));
+        // 0 = Name, 1 = zoneCount (a template's width count), 2 = Priority.
+        let customOrder = root.viewMode === 2 ? settingsController.effectiveScrollingOrder() : (root.viewMode === 0 ? settingsController.effectiveSnappingOrder() : settingsController.effectiveTilingOrder().map(id => "autotile:" + id));
         Logic.sortItems(groups, filterBar.sortByIndex, filterBar.sortAscending, customOrder);
         // "None" is the one grouping that should still show its (single) card
         // header — the user wants the title + count even with no grouping. Every

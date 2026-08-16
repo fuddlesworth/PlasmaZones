@@ -171,6 +171,9 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
     search->setPageKeywords(QStringLiteral("tiling-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
+    search->setPageKeywords(QStringLiteral("scrolling-ordering"),
+                            {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence"),
+                             PhosphorI18n::tr("template")});
     search->setPageKeywords(QStringLiteral("scrolling-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key"), PhosphorI18n::tr("template")});
@@ -933,6 +936,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Snapping layout priority"));
     addSection(search, QStringLiteral("tiling-ordering"), QStringLiteral("ordering"),
                PhosphorI18n::tr("Tiling algorithm priority"));
+    addSection(search, QStringLiteral("scrolling-ordering"), QStringLiteral("ordering"),
+               PhosphorI18n::tr("Scrolling template priority"));
     addSection(search, QStringLiteral("snapping-shortcuts"), QStringLiteral("quickShortcuts"),
                PhosphorI18n::tr("Snapping Quick Shortcuts"));
     addSection(search, QStringLiteral("tiling-shortcuts"), QStringLiteral("quickShortcuts"),

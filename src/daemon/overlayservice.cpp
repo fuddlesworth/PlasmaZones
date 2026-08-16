@@ -1099,8 +1099,9 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
         m_layoutManager, m_algorithmRegistry, resolvedId, currentVirtualDesktopForScreen(resolvedId), m_currentActivity,
         inc.manual, inc.autotile, Utils::screenAspectRatio(m_screenManager, resolvedId),
         !templatesScreen && m_settings && m_settings->filterLayoutsByAspectRatio(),
-        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile), m_autotileLayoutSource,
-        autotilePreviewCanvas, inc.templates, m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, inc.manual, inc.autotile, inc.templates),
+        m_autotileLayoutSource, autotilePreviewCanvas, inc.templates,
+        m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
         // The None row: this list is a PICKER of the context's template, so it
         // carries the opt-out alongside the templates themselves. Mirrored in
         // visibleLayoutCount below, which must agree with this row for row.

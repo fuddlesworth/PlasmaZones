@@ -266,6 +266,8 @@ public:
                    snappingLayoutOrderChanged)
     Q_PROPERTY(QStringList tilingAlgorithmOrder READ tilingAlgorithmOrder WRITE setTilingAlgorithmOrder NOTIFY
                    tilingAlgorithmOrderChanged)
+    Q_PROPERTY(QStringList scrollingTemplateOrder READ scrollingTemplateOrder WRITE setScrollingTemplateOrder NOTIFY
+                   scrollingTemplateOrderChanged)
 
     // Window filtering — the global knobs. The per-application /
     // per-class exclusion list Q_PROPERTYs (excludedApplications,
@@ -1035,6 +1037,8 @@ public:
     void setSnappingLayoutOrder(const QStringList& order) override;
     QStringList tilingAlgorithmOrder() const override;
     void setTilingAlgorithmOrder(const QStringList& order) override;
+    QStringList scrollingTemplateOrder() const override;
+    void setScrollingTemplateOrder(const QStringList& order) override;
 
     // Window filtering — PhosphorConfig::Store-backed. The per-app /
     // per-class exclusion list accessors retired in v4 — see the

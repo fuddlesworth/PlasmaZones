@@ -341,9 +341,10 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
-// User-defined sort order for the layout picker and tiling algorithm menu.
-// Both are comma-joined lists on disk; the canonicalCommaList validator
-// normalizes formatting (trim, de-dupe) on every read/write.
+// User-defined sort order for the layout picker, the tiling algorithm menu
+// and the scrolling template picker. All are comma-joined lists on disk; the
+// canonicalCommaList validator normalizes formatting (trim, de-dupe) on every
+// read/write.
 
 void appendOrderingSchema(PhosphorConfig::Schema& schema)
 {
@@ -351,6 +352,7 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::orderingGroup()] = {
         {CD::snappingLayoutOrderKey(), CD::snappingLayoutOrder(), QMetaType::QString, {}, canonicalCommaList},
         {CD::tilingAlgorithmOrderKey(), CD::tilingAlgorithmOrder(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::scrollingTemplateOrderKey(), CD::scrollingTemplateOrder(), QMetaType::QString, {}, canonicalCommaList},
     };
 }
 

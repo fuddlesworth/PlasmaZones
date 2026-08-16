@@ -53,6 +53,29 @@ private Q_SLOTS:
             (QStringList{QStringLiteral("{aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa}"), QStringLiteral("autotile:bsp")}));
     }
 
+    void scrollingOrder_keptAsBareUuid()
+    {
+        PlasmaZones::StubSettings s;
+        s.setScrollingTemplateOrder({QStringLiteral("{33333333-3333-3333-3333-333333333333}"),
+                                     QStringLiteral("{44444444-4444-4444-4444-444444444444}")});
+
+        const QStringList order = buildCustomOrder(&s, /*includeManual=*/false, /*includeAutotile=*/false,
+                                                   /*includeScrollingTemplates=*/true);
+        QCOMPARE(order,
+                 (QStringList{QStringLiteral("{33333333-3333-3333-3333-333333333333}"),
+                              QStringLiteral("{44444444-4444-4444-4444-444444444444}")}));
+    }
+
+    void scrollingOrder_excludedWithoutFlag()
+    {
+        PlasmaZones::StubSettings s;
+        s.setScrollingTemplateOrder({QStringLiteral("{33333333-3333-3333-3333-333333333333}")});
+
+        // A list that carries no template rows must not receive template ids —
+        // the flag defaults to false so pre-existing callers stay unchanged.
+        QVERIFY(buildCustomOrder(&s, /*includeManual=*/true, /*includeAutotile=*/true).isEmpty());
+    }
+
     void nullSettings_returnsEmpty()
     {
         QVERIFY(buildCustomOrder(nullptr, true, true).isEmpty());

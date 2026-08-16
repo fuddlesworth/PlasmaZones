@@ -40,18 +40,22 @@ QVariantList applyCustomOrder(const QStringList& customOrder, const QHash<QStrin
         }
     }
 
-    // Then: remaining items in default order (name-alphabetical)
+    // Then: remaining items in default order (name-alphabetical). The label
+    // key differs per family — layout/template rows from toVariantMap stamp
+    // "displayName", algorithm rows from AlgorithmService stamp "name" — so
+    // read whichever is present.
+    const auto labelOf = [](const QVariantMap& map) {
+        const QString displayName = map.value(QStringLiteral("displayName")).toString();
+        return displayName.isEmpty() ? map.value(QStringLiteral("name")).toString() : displayName;
+    };
     QVector<QPair<QString, QVariantMap>> remaining;
     for (auto it = itemMap.cbegin(); it != itemMap.cend(); ++it) {
         if (!added.contains(it.key())) {
             remaining.append({it.key(), it.value()});
         }
     }
-    std::sort(remaining.begin(), remaining.end(), [](const auto& a, const auto& b) {
-        return a.second.value(QStringLiteral("name"))
-                   .toString()
-                   .compare(b.second.value(QStringLiteral("name")).toString(), Qt::CaseInsensitive)
-            < 0;
+    std::sort(remaining.begin(), remaining.end(), [&labelOf](const auto& a, const auto& b) {
+        return labelOf(a.second).compare(labelOf(b.second), Qt::CaseInsensitive) < 0;
     });
     for (const auto& pair : remaining) {
         result.append(pair.second);
@@ -102,6 +106,11 @@ QStringList SettingsController::effectiveTilingOrder() const
     return m_stagedTilingOrder.value_or(m_settings.tilingAlgorithmOrder());
 }
 
+QStringList SettingsController::effectiveScrollingOrder() const
+{
+    return m_stagedScrollingOrder.value_or(m_settings.scrollingTemplateOrder());
+}
+
 bool SettingsController::hasCustomSnappingOrder() const
 {
     return !effectiveSnappingOrder().isEmpty();
@@ -112,17 +121,39 @@ bool SettingsController::hasCustomTilingOrder() const
     return !effectiveTilingOrder().isEmpty();
 }
 
+bool SettingsController::hasCustomScrollingOrder() const
+{
+    return !effectiveScrollingOrder().isEmpty();
+}
+
 QVariantList SettingsController::resolvedSnappingOrder() const
 {
     QHash<QString, QVariantMap> layoutMap;
     for (const QVariant& v : m_layouts) {
         QVariantMap map = v.toMap();
         QString id = map.value(QStringLiteral("id")).toString();
-        if (!id.isEmpty() && !map.value(QStringLiteral("isAutotile"), false).toBool()) {
+        // Template rows share m_layouts with the manual layouts and are not
+        // autotile, so they must be excluded explicitly or they leak into the
+        // snapping priority list (they have their own scrolling order).
+        if (!id.isEmpty() && !map.value(QStringLiteral("isAutotile"), false).toBool()
+            && !map.value(QStringLiteral("isScrollingTemplate"), false).toBool()) {
             layoutMap.insert(id, map);
         }
     }
     return applyCustomOrder(effectiveSnappingOrder(), layoutMap);
+}
+
+QVariantList SettingsController::resolvedScrollingOrder() const
+{
+    QHash<QString, QVariantMap> templateMap;
+    for (const QVariant& v : m_layouts) {
+        QVariantMap map = v.toMap();
+        QString id = map.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty() && map.value(QStringLiteral("isScrollingTemplate"), false).toBool()) {
+            templateMap.insert(id, map);
+        }
+    }
+    return applyCustomOrder(effectiveScrollingOrder(), templateMap);
 }
 
 QVariantList SettingsController::resolvedTilingOrder() const
@@ -150,6 +181,14 @@ void SettingsController::moveTilingAlgorithm(int fromIndex, int toIndex)
 {
     if (moveOrderedItem(resolvedTilingOrder(), fromIndex, toIndex, m_stagedTilingOrder)) {
         Q_EMIT stagedTilingOrderChanged();
+        setNeedsSave(true);
+    }
+}
+
+void SettingsController::moveScrollingTemplate(int fromIndex, int toIndex)
+{
+    if (moveOrderedItem(resolvedScrollingOrder(), fromIndex, toIndex, m_stagedScrollingOrder)) {
+        Q_EMIT stagedScrollingOrderChanged();
         setNeedsSave(true);
     }
 }
@@ -188,6 +227,19 @@ void SettingsController::resetTilingOrder()
     }
     m_stagedTilingOrder = QStringList{};
     Q_EMIT stagedTilingOrderChanged();
+    setNeedsSave(true);
+}
+
+void SettingsController::resetScrollingOrder()
+{
+    // Same effective-order short-circuit as resetSnappingOrder above.
+    const bool stagedEmpty = m_stagedScrollingOrder.has_value() && m_stagedScrollingOrder->isEmpty();
+    const bool settingsEmpty = !m_stagedScrollingOrder.has_value() && m_settings.scrollingTemplateOrder().isEmpty();
+    if (stagedEmpty || settingsEmpty) {
+        return;
+    }
+    m_stagedScrollingOrder = QStringList{};
+    Q_EMIT stagedScrollingOrderChanged();
     setNeedsSave(true);
 }
 

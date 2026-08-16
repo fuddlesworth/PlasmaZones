@@ -406,6 +406,10 @@ public:
     {
         return QString();
     }
+    static QString scrollingTemplateOrder()
+    {
+        return QString();
+    }
 
     /// Default snapping default-layout id: empty (no explicit default; the
     /// daemon falls back to its bundled template pick). Same
