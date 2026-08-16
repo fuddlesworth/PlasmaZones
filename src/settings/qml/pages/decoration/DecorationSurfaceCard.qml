@@ -122,7 +122,13 @@ Item {
         root._resolved = root.bridge.resolvedProfile(root.surfacePath);
         root._raw = root.bridge.rawProfile(root.surfacePath);
         root._chain = root.bridge.chainAt(root.surfacePath);
-        root._params = (root._raw && root._raw.parameters) ? root._raw.parameters : ({});
+        // Direct override when engaged, else the RESOLVED map — the editor's
+        // other two inputs (chainAt, disabledPacksAt) are resolved too, and a
+        // latched-open card with no override must show the inherited values
+        // the surface is actually drawing with, not the pack schema defaults
+        // (the C++ writers engage from the same resolved map on first edit,
+        // so the display matches what an edit would commit).
+        root._params = (root._raw && root._raw.parameters) ? root._raw.parameters : ((root._resolved && root._resolved.parameters) ? root._resolved.parameters : ({}));
         root._disabledPacks = root.bridge.disabledPacksAt(root.surfacePath);
         root._parentChainText = root._computeParentChainText();
         root._shadowingChildrenCount = root.bridge.overrideDescendantCount(root.surfacePath);

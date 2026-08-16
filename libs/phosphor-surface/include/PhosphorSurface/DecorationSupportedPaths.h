@@ -4,7 +4,6 @@
 #pragma once
 
 #include <QLatin1Char>
-#include <QLatin1StringView>
 #include <QSet>
 #include <QString>
 #include <QStringList>

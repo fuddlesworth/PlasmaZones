@@ -251,10 +251,12 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     m_capturingSnapshot = false;
     state.captureValid = true;
     state.captureInComposite = !intoCaptureTex;
+    // The origin the shell content scan must measure against (see the field
+    // doc): these texels were rasterized relative to THIS logical geometry.
+    state.captureLogicalTopLeft = logicalGeometry.topLeft();
 }
 
-void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state,
-                                               const QRectF& logicalGeometry, qreal captureScale)
+void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, qreal captureScale)
 {
     const QRectF frame = w->frameGeometry();
     if (frame.isEmpty() || captureScale <= 0.0) {
@@ -290,8 +292,14 @@ void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMul
     // sub-device-pixel residue at fractional scales — bounds are measured
     // from the FLOORED origin, and dropping the fraction shifted the
     // substituted frame up to one device px up/left of the visible body.
-    const qreal fxExact = (frame.left() - logicalGeometry.left()) * captureScale;
-    const qreal fyExact = (frame.top() - logicalGeometry.top()) * captureScale;
+    //
+    // Measured against the origin the CAPTURE was rasterized at, not the
+    // caller's live logicalGeometry: the scan can run on a still-valid
+    // capture after a pure move, and at fractional scale the alignment
+    // residue moves with the geometry while the texels do not.
+    const QPointF captureOrigin = state.captureLogicalTopLeft;
+    const qreal fxExact = (frame.left() - captureOrigin.x()) * captureScale;
+    const qreal fyExact = (frame.top() - captureOrigin.y()) * captureScale;
     const int fx = std::clamp(static_cast<int>(std::floor(fxExact)), 0, texSize.width());
     const int fy = std::clamp(static_cast<int>(std::floor(fyExact)), 0, texSize.height());
     const int fw = std::clamp(static_cast<int>(std::ceil(frame.width() * captureScale)), 0, texSize.width() - fx);
@@ -305,7 +313,9 @@ void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMul
     // rect's BOTTOM edge and buffer row r is top-down row fh - 1 - r.
     // m_shellScanScratch is the reusable staging buffer — this runs on the
     // paint path, and a fresh ~1 MB allocation per rescan is exactly the
-    // per-frame-allocation class this file avoids. resize() only ever grows.
+    // per-frame-allocation class this file avoids. QByteArray retains its
+    // capacity across resize(), so once the buffer has grown to the largest
+    // scanned panel no further allocation happens.
     m_shellScanScratch.resize(static_cast<qsizetype>(fw) * fh * 4);
     // The row indexing below assumes tightly packed rows. RGBA8 rows are
     // 4-byte multiples so any PACK_ALIGNMENT up to 4 is tight, but the global

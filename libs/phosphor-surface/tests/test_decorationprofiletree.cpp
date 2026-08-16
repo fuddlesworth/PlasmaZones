@@ -118,9 +118,15 @@ private Q_SLOTS:
         baseline.disabledPacks = QStringList{QStringLiteral("glow")};
         tree.setBaseline(baseline);
         const DecorationProfile shellResolved = tree.resolve(QStringLiteral("shell.panel"));
-        QCOMPARE(shellResolved.chain.value_or(QStringList{}), QStringList{});
-        QCOMPARE(shellResolved.parameters.value_or(QVariantMap{}), QVariantMap{});
-        QCOMPARE(shellResolved.disabledPacks.value_or(QStringList{}), QStringList{});
+        // has_value first: value_or alone would collapse engaged-empty and
+        // nullopt into the same reading, and the engagement half (withDefaults
+        // engages all three) is part of the pinned contract.
+        QVERIFY(shellResolved.chain.has_value());
+        QVERIFY(shellResolved.parameters.has_value());
+        QVERIFY(shellResolved.disabledPacks.has_value());
+        QCOMPARE(*shellResolved.chain, QStringList{});
+        QCOMPARE(*shellResolved.parameters, QVariantMap{});
+        QCOMPARE(*shellResolved.disabledPacks, QStringList{});
         // The same baseline still reaches a non-isolated surface whole.
         const DecorationProfile windowResolved = tree.resolve(QStringLiteral("window.tiled"));
         QCOMPARE(windowResolved.chain, QStringList{QStringLiteral("border")});

@@ -139,6 +139,7 @@ private Q_SLOTS:
         QVERIFY(!decorationRootDiffers(a, e, QStringLiteral("osd")));
         QVERIFY(!decorationRootDiffers(a, e, QStringLiteral("popup")));
         QVERIFY(!decorationRootDiffers(a, e, QStringLiteral("window")));
+        QVERIFY(!decorationRootDiffers(a, e, QStringLiteral("shell")));
     }
 };
 

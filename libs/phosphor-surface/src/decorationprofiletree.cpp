@@ -9,13 +9,11 @@
 #include <QJsonValue>
 #include <QLoggingCategory>
 
-namespace {
-Q_LOGGING_CATEGORY(lcDecorationTree, "phosphorsurfaceshaders.decorationtree")
-} // namespace
-
 namespace PhosphorSurfaceShaders {
 
 namespace {
+
+Q_LOGGING_CATEGORY(lcDecorationTree, "phosphorsurfaceshaders.decorationtree")
 
 // Tree serialization keys, hoisted so toJson / fromJson share one source of
 // truth (mirroring DecorationProfile::JsonField*) — a future rename touches
@@ -243,9 +241,12 @@ DecorationProfileTree DecorationProfileTree::fromJson(const QJsonObject& obj)
         // override for a not-yet-loaded pack must survive and resolve to a no-op
         // at render time rather than be silently dropped on load. The settings
         // UI (DecorationPageController) remains the primary path validator.
+        // qCDebug, not qCWarning: this parser runs on EVERY read of the
+        // stored blob (the settings getters carry no parse cache), so a bad
+        // path in a hand-edited config would repeat a warning for the life of
+        // the session rather than fire once at load.
         if (!decorationSurfaceSupported(path)) {
-            qCWarning(lcDecorationTree) << "Dropping decoration override for unsupported surface path" << path
-                                        << "- it will be removed from the stored configuration on the next save";
+            qCDebug(lcDecorationTree) << "Dropping decoration override for unsupported surface path" << path;
             continue;
         }
         // setOverride de-dups: a malformed file with duplicate entries for the

@@ -203,7 +203,10 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
             return &cacheIt->second;
         }
         if (!profile) {
-            profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId));
+            // Pass `w`: the id-only overload's exact-id lookup can miss, and a
+            // miss here would bake the wrong profile's parameter baselines
+            // into the SHARED compiled-pack entry (see the overload doc).
+            profile = m_decorationTree.resolve(resolveSurfacePathFor(windowId, w));
         }
         return compiledPack(packId, *profile);
     };
@@ -313,7 +316,7 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
     // prefix/composite caches itself — which is why this sits ABOVE the
     // allStatic early return below: the re-fold must see the drop this frame.
     if (deco.isShellSurface) {
-        updateShellContentRect(w, state, logicalGeometry, captureScale);
+        updateShellContentRect(w, state, captureScale);
     }
     // Hand the OffscreenEffect slot back: to the passthrough present on the rest
     // path, or to the caller's animation shader mid-transition. Runs on the

@@ -1630,9 +1630,11 @@ private:
     /// the result on the multipass state for pushBorderUniforms to substitute
     /// for the frame. Restricted to the frame subrect so the expanded-geometry
     /// shadow band outside the frame can never inflate the bounds either.
-    /// Defined in surface_capture.cpp beside the capture it reads.
-    void updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, const QRectF& logicalGeometry,
-                                qreal captureScale);
+    /// Defined in surface_capture.cpp beside the capture it reads. The scan
+    /// measures against the origin stamped by captureWindowSurface
+    /// (state.captureLogicalTopLeft), not a caller-supplied geometry: the
+    /// capture it reads may predate the caller's current geometry.
+    void updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, qreal captureScale);
 
     /// Render the window's active surface-layer stack into the window's
     /// per-window ping-pong FBO chain (`m_surfaceMultipass`, shared with the
@@ -1727,8 +1729,9 @@ private:
 
     /// Reusable staging buffer for updateShellContentRect's glReadPixels — the
     /// scan runs on the compositor paint path, and a fresh per-scan QByteArray
-    /// is a ~1 MB malloc/free per decorated shell surface per rescan. resize()
-    /// is a no-op once the buffer has grown to the largest scanned panel.
+    /// is a ~1 MB malloc/free per decorated shell surface per rescan.
+    /// QByteArray retains capacity across resize(), so it never reallocates
+    /// once it has grown to the largest scanned panel.
     /// Compositor-thread only, like the rest of the GL state here.
     QByteArray m_shellScanScratch;
 

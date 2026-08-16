@@ -14,10 +14,13 @@ import org.kde.kirigami as Kirigami
  * first-visit cost. See AnimationEventCardList for the full rationale of the
  * latching viewport gate; this is the same pattern with a surface model.
  *
- * Cards are recycle-safe: DecorationSurfaceCard holds no persistent state of
- * its own (its Component.onCompleted re-reads from the controller), so a
- * freshly-built card always shows the committed tree state. Each Loader
- * LATCHES active once it enters the viewport and never unloads.
+ * Cards are recycle-safe: DecorationSurfaceCard holds one deliberately
+ * non-persisted piece of session state (the _editorLatch that keeps the chain
+ * editor open before a first edit) and derives everything else from the
+ * controller in Component.onCompleted, so a freshly-built card always shows
+ * the committed tree state with the editor closed. Each Loader LATCHES active
+ * once it enters the viewport and never unloads, so a built card's latch
+ * survives exactly as long as the page visit.
  *
  * Consumers provide `surfaceModel` (and an Accessible.name):
  *
