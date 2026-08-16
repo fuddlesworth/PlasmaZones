@@ -262,7 +262,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Decorations.WindowFiltering settings (m_decorationExcludeTransientWindows /
     // m_decorationMinWindow{Width,Height}). Defaults preserve the prior
     // shouldHandleWindow behavior (transients skipped, no size threshold).
-    if (!shouldDecorateWindow(w)) {
+    // Caller-owned memoisation slot: the Exclude gate here and the rule-action
+    // resolve below both take the same per-window WindowQuery, and each would
+    // otherwise build its own ~30-accessor walk on a cold cache — which is every
+    // window of the sweep that follows an invalidation.
+    std::optional<PhosphorRules::WindowQuery> sharedQuery;
+    if (!shouldDecorateWindow(w, &sharedQuery)) {
         // Same orphan release as the minimized/fullscreen gate above: the window is
         // no longer decorated, so nothing will reach its kept GL state again.
         undecorate();
@@ -305,9 +310,14 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // panel the instant the user enabled the opt-in, which is not what
     // enabling "decorate panels" asks for. Keyed off the resolved surface path
     // rather than a second classify so the two cannot disagree.
+    //
+    // The skip also leaves `sharedQuery` disengaged for a shell surface, which
+    // is correct and not a missed memoisation: shouldDecorateWindow answers
+    // these kinds from their own opt-in before it reaches the rule slice, so
+    // nothing filled the slot and nothing below reads it.
     const bool isShellSurface = surfacePath.startsWith(QLatin1String("shell."));
     const std::optional<ResolvedDecorationChain> ruleChain =
-        isShellSurface ? std::nullopt : resolveDecorationChain(resolveRuleActions(w, windowId));
+        isShellSurface ? std::nullopt : resolveDecorationChain(resolveRuleActions(w, windowId, &sharedQuery));
     if (ruleChain) {
         userPacks = ruleChain->chain;
     }

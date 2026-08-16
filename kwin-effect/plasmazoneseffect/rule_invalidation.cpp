@@ -173,6 +173,28 @@ void PlasmaZonesEffect::flushPendingRuleInvalidations()
     }
 }
 
+void PlasmaZonesEffect::drainDragSuppressedRuleInvalidations()
+{
+    // The set is shared across drags and this drain can run up to the endDrag
+    // reply/timeout window (500 ms) after dragStopped — a successor drag started
+    // inside that window must not have its own parked ids drained mid-drag,
+    // which would run the decoration rebuild the drag gate exists to defer.
+    // Nothing is stranded by returning here: the successor always reaches
+    // callEndDrag, whose drain picks these ids up.
+    if (m_dragTracker && m_dragTracker->isDragging()) {
+        return;
+    }
+    // The suppressed ids were recorded by the cross-screen handlers, which stamp
+    // m_trackedScreenPerWindow before their drag gate — so nothing at drag end can
+    // rediscover the crossing by comparing screens, and this set is the only
+    // record of it. Each id goes through the normal per-window path, which
+    // coalesces with the invalidations the drag outcome itself queued and drops
+    // ids whose window has since closed (findWindowById returns null in the flush).
+    for (const QString& windowId : std::exchange(m_dragSuppressedRuleInvalidations, {})) {
+        invalidateRuleCacheForStateChange(windowId);
+    }
+}
+
 void PlasmaZonesEffect::scheduleBorderSweep()
 {
     if (m_borderSweepPending) {
@@ -183,6 +205,14 @@ void PlasmaZonesEffect::scheduleBorderSweep()
     // before the turn ends.
     QTimer::singleShot(0, this, [this] {
         m_borderSweepPending = false;
+        // Daemon loss inside the scheduling turn already tore every decoration
+        // down (clearAllDecorations) against the cleared placement caches, so a
+        // sweep landing after it would re-decorate windows the teardown just
+        // undecorated. Every scheduler is daemon-driven, so a closed gate here
+        // always means the state the sweep was going to re-fold is gone.
+        if (!m_daemonGate.serviceRegistered) {
+            return;
+        }
         updateAllDecorations();
     });
 }

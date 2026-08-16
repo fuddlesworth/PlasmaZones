@@ -624,6 +624,26 @@ void Daemon::initEnginesAndWiring()
                 reconcileActiveAssignments();
             });
         }));
+
+    // Deleting a layout moves resolved assignments without touching a single
+    // rule: the assignment entry keeps naming the dead uuid, the cascade stops
+    // resolving it, and the level-1 default provider refuses it too (see the
+    // dead-id guard in initLayoutAndSettingsWiring). Nothing on the rulesChanged
+    // path fires for that, so the published active-layout map kept naming a
+    // layout the user removed and the effect's ActiveLayout matcher with it.
+    // Republish only — no reconcile: the resnap/OSD apply belongs to assignment
+    // edits, and diffActiveAssignments reads layouts without mutating them, so
+    // this cannot re-enter layoutsChanged.
+    //
+    // Disconnect-first for the same reason as the rulesChanged sweep above:
+    // m_layoutManager survives a stop() → init() cycle, and it is a mixed sender
+    // that stop() deliberately does not blanket-sever. No other daemon-receiver
+    // handler sits on this signal, so the targeted sweep only drops our own.
+    disconnect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, nullptr);
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
+        diffActiveAssignments();
+    });
+
     // Prime the snapshot from the initial rule set so the first real rule edit
     // diffs against the live assignments rather than an empty baseline.
     diffActiveAssignments();

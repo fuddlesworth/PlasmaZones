@@ -459,6 +459,20 @@ void Daemon::connectDesktopActivity()
                 }
                 // Prune fallback assignment maps
                 pruneContextMapsForDesktop(newCount);
+
+                // No diffActiveAssignments() here, deliberately. The published
+                // active-layout map is keyed by screen and resolved against each
+                // screen's own current desktop, and every screen whose desktop
+                // number this removal actually moved is announced through
+                // screenDesktopChanged instead: VirtualDesktopManager clamps the
+                // out-of-range entries (clampScreenDesktopsToCount) BEFORE it
+                // emits desktopCountChanged, so their per-screen handler has
+                // already re-diffed by the time we run. A mid-list removal that
+                // renumbers a still-in-range screen (desktop 3 becomes 2) leaves
+                // the per-screen map holding the stale number until the effect
+                // re-reports that output's desktop; a diff here would read the
+                // same stale number and could not fix it. pruneContextMapsForDesktop
+                // touches only m_lastEngineOrders, which no resolution reads.
             });
 
     // Set initial virtual desktop on components that maintain their own copy
@@ -929,6 +943,9 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // reconfigure replaces the physical id with vs:N children (or back) in
     // effectiveScreenIds, and an un-primed id always diffs as changed, so
     // the next unrelated rule edit would spuriously resnap every new VS.
+    // The refresh also republishes the active-layout map under the new id
+    // keyspace, or the effect's ActiveLayout cache keeps matching on screen
+    // ids that no longer exist.
     diffActiveAssignments();
 }
 

@@ -484,8 +484,17 @@ public:
      * geometry MOVE is gated. When UNSET (default), the engine preserves its
      * historical behaviour of always re-applying the recorded position — the path
      * unit tests rely on.
+     *
+     * @p screenIdHint names the screen the window is being inserted onto. The
+     * daemon stamps its rule query's ScreenId / ActiveLayout context from it.
+     * The hint is needed because the daemon's own resolver consults the service
+     * and the snap engine BEFORE this engine, so a window carrying stale snap
+     * state would resolve to the snap screen rather than the landing screen,
+     * and some consults run before this engine has keyed the window at all.
+     * Empty is legal and means "ask the daemon's own fallbacks" for an
+     * already-tracked window.
      */
-    using RestorePositionPredicate = std::function<bool(const QString& windowId)>;
+    using RestorePositionPredicate = std::function<bool(const QString& windowId, const QString& screenIdHint)>;
 
     /// Inject the floated-position-restore gate. Clear with `{}` before destroying
     /// any state captured by the closure (the daemon honours this on re-wire).
@@ -501,6 +510,11 @@ public:
      * re-tile it); it is just marked floating, identical to a manual float. When
      * UNSET (default) no window is rule-floated. Clear with `{}` before destroying
      * any state the closure captured.
+     *
+     * @p screenIdHint carries the same contract as RestorePositionPredicate's:
+     * the screen the window is being inserted onto, which pins the daemon's
+     * ScreenId / ActiveLayout stamp past its resolver's snap-first precedence
+     * and past the consults that run before this engine keys the window.
      */
     /// Takes the OPENING SCREEN as well, so the resolver can stamp ScreenId
     /// and derive Mode — without which a rule pairing either with Float is

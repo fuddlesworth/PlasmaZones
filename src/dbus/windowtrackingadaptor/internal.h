@@ -213,9 +213,11 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // per-window query (ruleQueryFor) stamps ScreenId / Mode / ScreenOrientation, so
     // a rule pairing one of those with a window property resolves there but not on
     // this path. Callers that DO know more pin what they know on top of the
-    // query this builds. Stamping ScreenId: placementZonesByRule,
-    // applyOpenDesktopRouting, applyOpenScreenRouting, applyOpenRoutingForTiling.
-    // Stamping ScreenId AND the derived Mode: shouldFloatByRule,
+    // query this builds. Stamping the screen-derived trio (ScreenId,
+    // ActiveLayout, ScreenOrientation — via stampScreenContext):
+    // placementZonesByRule, applyOpenDesktopRouting, applyOpenScreenRouting,
+    // applyOpenRoutingForTiling. Stamping the trio AND the derived Mode:
+    // shouldFloatByRule,
     // scrollOpenRuleParams, shouldRestoreSizeOnUnsnap and
     // shouldUnfloatFallbackToZone, all four of which resolve UNCACHED for that
     // reason (resolveCached is keyed on windowId and rule revision alone, so a
@@ -256,9 +258,12 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // (rules.cpp's unanswerableWindowFields) and ColorScheme when the process
     // has no palette to classify (rules.cpp's admitWith).
     //
-    // ActiveLayout is populated only by the windowless context cascade (never
-    // by either per-window query), so it is context-scoped in practice —
-    // which is the primary use of all four of these fields anyway. Extended
+    // ActiveLayout resolves through the ONE definition every producer shares
+    // (assignmentIdForScreen for the screen's current desktop and activity —
+    // the id the windowless context cascade stamps and the daemon publishes
+    // to the KWin effect), so an `ActiveLayout Equals <uuid>` leaf means the
+    // same thing on a context rule, a daemon-resolved window rule, and an
+    // effect-resolved appearance rule. Extended
     // properties: an optional→optional copy preserves engagement exactly, so
     // a field the effect could not observe stays disengaged and inert here
     // too.

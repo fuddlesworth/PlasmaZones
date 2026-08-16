@@ -18,6 +18,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QScreen>
+#include <QSet>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
@@ -133,13 +134,105 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
 void LayoutAdaptor::clearAssignment(const QString& screenId)
 {
+    // Bus boundary: guard the screen name like every assignLayout* sibling does.
+    // ScreenIdentity::idForName("") returns "" unchanged, so without this an empty
+    // id reached clearAssignment and then shipped as an empty entry in the
+    // assignmentChangesApplied list.
+    if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
+        return;
+    }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId);
     m_changedScreenIds.insert(resolvedId);
 }
 
+void LayoutAdaptor::markScreensWithStoredAssignments(AssignmentFamily family)
+{
+    // Every batch setter routes through LayoutRegistry::applyBatchAssignments,
+    // which DROPS every rule of the family before rebuilding from the incoming
+    // map. A screen whose assignment is removed by being absent from that map
+    // therefore changes, but marking only the map's own keys never recorded it —
+    // so it was never resnapped and never appeared in assignmentChangesApplied,
+    // and it kept its old placement until something unrelated moved it.
+    //
+    // Scoped to the family being replaced. A setter that rebuilds the Desktop
+    // rules leaves the Monitor-only, Activity and Combined rules untouched, so
+    // marking a screen because it holds one of THOSE costs a resnap and a
+    // per-screen OSD for a screen whose resolved assignment cannot have moved.
+    //
+    // The three context families are read from the registry's own family
+    // readers, the round-trip counterparts of the batch setters. That also
+    // closes the old coverage gap: those readers enumerate every context a
+    // family holds, where probing one context per screen from here missed a
+    // screen whose only stored entry was for a desktop the user is not
+    // currently on. The base family has no such reader, so it is probed per
+    // screen with the exact monitor-only tuple.
+    //
+    // The three family readers return every screen id the registry has EVER stored
+    // a rule for, including monitors that are not connected now. The base branch is
+    // naturally free of those because it walks the live screen list; the readers are
+    // not, so they are intersected with it. Marking a disconnected monitor would put
+    // it into the resnap set and the per-screen OSD run for a screen that cannot be
+    // resnapped or shown anything, widening the blast radius past what this pass had
+    // before the readers replaced the per-screen probe.
+    const QStringList liveScreenIds = m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList();
+    const QSet<QString> liveScreens(liveScreenIds.cbegin(), liveScreenIds.cend());
+    // Without a screen manager (degraded single-argument-constructor mode, test
+    // fixtures) there is no live set to filter against. Mark unfiltered, as this
+    // pass always did, rather than silently marking nothing.
+    const bool filterToLiveScreens = m_screenManager != nullptr;
+    const auto markScreen = [this, &liveScreens, filterToLiveScreens](const QString& screenId) {
+        if (!filterToLiveScreens || liveScreens.contains(screenId)) {
+            m_changedScreenIds.insert(screenId);
+        }
+    };
+    switch (family) {
+    case AssignmentFamily::Base: {
+        if (!m_screenManager) {
+            // Degraded single-argument-constructor mode (test fixtures). Say so
+            // rather than returning silently: the batch still replaces the base
+            // family, so a screen dropped from the incoming map goes unmarked.
+            qCWarning(lcDbusLayout) << "markScreensWithStoredAssignments: no screen manager — base-family screens "
+                                       "dropped by this batch will not be marked as changed";
+            return;
+        }
+        for (const QString& screenId : liveScreenIds) {
+            // Exact monitor-only shape (desktop 0, no activity) — not the
+            // cascade, which would also report a Desktop or Activity rule this
+            // setter does not touch.
+            if (m_layoutManager->hasExplicitAssignment(screenId, 0, QString())) {
+                m_changedScreenIds.insert(screenId);
+            }
+        }
+        break;
+    }
+    case AssignmentFamily::Desktop: {
+        const auto assignments = m_layoutManager->desktopAssignments();
+        for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
+            markScreen(it.key().first);
+        }
+        break;
+    }
+    case AssignmentFamily::Activity: {
+        const auto assignments = m_layoutManager->activityAssignments();
+        for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
+            markScreen(it.key().first);
+        }
+        break;
+    }
+    case AssignmentFamily::Combined: {
+        const auto assignments = m_layoutManager->combinedAssignments();
+        for (auto it = assignments.constBegin(); it != assignments.constEnd(); ++it) {
+            markScreen(it.key().screenId);
+        }
+        break;
+    }
+    }
+}
+
 void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
 {
+    markScreensWithStoredAssignments(AssignmentFamily::Base);
     QHash<QString, QString> parsedAssignments;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenIdOrName = it.key();
@@ -284,6 +377,9 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout to desktop"))) {
         return;
     }
+    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("assign layout to desktop"))) {
+        return;
+    }
 
     // Validate UUID for manual layouts, skip for autotile IDs
     if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
@@ -305,6 +401,9 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 
 void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
+    if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
+        return;
+    }
     if (!validDesktopArg(virtualDesktop, "clearAssignmentForScreenDesktop")) {
         return;
     }
@@ -356,7 +455,14 @@ QString LayoutAdaptor::getScreenStates()
     // and every other slot in this file dereferences it unguarded.
     QJsonArray result;
 
-    const QString activity = m_layoutManager->currentActivity();
+    // Resolve the context from the LIVE managers, matching getLayoutForScreen and
+    // getAssignedLayoutForScreen above rather than the registry's pushed mirrors.
+    // The mirrors are written from exactly one place each (the daemon's
+    // desktop-switch and activity-switch handlers), so between a real switch and
+    // that handler running they lag — and this readback would then describe the
+    // previous desktop while its file siblings, and the published active-layout
+    // snapshot, already describe the new one. One source per adaptor.
+    const QString activity = m_activityManager ? m_activityManager->currentActivity() : QString();
 
     // Use effective screen IDs (includes virtual screens when configured)
     // so the settings app sees one entry per virtual screen, not per physical monitor.
@@ -364,7 +470,9 @@ QString LayoutAdaptor::getScreenStates()
 
     for (const QString& screenId : std::as_const(screenIds)) {
         // Per-output virtual desktops (#648): each screen resolves its own desktop.
-        const int desktop = m_layoutManager->currentVirtualDesktopForScreen(screenId);
+        // The VDM-less fallback (desktop stays 0, the base cascade level) is a
+        // test-fixture configuration: the daemon always wires a manager.
+        const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktopForScreen(screenId) : 0;
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
 
         QJsonObject obj;
@@ -453,6 +561,7 @@ QString LayoutAdaptor::getScreenStates()
 
 void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
 {
+    markScreensWithStoredAssignments(AssignmentFamily::Desktop);
     QHash<QPair<QString, int>, QString> parsedAssignments;
 
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
@@ -506,6 +615,63 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
 
     m_layoutManager->setAllDesktopAssignments(parsedAssignments);
     qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "desktop assignments";
+}
+
+QVariantMap LayoutAdaptor::getActiveLayoutsForScreens()
+{
+    QVariantMap result;
+    for (auto it = m_activeAssignmentByScreen.constBegin(); it != m_activeAssignmentByScreen.constEnd(); ++it) {
+        // Omit screens that resolve to nothing rather than shipping an empty
+        // string. This is map hygiene, not inertness: ActiveLayout is a
+        // non-optional context field, so a reader CANNOT leave it unset — an
+        // absent entry and an empty entry both end up compared as an empty
+        // string on the far side. What omission buys is that no consumer has to
+        // decide what an empty payload means, and the map stays a list of
+        // screens that actually resolve a layout.
+        //
+        // Note what stays true either way: a negated leaf (`NotEquals` /
+        // `DoesNotContain`) still matches the engaged-empty value. Only the
+        // `Equals ""` shape is closed, and that is closed at authoring time by
+        // MatchExpression::isValid rejecting an empty-Equals context-string
+        // leaf, not here.
+        if (!it.value().isEmpty()) {
+            result.insert(it.key(), it.value());
+        }
+    }
+    return result;
+}
+
+void LayoutAdaptor::publishActiveAssignments(const QHash<QString, QString>& activeByScreen,
+                                             const QSet<QString>& changedScreenIds)
+{
+    // Capture the values to broadcast BEFORE the snapshot is replaced, so the
+    // per-screen comparison below sees the old value, and so the loop reads a
+    // local rather than the member it is about to broadcast from (each emission
+    // costs the effect a rule-cache invalidation and a decoration sweep, and a
+    // subscriber is free to call back into this adaptor).
+    QList<std::pair<QString, QString>> toEmit;
+    toEmit.reserve(changedScreenIds.size());
+    for (const QString& screenId : changedScreenIds) {
+        // A screen dropped from the snapshot (monitor unplugged) broadcasts an
+        // empty id, which tells subscribers to forget their cached value rather
+        // than keep matching against a layout that is no longer on that screen.
+        const QString newValue = activeByScreen.value(screenId);
+        // The daemon computes changedScreenIds by diffing, so an unchanged
+        // screen should not be here at all. Comparing anyway keeps the emission
+        // contract local to this method: a caller that over-reports (a future
+        // one, or a test) cannot make a subscriber invalidate for a value that
+        // did not move.
+        if (newValue != m_activeAssignmentByScreen.value(screenId)) {
+            toEmit.append({screenId, newValue});
+        }
+    }
+
+    // Snapshot first, broadcast second: a subscriber that reacts to the signal
+    // by calling getActiveLayoutsForScreens must not read the pre-change map.
+    m_activeAssignmentByScreen = activeByScreen;
+    for (const auto& [screenId, layoutId] : std::as_const(toEmit)) {
+        Q_EMIT activeLayoutForScreenChanged(screenId, layoutId);
+    }
 }
 
 QVariantMap LayoutAdaptor::getAllDesktopAssignments()
@@ -643,6 +809,15 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
 
 void LayoutAdaptor::clearAssignmentForScreenActivity(const QString& screenId, const QString& activityId)
 {
+    if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
+        return;
+    }
+    // Mirror the assign sibling: an empty activity is not this family's key, it
+    // is the base (monitor-only) key, so clearing on it would drop a rule the
+    // caller did not name.
+    if (!validateNonEmpty(activityId, QStringLiteral("activity ID"), QStringLiteral("clear assignment"))) {
+        return;
+    }
     const QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
     m_layoutManager->clearAssignment(resolvedId, 0, activityId);
     m_changedScreenIds.insert(resolvedId);
@@ -656,6 +831,7 @@ bool LayoutAdaptor::hasExplicitAssignmentForScreenActivity(const QString& screen
 
 void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
 {
+    markScreensWithStoredAssignments(AssignmentFamily::Activity);
     QHash<QPair<QString, QString>, QString> parsedAssignments;
 
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
@@ -724,6 +900,7 @@ QVariantMap LayoutAdaptor::getAllCombinedAssignments()
 
 void LayoutAdaptor::setAllCombinedAssignments(const QVariantMap& assignments)
 {
+    markScreensWithStoredAssignments(AssignmentFamily::Combined);
     QHash<PhosphorZones::CombinedAssignmentKey, QString> parsed;
     for (auto it = assignments.cbegin(); it != assignments.cend(); ++it) {
         const QString& rawKey = it.key();
@@ -787,6 +964,16 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("assign layout"))) {
         return;
     }
+    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("assign layout"))) {
+        return;
+    }
+    // The Combined family is defined by all three dimensions being pinned
+    // (isValidCombinedKey, and setAllCombinedAssignments requires it). An empty
+    // activity here writes a Desktop-family rule under a Combined-family slot
+    // name, which the combined reader then never reports back.
+    if (!validateNonEmpty(activityId, QStringLiteral("activity ID"), QStringLiteral("assign layout"))) {
+        return;
+    }
 
     // Validate UUID for manual layouts, skip for autotile IDs
     if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !PhosphorLayout::LayoutId::isScrolling(layoutId)) {
@@ -810,7 +997,15 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
 void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                             const QString& activityId)
 {
+    if (!validateNonEmpty(screenId, QStringLiteral("screen name"), QStringLiteral("clear assignment"))) {
+        return;
+    }
     if (!validDesktopArg(virtualDesktop, "clearAssignmentForScreenDesktopActivity")) {
+        return;
+    }
+    // Same Combined-family key requirement as the assign sibling: an empty
+    // activity names the Desktop family, whose rule this slot must not clear.
+    if (!validateNonEmpty(activityId, QStringLiteral("activity ID"), QStringLiteral("clear assignment"))) {
         return;
     }
     QString resolvedId = PhosphorScreens::ScreenIdentity::idForName(screenId);
@@ -1054,6 +1249,14 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
         return;
     }
 
+    // The desktop was the one argument the comment above claimed to cover but
+    // did not. 0 is legal here (the documented screen-level entry); a negative
+    // number names a context nothing resolves, and persisting a rule for it grows
+    // the rule set with entries no cascade will ever read.
+    if (!validateDesktopNumber(virtualDesktop, QStringLiteral("set assignment entry"), /*allowZero=*/true)) {
+        return;
+    }
+
     // Seed from the stored entry so the SCROLLING TEMPLATE survives a
     // Monitors-page save: this method's wire signature carries only
     // mode/snapping/tiling, and building a fresh entry would wipe the
@@ -1080,18 +1283,50 @@ void LayoutAdaptor::setSaveBatchMode(bool enabled)
     m_suppressScreenLayoutSignal = enabled;
 }
 
-void LayoutAdaptor::markScreensChanged(const QSet<QString>& screenIds)
+void LayoutAdaptor::clearSaveBatchMode()
 {
-    m_changedScreenIds.unite(screenIds);
+    // Self-healing counterpart to setSaveBatchMode(true). The XML calls the pair
+    // "always paired", but nothing enforced it: a settings app that crashes
+    // between the two calls, or any session peer calling the setter directly,
+    // muted screenLayoutChanged for the daemon's whole remaining lifetime. Since
+    // applyAssignmentChanges is the close of every legitimate batch, releasing
+    // the flag there bounds the damage to one batch without changing the
+    // behaviour of a well-behaved client, which sets it back to false itself.
+    m_suppressScreenLayoutSignal = false;
 }
 
 void LayoutAdaptor::applyAssignmentChanges()
 {
+    // Drains the CLIENT's buffer only — the set accumulated by this adaptor's
+    // own assignment slots since the last apply. Nothing else writes it.
+    //
+    // Release the batch suppression FIRST, above the empty-buffer return: a
+    // client that called setSaveBatchMode(true) and then died before staging
+    // anything is exactly the case this release exists for, and it stages
+    // nothing, so releasing after the return would never fire for it.
+    clearSaveBatchMode();
+    if (m_changedScreenIds.isEmpty()) {
+        // Nothing was staged, so there is nothing to apply. The early return
+        // matters because downstream an EMPTY set means "every screen"
+        // (populateResnapBufferForAllScreens skips its include filter, and the
+        // OSD loop treats empty as match-all). Without this, a bus peer calling
+        // applyAssignmentChanges with no preceding mutation would force a full
+        // resnap of every window plus a per-screen OSD.
+        return;
+    }
     QSet<QString> changed = std::move(m_changedScreenIds);
     m_changedScreenIds.clear();
+    applyAssignmentChangesFor(changed);
+}
+
+void LayoutAdaptor::applyAssignmentChangesFor(const QSet<QString>& screenIds)
+{
+    if (screenIds.isEmpty()) {
+        return;
+    }
     // Signal is typed as QStringList for D-Bus compatibility (QSet is not
     // marshallable). Receivers that need set semantics convert back.
-    Q_EMIT assignmentChangesApplied(QStringList(changed.begin(), changed.end()));
+    Q_EMIT assignmentChangesApplied(QStringList(screenIds.begin(), screenIds.end()));
 }
 
 } // namespace PlasmaZones

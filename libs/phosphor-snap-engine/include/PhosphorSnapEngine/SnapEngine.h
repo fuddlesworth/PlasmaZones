@@ -920,14 +920,24 @@ public:
     /// Provider that builds the full WindowQuery (window class / title / role /
     /// frame size / flags) for a live windowId. Daemon-injected, keyed by the
     /// live windowId — the daemon resolves it from its WindowRegistry (the same
-    /// `buildRuleQueryForWindow` the float / restore predicates use). When set,
-    /// exclusion evaluates a window's FULL attributes (matching the autotile
-    /// engine) instead of appId alone, and the frame size carried in the query
-    /// is checked against the minimum-window-size thresholds. When UNSET
-    /// (default) the engine falls back to the appId-only query — the historical
-    /// behaviour unit tests rely on. A null/empty optional from the provider
-    /// (metadata not yet known) also falls back to appId-only.
-    using ExclusionQueryProvider = std::function<std::optional<PhosphorRules::WindowQuery>(const QString& windowId)>;
+    /// `buildContextualRuleQuery` the float / restore predicates use, so the
+    /// query carries the screen-derived ScreenId / ActiveLayout context too).
+    /// When set, exclusion evaluates a window's FULL attributes (matching the
+    /// autotile engine) instead of appId alone, and the frame size carried in
+    /// the query is checked against the minimum-window-size thresholds. When
+    /// UNSET (default) the engine falls back to the appId-only query — the
+    /// historical behaviour unit tests rely on. A null/empty optional from the
+    /// provider (metadata not yet known) also falls back to appId-only.
+    ///
+    /// @p screenHint is the screen the caller knows the window belongs to, and
+    /// exists for the window-open path: a window being restored is not in any
+    /// SnapState yet, so the daemon's own screen resolution comes back empty and
+    /// the ScreenId / ActiveLayout leaves of an Exclude rule would not resolve.
+    /// Callers that ask about an already-tracked window (the navigation actions)
+    /// pass an empty hint and let the daemon resolve the screen from its
+    /// trackers.
+    using ExclusionQueryProvider =
+        std::function<std::optional<PhosphorRules::WindowQuery>(const QString& windowId, const QString& screenHint)>;
 
     /// Inject the exclusion query provider. See ExclusionQueryProvider. Same
     /// lifetime contract as setExcludeRuleSet — the caller keeps captured state
@@ -956,8 +966,11 @@ public:
     /// and applies the minimum-window-size thresholds to the query's frame
     /// size. Falls back to the appId-only path (@ref isAppIdExcluded's query
     /// shape) when no provider is set or window metadata is not yet known.
+    /// @p screenHint is forwarded to the provider — see ExclusionQueryProvider;
+    /// pass the screen the window is opening on where it is known, and leave it
+    /// empty for an already-tracked window.
     /// Public so the unit-test layer can drive the wiring directly.
-    bool isWindowExcluded(const QString& windowId) const;
+    bool isWindowExcluded(const QString& windowId, const QString& screenHint = QString()) const;
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════

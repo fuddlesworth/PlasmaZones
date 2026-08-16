@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
-#include "internal.h"
 #include "persistenceworker.h"
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include "config/configbackends.h"
@@ -26,7 +25,6 @@
 #include <PhosphorEngine/EngineTypes.h>
 
 namespace PlasmaZones {
-using namespace WindowTrackingInternal;
 
 bool WindowTrackingAdaptor::isPersistedContextDisabled(const QString& screenId, int virtualDesktop,
                                                        const QString& activity) const

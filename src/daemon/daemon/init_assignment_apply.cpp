@@ -39,8 +39,22 @@ namespace PlasmaZones {
 void Daemon::handleAssignmentChangesApplied(const QStringList& changedScreenIdsList)
 {
     const QSet<QString> changedScreenIds(changedScreenIdsList.begin(), changedScreenIdsList.end());
-    if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
+    if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager) {
+        // Refresh the snapshot even when the resnap work below cannot run.
+        // The tail of this function calls diffActiveAssignments, which is what
+        // republishes each screen's active layout to the KWin effect, and the
+        // guard above may have rejected the whole pass for a member that
+        // republish does not use. Returning outright during a teardown or
+        // re-init window left the effect's ActiveLayout cache stale for a KCM
+        // apply that otherwise succeeded. diffActiveAssignments needs BOTH
+        // m_layoutManager and m_screenManager (it enumerates effective screen
+        // ids) and self-guards on the pair, so the check here is only to avoid
+        // calling into it with nothing to do.
+        if (m_layoutManager) {
+            diffActiveAssignments();
+        }
         return;
+    }
 
     const QString activity = currentActivity();
 
