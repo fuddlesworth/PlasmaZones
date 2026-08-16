@@ -317,11 +317,11 @@ void TestScrollEngineZoneNumbers::minimizedTileCarriesNoNumberAndIsSteppedOver()
     QVERIFY(state);
     // Params built to match the ENGINE's own resolution (no IScrollSettings
     // attached, so gap 0) — defaultParams()'s gap 10 would re-clamp the view
-    // anchor against geometry the engine never uses.
-    PhosphorScrollEngine::ScrollLayoutParams engineParams;
-    engineParams.workArea = ScrollTestUtils::defaultScreenRect();
-    engineParams.gap = 0;
-    QVERIFY(state->strip().setWindowMinimized(wid("x"), true, engineParams));
+    // anchor against geometry the engine never uses. The shared helper is
+    // that exact struct AND carries the arm's axis; a local copy that omitted
+    // it drove a portrait work area through a horizontal mapper on the
+    // vertical arm.
+    QVERIFY(state->strip().setWindowMinimized(wid("x"), true, ScrollTestUtils::engineParams()));
     engine->retile(QStringLiteral("S1"));
 
     // The minimized tile is still MANAGED and still in the order, but it has

@@ -69,6 +69,7 @@ private Q_SLOTS:
 
     void widthChannelsRankRuleOverSettingsOverGlobal();
     void heightChannelsRankRuleOverSettingsOverGlobal();
+    void perScreenStripAxisOverridesTheResolvedAxis();
     void absentTrioSlotsFallBackPerSlotToTheGlobal();
     void presetIndexIsClampedToTheLivePresetList();
     void fixedKindWithAProportionValueFallsThroughToTheGlobal();
@@ -198,6 +199,76 @@ void TestScrollEnginePerScreen::widthChannelsRankRuleOverSettingsOverGlobal()
     const ColumnWidth global = openedWidth(engine, kS3, QStringLiteral("app|c"));
     QCOMPARE(global.kind, ColumnWidth::Proportion);
     QCOMPARE(global.proportion, 0.25);
+}
+
+// The per-screen StripAxis key is the PR's headline knob and had ZERO coverage
+// anywhere in the repo: nothing wrote ScrollPerScreenKeys::stripAxis(), so the
+// whole intent switch in effectiveStripAxis was dead as far as the suite was
+// concerned and could have been deleted with every test still green.
+//
+// This pins the FORCED intents, which the harness cannot otherwise reach: it
+// transposes the work area and lets the axis fall out of the Auto branch, so
+// main is always the longer edge and a width-versus-mainSize confusion
+// coincides numerically. Forcing an axis AGAINST the fixture's aspect is what
+// separates the two, so the assertions below are on the CROSS extent, which is
+// the one the forced axis actually changes.
+void TestScrollEnginePerScreen::perScreenStripAxisOverridesTheResolvedAxis()
+{
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // S1 forced to the axis the fixture would NOT resolve on its own, S2 left
+    // to resolve from its work-area aspect. Auto is 0, Horizontal 1, Vertical 2
+    // in the config tri-state, which is deliberately NOT the protocol's
+    // numbering — the engine switches rather than casting.
+    const bool fixtureIsVertical = ScrollTestUtils::Ax::vertical();
+    QVariantMap forced;
+    forced.insert(ScrollPerScreenKeys::stripAxis(), fixtureIsVertical ? 1 : 2);
+    engine->applyPerScreenConfig(kS1, forced);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
+    QVERIFY(columnExists(engine, kS2, QStringLiteral("app|b")));
+
+    // A lone column always spans the full CROSS extent of ITS OWN axis and
+    // takes only a share along its main axis. The harness's Ax:: readers
+    // measure against the ARM's axis, so on the forced screen the two roles
+    // are swapped relative to them: the column runs full length along the
+    // harness's MAIN direction, because that is the engine's cross there.
+    //
+    // That is the discriminator. If the per-screen key were ignored, S1 would
+    // resolve exactly like S2 and its harness-main extent would be the default
+    // column share rather than the full extent.
+    const QVector<QRect> forcedRects = engine->visibleTileRects(kS1);
+    const QVector<QRect> autoRects = engine->visibleTileRects(kS2);
+    QCOMPARE(forcedRects.size(), 1);
+    QCOMPARE(autoRects.size(), 1);
+
+    QCOMPARE(ScrollTestUtils::Ax::crossLen(autoRects.first()), ScrollTestUtils::kCrossExtent);
+    QVERIFY(ScrollTestUtils::Ax::mainLen(autoRects.first()) < ScrollTestUtils::kMainExtent);
+    QCOMPARE(ScrollTestUtils::Ax::mainLen(forcedRects.first()), ScrollTestUtils::kMainExtent);
+
+    // Clearing the override drops the screen back onto the resolved axis, so
+    // it looks like the untouched one again.
+    engine->clearPerScreenConfig(kS1);
+    engine->retile(kS1);
+    const QVector<QRect> cleared = engine->visibleTileRects(kS1);
+    QCOMPARE(cleared.size(), 1);
+    QCOMPARE(ScrollTestUtils::Ax::crossLen(cleared.first()), ScrollTestUtils::kCrossExtent);
+    QVERIFY(ScrollTestUtils::Ax::mainLen(cleared.first()) < ScrollTestUtils::kMainExtent);
+
+    // An out-of-range intent degrades to Auto rather than to a fixed axis.
+    QVariantMap garbage;
+    garbage.insert(ScrollPerScreenKeys::stripAxis(), 99);
+    engine->applyPerScreenConfig(kS1, garbage);
+    engine->retile(kS1);
+    const QVector<QRect> degraded = engine->visibleTileRects(kS1);
+    QCOMPARE(degraded.size(), 1);
+    QCOMPARE(ScrollTestUtils::Ax::crossLen(degraded.first()), ScrollTestUtils::kCrossExtent);
+    QVERIFY(ScrollTestUtils::Ax::mainLen(degraded.first()) < ScrollTestUtils::kMainExtent);
 }
 
 void TestScrollEnginePerScreen::heightChannelsRankRuleOverSettingsOverGlobal()
