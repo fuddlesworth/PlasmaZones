@@ -506,10 +506,12 @@ private:
      * size off), so a default config decorates exactly what it did before.
      *
      * The one surface family that escapes the always-wrong block is the
-     * plasma-shell kinds shellSurfaceKindFor() recognises: each is answered by
-     * its own opt-in (m_decorationExcludeShellPanels for the panel) before the
-     * app-window rejects run, because every one of those rejects is written
-     * about application windows and would reject a shell surface outright.
+     * plasma-shell kinds shellSurfaceKindFor() recognises: each answers YES
+     * before the app-window rejects run (every one of those rejects is written
+     * about application windows and would reject a shell surface outright).
+     * Their real gate is the decoration tree: the `shell` subtree is
+     * baseline-isolated, so an unconfigured shell surface resolves an empty
+     * chain and updateWindowDecoration undecorates it.
      */
     /// @p sharedQuery (optional): caller-owned memoisation slot, forwarded to the
     /// Exclude-rule gate. updateWindowDecoration passes its own slot so the
@@ -1601,6 +1603,23 @@ private:
     /// reason SurfaceMultipassState::captureValid exists. Defined in surface_capture.cpp.
     void captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state, const QRectF& logicalGeometry,
                               qreal captureScale, bool intoCaptureTex, qreal captureOpacity);
+
+    /// Shell surfaces only: derive the VISIBLE content rect of the freshly
+    /// captured surface from its alpha, inside the frame rect. A Plasma panel's
+    /// window often covers far more than what the user sees — a floating panel,
+    /// or one restyled by a widget like Panel Colorizer, draws a rounded body
+    /// inset in an otherwise transparent full-width window — and a decoration
+    /// wrapped around frameGeometry() then traces the invisible window rect.
+    /// The scan reads the capture back once (throttled), bounds the texels
+    /// whose alpha clears a floor RELATIVE to the strongest alpha present
+    /// (a floating panel keeps its float gap and drop shadow INSIDE the frame
+    /// rect, so an absolute floor bounded the shadow's soft skirt), and stores
+    /// the result on the multipass state for pushBorderUniforms to substitute
+    /// for the frame. Restricted to the frame subrect so the expanded-geometry
+    /// shadow band outside the frame can never inflate the bounds either.
+    /// Defined in surface_capture.cpp beside the capture it reads.
+    void updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, const QRectF& logicalGeometry,
+                                qreal captureScale);
 
     /// Render the window's active surface-layer stack into the window's
     /// per-window ping-pong FBO chain (`m_surfaceMultipass`, shared with the
@@ -2899,13 +2918,6 @@ private:
     // (min-size 0). The rule-driven exclusion gate binds the dedicated
     // decoration slice (m_decorationExclusionEvaluator above).
     bool m_decorationExcludeTransientWindows = true;
-    // Plasma panel opt-in, same group and the same default-preserving reason:
-    // panels were never decorated before, so this starts excluded and a
-    // pre-D-Bus pass leaves them alone. Decorations-only — there is no
-    // snapping or animation twin because both of those filters reject
-    // plasma-shell surfaces structurally.
-    bool m_decorationExcludeShellPanels = true;
-    bool m_decorationExcludeShellAppletPopups = true;
     int m_decorationMinWindowWidth = 0;
     int m_decorationMinWindowHeight = 0;
 

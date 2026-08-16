@@ -27,7 +27,7 @@
             "type": "int",
             "default": 8,
             "min": 0,
-            "max": 32,
+            "max": 64,
             "description": "Roundness of the pane corners (px, 0 for square)"
         },
         {

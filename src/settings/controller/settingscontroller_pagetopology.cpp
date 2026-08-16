@@ -525,8 +525,6 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // window-appearance page) hosts the WindowFilterCard bound to the
              // Decorations.WindowFiltering group.
              {CD::decorationsWindowFilteringGroup(), CD::transientWindowsKey()},
-             {CD::decorationsWindowFilteringGroup(), CD::shellPanelsKey()},
-             {CD::decorationsWindowFilteringGroup(), CD::shellAppletPopupsKey()},
              {CD::decorationsWindowFilteringGroup(), CD::minimumWindowWidthKey()},
              {CD::decorationsWindowFilteringGroup(), CD::minimumWindowHeightKey()},
              {CD::gapsGroup(), CD::innerGapKey()},

@@ -313,8 +313,11 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     //
     // The skip also leaves `sharedQuery` disengaged for a shell surface, which
     // is correct and not a missed memoisation: shouldDecorateWindow answers
-    // these kinds from their own opt-in before it reaches the rule slice, so
-    // nothing filled the slot and nothing below reads it.
+    // these kinds structurally before it reaches the rule slice, so nothing
+    // filled the slot and nothing below reads it. The shell subtree is
+    // baseline-isolated, so an unconfigured shell surface resolves an empty
+    // chain here and falls out at the decorate gate below — engaging a chain
+    // on the Decoration → Shell page is the whole opt-in.
     const bool isShellSurface = surfacePath.startsWith(QLatin1String("shell."));
     const std::optional<ResolvedDecorationChain> ruleChain =
         isShellSurface ? std::nullopt : resolveDecorationChain(resolveRuleActions(w, windowId, &sharedQuery));
@@ -396,6 +399,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     WindowDecoration wb;
     wb.chain = chain;
     wb.basePackId = basePackId;
+    wb.isShellSurface = isShellSurface;
 
     // Resolve THIS window's param values for every pack in the chain. Windows
     // on different surface paths (window.tiled / window.snapped /

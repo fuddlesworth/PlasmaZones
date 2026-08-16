@@ -44,6 +44,11 @@ Item {
 
     readonly property var bridge: settingsController.decorationPage
 
+    // Mirrors decorationPathIsBaselineIsolated in DecorationSupportedPaths.h:
+    // the shell subtree never inherits the tree baseline, so its cards must
+    // not claim "Using global defaults" when unoverridden.
+    readonly property bool _baselineIsolated: root.surfacePath === "shell" || root.surfacePath.startsWith("shell.")
+
     // True when this card edits its own DIRECT profile: an alwaysEnabled root
     // always does; a leaf only when its override is engaged.
     readonly property bool _editing: root.alwaysEnabled || root._hasOverride
@@ -176,7 +181,14 @@ Item {
                 text: {
                     if (root.isParentNode)
                         return i18n("Settings here apply to all child surfaces unless individually overridden.");
-                    return root._parentChainText.length > 0 ? i18n("Inheriting from: %1", root._parentChainText) : i18n("Using global defaults");
+                    if (root._parentChainText.length > 0)
+                        return i18n("Inheriting from: %1", root._parentChainText);
+                    // Baseline-isolated subtree roots (shell) never fall back
+                    // to the global default chain; without an override they
+                    // are simply undecorated.
+                    if (root._baselineIsolated)
+                        return i18n("Not decorated. Enable to build a decoration.");
+                    return i18n("Using global defaults");
                 }
             }
 

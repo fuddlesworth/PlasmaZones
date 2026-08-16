@@ -38,11 +38,13 @@ inline QStringList decorationLeafSurfacePaths()
         QStringLiteral("popup.cheatsheet"),
         // shell.* — surfaces owned by plasmashell rather than by us or by an
         // application. Unlike every path above, these are FOREIGN windows the
-        // KWin effect decorates in place, so each leaf is additionally gated
-        // by its own Decorations.WindowFiltering opt-in (default off) and
-        // resolves chain-only: the config-backed border / opacity-tint
-        // "easy mode" layers never apply to them, so a shell surface is
-        // styled by an explicit pack chain here or not at all.
+        // KWin effect decorates in place. The subtree is baseline-isolated
+        // (decorationPathIsBaselineIsolated below): a shell surface never
+        // inherits the tree baseline, so it stays undecorated until a chain is
+        // engaged at `shell` or one of its leaves — engaging that chain IS the
+        // opt-in. It also resolves chain-only: the config-backed border /
+        // opacity-tint "easy mode" layers never apply to it, so a shell
+        // surface is styled by an explicit pack chain here or not at all.
         QStringLiteral("shell.panel"),
         QStringLiteral("shell.appletPopup"),
     };
@@ -87,6 +89,18 @@ inline QStringList decorationSupportedSurfacePaths()
         }
     }
     return out;
+}
+
+/// Roots whose subtree does NOT inherit the tree baseline. The `shell.*`
+/// family decorates FOREIGN plasmashell windows, and inheriting the baseline
+/// there would border every panel the instant the user configured a global
+/// decoration chain for their own windows — so a shell surface resolves only
+/// from overrides inside its own subtree, and an unconfigured shell surface
+/// resolves empty (undecorated). Consulted by DecorationProfileTree::resolve
+/// and withSeedDefaults so the two cannot disagree.
+inline bool decorationPathIsBaselineIsolated(const QString& path)
+{
+    return path == QLatin1String("shell") || path.startsWith(QLatin1String("shell."));
 }
 
 /// Convenience predicate: does @p path name a surface that can carry a

@@ -31,7 +31,7 @@
             "type": "int",
             "default": 8,
             "min": 0,
-            "max": 32,
+            "max": 64,
             "group": "Shape",
             "description": "Corner rounding of the pane (px)"
         },

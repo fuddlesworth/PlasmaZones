@@ -530,8 +530,6 @@ public:
     // Declared here with the shared filtering leaf keys rather than with the
     // Decorations keys above because the group context is what disambiguates
     // it, matching `notificationsAndOsdKey`'s placement.
-    P_CONFIG_KEY(shellPanelsKey, "ShellPanels")
-    P_CONFIG_KEY(shellAppletPopupsKey, "ShellAppletPopups")
     // `notificationsAndOsdKey` is consumed exclusively by the
     // Animations.WindowFiltering schema (no equivalent in the Exclusions
     // group), so it is declared with the rest of the animation keys below

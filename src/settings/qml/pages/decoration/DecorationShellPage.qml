@@ -7,14 +7,16 @@ import QtQuick
 // QML.
 //
 // Unlike every other decoration surface, these are windows PlasmaZones does not
-// own: they belong to plasmashell. Each one is additionally gated by its own
-// opt-in on Decoration → General, and none of them honours the plain border /
-// opacity settings or the window rules, so a pack chain here is the whole
-// decoration. "All Shell Surfaces" (path "shell") is the category root card
-// that each surface can override via the DecorationProfileTree walk-up.
+// own: they belong to plasmashell. The `shell` subtree is baseline-isolated
+// (it never inherits the global default chain), none of these surfaces honours
+// the plain border / opacity settings or the window rules, and there is no
+// separate enable toggle — a pack chain engaged here is the whole decoration
+// and the whole opt-in. "All Shell Surfaces" (path "shell") is the category
+// root card that each surface can override via the DecorationProfileTree
+// walk-up.
 DecorationSurfaceCardList {
     Accessible.name: i18n("Shell decoration surfaces")
-    headerText: i18n("Decoration for surfaces owned by the Plasma shell. Each surface also has to be enabled under Decoration → General before it is drawn.")
+    headerText: i18n("Decoration for surfaces owned by the Plasma shell. These stay undecorated until a decoration is enabled here, and the global default decoration never applies to them.")
     surfaceModel: [
         {
             "surfacePath": "shell",

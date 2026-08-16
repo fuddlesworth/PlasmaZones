@@ -804,13 +804,18 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
     //
     // PLASMA-SHELL SURFACES are the one family that is NOT structural here.
     // shellSurfaceKindFor classifies them by KWin window type + owning class,
-    // and each recognised kind is gated by its own opt-in below instead of by
+    // and each recognised kind is admitted below instead of taking
     // the blanket isPlasmaShellSurface reject the rest of this file uses. That
     // predicate stays the verdict for every OTHER plasma-shell surface (the
     // desktop, notifications, the OSD, krunner, applet popups), so an
     // unrecognised kind still falls through to the structural rejects.
     //
-    // Each kind answers from its own opt-in, all default off. Everything below
+    // Each recognised kind answers YES here: the actual opt-in lives in the
+    // decoration tree, whose `shell` subtree is baseline-isolated (see
+    // DecorationSupportedPaths), so an unconfigured shell surface resolves an
+    // EMPTY chain and updateWindowDecoration's decorate gate undecorates it.
+    // Engaging a chain on the Decoration → Shell page is what turns a shell
+    // surface on — there is no separate enable toggle. Everything below
     // this point is skipped for a shell surface on purpose: the transient /
     // min-size / keep-above / special-window rejects are all written about
     // APPLICATION windows and every one of them would reject these outright
@@ -825,9 +830,8 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
     // silently falls through to the app-window rejects below and never draws.
     switch (shellSurfaceKindFor(w)) {
     case ShellSurfaceKind::Panel:
-        return !m_decorationExcludeShellPanels;
     case ShellSurfaceKind::AppletPopup:
-        return !m_decorationExcludeShellAppletPopups;
+        return true;
     case ShellSurfaceKind::None:
         break;
     }

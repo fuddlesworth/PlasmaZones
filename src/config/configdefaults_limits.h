@@ -148,22 +148,11 @@ public:
     // the min-size axes default off (0). On upgrade nothing changes until the
     // user opts into decorating transients or into a size threshold.
     //
-    // ShellPanels is the same shape for plasmashell's own panel surfaces, and
-    // has no snapping or animation twin: those two filters reject plasma-shell
-    // surfaces structurally and are not user-tunable. Defaults on (excluded)
-    // for the same upgrade-neutrality reason, and because a panel is a
-    // permanently visible surface whose offscreen redirect costs GPU time on
-    // every frame it is damaged — an opt-in the user makes deliberately.
+    // Plasma-shell surfaces (panels, applet popups) carry no toggle here: the
+    // decoration tree's `shell` subtree is baseline-isolated, so engaging a
+    // chain on the Decoration → Shell page is their whole opt-in.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static bool decorationExcludeShellPanels()
-    {
-        return true;
-    }
-    static bool decorationExcludeShellAppletPopups()
-    {
-        return true;
-    }
     static bool decorationExcludeTransientWindows()
     {
         return true;

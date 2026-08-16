@@ -68,6 +68,44 @@ private Q_SLOTS:
         QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("frost")});
     }
 
+    void shell_subtree_is_baseline_isolated()
+    {
+        QVERIFY(decorationPathIsBaselineIsolated(QStringLiteral("shell")));
+        QVERIFY(decorationPathIsBaselineIsolated(QStringLiteral("shell.panel")));
+        QVERIFY(!decorationPathIsBaselineIsolated(QStringLiteral("window.tiled")));
+        QVERIFY(!decorationPathIsBaselineIsolated(QStringLiteral("osd")));
+        // Prefix collisions must not count as isolated: only the `shell` node
+        // and its dot-children are.
+        QVERIFY(!decorationPathIsBaselineIsolated(QStringLiteral("shellfish")));
+
+        // Engaging a chain on the Decoration → Shell page is the whole shell
+        // opt-in, so a baseline chain (the user's global look for their own
+        // windows) must never leak onto a shell surface: with no shell-scope
+        // override the leaf resolves EMPTY, and the effect's decorate gate
+        // leaves the surface undecorated.
+        DecorationProfileTree tree;
+        tree.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain.value_or(QStringList{}), QStringList{});
+        QCOMPARE(tree.resolve(QStringLiteral("shell.appletPopup")).chain.value_or(QStringList{}), QStringList{});
+        // Non-shell surfaces keep inheriting the baseline unchanged.
+        QCOMPARE(tree.resolve(QStringLiteral("window.tiled")).chain, QStringList{QStringLiteral("border")});
+
+        // An override inside the shell subtree engages exactly as before.
+        tree.setOverride(QStringLiteral("shell"),
+                         makeProfile(QStringList{QStringLiteral("glow")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("glow")});
+
+        // Seeds: a baseline chain must not veto a shell seed either — the
+        // withSeedDefaults master gate mirrors resolve()'s isolation.
+        DecorationProfileTree user;
+        user.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
+        DecorationProfileTree seeds;
+        seeds.setOverride(QStringLiteral("shell.panel"),
+                          makeProfile(QStringList{QStringLiteral("frost")}, 1.0, QStringLiteral("#445566")));
+        const DecorationProfileTree merged = user.withSeedDefaults(seeds);
+        QCOMPARE(merged.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("frost")});
+    }
+
     // ── Serialization ────────────────────────────────────────────────────
 
     void roundTrip_preserves_baseline_overrides_and_order()

@@ -1137,32 +1137,6 @@ public:
         Q_EMIT decorationExcludeTransientWindowsChanged();
         Q_EMIT settingsChanged();
     }
-    bool decorationExcludeShellPanels() const override
-    {
-        return m_decorationExcludeShellPanels;
-    }
-    void setDecorationExcludeShellPanels(bool exclude) override
-    {
-        if (m_decorationExcludeShellPanels == exclude) {
-            return;
-        }
-        m_decorationExcludeShellPanels = exclude;
-        Q_EMIT decorationExcludeShellPanelsChanged();
-        Q_EMIT settingsChanged();
-    }
-    bool decorationExcludeShellAppletPopups() const override
-    {
-        return m_decorationExcludeShellAppletPopups;
-    }
-    void setDecorationExcludeShellAppletPopups(bool exclude) override
-    {
-        if (m_decorationExcludeShellAppletPopups == exclude) {
-            return;
-        }
-        m_decorationExcludeShellAppletPopups = exclude;
-        Q_EMIT decorationExcludeShellAppletPopupsChanged();
-        Q_EMIT settingsChanged();
-    }
     int decorationMinimumWindowWidth() const override
     {
         return m_decorationMinimumWindowWidth;
@@ -2792,8 +2766,6 @@ private:
     // Decoration-filter defaults, routed through ConfigDefaults like the
     // animation-filter defaults above.
     bool m_decorationExcludeTransientWindows = ConfigDefaults::decorationExcludeTransientWindows();
-    bool m_decorationExcludeShellPanels = ConfigDefaults::decorationExcludeShellPanels();
-    bool m_decorationExcludeShellAppletPopups = ConfigDefaults::decorationExcludeShellAppletPopups();
     int m_decorationMinimumWindowWidth = ConfigDefaults::decorationMinimumWindowWidth();
     int m_decorationMinimumWindowHeight = ConfigDefaults::decorationMinimumWindowHeight();
     QVariantMap m_autotilePerAlgorithmSettings;

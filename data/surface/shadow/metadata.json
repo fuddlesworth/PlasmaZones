@@ -51,7 +51,7 @@
             "type": "int",
             "default": 8,
             "min": 0,
-            "max": 32,
+            "max": 64,
             "description": "Corner rounding the shadow follows (px, match the Border pack)"
         },
         {

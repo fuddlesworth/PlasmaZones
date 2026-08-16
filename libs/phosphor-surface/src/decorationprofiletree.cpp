@@ -35,7 +35,11 @@ DecorationProfile DecorationProfileTree::resolve(const QString& surfacePath) con
         cursor = decorationParentPath(cursor);
     }
 
-    DecorationProfile effective = m_baseline;
+    // Baseline-isolated subtrees (shell.*) start from an empty profile: the
+    // baseline is the user's look for surfaces WE own, and a foreign shell
+    // surface must stay undecorated until a chain is engaged in its own
+    // subtree. See decorationPathIsBaselineIsolated.
+    DecorationProfile effective = decorationPathIsBaselineIsolated(surfacePath) ? DecorationProfile{} : m_baseline;
 
     for (const QString& step : chain) {
         auto it = m_overrides.constFind(step);
@@ -57,7 +61,11 @@ DecorationProfileTree DecorationProfileTree::withSeedDefaults(const DecorationPr
     // overlays deepest-last, and an injected leaf field would silently win
     // over the user's category-level engagement.
     const auto fieldEngagedOnWalk = [this](const QString& surfacePath, auto member) {
-        if ((m_baseline.*member).has_value())
+        // Baseline-isolated paths (shell.*) never resolve against the
+        // baseline, so a baseline engagement must not block a seed there —
+        // mirror resolve()'s isolation or a global user chain would silently
+        // veto every shell seed a decoration set ships.
+        if (!decorationPathIsBaselineIsolated(surfacePath) && (m_baseline.*member).has_value())
             return true;
         QString cursor = surfacePath;
         while (!cursor.isEmpty()) {

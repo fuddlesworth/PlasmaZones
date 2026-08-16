@@ -516,18 +516,6 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                {PhosphorI18n::tr("dialogs"), PhosphorI18n::tr("popups"), PhosphorI18n::tr("menus"),
                 PhosphorI18n::tr("border")},
                /*advancedOnly=*/true);
-    // Decorations-only row on this card — no General / Animations twin, since
-    // those two filters reject plasma-shell surfaces structurally.
-    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorateShellPanels"),
-               PhosphorI18n::tr("Decorate Plasma panels"),
-               {PhosphorI18n::tr("panel"), PhosphorI18n::tr("shell"), PhosphorI18n::tr("plasma"),
-                PhosphorI18n::tr("taskbar"), PhosphorI18n::tr("dock")},
-               /*advancedOnly=*/true);
-    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorateShellAppletPopups"),
-               PhosphorI18n::tr("Decorate applet popups"),
-               {PhosphorI18n::tr("applet"), PhosphorI18n::tr("popup"), PhosphorI18n::tr("shell"),
-                PhosphorI18n::tr("launcher"), PhosphorI18n::tr("system tray"), PhosphorI18n::tr("widget")},
-               /*advancedOnly=*/true);
     addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("minimumWindowWidth"),
                PhosphorI18n::tr("Minimum window width"),
                {PhosphorI18n::tr("threshold"), PhosphorI18n::tr("narrow"), PhosphorI18n::tr("size")},

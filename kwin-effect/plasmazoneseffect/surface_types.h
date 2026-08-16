@@ -306,6 +306,17 @@ struct SurfaceMultipassState
     std::unique_ptr<KWin::GLTexture> captureTex;
     std::unique_ptr<KWin::GLFramebuffer> captureFbo;
     bool captureValid = false;
+
+    /// Shell surfaces only (WindowDecoration::isShellSurface): the visible
+    /// content bounds of the last scanned capture, in LOGICAL px relative to
+    /// the window's frame top-left, top-down. Empty/invalid = never scanned or
+    /// nothing visible; consumers fall back to the full frame. Paired with the
+    /// frame size it was scanned at so a resize invalidates it instead of
+    /// serving stale bounds, and with the scan stamp that throttles the
+    /// readback (updateShellContentRect).
+    QRectF shellContentRect;
+    QSizeF shellContentFrameSize;
+    qint64 shellContentScanMs = -1;
     /// WHICH texture the valid capture is sitting in.
     ///
     /// It has two possible homes: captureTex normally, or compositeTex[0] for the
@@ -605,6 +616,16 @@ struct WindowDecoration
     /// looks this up in m_compiledPacks to get the CompiledSurfacePack instead
     /// of the old single global border shader.
     QString basePackId;
+
+    /// True when the window resolved onto a `shell.*` surface path (a
+    /// plasmashell panel or applet popup). Two consumers: the fold scans the
+    /// capture's visible-content bounds for these (updateShellContentRect),
+    /// and pushBorderUniforms substitutes those bounds for frameGeometry() so
+    /// packs hug what the user actually sees (a floating or Panel
+    /// Colorizer-styled panel is a rounded body inset in a mostly transparent
+    /// full-width window). Set by updateWindowDecoration from the same
+    /// resolved surface path that selected chain-only resolution.
+    bool isShellSurface = false;
 
     /// Transparent OUTER MARGIN (logical px) the chain's packs need around
     /// the window to draw into — the max over each pack's resolved

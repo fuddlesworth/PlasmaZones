@@ -303,7 +303,21 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // window). frameTopLeft = (frameGeometry.topLeft - expandedGeometry.topLeft) *
     // scale is the frame's offset inside that texture (top-down device px), and
     // frameSize = frameGeometry.size * scale its extent.
-    const QRectF frame = w->frameGeometry();
+    QRectF frame = w->frameGeometry();
+    // Shell surfaces: substitute the scanned visible-content bounds for the
+    // frame, so the SDF hugs the panel's visible body (a floating or Panel
+    // Colorizer-styled panel is a rounded rect inset in a mostly transparent
+    // full-width window) instead of tracing the invisible window rect. Guarded
+    // on the frame size the scan ran at — after a resize the stale bounds are
+    // ignored until the next capture rescans (updateShellContentRect).
+    if (wb.isShellSurface) {
+        if (const auto psIt = m_surfaceMultipass.find(windowId); psIt != m_surfaceMultipass.end()) {
+            const SurfaceMultipassState& mp = psIt->second;
+            if (!mp.shellContentRect.isEmpty() && mp.shellContentFrameSize == frame.size()) {
+                frame = mp.shellContentRect.translated(frame.topLeft());
+            }
+        }
+    }
     // The canvas the fold is drawing into — surfaceCanvasFor's device-aligned
     // rect, padding included. NOT re-derived from expandedGeometry + padding:
     // the alignment shifts the canvas off the raw expanded rect by a

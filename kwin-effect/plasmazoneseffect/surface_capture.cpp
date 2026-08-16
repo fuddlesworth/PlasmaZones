@@ -30,6 +30,7 @@
 
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
+#include <QByteArray>
 #include <QLoggingCategory>
 #include <QPoint>
 #include <QRectF>
@@ -37,8 +38,7 @@
 #include <QSize>
 
 #include <algorithm> // std::max, unioning the two not-animating spans
-
-#include <cmath>
+#include <cmath> // std::floor / std::ceil, the shell content-rect scan bounds
 
 #include <epoxy/gl.h>
 
@@ -251,6 +251,103 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     m_capturingSnapshot = false;
     state.captureValid = true;
     state.captureInComposite = !intoCaptureTex;
+}
+
+void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state,
+                                               const QRectF& logicalGeometry, qreal captureScale)
+{
+    const QRectF frame = w->frameGeometry();
+    if (frame.isEmpty() || captureScale <= 0.0) {
+        return;
+    }
+    // Throttle the readback: a panel damages often (clock ticks, tray
+    // animation) but its visible shape changes rarely, and glReadPixels is a
+    // pipeline stall. A frame RESIZE bypasses the throttle — the stored rect
+    // is invalid for the new size (consumers check shellContentFrameSize) and
+    // must be replaced on the first capture at that size.
+    constexpr qint64 kRescanIntervalMs = 1000;
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (state.shellContentFrameSize == frame.size() && state.shellContentScanMs >= 0
+        && nowMs - state.shellContentScanMs < kRescanIntervalMs) {
+        return;
+    }
+
+    KWin::GLFramebuffer* fbo = state.captureInComposite ? state.compositeFbo[0].get() : state.captureFbo.get();
+    if (!fbo || !fbo->valid()) {
+        return;
+    }
+    const QSize texSize = fbo->size();
+
+    // The frame subrect inside the canvas texture, top-down device px. FLOOR
+    // the origin / CEIL the extent so a fractional-scale frame edge lands
+    // inside the scan rather than outside it, then clamp to the texture.
+    const int fx = std::clamp(static_cast<int>(std::floor((frame.left() - logicalGeometry.left()) * captureScale)), 0,
+                              texSize.width());
+    const int fy = std::clamp(static_cast<int>(std::floor((frame.top() - logicalGeometry.top()) * captureScale)), 0,
+                              texSize.height());
+    const int fw = std::clamp(static_cast<int>(std::ceil(frame.width() * captureScale)), 0, texSize.width() - fx);
+    const int fh = std::clamp(static_cast<int>(std::ceil(frame.height() * captureScale)), 0, texSize.height() - fy);
+    if (fw <= 0 || fh <= 0) {
+        return;
+    }
+
+    // GL's framebuffer origin is bottom-left (same flip snapassistthumbnail-
+    // capture.cpp applies to its toImage()), so the read starts at the frame
+    // rect's BOTTOM edge and buffer row r is top-down row fh - 1 - r.
+    QByteArray pixels;
+    pixels.resize(static_cast<qsizetype>(fw) * fh * 4);
+    KWin::GLFramebuffer::pushFramebuffer(fbo);
+    glReadPixels(fx, texSize.height() - fy - fh, fw, fh, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    KWin::GLFramebuffer::popFramebuffer();
+
+    // Bound the texels that read as the surface's BODY, not its shadow. A
+    // floating panel keeps its float gap and drop shadow INSIDE the frame
+    // rect (plasmashell draws them in its own window), so a fixed low floor
+    // bounded the shadow's soft skirt and the decoration wrapped the full
+    // floating extent instead of the visible bar (live-measured: the skirt
+    // sits around 15-25% alpha while a Panel Colorizer body is 85%+ with
+    // opaque widgets on top). The floor is therefore RELATIVE — a fraction of
+    // the strongest alpha actually present — so it lands above any soft
+    // shadow while still admitting a deliberately translucent body, whose
+    // widgets carry the maximum up anyway. kAlphaFloorMin keeps a
+    // near-invisible surface from bounding its own noise.
+    const auto* data = reinterpret_cast<const unsigned char*>(pixels.constData());
+    unsigned char maxAlpha = 0;
+    const qsizetype pixelCount = static_cast<qsizetype>(fw) * fh;
+    for (qsizetype i = 0; i < pixelCount; ++i) {
+        maxAlpha = std::max(maxAlpha, data[i * 4 + 3]);
+    }
+    constexpr int kAlphaFloorMin = 8;
+    const int alphaFloor = std::max(kAlphaFloorMin, (static_cast<int>(maxAlpha) * 35) / 100);
+    int minX = fw, maxX = -1, minRow = fh, maxRow = -1;
+    for (int r = 0; r < fh; ++r) {
+        const unsigned char* row = data + static_cast<qsizetype>(r) * fw * 4;
+        for (int x = 0; x < fw; ++x) {
+            if (row[x * 4 + 3] < alphaFloor) {
+                continue;
+            }
+            minX = std::min(minX, x);
+            maxX = std::max(maxX, x);
+            minRow = std::min(minRow, r);
+            maxRow = std::max(maxRow, r);
+        }
+    }
+
+    state.shellContentFrameSize = frame.size();
+    state.shellContentScanMs = nowMs;
+    if (maxX < 0) {
+        // Nothing visible at all — leave the rect empty; consumers fall back
+        // to the full frame rather than collapsing the decoration to a point.
+        state.shellContentRect = QRectF();
+        return;
+    }
+    // Buffer rows are bottom-up (row 0 is the frame's bottom edge), so the
+    // top-down top is fh - 1 - maxRow and the top-down bottom is
+    // fh - 1 - minRow, both inclusive.
+    const int topDown = fh - 1 - maxRow;
+    const int bottomDown = fh - 1 - minRow;
+    state.shellContentRect = QRectF(minX / captureScale, topDown / captureScale, (maxX - minX + 1) / captureScale,
+                                    (bottomDown - topDown + 1) / captureScale);
 }
 
 // Decide what a fold can REUSE before it does any work.

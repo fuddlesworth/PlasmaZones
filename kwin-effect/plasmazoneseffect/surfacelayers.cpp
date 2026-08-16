@@ -300,6 +300,14 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         captureWindowSurface(w, state, logicalGeometry, captureScale,
                              /*intoCaptureTex=*/!plan.captureInComposite, captureOpacity);
+        // Shell surfaces: bound the capture's VISIBLE content so the packs can
+        // hug what the user actually sees instead of the window rect (a
+        // floating or Panel Colorizer-styled panel is a rounded body inset in
+        // a mostly transparent full-width window). Reads the capture back, so
+        // it runs only on a fresh capture and is throttled inside.
+        if (deco.isShellSurface) {
+            updateShellContentRect(w, state, logicalGeometry, captureScale);
+        }
     }
     // Hand the OffscreenEffect slot back: to the passthrough present on the rest
     // path, or to the caller's animation shader mid-transition. Runs on the
