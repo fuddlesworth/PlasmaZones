@@ -262,7 +262,12 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // Decorations.WindowFiltering settings (m_decorationExcludeTransientWindows /
     // m_decorationMinWindow{Width,Height}). Defaults preserve the prior
     // shouldHandleWindow behavior (transients skipped, no size threshold).
-    if (!shouldDecorateWindow(w)) {
+    // Caller-owned memoisation slot: the Exclude gate here and the rule-action
+    // resolve below both take the same per-window WindowQuery, and each would
+    // otherwise build its own ~30-accessor walk on a cold cache — which is every
+    // window of the sweep that follows an invalidation.
+    std::optional<PhosphorRules::WindowQuery> sharedQuery;
+    if (!shouldDecorateWindow(w, &sharedQuery)) {
         // Same orphan release as the minimized/fullscreen gate above: the window is
         // no longer decorated, so nothing will reach its kept GL state again.
         undecorate();
@@ -294,7 +299,8 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // border-appearance resolvers use, so it refreshes on every trigger
     // that re-runs updateWindowDecoration (rule edits, focus, snap flips,
     // desktop changes).
-    const std::optional<ResolvedDecorationChain> ruleChain = resolveDecorationChain(resolveRuleActions(w, windowId));
+    const std::optional<ResolvedDecorationChain> ruleChain =
+        resolveDecorationChain(resolveRuleActions(w, windowId, &sharedQuery));
     if (ruleChain) {
         userPacks = ruleChain->chain;
     }

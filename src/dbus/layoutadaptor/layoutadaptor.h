@@ -182,10 +182,15 @@ public Q_SLOTS:
                             const QString& snappingLayout, const QString& tilingAlgorithm);
 
     // Suppress screenLayoutChanged D-Bus signals during KCM save batch.
+    // applyAssignmentChanges releases the suppression itself, so a client that
+    // dies mid-batch cannot leave the signal muted for the daemon's lifetime.
     void setSaveBatchMode(bool enabled);
 
     // Trigger resnap/retile + OSD after KCM assignment changes.
     // Called ONCE after all setAssignmentEntry/clear calls complete.
+    // Releases the save-batch suppression first, then applies. A batch that
+    // staged nothing is a no-op beyond that release: downstream an empty set
+    // means EVERY screen, so it must never be forwarded.
     void applyAssignmentChanges();
 
     // Virtual desktop information
@@ -201,6 +206,14 @@ public Q_SLOTS:
     QStringList getAvailableScreenIds();
 
     QString getAllScreenAssignments();
+
+    /// Each effective screen's RESOLVED active layout id, as the daemon last
+    /// computed it. Served from the snapshot @ref publishActiveAssignments
+    /// pushes rather than resolved on demand, so a reader and the
+    /// @ref activeLayoutForScreenChanged stream can never disagree about what
+    /// the current value is. Screens resolving to no layout are omitted.
+    QVariantMap getActiveLayoutsForScreens();
+
     // The three batch getters below answer key -> {layoutId, scrollingTemplate}
     // maps, deliberately wider than the plain layoutId string their matching
     // batch setters read. The template rides the getter for readback only; it
@@ -417,6 +430,19 @@ Q_SIGNALS:
     void layoutDeleted(const QString& layoutId);
 
     void screenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
+
+    /**
+     * @brief Emitted when a screen's RESOLVED active layout changes.
+     *
+     * The companion to @ref getActiveLayoutsForScreens, and the signal a
+     * subscriber tracking the `ActiveLayout` rule field wants. Distinct from
+     * @ref screenLayoutChanged in both coverage and timing: that one reports
+     * assignment MUTATIONS and is suppressed during a KCM save batch, while
+     * this fires whenever the resolved value moves for any reason at all,
+     * including a desktop or activity switch that mutates nothing.
+     */
+    void activeLayoutForScreenChanged(const QString& screenId, const QString& layoutId);
+
     void virtualDesktopCountChanged(int count);
 
     /**
@@ -466,11 +492,96 @@ private Q_SLOTS:
 public:
     void invalidateCache();
 
-    // Mark screens as changed for the next applyAssignmentChanges(), without
-    // going through setAssignmentEntry. Internal (NOT bus-exposed): the daemon
-    // calls this to drive the same resnap/retile path when a RULE edit (not a
-    // legacy assignment edit) changes the active assignment for some screens.
-    void markScreensChanged(const QSet<QString>& screenIds);
+    /**
+     * @brief Emit @ref assignmentChangesApplied for an explicitly supplied set.
+     *
+     * Internal (NOT bus-exposed). The daemon's rule-driven reconcile uses this
+     * instead of staging into @ref m_changedScreenIds and calling
+     * @ref applyAssignmentChanges, because that buffer belongs to the BUS
+     * CLIENT: the settings app accumulates a save batch across N
+     * setAssignmentEntry calls and commits it with one applyAssignmentChanges.
+     *
+     * Sharing the buffer was a real defect, not a tidiness question. Every
+     * assignment write emits RuleStore::rulesChanged synchronously, which drives
+     * Daemon::reconcileActiveAssignments, so an N-entry save ran the apply pass
+     * N times mid-batch and drained the client's buffer each time. The client's
+     * closing call then saw an empty set — which downstream means EVERY screen —
+     * and resnapped and OSD'd all of them instead of the ones it edited.
+     *
+     * The two sets are genuinely different facts ("screens this client edited"
+     * versus "screens whose resolved assignment moved"), so they get their own
+     * storage rather than a mode flag arbitrating one buffer.
+     *
+     * A no-op on an empty set: empty means "every screen" downstream, never
+     * "nothing".
+     */
+    void applyAssignmentChangesFor(const QSet<QString>& screenIds);
+
+    /// The assignment family a batch setter replaces. Each batch drops and
+    /// rebuilds exactly one of these and leaves the other three alone, so the
+    /// pre-batch marking has to be scoped the same way.
+    enum class AssignmentFamily {
+        Base, ///< Monitor-only rules (setAllScreenAssignments)
+        Desktop, ///< (screen, desktop) rules (setAllDesktopAssignments)
+        Activity, ///< (screen, activity) rules (setAllActivityAssignments)
+        Combined ///< (screen, desktop, activity) rules (setAllCombinedAssignments)
+    };
+
+    /// Mark every screen that currently holds a stored assignment IN @p family
+    /// as changed, before a batch setter replaces that family wholesale.
+    /// Internal (NOT bus-exposed): a screen dropped by absence from the incoming
+    /// map would otherwise never be marked, resnapped, or reported. Scoped to
+    /// the family so a screen whose only stored rule belongs to an untouched
+    /// family does not pay for a resnap and an OSD it cannot need.
+    void markScreensWithStoredAssignments(AssignmentFamily family);
+
+    /// Release the save-batch suppression. Internal (NOT bus-exposed): called
+    /// from applyAssignmentChanges so a client that dies mid-batch cannot leave
+    /// screenLayoutChanged muted for the daemon's lifetime.
+    void clearSaveBatchMode();
+
+    /**
+     * @brief Publish the daemon's freshly recomputed active-assignment snapshot.
+     *
+     * Internal (NOT bus-exposed). The daemon owns the recomputation — its
+     * `diffActiveAssignments()` is the one place that resolves every effective
+     * screen's active assignment id against that screen's current desktop and
+     * activity, and it already runs on every edge that can move the value
+     * (assignment edits, rule edits, desktop / activity switches, screen
+     * reconfigure, startup). Rather than duplicate that resolution here, the
+     * daemon hands the result over: this stores it as the readback snapshot for
+     * @ref getActiveLayoutsForScreens and emits
+     * @ref activeLayoutForScreenChanged for each screen in @p changedScreenIds.
+     *
+     * @param activeByScreen The complete new snapshot, keyed by effective screen
+     *        id. Replaces the previous one wholesale, so a screen that went away
+     *        drops out of the readback.
+     * @param changedScreenIds The screens whose id actually differs from the
+     *        previous snapshot. Only these are broadcast, and each is compared
+     *        against the outgoing snapshot again here, so a value that did not
+     *        move is silent on the bus either way.
+     *
+     * @note Both parameters are const references and the daemon passes its own
+     *       live @c m_activeAssignmentByScreen as @p activeByScreen, so this
+     *       method must not do anything that could re-enter the daemon while it
+     *       iterates them. The emission loop reads a local list built before the
+     *       snapshot swap rather than either container, so a re-entrant call
+     *       cannot invalidate the iteration in progress. That is all the local
+     *       list buys: it fixes iteration safety, not emission ORDER. A
+     *       re-entrant call still finishes its own emissions first, so the outer
+     *       loop would then deliver its pre-computed (older) values after the
+     *       newer ones. Theoretical today — nothing in-process subscribes to
+     *       @ref activeLayoutForScreenChanged, and the only remote subscriber is
+     *       the effect, which cannot re-enter the daemon synchronously.
+     *
+     * @note Each broadcast costs the effect a full rule-cache invalidation and a
+     *       stacking-order decoration sweep, which is required (an
+     *       ActiveLayout-scoped appearance slot is baked into the decoration) but
+     *       not free. For a user with per-desktop layout assignments that lands
+     *       on every virtual-desktop switch, alongside the transition. Keeping
+     *       @p changedScreenIds tight is what bounds it.
+     */
+    void publishActiveAssignments(const QHash<QString, QString>& activeByScreen, const QSet<QString>& changedScreenIds);
 
     /**
      * @brief Notify consumers that the layout list data has changed
@@ -525,6 +636,15 @@ private:
      * @return true if valid (non-empty), false if empty (logs warning)
      */
     bool validateNonEmpty(const QString& value, const QString& paramName, const QString& operation) const;
+
+    /**
+     * @brief Validate a 1-based virtual desktop number arriving over the bus
+     * @param virtualDesktop The desktop number as received
+     * @param operation Operation name for error message
+     * @param allowZero Accept 0, the documented screen-level wildcard
+     * @return true if usable, false if out of range (logs warning)
+     */
+    bool validateDesktopNumber(int virtualDesktop, const QString& operation, bool allowZero = false) const;
 
     /**
      * @brief Parse JSON string to QJsonObject with validation
@@ -582,6 +702,12 @@ private:
     // setters/clears, the batch setters, setScrollingTemplateLayout, ...),
     // consumed by applyAssignmentChanges.
     QSet<QString> m_changedScreenIds;
+
+    // Resolved active layout id per effective screen, pushed by the daemon via
+    // publishActiveAssignments. Mirrors Daemon::m_activeAssignmentByScreen — the
+    // daemon is the authority, this is the bus-facing copy that backs
+    // getActiveLayoutsForScreens.
+    QHash<QString, QString> m_activeAssignmentByScreen;
 
     // JSON caching for performance
     QString m_cachedActiveLayoutJson;
