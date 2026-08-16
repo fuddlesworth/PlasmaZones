@@ -768,6 +768,15 @@ void PlasmaZonesEffect::connectWindowAndScreenSignals()
     // window snapped while on another desktop isn't created until that desktop
     // becomes current. Rebuild on every desktop switch so those borders appear
     // without waiting for the window to be re-activated.
+    //
+    // Known one-frame cost: a desktop switch usually moves each screen's resolved
+    // active layout too, and this sweep re-folds appearance against the
+    // active-layout entries the PREVIOUS desktop resolved — the daemon's
+    // setActiveLayouts push lands after, and its change edge re-folds the
+    // affected windows. So an ActiveLayout-scoped border / tint / opacity can
+    // show the outgoing desktop's value for the frames between the switch and the
+    // push. Not corrected here: the effect cannot resolve the daemon's
+    // assignment cascade, so there is no local value to fold instead.
     connect(KWin::effects, &KWin::EffectsHandler::desktopChanged, this, [this]() {
         updateAllDecorations();
     });

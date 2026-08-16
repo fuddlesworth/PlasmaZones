@@ -290,7 +290,13 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     // per-window RestorePosition rule). When the predicate is unset
                     // (tests / no daemon) the move always fires, preserving
                     // historical behaviour.
-                    const bool restorePosition = !m_restorePositionPredicate || m_restorePositionPredicate(windowId);
+                    // Hint with the screen the window is being inserted onto: the
+                    // hint stamps the rule query's ScreenId / ActiveLayout, which
+                    // ask where the window is landing now. (In this branch the
+                    // take() predicate makes restoreScreen equal to screenId, so
+                    // the two candidates cannot diverge here anyway.)
+                    const bool restorePosition =
+                        !m_restorePositionPredicate || m_restorePositionPredicate(windowId, screenId);
                     if (freeGeo.isValid() && restorePosition) {
                         Q_EMIT geometryRestoreRequested(windowId, freeGeo, restoreScreen);
                     }

@@ -24,9 +24,63 @@ namespace PWR = PhosphorRules;
 
 using namespace RuleHelpers;
 
+namespace {
+
+// One walk, both directions. @p shouldFlip selects the entries to convert and
+// @p target is the mode they are rewritten to; the layout fields (snapping,
+// tiling, scrolling template) are carried across verbatim, which is what lets
+// the pair round-trip. Returns the flipped rules through @p updated and the
+// full context dims to announce through @p affected. The caller commits and
+// emits, because the two directions differ in what else they persist.
+//
+// The rewrite replaces only the assignment slot actions. A MIXED context rule
+// (context match + SetEngineMode alongside SetOpacity / Float / Exclude /
+// LockContext / OverrideAnimation* / gap actions) must still flip — a mixed
+// autotile rule is a real autotile assignment and a global disable has to
+// neuter it — so the predicate deliberately does NOT gate on
+// isPureAssignmentRule the way the purge path at layoutregistry_assignments.cpp
+// does. Assigning makeAssignmentActions' output wholesale would therefore drop
+// every non-assignment action such a rule carries, in BOTH directions;
+// carryOverNonAssignmentActions preserves them. Dropping a gap action here
+// also changed the gap fingerprint the settings layer watches, which
+// re-entered the settings handler mid-write; preserving the actions closes
+// that re-entrancy exposure too.
+template<typename PredicateFn>
+int flipAssignmentModes(QList<PWR::Rule>& updated, QSet<ContextDims>& affected, AssignmentEntry::Mode target,
+                        PredicateFn shouldFlip)
+{
+    int flipped = 0;
+    for (PWR::Rule& rule : updated) {
+        // Context-assignment rules only — a window-property rule that
+        // legitimately carries a SetEngineMode action is not an assignment,
+        // so a global autotile disable has no business neutering it.
+        if (!isContextAssignmentRule(rule)) {
+            continue;
+        }
+        const AssignmentEntry entry = entryFromRuleMatchActions(rule);
+        if (!shouldFlip(entry)) {
+            continue;
+        }
+        // Rewrite the slot actions to @p target — preserve all three layout
+        // fields so the flip can round-trip, and carry over everything that
+        // is not an assignment slot.
+        const PWR::Rule previous = rule;
+        rule.actions = PWR::ContextRuleBridge::makeAssignmentActions(
+            modeToWireString(target), entry.snappingLayout, entry.tilingAlgorithm, entry.scrollingTemplateLayout);
+        carryOverNonAssignmentActions(rule, previous);
+        ++flipped;
+
+        // Recover the rule's own context for the layoutAssigned signal.
+        affected.insert(decodeDims(rule.match));
+    }
+    return flipped;
+}
+
+} // namespace
+
 void LayoutRegistry::clearAutotileAssignments()
 {
-    // Flip every Autotile assignment rule to Snapping (preserving both layout
+    // Flip every Autotile assignment rule to Snapping (preserving the layout
     // fields) and drop autotile quick-layout slots.
     QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
     // `affected` collects the FULL context dims for the debug log; the EMIT
@@ -38,40 +92,18 @@ void LayoutRegistry::clearAutotileAssignments()
     // payload under each rule's OWN activity, and there the per-activity
     // dedupe key was load-bearing — that payload is gone.)
     QSet<ContextDims> affected;
-    bool changed = false;
-
-    for (PWR::Rule& rule : updated) {
-        // Context-assignment rules only — a window-property rule that
-        // legitimately carries a SetEngineMode action is not an assignment.
-        // MIXED rules ARE flipped: a context assigned to autotile must be
-        // cleared whether or not the user also hung a SetOpacity on it, and
-        // gating them out left "clear all autotile assignments" silently
-        // leaving such a context on autotile. Their extra actions survive
-        // because the rebuild below carries them across.
-        if (!isContextAssignmentRule(rule)) {
-            continue;
-        }
-        const AssignmentEntry entry = entryFromRuleMatchActions(rule);
-        if (entry.mode != AssignmentEntry::Autotile) {
-            continue;
-        }
-        // Flip to Snapping — preserve both layout fields so re-enabling
-        // autotile can restore the previous algorithm, and carry over
-        // everything that is not an assignment slot.
-        const PWR::Rule previous = rule;
-        rule.actions = PWR::ContextRuleBridge::makeAssignmentActions(modeToWireString(AssignmentEntry::Snapping),
-                                                                     entry.snappingLayout, entry.tilingAlgorithm,
-                                                                     entry.scrollingTemplateLayout);
-        carryOverNonAssignmentActions(rule, previous);
-        changed = true;
-
-        // Recover the rule's own context for the layoutAssigned signal.
-        affected.insert(decodeDims(rule.match));
-    }
+    const int flipped =
+        flipAssignmentModes(updated, affected, AssignmentEntry::Snapping, [](const AssignmentEntry& entry) {
+            return entry.mode == AssignmentEntry::Autotile;
+        });
+    bool changed = flipped > 0;
 
     // Drop autotile quick-layout slots — clearing autotile everywhere
     // includes the per-mode autotile bindings. The Snapping and Scrolling
-    // slots are untouched: each mode owns a separate array.
+    // slots are untouched: each mode owns a separate array. This is a
+    // ONE-WAY loss: restoreAutotileAssignments rebuilds the assignment
+    // rules but has nothing to rebuild these from, and writeQuickLayouts()
+    // persists the wipe immediately.
     auto& autotileSlots = m_quickLayoutSlots[slotIndexFor(AssignmentEntry::Autotile)];
     if (!autotileSlots.isEmpty()) {
         autotileSlots.clear();
@@ -79,7 +111,9 @@ void LayoutRegistry::clearAutotileAssignments()
     }
 
     if (changed) {
-        m_ruleStore->setAllRules(updated);
+        if (!m_ruleStore->setAllRules(updated)) {
+            qCWarning(lcZonesLib) << "clearAutotileAssignments: rule store refused to persist the flipped assignments";
+        }
         writeQuickLayouts();
         // The EMIT dedupes on (screen, desktop) only. The payload resolves
         // under m_currentActivity and layoutAssigned carries no activity, so
@@ -87,8 +121,15 @@ void LayoutRegistry::clearAutotileAssignments()
         // signals — and each one re-runs updateEngineScreens, updateLayoutFilter
         // and diffActiveAssignments in the daemon. `affected` keeps the full
         // dims for the debug log's sake.
+        //
+        // A context rule with no screen dimension decodes to an empty screenId
+        // and is skipped: the per-screen subscribers cannot act on it, and the
+        // LayoutAdaptor would relay a screenLayoutChanged("") onto the bus.
         QSet<QPair<QString, int>> emitted;
         for (const ContextDims& dims : std::as_const(affected)) {
+            if (dims.screenId.isEmpty()) {
+                continue;
+            }
             qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << dims.screenId
                                 << "desktop=" << dims.virtualDesktop << "activity=" << dims.activity;
             const auto emitKey = qMakePair(dims.screenId, dims.virtualDesktop);
@@ -112,6 +153,72 @@ void LayoutRegistry::clearAutotileAssignments()
         }
         qCInfo(lcZonesLib) << "Cleared all autotile assignments";
     }
+}
+
+int LayoutRegistry::restoreAutotileAssignments()
+{
+    // Reverse direction of clearAutotileAssignments for the ASSIGNMENT RULES:
+    // flip context-assignment rules back to Autotile where a previous global
+    // disable neutered them. The quick-layout slots that disable wiped are not
+    // recoverable and stay gone.
+    //
+    // The disable is global — it walks every context-assignment rule regardless
+    // of desktop or activity — while the re-enable in the daemon only ever wrote
+    // the CURRENT desktop per screen. A Settings off/on round trip therefore
+    // stranded every other desktop and every activity-pinned context in Snapping
+    // with no way back short of re-assigning each by hand. This closes that.
+    //
+    // The discriminator is a non-empty tilingAlgorithm on a Snapping entry, and
+    // it means exactly one thing: this context ran autotile at some point. Both
+    // assignLayout and purgeSnappingLayoutFromAssignments preserve the field, so
+    // it survives a user manually switching the context back to Snapping just as
+    // it survives the global disable. The restore therefore revives EVERY
+    // context carrying algorithm memory, the hand-switched ones included. That
+    // is the intended semantics of the global enable: autotile comes back
+    // everywhere it has ever been configured, not only where the last disable
+    // took it away.
+    //
+    // Note also that the daemon fires this on every entering-autotile edge, not
+    // only after a disable — toggling snapping OFF while autotile is already on
+    // is such an edge and revives the same set.
+    //
+    // snappingLayout is preserved on the way back, symmetric with the disable,
+    // so a second disable returns each context to the same snap layout.
+    QList<PWR::Rule> updated = m_ruleStore->ruleSet().rules();
+    QSet<ContextDims> affected;
+
+    const int restored =
+        flipAssignmentModes(updated, affected, AssignmentEntry::Autotile, [](const AssignmentEntry& entry) {
+            return entry.mode == AssignmentEntry::Snapping && !entry.tilingAlgorithm.isEmpty();
+        });
+
+    if (restored > 0) {
+        if (!m_ruleStore->setAllRules(updated)) {
+            qCWarning(lcZonesLib)
+                << "restoreAutotileAssignments: rule store refused to persist the restored assignments";
+        }
+        // Same emit shape as clearAutotileAssignments: dedupe on
+        // (screen, desktop), skip screenless context rules, and resolve the
+        // payload under the CURRENT activity so observers receive the layout
+        // the context now resolves to.
+        QSet<QPair<QString, int>> emitted;
+        for (const ContextDims& dims : std::as_const(affected)) {
+            if (dims.screenId.isEmpty()) {
+                continue;
+            }
+            qCDebug(lcZonesLib) << "restoreAutotileAssignments: flipped back to Autotile for screen=" << dims.screenId
+                                << "desktop=" << dims.virtualDesktop << "activity=" << dims.activity;
+            const auto emitKey = qMakePair(dims.screenId, dims.virtualDesktop);
+            if (emitted.contains(emitKey)) {
+                continue;
+            }
+            emitted.insert(emitKey);
+            emitLayoutAssigned(dims.screenId, dims.virtualDesktop,
+                               assignmentIdForScreen(dims.screenId, dims.virtualDesktop, m_currentActivity));
+        }
+        qCInfo(lcZonesLib) << "Restored" << restored << "autotile assignments";
+    }
+    return restored;
 }
 
 // ── Batch setters ───────────────────────────────────────────────────────────
@@ -151,7 +258,11 @@ void LayoutRegistry::applyBatchAssignments(const QHash<KeyT, QString>& assignmen
     // below — mirrors `upsertAssignmentRule`'s `rule.enabled =
     // existing->enabled` preservation. Without this capture, disabled
     // assignment rules silently flip back to enabled on any KCM
-    // "apply all" call that runs a batch setter.
+    // "apply all" call that runs a batch setter. Non-assignment actions a
+    // mixed rule carries are captured too — the rebuild emits only the three
+    // slot actions, and dropping the rest here was the last rebuild path
+    // that still clobbered them (flipAssignmentModes and upsertAssignmentRule
+    // both preserve survivors the same way).
     struct OldEntrySnapshot
     {
         AssignmentEntry entry;

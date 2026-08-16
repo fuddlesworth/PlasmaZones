@@ -39,6 +39,13 @@ struct EffectVirtualScreenDef
 {
     QString id; ///< e.g., "Dell:U2722D:115107/vs:0"
     QRect geometry; ///< Absolute geometry in global compositor coords
+
+    /// Both fields are the whole identity of a subdivision, so a defaulted
+    /// comparison is exact. It exists so the VS-config reply can tell a
+    /// re-fetch that changed nothing from one that reshaped the screen-id
+    /// keyspace, and skip the rule invalidation + decoration re-fold for the
+    /// former (QVector's operator== needs this).
+    bool operator==(const EffectVirtualScreenDef& other) const = default;
 };
 
 } // namespace PlasmaZones

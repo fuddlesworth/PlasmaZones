@@ -31,6 +31,20 @@
             ]
         },
         {
+            "version": "3.3.8",
+            "date": "2026-08-15",
+            "highlights": [
+                "Added: each monitor's active layout is now published on the session bus, so the compositor and other tools can follow which layout a monitor is on (#921)",
+                "Fixed: window rules matching on \"Active layout\" or \"Screen orientation\" never fired. They now resolve against the monitor the window is on (#921)",
+                "Fixed: border, tint, opacity, and window-layer rules can now match on \"Active layout\" too, and affected windows are re-drawn when it changes (#921)",
+                "Fixed: rules that exclude windows now update when you change focus or move a window to another monitor, instead of keeping their first answer for the life of the window (#921)",
+                "Fixed: turning autotile off and on again reset every monitor to the same tiling algorithm and only came back on the desktop you were looking at (#921)",
+                "Fixed: a rule that moves a window to another monitor was ignored when the rule also snapped it to a zone and the target monitor was using autotile (#921)",
+                "Fixed: windows restored at login were wrongly grouped with other windows while their process ids were still unknown, which suppressed their snap positions (#921)",
+                "Fixed: a settings window that quit or crashed mid-save left the daemon's layout changes muted until it was restarted (#921)"
+            ]
+        },
+        {
             "version": "3.3.7",
             "date": "2026-08-14",
             "highlights": [

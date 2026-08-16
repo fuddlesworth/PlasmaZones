@@ -572,7 +572,10 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // frame size) through the unified RuleEvaluator and applies the
     // minimum-window-size thresholds — the same match model the autotile
     // engine uses, replacing the hand-rolled appIdMatches loops.
-    if (m_windowTracker && isWindowExcluded(windowId)) {
+    // The opening screen is passed as the query's screen hint: the window is not
+    // in a SnapState yet, so the daemon cannot resolve its screen on its own and
+    // an Exclude rule keyed on ScreenId / ActiveLayout would not resolve here.
+    if (m_windowTracker && isWindowExcluded(windowId, screenId)) {
         qCInfo(PhosphorSnapEngine::lcSnapEngine) << "resolveWindowRestore:" << windowId << "excluded by rule or size";
         return SnapResult::noSnap();
     }
