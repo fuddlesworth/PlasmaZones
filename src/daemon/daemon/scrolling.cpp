@@ -434,7 +434,7 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         }
     }
 
-    // Publish the effect-owned pair in ONE push, after the walk. SORTED here,
+    // Publish the three effect-owned lists in ONE push, after the walk. SORTED here,
     // not by construction: the walk iterates a QSet, whose order is hash order
     // and is not stable across insertions, so the same membership could be
     // built in two different orders and the adaptor's emit-on-change compare —

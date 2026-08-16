@@ -215,7 +215,19 @@ private Q_SLOTS:
         // horizontal-only test can see.
         const QString perp = glslFunctionBody(code, QStringLiteral("stripAxisPerp"));
         QVERIFY2(!perp.isEmpty(), "stripAxisPerp is missing from shared/strip_transition.glsl");
-        QVERIFY2(perp.contains(QLatin1String("iStripAxis.y")) && perp.contains(QLatin1String("iStripAxis.x")),
+        // Accept both spellings of the same swap: the component form
+        // vec2(iStripAxis.y, iStripAxis.x) and the equivalent .yx swizzle. A
+        // reformat between them is semantically identical, and failing on it
+        // would be a false alarm rather than a caught regression. What must
+        // NOT appear either way is a negation, which is the rotation.
+        const bool componentSwap =
+            perp.contains(QLatin1String("iStripAxis.y")) && perp.contains(QLatin1String("iStripAxis.x"));
+        const bool swizzleSwap = perp.contains(QLatin1String("iStripAxis.yx"));
+        QVERIFY2(!perp.contains(QLatin1String("-iStripAxis")),
+                 qPrintable(QStringLiteral("stripAxisPerp negates a component, which is the rotation the header "
+                                           "warns against rather than the swap: ")
+                            + perp.simplified()));
+        QVERIFY2(componentSwap || swizzleSwap,
                  qPrintable(QStringLiteral("stripAxisPerp is not the plain component swap: ") + perp.simplified()));
         QVERIFY2(!perp.contains(QLatin1String("-iStripAxis")),
                  qPrintable(QStringLiteral("stripAxisPerp negates a component: ") + perp.simplified()));

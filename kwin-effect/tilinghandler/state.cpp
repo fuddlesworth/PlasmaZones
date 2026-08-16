@@ -224,11 +224,20 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     }
     m_scrollCropStraddlerScreens = crop;
     m_scrollVerticalAxisScreens = verticalAxis;
-    // Both are PAINTED state: a screen that just started (or stopped) cropping
-    // has stale pixels on it, and a screen whose axis just flipped has pixels
-    // laid out the other way. Nothing else will revisit them — the strip's
-    // geometry did not necessarily move, so no tile batch is guaranteed. The
-    // focus-follows-mouse set needs no such bookend; it is read fresh on the
+    // Crop is PAINTED state: a screen that just started (or stopped) cropping
+    // has stale pixels on it, and nothing else will revisit them, since the
+    // strip's geometry did not necessarily move and no tile batch is
+    // guaranteed.
+    //
+    // The axis set is NOT read by the paint path — StripViewAnimator holds the
+    // per-output stamp that offsetFor and the shader pass answer from. It is
+    // damaged here anyway, defensively: an axis change means the daemon has
+    // re-resolved a screen's layout, and a full repaint on that is cheap
+    // against getting it wrong. Do not cite this repaint as evidence the set
+    // is painted state; the teardown clear deliberately has no such bookend
+    // for exactly that reason.
+    //
+    // The focus-follows-mouse set needs no bookend; it is read fresh on the
     // next pointer move.
     if (KWin::effects) {
         KWin::effects->addRepaintFull();

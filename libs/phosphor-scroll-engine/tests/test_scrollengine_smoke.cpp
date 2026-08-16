@@ -812,14 +812,24 @@ void TestScrollEngineSmoke::parkingAvoidsNeighbourOutputs()
     const QRect parked = engine->lastManagedRect(QStringLiteral("app|c"));
     QVERIFY2(parked.top() > screen.bottom(),
              qPrintable(QStringLiteral("expected a park below the screen, got y=%1").arg(parked.y())));
-    // BOTH horizontal edges, not just the left one: an old left-edge-only
-    // check passed for a park that kept a trail-side overhang. The far edge is
-    // pinned to the SCREEN's, which is what tells the screen bound apart from
-    // the work-area one — under a work-area clamp the 100px inset would stop
-    // this 100px short of the screen edge.
-    QVERIFY2(parked.left() >= screen.left(),
-             qPrintable(QStringLiteral("parked x must stay within the screen's span, got x=%1").arg(parked.x())));
-    QCOMPARE(parked.right(), screen.right());
+    // parkRect clamps the PHYSICAL x only (it is deliberately physical on both
+    // axes), so the span claim below holds on either arm.
+    QVERIFY2(parked.left() >= screen.left() && parked.right() <= screen.right(),
+             qPrintable(QStringLiteral("parked rect must stay within the screen's horizontal span, got x=%1 w=%2")
+                            .arg(parked.x())
+                            .arg(parked.width())));
+
+    // The far-edge PIN is horizontal-only, and deliberately so rather than by
+    // oversight. It is what tells the screen bound apart from the work-area
+    // one: c departs along the main axis, so on a horizontal strip it carries
+    // an x overhang that the clamp pulls back to the SCREEN's right edge,
+    // where a work-area clamp would stop 100px short. On a vertical strip c
+    // departs along y instead and its x is simply the work area's own span, so
+    // there is no overhang, the clamp never engages, and asserting the pin
+    // there would be true by construction and prove nothing.
+    if (!Ax::vertical()) {
+        QCOMPARE(parked.right(), screen.right());
+    }
     // parkRect MOVES; it never resizes. A park that trimmed the rect to fit
     // would satisfy the containment above.
     QCOMPARE(parked.size(), beforePark.size());

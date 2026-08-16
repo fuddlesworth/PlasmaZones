@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): around 1370 lines, past the 1150 hard
-// ceiling.
+// FILE-SIZE EXCEPTION (sanctioned): past the 1150 hard ceiling. No exact
+// figure is quoted here on purpose — it goes stale on the next slot added.
 //
 // The case for it: this file's concern is a single resolution cascade —
 // rule > per-screen settings trio > cached global, plus the template channel

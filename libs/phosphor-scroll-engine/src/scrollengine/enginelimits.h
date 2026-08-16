@@ -52,6 +52,10 @@ inline constexpr int kMaxTemplateScan = 256;
 /// live-strip continues) do not consume it, it bounds ONE restore call
 /// (loadState may run more than once; the stash-exists skip covers the
 /// repeat-blob case), and drops are logged, never silent.
+inline constexpr int kMaxRestoredKeys = 512;
+inline constexpr int kMaxRestoredColumnsPerKey = 64;
+inline constexpr int kMaxRestoredTilesPerColumn = 32;
+
 /// Sanity ceiling for a PIXEL extent minted from an untrusted qreal (the
 /// per-screen override map, which applyPerScreenConfig stores verbatim, and
 /// the injected ISettings an embedder implements). Both channels reach
@@ -61,9 +65,5 @@ inline constexpr int kMaxTemplateScan = 256;
 /// conversion total. Deliberately far above any real monitor extent: this
 /// rejects the malformed, it is not a layout constraint.
 inline constexpr double kMaxFixedExtentPx = 65535.0;
-
-inline constexpr int kMaxRestoredKeys = 512;
-inline constexpr int kMaxRestoredColumnsPerKey = 64;
-inline constexpr int kMaxRestoredTilesPerColumn = 32;
 
 } // namespace PhosphorScrollEngine

@@ -933,10 +933,11 @@ private:
     /// Bounded retry, the fetchScrollingScreens pattern.
     void fetchScrollEffectBehaviour();
     /// Shared apply for the fetch reply and the live signal: replaces all
-    /// three sets from the wire map. Repaints when the CROP set or the AXIS
-    /// set moved, because both are painted state the compositor will not
-    /// otherwise revisit; focus-follows-mouse is consulted per pointer move
-    /// and needs nothing.
+    /// three sets from the wire map. Repaints when the CROP set moved (it is
+    /// painted state the compositor will not otherwise revisit) and,
+    /// defensively, when the AXIS set moved, which signals a re-resolved
+    /// layout rather than stale pixels of its own. Focus-follows-mouse is
+    /// consulted per pointer move and needs nothing.
     void applyScrollEffectBehaviour(const QVariantMap& behaviour);
     void fetchActiveLayouts();
     /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel).
@@ -1038,9 +1039,14 @@ private:
     /// applyScrollEffectBehaviour) — empty is a positive claim here, not a
     /// safe default.
     ///
-    /// Held CONTINUOUSLY rather than read off a tile batch, because the paint
-    /// path and the tab-indicator surface both need it at moments when no
-    /// batch is in hand, and because the axis outlives any one batch.
+    /// Held CONTINUOUSLY rather than read off a tile batch, because the batch
+    /// path needs it for entries the batch itself carries no axis for, and
+    /// because the axis outlives any one batch.
+    ///
+    /// NOT the copy the paint path reads. StripViewAnimator stamps the axis
+    /// per output when a batch lands, and offsetFor / axisFor answer from that
+    /// stamp — which is why the teardown clear here needs no repaint bookend.
+    /// This set is consulted only when a batch is in hand.
     QSet<QString> m_scrollVerticalAxisScreens;
     /// Set by applyScrollEffectBehaviour on every apply (before its change
     /// gate, the m_activeLayoutsSeeded shape: an identical map is still a real

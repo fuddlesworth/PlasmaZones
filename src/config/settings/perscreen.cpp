@@ -159,10 +159,12 @@ bool isPerScreenScrollingAxisKey(const QString& key)
     return key == QLatin1String(PerScreenScrollingKey::StripAxis);
 }
 
-// The New-columns card's sizing keys, as the complement. Keeping this an
-// explicit predicate (rather than open-coding the seven) lets the two
-// sub-domains stay disjoint as keys are added, matching the autotile store's
-// isPerScreenAutotileAlgorithmKey.
+// The New-columns card's sizing keys, as the complement — the same shape as
+// the autotile store's isPerScreenAutotileAlgorithmKey. Being the complement
+// makes the two sub-domains exhaustive and disjoint by construction, but it
+// also means a NEW key defaults to SIZING silently. The thing that actually
+// catches a new key is the static_assert on kPerScreenScrollingKeys' size
+// above: adding one fails the build until its sub-domain is decided here.
 bool isPerScreenScrollingSizingKey(const QString& key)
 {
     return !isPerScreenScrollingAxisKey(key);

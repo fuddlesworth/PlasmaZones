@@ -62,8 +62,8 @@ SettingsFlickable {
     }
 
     // Bumped on every override change so the check below re-runs:
-    // hasPerScreenScrollingSettings is a plain invokable with no NOTIFY, so a
-    // binding over it would never re-evaluate on its own.
+    // hasPerScreenScrollingSizingSettings is a plain invokable with no NOTIFY,
+    // so a binding over it would never re-evaluate on its own.
     property int overrideRevision: 0
 
     // True while any monitor carries a scrolling override, which would win
