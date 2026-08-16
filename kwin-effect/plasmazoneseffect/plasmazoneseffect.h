@@ -1631,9 +1631,10 @@ private:
     /// for the frame. Restricted to the frame subrect so the expanded-geometry
     /// shadow band outside the frame can never inflate the bounds either.
     /// Defined in surface_capture.cpp beside the capture it reads. The scan
-    /// measures against the origin stamped by captureWindowSurface
-    /// (state.captureLogicalTopLeft), not a caller-supplied geometry: the
-    /// capture it reads may predate the caller's current geometry.
+    /// measures against the frame OFFSET stamped by captureWindowSurface
+    /// (state.captureFrameOffset), not a caller-supplied geometry: the
+    /// capture it reads may predate the caller's current geometry, and the
+    /// frame-relative offset is the quantity that survives a move.
     void updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, qreal captureScale);
 
     /// Render the window's active surface-layer stack into the window's
