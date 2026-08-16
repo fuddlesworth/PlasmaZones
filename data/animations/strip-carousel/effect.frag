@@ -38,7 +38,7 @@ vec4 pTransition(vec2 uv, float t) {
     // written in along/across terms rather than x/y. iStripAxis is the unit
     // vector along travel; its perpendicular is the across direction. For a
     // horizontal strip these reduce to exactly the old uv.x / uv.y.
-    vec2 axisPerp = vec2(iStripAxis.y, iStripAxis.x);
+    vec2 axisPerp = stripAxisPerp();
     vec2 centre = vec2(centreX, centreY);
     float along = dot(uv, iStripAxis);
     float across = dot(uv, axisPerp);
@@ -73,7 +73,22 @@ vec4 pTransition(vec2 uv, float t) {
     // already clamped the instant it leaves [0,1], so a ramp starting at 0
     // would show a band of half-lit smear. Starting the ramp 0.006 uv inside
     // means the void is fully closed by the time clamping begins.
-    vec2 outside = max(-su, su - 1.0);
-    float voidAmt = smoothstep(-0.006, 0.0, max(outside.x, outside.y));
+    //
+    // The ramp keys off the warp's OUTWARD PUSH, never the sample's raw
+    // position. A fragment already sitting within 0.006 uv of a screen edge
+    // scores inside a position-only ramp before any warp is applied, so that
+    // form darkened a thin border on ALL FOUR screen edges at every non-zero
+    // tilt, including the two perpendicular to travel that the across taper
+    // only ever pulls INWARD. Worse, that darkening carried no factor of tilt
+    // or of the mask, so it did not converge at settle: it switched off in one
+    // frame at the early-out above instead of fading, which is the pop the
+    // identity contract forbids. Subtracting the fragment's own margin makes
+    // an undisplaced sample score exactly zero, and the push gate is smooth so
+    // nothing seams.
+    vec2 sampleOut = max(-su, su - 1.0); // the sample's overshoot, negative while inside
+    vec2 fragOut = max(-uv, uv - 1.0);   // the same measure undisplaced, always <= 0
+    vec2 pushed = max(sampleOut - fragOut, vec2(0.0));
+    float voidAmt = smoothstep(-0.006, 0.0, max(sampleOut.x, sampleOut.y))
+        * smoothstep(0.0, 0.006, max(pushed.x, pushed.y));
     return vec4(c.rgb * shade * (1.0 - voidAmt), c.a);
 }
