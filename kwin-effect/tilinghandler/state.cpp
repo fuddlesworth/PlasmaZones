@@ -139,8 +139,8 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // publish and reads as an empty set for all three). Empty is the safe
     // direction for focus-follows-mouse and crop — both are behaviours that
     // simply stay off — but it is the WRONG direction for the axis, where it
-    // silently re-lays every vertical strip horizontally in the paint path.
-    // The axis arm below keeps the previous membership instead.
+    // silently re-lays every vertical strip horizontally on the next tile
+    // batch. The axis arm below keeps the previous membership instead.
     const auto toSet = [](const QVariant& raw, QLatin1StringView key) -> std::optional<QSet<QString>> {
         QVariant v = raw;
         if (v.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
@@ -216,8 +216,8 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // axis-only change on the floor — which is exactly what a monitor rotation
     // produces when the crop membership happens not to move, and it would
     // leave the effect sliding the strip along the old axis with no batch
-    // coming to correct it. (Only crop is painted state; see the repaint
-    // below for what the axis half of this gate is actually for.)
+    // coming to correct it. (Only crop is painted state — the repaint below
+    // explains why the axis half is not a painting concern.)
     const bool cropChanged = crop != m_scrollCropStraddlerScreens;
     const bool axisChanged = verticalAxis != m_scrollVerticalAxisScreens;
     if (!cropChanged && !axisChanged) {

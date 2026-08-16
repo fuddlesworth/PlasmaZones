@@ -810,28 +810,39 @@ void TestScrollEngineSmoke::parkingAvoidsNeighbourOutputs()
     engine->focusColumnFirst(QStringLiteral("S1"));
     const QRect screen = defaultScreenRect();
     const QRect parked = engine->lastManagedRect(QStringLiteral("app|c"));
+    // THE TWO ARMS DISCRIMINATE THROUGH DIFFERENT ASSERTIONS, because the
+    // fixture's inset lands on a different physical edge in each. parkTop is
+    // unionBottom + 1 + kParkMargin, and the union seeds from the screen rect.
+    //
+    // VERTICAL arm: screen 800x1200 (bottom 1199), work area inset to
+    // y 100..1099. A work-area-derived parkTop would be 1116 and fail THIS
+    // assertion. So the park-below-the-screen check is the discriminator here.
+    //
+    // HORIZONTAL arm: screen 1200x800 (bottom 799), work area inset on x only,
+    // so its bottom is ALSO 799 and both derivations give the same parkTop.
+    // This assertion cannot tell them apart on that arm; the far-edge pin
+    // below does it instead.
     QVERIFY2(parked.top() > screen.bottom(),
              qPrintable(QStringLiteral("expected a park below the screen, got y=%1").arg(parked.y())));
     // parkRect clamps the PHYSICAL x only (it is deliberately physical on both
-    // axes). This is a SHAPE pin, not the screen-vs-work-area discriminator:
-    // qBound guarantees the lower half on either arm, and on the vertical arm
-    // the column already spans the full screen width so the upper half is true
-    // by construction too. The screen-vs-work-area claim is carried on both
-    // arms by the ungated `parked.top() > screen.bottom()` above, since a
-    // work-area-derived parkTop would sit above the screen's bottom edge.
+    // axes). This is a SHAPE pin and nothing more: qBound guarantees the lower
+    // half on either arm, and the upper half holds whenever the rect is no
+    // wider than the screen, which it never is. Neither arm's screen-vs-work-
+    // area claim rests on it.
     QVERIFY2(parked.left() >= screen.left() && parked.right() <= screen.right(),
              qPrintable(QStringLiteral("parked rect must stay within the screen's horizontal span, got x=%1 w=%2")
                             .arg(parked.x())
                             .arg(parked.width())));
 
-    // The far-edge PIN is horizontal-only, and deliberately so rather than by
-    // oversight. It is what tells the screen bound apart from the work-area
-    // one: c departs along the main axis, so on a horizontal strip it carries
-    // an x overhang that the clamp pulls back to the SCREEN's right edge,
-    // where a work-area clamp would stop 100px short. On a vertical strip c
-    // departs along y instead and its x is simply the work area's own span, so
-    // there is no overhang, the clamp never engages, and asserting the pin
-    // there would be true by construction and prove nothing.
+    // The far-edge PIN is the HORIZONTAL arm's discriminator, and gated to it
+    // deliberately rather than by oversight. c departs along the main axis, so
+    // on a horizontal strip it carries an x overhang that the clamp pulls back
+    // to the SCREEN's right edge, where a work-area clamp would stop 100px
+    // short. On a vertical strip c departs along y instead and its x is simply
+    // the work area's own span, so there is no overhang, the clamp never
+    // engages, and asserting the pin there would be true by construction and
+    // prove nothing — which is why the vertical arm leans on the park-below
+    // check above instead.
     if (!Ax::vertical()) {
         QCOMPARE(parked.right(), screen.right());
     }
