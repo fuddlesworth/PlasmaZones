@@ -246,7 +246,8 @@ DecorationProfileTree DecorationProfileTree::fromJson(const QJsonObject& obj)
         // path in a hand-edited config would repeat a warning for the life of
         // the session rather than fire once at load.
         if (!decorationSurfaceSupported(path)) {
-            qCDebug(lcDecorationTree) << "Dropping decoration override for unsupported surface path" << path;
+            qCDebug(lcDecorationTree) << "Dropping decoration override for unsupported surface path" << path
+                                      << "- it is removed from the stored configuration on the next save";
             continue;
         }
         // setOverride de-dups: a malformed file with duplicate entries for the

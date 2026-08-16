@@ -19,8 +19,9 @@ import org.kde.kirigami as Kirigami
  * editor open before a first edit) and derives everything else from the
  * controller in Component.onCompleted, so a freshly-built card always shows
  * the committed tree state with the editor closed. Each Loader LATCHES active
- * once it enters the viewport and never unloads, so a built card's latch
- * survives exactly as long as the page visit.
+ * once it enters the viewport and never unloads, and PageHost caches a
+ * visited page's Loader for the application session, so a built card's latch
+ * survives until the settings window closes.
  *
  * Consumers provide `surfaceModel` (and an Accessible.name):
  *

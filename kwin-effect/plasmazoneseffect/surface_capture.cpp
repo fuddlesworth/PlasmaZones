@@ -251,9 +251,13 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     m_capturingSnapshot = false;
     state.captureValid = true;
     state.captureInComposite = !intoCaptureTex;
-    // The origin the shell content scan must measure against (see the field
-    // doc): these texels were rasterized relative to THIS logical geometry.
-    state.captureLogicalTopLeft = logicalGeometry.topLeft();
+    // The frame-relative offset the shell content scan must measure against
+    // (see the field doc): the viewport above maps logicalGeometry onto the
+    // FBO, so the frame's texels sit at exactly this offset (times scale)
+    // inside the capture — and unlike either absolute origin, the OFFSET is
+    // move-invariant, because the canvas is derived from the window's own
+    // geometry and moves with it.
+    state.captureFrameOffset = w->frameGeometry().topLeft() - logicalGeometry.topLeft();
 }
 
 void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, qreal captureScale)
@@ -293,13 +297,14 @@ void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMul
     // from the FLOORED origin, and dropping the fraction shifted the
     // substituted frame up to one device px up/left of the visible body.
     //
-    // Measured against the origin the CAPTURE was rasterized at, not the
-    // caller's live logicalGeometry: the scan can run on a still-valid
-    // capture after a pure move, and at fractional scale the alignment
-    // residue moves with the geometry while the texels do not.
-    const QPointF captureOrigin = state.captureLogicalTopLeft;
-    const qreal fxExact = (frame.left() - captureOrigin.x()) * captureScale;
-    const qreal fyExact = (frame.top() - captureOrigin.y()) * captureScale;
+    // Measured via the frame offset stamped AT CAPTURE TIME (see the field
+    // doc): the scan can run on a still-valid capture after a pure move, and
+    // the frame-relative offset is the move-invariant quantity — pairing the
+    // live frame with a capture-time canvas origin (or the reverse) would err
+    // by the whole move delta, while the offset is exact for the texels the
+    // buffer actually holds.
+    const qreal fxExact = state.captureFrameOffset.x() * captureScale;
+    const qreal fyExact = state.captureFrameOffset.y() * captureScale;
     const int fx = std::clamp(static_cast<int>(std::floor(fxExact)), 0, texSize.width());
     const int fy = std::clamp(static_cast<int>(std::floor(fyExact)), 0, texSize.height());
     const int fw = std::clamp(static_cast<int>(std::ceil(frame.width() * captureScale)), 0, texSize.width() - fx);

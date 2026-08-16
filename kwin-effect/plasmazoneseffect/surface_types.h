@@ -317,14 +317,17 @@ struct SurfaceMultipassState
     QRectF shellContentRect;
     QSizeF shellContentFrameSize;
     qint64 shellContentScanMs = -1;
-    /// The logical-geometry top-left the current capture was rasterized at.
-    /// The scan measures its bounds inside the CAPTURED texture, so its frame
-    /// offsets must be computed against this origin, not the caller's live
-    /// geometry: a pure move at fractional scale shifts the device-alignment
-    /// residue without invalidating the capture, and live-origin math would
-    /// then be up to one device px out of phase with the texels. Stamped by
-    /// captureWindowSurface beside captureValid.
-    QPointF captureLogicalTopLeft;
+    /// The frame's offset inside the capture canvas (frame top-left minus the
+    /// canvas logical top-left) AT CAPTURE TIME, in logical px. The scan
+    /// measures its bounds inside the CAPTURED texture, and the frame's
+    /// texels sit at exactly this offset times the capture scale — a
+    /// move-invariant quantity, unlike either absolute origin: the canvas is
+    /// derived from the window's own geometry, so pairing the LIVE frame with
+    /// the capture-time canvas origin (or vice versa) errs by the whole move
+    /// delta on a still-valid capture, while the live frame/live canvas pair
+    /// carries a sub-device-pixel alignment residue at fractional scale.
+    /// Stamped by captureWindowSurface beside captureValid.
+    QPointF captureFrameOffset;
     /// WHICH texture the valid capture is sitting in.
     ///
     /// It has two possible homes: captureTex normally, or compositeTex[0] for the

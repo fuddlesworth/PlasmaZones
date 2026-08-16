@@ -126,8 +126,9 @@ Item {
         // other two inputs (chainAt, disabledPacksAt) are resolved too, and a
         // latched-open card with no override must show the inherited values
         // the surface is actually drawing with, not the pack schema defaults
-        // (the C++ writers engage from the same resolved map on first edit,
-        // so the display matches what an edit would commit).
+        // (the C++ writers engage from the same resolved map, filtered to the
+        // effective chain, on first edit — display-equivalent, since the
+        // editor only indexes per-pack entries for packs in the chain).
         root._params = (root._raw && root._raw.parameters) ? root._raw.parameters : ((root._resolved && root._resolved.parameters) ? root._resolved.parameters : ({}));
         root._disabledPacks = root.bridge.disabledPacksAt(root.surfacePath);
         root._parentChainText = root._computeParentChainText();
