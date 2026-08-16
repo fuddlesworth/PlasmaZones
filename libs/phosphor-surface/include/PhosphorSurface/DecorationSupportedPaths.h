@@ -3,14 +3,35 @@
 
 #pragma once
 
+#include <QLatin1Char>
+#include <QLatin1StringView>
 #include <QSet>
 #include <QString>
 #include <QStringList>
 
 namespace PhosphorSurfaceShaders {
 
+/// The root of the plasmashell surface subtree and its two leaves. Single
+/// spellings for the `shell` family: the leaf list, the baseline-isolation
+/// predicate, and the KWin effect's path producer all build from these, so
+/// renaming the root cannot silently un-isolate the subtree while leaving the
+/// paths decorable (which would fail OPEN — panels would start inheriting the
+/// baseline).
+inline QString decorationShellRootPath()
+{
+    return QStringLiteral("shell");
+}
+inline QString decorationShellPanelPath()
+{
+    return QStringLiteral("shell.panel");
+}
+inline QString decorationShellAppletPopupPath()
+{
+    return QStringLiteral("shell.appletPopup");
+}
+
 /// Leaf surface paths a per-surface decoration profile actually resolves
-/// against. Each names a concrete surface the shell decorates: the three
+/// against. Each names a concrete surface PlasmaZones decorates: the three
 /// window placement states (tiled / snapped / floating), the OSD, the
 /// four transient popups, and the foreign plasma-shell surfaces under
 /// `shell.*`. (The zone overlay is intentionally NOT a decoration target — it
@@ -42,11 +63,14 @@ inline QStringList decorationLeafSurfacePaths()
         // (decorationPathIsBaselineIsolated below): a shell surface never
         // inherits the tree baseline, so it stays undecorated until a chain is
         // engaged at `shell` or one of its leaves — engaging that chain IS the
-        // opt-in. It also resolves chain-only: the config-backed border /
+        // opt-in (applying a decoration set that carries shell paths engages
+        // the chain the same way, and counts as the same opt-in: the user
+        // chose to apply the set). It also resolves chain-only: the
+        // config-backed border /
         // opacity-tint "easy mode" layers never apply to it, so a shell
         // surface is styled by an explicit pack chain here or not at all.
-        QStringLiteral("shell.panel"),
-        QStringLiteral("shell.appletPopup"),
+        decorationShellPanelPath(),
+        decorationShellAppletPopupPath(),
     };
 }
 
@@ -71,8 +95,9 @@ inline QString decorationParentPath(const QString& path)
 /// overlay merge), so e.g. `window` styles every window placement and
 /// `window.floating` overrides only the floating state.
 ///
-/// Surface-state analogue of `PlasmaZones::shaderSupportedEventPaths()`: leaves + ancestors,
-/// insertion-ordered, de-duplicated.
+/// Surface-state analogue of `PlasmaZones::shaderSupportedEventPaths()`. The
+/// de-duplicated result is consumed as a set (see decorationSurfaceSupported);
+/// no consumer relies on its order.
 inline QStringList decorationSupportedSurfacePaths()
 {
     QStringList out;
@@ -100,7 +125,8 @@ inline QStringList decorationSupportedSurfacePaths()
 /// and withSeedDefaults so the two cannot disagree.
 inline bool decorationPathIsBaselineIsolated(const QString& path)
 {
-    return path == QLatin1String("shell") || path.startsWith(QLatin1String("shell."));
+    const QString root = decorationShellRootPath();
+    return path == root || path.startsWith(root + QLatin1Char('.'));
 }
 
 /// Convenience predicate: does @p path name a surface that can carry a

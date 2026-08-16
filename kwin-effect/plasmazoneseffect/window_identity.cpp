@@ -173,6 +173,11 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         }
     }
     if (includeExtended) {
+        // The empty screenId makes ruleQueryFor derive a screen orientation
+        // that this snapshot then never marshals — a knowingly discarded
+        // by-product of reusing the shared builder, not a missing field: the
+        // daemon has no metadata key for it and derives its own context
+        // (stampScreenContext) from the live screen resolution instead.
         PhosphorRules::WindowQuery props = ruleQueryFor(w, QString(), false, false, false, QString());
         // Report the window's OWN (pre-rule) keepAbove/keepBelow — the daemon
         // matches its KeepAbove/KeepBelow predicates against this metadata,

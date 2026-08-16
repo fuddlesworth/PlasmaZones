@@ -8,6 +8,7 @@
 #include <QStringView>
 
 #include <optional>
+#include <utility> // std::pair (kTable)
 
 namespace PhosphorProtocol {
 
@@ -55,17 +56,23 @@ inline constexpr int windowTypeMinValue = static_cast<int>(WindowType::Unknown);
 inline constexpr int windowTypeMaxValue = static_cast<int>(WindowType::AppletPopup);
 
 /// True if @p value is a valid WindowType underlying value.
-inline bool isValidWindowType(int value)
+inline constexpr bool isValidWindowType(int value)
 {
     return value >= windowTypeMinValue && value <= windowTypeMaxValue;
 }
 
 /// Cast an int that crossed D-Bus to a WindowType; out-of-range values
 /// (version skew, a malformed caller) fall back to WindowType::Unknown.
-inline WindowType windowTypeFromInt(int value)
+inline constexpr WindowType windowTypeFromInt(int value)
 {
     return isValidWindowType(value) ? static_cast<WindowType>(value) : WindowType::Unknown;
 }
+
+// Pin the bounds invariants beside the enum they describe: constexpr lets the
+// compiler enforce what the runtime test also checks.
+static_assert(windowTypeMinValue == 0);
+static_assert(!isValidWindowType(windowTypeMinValue - 1) && !isValidWindowType(windowTypeMaxValue + 1));
+static_assert(windowTypeFromInt(windowTypeMaxValue + 1) == WindowType::Unknown);
 
 /// Canonical lowercase wire string for a WindowType.
 inline QString windowTypeToString(WindowType type)

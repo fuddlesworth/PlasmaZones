@@ -7,6 +7,11 @@
 
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QLoggingCategory>
+
+namespace {
+Q_LOGGING_CATEGORY(lcDecorationTree, "phosphorsurfaceshaders.decorationtree")
+} // namespace
 
 namespace PhosphorSurfaceShaders {
 
@@ -164,7 +169,10 @@ bool DecorationProfileTree::clearOverride(const QString& surfacePath)
 {
     if (!m_overrides.remove(surfacePath))
         return false;
-    m_insertionOrder.removeAll(surfacePath);
+    // removeOne, not removeAll: setOverride's contains-check keeps the order
+    // list duplicate-free, so at most one entry exists and the scan can stop
+    // at the hit.
+    m_insertionOrder.removeOne(surfacePath);
     return true;
 }
 
@@ -190,6 +198,11 @@ QJsonObject DecorationProfileTree::toJson() const
 
     QJsonArray overrides;
     for (const QString& path : m_insertionOrder) {
+        // Unreachable in practice: every mutator writes m_overrides and
+        // m_insertionOrder together (setOverride / clearOverride /
+        // clearAllOverrides are the complete set), so the two cannot desync.
+        // Kept as a cheap guard rather than an assert — a desync here would
+        // only drop the orphaned entry from the serialized form.
         auto it = m_overrides.constFind(path);
         if (it == m_overrides.constEnd())
             continue;
@@ -218,13 +231,23 @@ DecorationProfileTree DecorationProfileTree::fromJson(const QJsonObject& obj)
             continue;
         // Defence-in-depth at the persistence boundary: drop overrides for paths
         // that name no decorable surface (junk / a path retired in a newer
-        // version). Pack ids are intentionally NOT validated here — the registry
+        // version). The drop is DESTRUCTIVE at the next save: toJson writes
+        // only the surviving entries, so once any decoration setting is
+        // touched the dropped override is gone from the stored config too —
+        // consistent with the project's no-ad-hoc-back-compat rule (old
+        // values silently drop), but worth a diagnostic for the hand-editing
+        // case (the likeliest mistype is the wire token `appletpopup` for the
+        // camelCase leaf `shell.appletPopup`). Pack ids are intentionally NOT
+        // validated here — the registry
         // loads packs asynchronously and is the catalogue, not the gate, so an
         // override for a not-yet-loaded pack must survive and resolve to a no-op
         // at render time rather than be silently dropped on load. The settings
         // UI (DecorationPageController) remains the primary path validator.
-        if (!decorationSurfaceSupported(path))
+        if (!decorationSurfaceSupported(path)) {
+            qCWarning(lcDecorationTree) << "Dropping decoration override for unsupported surface path" << path
+                                        << "- it will be removed from the stored configuration on the next save";
             continue;
+        }
         // setOverride de-dups: a malformed file with duplicate entries for the
         // same path resolves to last-value-wins (keeping the first-seen position),
         // and the next save() normalises it back to a single entry.

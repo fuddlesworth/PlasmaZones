@@ -3,7 +3,7 @@
     "name": "Rippled Glass",
     "description": "A pane of rippled glass over the scene behind the window. The blurred backdrop warps across the whole pane under a drifting watery distortion, with slight colour fringing and soft highlights along the ripples. It shows through wherever the window itself is translucent, and lowering the Content opacity parameter fades the window content so the ripples show on opaque windows too.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Blur",
     "fragmentShader": "effect.frag",
     "needsBackdrop": true,

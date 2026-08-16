@@ -300,14 +300,20 @@ KWin::GLTexture* PlasmaZonesEffect::renderSurfaceChainComposite(KWin::EffectWind
         }
         captureWindowSurface(w, state, logicalGeometry, captureScale,
                              /*intoCaptureTex=*/!plan.captureInComposite, captureOpacity);
-        // Shell surfaces: bound the capture's VISIBLE content so the packs can
-        // hug what the user actually sees instead of the window rect (a
-        // floating or Panel Colorizer-styled panel is a rounded body inset in
-        // a mostly transparent full-width window). Reads the capture back, so
-        // it runs only on a fresh capture and is throttled inside.
-        if (deco.isShellSurface) {
-            updateShellContentRect(w, state, logicalGeometry, captureScale);
-        }
+    }
+    // Shell surfaces: bound the capture's VISIBLE content so the packs can
+    // hug what the user actually sees instead of the window rect (a floating
+    // or Panel Colorizer-styled panel is a rounded body inset in a mostly
+    // transparent full-width window). Runs on EVERY paint of the surface, not
+    // only after a fresh capture: a restyle that changes the visible shape at
+    // an unchanged frame size (Panel Colorizer transition, an auto-hide
+    // reveal) invalidates nothing capture-side, and gating the rescan on
+    // !captureValid left the old bounds standing indefinitely. The readback
+    // is throttled inside (1 s), and a rect that actually moved clears the
+    // prefix/composite caches itself — which is why this sits ABOVE the
+    // allStatic early return below: the re-fold must see the drop this frame.
+    if (deco.isShellSurface) {
+        updateShellContentRect(w, state, logicalGeometry, captureScale);
     }
     // Hand the OffscreenEffect slot back: to the passthrough present on the rest
     // path, or to the caller's animation shader mid-transition. Runs on the

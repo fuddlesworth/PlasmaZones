@@ -23,6 +23,7 @@
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include <QColor>
@@ -255,8 +256,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
 
     // APP-WINDOW GATE: decoration-specific filter (shouldDecorateWindow), NOT
-    // the snapping shouldHandleWindow. It rejects the always-wrong surfaces
-    // (docks, panels, desktop, OSDs, notifications, portal / plasma-shell,
+    // the snapping shouldHandleWindow. It admits plasmashell's panels and
+    // applet popups up front (the shell carve-out — see the header doc), then
+    // rejects the always-wrong surfaces (desktop, OSDs, notifications,
+    // portal / other plasma-shell, other docks,
     // our own overlays) and honours the user Exclude rules, but the
     // transient family and a minimum-size threshold are user-tunable via the
     // Decorations.WindowFiltering settings (m_decorationExcludeTransientWindows /
@@ -283,7 +286,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // added to a chain).
     // enabledChain(): packs the user toggled off stay in the profile but must
     // not render, exactly like a disabled rule is skipped by the evaluator.
-    const QString surfacePath = resolveSurfacePathFor(windowId);
+    const QString surfacePath = resolveSurfacePathFor(windowId, w);
     const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
     QStringList userPacks = resolvedProfile.enabledChain();
 
@@ -318,7 +321,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // baseline-isolated, so an unconfigured shell surface resolves an empty
     // chain here and falls out at the decorate gate below — engaging a chain
     // on the Decoration → Shell page is the whole opt-in.
-    const bool isShellSurface = surfacePath.startsWith(QLatin1String("shell."));
+    const bool isShellSurface = PhosphorSurfaceShaders::decorationPathIsBaselineIsolated(surfacePath);
     const std::optional<ResolvedDecorationChain> ruleChain =
         isShellSurface ? std::nullopt : resolveDecorationChain(resolveRuleActions(w, windowId, &sharedQuery));
     if (ruleChain) {
@@ -822,17 +825,24 @@ bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 
 QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId) const
 {
+    // findWindowByIdExact, never findWindowById — the fuzzy appId fallback
+    // could resolve a same-app sibling for a dead id and mis-route a real
+    // window onto a shell path. Callers that already hold the EffectWindow*
+    // use the overload below instead of paying (and risking) this lookup.
+    return resolveSurfacePathFor(windowId, findWindowByIdExact(windowId));
+}
+
+QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId, KWin::EffectWindow* w) const
+{
     // SHELL SURFACES resolve by kind, before any placement lookup: plasmashell's
     // panel is never in either engine's tiled bucket, so without this it would
     // fall through to "window.floating" and wear whatever the user styled their
-    // floating app windows with. findWindowByIdExact, never findWindowById —
-    // the fuzzy appId fallback could resolve a same-app sibling for a dead id
-    // and mis-route a real window onto a shell path.
-    switch (shellSurfaceKindFor(findWindowByIdExact(windowId))) {
+    // floating app windows with.
+    switch (shellSurfaceKindFor(w)) {
     case ShellSurfaceKind::Panel:
-        return QStringLiteral("shell.panel");
+        return PhosphorSurfaceShaders::decorationShellPanelPath();
     case ShellSurfaceKind::AppletPopup:
-        return QStringLiteral("shell.appletPopup");
+        return PhosphorSurfaceShaders::decorationShellAppletPopupPath();
     case ShellSurfaceKind::None:
         break;
     }

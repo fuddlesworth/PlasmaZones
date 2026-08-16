@@ -3,7 +3,7 @@
     "name": "Phosphor Border",
     "description": "Rounded corners and a window border carrying the Phosphor brand gradient from cyan to rose, flowing slowly around the frame with a soft gleam orbiting the band. The whole band dims when the surface loses focus. Width, corner radius, flow speed, gleam and the four gradient stops are this pack's own parameters.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Borders",
     "providesBorder": true,
     "animated": true,

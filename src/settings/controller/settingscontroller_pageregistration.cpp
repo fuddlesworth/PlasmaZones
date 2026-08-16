@@ -125,7 +125,7 @@ void SettingsController::buildApplicationController()
     // Appearance, then Animations.
     // PER-SURFACE scope: per-surface CHAINS of decoration shader packs,
     // resolved through a DecorationProfileTree (walk-up inheritance). Each
-    // surface family (window / osd / popup) is its own root card, whose toggle
+    // surface family (window / osd / popup / shell) is its own root card, whose toggle
     // engages or clears that family's override; children diverge from it through
     // the walk-up. The nav handle ("decoration") redirects to its General page
     // (the config-backed window-appearance page, registered below with the

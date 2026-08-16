@@ -9,6 +9,8 @@
 
 #include "decorationpagecontroller.h"
 
+#include <PhosphorSurface/DecorationSupportedPaths.h>
+
 #include <QLatin1Char>
 
 namespace PlasmaZones {
@@ -25,6 +27,11 @@ QStringList DecorationPageController::parentChain(const QString& path) const
         cur = (dot < 0) ? QString() : cur.left(dot);
     }
     return chain;
+}
+
+bool DecorationPageController::isBaselineIsolated(const QString& path) const
+{
+    return PhosphorSurfaceShaders::decorationPathIsBaselineIsolated(path);
 }
 
 } // namespace PlasmaZones

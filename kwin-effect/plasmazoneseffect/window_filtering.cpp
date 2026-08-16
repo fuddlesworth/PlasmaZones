@@ -806,8 +806,8 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
     // shellSurfaceKindFor classifies them by KWin window type + owning class,
     // and each recognised kind is admitted below instead of taking
     // the blanket isPlasmaShellSurface reject the rest of this file uses. That
-    // predicate stays the verdict for every OTHER plasma-shell surface (the
-    // desktop, notifications, the OSD, krunner, applet popups), so an
+    // predicate stays the verdict for every plasma-shell surface OUTSIDE the
+    // two admitted kinds (the desktop, notifications, the OSD, krunner), so an
     // unrecognised kind still falls through to the structural rejects.
     //
     // Each recognised kind answers YES here: the actual opt-in lives in the

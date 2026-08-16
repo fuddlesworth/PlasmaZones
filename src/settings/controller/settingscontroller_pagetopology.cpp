@@ -209,7 +209,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
     // isLibraryPage; their families' default keys are owned by
     // snapping-window-behavior / tiling-algorithm / scrolling-columns below),
     // the controller-mediated ordering/shortcuts
-    // pages, the Animations tree, and the Decoration pages (whose three leaves
+    // pages, the Animations tree, and the Decoration pages (whose four leaves
     // SHARE the one DecorationProfileTree key — the one-owner invariant above
     // forbids listing a shared key here) are deliberately absent because they
     // revert through their own machinery (the special-case branches in

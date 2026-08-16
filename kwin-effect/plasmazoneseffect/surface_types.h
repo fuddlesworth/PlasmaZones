@@ -625,6 +625,12 @@ struct WindowDecoration
     /// Colorizer-styled panel is a rounded body inset in a mostly transparent
     /// full-width window). Set by updateWindowDecoration from the same
     /// resolved surface path that selected chain-only resolution.
+    ///
+    /// Deliberately NOT part of the fold plan's key set (FoldInputs): a live
+    /// window cannot flip it without also changing its resolved surface path
+    /// and hence (in practice) its chain, which IS compared — the
+    /// classification keys on KWin's window type plus the owning class,
+    /// neither of which mutates for a mapped panel or popup.
     bool isShellSurface = false;
 
     /// Transparent OUTER MARGIN (logical px) the chain's packs need around

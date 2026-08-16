@@ -3,7 +3,7 @@
     "name": "Marching Ants",
     "description": "Rounded corners and a dashed window border whose dashes march around the frame, the classic selection marquee. Dash count, fill, march speed and the dash and gap colours are this pack's own parameters, and the motion dims when the surface loses focus.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Borders",
     "providesBorder": true,
     "animated": true,

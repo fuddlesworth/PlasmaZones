@@ -3,7 +3,7 @@
     "name": "Gradient Border",
     "description": "Rounded corners and a window border coloured by a still two-colour gradient across the frame. The gradient direction is set in degrees, and the band dims when the surface loses focus. Width, corner radius, angle and the two colours are this pack's own parameters.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Borders",
     "providesBorder": true,
     "fragmentShader": "effect.frag",

@@ -303,7 +303,8 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // window). frameTopLeft = (frameGeometry.topLeft - expandedGeometry.topLeft) *
     // scale is the frame's offset inside that texture (top-down device px), and
     // frameSize = frameGeometry.size * scale its extent.
-    QRectF frame = w->frameGeometry();
+    const QRectF windowFrame = w->frameGeometry();
+    QRectF frame = windowFrame;
     // Shell surfaces: substitute the scanned visible-content bounds for the
     // frame, so the SDF hugs the panel's visible body (a floating or Panel
     // Colorizer-styled panel is a rounded rect inset in a mostly transparent
@@ -324,11 +325,15 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // sub-pixel band, and these uniforms position the frame INSIDE the
     // texture in device px, so they must describe the actual canvas to the
     // texel. The expanded/frame fallback covers callers with no canvas.
+    // The last-resort fallback is the RAW window frame, never the shell
+    // content substitution above: `expanded` describes the canvas TEXTURE
+    // extent, and substituting the visible-body rect there would tell the
+    // shader the texture is only as big as the body, mis-mapping the SDF.
     QRectF expanded = canvasRect;
     if (!expanded.isValid() || expanded.isEmpty()) {
         expanded = w->expandedGeometry();
         if (expanded.isEmpty()) {
-            expanded = frame;
+            expanded = windowFrame;
         }
     }
     const QVector2D windowExpandedSize(static_cast<float>(expanded.width() * scale),
@@ -365,7 +370,10 @@ void PlasmaZonesEffect::pushBorderUniforms(KWin::EffectWindow* w, const WindowDe
     // most once per frame. @p windowId is threaded from the fold so this hot
     // path does not recompute getWindowId(w) per pack.
     if (pack.uFocusedLoc >= 0) {
-        const bool focused = KWin::effects && w == KWin::effects->activeWindow();
+        // Shell surfaces pin focused high — a panel never becomes the active
+        // window, so the raw test froze it on inactiveColor forever. Must
+        // agree with planSurfaceFold's focusedNow (same rationale there).
+        const bool focused = wb.isShellSurface || (KWin::effects && w == KWin::effects->activeWindow());
         shader->setUniform(pack.uFocusedLoc, advanceFocusFade(windowId, focused));
     }
     // uSurfaceOpacity is a LEGACY constant now: the retired handlesOpacity

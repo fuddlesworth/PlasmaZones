@@ -700,9 +700,6 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
     // leaf keys; only the group differs.
     schema.groups[CD::decorationsWindowFilteringGroup()] = {
         {CD::transientWindowsKey(), CD::decorationExcludeTransientWindows(), QMetaType::Bool},
-        // Decorations-only: the snapping and animation filters reject
-        // plasma-shell surfaces structurally, so there is no twin key in
-        // either of the two groups above.
         {CD::minimumWindowWidthKey(),
          CD::decorationMinimumWindowWidth(),
          QMetaType::Int,

@@ -3,7 +3,7 @@
     "name": "Audio Border",
     "description": "A rounded border that pulses with the music. The bass energy pushes the border toward a pulse colour and brightens it on each beat. It reacts on window borders, OSDs, and popups whenever the audio visualizer is turned on, and stays a plain static frame when it is off.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Borders",
     "providesBorder": true,
     "animated": true,

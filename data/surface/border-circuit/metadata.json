@@ -3,7 +3,7 @@
     "name": "Circuit Border",
     "description": "Rounded corners and a window border textured as a hex circuit, with bright data pulses travelling around the band over a dim base grid. The cells flicker faintly and the whole band dims when the surface loses focus. Width, corner radius, hex size, pulse count, pulse speed and the two colours are this pack's own parameters.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Borders",
     "providesBorder": true,
     "animated": true,

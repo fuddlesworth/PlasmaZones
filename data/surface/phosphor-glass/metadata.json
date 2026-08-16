@@ -3,7 +3,7 @@
     "name": "Phosphor Glass",
     "description": "Dark navy glass over a real blur that behaves like a phosphor screen. Bright content behind the surface excites a glowing response in the brand gradient, the glow breathes like phosphor persistence, and a slow diagonal sweep recharges the pane as it passes. Where no scene exists behind the surface it falls back to a translucent navy slab with the same shimmer. Lowering the Content opacity parameter fades the window content so the glass shows on opaque windows too.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Blur",
     "needsBackdrop": true,
     "animated": true,

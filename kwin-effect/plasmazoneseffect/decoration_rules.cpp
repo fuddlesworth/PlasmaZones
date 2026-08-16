@@ -29,7 +29,11 @@ namespace PlasmaZones {
 
 void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w)
 {
-    if (!w || windowId.isEmpty()) {
+    // isDeleted matches the two sibling reconcilers below. Every current
+    // caller pre-checks it, so this is defence in depth: the body reads the
+    // window class and, on the non-shielded arm, walks the rule query — the
+    // exact id-cache re-pollution shouldHandleWindow guards corpses out of.
+    if (!w || w->isDeleted() || windowId.isEmpty()) {
         return;
     }
     // Tri-state override, forwarded to the DecorationManager (Rule is the only

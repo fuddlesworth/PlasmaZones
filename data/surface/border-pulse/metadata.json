@@ -3,7 +3,7 @@
     "name": "Pulse Border",
     "description": "Rounded corners and a window border that breathes between two colours on a smooth cycle, with an optional brightness dip at the low end. The pulse dims when the surface loses focus. Width, corner radius, pulse speed, dip depth and the two colours are this pack's own parameters.",
     "author": "PlasmaZones",
-    "version": "1.0",
+    "version": "1.1",
     "category": "Borders",
     "providesBorder": true,
     "animated": true,

@@ -54,7 +54,7 @@ class ISettings;
 /// window-only, and the daemon surfaces default to no decoration — see
 /// settingscontroller_pageregistration.cpp). The baseline is reachable over D-Bus
 /// and from tests, and the resolve walk-up honours it, but the UI edits the
-/// category root cards ("window", "osd", "popup") instead. Decoration SETS
+/// category root cards ("window", "osd", "popup", "shell") instead. Decoration SETS
 /// deliberately neither capture nor apply a baseline for the same reason: an
 /// imported one could never be undone through the UI.
 ///
@@ -113,6 +113,12 @@ public:
     /// baseline. e.g. `parentChain("window.tiled")` == `["window.tiled",
     /// "window"]`. Drives the "inheriting from" breadcrumb.
     Q_INVOKABLE QStringList parentChain(const QString& path) const;
+
+    /// Forwards PhosphorSurfaceShaders::decorationPathIsBaselineIsolated so
+    /// the QML cards read the one SSOT instead of hand-mirroring the shell
+    /// path prefixes. True for a path whose subtree never inherits the tree
+    /// baseline (the `shell` family).
+    Q_INVOKABLE bool isBaselineIsolated(const QString& path) const;
 
     // ── Profile readers ───────────────────────────────────────────────────
 

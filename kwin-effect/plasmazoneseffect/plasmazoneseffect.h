@@ -538,9 +538,14 @@ private:
      */
     enum class ShellSurfaceKind {
         None, ///< not a plasma-shell surface (an ordinary app window)
-        Panel, ///< plasmashell's panel(s) — NET::Dock, layer 3
+        Panel, ///< plasmashell's panel(s) — NET::Dock owned by plasmashell
         AppletPopup, ///< launcher / tray flyout / widget popup — NET::AppletPopup
     };
+    /// A null window answers None — the decorate gate then reads it as "not a
+    /// shell surface" and falls through to the app-window filters. Contrast
+    /// isRuleShieldedSurface below, whose null answer is TRUE (fail closed):
+    /// the two deliberately differ, because "decorate nothing extra" and
+    /// "write no rule state" are the safe defaults on their respective paths.
     static ShellSurfaceKind shellSurfaceKindFor(KWin::EffectWindow* w);
 
     /**
@@ -554,6 +559,9 @@ private:
      * rewrite plasmashell's window state. Callers resolve a shielded window as
      * rule-free rather than early-returning, so a window that mutated INTO a
      * shielded class still drains any snapshot it holds.
+     *
+     * A null window answers TRUE (fail closed): a rule may never write state
+     * through a pointer we cannot classify.
      */
     static bool isRuleShieldedSurface(KWin::EffectWindow* w);
 
@@ -1568,9 +1576,14 @@ private:
     /// global point, or kCursorOutside when the pointer is elsewhere or the chain is
     /// paused. Handed in rather than re-derived, because the fold keys its cache on this
     /// exact value and the shader must be given the same one.
+    /// @p canvasRect and @p windowId are REQUIRED (no defaults, on purpose):
+    /// an empty canvasRect silently skips the shell content-rect substitution,
+    /// and an empty windowId would key a SHARED m_focusFade ramp entry that
+    /// every defaulted caller advances and reads. The sole caller (the fold)
+    /// always has both.
     void pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
                             const CompiledSurfacePack& pack, qreal scale, float timeSec, const QPointF& foldCursor,
-                            const QRectF& canvasRect = {}, const QString& windowId = {});
+                            const QRectF& canvasRect, const QString& windowId);
 
     /// Advance the per-window smoothed focus value (m_focusFade) toward the
     /// hard 0/1 target and return it, so focus changes cross-fade instead of
@@ -1711,6 +1724,13 @@ private:
     /// registry hot-reload (effectsChanged) so a fixed pack that breaks again
     /// warns again.
     bool m_opacityTintFallbackWarned = false;
+
+    /// Reusable staging buffer for updateShellContentRect's glReadPixels — the
+    /// scan runs on the compositor paint path, and a fresh per-scan QByteArray
+    /// is a ~1 MB malloc/free per decorated shell surface per rescan. resize()
+    /// is a no-op once the buffer has grown to the largest scanned panel.
+    /// Compositor-thread only, like the rest of the GL state here.
+    QByteArray m_shellScanScratch;
 
     /// The shared clock behind the surface contract's `iTime`, in integer milliseconds,
     /// relative to an epoch captured at first use. Monotonic (steady_clock). Every
@@ -2032,15 +2052,23 @@ private:
     /// not be fed a live spectrum. See the note in surface_audio.cpp.
     bool bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc, bool animating);
 
-    /// Resolve the DECORATION SURFACE PATH for @p windowId based on MEMBERSHIP
-    /// alone:
+    /// Resolve the DECORATION SURFACE PATH for @p windowId. A recognised
+    /// plasma-shell surface resolves by KIND first, before any membership
+    /// lookup (shellSurfaceKindFor: Panel → "shell.panel", AppletPopup →
+    /// "shell.appletPopup") — that branch is what routes the foreign shell
+    /// surfaces onto their baseline-isolated subtree. Everything else
+    /// resolves by MEMBERSHIP:
     ///   • autotile member (TilingStateHelpers::isTiledWindow) → "window.tiled"
     ///   • else snap member (SnapHandler::isTiledWindow)         → "window.snapped"
     ///   • else                                                  → "window.floating"
     /// Autotile-first precedence. The resolved profile's enabledChain() (an
     /// empty chain = no decoration) is the sole render gate (see
     /// updateWindowDecoration); there is no separate show-border gate.
+    /// The id-only form looks the window up via findWindowByIdExact; callers
+    /// already holding the EffectWindow* pass it to the overload so a cache
+    /// miss cannot silently degrade a shell surface to "window.floating".
     QString resolveSurfacePathFor(const QString& windowId) const;
+    QString resolveSurfacePathFor(const QString& windowId, KWin::EffectWindow* w) const;
 
     /// Seed m_decorationTree with the empty/neutral default (mirroring the
     /// daemon's ConfigDefaults::decorationProfileTree()) so the pre-fetch state
