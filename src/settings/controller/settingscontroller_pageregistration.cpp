@@ -125,7 +125,7 @@ void SettingsController::buildApplicationController()
     // Appearance, then Animations.
     // PER-SURFACE scope: per-surface CHAINS of decoration shader packs,
     // resolved through a DecorationProfileTree (walk-up inheritance). Each
-    // surface family (window / osd / popup) is its own root card, whose toggle
+    // surface family (window / osd / popup / shell) is its own root card, whose toggle
     // engages or clears that family's override; children diverge from it through
     // the walk-up. The nav handle ("decoration") redirects to its General page
     // (the config-backed window-appearance page, registered below with the
@@ -490,6 +490,10 @@ void SettingsController::buildApplicationController()
                /*divider=*/false, AdvancedOnly);
     regVirtual(QStringLiteral("decorations-popups"), QStringLiteral("decorations-surfaces"), PhosphorI18n::tr("Popups"),
                QStringLiteral("pages/decoration/DecorationPopupsPage.qml"), QStringLiteral("view-presentation"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("decorations-shell"), QStringLiteral("decorations-surfaces"), PhosphorI18n::tr("Shell"),
+               QStringLiteral("pages/decoration/DecorationShellPage.qml"), QStringLiteral("computer"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
 

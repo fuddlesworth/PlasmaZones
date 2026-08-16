@@ -438,7 +438,10 @@ private:
     // Cached decoration-exclusion verdict (Exclude ∪ ExcludeDecorations
     // slice) consumed by shouldDecorateWindow. Same empty-slice fast path
     // and per-window cache contract as isExcludedBySnappingRule.
-    bool isExcludedByDecorationRule(KWin::EffectWindow* w) const;
+    /// @p sharedQuery (optional): caller-owned memoisation slot, same contract
+    /// as the snapping twin. Engaged only when a cache miss forced the build.
+    bool isExcludedByDecorationRule(KWin::EffectWindow* w,
+                                    std::optional<PhosphorRules::WindowQuery>* sharedQuery = nullptr) const;
 
     /// Classify a window's structural kind for the snap-restore consume gate.
     PhosphorEngine::WindowKind classifyWindowKind(KWin::EffectWindow* w) const;
@@ -501,6 +504,14 @@ private:
      * deliberately does not), then applies the transient toggle and the
      * min-size threshold. Defaults preserve the prior behavior (transient on,
      * size off), so a default config decorates exactly what it did before.
+     *
+     * The one surface family that escapes the always-wrong block is the
+     * plasma-shell kinds shellSurfaceKindFor() recognises: each answers YES
+     * before the app-window rejects run (every one of those rejects is written
+     * about application windows and would reject a shell surface outright).
+     * Their real gate is the decoration tree: the `shell` subtree is
+     * baseline-isolated, so an unconfigured shell surface resolves an empty
+     * chain and updateWindowDecoration undecorates it.
      */
     /// @p sharedQuery (optional): caller-owned memoisation slot, forwarded to the
     /// Exclude-rule gate. updateWindowDecoration passes its own slot so the
@@ -508,6 +519,51 @@ private:
     /// ~30-accessor WindowQuery once per window per sweep instead of twice.
     bool shouldDecorateWindow(KWin::EffectWindow* w,
                               std::optional<PhosphorRules::WindowQuery>* sharedQuery = nullptr) const;
+
+    /**
+     * @brief Which plasma-shell surface family @p w belongs to, if any.
+     *
+     * DECORATION-ONLY classification, deliberately NOT built on
+     * isPlasmaShellSurface(). That predicate is a coarse "never track this"
+     * class match written for autotile leakage (see its docs); it lumps the
+     * panel, the desktop, tray popups, notifications, the OSD and krunner into
+     * one verdict, which is exactly right for tracking and exactly wrong for
+     * decoration, where each family wants its own surface path and its own
+     * opt-in. The two must stay independent: relaxing this one must never
+     * relax tracking, focus reporting, or rule shielding.
+     *
+     * Resolved from KWin's own window TYPE plus the owning class, not from a
+     * substring guess. A Plasma panel is a real `NET::Dock` whose class is
+     * plasmashell; that pair is unambiguous and needs no heuristics.
+     */
+    enum class ShellSurfaceKind {
+        None, ///< not a plasma-shell surface (an ordinary app window)
+        Panel, ///< plasmashell's panel(s) — NET::Dock owned by plasmashell
+        AppletPopup, ///< launcher / tray flyout / widget popup — NET::AppletPopup
+    };
+    /// A null window answers None — the decorate gate then reads it as "not a
+    /// shell surface" and falls through to the app-window filters. Contrast
+    /// isRuleShieldedSurface below, whose null answer is TRUE (fail closed):
+    /// the two deliberately differ, because "decorate nothing extra" and
+    /// "write no rule state" are the safe defaults on their respective paths.
+    static ShellSurfaceKind shellSurfaceKindFor(KWin::EffectWindow* w);
+
+    /**
+     * @brief May a matched rule write persistent window state onto @p w?
+     *
+     * Shared shield for the three reconcilers that mutate state a rule has no
+     * business touching on a surface we do not own: the stacking layer, the
+     * hidden title bar, and open-fullscreen. Deliberately SEPARATE from
+     * shouldDecorateWindow — a user who opts into decorating the panel is
+     * opting into our paint pass over it, not into letting a broad rule
+     * rewrite plasmashell's window state. Callers resolve a shielded window as
+     * rule-free rather than early-returning, so a window that mutated INTO a
+     * shielded class still drains any snapshot it holds.
+     *
+     * A null window answers TRUE (fail closed): a rule may never write state
+     * through a pointer we cannot classify.
+     */
+    static bool isRuleShieldedSurface(KWin::EffectWindow* w);
 
     /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.
@@ -1520,9 +1576,14 @@ private:
     /// global point, or kCursorOutside when the pointer is elsewhere or the chain is
     /// paused. Handed in rather than re-derived, because the fold keys its cache on this
     /// exact value and the shader must be given the same one.
+    /// @p canvasRect and @p windowId are REQUIRED (no defaults, on purpose):
+    /// an empty canvasRect silently skips the shell content-rect substitution,
+    /// and an empty windowId would key a SHARED m_focusFade ramp entry that
+    /// every defaulted caller advances and reads. The sole caller (the fold)
+    /// always has both.
     void pushBorderUniforms(KWin::EffectWindow* w, const WindowDecoration& wb, const QString& packId,
                             const CompiledSurfacePack& pack, qreal scale, float timeSec, const QPointF& foldCursor,
-                            const QRectF& canvasRect = {}, const QString& windowId = {});
+                            const QRectF& canvasRect, const QString& windowId);
 
     /// Advance the per-window smoothed focus value (m_focusFade) toward the
     /// hard 0/1 target and return it, so focus changes cross-fade instead of
@@ -1555,6 +1616,26 @@ private:
     /// reason SurfaceMultipassState::captureValid exists. Defined in surface_capture.cpp.
     void captureWindowSurface(KWin::EffectWindow* w, SurfaceMultipassState& state, const QRectF& logicalGeometry,
                               qreal captureScale, bool intoCaptureTex, qreal captureOpacity);
+
+    /// Shell surfaces only: derive the VISIBLE content rect of the freshly
+    /// captured surface from its alpha, inside the frame rect. A Plasma panel's
+    /// window often covers far more than what the user sees — a floating panel,
+    /// or one restyled by a widget like Panel Colorizer, draws a rounded body
+    /// inset in an otherwise transparent full-width window — and a decoration
+    /// wrapped around frameGeometry() then traces the invisible window rect.
+    /// The scan reads the capture back once (throttled), bounds the texels
+    /// whose alpha clears a floor RELATIVE to the strongest alpha present
+    /// (a floating panel keeps its float gap and drop shadow INSIDE the frame
+    /// rect, so an absolute floor bounded the shadow's soft skirt), and stores
+    /// the result on the multipass state for pushBorderUniforms to substitute
+    /// for the frame. Restricted to the frame subrect so the expanded-geometry
+    /// shadow band outside the frame can never inflate the bounds either.
+    /// Defined in surface_capture.cpp beside the capture it reads. The scan
+    /// measures against the frame OFFSET stamped by captureWindowSurface
+    /// (state.captureFrameOffset), not a caller-supplied geometry: the
+    /// capture it reads may predate the caller's current geometry, and the
+    /// frame-relative offset is the quantity that survives a move.
+    void updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, qreal captureScale);
 
     /// Render the window's active surface-layer stack into the window's
     /// per-window ping-pong FBO chain (`m_surfaceMultipass`, shared with the
@@ -1646,6 +1727,14 @@ private:
     /// registry hot-reload (effectsChanged) so a fixed pack that breaks again
     /// warns again.
     bool m_opacityTintFallbackWarned = false;
+
+    /// Reusable staging buffer for updateShellContentRect's glReadPixels — the
+    /// scan runs on the compositor paint path, and a fresh per-scan QByteArray
+    /// is a ~1 MB malloc/free per decorated shell surface per rescan.
+    /// QByteArray retains capacity across resize(), so it never reallocates
+    /// once it has grown to the largest scanned panel.
+    /// Compositor-thread only, like the rest of the GL state here.
+    QByteArray m_shellScanScratch;
 
     /// The shared clock behind the surface contract's `iTime`, in integer milliseconds,
     /// relative to an epoch captured at first use. Monotonic (steady_clock). Every
@@ -1967,15 +2056,23 @@ private:
     /// not be fed a live spectrum. See the note in surface_audio.cpp.
     bool bindSurfaceAudio(KWin::GLShader* shader, int iAudioSpectrumSizeLoc, int uAudioSpectrumLoc, bool animating);
 
-    /// Resolve the DECORATION SURFACE PATH for @p windowId based on MEMBERSHIP
-    /// alone:
+    /// Resolve the DECORATION SURFACE PATH for @p windowId. A recognised
+    /// plasma-shell surface resolves by KIND first, before any membership
+    /// lookup (shellSurfaceKindFor: Panel → "shell.panel", AppletPopup →
+    /// "shell.appletPopup") — that branch is what routes the foreign shell
+    /// surfaces onto their baseline-isolated subtree. Everything else
+    /// resolves by MEMBERSHIP:
     ///   • autotile member (TilingStateHelpers::isTiledWindow) → "window.tiled"
     ///   • else snap member (SnapHandler::isTiledWindow)         → "window.snapped"
     ///   • else                                                  → "window.floating"
     /// Autotile-first precedence. The resolved profile's enabledChain() (an
     /// empty chain = no decoration) is the sole render gate (see
     /// updateWindowDecoration); there is no separate show-border gate.
+    /// The id-only form looks the window up via findWindowByIdExact; callers
+    /// already holding the EffectWindow* pass it to the overload so a cache
+    /// miss cannot silently degrade a shell surface to "window.floating".
     QString resolveSurfacePathFor(const QString& windowId) const;
+    QString resolveSurfacePathFor(const QString& windowId, KWin::EffectWindow* w) const;
 
     /// Seed m_decorationTree with the empty/neutral default (mirroring the
     /// daemon's ConfigDefaults::decorationProfileTree()) so the pre-fetch state

@@ -173,6 +173,11 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w, bool includeEx
         }
     }
     if (includeExtended) {
+        // The empty screenId makes ruleQueryFor derive a screen orientation
+        // that this snapshot then never marshals — a knowingly discarded
+        // by-product of reusing the shared builder, not a missing field: the
+        // daemon has no metadata key for it and derives its own context
+        // (stampScreenContext) from the live screen resolution instead.
         PhosphorRules::WindowQuery props = ruleQueryFor(w, QString(), false, false, false, QString());
         // Report the window's OWN (pre-rule) keepAbove/keepBelow — the daemon
         // matches its KeepAbove/KeepBelow predicates against this metadata,
@@ -339,6 +344,71 @@ bool PlasmaZonesEffect::isPlasmaShellSurface(const QString& windowClass)
         || windowClass.contains(QLatin1String("org.kde.plasma.emojier"), Qt::CaseInsensitive)
         || windowClass.contains(QLatin1String("org.kde.plasma.notifications"), Qt::CaseInsensitive)
         || windowClass.contains(QLatin1String("org.kde.krunner"), Qt::CaseInsensitive);
+}
+
+PlasmaZonesEffect::ShellSurfaceKind PlasmaZonesEffect::shellSurfaceKindFor(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return ShellSurfaceKind::None;
+    }
+    // TYPE first, class second. isDock() is KWin's own answer (NET::Dock), and
+    // it is the cheap read; the class check then confirms plasmashell OWNS the
+    // dock, so a third-party panel (a wlr layer-shell bar, an Xembed tray) is
+    // not silently swept into a path named for Plasma's. Verified live: both
+    // Plasma panels report isDock() with resourceName/resourceClass
+    // "plasmashell", while Kickoff and tray popups are NET::AppletPopup and
+    // are therefore NOT Panel here — they are a separate family that will get
+    // its own leaf, not a widening of this one.
+    //
+    // Deliberately reuses isPlasmaShellSurface ONLY as the ownership test,
+    // never as the verdict: that predicate alone would also match the desktop,
+    // notifications, the OSD and krunner, none of which are panels.
+    if (w->isDock() && isPlasmaShellSurface(w->windowClass())) {
+        return ShellSurfaceKind::Panel;
+    }
+    // NET::AppletPopup — the launcher, tray flyouts, any widget's expanded
+    // view. KWin gives this its own type, so no class disambiguation is needed
+    // or wanted: the type is Plasma-specific by construction and, unlike the
+    // dock case, there is no third-party surface that could claim it. Measured
+    // live: an applet popup sets NONE of KWin's generic predicates (not
+    // isPopupWindow, isMenu, isDialog, isDock, isSpecialWindow aside), which
+    // is why it needs an explicit arm here rather than falling out of one of
+    // the type tests windowTypeFor runs.
+    if (w->isAppletPopup()) {
+        return ShellSurfaceKind::AppletPopup;
+    }
+    return ShellSurfaceKind::None;
+}
+
+bool PlasmaZonesEffect::isRuleShieldedSurface(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return true;
+    }
+    // Structural / own-surface shield for the reconcilers that write PERSISTENT
+    // window state from a rule match (stacking layer, title-bar hiding,
+    // open-fullscreen). A broad match expression must never demote a dock, pin
+    // a notification, hide the panel's (nonexistent) title bar, or strip the
+    // daemon overlay's own keep-above.
+    //
+    // Transients / popups are deliberately NOT shielded: transient utility
+    // surfaces are legitimate rule targets, and transient exclusion is
+    // per-feature user opt-in in this project (the IsTransient match field),
+    // never hardcoded policy.
+    //
+    // Distinct from shouldDecorateWindow's gate on purpose, and NOT to be
+    // folded into it: this predicate answers "may a rule mutate this window's
+    // persistent state", which stays NO for plasma-shell surfaces even when
+    // the user has opted into DECORATING one. Decoration is our own paint pass
+    // over a surface we do not own; rewriting that surface's window state is
+    // not. Every caller wants a shielded window to resolve as rule-FREE rather
+    // than to early-return, so an entry that was rule-held before its class
+    // mutated (the Electron/CEF swap, an X11 type change) still drains its
+    // snapshot through the caller's restore branch.
+    const QString winClass = w->windowClass();
+    return isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass) || isXdgDesktopPortalSurface(winClass)
+        || w->isDesktop() || w->isDock() || w->isNotification() || w->isCriticalNotification()
+        || w->isOnScreenDisplay();
 }
 
 bool PlasmaZonesEffect::isOwnOverlayClass(const QString& windowClass)
