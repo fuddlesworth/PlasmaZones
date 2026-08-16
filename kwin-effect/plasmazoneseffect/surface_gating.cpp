@@ -222,7 +222,25 @@ bool PlasmaZonesEffect::decorationMayAnimate(KWin::EffectWindow* w) const
     // Only the window in use shimmers. Divides the continuous redraw by the
     // decorated-window count, which is the single biggest lever available while
     // the user is still at the machine.
-    if (m_animateFocusedOnly && KWin::effects->activeWindow() != w) {
+    //
+    // Shell surfaces are exempt from the focused-only arm (NOT from the idle
+    // arm above): a panel is a dock and never becomes KWin's active window, so
+    // the gate froze every animated pack the user engaged on Decoration →
+    // Shell permanently, with no diagnostic. A panel is always visible and
+    // "in use", so the user asking for an animated panel pack has asked for
+    // the continuous redraw this gate normally trims — the idle pause still
+    // stops it when nobody is at the machine.
+    //
+    // This classify MUST agree with the resolved-path shell verdict
+    // (WindowDecoration::isShellSurface, set from decorationPathIsBaseline-
+    // Isolated(resolveSurfacePathFor(...))). It does whenever the decoration
+    // entry is current: resolveSurfacePathFor emits a shell path exactly when
+    // this classifier answers a shell kind, and the stored flag is a snapshot
+    // from the last updateWindowDecoration. Re-classifying here rather than
+    // looking the decoration entry up keeps this gate usable for windows with
+    // no decoration entry and off the id-cache path.
+    if (m_animateFocusedOnly && KWin::effects->activeWindow() != w
+        && shellSurfaceKindFor(w) == ShellSurfaceKind::None) {
         return false;
     }
     return true;

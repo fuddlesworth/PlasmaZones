@@ -575,7 +575,8 @@ bool PlasmaZonesEffect::isExcludedBySnappingRule(KWin::EffectWindow* w,
     return m_snappingExclusionEvaluator.resolveCached(windowId, query()).isExcluded();
 }
 
-bool PlasmaZonesEffect::isExcludedByDecorationRule(KWin::EffectWindow* w) const
+bool PlasmaZonesEffect::isExcludedByDecorationRule(KWin::EffectWindow* w,
+                                                   std::optional<PhosphorRules::WindowQuery>* sharedQuery) const
 {
     // Mirrors isExcludedBySnappingRule over the decoration slice (Exclude ∪
     // ExcludeDecorations): empty-slice fast path, then the per-window verdict
@@ -586,15 +587,30 @@ bool PlasmaZonesEffect::isExcludedByDecorationRule(KWin::EffectWindow* w) const
     if (m_decorationExclusionRuleSet.isEmpty()) {
         return false;
     }
+    // Caller-owned memoisation slot, identical to the snapping twin above: a
+    // miss builds the query INTO the slot so shouldDecorateWindow's caller
+    // (updateWindowDecoration) reuses that build for its own resolveRuleActions
+    // pass instead of walking the ~30 accessors a second time for the same
+    // window. Safe to share because both sides build through the very same
+    // `ruleQuery(w)`, so the memoised value is the query the other would have
+    // constructed for itself.
+    std::optional<PhosphorRules::WindowQuery> localQuery;
+    std::optional<PhosphorRules::WindowQuery>& slot = sharedQuery ? *sharedQuery : localQuery;
+    const auto query = [&]() -> const PhosphorRules::WindowQuery& {
+        if (!slot) {
+            slot = ruleQuery(w);
+        }
+        return *slot;
+    };
     const QString windowId = getWindowId(w);
     if (windowId.isEmpty()) {
-        return m_decorationExclusionEvaluator.resolve(ruleQuery(w)).isExcluded();
+        return m_decorationExclusionEvaluator.resolve(query()).isExcluded();
     }
     if (std::optional<PhosphorRules::ResolvedActions> cached =
             m_decorationExclusionEvaluator.resolveCachedIfPresent(windowId)) {
         return cached->isExcluded();
     }
-    return m_decorationExclusionEvaluator.resolveCached(windowId, ruleQuery(w)).isExcluded();
+    return m_decorationExclusionEvaluator.resolveCached(windowId, query()).isExcluded();
 }
 
 bool PlasmaZonesEffect::shouldAnimateWindow(KWin::EffectWindow* w,
@@ -785,6 +801,40 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
     // fullscreen surfaces wear no chrome — borderless-through-the-hold is
     // the intended presentation, and the un-flag paths' decoration re-drives
     // bring the chrome back when the hold ends.
+    //
+    // PLASMA-SHELL SURFACES are the one family that is NOT structural here.
+    // shellSurfaceKindFor classifies them by KWin window type + owning class,
+    // and each recognised kind is admitted below instead of taking
+    // the blanket isPlasmaShellSurface reject the rest of this file uses. That
+    // predicate stays the verdict for every plasma-shell surface OUTSIDE the
+    // two admitted kinds (the desktop, notifications, the OSD, krunner), so an
+    // unrecognised kind still falls through to the structural rejects.
+    //
+    // Each recognised kind answers YES here: the actual opt-in lives in the
+    // decoration tree, whose `shell` subtree is baseline-isolated (see
+    // DecorationSupportedPaths), so an unconfigured shell surface resolves an
+    // EMPTY chain and updateWindowDecoration's decorate gate undecorates it.
+    // Engaging a chain on the Decoration → Shell page is what turns a shell
+    // surface on — there is no separate enable toggle. Everything below
+    // this point is skipped for a shell surface on purpose: the transient /
+    // min-size / keep-above / special-window rejects are all written about
+    // APPLICATION windows and every one of them would reject these outright
+    // (a panel is a dock; an applet popup is a special window). The user
+    // exclusion rules are skipped too — a rule's match expression is authored
+    // against app identity (appId, class, title, PID), none of which
+    // meaningfully describes plasmashell's own surfaces, so a broad rule must
+    // not silently strip a decoration the user turned on here.
+    //
+    // A switch, not a chain of ifs: adding a ShellSurfaceKind without an
+    // answer here is then a compiler warning rather than a surface that
+    // silently falls through to the app-window rejects below and never draws.
+    switch (shellSurfaceKindFor(w)) {
+    case ShellSurfaceKind::Panel:
+    case ShellSurfaceKind::AppletPopup:
+        return true;
+    case ShellSurfaceKind::None:
+        break;
+    }
     if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass) || isPlasmaShellSurface(windowClass)) {
         return false;
     }
@@ -817,7 +867,12 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w,
     // ExcludeDecorations strips only decorations, and the scoped
     // ExcludePlacement (which lives in the SNAPPING slice, not this one)
     // deliberately leaves decorations alone.
-    if (isExcludedByDecorationRule(w)) {
+    // Forward the caller's memoisation slot: this gate is the ONLY consumer of
+    // a WindowQuery inside this function, so forwarding here is what makes the
+    // slot live. Without it the parameter is inert and updateWindowDecoration's
+    // resolveRuleActions rebuilds the same ~30-accessor query it was meant to
+    // reuse.
+    if (isExcludedByDecorationRule(w, sharedQuery)) {
         return false;
     }
 

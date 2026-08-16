@@ -226,6 +226,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
         {PhosphorI18n::tr("osd"), PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("decoration")});
     search->setPageKeywords(QStringLiteral("decorations-popups"),
                             {PhosphorI18n::tr("popup"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("tooltip")});
+    search->setPageKeywords(QStringLiteral("decorations-shell"),
+                            {PhosphorI18n::tr("shell"), PhosphorI18n::tr("panel"), PhosphorI18n::tr("plasma"),
+                             PhosphorI18n::tr("taskbar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("applet"),
+                             PhosphorI18n::tr("applet popup"), PhosphorI18n::tr("launcher"), PhosphorI18n::tr("tray"),
+                             PhosphorI18n::tr("system tray"), PhosphorI18n::tr("dock"), PhosphorI18n::tr("widget")});
     search->setPageKeywords(QStringLiteral("decorations-sets"),
                             {PhosphorI18n::tr("decoration set"), PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"),
                              PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack")});

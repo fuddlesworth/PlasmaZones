@@ -127,11 +127,13 @@ P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup,
 //
 // Three global decoration-filtering knobs in `Decorations.WindowFiltering`:
 // `decorationExcludeTransientWindows`, `decorationMinimumWindowWidth`,
-// `decorationMinimumWindowHeight`. Mirrors the Exclusions block, stored
+// `decorationMinimumWindowHeight`, mirroring the Exclusions block. Stored
 // independently so the KWin effect's border pass can be tuned separately
 // from snapping and animation filtering. Reuses the shared leaf keys; only
 // the group differs. Consumed effect-side via the generic settingsChanged
-// D-Bus broadcast (see kwin-effect loadCachedSettings).
+// D-Bus broadcast (see kwin-effect loadCachedSettings). Plasma-shell
+// surfaces carry no filtering knob: their opt-in is the decoration tree's
+// baseline-isolated `shell` subtree.
 
 P_STORE_GET(bool, decorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey, bool)
 P_STORE_SET_BOOL(setDecorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey,

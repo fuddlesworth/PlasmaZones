@@ -597,7 +597,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Animate only the active window")
                     searchAnchor: "decorationAnimateFocusedOnly"
-                    description: i18n("Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.")
+                    description: i18n("Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.")
 
                     SettingsSwitch {
                         checked: appSettings.decorationAnimateFocusedOnly

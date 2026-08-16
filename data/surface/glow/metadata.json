@@ -3,7 +3,7 @@
     "name": "Glow",
     "description": "A soft coloured halo that hugs the surface's edge, brightest against the window and fading out over the glow size. It follows the frame's rounded corners and dims when the surface loses focus.",
     "author": "PlasmaZones",
-    "version": "1.2",
+    "version": "1.3",
     "category": "Ambience",
     "fragmentShader": "effect.frag",
     "interiorOpaque": true,
@@ -33,7 +33,7 @@
             "type": "int",
             "default": 8,
             "min": 0,
-            "max": 32,
+            "max": 64,
             "description": "Corner rounding the halo follows (px, match the Border pack)"
         },
         {

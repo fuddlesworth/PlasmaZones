@@ -245,7 +245,12 @@ void DecorationPageController::setChain(const QString& path, const QStringList& 
     // follow-the-theme sentinel — the shipped default — is seeded from the
     // RESOLVED zone colours it follows, so the colour half of the carry-over
     // promise above holds in the default configuration too.
-    if (m_registry && (m_settings->showWindowBorder() || m_settings->showWindowOpacityTint())) {
+    // Never for the baseline-isolated shell subtree: those surfaces take no
+    // plain border / opacity-tint layer at all (chain-only by contract, see
+    // DecorationSupportedPaths.h), so there is no plain look to carry over and
+    // a pack added there starts from its own defaults.
+    if (m_registry && !PhosphorSurfaceShaders::decorationPathIsBaselineIsolated(path)
+        && (m_settings->showWindowBorder() || m_settings->showWindowOpacityTint())) {
         // Base the working map on the DIRECT override when one is engaged, else
         // on the RESOLVED effective parameters. Seeding engages the optional
         // (profile.parameters = allParams below), and DecorationProfile::overlay
@@ -352,8 +357,8 @@ void DecorationPageController::setChainLayerEnabled(const QString& path, const Q
     DecorationProfile profile = directProfileAt(tree, path);
     // First direct edit at this path: seed from the RESOLVED value so the
     // toggle diverges from what the user was previewing instead of silently
-    // re-enabling every inherited-off layer (mirrors _engageOverride's
-    // chain/params seeding in DecorationSurfaceCard).
+    // re-enabling every inherited-off layer (same engage-from-resolved
+    // discipline as setChain's prevChain above).
     QStringList disabled = profile.disabledPacks ? *profile.disabledPacks : tree.resolve(path).effectiveDisabledPacks();
     // Filter an inherited seed to this path's effective chain, mirroring
     // setChain's prune: an inherited disabled entry for a pack not in the
