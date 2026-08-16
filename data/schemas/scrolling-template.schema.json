@@ -32,11 +32,11 @@
         },
         "presetColumnWidths": {
             "$ref": "#/definitions/fractionList",
-            "description": "Widths the column-width cycling shortcut steps through, as work-area fractions."
+            "description": "Widths the column-width cycling shortcut steps through, as fractions of the work area along the strip."
         },
         "presetWindowHeights": {
             "$ref": "#/definitions/fractionList",
-            "description": "Heights the window-height cycling shortcut steps through, as column-height fractions."
+            "description": "Heights the window-height cycling shortcut steps through, as fractions of the column across the strip."
         }
     },
     "definitions": {
