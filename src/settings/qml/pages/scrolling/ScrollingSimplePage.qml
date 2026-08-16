@@ -71,7 +71,7 @@ SettingsFlickable {
         void root.overrideRevision;
         var list = settingsController.screens || [];
         for (var i = 0; i < list.length; i++) {
-            if (settingsController.hasPerScreenScrollingSettings(list[i].name))
+            if (settingsController.hasPerScreenScrollingSizingSettings(list[i].name))
                 return true;
         }
         return false;

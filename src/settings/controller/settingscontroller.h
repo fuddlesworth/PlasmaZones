@@ -680,6 +680,8 @@ public:
     // No sub-domain split: the scrolling map carries only the New-columns
     // card's sizing keys, so the whole-domain pair is that card's chip.
     Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenScrollingSizingSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingSizingSettings(const QString& screenName) const;
 
     // Per-screen gaps are config-backed: a per-monitor override is the gap-
     // dimension sub-domain of the per-screen autotile store (unified snap+tile).

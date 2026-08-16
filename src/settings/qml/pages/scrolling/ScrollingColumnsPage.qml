@@ -125,12 +125,13 @@ SettingsFlickable {
             // Algorithm card: default column/tile sizing is layout tuning a
             // monitor legitimately owns. Everything else scrolling offers is
             // app-wide, with rules as the per-context escape hatch. The map
-            // holds only this card's keys, so the whole-domain accessors
-            // serve as its sub-domain.
+            // ALSO carries the strip axis, which this card does not show, so
+            // the chip scopes to the sizing sub-domain and its reset leaves
+            // the monitor's strip direction alone.
             scopeEnabled: true
             scopeAppSettings: settingsController
-            scopeHasOverridesMethod: "hasPerScreenScrollingSettings"
-            scopeClearerMethod: "clearPerScreenScrollingSettings"
+            scopeHasOverridesMethod: "hasPerScreenScrollingSizingSettings"
+            scopeClearerMethod: "clearPerScreenScrollingSizingSettings"
 
             // The kind the size rows key off: the scoped monitor's override
             // when present, else the global.

@@ -107,11 +107,14 @@ inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
  * migration history), and spelled exactly like the engine's
  * ScrollPerScreenKeys settings channel so the daemon merge is a plain copy.
  *
- * Deliberately ONLY the New-columns card's sizing defaults (the analogue of
- * the tiling Algorithm card's per-monitor tuning). Scrolling's behavior and
- * view settings stay app-wide like their tiling/snapping siblings — the
- * per-context variants are the rule actions, which use the engine's rule
- * channel rather than this store.
+ * TWO disjoint sub-domains: the New-columns card's sizing defaults (the
+ * analogue of the tiling Algorithm card's per-monitor tuning) and the strip
+ * axis, which is an orientation intent surfaced by a different card. They are
+ * split by isPerScreenScrollingSizingKey / isPerScreenScrollingAxisKey in
+ * perscreen.cpp so one card's scope chip cannot report or clear the other's
+ * override. Scrolling's remaining behavior and view settings stay app-wide
+ * like their tiling/snapping siblings — the per-context variants are the rule
+ * actions, which use the engine's rule channel rather than this store.
  */
 namespace PerScreenScrollingKey {
 inline constexpr const char DefaultColumnWidthKind[] = "DefaultColumnWidthKind";

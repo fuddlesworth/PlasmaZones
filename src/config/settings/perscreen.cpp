@@ -126,12 +126,17 @@ constexpr QLatin1String kAutotilePrefix{"Autotile"};
 // and the engine's ScrollPerScreenKeys settings channel all use one spelling,
 // so the daemon merge is a plain copy.
 //
-// Deliberately ONLY the New-columns card's sizing defaults — the analogue of
-// the tiling Algorithm card's per-monitor tuning. Scrolling's behavior/view
-// settings stay app-wide like their tiling/snapping siblings; per-context
-// variants of those are the rule actions' job (SetCenterFocusedColumn /
-// SetScrollInsertPosition), which write the engine's RULE channel, not this
-// store.
+// TWO disjoint sub-domains: the New-columns card's sizing defaults (the
+// analogue of the tiling Algorithm card's per-monitor tuning) and the strip
+// axis. They are split by isPerScreenScrollingSizingKey /
+// isPerScreenScrollingAxisKey below so one card's scope chip cannot report or
+// clear the other's override — the whole-domain accessors remain the D-Bus
+// category surface, not a card's chip surface.
+//
+// Scrolling's other behavior/view settings stay app-wide like their
+// tiling/snapping siblings; per-context variants of those are the rule
+// actions' job (SetCenterFocusedColumn / SetScrollInsertPosition), which write
+// the engine's RULE channel, not this store.
 const QLatin1String kPerScreenScrollingKeys[] = {
     QLatin1String(PerScreenScrollingKey::DefaultColumnWidthKind),
     QLatin1String(PerScreenScrollingKey::DefaultColumnWidthValue),
@@ -146,6 +151,22 @@ const QLatin1String kPerScreenScrollingKeys[] = {
 static_assert(std::size(kPerScreenScrollingKeys) == 8,
               "kPerScreenScrollingKeys changed size — the validate ladder, the read ladder, and the engine's "
               "ScrollPerScreenKeys channel each carry one arm per key and have to grow with it");
+
+// The strip axis is its own sub-domain: it is an orientation intent, not a
+// sizing default, and it is surfaced by a different card on a different page.
+bool isPerScreenScrollingAxisKey(const QString& key)
+{
+    return key == QLatin1String(PerScreenScrollingKey::StripAxis);
+}
+
+// The New-columns card's sizing keys, as the complement. Keeping this an
+// explicit predicate (rather than open-coding the seven) lets the two
+// sub-domains stay disjoint as keys are added, matching the autotile store's
+// isPerScreenAutotileAlgorithmKey.
+bool isPerScreenScrollingSizingKey(const QString& key)
+{
+    return !isPerScreenScrollingAxisKey(key);
+}
 
 // Repair an inconsistent per-screen {Kind, Value} width pair, the way
 // Settings::normalizeScrollingColumnWidthValue repairs the global one.
@@ -880,9 +901,25 @@ void Settings::clearPerScreenScrollingSettings(const QString& screenIdOrName)
 
 bool Settings::hasPerScreenScrollingSettings(const QString& screenIdOrName) const
 {
-    // No sub-domain split: the map holds only the New-columns card's sizing
-    // keys, so the whole-domain accessors ARE that card's chip surface.
+    // WHOLE-DOMAIN: this is the D-Bus category surface (clear-the-category),
+    // not a card's chip surface. The cards use the sizing/axis sub-domain
+    // accessors below, the way the autotile store's Algorithm twins do.
     return findPerScreenEntry(m_perScreenScrollingSettings, screenIdOrName) != m_perScreenScrollingSettings.constEnd();
+}
+
+bool Settings::hasPerScreenScrollingSizingSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingSizingKey,
+                                 /*wantMatch=*/true);
+}
+
+void Settings::clearPerScreenScrollingSizingSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingSizingKey,
+                                /*clearMatch=*/true)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
 }
 
 // ── Per-Screen Snapping Config ───────────────────────────────────────────────

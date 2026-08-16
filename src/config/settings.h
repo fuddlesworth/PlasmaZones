@@ -1170,6 +1170,13 @@ public:
                                                   const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenIdOrName) const override;
+    // Sizing sub-domain: the New-columns card's chip surface. The strip axis
+    // shares the same per-screen entry but is NOT a sizing default, so the
+    // card must not report or clear it. Plain members rather than ISettings
+    // virtuals, matching the autotile Algorithm twins above: the D-Bus
+    // per-screen dispatch only needs get/set/clear, which are unchanged.
+    bool hasPerScreenScrollingSizingSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingSizingSettings(const QString& screenIdOrName);
 
     // Per-screen snapping gaps project the config-backed per-monitor gap
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so

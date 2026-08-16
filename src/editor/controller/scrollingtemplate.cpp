@@ -81,6 +81,19 @@ void EditorController::beginTemplateSession(const QString& id, const QString& na
 {
     setEditorModeInternal(ModeScrollingTemplate);
 
+    // A template has no fixed-zone reference, so the layout bounding box a
+    // previous FIXED-geometry layout left behind is never the right basis for
+    // it. targetScreenSize() prefers that override, and templatePreviewVertical
+    // resolves the Auto axis from whatever it returns, so a template launched
+    // for the SAME screen an editing session already targeted would take its
+    // strip direction from the old layout's bounding box instead of the
+    // monitor. Neither clearer on the launch path runs in that case, because
+    // applyLaunch's screen switch early-returns when the target is unchanged.
+    if (m_layoutBoundsOverride.isValid()) {
+        m_layoutBoundsOverride = QSize();
+        Q_EMIT targetScreenSizeChanged();
+    }
+
     m_layoutId = id;
     m_layoutName = name;
     m_isNewLayout = isNew;
