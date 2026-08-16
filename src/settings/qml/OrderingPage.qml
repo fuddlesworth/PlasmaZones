@@ -25,8 +25,15 @@ SettingsFlickable {
     property string previewZonesKey: "zones"
     // Zone count key: "zoneCount" or "defaultMaxWindows"
     property string zoneCountKey: "zoneCount"
+    // Display label key: snapping layouts stamp "displayName"
+    // (toVariantMap(LayoutPreview)), tiling algorithms stamp "name"
+    // (AlgorithmService::availableAlgorithms)
+    property string nameKey: "displayName"
     // Whether to hide the badge when count is 0
     property bool hideZeroBadge: false
+    // What the badge counts: "zone" (layouts/algorithms) or "column"
+    // (scrolling templates, whose zoneCount is the starting column count)
+    property string countNoun: "zone"
     property bool _rebuilding: false
     property bool _movingLocally: false
     property var _zoneCache: ({})
@@ -266,7 +273,12 @@ SettingsFlickable {
                                             anchors.fill: parent
                                             anchors.margins: Math.round(Kirigami.Units.smallSpacing * 0.75)
                                             zones: root._zoneCache[delegateRoot.model.id] || []
-                                            isHovered: delegateHover.hovered
+                                            // Always render zones highlighted — the inactive fill
+                                            // is near-invisible on the alternate-background
+                                            // thumbnail, so hover-gating it hid what each row is.
+                                            // Same convention as the other static settings
+                                            // previews (AlgorithmPreview, NewLayoutDialog).
+                                            isHovered: true
                                             showZoneNumbers: false
                                             minZoneSize: 2
                                         }
@@ -295,7 +307,7 @@ SettingsFlickable {
                                             // Guard against a transient undefined role while the
                                             // ordering model is (re)populated — assigning undefined
                                             // to the QString `text` warns otherwise.
-                                            text: delegateRoot.model.displayName || ""
+                                            text: delegateRoot.model[root.nameKey] || ""
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
                                         }
@@ -324,7 +336,7 @@ SettingsFlickable {
                                             id: badgeLabel
 
                                             anchors.centerIn: parent
-                                            text: i18np("%n zone", "%n zones", parent.count)
+                                            text: root.countNoun === "column" ? i18np("%n column", "%n columns", parent.count) : i18np("%n zone", "%n zones", parent.count)
                                             font: Kirigami.Theme.smallFont
                                             color: Kirigami.Theme.highlightColor
                                         }
@@ -340,7 +352,7 @@ SettingsFlickable {
                                         onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index - 1)
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move up")
-                                        Accessible.name: i18n("Move %1 up", delegateRoot.model.displayName || "")
+                                        Accessible.name: i18n("Move %1 up", delegateRoot.model[root.nameKey] || "")
 
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {
@@ -360,7 +372,7 @@ SettingsFlickable {
                                         onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index + 1)
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move down")
-                                        Accessible.name: i18n("Move %1 down", delegateRoot.model.displayName || "")
+                                        Accessible.name: i18n("Move %1 down", delegateRoot.model[root.nameKey] || "")
 
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {

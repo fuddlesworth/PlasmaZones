@@ -18,6 +18,7 @@ OrderingPage {
     hasCustomOrder: settingsController.hasCustomTilingOrder()
     previewZonesKey: "previewZones"
     zoneCountKey: "defaultMaxWindows"
+    nameKey: "name"
     hideZeroBadge: true
     resolveOrder: function () {
         let items = settingsController.resolvedTilingOrder();

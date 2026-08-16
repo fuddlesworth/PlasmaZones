@@ -566,7 +566,13 @@ ComboBox {
                     anchors.fill: parent
                     anchors.margins: Math.round(Kirigami.Units.smallSpacing * 0.75)
                     zones: (modelData.layout && modelData.layout.zones) || []
-                    isHovered: highlighted
+                    // Always render zones highlighted — the inactive fill is
+                    // near-invisible on the alternate-background thumbnail, so
+                    // gating it on the row highlight hid what each entry is.
+                    // Same convention as OrderingPage and the other static
+                    // settings previews; the row highlight stays visible on
+                    // the thumbnail border.
+                    isHovered: true
                     showZoneNumbers: false
                     minZoneSize: 2
                 }
