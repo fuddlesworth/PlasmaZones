@@ -498,8 +498,51 @@ private:
      * deliberately does not), then applies the transient toggle and the
      * min-size threshold. Defaults preserve the prior behavior (transient on,
      * size off), so a default config decorates exactly what it did before.
+     *
+     * The one surface family that escapes the always-wrong block is the
+     * plasma-shell kinds shellSurfaceKindFor() recognises: each is answered by
+     * its own opt-in (m_decorationExcludeShellPanels for the panel) before the
+     * app-window rejects run, because every one of those rejects is written
+     * about application windows and would reject a shell surface outright.
      */
     bool shouldDecorateWindow(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Which plasma-shell surface family @p w belongs to, if any.
+     *
+     * DECORATION-ONLY classification, deliberately NOT built on
+     * isPlasmaShellSurface(). That predicate is a coarse "never track this"
+     * class match written for autotile leakage (see its docs); it lumps the
+     * panel, the desktop, tray popups, notifications, the OSD and krunner into
+     * one verdict, which is exactly right for tracking and exactly wrong for
+     * decoration, where each family wants its own surface path and its own
+     * opt-in. The two must stay independent: relaxing this one must never
+     * relax tracking, focus reporting, or rule shielding.
+     *
+     * Resolved from KWin's own window TYPE plus the owning class, not from a
+     * substring guess. A Plasma panel is a real `NET::Dock` whose class is
+     * plasmashell; that pair is unambiguous and needs no heuristics.
+     */
+    enum class ShellSurfaceKind {
+        None, ///< not a plasma-shell surface (an ordinary app window)
+        Panel, ///< plasmashell's panel(s) — NET::Dock, layer 3
+        AppletPopup, ///< launcher / tray flyout / widget popup — NET::AppletPopup
+    };
+    static ShellSurfaceKind shellSurfaceKindFor(KWin::EffectWindow* w);
+
+    /**
+     * @brief May a matched rule write persistent window state onto @p w?
+     *
+     * Shared shield for the three reconcilers that mutate state a rule has no
+     * business touching on a surface we do not own: the stacking layer, the
+     * hidden title bar, and open-fullscreen. Deliberately SEPARATE from
+     * shouldDecorateWindow — a user who opts into decorating the panel is
+     * opting into our paint pass over it, not into letting a broad rule
+     * rewrite plasmashell's window state. Callers resolve a shielded window as
+     * rule-free rather than early-returning, so a window that mutated INTO a
+     * shielded class still drains any snapshot it holds.
+     */
+    static bool isRuleShieldedSurface(KWin::EffectWindow* w);
 
     /**
      * @brief Reject Plasma shell layer-shell surfaces by window class.
@@ -2806,6 +2849,13 @@ private:
     // (min-size 0). The rule-driven exclusion gate binds the dedicated
     // decoration slice (m_decorationExclusionEvaluator above).
     bool m_decorationExcludeTransientWindows = true;
+    // Plasma panel opt-in, same group and the same default-preserving reason:
+    // panels were never decorated before, so this starts excluded and a
+    // pre-D-Bus pass leaves them alone. Decorations-only — there is no
+    // snapping or animation twin because both of those filters reject
+    // plasma-shell surfaces structurally.
+    bool m_decorationExcludeShellPanels = true;
+    bool m_decorationExcludeShellAppletPopups = true;
     int m_decorationMinWindowWidth = 0;
     int m_decorationMinWindowHeight = 0;
 

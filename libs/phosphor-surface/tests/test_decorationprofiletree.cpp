@@ -3,6 +3,7 @@
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -35,6 +36,38 @@ class TestDecorationProfileTree : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    // ── Supported surfaces ───────────────────────────────────────────────
+
+    void shell_surfaces_are_decorable_and_inherit_from_their_root()
+    {
+        // The shell.* family names foreign plasma-shell surfaces. Both the
+        // leaf and its ancestor must be decorable, or a stored override at
+        // either would be silently dropped on load by fromJson's
+        // decorationSurfaceSupported() guard.
+        QVERIFY(decorationSurfaceSupported(QStringLiteral("shell.panel")));
+        QVERIFY(decorationSurfaceSupported(QStringLiteral("shell.appletPopup")));
+        QVERIFY(decorationSurfaceSupported(QStringLiteral("shell")));
+        QVERIFY(decorationLeafSurfacePaths().contains(QStringLiteral("shell.panel")));
+        QVERIFY(decorationLeafSurfacePaths().contains(QStringLiteral("shell.appletPopup")));
+        // The family is closed to exactly what the effect can classify —
+        // "shell" alone is an ancestor, never a surface the effect resolves,
+        // and a kind with no ShellSurfaceKind arm is not decorable.
+        QVERIFY(!decorationLeafSurfacePaths().contains(QStringLiteral("shell")));
+        QVERIFY(!decorationSurfaceSupported(QStringLiteral("shell.menu")));
+
+        // A chain set on the root reaches the leaf through the ancestor walk,
+        // so "All Shell Surfaces" really is the category default.
+        DecorationProfileTree tree;
+        tree.setOverride(QStringLiteral("shell"),
+                         makeProfile(QStringList{QStringLiteral("glow")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("glow")});
+
+        // And the leaf overrides it.
+        tree.setOverride(QStringLiteral("shell.panel"),
+                         makeProfile(QStringList{QStringLiteral("frost")}, 1.0, QStringLiteral("#445566")));
+        QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("frost")});
+    }
+
     // ── Serialization ────────────────────────────────────────────────────
 
     void roundTrip_preserves_baseline_overrides_and_order()

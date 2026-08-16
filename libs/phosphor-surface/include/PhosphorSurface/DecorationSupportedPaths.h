@@ -11,12 +11,12 @@ namespace PhosphorSurfaceShaders {
 
 /// Leaf surface paths a per-surface decoration profile actually resolves
 /// against. Each names a concrete surface the shell decorates: the three
-/// window placement states (tiled / snapped / floating), the OSD, and the
-/// four transient popups. (The zone overlay is intentionally NOT a
-/// decoration target — it is a fullscreen, mostly-transparent zone canvas
-/// drawn by the separate overlay shader category, not a card to round/border.)
-/// When a future surface gains a decoration leg, append its leaf path here in
-/// lockstep.
+/// window placement states (tiled / snapped / floating), the OSD, the
+/// four transient popups, and the foreign plasma-shell surfaces under
+/// `shell.*`. (The zone overlay is intentionally NOT a decoration target — it
+/// is a fullscreen, mostly-transparent zone canvas drawn by the separate
+/// overlay shader category, not a card to round/border.) When a future
+/// surface gains a decoration leg, append its leaf path here in lockstep.
 ///
 /// Surface-state analogue of `PlasmaZones::shaderConsumedLeafEventPaths()` for the
 /// decoration concern: the SSOT for "which surfaces can carry a
@@ -36,6 +36,15 @@ inline QStringList decorationLeafSurfacePaths()
         QStringLiteral("popup.zoneSelector"),
         QStringLiteral("popup.layoutPicker"),
         QStringLiteral("popup.cheatsheet"),
+        // shell.* — surfaces owned by plasmashell rather than by us or by an
+        // application. Unlike every path above, these are FOREIGN windows the
+        // KWin effect decorates in place, so each leaf is additionally gated
+        // by its own Decorations.WindowFiltering opt-in (default off) and
+        // resolves chain-only: the config-backed border / opacity-tint
+        // "easy mode" layers never apply to them, so a shell surface is
+        // styled by an explicit pack chain here or not at all.
+        QStringLiteral("shell.panel"),
+        QStringLiteral("shell.appletPopup"),
     };
 }
 

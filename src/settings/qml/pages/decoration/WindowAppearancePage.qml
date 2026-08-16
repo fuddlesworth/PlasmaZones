@@ -507,6 +507,51 @@ SettingsFlickable {
                 appSettings.decorationExcludeTransientWindows = value;
             }
 
+            // Decorations-only extra row: the Plasma panel opt-in. Presented
+            // positively ("Decorate Plasma panels") against a stored exclusion
+            // key, so the switch reads the way a user thinks about it while the
+            // config key stays consistent with the rest of this filtering
+            // group. Supplies its own leading separator so it composes under
+            // the transient row, matching the animations host.
+            insertAfterTransient: Component {
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    SettingsSeparator {}
+
+                    SettingsRow {
+                        title: i18n("Decorate Plasma panels")
+                        searchAnchor: "decorateShellPanels"
+                        description: i18n("Draw the panel decoration set on the Plasma panels. Pick its packs under Decoration → Shell.")
+
+                        SettingsSwitch {
+                            checked: !appSettings.decorationExcludeShellPanels
+                            accessibleName: i18n("Decorate Plasma panels")
+                            onToggled: function (newValue) {
+                                appSettings.decorationExcludeShellPanels = !newValue;
+                            }
+                        }
+                    }
+
+                    SettingsSeparator {}
+
+                    SettingsRow {
+                        title: i18n("Decorate applet popups")
+                        searchAnchor: "decorateShellAppletPopups"
+                        description: i18n("Draw the applet popup decoration set on the launcher and the system tray popups. Pick its packs under Decoration → Shell.")
+
+                        SettingsSwitch {
+                            checked: !appSettings.decorationExcludeShellAppletPopups
+                            accessibleName: i18n("Decorate applet popups")
+                            onToggled: function (newValue) {
+                                appSettings.decorationExcludeShellAppletPopups = !newValue;
+                            }
+                        }
+                    }
+                }
+            }
+
             // Spin-box bounds come from generalPage (the shared schema-bounds
             // controller that also serves the animation filter card), not
             // root.ctl — the same cross-controller sourcing AnimationsGeneralPage

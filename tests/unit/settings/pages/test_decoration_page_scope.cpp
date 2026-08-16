@@ -50,6 +50,7 @@ private Q_SLOTS:
         QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-windows")), QStringLiteral("window"));
         QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-osds")), QStringLiteral("osd"));
         QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-popups")), QStringLiteral("popup"));
+        QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-shell")), QStringLiteral("shell"));
         QVERIFY(decorationSurfaceRoot(QStringLiteral("decorations-sets")).isEmpty());
         QVERIFY(decorationSurfaceRoot(QStringLiteral("decorations-shaders")).isEmpty());
         QVERIFY(decorationSurfaceRoot(QStringLiteral("window-appearance")).isEmpty());

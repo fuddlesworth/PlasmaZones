@@ -294,7 +294,20 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // border-appearance resolvers use, so it refreshes on every trigger
     // that re-runs updateWindowDecoration (rule edits, focus, snap flips,
     // desktop changes).
-    const std::optional<ResolvedDecorationChain> ruleChain = resolveDecorationChain(resolveRuleActions(w, windowId));
+    //
+    // SHELL SURFACES resolve chain-only — the tree node is their whole
+    // decoration, and neither the rule chain here nor the easy-mode appearance
+    // below applies to them. Both are keyed to APP identity: a rule's match
+    // expression walks appId / class / title / role / PID / window state, none
+    // of which describes plasmashell's panel, and the easy-mode config
+    // defaults are scoped by placement (Tiled / Normal / All) which a panel is
+    // outside of. `All` in particular would otherwise put a border on the
+    // panel the instant the user enabled the opt-in, which is not what
+    // enabling "decorate panels" asks for. Keyed off the resolved surface path
+    // rather than a second classify so the two cannot disagree.
+    const bool isShellSurface = surfacePath.startsWith(QLatin1String("shell."));
+    const std::optional<ResolvedDecorationChain> ruleChain =
+        isShellSurface ? std::nullopt : resolveDecorationChain(resolveRuleActions(w, windowId));
     if (ruleChain) {
         userPacks = ruleChain->chain;
     }
@@ -324,7 +337,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     std::optional<ResolvedWindowAppearance> appearance;
     bool showBorder = false;
     bool showOpacityTint = false;
-    if (userPacks.isEmpty()) {
+    if (userPacks.isEmpty() && !isShellSurface) {
         appearance = resolveEffectiveWindowAppearance(w, windowId);
         showBorder = appearance->showBorder.value_or(false);
         showOpacityTint = appearance->showOpacityTint.value_or(false);
@@ -795,6 +808,21 @@ bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 
 QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId) const
 {
+    // SHELL SURFACES resolve by kind, before any placement lookup: plasmashell's
+    // panel is never in either engine's tiled bucket, so without this it would
+    // fall through to "window.floating" and wear whatever the user styled their
+    // floating app windows with. findWindowByIdExact, never findWindowById —
+    // the fuzzy appId fallback could resolve a same-app sibling for a dead id
+    // and mis-route a real window onto a shell path.
+    switch (shellSurfaceKindFor(findWindowByIdExact(windowId))) {
+    case ShellSurfaceKind::Panel:
+        return QStringLiteral("shell.panel");
+    case ShellSurfaceKind::AppletPopup:
+        return QStringLiteral("shell.appletPopup");
+    case ShellSurfaceKind::None:
+        break;
+    }
+
     // MEMBERSHIP-only resolution: isTiledWindow tests bucket membership, and the
     // resolved profile's enabledChain() (an empty chain = no decoration) is the
     // sole render gate (see updateWindowDecoration) — there is no separate show-border

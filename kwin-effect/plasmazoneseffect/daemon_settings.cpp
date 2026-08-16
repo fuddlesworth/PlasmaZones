@@ -648,6 +648,34 @@ void PlasmaZonesEffect::loadCachedSettings()
             scheduleBorderSweep();
         }
     });
+    // Plasma panel opt-in. Same default-true (excluded) type-guard shape as
+    // the transient loader above, and for the same reason: a non-bool reply
+    // from an older daemon would toBool() to false and start redirecting the
+    // panel offscreen — a permanently visible surface — until the next
+    // successful load. A change sweeps the borders because a panel generates
+    // no window events of its own to self-correct on.
+    loadSettingAsync(QStringLiteral("decorationExcludeShellPanels"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        const bool b = v.toBool();
+        if (m_decorationExcludeShellPanels != b) {
+            m_decorationExcludeShellPanels = b;
+            scheduleBorderSweep();
+        }
+    });
+    // Applet popups (launcher, tray flyouts). Same shape and same type-guard
+    // reasoning as the panel loader above.
+    loadSettingAsync(QStringLiteral("decorationExcludeShellAppletPopups"), [this](const QVariant& v) {
+        if (v.typeId() != QMetaType::Bool) {
+            return;
+        }
+        const bool b = v.toBool();
+        if (m_decorationExcludeShellAppletPopups != b) {
+            m_decorationExcludeShellAppletPopups = b;
+            scheduleBorderSweep();
+        }
+    });
     // Clamp on the effect side as defence-in-depth, symmetric with the
     // animation min-size fetches above — the daemon schema already bounds
     // these to [0, 2000].

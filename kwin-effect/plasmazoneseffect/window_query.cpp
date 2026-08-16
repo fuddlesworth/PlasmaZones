@@ -35,6 +35,17 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     if (w->isDock()) {
         return WindowType::Dock;
     }
+    // Plasma applet popups (Kickoff, tray flyouts, any widget's expanded view).
+    // Placed HIGH on purpose rather than next to the generic Popup branch at
+    // the bottom: NET::AppletPopup is its own type and, as measured, sets none
+    // of the generic predicates below (not isPopupWindow, not isMenu, not
+    // isDialog, no transientFor), so it would otherwise fall all the way
+    // through to Unknown — which is exactly the bug this branch fixes. Sitting
+    // above the generic tests means a future KWin that ALSO reports one of
+    // them cannot silently re-route these surfaces to a vaguer type.
+    if (w->isAppletPopup()) {
+        return WindowType::AppletPopup;
+    }
     if (w->isOnScreenDisplay()) {
         return WindowType::OnScreenDisplay;
     }

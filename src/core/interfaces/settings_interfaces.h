@@ -357,6 +357,21 @@ public:
     // threshold was ever applied).
     virtual bool decorationExcludeTransientWindows() const = 0;
     virtual void setDecorationExcludeTransientWindows(bool exclude) = 0;
+    // Plasma-shell panel surfaces. Decorations-only: the snapping filter above
+    // and the animation filter both reject plasma-shell surfaces structurally
+    // with no knob, so this has no twin. Defaults to excluded — decorating a
+    // panel is a deliberate opt-in, both because it is a foreign surface and
+    // because it is permanently visible, so its offscreen redirect costs GPU
+    // time on every frame the panel is damaged.
+    virtual bool decorationExcludeShellPanels() const = 0;
+    virtual void setDecorationExcludeShellPanels(bool exclude) = 0;
+    // Plasma applet popups (the launcher, system-tray flyouts, any widget's
+    // expanded view). Same opt-in shape as the panel above and the same
+    // decorations-only reasoning. Cheaper at runtime than the panel: these are
+    // transient surfaces, so the offscreen redirect lives only as long as the
+    // popup is open rather than for the whole session.
+    virtual bool decorationExcludeShellAppletPopups() const = 0;
+    virtual void setDecorationExcludeShellAppletPopups(bool exclude) = 0;
     virtual int decorationMinimumWindowWidth() const = 0;
     virtual void setDecorationMinimumWindowWidth(int width) = 0;
     virtual int decorationMinimumWindowHeight() const = 0;

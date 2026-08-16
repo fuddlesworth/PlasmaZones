@@ -765,6 +765,36 @@ bool PlasmaZonesEffect::shouldDecorateWindow(KWin::EffectWindow* w) const
     // fullscreen surfaces wear no chrome — borderless-through-the-hold is
     // the intended presentation, and the un-flag paths' decoration re-drives
     // bring the chrome back when the hold ends.
+    //
+    // PLASMA-SHELL SURFACES are the one family that is NOT structural here.
+    // shellSurfaceKindFor classifies them by KWin window type + owning class,
+    // and each recognised kind is gated by its own opt-in below instead of by
+    // the blanket isPlasmaShellSurface reject the rest of this file uses. That
+    // predicate stays the verdict for every OTHER plasma-shell surface (the
+    // desktop, notifications, the OSD, krunner, applet popups), so an
+    // unrecognised kind still falls through to the structural rejects.
+    //
+    // Each kind answers from its own opt-in, all default off. Everything below
+    // this point is skipped for a shell surface on purpose: the transient /
+    // min-size / keep-above / special-window rejects are all written about
+    // APPLICATION windows and every one of them would reject these outright
+    // (a panel is a dock; an applet popup is a special window). The user
+    // exclusion rules are skipped too — a rule's match expression is authored
+    // against app identity (appId, class, title, PID), none of which
+    // meaningfully describes plasmashell's own surfaces, so a broad rule must
+    // not silently strip a decoration the user turned on here.
+    //
+    // A switch, not a chain of ifs: adding a ShellSurfaceKind without an
+    // answer here is then a compiler warning rather than a surface that
+    // silently falls through to the app-window rejects below and never draws.
+    switch (shellSurfaceKindFor(w)) {
+    case ShellSurfaceKind::Panel:
+        return !m_decorationExcludeShellPanels;
+    case ShellSurfaceKind::AppletPopup:
+        return !m_decorationExcludeShellAppletPopups;
+    case ShellSurfaceKind::None:
+        break;
+    }
     if (isOwnOverlayClass(windowClass) || isXdgDesktopPortalSurface(windowClass) || isPlasmaShellSurface(windowClass)) {
         return false;
     }

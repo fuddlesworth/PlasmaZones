@@ -295,6 +295,10 @@ public:
     // animation filtering so the border pass can be tuned independently.
     Q_PROPERTY(bool decorationExcludeTransientWindows READ decorationExcludeTransientWindows WRITE
                    setDecorationExcludeTransientWindows NOTIFY decorationExcludeTransientWindowsChanged)
+    Q_PROPERTY(bool decorationExcludeShellPanels READ decorationExcludeShellPanels WRITE setDecorationExcludeShellPanels
+                   NOTIFY decorationExcludeShellPanelsChanged)
+    Q_PROPERTY(bool decorationExcludeShellAppletPopups READ decorationExcludeShellAppletPopups WRITE
+                   setDecorationExcludeShellAppletPopups NOTIFY decorationExcludeShellAppletPopupsChanged)
     Q_PROPERTY(int decorationMinimumWindowWidth READ decorationMinimumWindowWidth WRITE setDecorationMinimumWindowWidth
                    NOTIFY decorationMinimumWindowWidthChanged)
     Q_PROPERTY(int decorationMinimumWindowHeight READ decorationMinimumWindowHeight WRITE
@@ -1061,6 +1065,10 @@ public:
     // stored under `Decorations.WindowFiltering`.
     bool decorationExcludeTransientWindows() const override;
     void setDecorationExcludeTransientWindows(bool exclude) override;
+    bool decorationExcludeShellPanels() const override;
+    void setDecorationExcludeShellPanels(bool exclude) override;
+    bool decorationExcludeShellAppletPopups() const override;
+    void setDecorationExcludeShellAppletPopups(bool exclude) override;
     int decorationMinimumWindowWidth() const override;
     void setDecorationMinimumWindowWidth(int width) override;
     int decorationMinimumWindowHeight() const override;

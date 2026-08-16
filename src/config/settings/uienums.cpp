@@ -125,9 +125,12 @@ P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup,
 
 // ── Decoration Window Filtering (PhosphorConfig::Store-backed) ─────────────
 //
-// Three global decoration-filtering knobs in `Decorations.WindowFiltering`:
-// `decorationExcludeTransientWindows`, `decorationMinimumWindowWidth`,
-// `decorationMinimumWindowHeight`. Mirrors the Exclusions block, stored
+// Four global decoration-filtering knobs in `Decorations.WindowFiltering`:
+// `decorationExcludeTransientWindows`, `decorationExcludeShellPanels`,
+// `decorationMinimumWindowWidth`, `decorationMinimumWindowHeight`. The first,
+// third and fourth mirror the Exclusions block; ShellPanels is
+// decorations-only (the snapping and animation filters reject plasma-shell
+// surfaces structurally and expose no knob). Stored
 // independently so the KWin effect's border pass can be tuned separately
 // from snapping and animation filtering. Reuses the shared leaf keys; only
 // the group differs. Consumed effect-side via the generic settingsChanged
@@ -136,6 +139,12 @@ P_STORE_SET_INT(setAnimationMinimumWindowHeight, animationsWindowFilteringGroup,
 P_STORE_GET(bool, decorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey, bool)
 P_STORE_SET_BOOL(setDecorationExcludeTransientWindows, decorationsWindowFilteringGroup, transientWindowsKey,
                  decorationExcludeTransientWindowsChanged)
+P_STORE_GET(bool, decorationExcludeShellPanels, decorationsWindowFilteringGroup, shellPanelsKey, bool)
+P_STORE_SET_BOOL(setDecorationExcludeShellPanels, decorationsWindowFilteringGroup, shellPanelsKey,
+                 decorationExcludeShellPanelsChanged)
+P_STORE_GET(bool, decorationExcludeShellAppletPopups, decorationsWindowFilteringGroup, shellAppletPopupsKey, bool)
+P_STORE_SET_BOOL(setDecorationExcludeShellAppletPopups, decorationsWindowFilteringGroup, shellAppletPopupsKey,
+                 decorationExcludeShellAppletPopupsChanged)
 P_STORE_GET(int, decorationMinimumWindowWidth, decorationsWindowFilteringGroup, minimumWindowWidthKey, int)
 P_STORE_SET_INT(setDecorationMinimumWindowWidth, decorationsWindowFilteringGroup, minimumWindowWidthKey,
                 decorationMinimumWindowWidthChanged)

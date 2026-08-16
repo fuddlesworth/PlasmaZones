@@ -544,6 +544,9 @@ void SettingsAdaptor::initializeRegistry()
     // from snapping and animation filtering.
     REGISTER_BOOL_SETTING("decorationExcludeTransientWindows", decorationExcludeTransientWindows,
                           setDecorationExcludeTransientWindows)
+    REGISTER_BOOL_SETTING("decorationExcludeShellPanels", decorationExcludeShellPanels, setDecorationExcludeShellPanels)
+    REGISTER_BOOL_SETTING("decorationExcludeShellAppletPopups", decorationExcludeShellAppletPopups,
+                          setDecorationExcludeShellAppletPopups)
     REGISTER_INT_SETTING("decorationMinimumWindowWidth", decorationMinimumWindowWidth, setDecorationMinimumWindowWidth)
     REGISTER_INT_SETTING("decorationMinimumWindowHeight", decorationMinimumWindowHeight,
                          setDecorationMinimumWindowHeight)

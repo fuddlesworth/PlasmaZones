@@ -91,6 +91,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         QStringLiteral("decorations-windows"),
         QStringLiteral("decorations-osds"),
         QStringLiteral("decorations-popups"),
+        QStringLiteral("decorations-shell"),
     };
     static const QSet<QString> kDecorationLibraryChildren{QStringLiteral("decorations-sets"),
                                                           QStringLiteral("decorations-shaders")};
@@ -524,6 +525,8 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              // window-appearance page) hosts the WindowFilterCard bound to the
              // Decorations.WindowFiltering group.
              {CD::decorationsWindowFilteringGroup(), CD::transientWindowsKey()},
+             {CD::decorationsWindowFilteringGroup(), CD::shellPanelsKey()},
+             {CD::decorationsWindowFilteringGroup(), CD::shellAppletPopupsKey()},
              {CD::decorationsWindowFilteringGroup(), CD::minimumWindowWidthKey()},
              {CD::decorationsWindowFilteringGroup(), CD::minimumWindowHeightKey()},
              {CD::gapsGroup(), CD::innerGapKey()},
@@ -685,6 +688,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("decorations-windows"),
         QStringLiteral("decorations-osds"),
         QStringLiteral("decorations-popups"),
+        QStringLiteral("decorations-shell"),
         QStringLiteral("decorations-sets"),
         QStringLiteral("decorations-shaders"),
         QStringLiteral("rules"),

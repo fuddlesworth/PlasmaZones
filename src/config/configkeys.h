@@ -524,6 +524,14 @@ public:
     P_CONFIG_KEY(transientWindowsKey, "TransientWindows")
     P_CONFIG_KEY(minimumWindowWidthKey, "MinimumWindowWidth")
     P_CONFIG_KEY(minimumWindowHeightKey, "MinimumWindowHeight")
+    // Consumed exclusively by the Decorations.WindowFiltering schema — there
+    // is no snapping or animation equivalent, because plasma-shell surfaces
+    // are rejected outright by those two filters (see isPlasmaShellSurface).
+    // Declared here with the shared filtering leaf keys rather than with the
+    // Decorations keys above because the group context is what disambiguates
+    // it, matching `notificationsAndOsdKey`'s placement.
+    P_CONFIG_KEY(shellPanelsKey, "ShellPanels")
+    P_CONFIG_KEY(shellAppletPopupsKey, "ShellAppletPopups")
     // `notificationsAndOsdKey` is consumed exclusively by the
     // Animations.WindowFiltering schema (no equivalent in the Exclusions
     // group), so it is declared with the rest of the animation keys below

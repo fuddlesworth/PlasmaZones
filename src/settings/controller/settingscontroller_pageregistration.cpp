@@ -492,6 +492,10 @@ void SettingsController::buildApplicationController()
                QStringLiteral("pages/decoration/DecorationPopupsPage.qml"), QStringLiteral("view-presentation"),
                /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("decorations-shell"), QStringLiteral("decorations-surfaces"), PhosphorI18n::tr("Shell"),
+               QStringLiteral("pages/decoration/DecorationShellPage.qml"), QStringLiteral("computer"),
+               /*collapsible=*/false,
+               /*divider=*/false, AdvancedOnly);
 
     regVirtual(QStringLiteral("decorations-sets"), QStringLiteral("decorations-library"),
                PhosphorI18n::tr("Decoration Sets"), QStringLiteral("pages/decoration/DecorationSetsPage.qml"),
