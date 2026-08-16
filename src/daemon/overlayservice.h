@@ -337,6 +337,10 @@ public:
     // Per-card work-area width shares for the variable-width strip row
     // (empty on non-strip screens); trigger-edge bar-width parity
     QList<qreal> selectorStripFractions(const QString& screenId) const override;
+    bool selectorStripVerticalAxis(const QString& screenId) const override
+    {
+        return stripIsVertical(screenId);
+    }
 
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;

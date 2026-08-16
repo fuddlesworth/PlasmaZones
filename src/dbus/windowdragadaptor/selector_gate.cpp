@@ -257,9 +257,14 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     const QList<qreal> stripFractions =
         m_overlayService ? m_overlayService->selectorStripFractions(effectiveId) : QList<qreal>();
 
-    // Use shared layout computation (same code as OverlayService)
+    // Use shared layout computation (same code as OverlayService). The axis
+    // rides along for the same reason it does there: a bar rect computed on
+    // the horizontal assumption is the transpose of the popup actually
+    // painted, so the keep-visible band would stop matching what the cursor
+    // is over and the popup would hide while it is still under the pointer.
+    const bool stripVerticalAxis = m_overlayService ? m_overlayService->selectorStripVerticalAxis(effectiveId) : false;
     const ZoneSelectorLayout selectorLayout =
-        computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions);
+        computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions, stripVerticalAxis);
     const int barHeight = selectorLayout.barHeight;
     const int barWidth = selectorLayout.barWidth;
 

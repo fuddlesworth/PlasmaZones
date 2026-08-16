@@ -101,8 +101,12 @@ Item {
     property bool verticalAxis: false
 
     // The along-strip extent always carries widthFraction; which screen
-    // dimension that is depends on the axis.
-    readonly property int alongExtent: Math.max(8, Math.round(previewWidth * widthFraction))
+    // dimension that is depends on the axis. widthFraction is the column's
+    // share ALONG the strip, not a physical width, so on a vertical strip it
+    // has to scale the preview's HEIGHT. Scaling previewWidth on both axes
+    // renders a full-strip column on a portrait monitor as a square instead
+    // of a band as tall as the preview.
+    readonly property int alongExtent: Math.max(8, Math.round((verticalAxis ? previewHeight : previewWidth) * widthFraction))
 
     width: verticalAxis ? previewWidth + cardSidePadding * 2 : alongExtent + cardSidePadding * 2
     height: verticalAxis ? alongExtent + labelSpace + cardPadding : previewHeight + labelSpace + cardPadding

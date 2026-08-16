@@ -243,7 +243,12 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // (empty fraction list) so the bar retains a hittable "open the first
     // column" body instead of collapsing.
     const int layoutCount = stripMode ? std::max(1, static_cast<int>(stripColumns.size())) : layouts.size();
-    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions);
+    // The axis has to reach the layout too, not just QML: the cards stack
+    // down the popup on a vertical strip, so sizing the container as one
+    // horizontal card row would clip the tail cards away, and the hit-test
+    // reads rendered rects back and would find them empty.
+    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screenGeom, layoutCount, stripFractions,
+                                                                stripMode && stripIsVertical(screenId));
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
     // containerWidth/Height, so it has to be correct before we apply the layout.

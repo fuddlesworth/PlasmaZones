@@ -85,7 +85,8 @@ inline int stripCardPreviewWidth(int indicatorWidth, qreal widthFraction)
  * branch, selector_strip.cpp, not here).
  */
 inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, const QRect& screenGeom,
-                                                    int layoutCount, const QList<qreal>& stripFractions = {})
+                                                    int layoutCount, const QList<qreal>& stripFractions = {},
+                                                    bool stripVerticalAxis = false)
 {
     ZoneSelectorLayout layout;
     const qreal screenAspectRatio =
@@ -154,6 +155,46 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
 
     layout.rows = visibleRows;
     layout.needsScrolling = (layout.totalRows > visibleRows);
+
+    if (!stripFractions.isEmpty() && stripVerticalAxis) {
+        // Vertical strip: the same cards stacked DOWN the popup. The card
+        // count becomes the row count, the fractions accumulate into the
+        // content HEIGHT, and one card's cross extent is the whole width.
+        // Sizing this arm as a horizontal row (the pre-#923 behaviour, when
+        // the axis never reached this function) stuffs a tall stack into a
+        // one-cell-high container: the tail cards clip away with no vertical
+        // scrollbar, and because the hit-test reads rendered rects back they
+        // come back empty and unhittable.
+        const int cardCount = static_cast<int>(stripFractions.size());
+        layout.rows = cardCount;
+        layout.columns = 1;
+        layout.totalRows = cardCount;
+        int cardsExtent = 0;
+        for (const qreal f : stripFractions) {
+            cardsExtent += stripCardPreviewWidth(layout.indicatorHeight, f) + layout.labelSpace + layout.cardPadding;
+        }
+        layout.scrollContentHeight = cardsExtent + (cardCount - 1) * layout.indicatorSpacing;
+        layout.scrollContentWidth = layout.indicatorWidth + layout.cardSidePadding * 2;
+
+        layout.contentWidth = layout.scrollContentWidth;
+        layout.contentHeight = layout.scrollContentHeight;
+        if (maxContentH > 0 && layout.contentHeight > maxContentH) {
+            layout.contentHeight = maxContentH;
+            layout.needsScrolling = true;
+        } else {
+            layout.needsScrolling = false;
+        }
+        if (maxContentW > 0 && layout.contentWidth > maxContentW) {
+            layout.contentWidth = maxContentW;
+            layout.needsHorizontalScrolling = true;
+        }
+
+        layout.containerWidth = layout.contentWidth + layout.containerPadding;
+        layout.containerHeight = layout.contentHeight + layout.containerPadding;
+        layout.barHeight = layout.containerTopMargin + layout.containerHeight;
+        layout.barWidth = layout.containerSideMargin + layout.containerWidth + layout.containerSideMargin;
+        return layout;
+    }
 
     if (!stripFractions.isEmpty()) {
         // Variable-width strip cards: each card is its column's real share
