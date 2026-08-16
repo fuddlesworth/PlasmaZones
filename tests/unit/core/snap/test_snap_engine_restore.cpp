@@ -662,7 +662,7 @@ private Q_SLOTS:
         // a sub-threshold full query makes isWindowExcluded true.
         m_settings->setMinimumWindowWidth(200);
         m_settings->setMinimumWindowHeight(150);
-        engine.setExclusionQueryProvider([](const QString&) {
+        engine.setExclusionQueryProvider([](const QString&, const QString&) {
             PhosphorRules::WindowQuery q;
             q.width = 80;
             q.height = 60;

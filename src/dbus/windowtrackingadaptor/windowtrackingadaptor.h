@@ -788,6 +788,50 @@ public:
      */
     void loadState();
 
+    /// Build the per-window rule query, with the screen-derived context fields
+    /// stamped on top of the WindowRegistry metadata. The registry records no
+    /// screen, so `ScreenId` and `ActiveLayout` can only be filled here: @p
+    /// screenIdHint names the screen the window is landing on (the open /
+    /// routing paths know it before the service does), and an empty hint falls
+    /// back to the service's live screen-for-window. `ActiveLayout` resolves to
+    /// the layout assigned to that screen's (desktop, activity) context, the
+    /// same id the windowless context cascade stamps.
+    ///
+    /// EVERY per-window resolver must go through this rather than the bare
+    /// buildRuleQueryForWindow free function. Seven of them share one
+    /// RuleEvaluator::resolveCached entry keyed on (windowId, rule-set
+    /// revision), and resolveCached returns the cached actions WITHOUT
+    /// consulting the query on a hit — so whichever of those seven touches a
+    /// window first fixes the context every later one reuses for that window's
+    /// lifetime. (The other two consumers do not share it:
+    /// shouldRestoreSizeOnUnsnap calls the uncached resolve(), and the snap
+    /// engine's exclusion-query provider feeds SnapEngine's separate
+    /// exclusion evaluator.)
+    ///
+    /// Uniform stamping is therefore necessary but NOT sufficient: the hinted
+    /// and unhinted paths resolve different screens, so the ORDER matters too.
+    /// The hint-bearing resolver has to seed first, and does on both engines
+    /// today — SnapEngine::resolveWindowRestore calls calculateSnapToPlacementRule
+    /// (libs/phosphor-snap-engine/src/lifecycle.cpp) ahead of the restore, managed-restore
+    /// and float predicates, and TilingAdaptor::dispatchWindowOpened calls
+    /// applyOpenRoutingForTiling ahead of the tile engine's windowOpened.
+    /// Reordering either would silently revert ActiveLayout / ScreenId matching
+    /// on the open path without failing a test.
+    ///
+    /// nullopt when no metadata is tracked for @p windowId.
+    std::optional<PhosphorRules::WindowQuery> buildContextualRuleQuery(const QString& windowId,
+                                                                       const QString& screenIdHint = QString()) const;
+
+    /// Mode-neutral screen lookup for @p windowId: the snap service first (it
+    /// canonicalizes the composite id), then each engine's own tracker. Returns
+    /// empty when neither engine has placed the window and it holds no snap
+    /// state, and equally when neither engine is wired at all (a test fixture, or
+    /// before Daemon::initEngines runs).
+    /// Used by buildContextualRuleQuery when no caller supplied a hint;
+    /// the service accessor alone is snap-only and reports nothing for
+    /// autotile-tracked windows.
+    QString resolveScreenForWindow(const QString& windowId) const;
+
     /// Resolve whether a FLOATED window should have its previous position restored
     /// on open. Consulted by the restore-position predicate the daemon injects into
     /// BOTH engines (in-process, not via D-Bus); @p mode selects which per-engine
@@ -795,7 +839,22 @@ public:
     /// RestorePosition rule wins (engine-neutral); otherwise the
     /// per-engine `*RestoreFloatedWindowsOnLogin` setting decides. Builds a
     /// WindowQuery from the window registry metadata.
-    bool shouldRestoreFloatedPosition(const QString& windowId, PhosphorZones::AssignmentEntry::Mode mode);
+    ///
+    /// @p useCache selects the memoised per-window verdict (the open path, where
+    /// the answer is resolved once per window lifetime) or a fresh resolve. The
+    /// autotile wiring passes false because its restore-position predicate also
+    /// runs mid-session, from insertWindow via backfillWindows.
+    ///
+    /// @p screenIdHint pins the query's ScreenId / ActiveLayout to the screen the
+    /// window is landing on. It is required on the uncached autotile path: an
+    /// uncached resolve builds its query fresh, and a hintless
+    /// resolveScreenForWindow consults the service and the snap engine before the
+    /// autotile engine — stale snap state resolves the WRONG screen, and the
+    /// consults reached from context seeding can run before the engine keys the
+    /// window at all. Empty is legal for an already-tracked window, where
+    /// resolveScreenForWindow's engine fallbacks answer.
+    bool shouldRestoreFloatedPosition(const QString& windowId, PhosphorZones::AssignmentEntry::Mode mode,
+                                      bool useCache = true, const QString& screenIdHint = QString());
 
     /// Resolve whether a SNAPPED window should be restored to its zone on login.
     /// The snapped-to-zone analogue of shouldRestoreFloatedPosition: a matched
@@ -828,7 +887,7 @@ public:
     /// @p screenId is the OPENING screen; it stamps ScreenId and the derived
     /// Mode onto the query, without which a rule pairing either with Float is
     /// silently inert. Empty is tolerated (neither is stamped).
-    bool shouldFloatByRule(const QString& windowId, const QString& screenId);
+    bool shouldFloatByRule(const QString& windowId, const QString& screenId = QString());
 
     /// Per-window scrolling open-behaviour rule slots (openColumnWidth /
     /// openWindowHeight / openTabbed / openColumnPlacement / openMaximized /
@@ -962,6 +1021,15 @@ public:
     /// alone, so a stamped query is discarded on a hit.
     void stampScreenAndMode(PhosphorRules::WindowQuery& query, const QString& windowId, const QString& screenId);
 
+    /// Stamp the screen-derived context trio onto @p query: ScreenId, the
+    /// ActiveLayout resolved for that screen's CURRENT desktop and activity
+    /// (the same id the windowless context cascade stamps and the daemon
+    /// publishes to the KWin effect, so the leaf means one thing everywhere),
+    /// and ScreenOrientation. An empty @p screenId stamps nothing. Called by
+    /// every resolver that pins a screen, cached and uncached alike, so the
+    /// shared evaluator memo is always seeded with the full trio.
+    void stampScreenContext(PhosphorRules::WindowQuery& query, const QString& screenId) const;
+
     /// Resolve the open-placement directive for a window from its matched window
     /// rules: the 1-based `SnapToZone` ordinals to snap into (empty when no
     /// SnapToZone rule matches; multiple ordinals request a zone span) plus the
@@ -1014,10 +1082,13 @@ public:
     /// wired.
     QString shadowWindowId(const QString& windowId) const;
 
-    /// Engine-neutral RouteToScreen for a BARE route (no SnapToZone): if a matched
-    /// rule pins @p windowId to a different monitor and the rule carries no
-    /// SnapToZone (a route + snap is placed by the snap placement directive, which
-    /// resolves the zones ON the target screen), move the window there free.
+    /// Engine-neutral RouteToScreen: if a matched rule pins @p windowId to a
+    /// different monitor, move the window there free. The route is honoured
+    /// whether or not the same rule also carries SnapToZone — a route + snap
+    /// normally places on the target through the snap placement directive and
+    /// never reaches here, but calculateSnapToPlacementRule declines whenever the
+    /// routed target is not in Snapping mode or resolves no layout, ordinal or
+    /// geometry, and those declines land here with nothing placed.
     /// Translates the window's current frame geometry onto the target screen's
     /// available area (preserving its relative position, clamped to fit) and emits
     /// applyGeometryRequested with an empty zone id (a free placement, no snap

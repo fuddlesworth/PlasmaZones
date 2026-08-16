@@ -338,11 +338,14 @@ private Q_SLOTS:
         delete snap;
     }
 
-    // A rule carrying BOTH SnapToZone and RouteToScreen must NOT be moved by
-    // applyOpenScreenRouting: the snap placement directive routes AND snaps it on the
-    // target screen, so a free move here would double-place the window. The Placement
-    // slot guard suppresses it even with everything else set up to move.
-    void testApplyOpenScreenRouting_snapToZonePresent_doesNotDoubleMove()
+    // A rule carrying BOTH SnapToZone and RouteToScreen is still moved by
+    // applyOpenScreenRouting. Its only caller reaches it exclusively under
+    // !shouldSnap — the placement directive already declined (a non-snapping
+    // target, no layout, no surviving ordinal) — so suppressing the move on the
+    // Placement slot's mere presence left the window neither snapped nor routed
+    // (the #921 fix). The verdict is still "matched": the rule owns the
+    // window's monitor either way.
+    void testApplyOpenScreenRouting_snapToZonePresent_stillHonoursRoute()
     {
         PhosphorScreens::FakeScreenProvider fake;
         fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
@@ -387,11 +390,14 @@ private Q_SLOTS:
         QSignalSpy geomSpy(wta, &WindowTrackingAdaptor::applyGeometryRequested);
 
         QVERIFY2(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")),
-                 "a valid placement directive owns the window's placement, so it must report as matched even "
-                 "though nothing moved here");
+                 "a matched route+snap rule must report the directive as matched");
 
-        QVERIFY2(outputSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
-        QVERIFY2(geomSpy.isEmpty(), "a route+snap rule must not free-move via applyOpenScreenRouting");
+        // The route is honoured even though the Placement slot rode along:
+        // reaching this call at all means the snap did not happen.
+        QCOMPARE(outputSpy.count(), 1);
+        QCOMPARE(outputSpy.at(0).at(1).toString(), QStringLiteral("DP-2"));
+        QCOMPARE(geomSpy.count(), 1);
+        QCOMPARE(geomSpy.at(0).at(6).toString(), QStringLiteral("DP-2"));
 
         wta->setRuleStore(nullptr);
         wta->setWindowRegistry(nullptr);

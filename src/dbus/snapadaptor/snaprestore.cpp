@@ -56,11 +56,13 @@ void SnapAdaptor::snapToLastZone(const QString& windowId, const QString& windowS
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    // Empty windowId is a precondition violation that the sibling slots
-    // (snapToAppRule, snapToEmptyZone, resolveWindowRestore) all guard;
+    // Empty windowId or screen is a precondition violation that the sibling
+    // slots (snapToAppRule, snapToEmptyZone, resolveWindowRestore) all guard;
     // mirror their early-return so the input contract is symmetric across
-    // the snap-restore family.
-    if (windowId.isEmpty()) {
+    // the snap-restore family. The calculators resolve the layout, the
+    // last-used state and the desktop filter from the screen, so an empty one
+    // has no honest answer to give.
+    if (windowId.isEmpty() || windowScreenId.isEmpty()) {
         return;
     }
 
@@ -93,7 +95,7 @@ void SnapAdaptor::snapToAppRule(const QString& windowId, const QString& windowSc
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || windowScreenName.isEmpty()) {
         return;
     }
 
@@ -126,7 +128,7 @@ void SnapAdaptor::snapToEmptyZone(const QString& windowId, const QString& window
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    if (windowId.isEmpty()) {
+    if (windowId.isEmpty() || windowScreenId.isEmpty()) {
         return;
     }
 
@@ -240,6 +242,16 @@ void SnapAdaptor::resolveWindowRestore(const QString& windowId, const QString& s
     // Return value intentionally ignored: applySnapResult has already set
     // shouldSnap (false on a disabled-context refusal) and there is no
     // post-snap work in this slot to skip.
+    //
+    // In particular, a refusal here does NOT fall through to
+    // applyOpenScreenRouting. That asymmetry is deliberate. Both of
+    // applySnapResult's refusals mean the user has told us to keep our hands off
+    // this window — snapping is globally disabled, or the destination context is
+    // marked disabled — so honouring the rule's RouteToScreen and moving the
+    // window anyway would act on exactly the context that just said no. The
+    // RouteToDesktop above is different: it is emitted before the engine is
+    // consulted at all, by design, because a desktop route is independent of
+    // whether the window snaps.
 }
 
 bool SnapAdaptor::applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY,
