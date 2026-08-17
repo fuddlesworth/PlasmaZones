@@ -15,6 +15,9 @@ OrderingPage {
     emptyText: i18n("No layouts available")
     emptyExplanation: i18n("Create layouts on the Snapping → Layouts page first.")
     resetAccessibleName: i18n("Reset layout order to default")
+    // Seed only: hasCustomSnappingOrder() is a non-reactive Q_INVOKABLE, so
+    // the first updateCustomOrderState() JS write severs this binding on
+    // purpose — the Connections below are the refresh path from then on.
     hasCustomOrder: settingsController.hasCustomSnappingOrder()
     previewZonesKey: "zones"
     zoneCountKey: "zoneCount"
@@ -39,9 +42,7 @@ OrderingPage {
 
     Connections {
         function onStagedSnappingOrderChanged() {
-            if (!root._rebuilding && !root._movingLocally)
-                root.rebuildModel();
-
+            root.refreshFromStagedOrder();
             root.updateCustomOrderState();
         }
 

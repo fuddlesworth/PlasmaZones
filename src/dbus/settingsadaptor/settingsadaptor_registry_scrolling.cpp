@@ -32,7 +32,7 @@
 #include "config/settings.h" // For concrete Settings type
 #include "config/configdefaults.h" // ConfigDefaults::isValidScrolling* validators
 #include <QColor>
-#include <QUuid> // defaultScrollingTemplate id-format validation
+#include <QUuid> // id-format validation (defaultScrollingTemplate, scrollingTemplateOrder)
 
 namespace PlasmaZones {
 
@@ -190,12 +190,58 @@ void SettingsAdaptor::initializeRegistryScrolling()
         return QVariant::fromValue(m_settings->scrollingDragInsertTriggers());
     };
     m_setters[QStringLiteral("scrollingDragInsertTriggers")] = [this](const QVariant& v) {
+        // Refuse non-QVariantList payloads rather than coercing: toList() on
+        // an int, bool or map yields an EMPTY list, which would silently
+        // clear the triggers while reporting success — same refuse-don't-
+        // coerce posture as the enum setters below. QStringList is refused
+        // too: this key's payload is a list of trigger MAPS, so a string
+        // list is the same coerced garbage in different clothing.
+        if (v.typeId() != QMetaType::QVariantList) {
+            return false;
+        }
         m_settings->setScrollingDragInsertTriggers(v.toList());
         return true;
     };
     m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("stringlist");
 
     REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
+
+    // The template priority order (IOrderingSettings) — the scrolling member
+    // of the ordering family. The snapping and tiling orders are not on the
+    // generic wire; the settings app writes them through its own Settings.
+    // The daemon consumes this one in-process via buildCustomOrder; the
+    // registration keeps the every-scrolling-property D-Bus contract
+    // complete (test_settings_registry_contract). Hand-written rather than
+    // REGISTER_STRINGLIST_SETTING: an ordering write must not coerce — a
+    // non-list payload converted through toStringList() becomes an EMPTY
+    // list, silently wiping the user's saved order while reporting success.
+    // Entries are validated as UUID form the same way defaultScrollingTemplate
+    // refuses malformed ids below (existence against the store cannot be
+    // checked here either), which also keeps the reserved "none" sentinel and
+    // comma-bearing strings out of the persisted comma-joined key, and the
+    // count cap bounds what an errant session process can persist.
+    m_getters[QStringLiteral("scrollingTemplateOrder")] = [this]() {
+        return m_settings->scrollingTemplateOrder();
+    };
+    m_setters[QStringLiteral("scrollingTemplateOrder")] = [this](const QVariant& v) {
+        const int type = v.typeId();
+        if (type != QMetaType::QStringList && type != QMetaType::QVariantList) {
+            return false;
+        }
+        const QStringList order = v.toStringList();
+        constexpr qsizetype kMaxOrderEntries = 1024;
+        if (order.size() > kMaxOrderEntries) {
+            return false;
+        }
+        for (const QString& id : order) {
+            if (QUuid::fromString(id).isNull()) {
+                return false;
+            }
+        }
+        m_settings->setScrollingTemplateOrder(order);
+        return true;
+    };
+    m_schemas[QStringLiteral("scrollingTemplateOrder")] = QStringLiteral("stringlist");
 
     // The scrolling twin of the snap / autotile restore-floated pair, plus the
     // tab-strip toggle. All three are ISettings virtuals with defaults, so they

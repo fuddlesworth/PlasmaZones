@@ -3,6 +3,7 @@
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -35,6 +36,151 @@ class TestDecorationProfileTree : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    // ── Supported surfaces ───────────────────────────────────────────────
+
+    void shell_surfaces_are_decorable_and_inherit_from_their_root()
+    {
+        // The shell.* family names foreign plasma-shell surfaces. Both the
+        // leaf and its ancestor must be decorable, or a stored override at
+        // either would be silently dropped on load by fromJson's
+        // decorationSurfaceSupported() guard.
+        QVERIFY(decorationSurfaceSupported(QStringLiteral("shell.panel")));
+        QVERIFY(decorationSurfaceSupported(QStringLiteral("shell.appletPopup")));
+        QVERIFY(decorationSurfaceSupported(QStringLiteral("shell")));
+        QVERIFY(decorationLeafSurfacePaths().contains(QStringLiteral("shell.panel")));
+        QVERIFY(decorationLeafSurfacePaths().contains(QStringLiteral("shell.appletPopup")));
+        // The family is closed to exactly what the effect can classify —
+        // "shell" alone is an ancestor, never a surface the effect resolves,
+        // and a kind with no ShellSurfaceKind arm is not decorable.
+        QVERIFY(!decorationLeafSurfacePaths().contains(QStringLiteral("shell")));
+        QVERIFY(!decorationSurfaceSupported(QStringLiteral("shell.menu")));
+
+        // A chain set on the root reaches the leaf through the ancestor walk,
+        // so "All Shell Surfaces" really is the category default.
+        DecorationProfileTree tree;
+        tree.setOverride(QStringLiteral("shell"),
+                         makeProfile(QStringList{QStringLiteral("glow")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("glow")});
+
+        // And the leaf overrides it.
+        tree.setOverride(QStringLiteral("shell.panel"),
+                         makeProfile(QStringList{QStringLiteral("frost")}, 1.0, QStringLiteral("#445566")));
+        QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("frost")});
+    }
+
+    void shell_subtree_is_baseline_isolated()
+    {
+        QVERIFY(decorationPathIsBaselineIsolated(QStringLiteral("shell")));
+        QVERIFY(decorationPathIsBaselineIsolated(QStringLiteral("shell.panel")));
+        QVERIFY(!decorationPathIsBaselineIsolated(QStringLiteral("window.tiled")));
+        QVERIFY(!decorationPathIsBaselineIsolated(QStringLiteral("osd")));
+        // Prefix collisions must not count as isolated: only the `shell` node
+        // and its dot-children are.
+        QVERIFY(!decorationPathIsBaselineIsolated(QStringLiteral("shellfish")));
+
+        // Engaging a chain on the Decoration → Shell page is the whole shell
+        // opt-in, so a baseline chain (the user's global look for their own
+        // windows) must never leak onto a shell surface: with no shell-scope
+        // override the leaf resolves EMPTY, and the effect's decorate gate
+        // leaves the surface undecorated.
+        DecorationProfileTree tree;
+        tree.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain.value_or(QStringList{}), QStringList{});
+        QCOMPARE(tree.resolve(QStringLiteral("shell.appletPopup")).chain.value_or(QStringList{}), QStringList{});
+        // Non-shell surfaces keep inheriting the baseline unchanged.
+        QCOMPARE(tree.resolve(QStringLiteral("window.tiled")).chain, QStringList{QStringLiteral("border")});
+
+        // An override inside the shell subtree engages exactly as before.
+        tree.setOverride(QStringLiteral("shell"),
+                         makeProfile(QStringList{QStringLiteral("glow")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("glow")});
+
+        // Seeds: a baseline chain must not veto a shell seed either — the
+        // withSeedDefaults master gate mirrors resolve()'s isolation.
+        DecorationProfileTree user;
+        user.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
+        DecorationProfileTree seeds;
+        seeds.setOverride(QStringLiteral("shell.panel"),
+                          makeProfile(QStringList{QStringLiteral("frost")}, 1.0, QStringLiteral("#445566")));
+        const DecorationProfileTree merged = user.withSeedDefaults(seeds);
+        QCOMPARE(merged.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("frost")});
+    }
+
+    void shell_isolation_covers_every_baseline_field()
+    {
+        // resolve() isolates the ENTIRE baseline profile, not just its chain:
+        // leaked baseline parameters or a leaked disabled set would retune /
+        // suppress whatever pack the user later engages at shell. Pin all
+        // three fields, engaged-EMPTY (withDefaults engages them) rather than
+        // carrying the baseline values.
+        DecorationProfileTree tree;
+        DecorationProfile baseline = makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233"));
+        baseline.disabledPacks = QStringList{QStringLiteral("glow")};
+        tree.setBaseline(baseline);
+        const DecorationProfile shellResolved = tree.resolve(QStringLiteral("shell.panel"));
+        // has_value first: value_or alone would collapse engaged-empty and
+        // nullopt into the same reading, and the engagement half (withDefaults
+        // engages all three) is part of the pinned contract.
+        QVERIFY(shellResolved.chain.has_value());
+        QVERIFY(shellResolved.parameters.has_value());
+        QVERIFY(shellResolved.disabledPacks.has_value());
+        QCOMPARE(*shellResolved.chain, QStringList{});
+        QCOMPARE(*shellResolved.parameters, QVariantMap{});
+        QCOMPARE(*shellResolved.disabledPacks, QStringList{});
+        // The same baseline still reaches a non-isolated surface whole.
+        const DecorationProfile windowResolved = tree.resolve(QStringLiteral("window.tiled"));
+        QCOMPARE(windowResolved.chain, QStringList{QStringLiteral("border")});
+        QVERIFY(windowResolved.parameters->contains(QStringLiteral("border")));
+        QCOMPARE(windowResolved.disabledPacks, QStringList{QStringLiteral("glow")});
+    }
+
+    void engaged_chain_inside_shell_subtree_blocks_a_shell_seed()
+    {
+        // The seed master gate is the ancestor walk: a user chain engaged AT
+        // "shell" must block a seed at "shell.panel" exactly like a window
+        // chain blocks a window seed — isolation exempts only the BASELINE
+        // slot, never an engagement inside the subtree itself.
+        DecorationProfileTree user;
+        user.setOverride(QStringLiteral("shell"),
+                         makeProfile(QStringList{QStringLiteral("glow")}, 2.0, QStringLiteral("#112233")));
+        DecorationProfileTree seeds;
+        seeds.setOverride(QStringLiteral("shell.panel"),
+                          makeProfile(QStringList{QStringLiteral("frost")}, 1.0, QStringLiteral("#445566")));
+        const DecorationProfileTree merged = user.withSeedDefaults(seeds);
+        QCOMPARE(merged.resolve(QStringLiteral("shell.panel")).chain, QStringList{QStringLiteral("glow")});
+        QVERIFY(!merged.hasOverride(QStringLiteral("shell.panel")));
+    }
+
+    void supported_paths_list_carries_the_shell_family()
+    {
+        // The exported list function, as opposed to the membership set — a
+        // regression here silently drops the whole family from every consumer
+        // built on the set.
+        const QStringList supported = decorationSupportedSurfacePaths();
+        QVERIFY(supported.contains(QStringLiteral("shell")));
+        QVERIFY(supported.contains(decorationShellPanelPath()));
+        QVERIFY(supported.contains(decorationShellAppletPopupPath()));
+        // The named accessors and the leaf list must agree — the effect's
+        // resolveSurfacePathFor emits the accessors' spellings, and a drifted
+        // leaf list would strand those paths outside the taxonomy.
+        QVERIFY(decorationLeafSurfacePaths().contains(decorationShellPanelPath()));
+        QVERIFY(decorationLeafSurfacePaths().contains(decorationShellAppletPopupPath()));
+        QCOMPARE(decorationShellRootPath(), QStringLiteral("shell"));
+    }
+
+    void resolve_outside_the_taxonomy_differs_by_isolation_arm()
+    {
+        // Contract pin for the two out-of-taxonomy arms: an unsupported
+        // NON-shell path still inherits the baseline (resolve() is a pure
+        // walk, not a taxonomy gate), while an unsupported shell-prefixed
+        // path resolves EMPTY because isolation is a prefix test. Both are
+        // deliberate; fromJson / the settings UI are the taxonomy gates.
+        DecorationProfileTree tree;
+        tree.setBaseline(makeProfile(QStringList{QStringLiteral("border")}, 2.0, QStringLiteral("#112233")));
+        QCOMPARE(tree.resolve(QStringLiteral("bogus")).chain, QStringList{QStringLiteral("border")});
+        QCOMPARE(tree.resolve(QStringLiteral("shell.menu")).chain.value_or(QStringList{}), QStringList{});
+    }
+
     // ── Serialization ────────────────────────────────────────────────────
 
     void roundTrip_preserves_baseline_overrides_and_order()

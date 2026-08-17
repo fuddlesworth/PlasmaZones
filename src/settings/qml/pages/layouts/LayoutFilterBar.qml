@@ -86,9 +86,8 @@ RowLayout {
     readonly property var tilingSortModel: [i18n("Name"), i18n("Zone Count"), i18n("Priority")]
     // Width Count deliberately shares sort index 1 with Zone Count: the
     // shared sort logic reads the same zoneCount field (a template's
-    // width count) so no template-specific comparator is needed. No
-    // Priority entry — templates have no custom-order page.
-    readonly property var templateSortModel: [i18n("Name"), i18n("Width Count")]
+    // width count) so no template-specific comparator is needed.
+    readonly property var templateSortModel: [i18n("Name"), i18n("Width Count"), i18n("Priority")]
     // Guard to suppress redundant filterSettingsChanged during batch resets
     property bool _resetting: false
     // Cached "a priority order exists for the current mode" — hasCustom*Order()
@@ -98,8 +97,21 @@ RowLayout {
     property bool _hasPriorityOrder: false
 
     function _refreshHasPriorityOrder() {
-        // Templates have no priority order (and no Priority sort entry).
-        _hasPriorityOrder = viewMode === 2 ? false : (viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder());
+        _hasPriorityOrder = viewMode === 2 ? settingsController.hasCustomScrollingOrder() : (viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder());
+        // Greying the Priority entry only blocks NEW picks (GroupSortBar makes
+        // selecting an unavailable entry a no-op) — a selection already on
+        // Priority survives the order's reset, leaving the closed combo
+        // reading "Priority" while the sort silently falls back to name.
+        // Coerce back to Name so the displayed sort matches the applied one.
+        // Persist directly: the Component.onCompleted caller runs AFTER
+        // loadState's own emit, and syncFromState assigns combo indices
+        // without emitting changed, so nothing downstream would re-save.
+        if (!_hasPriorityOrder && sortByIndex === 2) {
+            sortByIndex = 0;
+            groupSort.sortByIndex = 0;
+            groupSort.syncFromState();
+            saveState();
+        }
     }
 
     // The state map for this instance's fixed view mode — the one authority
@@ -278,10 +290,9 @@ RowLayout {
     // loadState() that emits, and would rebuild twice.
     //
     // Each handler is gated on this instance's mode: all three live library
-    // pages hear both signals, and an ungated handler rebuilt every group
+    // pages hear every signal, and an ungated handler rebuilt every group
     // model (and rewrote every Settings block) for a reorder that only one
-    // mode's cards can even sort by. Templates have no priority order at all,
-    // so the viewMode 2 instance ignores both.
+    // mode's cards can even sort by.
     Connections {
         function onStagedSnappingOrderChanged() {
             if (root.viewMode !== 0)
@@ -292,6 +303,13 @@ RowLayout {
 
         function onStagedTilingOrderChanged() {
             if (root.viewMode !== 1)
+                return;
+            root._refreshHasPriorityOrder();
+            root.filterSettingsChanged();
+        }
+
+        function onStagedScrollingOrderChanged() {
+            if (root.viewMode !== 2)
                 return;
             root._refreshHasPriorityOrder();
             root.filterSettingsChanged();
@@ -311,8 +329,8 @@ RowLayout {
 
         groupModel: root.viewMode === 2 ? root.templateGroupModel : (root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel)
         sortModel: root.viewMode === 2 ? root.templateSortModel : (root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel)
-        sortItemAvailable: root.viewMode === 2 ? [true, true] : [true, true, root._hasPriorityOrder]
-        disabledSortTooltip: i18n("Set a layout order on the Priority page first")
+        sortItemAvailable: [true, true, root._hasPriorityOrder]
+        disabledSortTooltip: i18n("Set a priority order on the Priority page first")
         onChanged: {
             root.groupByIndex = groupByIndex;
             root.sortByIndex = sortByIndex;

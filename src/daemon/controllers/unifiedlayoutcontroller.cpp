@@ -183,7 +183,8 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             m_includeManualLayouts, m_includeAutotileLayouts,
             Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
-            PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
+            PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts,
+                                                         m_includeScrollingTemplates),
             m_autotileLayoutSource, /*autotilePreviewCanvas=*/{}, m_includeScrollingTemplates,
             m_layoutManager ? m_layoutManager->scrollingTemplateStore() : nullptr,
             // The None row has to be in THIS list too, not just the popup's:
@@ -248,13 +249,30 @@ void UnifiedLayoutController::cycle(bool forward)
     if (currentIndex < 0) {
         // No current selection (a fresh Templates screen with no template,
         // or an unmatched id): the first FORWARD press applies the first
-        // entry rather than skipping past it to the second; backward wraps
-        // to the last, which clamping to 0 already produces.
+        // entry rather than skipping past it to the second — unless the only
+        // row is the None sentinel, where "apply" would stamp an explicit
+        // opt-out the press did not mean (mirrors the backward arm below).
         if (forward) {
+            if (list.size() == 1 && list.first().id == PhosphorZones::NoScrollingTemplate) {
+                return;
+            }
             applyLayoutByIndex(0);
             return;
         }
-        currentIndex = 0;
+        // Backward wraps to the last row. On a Templates screen the None row
+        // is pinned last, and a screen with no current selection is already
+        // in the no-template state, so applying it would read as a dead
+        // press — land on the last real row instead, and when the None row
+        // is the ONLY row there is nothing to cycle to at all.
+        int last = static_cast<int>(list.size()) - 1;
+        if (list[last].id == PhosphorZones::NoScrollingTemplate) {
+            if (list.size() == 1) {
+                return;
+            }
+            --last;
+        }
+        applyLayoutByIndex(last);
+        return;
     }
 
     // Calculate next index with wraparound
@@ -275,9 +293,16 @@ void UnifiedLayoutController::cycle(bool forward)
 QString UnifiedLayoutController::displayIdForAssignment(const QString& screenId, const QString& assignmentId) const
 {
     if (m_layoutManager && !screenId.isEmpty() && PhosphorLayout::LayoutId::isScrolling(assignmentId)) {
-        // Shared authority with OverlayService::activeLayoutIdForScreen:
+        // Same registry query as OverlayService::activeLayoutIdForScreen:
         // template UUID when one resolves, else the sentinel (== the
-        // assignment id we were handed, matching no card).
+        // assignment id we were handed, matching no card). NOT the same
+        // authority, though: the overlay side additionally gates the
+        // substitution on the LIVE support resolver and falls through to the
+        // manual resolution when a scrolling assignment is router-downgraded,
+        // while this path substitutes on the assignment id alone. Gating here
+        // on m_currentLayoutSupport would need that member to be provably
+        // fresh at every call site (it is push-based), which has not been
+        // established — so on a downgraded screen the two can disagree.
         return m_layoutManager->scrollingDisplayIdForContext(
             screenId, m_layoutManager->currentVirtualDesktopForScreen(screenId), m_currentActivity);
     }

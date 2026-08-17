@@ -256,6 +256,23 @@ void Daemon::connectLayoutSignals()
                 if (!m_running || !m_scrollingTemplateStore) {
                     return;
                 }
+                // A None pick never reaches showScrollingTemplateOsd's ledger
+                // advance ("none" parses to a null QUuid, templateById answers
+                // an invalid template and the funnel bails before the insert),
+                // so record the clear HERE — otherwise the ledger keeps the
+                // previously announced template and a later re-apply of that
+                // same template reads as templateOnly == false, announcing a
+                // scrolling MODE switch that did not happen (the exact hazard
+                // init_assignment_apply's silent-clear arm records an empty id
+                // to prevent). Deliberately not inside showScrollingTemplateOsd:
+                // its early return is shared with shouldSuppressOsd, and
+                // stamping the ledger for a suppressed screen would silence a
+                // later legitimate card. The None press itself shows no card,
+                // matching the KCM clear arm's silent posture.
+                if (templateId == PhosphorZones::NoScrollingTemplate) {
+                    m_lastAnnouncedTemplateByScreen.insert(screenId, QString());
+                    return;
+                }
                 if (isOsdTriggerEnabled(OsdTrigger::LayoutSwitch, screenId)) {
                     QTimer::singleShot(0, this, [this, templateId, screenId]() {
                         if (!m_scrollingTemplateStore) {

@@ -183,8 +183,10 @@ private Q_SLOTS:
     /**
      * The Decorations.Performance keys specifically, spelled out. The scrape above
      * would catch a regression on these too, but naming them pins the exact bug that
-     * shipped: all three were absent from the registry, and PauseWhenIdle's default
-     * of true was being inverted to false on every startup.
+     * shipped: the original trio (AnimateFocusedOnly, PauseWhenIdle, IdleTimeoutSec)
+     * was absent from the registry, and PauseWhenIdle's default of true was being
+     * inverted to false on every startup. BlurScaleMultiplier joined the group later
+     * and rides the same wire, so it is pinned here too.
      */
     void testDecorationPerformanceKeysAreRegistered()
     {
@@ -192,6 +194,7 @@ private Q_SLOTS:
         QVERIFY(keys.contains(QStringLiteral("decorationAnimateFocusedOnly")));
         QVERIFY(keys.contains(QStringLiteral("decorationPauseWhenIdle")));
         QVERIFY(keys.contains(QStringLiteral("decorationIdleTimeoutSec")));
+        QVERIFY(keys.contains(QStringLiteral("decorationBlurScaleMultiplier")));
     }
 
     /**
@@ -365,6 +368,20 @@ private Q_SLOTS:
             case QMetaType::QString:
                 perturbed = QVariant(original.toString() + QStringLiteral("zz"));
                 break;
+            case QMetaType::QStringList: {
+                // scrollingTemplateOrder is the one QStringList property this
+                // scan reaches (the snapping/tiling orders match neither name
+                // filter). Without this arm it would compare its empty default
+                // against another empty-defaulting key's, so a registration
+                // against the wrong accessor would be invisible. The write
+                // goes through the Q_PROPERTY setter, whose canonicalCommaList
+                // validator preserves any non-empty distinct entry; a braced
+                // UUID is used anyway so the value is a plausible one.
+                QStringList l = original.toStringList();
+                l.append(QStringLiteral("{00000000-0000-0000-0000-0000000000ff}"));
+                perturbed = QVariant(l);
+                break;
+            }
             case QMetaType::QColor:
                 // A colour no default resolves to, with a non-opaque alpha so
                 // an alpha-dropping comparison (QColor::name() omits it, the

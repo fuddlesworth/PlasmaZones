@@ -353,7 +353,7 @@ QStringList Settings::managedGroupNames()
         ConfigDefaults::orderingGroup(), // "Ordering"
         ConfigDefaults::windowsAppearanceGroup(), // "Windows" — window border + title bar decoration
         ConfigDefaults::decorationsWindowFilteringGroup(), // "Decorations.WindowFiltering" — border-pass window filter
-        ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — idle/focused-only animation gating
+        ConfigDefaults::decorationsPerformanceGroup(), // "Decorations.Performance" — animation gating + blur density
         ConfigDefaults::gapsGroup(), // "Gaps" — shared inner/outer gap model
         ConfigDefaults::decorationsGroup(), // "Decorations" — per-surface decoration tree (DecorationProfileTree blob)
                                             // + WindowFiltering + Performance sub-groups

@@ -287,6 +287,15 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()), number(ms));
         t.insert(pairKey(CD::decorationsPerformanceGroup(), CD::idleTimeoutSecKey()), number(QStringLiteral("s")));
 
+        // ── Blur density multiplier, percent-rendered ───────────────────────
+        // A MULTIPLIER (band 0.25-2.0), not a 0-1 ratio like the percent block
+        // above: the tiers the UI offers read as 50% / 100% / 200% here, which
+        // is how the profile diff should speak about them. The ratio guard in
+        // test_settingsvaluelabels.cpp (percentScaledKeysStoreARatio) clears
+        // this key only via its 1.0 default; that is expected and documented
+        // there.
+        t.insert(pairKey(CD::decorationsPerformanceGroup(), CD::blurScaleMultiplierKey()), number(pct, 100.0));
+
         // ── Audio / shader scalars ──────────────────────────────────────────
         t.insert(pairKey(CD::shadersGroup(), CD::frameRateKey()), number(QStringLiteral("fps")));
         t.insert(pairKey(CD::shadersAudioGroup(), CD::sensitivityKey()), number(pct));

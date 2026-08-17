@@ -42,7 +42,7 @@ class TestDecorationPageScope : public QObject
 
 private Q_SLOTS:
 
-    /// The three surface pages map to their roots; the non-surface leaves
+    /// The four surface pages map to their roots; the non-surface leaves
     /// (sets library, shaders browser) and unknown ids map to the empty
     /// string, which the callers dispatch to whole-tree handling.
     void testDecorationSurfaceRoot_mapsSurfacePagesOnly()
@@ -50,6 +50,7 @@ private Q_SLOTS:
         QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-windows")), QStringLiteral("window"));
         QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-osds")), QStringLiteral("osd"));
         QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-popups")), QStringLiteral("popup"));
+        QCOMPARE(decorationSurfaceRoot(QStringLiteral("decorations-shell")), QStringLiteral("shell"));
         QVERIFY(decorationSurfaceRoot(QStringLiteral("decorations-sets")).isEmpty());
         QVERIFY(decorationSurfaceRoot(QStringLiteral("decorations-shaders")).isEmpty());
         QVERIFY(decorationSurfaceRoot(QStringLiteral("window-appearance")).isEmpty());
@@ -92,18 +93,32 @@ private Q_SLOTS:
         DecorationProfileTree a;
         a.setOverride(QStringLiteral("osd"), chainProfile({QStringLiteral("border")}));
         a.setOverride(QStringLiteral("popup.layoutPicker"), chainProfile({QStringLiteral("glow")}));
+        a.setOverride(QStringLiteral("shell.panel"), chainProfile({QStringLiteral("border")}));
 
         // Identical trees: no root differs.
         DecorationProfileTree b = a;
         QVERIFY(!decorationRootDiffers(a, b, QStringLiteral("osd")));
         QVERIFY(!decorationRootDiffers(a, b, QStringLiteral("popup")));
         QVERIFY(!decorationRootDiffers(a, b, QStringLiteral("window")));
+        QVERIFY(!decorationRootDiffers(a, b, QStringLiteral("shell")));
 
         // Value change under osd: only the osd root differs.
         b.setOverride(QStringLiteral("osd"), chainProfile({QStringLiteral("shadow")}));
         QVERIFY(decorationRootDiffers(a, b, QStringLiteral("osd")));
         QVERIFY(!decorationRootDiffers(a, b, QStringLiteral("popup")));
         QVERIFY(!decorationRootDiffers(a, b, QStringLiteral("window")));
+        QVERIFY(!decorationRootDiffers(a, b, QStringLiteral("shell")));
+
+        // Shell edits are scoped exactly like the other roots: a change under
+        // shell is visible to the shell root only, and invisible to the rest —
+        // the fourth root must not re-introduce the cross-surface clobbering
+        // this helper exists to prevent.
+        DecorationProfileTree s = a;
+        s.setOverride(QStringLiteral("shell.panel"), chainProfile({QStringLiteral("glow")}));
+        QVERIFY(decorationRootDiffers(a, s, QStringLiteral("shell")));
+        QVERIFY(!decorationRootDiffers(a, s, QStringLiteral("osd")));
+        QVERIFY(!decorationRootDiffers(a, s, QStringLiteral("popup")));
+        QVERIFY(!decorationRootDiffers(a, s, QStringLiteral("window")));
 
         // Removal counts (present in one, absent in the other) — both ways.
         DecorationProfileTree c = a;
@@ -124,6 +139,7 @@ private Q_SLOTS:
         QVERIFY(!decorationRootDiffers(a, e, QStringLiteral("osd")));
         QVERIFY(!decorationRootDiffers(a, e, QStringLiteral("popup")));
         QVERIFY(!decorationRootDiffers(a, e, QStringLiteral("window")));
+        QVERIFY(!decorationRootDiffers(a, e, QStringLiteral("shell")));
     }
 };
 

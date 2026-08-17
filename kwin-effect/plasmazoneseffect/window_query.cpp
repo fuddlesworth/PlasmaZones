@@ -35,6 +35,17 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     if (w->isDock()) {
         return WindowType::Dock;
     }
+    // Plasma applet popups (Kickoff, tray flyouts, any widget's expanded view).
+    // Placed HIGH on purpose rather than next to the generic Popup branch at
+    // the bottom: NET::AppletPopup is its own type and, as measured, sets none
+    // of the generic predicates below (not isPopupWindow, not isMenu, not
+    // isDialog, no transientFor), so it would otherwise fall all the way
+    // through to Unknown — which is exactly the bug this branch fixes. Sitting
+    // above the generic tests means a future KWin that ALSO reports one of
+    // them cannot silently re-route these surfaces to a vaguer type.
+    if (w->isAppletPopup()) {
+        return WindowType::AppletPopup;
+    }
     if (w->isOnScreenDisplay()) {
         return WindowType::OnScreenDisplay;
     }
@@ -49,6 +60,14 @@ PhosphorProtocol::WindowType windowTypeFor(KWin::EffectWindow* w)
     }
     if (w->isDropdownMenu() || w->isPopupMenu() || w->isMenu()) {
         return WindowType::Menu;
+    }
+    // Explicit arm so a NET::Toolbar surface resolves as its own type instead
+    // of falling through to Unknown (it sets none of the generic predicates
+    // below, not even isNormalWindow) — the same fall-through bug the
+    // isAppletPopup arm above fixes, and the Rules page offers Toolbar as a
+    // window-type value, so without a producer that rule could never match.
+    if (w->isToolbar()) {
+        return WindowType::Toolbar;
     }
     if (w->isUtility()) {
         return WindowType::Utility;
@@ -181,9 +200,11 @@ PhosphorRules::WindowQuery ruleQueryFor(KWin::EffectWindow* w, const QString& sc
             query.appId = appId;
         }
     }
-    // pid 0 is KWin's "unknown" sentinel — Wayland surfaces during early
-    // lifecycle and X11 windows missing the _NET_WM_PID hint return 0
-    // from EffectWindow::pid(). Engaging `query.pid = 0` would let a
+    // EffectWindow::pid() reports an unknown PID as -1 (KWin's documented
+    // sentinel — see the matching notes in window_identity.cpp and
+    // window_filtering.cpp); 0 can also surface transiently during early
+    // Wayland lifecycle. The `pid > 0` guard below covers both. Engaging
+    // `query.pid = 0` would let a
     // `Pid Equals 0` predicate silently match every such window. Gate
     // on pid > 0 so the optional stays disengaged in the no-process case.
     // pid_t comes from <sys/types.h>; included explicitly (don't rely on

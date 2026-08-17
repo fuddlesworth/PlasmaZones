@@ -31,6 +31,9 @@ OrderingPageKind orderingPageKind(const QString& page)
     if (page == QLatin1String("tiling-ordering")) {
         return OrderingPageKind::Tiling;
     }
+    if (page == QLatin1String("scrolling-ordering")) {
+        return OrderingPageKind::Scrolling;
+    }
     return OrderingPageKind::None;
 }
 
@@ -113,9 +116,10 @@ const Settings::ConfigKeyList& animationConfigKeys()
 // the file-size ceiling).
 
 // Every decoration leaf reads/writes the single shared DecorationProfileTree
-// settings key (one JSON blob covering windows + OSDs + popups), so
-// pageGroupChildren("decorations") — the canonical leaf set — identifies them
-// all. Reset/Discard/dirty are NOT whole-tree, though: the three surface pages
+// settings key (one JSON blob covering windows, OSDs, popups and shell
+// surfaces), so pageGroupChildren("decorations") — the canonical leaf set —
+// identifies them all. Reset/Discard/dirty are NOT whole-tree, though: the
+// four surface pages
 // each own one root subtree (see decorationSurfaceRoot), so resetting OSDs must
 // not touch the Windows overrides. Only the sets/shaders library leaves act on
 // the whole editable tree.

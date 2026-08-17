@@ -44,6 +44,47 @@ SettingsFlickable {
     // table, so a picker cannot offer a scope the effect would reject.
     readonly property var scopeOptions: settingsController.valueOptions("Windows", "BorderScope")
 
+    // Blur-quality tiers for the Blur card: a multiplier on the buffer-pass
+    // resolution each decoration pack declares. Fixed tiers rather than a free
+    // slider, because the useful values cluster at halve / keep / double and
+    // the effect clamps the product into its allocator band anyway. The
+    // schema's legal band is deliberately wider than these tiers (down to
+    // 0.25, hand-edit headroom); blurQualityIndex() highlights the nearest
+    // tier for an off-tier stored value. i18nc contexts because the single
+    // app-wide translation catalogue would otherwise share these bare
+    // adjectives with any future "Low"/"High" elsewhere.
+    readonly property var blurQualityOptions: [
+        {
+            text: i18nc("@item:inlistbox decoration blur quality", "Low"),
+            value: 0.5
+        },
+        {
+            text: i18nc("@item:inlistbox decoration blur quality", "Balanced"),
+            value: 1.0
+        },
+        {
+            text: i18nc("@item:inlistbox decoration blur quality", "High"),
+            value: 2.0
+        }
+    ]
+
+    // Nearest tier for the stored multiplier, so a hand-edited config value
+    // still highlights the closest option instead of a blank combo. A
+    // non-finite value (nothing produces one today) falls back to the
+    // Balanced tier, the shipped default, rather than accidentally reading
+    // as "Low" out of the comparison seeding.
+    function blurQualityIndex(value) {
+        if (!isFinite(value))
+            return 1;
+        var best = 0;
+        for (var i = 1; i < root.blurQualityOptions.length; ++i) {
+            if (Math.abs(root.blurQualityOptions[i].value - value) < Math.abs(root.blurQualityOptions[best].value - value)) {
+                best = i;
+            }
+        }
+        return best;
+    }
+
     // Index of @p scope in scopeOptions, or -1 when it is not a listed token.
     function scopeIndex(scope) {
         for (var i = 0; i < root.scopeOptions.length; ++i) {
@@ -532,6 +573,53 @@ SettingsFlickable {
             }
         }
 
+        // =====================================================================
+        // BLUR CARD
+        // =====================================================================
+        // The base blur every glass-family decoration pack builds on renders at
+        // the pack's declared buffer resolution. This card scales that
+        // resolution globally, which is the per-frame cost lever (the
+        // Performance card below gates WHEN the chain animates instead). Stays
+        // in simple mode: on an integrated GPU this single knob is the
+        // difference between affordable and expensive blur, and it changes
+        // what the user sees. Placed with the decoration cards rather than
+        // after Gaps, since it only affects decoration shader packs.
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Blur")
+            searchAnchor: "decorationBlur"
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                // Same caveat pattern as the border card's shader note above:
+                // this knob only does anything for windows wearing a
+                // decoration shader pack.
+                Label {
+                    Layout.fillWidth: true
+                    text: i18n("This applies to windows that use decoration shader packs with blur.")
+                    font.italic: true
+                    color: Kirigami.Theme.disabledTextColor
+                    wrapMode: Text.WordWrap
+                }
+
+                SettingsRow {
+                    title: i18n("Blur quality")
+                    searchAnchor: "decorationBlurQuality"
+                    description: i18n("How sharply decoration shaders compute their blur, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Blur quality")
+                        textRole: "text"
+                        model: root.blurQualityOptions
+                        currentIndex: root.blurQualityIndex(appSettings.decorationBlurScaleMultiplier)
+                        onActivated: index => appSettings.decorationBlurScaleMultiplier = root.blurQualityOptions[index].value
+                    }
+                }
+            }
+        }
+
         // =================================================================
         // Gaps Card — the unified inner/outer gap model, config-backed. Smart
         // gaps is tiling-only and lives on the Tiling → Window page, so it is
@@ -597,7 +685,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Animate only the active window")
                     searchAnchor: "decorationAnimateFocusedOnly"
-                    description: i18n("Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open.")
+                    description: i18n("Other windows keep their decoration but stop moving. Saves graphics card use roughly in proportion to how many windows you have open. Panels and applet popups keep animating, because a panel is never the active window.")
 
                     SettingsSwitch {
                         checked: appSettings.decorationAnimateFocusedOnly

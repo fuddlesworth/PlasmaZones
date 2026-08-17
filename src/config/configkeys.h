@@ -164,7 +164,9 @@ public:
     // leave its top performance state: measured at ~110 W and +12 C over an idle
     // desktop with the effect unloaded, on hardware that is only ~45% busy. The
     // cost is not the work per frame, it is that there IS work every frame — so
-    // the knobs here bound WHEN the chain animates rather than how much it does.
+    // most knobs here bound WHEN the chain animates. The group also carries one
+    // per-frame-cost knob, BlurScaleMultiplier, which scales how much blur work
+    // each frame does rather than gating when frames happen.
     P_CONFIG_GROUP(decorationsPerformanceGroup, "Decorations.Performance")
 
     // Parent groups (for purge enumeration — covers all sub-groups)
@@ -511,6 +513,7 @@ public:
     P_CONFIG_KEY(animateFocusedOnlyKey, "AnimateFocusedOnly")
     P_CONFIG_KEY(pauseWhenIdleKey, "PauseWhenIdle")
     P_CONFIG_KEY(idleTimeoutSecKey, "IdleTimeoutSec")
+    P_CONFIG_KEY(blurScaleMultiplierKey, "BlurScaleMultiplier")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps
@@ -739,6 +742,7 @@ public:
 
     P_CONFIG_KEY(snappingLayoutOrderKey, "SnappingLayoutOrder")
     P_CONFIG_KEY(tilingAlgorithmOrderKey, "TilingAlgorithmOrder")
+    P_CONFIG_KEY(scrollingTemplateOrderKey, "ScrollingTemplateOrder")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-Screen Config Group Prefixes

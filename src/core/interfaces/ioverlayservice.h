@@ -125,18 +125,29 @@ public:
     virtual void updateMousePosition(int cursorX, int cursorY) = 0;
 
     // Filtered layout count in the LAYOUT/TEMPLATE vocabulary — the candidate
-    // list the picker and cycle shortcuts consult (their empty-list gates test
-    // this against zero). Never answers strip cards; selectorCardCount is the
-    // popup-sizing question.
+    // list the picker and cycle shortcuts consult. Their empty-list gates test
+    // this against zero on every screen; the empty-STORE case on a Templates
+    // screen is an additional disjunct those gates answer from the template
+    // store's count() directly, because the store-independent None row keeps
+    // this count >= 1 there and would mask it. Never answers strip cards;
+    // selectorCardCount is the popup-sizing question.
     virtual int visibleLayoutCount(const QString& screenId) const = 0;
+
+    // Whether the per-screen include resolution picks the TEMPLATE family for
+    // @p screenId — the same answer visibleLayoutCount and the picker's row
+    // builder act on. The picker/cycle empty-store gates ask THIS rather than
+    // re-deriving support from the mode router, whose live-set-first answer
+    // can diverge from the assignment-based resolution mid-transition and
+    // would misclassify another family's rows.
+    virtual bool screenResolvesToTemplates(const QString& screenId) const = 0;
 
     // Number of cells the drag-selector popup renders on @p screenId — strip
     // cards (floored at 1 for the empty-strip cell) on strip-selector screens,
     // the filtered layout count everywhere else. The trigger-edge sizing
     // contract: isNearTriggerEdge consults this so the keep-visible band and
     // the rendered popup can never disagree. Deliberately a separate virtual
-    // from visibleLayoutCount — folding the strip answer into that one made
-    // the shortcut gates' zero test unreachable on scrolling screens.
+    // from visibleLayoutCount, which stays a pure layout/template row count
+    // rather than absorbing the strip floor.
     virtual int selectorCardCount(const QString& screenId) const = 0;
 
     // Strip-selector screens only: one work-area width share per rendered

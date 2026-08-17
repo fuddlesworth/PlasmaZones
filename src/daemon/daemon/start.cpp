@@ -9,6 +9,7 @@
 #include "config/settingsconfigstore.h"
 #include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/LayoutComputeService.h>
+#include <PhosphorZones/ScrollingTemplateStore.h> // count() (inline) for the cycle shortcut's empty-store gate
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorWorkspaces/VirtualDesktopManager.h>
@@ -700,23 +701,31 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
     updateLayoutFilterForScreen(screenId);
     // Same empty-vocabulary answer the picker gives (shortcuts_wiring.cpp):
     // an empty candidate list means cycling would silently do nothing, on
-    // ANY screen. On a Templates screen that means the template store is
-    // empty, which the user can act on and which the generic "engine
-    // provides no layouts" card would misdescribe; everywhere else the
-    // allow-lists plus the aspect filter wiped the list and the generic card
-    // is the right answer. Same if/else split as the picker so the two
-    // shortcuts never disagree about what an empty list means.
-    if (m_overlayService && m_overlayService->visibleLayoutCount(screenId) == 0) {
-        if (support == LayoutSupport::Templates) {
-            qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
-            if (navigationOsdAllowed(screenId)) {
-                m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
-                                                    QString(), QString(), screenId);
+    // ANY screen. When the overlay's include resolution picked the template
+    // family, the store is asked directly — the synthetic None row keeps
+    // visibleLayoutCount >= 1 there even with zero templates, so the count
+    // alone cannot detect an empty store. Gated on the overlay's OWN
+    // resolution rather than on `support`: the include resolution ANDs the
+    // live capability with isScrolling(assignmentId), so a Templates-capable
+    // screen carrying a manual assignment resolves to the manual family and
+    // its rows must still cycle. Same gate shape and same store-keyed OSD
+    // split as the picker so the two shortcuts never disagree.
+    if (m_overlayService) {
+        const int visibleCount = m_overlayService->visibleLayoutCount(screenId);
+        const bool templateStoreEmpty = m_overlayService->screenResolvesToTemplates(screenId)
+            && (!m_scrollingTemplateStore || m_scrollingTemplateStore->count() == 0);
+        if (templateStoreEmpty || visibleCount == 0) {
+            if (templateStoreEmpty) {
+                qCDebug(lcDaemon) << "Layout cycle: no templates in the store for screen" << screenId;
+                if (navigationOsdAllowed(screenId)) {
+                    m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),
+                                                        QString(), QString(), screenId);
+                }
+            } else {
+                showLayoutsUnavailableOsd(screenId);
             }
-        } else {
-            showLayoutsUnavailableOsd(screenId);
+            return;
         }
-        return;
     }
     if (forward) {
         m_unifiedLayoutController->cycleNext();

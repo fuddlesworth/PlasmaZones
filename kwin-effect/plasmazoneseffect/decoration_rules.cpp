@@ -29,7 +29,11 @@ namespace PlasmaZones {
 
 void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWin::EffectWindow* w)
 {
-    if (!w || windowId.isEmpty()) {
+    // isDeleted matches the two sibling reconcilers below. Every current
+    // caller pre-checks it, so this is defence in depth: the body reads the
+    // window class and, on the non-shielded arm, walks the rule query — the
+    // exact id-cache re-pollution shouldHandleWindow guards corpses out of.
+    if (!w || w->isDeleted() || windowId.isEmpty()) {
         return;
     }
     // Tri-state override, forwarded to the DecorationManager (Rule is the only
@@ -52,8 +56,18 @@ void PlasmaZonesEffect::reconcileRuleHiddenTitleBar(const QString& windowId, KWi
     if (m_windowedFullscreenWindows.contains(windowId)) {
         return;
     }
-    const ResolvedWindowAppearance ovr = resolveEffectiveWindowAppearance(w, windowId);
-    m_decorationManager->setRuleOverride(windowId, ovr.hideTitleBar);
+    // Structural shield, same predicate the layer and open-fullscreen
+    // reconcilers use: hiding a title bar is a persistent window-state write,
+    // so a broad match expression must not reach a dock, the desktop, a
+    // notification, an OSD, or our own overlays. Previously unshielded, which
+    // let a titleBarScope=All config default resolve a hide for plasmashell's
+    // panel — inert only because KWin refuses to unset borders on a dock. A
+    // shielded window resolves to a DISENGAGED override rather than
+    // early-returning, so a window that mutated into a shielded class drains
+    // the override it was holding instead of stranding a hidden title bar.
+    const std::optional<bool> hideTitleBar =
+        isRuleShieldedSurface(w) ? std::nullopt : resolveEffectiveWindowAppearance(w, windowId).hideTitleBar;
+    m_decorationManager->setRuleOverride(windowId, hideTitleBar);
 }
 
 void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::EffectWindow* w)
@@ -98,25 +112,18 @@ void PlasmaZonesEffect::reconcileRuleWindowLayer(const QString& windowId, KWin::
     }
     // Structural / own-surface shield, extending the SetOpacity paint gate
     // (paint_pipeline.cpp shields only the overlay / plasmashell classes;
-    // the portal and structural entries here are deliberate hardening for a
-    // raw window-state write): a broad match expression must never demote a
-    // dock, pin a notification, or strip the daemon overlay's own
-    // keep-above. Transients / popups are deliberately NOT shielded:
-    // transient utility surfaces are legitimate layer-rule targets, and
-    // transient exclusion is per-feature user opt-in in this project (the
-    // IsTransient match field), never hardcoded policy. A shielded window
-    // resolves as rule-free rather than early-returning — window
-    // classification can mutate mid-session (the Electron/CEF class swap,
-    // an X11 type change), and a window that was rule-held BEFORE mutating
-    // into a shielded class must drain its snapshot through the restore
-    // branch below instead of stranding the rule's flags. Fresh shielded
-    // windows skip the resolve entirely and never enter the map.
-    const QString winClass = w->windowClass();
-    const bool shielded = isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass)
-        || isXdgDesktopPortalSurface(winClass) || w->isDesktop() || w->isDock() || w->isNotification()
-        || w->isCriticalNotification() || w->isOnScreenDisplay();
+    // the portal and structural entries in the shared predicate are
+    // deliberate hardening for a raw window-state write). See
+    // isRuleShieldedSurface for the full rationale, including why transients
+    // are deliberately absent from it. A shielded window resolves as
+    // rule-free rather than early-returning — window classification can
+    // mutate mid-session (the Electron/CEF class swap, an X11 type change),
+    // and a window that was rule-held BEFORE mutating into a shielded class
+    // must drain its snapshot through the restore branch below instead of
+    // stranding the rule's flags. Fresh shielded windows skip the resolve
+    // entirely and never enter the map.
     std::optional<QString> layer;
-    if (!shielded) {
+    if (!isRuleShieldedSurface(w)) {
         layer = resolveWindowLayer(resolveRuleActions(w, windowId));
     }
     const auto it = m_ruleWindowLayerSnapshots.find(windowId);
@@ -169,11 +176,9 @@ void PlasmaZonesEffect::applyRuleOpenFullscreen(const QString& windowId, KWin::E
     // Same structural shield as the layer reconcile: a broad match must
     // never fullscreen a dock, a notification, or our own overlay. Shielded
     // windows skip the resolve entirely — with no snapshot to drain there is
-    // no restore branch to route them through.
-    const QString winClass = w->windowClass();
-    if (isOwnOverlayClass(winClass) || isPlasmaShellSurface(winClass) || isXdgDesktopPortalSurface(winClass)
-        || w->isDesktop() || w->isDock() || w->isNotification() || w->isCriticalNotification()
-        || w->isOnScreenDisplay()) {
+    // no restore branch to route them through, so the early return that would
+    // be wrong for the other two reconcilers is right here.
+    if (isRuleShieldedSurface(w)) {
         return;
     }
     // Through the VERDICT evaluator, not the animation/appearance one: that

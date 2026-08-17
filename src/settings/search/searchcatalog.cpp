@@ -127,7 +127,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("snap"), PhosphorI18n::tr("drag"),
                              PhosphorI18n::tr("modifier"), PhosphorI18n::tr("key")});
     search->setPageKeywords(QStringLiteral("snapping-ordering"),
-                            {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
+                            {PhosphorI18n::tr("snap"), PhosphorI18n::tr("snapping"), PhosphorI18n::tr("layout"),
+                             PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
     search->setPageKeywords(QStringLiteral("snapping-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
@@ -167,10 +168,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              // the one exception to this section's tr-for-extraction rule.
                              QStringLiteral("niri")});
     search->setPageKeywords(QStringLiteral("tiling-ordering"),
-                            {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
+                            {PhosphorI18n::tr("tile"), PhosphorI18n::tr("tiling"), PhosphorI18n::tr("algorithm"),
+                             PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
     search->setPageKeywords(QStringLiteral("tiling-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
+    search->setPageKeywords(QStringLiteral("scrolling-ordering"),
+                            {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("priority"),
+                             PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence"), PhosphorI18n::tr("template")});
     search->setPageKeywords(QStringLiteral("scrolling-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key"), PhosphorI18n::tr("template")});
@@ -226,6 +231,11 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
         {PhosphorI18n::tr("osd"), PhosphorI18n::tr("on-screen display"), PhosphorI18n::tr("decoration")});
     search->setPageKeywords(QStringLiteral("decorations-popups"),
                             {PhosphorI18n::tr("popup"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("tooltip")});
+    search->setPageKeywords(QStringLiteral("decorations-shell"),
+                            {PhosphorI18n::tr("shell"), PhosphorI18n::tr("panel"), PhosphorI18n::tr("plasma"),
+                             PhosphorI18n::tr("taskbar"), PhosphorI18n::tr("decoration"), PhosphorI18n::tr("applet"),
+                             PhosphorI18n::tr("applet popup"), PhosphorI18n::tr("launcher"), PhosphorI18n::tr("tray"),
+                             PhosphorI18n::tr("system tray"), PhosphorI18n::tr("dock"), PhosphorI18n::tr("widget")});
     search->setPageKeywords(QStringLiteral("decorations-sets"),
                             {PhosphorI18n::tr("decoration set"), PhosphorI18n::tr("set"), PhosphorI18n::tr("preset"),
                              PhosphorI18n::tr("profile"), PhosphorI18n::tr("pack")});
@@ -239,7 +249,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("border"), PhosphorI18n::tr("color"),
                              PhosphorI18n::tr("title bar"), PhosphorI18n::tr("decoration"),
                              PhosphorI18n::tr("appearance"), PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"),
-                             PhosphorI18n::tr("spacing"), PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin")});
+                             PhosphorI18n::tr("spacing"), PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"),
+                             PhosphorI18n::tr("blur"), PhosphorI18n::tr("performance")});
     search->setPageKeywords(QStringLiteral("rules"),
                             {PhosphorI18n::tr("rule"), PhosphorI18n::tr("exclude"), PhosphorI18n::tr("float"),
                              PhosphorI18n::tr("monitor"), PhosphorI18n::tr("priority"), PhosphorI18n::tr("activity")});
@@ -502,6 +513,13 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
         PhosphorI18n::tr("Idle after"),
         {PhosphorI18n::tr("idle"), PhosphorI18n::tr("timeout"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery")},
         /*advancedOnly=*/true);
+    // The Blur card on the same page — the per-frame cost lever, where the
+    // Performance card gates when the chain animates.
+    addSection(search, QStringLiteral("window-appearance"), QStringLiteral("decorationBlur"), PhosphorI18n::tr("Blur"));
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationBlurQuality"),
+               PhosphorI18n::tr("Blur quality"),
+               {PhosphorI18n::tr("blur"), PhosphorI18n::tr("quality"), PhosphorI18n::tr("resolution"),
+                PhosphorI18n::tr("performance"), PhosphorI18n::tr("gpu"), PhosphorI18n::tr("glass")});
 
     // Window filtering (Decorations.WindowFiltering) — the shared WindowFilterCard
     // on the Window Appearance page. Same anchors the card emits, mirroring the
@@ -928,6 +946,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                PhosphorI18n::tr("Snapping layout priority"));
     addSection(search, QStringLiteral("tiling-ordering"), QStringLiteral("ordering"),
                PhosphorI18n::tr("Tiling algorithm priority"));
+    addSection(search, QStringLiteral("scrolling-ordering"), QStringLiteral("ordering"),
+               PhosphorI18n::tr("Scrolling template priority"));
     addSection(search, QStringLiteral("snapping-shortcuts"), QStringLiteral("quickShortcuts"),
                PhosphorI18n::tr("Snapping Quick Shortcuts"));
     addSection(search, QStringLiteral("tiling-shortcuts"), QStringLiteral("quickShortcuts"),

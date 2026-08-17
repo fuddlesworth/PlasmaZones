@@ -21,6 +21,7 @@
 #include "core/types/constants.h"
 #include <PhosphorContext/ContextResolver.h>
 #include <PhosphorZones/LayoutRegistry.h>
+#include <PhosphorZones/ScrollingTemplateStore.h> // count() (inline) for the picker's empty-store gate
 #include <QCoreApplication>
 #include <QProcess>
 #include <QProcessEnvironment>
@@ -304,17 +305,32 @@ void Daemon::connectShortcutSignals()
         // count check runs BEFORE showLayoutPicker, so it is the only place
         // the empty-list case can be reported; the picker's own empty-list
         // leg is unreachable from here.
-        if (m_overlayService->visibleLayoutCount(screenId) == 0) {
-            // A Templates screen with an empty list means the template store
-            // is empty (fresh install, or every template deleted), which is
-            // something the user can act on. The generic "engine provides no
-            // layouts" card would misdescribe it, so this goes out as the
-            // same navigation-OSD family showLayoutsUnavailableOsd uses
+        //
+        // The Templates arm cannot read visibleLayoutCount as "is the store
+        // empty": the synthetic None row is store-independent, so a template
+        // list counts >= 1 even with zero templates. Ask the store directly,
+        // gated on the overlay's OWN include resolution rather than on
+        // `support`: the include resolution ANDs the live capability with
+        // isScrolling(assignmentId), so a Templates-capable screen carrying
+        // a manual assignment resolves to the manual family — and those rows
+        // must still open the picker. (Post-stop() the resolver is cleared
+        // and that arm fails open to templates; unreachable from here.)
+        const int visibleCount = m_overlayService->visibleLayoutCount(screenId);
+        const bool templateStoreEmpty = m_overlayService->screenResolvesToTemplates(screenId)
+            && (!m_scrollingTemplateStore || m_scrollingTemplateStore->count() == 0);
+        if (templateStoreEmpty || visibleCount == 0) {
+            // An empty template store (fresh install, or every template
+            // deleted) is something the user can act on. The generic "engine
+            // provides no layouts" card would misdescribe it, so this goes out
+            // as the same navigation-OSD family showLayoutsUnavailableOsd uses
             // (same action, different reason) rather than a disabled-context
             // card — showDisabledOsd is the MonitorDisabled/DesktopDisabled
             // family and follows osdStyle, not the showNavigationOsd toggle
-            // this refusal is gated on.
-            if (support == LayoutSupport::Templates) {
+            // this refusal is gated on. Keyed on templateStoreEmpty, not on
+            // `support`: a screen reaching here through the count==0 arm
+            // (another family's list wiped, or a non-empty store) must get
+            // the generic card, not a claim the store is empty.
+            if (templateStoreEmpty) {
                 qCDebug(lcDaemon) << "Layout picker: no templates in the store for screen" << screenId;
                 if (navigationOsdAllowed(screenId)) {
                     m_overlayService->showNavigationOsd(false, QStringLiteral("layout"), QStringLiteral("no_templates"),

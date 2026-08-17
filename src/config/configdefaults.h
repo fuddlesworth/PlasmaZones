@@ -393,11 +393,11 @@ public:
         return {baselineBorderRuleId(), baselineTitleBarRuleId(), baselineGapRuleId()};
     }
 
-    /// Default user-defined sort orders for the layout picker and the tiling
-    /// algorithm menu: empty (no custom order; consumers fall back to their
-    /// natural sort). Comma-joined QString on disk, matching the keys' stored
-    /// type — the schema rows source their defaults here per the
-    /// every-default-through-ConfigDefaults rule.
+    /// Default user-defined sort orders for the layout picker, the tiling
+    /// algorithm menu and the scrolling template picker: empty (no custom
+    /// order; consumers fall back to their natural sort). Comma-joined
+    /// QString on disk, matching the keys' stored type; the schema rows
+    /// source their defaults here.
     static QString snappingLayoutOrder()
     {
         return QString();
@@ -406,10 +406,13 @@ public:
     {
         return QString();
     }
+    static QString scrollingTemplateOrder()
+    {
+        return QString();
+    }
 
     /// Default snapping default-layout id: empty (no explicit default; the
-    /// daemon falls back to its bundled template pick). Same
-    /// every-default-through-ConfigDefaults rationale as the orders above.
+    /// daemon falls back to its bundled template pick).
     static QString defaultLayoutId()
     {
         return QString();
@@ -1093,6 +1096,10 @@ static_assert(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDu
 static_assert(ConfigDefaults::decorationIdleTimeoutSec() >= ConfigDefaults::decorationIdleTimeoutSecMin()
                   && ConfigDefaults::decorationIdleTimeoutSec() <= ConfigDefaults::decorationIdleTimeoutSecMax(),
               "ConfigDefaults::decorationIdleTimeoutSec() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::decorationBlurScaleMultiplier() >= ConfigDefaults::decorationBlurScaleMultiplierMin()
+                  && ConfigDefaults::decorationBlurScaleMultiplier()
+                      <= ConfigDefaults::decorationBlurScaleMultiplierMax(),
+              "ConfigDefaults::decorationBlurScaleMultiplier() outside declared [min, max] range");
 static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
                   && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
               "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");

@@ -9,6 +9,7 @@
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 
+#include <QColor>
 #include <QHash>
 #include <QJsonDocument>
 #include <QSet>
@@ -1652,6 +1653,87 @@ public:
         Q_EMIT scrollingTabIndicatorUrgentColorChanged();
         Q_EMIT settingsChanged();
     }
+    // The scrolling drop-indicator family: all six pairs are DEFAULTED
+    // virtuals on ISettings answering frozen constants — the same hazard the
+    // tab-indicator block above records, with a live interface consumer
+    // (overlayservice's scrolldropindicator reads enabled). Member-backed and
+    // ConfigDefaults-seeded like that block. Simplification relative to
+    // production: the colour setters store whatever they are handed instead
+    // of translating an invalid QColor into the follow-the-theme sentinel —
+    // a stub has no palette to resolve against, so tests drive concrete
+    // colours.
+    bool scrollingDropIndicatorEnabled() const override
+    {
+        return m_scrollingDropIndicatorEnabled;
+    }
+    void setScrollingDropIndicatorEnabled(bool enabled) override
+    {
+        if (m_scrollingDropIndicatorEnabled == enabled)
+            return;
+        m_scrollingDropIndicatorEnabled = enabled;
+        Q_EMIT scrollingDropIndicatorEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+    QColor scrollingDropIndicatorColor() const override
+    {
+        return m_scrollingDropIndicatorColor;
+    }
+    void setScrollingDropIndicatorColor(const QColor& color) override
+    {
+        if (m_scrollingDropIndicatorColor == color)
+            return;
+        m_scrollingDropIndicatorColor = color;
+        Q_EMIT scrollingDropIndicatorColorChanged();
+        Q_EMIT settingsChanged();
+    }
+    QColor scrollingDropIndicatorBorderColor() const override
+    {
+        return m_scrollingDropIndicatorBorderColor;
+    }
+    void setScrollingDropIndicatorBorderColor(const QColor& color) override
+    {
+        if (m_scrollingDropIndicatorBorderColor == color)
+            return;
+        m_scrollingDropIndicatorBorderColor = color;
+        Q_EMIT scrollingDropIndicatorBorderColorChanged();
+        Q_EMIT settingsChanged();
+    }
+    double scrollingDropIndicatorOpacity() const override
+    {
+        return m_scrollingDropIndicatorOpacity;
+    }
+    void setScrollingDropIndicatorOpacity(double opacity) override
+    {
+        if (qFuzzyCompare(m_scrollingDropIndicatorOpacity, opacity))
+            return;
+        m_scrollingDropIndicatorOpacity = opacity;
+        Q_EMIT scrollingDropIndicatorOpacityChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingDropIndicatorBorderWidth() const override
+    {
+        return m_scrollingDropIndicatorBorderWidth;
+    }
+    void setScrollingDropIndicatorBorderWidth(int px) override
+    {
+        if (m_scrollingDropIndicatorBorderWidth == px)
+            return;
+        m_scrollingDropIndicatorBorderWidth = px;
+        Q_EMIT scrollingDropIndicatorBorderWidthChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingDropIndicatorBorderRadius() const override
+    {
+        return m_scrollingDropIndicatorBorderRadius;
+    }
+    void setScrollingDropIndicatorBorderRadius(int px) override
+    {
+        if (m_scrollingDropIndicatorBorderRadius == px)
+            return;
+        m_scrollingDropIndicatorBorderRadius = px;
+        Q_EMIT scrollingDropIndicatorBorderRadiusChanged();
+        Q_EMIT settingsChanged();
+    }
     // ISettings getter/setter; the ISnapSettings bridge (unfloatFallbackToZone)
     // is defined alongside the other ISnapSettings overrides below.
     bool snapUnfloatFallbackToZone() const override
@@ -1756,6 +1838,18 @@ public:
             return;
         m_tilingAlgorithmOrder = order;
         Q_EMIT tilingAlgorithmOrderChanged();
+        Q_EMIT settingsChanged();
+    }
+    QStringList scrollingTemplateOrder() const override
+    {
+        return m_scrollingTemplateOrder;
+    }
+    void setScrollingTemplateOrder(const QStringList& order) override
+    {
+        if (m_scrollingTemplateOrder == order)
+            return;
+        m_scrollingTemplateOrder = order;
+        Q_EMIT scrollingTemplateOrderChanged();
         Q_EMIT settingsChanged();
     }
 
@@ -1929,6 +2023,31 @@ public:
         }
         m_decorationIdleTimeoutSec = clamped;
         Q_EMIT decorationIdleTimeoutSecChanged();
+        Q_EMIT settingsChanged();
+    }
+    double decorationBlurScaleMultiplier() const override
+    {
+        return m_decorationBlurScaleMultiplier;
+    }
+    void setDecorationBlurScaleMultiplier(double value) override
+    {
+        // Mirror the schema's clampDouble, same rationale as the timeout above.
+        // Including its NaN branch, made explicit rather than left to qBound:
+        // Qt's qBound(min, val, max) composes as qMax(min, qMin(max, val)),
+        // whose all-false NaN comparisons happen to collapse to the minimum
+        // with this argument order — the same value clampDouble pins NaN to
+        // deliberately. Spelling the branch out keeps the stub's contract
+        // readable and independent of that composition detail.
+        if (qIsNaN(value)) {
+            value = ConfigDefaults::decorationBlurScaleMultiplierMin();
+        }
+        const double clamped = qBound(ConfigDefaults::decorationBlurScaleMultiplierMin(), value,
+                                      ConfigDefaults::decorationBlurScaleMultiplierMax());
+        if (qFuzzyCompare(m_decorationBlurScaleMultiplier, clamped)) {
+            return;
+        }
+        m_decorationBlurScaleMultiplier = clamped;
+        Q_EMIT decorationBlurScaleMultiplierChanged();
         Q_EMIT settingsChanged();
     }
 
@@ -2628,11 +2747,20 @@ private:
     QString m_scrollingTabIndicatorActiveColor = ConfigDefaults::scrollingTabIndicatorActiveColor();
     QString m_scrollingTabIndicatorInactiveColor = ConfigDefaults::scrollingTabIndicatorInactiveColor();
     QString m_scrollingTabIndicatorUrgentColor = ConfigDefaults::scrollingTabIndicatorUrgentColor();
+    bool m_scrollingDropIndicatorEnabled = ConfigDefaults::scrollingDropIndicatorEnabled();
+    // The FALLBACK colour, matching what the defaulted interface getter (and
+    // production with no palette) resolves to for the empty stored string.
+    QColor m_scrollingDropIndicatorColor = ConfigDefaults::scrollingDropIndicatorFallbackColor();
+    QColor m_scrollingDropIndicatorBorderColor = ConfigDefaults::scrollingDropIndicatorFallbackColor();
+    double m_scrollingDropIndicatorOpacity = ConfigDefaults::scrollingDropIndicatorOpacity();
+    int m_scrollingDropIndicatorBorderWidth = ConfigDefaults::scrollingDropIndicatorBorderWidth();
+    int m_scrollingDropIndicatorBorderRadius = ConfigDefaults::scrollingDropIndicatorBorderRadius();
     bool m_snapUnfloatFallbackToZone = ConfigDefaults::snapUnfloatFallbackToZone();
     bool m_snappingFocusNewWindows = ConfigDefaults::snappingFocusNewWindows();
     bool m_snappingFocusFollowsMouse = ConfigDefaults::snappingFocusFollowsMouse();
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
+    QStringList m_scrollingTemplateOrder;
     // Seeded from ConfigDefaults like every sibling trigger list: production
     // defaults to a single Alt trigger, and an empty stub baseline would
     // hand activation-gated tests a "no trigger configured" world the real
@@ -2801,6 +2929,7 @@ private:
     bool m_decorationAnimateFocusedOnly = ConfigDefaults::decorationAnimateFocusedOnly();
     bool m_decorationPauseWhenIdle = ConfigDefaults::decorationPauseWhenIdle();
     int m_decorationIdleTimeoutSec = ConfigDefaults::decorationIdleTimeoutSec();
+    double m_decorationBlurScaleMultiplier = ConfigDefaults::decorationBlurScaleMultiplier();
     bool m_showWindowOpacityTint = ConfigDefaults::showWindowOpacityTint();
     QString m_windowOpacityTintScope = ConfigDefaults::windowOpacityTintScope();
     double m_windowOpacity = ConfigDefaults::windowOpacity();

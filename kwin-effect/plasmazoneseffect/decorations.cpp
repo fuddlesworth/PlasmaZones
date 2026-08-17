@@ -23,6 +23,7 @@
 
 #include <PhosphorSurface/DecorationProfile.h>
 #include <PhosphorSurface/DecorationProfileTree.h>
+#include <PhosphorSurface/DecorationSupportedPaths.h>
 #include <PhosphorSurface/SurfaceThemeResolve.h>
 
 #include <QColor>
@@ -255,8 +256,10 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     }
 
     // APP-WINDOW GATE: decoration-specific filter (shouldDecorateWindow), NOT
-    // the snapping shouldHandleWindow. It rejects the always-wrong surfaces
-    // (docks, panels, desktop, OSDs, notifications, portal / plasma-shell,
+    // the snapping shouldHandleWindow. It admits plasmashell's panels and
+    // applet popups up front (the shell carve-out — see the header doc), then
+    // rejects the always-wrong surfaces (desktop, OSDs, notifications,
+    // portal / other plasma-shell, other docks,
     // our own overlays) and honours the user Exclude rules, but the
     // transient family and a minimum-size threshold are user-tunable via the
     // Decorations.WindowFiltering settings (m_decorationExcludeTransientWindows /
@@ -283,7 +286,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // added to a chain).
     // enabledChain(): packs the user toggled off stay in the profile but must
     // not render, exactly like a disabled rule is skipped by the evaluator.
-    const QString surfacePath = resolveSurfacePathFor(windowId);
+    const QString surfacePath = resolveSurfacePathFor(windowId, w);
     const PhosphorSurfaceShaders::DecorationProfile resolvedProfile = m_decorationTree.resolve(surfacePath);
     QStringList userPacks = resolvedProfile.enabledChain();
 
@@ -299,8 +302,28 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     // border-appearance resolvers use, so it refreshes on every trigger
     // that re-runs updateWindowDecoration (rule edits, focus, snap flips,
     // desktop changes).
+    //
+    // SHELL SURFACES resolve chain-only — the tree node is their whole
+    // decoration, and neither the rule chain here nor the easy-mode appearance
+    // below applies to them. Both are keyed to APP identity: a rule's match
+    // expression walks appId / class / title / role / PID / window state, none
+    // of which describes plasmashell's panel, and the easy-mode config
+    // defaults are scoped by placement (Tiled / Normal / All) which a panel is
+    // outside of. `All` in particular would otherwise put a border on the
+    // panel the instant the user enabled the opt-in, which is not what
+    // enabling "decorate panels" asks for. Keyed off the resolved surface path
+    // rather than a second classify so the two cannot disagree.
+    //
+    // The skip also leaves `sharedQuery` disengaged for a shell surface, which
+    // is correct and not a missed memoisation: shouldDecorateWindow answers
+    // these kinds structurally before it reaches the rule slice, so nothing
+    // filled the slot and nothing below reads it. The shell subtree is
+    // baseline-isolated, so an unconfigured shell surface resolves an empty
+    // chain here and falls out at the decorate gate below — engaging a chain
+    // on the Decoration → Shell page is the whole opt-in.
+    const bool isShellSurface = PhosphorSurfaceShaders::decorationPathIsBaselineIsolated(surfacePath);
     const std::optional<ResolvedDecorationChain> ruleChain =
-        resolveDecorationChain(resolveRuleActions(w, windowId, &sharedQuery));
+        isShellSurface ? std::nullopt : resolveDecorationChain(resolveRuleActions(w, windowId, &sharedQuery));
     if (ruleChain) {
         userPacks = ruleChain->chain;
     }
@@ -330,7 +353,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     std::optional<ResolvedWindowAppearance> appearance;
     bool showBorder = false;
     bool showOpacityTint = false;
-    if (userPacks.isEmpty()) {
+    if (userPacks.isEmpty() && !isShellSurface) {
         appearance = resolveEffectiveWindowAppearance(w, windowId);
         showBorder = appearance->showBorder.value_or(false);
         showOpacityTint = appearance->showOpacityTint.value_or(false);
@@ -379,6 +402,7 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
     WindowDecoration wb;
     wb.chain = chain;
     wb.basePackId = basePackId;
+    wb.isShellSurface = isShellSurface;
 
     // Resolve THIS window's param values for every pack in the chain. Windows
     // on different surface paths (window.tiled / window.snapped /
@@ -684,6 +708,15 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
 void PlasmaZonesEffect::updateAllDecorations()
 {
+    // Compositor teardown: KWin::effects can be null when a caller driven by a
+    // file watcher or a D-Bus reply fires during shutdown (the registry
+    // hot-reload handler documents exactly this case before its own guarded
+    // addRepaintFull). Nothing to reconcile against, and the stackingOrder()
+    // walk below would deref the null.
+    if (!KWin::effects) {
+        return;
+    }
+
     // Snapshot which windows are decorated BEFORE the reconcile. This serves the post-loop
     // sweep, and nothing else: it is how the sweep finds the entries this pass did not
     // revisit. (It used to also feed a "was this decorated?" hint into
@@ -801,6 +834,28 @@ bool PlasmaZonesEffect::isWindowMarkedSnapped(const QString& windowId) const
 
 QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId) const
 {
+    // findWindowByIdExact, never findWindowById — the fuzzy appId fallback
+    // could resolve a same-app sibling for a dead id and mis-route a real
+    // window onto a shell path. Callers that already hold the EffectWindow*
+    // use the overload below instead of paying (and risking) this lookup.
+    return resolveSurfacePathFor(windowId, findWindowByIdExact(windowId));
+}
+
+QString PlasmaZonesEffect::resolveSurfacePathFor(const QString& windowId, KWin::EffectWindow* w) const
+{
+    // SHELL SURFACES resolve by kind, before any placement lookup: plasmashell's
+    // panel is never in either engine's tiled bucket, so without this it would
+    // fall through to "window.floating" and wear whatever the user styled their
+    // floating app windows with.
+    switch (shellSurfaceKindFor(w)) {
+    case ShellSurfaceKind::Panel:
+        return PhosphorSurfaceShaders::decorationShellPanelPath();
+    case ShellSurfaceKind::AppletPopup:
+        return PhosphorSurfaceShaders::decorationShellAppletPopupPath();
+    case ShellSurfaceKind::None:
+        break;
+    }
+
     // MEMBERSHIP-only resolution: isTiledWindow tests bucket membership, and the
     // resolved profile's enabledChain() (an empty chain = no decoration) is the
     // sole render gate (see updateWindowDecoration) — there is no separate show-border

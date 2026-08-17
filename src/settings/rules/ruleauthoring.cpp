@@ -266,6 +266,7 @@ QList<WindowTypeOption> windowTypeOptions()
         {PhosphorProtocol::WindowType::Desktop, PhosphorI18n::tr("Desktop")},
         {PhosphorProtocol::WindowType::OnScreenDisplay, PhosphorI18n::tr("On-screen display")},
         {PhosphorProtocol::WindowType::Popup, PhosphorI18n::tr("Popup")},
+        {PhosphorProtocol::WindowType::AppletPopup, PhosphorI18n::tr("Plasma applet popup")},
     });
     QList<WindowTypeOption> out;
     out.reserve(static_cast<int>(entries.size()));

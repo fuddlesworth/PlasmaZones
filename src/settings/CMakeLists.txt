@@ -329,14 +329,15 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/tiling/TilingWindowHandlingCard.qml
         qml/pages/tiling/TilingFocusCard.qml
         # Scrolling: the condensed simple page, the advanced leaves
-        # (Columns / Tabs / Window / Strip Selector), the quick-shortcuts
-        # page binding templates to the quick digits, and the cards both
-        # surfaces share.
+        # (Columns / Tabs / Window / Strip Selector), the Configuration
+        # leaves (template priority + the quick-shortcuts page binding
+        # templates to the quick digits), and the cards both surfaces share.
         qml/pages/scrolling/ScrollingZoneSelectorPage.qml
         qml/pages/scrolling/ScrollingSimplePage.qml
         qml/pages/scrolling/ScrollingColumnsPage.qml
         qml/pages/scrolling/ScrollingTabsPage.qml
         qml/pages/scrolling/ScrollingWindowPage.qml
+        qml/pages/scrolling/ScrollingOrderingPage.qml
         qml/pages/scrolling/ScrollingQuickShortcutsPage.qml
         qml/pages/scrolling/PresetListEditor.qml
         qml/pages/scrolling/ScrollingWindowHandlingCard.qml
@@ -460,14 +461,15 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/AnimationsShadersPage.qml
         qml/pages/snapping/SnappingShadersPage.qml
         # Decoration drill-down — per-surface override cards (Windows / OSDs /
-        # Popups), each driving a ChainEditor (ordered decoration-pack list with
-        # per-pack params) and border/titlebar field overrides via
+        # Popups / Shell), each driving a ChainEditor (ordered decoration-pack
+        # list with per-pack params) and border/titlebar field overrides via
         # DecorationPageController.
         qml/pages/decoration/DecorationSetsPage.qml
         qml/pages/decoration/DecorationShadersPage.qml
         qml/pages/decoration/DecorationWindowsPage.qml
         qml/pages/decoration/DecorationOsdsPage.qml
         qml/pages/decoration/DecorationPopupsPage.qml
+        qml/pages/decoration/DecorationShellPage.qml
         qml/pages/decoration/DecorationSurfaceCardList.qml
         qml/pages/decoration/DecorationSurfaceCard.qml
         qml/pages/tiling/ChainEditor.qml

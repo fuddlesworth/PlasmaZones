@@ -172,6 +172,23 @@ P_STORE_SET_INT(setBorderRadius, snappingZonesBorderGroup, radiusKey, borderRadi
 // parser below is still defensive (trim + skip-empty) in case a caller
 // reads a string written before the validator was installed.
 
+void Settings::writeOrderList(const QString& key, const QStringList& order, OrderListSignalFn specificSignal)
+{
+    // Read the canonical stored form before AND after writing so the
+    // canonicalCommaList validator gets to pick the comparison points.
+    // Comparing the caller's (possibly non-canonical) input to the stored
+    // canonical value would emit a spurious `changed` signal every time a
+    // caller passed e.g. " a , b " while disk already holds "a,b".
+    const QString before = m_store->read<QString>(ConfigDefaults::orderingGroup(), key);
+    m_store->write(ConfigDefaults::orderingGroup(), key, order.join(QLatin1Char(',')));
+    const QString after = m_store->read<QString>(ConfigDefaults::orderingGroup(), key);
+    if (before == after) {
+        return;
+    }
+    Q_EMIT(this->*specificSignal)();
+    Q_EMIT settingsChanged();
+}
+
 QStringList Settings::snappingLayoutOrder() const
 {
     return parseCommaList(
@@ -180,22 +197,7 @@ QStringList Settings::snappingLayoutOrder() const
 
 void Settings::setSnappingLayoutOrder(const QStringList& order)
 {
-    // Read the canonical stored form before AND after writing so the
-    // canonicalCommaList validator gets to pick the comparison points.
-    // Comparing the user's (possibly non-canonical) input to the stored
-    // canonical value would emit a spurious `changed` signal every time a
-    // caller passed e.g. " a , b " while disk already holds "a,b".
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey());
-    m_store->write(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey(),
-                   order.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT snappingLayoutOrderChanged();
-    Q_EMIT settingsChanged();
+    writeOrderList(ConfigDefaults::snappingLayoutOrderKey(), order, &Settings::snappingLayoutOrderChanged);
 }
 
 QStringList Settings::tilingAlgorithmOrder() const
@@ -206,19 +208,18 @@ QStringList Settings::tilingAlgorithmOrder() const
 
 void Settings::setTilingAlgorithmOrder(const QStringList& order)
 {
-    // See setSnappingLayoutOrder — post-write compare against the canonical
-    // form avoids spurious change signals for equivalent non-canonical input.
-    const QString before =
-        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey());
-    m_store->write(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey(),
-                   order.join(QLatin1Char(',')));
-    const QString after =
-        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey());
-    if (before == after) {
-        return;
-    }
-    Q_EMIT tilingAlgorithmOrderChanged();
-    Q_EMIT settingsChanged();
+    writeOrderList(ConfigDefaults::tilingAlgorithmOrderKey(), order, &Settings::tilingAlgorithmOrderChanged);
+}
+
+QStringList Settings::scrollingTemplateOrder() const
+{
+    return parseCommaList(
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::scrollingTemplateOrderKey()));
+}
+
+void Settings::setScrollingTemplateOrder(const QStringList& order)
+{
+    writeOrderList(ConfigDefaults::scrollingTemplateOrderKey(), order, &Settings::scrollingTemplateOrderChanged);
 }
 
 // ── Animations (PhosphorConfig::Store-backed) ───────────────────────────────
@@ -236,11 +237,12 @@ P_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
 
 // ── Decorations.Performance (PhosphorConfig::Store-backed) ──────────────────
-// These bound WHEN the decoration chain animates, not how much work it does per
-// frame. An animated pack repaints every window carrying it on every vsync, and
-// that alone holds the GPU in its top performance state however cheap the frame
-// is — so the only lever that returns the card to its idle clocks is to stop
-// drawing when nothing needs to change.
+// Most of these bound WHEN the decoration chain animates, not how much work it
+// does per frame (the blur-scale multiplier at the end is the per-frame
+// exception). An animated pack repaints every window carrying it on every
+// vsync, and that alone holds the GPU in its top performance state however
+// cheap the frame is — so the only lever that returns the card to its idle
+// clocks is to stop drawing when nothing needs to change.
 
 P_STORE_GET(bool, decorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey, bool)
 P_STORE_SET_BOOL(setDecorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey,
@@ -253,6 +255,13 @@ P_STORE_SET_BOOL(setDecorationPauseWhenIdle, decorationsPerformanceGroup, pauseW
 P_STORE_GET(int, decorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey, int)
 P_STORE_SET_INT(setDecorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey,
                 decorationIdleTimeoutSecChanged)
+
+// Unlike its WHEN-gating group-mates this one shrinks the per-frame work: it
+// scales the resolution every pack's buffer passes (the blur pyramid) render
+// at, relative to the pack's own declared bufferScale.
+P_STORE_GET(double, decorationBlurScaleMultiplier, decorationsPerformanceGroup, blurScaleMultiplierKey, double)
+P_STORE_SET_DOUBLE(setDecorationBlurScaleMultiplier, decorationsPerformanceGroup, blurScaleMultiplierKey,
+                   decorationBlurScaleMultiplierChanged)
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values

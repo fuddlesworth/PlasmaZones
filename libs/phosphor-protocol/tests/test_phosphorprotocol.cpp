@@ -285,6 +285,29 @@ private Q_SLOTS:
         QVERIFY(!windowTypeFromString(QString()).has_value());
     }
 
+    void testWindowTypeAppletPopupIsWireStableAndInRange()
+    {
+        // Plasma applet popups (Kickoff, tray flyouts) were unrepresentable
+        // until AppletPopup was appended, so every one of them crossed the wire
+        // as Unknown and no rule could name them.
+        QVERIFY(isValidWindowType(static_cast<int>(WindowType::AppletPopup)));
+        QVERIFY(windowTypeFromInt(13) == WindowType::AppletPopup);
+        const auto parsed = windowTypeFromString(QStringLiteral("appletpopup"));
+        QVERIFY(parsed.has_value() && *parsed == WindowType::AppletPopup);
+
+        // The underlying ints ARE the D-Bus representation, so they are frozen.
+        // Renumbering an existing value would silently reinterpret every rule
+        // and every cached window snapshot a peer already stored; this pins the
+        // pre-existing tail of the enum against exactly that.
+        QCOMPARE(static_cast<int>(WindowType::Unknown), 0);
+        QCOMPARE(static_cast<int>(WindowType::Popup), 12);
+        QCOMPARE(static_cast<int>(WindowType::AppletPopup), 13);
+        // windowTypeMaxValue must track the LAST enumerator, or a newly added
+        // type is rejected on arrival and degrades to Unknown — the exact
+        // failure mode this whole test guards.
+        QCOMPARE(windowTypeMaxValue, static_cast<int>(WindowType::AppletPopup));
+    }
+
     void testWindowTypeFromIntClampsOutOfRange()
     {
         QVERIFY(windowTypeFromInt(static_cast<int>(WindowType::Dialog)) == WindowType::Dialog);

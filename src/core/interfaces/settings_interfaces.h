@@ -530,7 +530,7 @@ public:
 };
 
 /**
- * @brief Settings related to manual layout/algorithm ordering
+ * @brief Settings related to manual layout / algorithm / scrolling-template ordering
  *
  * Used by: Daemon (layout cycling, zone selector, overlay), Settings UI
  */
@@ -543,6 +543,8 @@ public:
     virtual void setSnappingLayoutOrder(const QStringList& order) = 0;
     virtual QStringList tilingAlgorithmOrder() const = 0;
     virtual void setTilingAlgorithmOrder(const QStringList& order) = 0;
+    virtual QStringList scrollingTemplateOrder() const = 0;
+    virtual void setScrollingTemplateOrder(const QStringList& order) = 0;
 };
 
 /**

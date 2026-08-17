@@ -30,6 +30,7 @@
 
 #include <PhosphorSurface/SurfaceShaderEffect.h>
 
+#include <QByteArray>
 #include <QLoggingCategory>
 #include <QPoint>
 #include <QRectF>
@@ -37,8 +38,7 @@
 #include <QSize>
 
 #include <algorithm> // std::max, unioning the two not-animating spans
-
-#include <cmath>
+#include <cmath> // std::floor / std::ceil, the shell content-rect scan bounds
 
 #include <epoxy/gl.h>
 
@@ -139,8 +139,11 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     }
 
     // (Re)allocate the cached per-pack buffer textures when the chain or size
-    // changes. chainBufferTex[k] holds one texture per pack k's buffer passes,
-    // downscaled by that pack's bufferScale; a pack that fails to compile (or has
+    // changes, or when the blur-scale-multiplier loader (daemon_settings.cpp)
+    // cleared chainKey to force a reallocation at the new density.
+    // chainBufferTex[k] holds one texture per pack k's buffer passes, sized by
+    // clampedBufferScale(eff.bufferScale) — the pack's declared bufferScale
+    // with the user's global multiplier folded in; a pack that fails to compile (or has
     // no buffers) leaves an empty inner vector and renders single-pass in the fold.
     if (state.chainKey != chain) {
         // Framebuffers before textures, for the reason given at the composite realloc above.
@@ -154,9 +157,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                 continue;
             }
             const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(chain.at(k));
-            const qreal bufferScale =
-                qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale, eff.bufferScale,
-                       PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
+            const qreal bufferScale = clampedBufferScale(eff.bufferScale);
             const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
                                    qMax(1, qRound(textureSize.height() * bufferScale)));
             auto& bufs = state.chainBufferTex[k];
@@ -251,6 +252,172 @@ void PlasmaZonesEffect::captureWindowSurface(KWin::EffectWindow* w, SurfaceMulti
     m_capturingSnapshot = false;
     state.captureValid = true;
     state.captureInComposite = !intoCaptureTex;
+    // The frame-relative offset the shell content scan must measure against
+    // (see the field doc): the viewport above maps logicalGeometry onto the
+    // FBO, so the frame's texels sit at exactly this offset (times scale)
+    // inside the capture — and unlike either absolute origin, the OFFSET is
+    // move-invariant, because the canvas is derived from the window's own
+    // geometry and moves with it.
+    state.captureFrameOffset = w->frameGeometry().topLeft() - logicalGeometry.topLeft();
+}
+
+void PlasmaZonesEffect::updateShellContentRect(KWin::EffectWindow* w, SurfaceMultipassState& state, qreal captureScale)
+{
+    const QRectF frame = w->frameGeometry();
+    if (frame.isEmpty() || captureScale <= 0.0) {
+        return;
+    }
+    // Throttle the readback: a panel damages often (clock ticks, tray
+    // animation) but its visible shape changes rarely, and glReadPixels is a
+    // pipeline stall. A frame RESIZE bypasses the throttle — the stored rect
+    // is invalid for the new size (consumers check shellContentFrameSize) and
+    // must be replaced on the first capture at that size. The caller runs this
+    // on EVERY paint of a shell surface (not only on a fresh capture — see
+    // renderSurfaceChainComposite), so a shape change at an unchanged frame
+    // size self-heals within one interval of the panel's next paint. A panel
+    // that is never painted at all keeps the old rect, which is fine: nothing
+    // is on screen to disagree with it.
+    constexpr qint64 kRescanIntervalMs = 1000;
+    const qint64 nowMs = ShaderInternal::shaderClockNowMs();
+    if (state.shellContentFrameSize == frame.size() && state.shellContentScanMs >= 0
+        && nowMs - state.shellContentScanMs < kRescanIntervalMs) {
+        return;
+    }
+
+    KWin::GLFramebuffer* fbo = state.captureInComposite ? state.compositeFbo[0].get() : state.captureFbo.get();
+    if (!fbo || !fbo->valid()) {
+        return;
+    }
+    const QSize texSize = fbo->size();
+
+    // The frame subrect inside the canvas texture, top-down device px. FLOOR
+    // the origin / CEIL the extent so a fractional-scale frame edge lands
+    // inside the scan rather than outside it, then clamp to the texture. The
+    // exact (pre-floor) origins are kept so the stored rect can carry the
+    // sub-device-pixel residue at fractional scales — bounds are measured
+    // from the FLOORED origin, and dropping the fraction shifted the
+    // substituted frame up to one device px up/left of the visible body.
+    //
+    // Measured via the frame offset stamped AT CAPTURE TIME (see the field
+    // doc): the scan can run on a still-valid capture after a pure move, and
+    // the frame-relative offset is the move-invariant quantity — pairing the
+    // live frame with a capture-time canvas origin (or the reverse) would err
+    // by the whole move delta, while the offset is exact for the texels the
+    // buffer actually holds.
+    const qreal fxExact = state.captureFrameOffset.x() * captureScale;
+    const qreal fyExact = state.captureFrameOffset.y() * captureScale;
+    const int fx = std::clamp(static_cast<int>(std::floor(fxExact)), 0, texSize.width());
+    const int fy = std::clamp(static_cast<int>(std::floor(fyExact)), 0, texSize.height());
+    const int fw = std::clamp(static_cast<int>(std::ceil(frame.width() * captureScale)), 0, texSize.width() - fx);
+    const int fh = std::clamp(static_cast<int>(std::ceil(frame.height() * captureScale)), 0, texSize.height() - fy);
+    if (fw <= 0 || fh <= 0) {
+        return;
+    }
+
+    // GL's framebuffer origin is bottom-left (same flip snapassistthumbnail-
+    // capture.cpp applies to its toImage()), so the read starts at the frame
+    // rect's BOTTOM edge and buffer row r is top-down row fh - 1 - r.
+    // m_shellScanScratch is the reusable staging buffer — this runs on the
+    // paint path, and a fresh ~1 MB allocation per rescan is exactly the
+    // per-frame-allocation class this file avoids. QByteArray retains its
+    // capacity across resize(), so once the buffer has grown to the largest
+    // scanned panel no further allocation happens.
+    m_shellScanScratch.resize(static_cast<qsizetype>(fw) * fh * 4);
+    // The row indexing below assumes tightly packed rows. RGBA8 rows are
+    // 4-byte multiples so any PACK_ALIGNMENT up to 4 is tight, but the global
+    // pixel-store state is shared with KWin and every other loaded effect —
+    // pin PACK_ROW_LENGTH/ALIGNMENT for the read and restore what was there.
+    GLint prevAlignment = 4;
+    GLint prevRowLength = 0;
+    glGetIntegerv(GL_PACK_ALIGNMENT, &prevAlignment);
+    glGetIntegerv(GL_PACK_ROW_LENGTH, &prevRowLength);
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    KWin::GLFramebuffer::pushFramebuffer(fbo);
+    glReadPixels(fx, texSize.height() - fy - fh, fw, fh, GL_RGBA, GL_UNSIGNED_BYTE, m_shellScanScratch.data());
+    KWin::GLFramebuffer::popFramebuffer();
+    glPixelStorei(GL_PACK_ALIGNMENT, prevAlignment);
+    glPixelStorei(GL_PACK_ROW_LENGTH, prevRowLength);
+
+    // Bound the texels that read as the surface's BODY, not its shadow. A
+    // floating panel keeps its float gap and drop shadow INSIDE the frame
+    // rect (plasmashell draws them in its own window), so a fixed low floor
+    // bounded the shadow's soft skirt and the decoration wrapped the full
+    // floating extent instead of the visible bar (live-measured: the skirt
+    // sits around 15-25% alpha while a Panel Colorizer body is 85%+ with
+    // opaque widgets on top). The floor is therefore RELATIVE — a fraction of
+    // the strongest alpha actually present — so it lands above any soft
+    // shadow while still admitting a deliberately translucent body, whose
+    // widgets carry the maximum up anyway. kAlphaFloorMin keeps a
+    // near-invisible surface from bounding its own noise.
+    //
+    // KNOWN LIMIT of the relative floor: it holds only while the body's peak
+    // alpha stays well above the shadow skirt. A panel styled fully
+    // translucent with no opaque widgets on it (peak alpha under ~72% of 255)
+    // puts the floor back inside the measured 15-25% skirt band, and the
+    // bounds then admit the shadow again. Accepted: such a panel has no crisp
+    // body edge to hug in the first place, and the fallback is the full
+    // frame, not a wrong crop of the body.
+    //
+    // Two passes over the buffer by necessity, not oversight: the floor is a
+    // fraction of the maximum, so the bounds pass cannot start until the max
+    // pass has finished.
+    const auto* data = reinterpret_cast<const unsigned char*>(m_shellScanScratch.constData());
+    unsigned char maxAlpha = 0;
+    const qsizetype pixelCount = static_cast<qsizetype>(fw) * fh;
+    for (qsizetype i = 0; i < pixelCount; ++i) {
+        maxAlpha = std::max(maxAlpha, data[i * 4 + 3]);
+    }
+    constexpr int kAlphaFloorMin = 8;
+    constexpr int kAlphaFloorPercentOfMax = 35;
+    const int alphaFloor = std::max(kAlphaFloorMin, (static_cast<int>(maxAlpha) * kAlphaFloorPercentOfMax) / 100);
+    int minX = fw, maxX = -1, minRow = fh, maxRow = -1;
+    for (int r = 0; r < fh; ++r) {
+        const unsigned char* row = data + static_cast<qsizetype>(r) * fw * 4;
+        for (int x = 0; x < fw; ++x) {
+            if (row[x * 4 + 3] < alphaFloor) {
+                continue;
+            }
+            minX = std::min(minX, x);
+            maxX = std::max(maxX, x);
+            minRow = std::min(minRow, r);
+            maxRow = std::max(maxRow, r);
+        }
+    }
+
+    state.shellContentFrameSize = frame.size();
+    state.shellContentScanMs = nowMs;
+    const QRectF previousRect = state.shellContentRect;
+    if (maxX < 0) {
+        // Nothing visible at all — leave the rect empty; consumers fall back
+        // to the full frame rather than collapsing the decoration to a point.
+        state.shellContentRect = QRectF();
+    } else {
+        // Buffer rows are bottom-up (row 0 is the frame's bottom edge), so the
+        // top-down top is fh - 1 - maxRow and the top-down bottom is
+        // fh - 1 - minRow, both inclusive. Bounds are measured from the
+        // FLOORED scan origin; subtracting the origin's dropped fraction
+        // (fxExact - fx, in [0,1) device px) re-expresses them relative to the
+        // frame's true fractional origin, which is what the consumer
+        // re-anchors against (pushBorderUniforms translates by
+        // frame.topLeft()).
+        const int topDown = fh - 1 - maxRow;
+        const int bottomDown = fh - 1 - minRow;
+        state.shellContentRect =
+            QRectF((minX - (fxExact - fx)) / captureScale, (topDown - (fyExact - fy)) / captureScale,
+                   (maxX - minX + 1) / captureScale, (bottomDown - topDown + 1) / captureScale);
+    }
+    // The rect is a direct shader input (pushBorderUniforms) but is NOT part
+    // of the fold plan's key set, so a moved rect must drop the cached
+    // prefix/composite itself — the fold has no other way to notice. Without
+    // this the update is consumed only by the accident that the sole original
+    // call site ran right after a fresh capture (which had already cleared
+    // both flags); the hoisted per-paint call site relies on this.
+    if (state.shellContentRect != previousRect) {
+        state.prefixValid = false;
+        state.prefixChainEnd = -1;
+        state.compositeValid = false;
+    }
 }
 
 // Decide what a fold can REUSE before it does any work.
@@ -452,7 +619,14 @@ SurfaceFoldPlan PlasmaZonesEffect::planSurfaceFold(KWin::EffectWindow* w, const 
     plan.foldCursor = chainReadsCursor
         ? foldCursorFor(w, state.canvasGeo, decorationMayAnimate(w), m_shaderManager.m_cachedCursorGlobal)
         : kCursorOutside;
-    const bool focusedNow = KWin::effects && w == KWin::effects->activeWindow();
+    // Shell surfaces count as FOCUSED: a panel is a dock and never becomes
+    // KWin's active window, so the raw test pinned uSurfaceFocused at 0 for
+    // its whole life and a focus-mixing pack (border's active/inactive
+    // colours) only ever showed its inactive appearance there. A panel has no
+    // unfocused state to represent — it is always "in use" while visible —
+    // and an applet popup is effectively focused for its whole open lifetime,
+    // so both kinds pin the flag high. Mirrored in pushBorderUniforms.
+    const bool focusedNow = deco.isShellSurface || (KWin::effects && w == KWin::effects->activeWindow());
     if (!chainReadsFocus) {
         // Terminate a STRANDED ramp. advanceFocusFade is this map's only
         // advancer, and it is unreachable for a chain with no compiled
