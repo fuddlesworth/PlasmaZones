@@ -579,7 +579,7 @@ SettingsFlickable {
                 const vertical = stateView.stripVertical;
                 return spans.map(function (span, index) {
                     return {
-                        "id": "strip:fallback:" + index,
+                        "id": "strip:fallback:" + (index + 1),
                         "name": "",
                         "useCustomColors": false,
                         "relativeGeometry": {

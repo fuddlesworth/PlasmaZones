@@ -200,6 +200,7 @@ private Q_SLOTS:
     /// to the historical behaviour rather than to a vertical strip.
     void intMappingCoversInRangeAndOutOfRange()
     {
+        QCOMPARE(PhosphorProtocol::scrollAxisFromInt(0), ScrollAxis::Horizontal);
         QCOMPARE(PhosphorProtocol::scrollAxisFromInt(1), ScrollAxis::Vertical);
         QCOMPARE(PhosphorProtocol::scrollAxisFromInt(2), ScrollAxis::Horizontal);
         QCOMPARE(PhosphorProtocol::scrollAxisFromInt(-1), ScrollAxis::Horizontal);

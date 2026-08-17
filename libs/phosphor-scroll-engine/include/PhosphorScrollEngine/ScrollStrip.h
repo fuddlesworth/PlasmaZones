@@ -388,10 +388,10 @@ private:
     int clampedAnchor(int anchor, const ScrollLayoutParams& params) const;
     /// The anchor a structural mutation ends on: KEEP the view where it was
     /// (an anchor reproducing @p oldViewOffset, clamped at BOTH strip edges —
-    /// deliberately stricter than removeWindowInternal's trail-only clamp,
-    /// because these mutations can shrink the strip from either end) unless
-    /// the centering policy says the focused column re-centers, in which
-    /// case RECENTER wins.
+    /// deliberately stricter than removeWindowInternal's leading-edge-only
+    /// clamp; see that function's comment for why a removal does not reclaim
+    /// trailing dead space) unless the centering policy says the focused
+    /// column re-centers, in which case RECENTER wins.
     int keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params) const;
     /// Apply the center-focused-column policy after the active column moved
     /// from @p prevIdx at @p oldViewOffset (strip coords) to the current active.

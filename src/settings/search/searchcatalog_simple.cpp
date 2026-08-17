@@ -107,8 +107,7 @@ void seedSimplePageAnchors(PhosphorControl::SearchController* search)
     // simple page hosts the same card (anchors resolve per hosting page id).
     addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("stripDirection"),
                PhosphorI18n::tr("Strip direction"));
-    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("stripAxis"),
-               PhosphorI18n::tr("Strip direction"),
+    addSetting(search, QStringLiteral("scrolling-simple"), QStringLiteral("stripAxis"), PhosphorI18n::tr("Direction"),
                {PhosphorI18n::tr("strip"), PhosphorI18n::tr("axis"), PhosphorI18n::tr("vertical"),
                 PhosphorI18n::tr("horizontal"), PhosphorI18n::tr("portrait")});
     addSection(search, QStringLiteral("scrolling-simple"), QStringLiteral("scrollingFocus"),

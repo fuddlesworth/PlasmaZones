@@ -124,8 +124,9 @@ private Q_SLOTS:
     /// two interchangeable: the departure test reads the WORK AREA, the park
     /// and the clamps read the SCREEN, and a swap of the two is invisible while
     /// they are equal. This slot insets the work area's trailing end by 100px
-    /// and places a tile past it but still inside the screen, so reading the
-    /// screen there clamps instead of parking.
+    /// and places a tile whose leading edge is still inside the screen but
+    /// past the work area's trailing end, so reading the screen there clamps
+    /// instead of parking.
     void theWorkAreaNotTheScreenDecidesDeparture()
     {
         QFETCH(int, axisValue);

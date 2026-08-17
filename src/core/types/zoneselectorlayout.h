@@ -187,7 +187,7 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
             cardsExtent += stripCardPreviewWidth(layout.indicatorHeight, f) + layout.labelSpace + layout.cardPadding;
         }
         layout.scrollContentHeight = cardsExtent + (cardCount - 1) * layout.indicatorSpacing;
-        layout.scrollContentWidth = layout.indicatorWidth + layout.cardSidePadding * 2;
+        layout.scrollContentWidth = layout.cellWidth;
 
         layout.contentWidth = layout.scrollContentWidth;
         layout.contentHeight = layout.scrollContentHeight;
