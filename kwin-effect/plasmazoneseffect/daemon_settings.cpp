@@ -21,6 +21,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QtNumeric>
 
 #include <algorithm>
 #include <utility>
@@ -184,25 +185,42 @@ void PlasmaZonesEffect::loadCachedSettings()
     // reallocate them (with the GL context current there, where the FBO
     // deletion is safe), and the fold invalidation forces that next fold — a
     // static chain would otherwise early-return its cached composite forever
-    // and never notice. The capture density self-heals: captureScaleKey is
-    // recomputed per frame from the (now cleared) scale cache.
+    // and never notice. The BACKDROP capture density self-heals with no help
+    // from this loader: chainBackdropScale re-resolves through the (now
+    // cleared) cache on the next paint and captureWindowBackdrop reallocates
+    // on the resulting size change (surface_backdrop.cpp). The window capture
+    // itself is unaffected — captureScale is the output scale, not a pack
+    // density, so it never sees this multiplier.
     loadSettingAsync(QStringLiteral("decorationBlurScaleMultiplier"), [this](const QVariant& v) {
         // Numeric-or-bust guard, same rationale as the bool loaders above: an
         // older daemon answers unknown keys with a valid EMPTY reply, and
         // QVariant("").toReal() is 0.0 — which would floor every buffer target
         // to kMinBufferScale instead of leaving the default multiplier alone.
+        // qIsFinite rejects NaN explicitly (NaN passes an m <= 0.0 test and
+        // would silently degrade the product clamp to its floor).
         bool ok = false;
-        const qreal m = v.toReal(&ok);
-        if (!ok || m <= 0.0) {
+        namespace DD = PhosphorCompositor::DecorationDefaults;
+        const qreal raw = v.toReal(&ok);
+        if (!ok || !qIsFinite(raw) || raw <= 0.0) {
             return;
         }
-        if (!qFuzzyCompare(m_decorationBlurScaleMultiplier, m)) {
+        // Boundary clamp against the shared SSOT, like every numeric loader in
+        // this file: the daemon's schema clamps to the same band, but a
+        // separate process's reply is not trusted with the range. The product
+        // clamp in clampedBufferScale() would saturate an out-of-range value
+        // anyway; this keeps the stored member inside its declared band.
+        const qreal m = qBound(DD::BlurScaleMultiplierMin, raw, DD::BlurScaleMultiplierMax);
+        if (!qFuzzyCompare(m_decorationBlurScaleMultiplier + 1.0, m + 1.0)) {
             m_decorationBlurScaleMultiplier = m;
             m_packBufferScaleCache.clear();
             for (auto& [id, surfaceState] : m_surfaceMultipass) {
                 surfaceState.chainKey.clear();
                 surfaceState.compositeValid = false;
                 surfaceState.prefixValid = false;
+                // The cleared chainKey makes ensureSurfaceTargets reset this
+                // before planSurfaceFold reads it, so this reset is symmetry
+                // with the profile-tree loader below, not a live fix.
+                surfaceState.prefixChainEnd = -1;
             }
             repaintAllDecorations();
         }

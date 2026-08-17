@@ -5,6 +5,8 @@
 
 #include "configdefaults_limits.h"
 
+#include <PhosphorCompositor/DecorationDefaults.h>
+
 namespace PlasmaZones {
 
 // Chain link 4: rendering-backend, audio-spectrum shader, decoration-shader, and
@@ -301,7 +303,9 @@ public:
     // never lets the GPU leave its top performance state — measured at ~110 W and
     // +12 C over an idle desktop with the effect unloaded, on a GPU that is only
     // ~45% busy. What costs is not the work per frame but that there IS work every
-    // frame, so these bound WHEN the chain animates, not how much it does.
+    // frame, so most of these bound WHEN the chain animates. The one exception
+    // is the blur-scale multiplier below, which shrinks the per-frame work
+    // itself rather than gating when it happens.
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Animate only the focused window's decoration; unfocused windows hold their
@@ -348,17 +352,22 @@ public:
     /// [kMinBufferScale, kMaxBufferScale] band it already clamps the raw
     /// metadata into). A multiplier rather than an absolute override so packs
     /// that deliberately run their buffers sharper keep their relative intent.
-    static constexpr double decorationBlurScaleMultiplier()
+    /// The values live in PhosphorCompositor::DecorationDefaults so the effect's
+    /// pre-settings-load seed and its D-Bus boundary clamp share this SSOT.
+    /// The legal band is deliberately wider than the settings UI's three tiers
+    /// (0.5 / 1.0 / 2.0): the headroom down to the minimum exists for hand
+    /// edits and scripted writes, and the UI highlights the nearest tier.
+    static constexpr qreal decorationBlurScaleMultiplier()
     {
-        return 1.0;
+        return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplier;
     }
-    static constexpr double decorationBlurScaleMultiplierMin()
+    static constexpr qreal decorationBlurScaleMultiplierMin()
     {
-        return 0.25;
+        return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplierMin;
     }
-    static constexpr double decorationBlurScaleMultiplierMax()
+    static constexpr qreal decorationBlurScaleMultiplierMax()
     {
-        return 2.0;
+        return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplierMax;
     }
 };
 

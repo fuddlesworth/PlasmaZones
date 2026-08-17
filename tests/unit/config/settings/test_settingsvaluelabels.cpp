@@ -19,6 +19,7 @@
  */
 
 #include <QDir>
+#include <QDirIterator>
 #include <QRegularExpression>
 #include <QSet>
 #include <QTest>
@@ -202,6 +203,14 @@ private Q_SLOTS:
     /// A key displayed as a percentage must actually persist a 0.0-1.0 ratio.
     /// Scaling a key that already stores 0-100 would render "8000%", and the
     /// only signal that the scale is wrong is the number a user sees.
+    ///
+    /// The check reads the DEFAULT, not the key's whole legal band. One
+    /// percent-rendered key is a multiplier rather than a ratio:
+    /// Decorations.Performance/BlurScaleMultiplier legally stores up to 2.0
+    /// (rendered "200%", which is correct for it) and clears this guard only
+    /// because its default is 1.0. If its default ever moves above 1.0, the
+    /// right fix is an explicit exemption for that key here, not loosening the
+    /// bound for everyone.
     void percentScaledKeysStoreARatio()
     {
         const PhosphorConfig::Schema schema = buildSettingsSchema();
@@ -324,8 +333,12 @@ private Q_SLOTS:
 
         QStringList problems;
         int calls = 0;
-        const QFileInfoList files = qmlDir.entryInfoList({QStringLiteral("*.qml")}, QDir::Files);
-        for (const QFileInfo& info : files) {
+        // Recursive on purpose: nearly every page lives under qml/pages/**, so
+        // a flat entryInfoList walk saw only the handful of top-level files and
+        // silently guarded 3 of the ~23 real call sites while reading green.
+        QDirIterator files(qmlDir.path(), {QStringLiteral("*.qml")}, QDir::Files, QDirIterator::Subdirectories);
+        while (files.hasNext()) {
+            const QFileInfo info(files.next());
             QFile file(info.absoluteFilePath());
             if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
                 continue;
@@ -349,7 +362,12 @@ private Q_SLOTS:
 
         problems.sort();
         QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1String("\n  "))));
-        QVERIFY2(calls > 0, "no valueOptions() calls found in QML — the scan is broken, not clean");
+        // A floor a single-file scan cannot satisfy: the settings QML carries
+        // over twenty valueOptions() calls, so a count this low means the walk
+        // regressed to a subset of the tree, not that pickers were removed.
+        QVERIFY2(calls > 10,
+                 qPrintable(QStringLiteral("only %1 valueOptions() calls found in QML — the scan is broken, not clean")
+                                .arg(calls)));
     }
 
     /// Every UI-subset token must name a choice its key actually declares —

@@ -515,7 +515,8 @@ public:
     Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
                    NOTIFY decorationProfileTreeChanged)
 
-    // Decorations.Performance — bounds on WHEN the decoration chain animates.
+    // Decorations.Performance — three bounds on WHEN the decoration chain
+    // animates, plus the blur-scale multiplier that shrinks the per-frame work.
     Q_PROPERTY(bool decorationAnimateFocusedOnly READ decorationAnimateFocusedOnly WRITE setDecorationAnimateFocusedOnly
                    NOTIFY decorationAnimateFocusedOnlyChanged)
     Q_PROPERTY(bool decorationPauseWhenIdle READ decorationPauseWhenIdle WRITE setDecorationPauseWhenIdle NOTIFY

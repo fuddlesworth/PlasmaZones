@@ -237,11 +237,12 @@ P_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
 P_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
 
 // ── Decorations.Performance (PhosphorConfig::Store-backed) ──────────────────
-// These bound WHEN the decoration chain animates, not how much work it does per
-// frame. An animated pack repaints every window carrying it on every vsync, and
-// that alone holds the GPU in its top performance state however cheap the frame
-// is — so the only lever that returns the card to its idle clocks is to stop
-// drawing when nothing needs to change.
+// Most of these bound WHEN the decoration chain animates, not how much work it
+// does per frame (the blur-scale multiplier at the end is the per-frame
+// exception). An animated pack repaints every window carrying it on every
+// vsync, and that alone holds the GPU in its top performance state however
+// cheap the frame is — so the only lever that returns the card to its idle
+// clocks is to stop drawing when nothing needs to change.
 
 P_STORE_GET(bool, decorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey, bool)
 P_STORE_SET_BOOL(setDecorationAnimateFocusedOnly, decorationsPerformanceGroup, animateFocusedOnlyKey,

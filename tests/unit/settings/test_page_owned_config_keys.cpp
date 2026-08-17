@@ -179,10 +179,15 @@ private Q_SLOTS:
         // same reason: its Gpu key shipped without a manifest owner (no
         // dirty mark, per-page Reset and Discard silently skipped it)
         // precisely because this sweep did not cover the group.
+        // Decorations.Performance joined when its fourth key
+        // (BlurScaleMultiplier) landed: all four are owned by the
+        // window-appearance page today, and sweeping the group keeps a future
+        // fifth key from shipping ownerless the way Rendering.Gpu did.
         for (const QString& group :
              {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
               ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
-              ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::renderingGroup()}) {
+              ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::renderingGroup(),
+              ConfigDefaults::decorationsPerformanceGroup()}) {
             const auto it = schema.groups.constFind(group);
             QVERIFY2(it != schema.groups.constEnd(), qPrintable(group));
             for (const PhosphorConfig::KeyDef& def : *it) {

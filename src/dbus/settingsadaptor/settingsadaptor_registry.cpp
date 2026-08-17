@@ -552,14 +552,16 @@ void SettingsAdaptor::initializeRegistry()
     // by name over getSetting, which resolves through THIS registry, not through Qt
     // property reflection — so leaving a key out here disables the setting on the
     // effect side however complete the rest of its wiring looks. That is not
-    // hypothetical: all three of these were missing once, and because getSetting then
-    // answered an unknown key with a valid empty string, PauseWhenIdle's default of
-    // true was being read back as false on every startup. tests/unit/dbus/
+    // hypothetical: the original trio (AnimateFocusedOnly, PauseWhenIdle,
+    // IdleTimeoutSec) was missing once, and because getSetting then answered an
+    // unknown key with a valid empty string, PauseWhenIdle's default of true was
+    // being read back as false on every startup. tests/unit/dbus/
     // test_settings_registry_contract.cpp is the tripwire for the next one.
     //
-    // decorationIdleTimeoutSec is read by the daemon directly, but registering it
-    // keeps the wire surface complete (getSettingKeys / getAllSettingSchemas
-    // enumerate this map).
+    // The effect fetches AnimateFocusedOnly, PauseWhenIdle, and
+    // BlurScaleMultiplier via loadSettingAsync; decorationIdleTimeoutSec is read
+    // by the daemon directly, but registering it keeps the wire surface complete
+    // (getSettingKeys / getAllSettingSchemas enumerate this map).
     REGISTER_BOOL_SETTING("decorationAnimateFocusedOnly", decorationAnimateFocusedOnly, setDecorationAnimateFocusedOnly)
     REGISTER_BOOL_SETTING("decorationPauseWhenIdle", decorationPauseWhenIdle, setDecorationPauseWhenIdle)
     REGISTER_INT_SETTING("decorationIdleTimeoutSec", decorationIdleTimeoutSec, setDecorationIdleTimeoutSec)

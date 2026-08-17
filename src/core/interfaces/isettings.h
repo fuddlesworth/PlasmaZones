@@ -179,10 +179,11 @@ public:
     virtual QString decorationProfileTreeJson() const = 0;
     virtual void setDecorationProfileTreeJson(const QString& json) = 0;
 
-    // Decorations.Performance — bounds on WHEN the decoration chain animates. An
-    // animated pack repaints every window carrying it on every vsync, and that
-    // alone keeps the GPU in its top performance state regardless of how cheap the
-    // per-frame work is, so these gate the redraw rather than shrink it.
+    // Decorations.Performance — an animated pack repaints every window carrying
+    // it on every vsync, and that alone keeps the GPU in its top performance
+    // state regardless of how cheap the per-frame work is. The three gates below
+    // bound WHEN the chain redraws; the blur-scale multiplier after them shrinks
+    // the per-frame work instead.
     virtual bool decorationAnimateFocusedOnly() const = 0;
     virtual void setDecorationAnimateFocusedOnly(bool value) = 0;
     virtual bool decorationPauseWhenIdle() const = 0;

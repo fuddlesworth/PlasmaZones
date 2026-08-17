@@ -292,7 +292,7 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         // above uses the same helper.
         ensureGlContextCurrent();
         m_compiledPacks.clear();
-        m_packBufferScaleCache.clear(); // metadata cache rides the compile cache's lifetime
+        m_packBufferScaleCache.clear(); // caches the multiplier-folded product; rides the compile cache's lifetime
         m_anyCompiledPackReadsCursor = false; // re-derived as packs recompile
         m_opacityTintFallbackWarned = false; // re-arm the capture-fallback warning with the fresh compiles
         m_surfaceMultipass.clear();
@@ -303,6 +303,13 @@ void PlasmaZonesEffect::initRenderingAndRegistries()
         if (KWin::effects) {
             KWin::effects->addRepaintFull();
         }
+        // A pack edit can also change the registry metadata that
+        // updateWindowDecoration SNAPSHOTS onto each WindowDecoration
+        // (outerPadding, needsBackdrop, chainInteriorOpaque) — without a
+        // re-resolve every open window keeps rendering with the old values.
+        // The decoration-profile-tree loader in daemon_settings.cpp does the
+        // same after its cache clears, for the same reason.
+        updateAllDecorations();
         // A pack reload can flip a decoration pack's `audio` metadata flag,
         // which feeds the cava run gate via hasAudioReactiveDecoration() —
         // mirror the animation registry's effectsChanged handler above.

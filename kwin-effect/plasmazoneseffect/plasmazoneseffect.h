@@ -2785,26 +2785,14 @@ private:
 
     /// Multiplier on each pack's declared buffer-pass bufferScale
     /// (Decorations.Performance.BlurScaleMultiplier) — unlike its WHEN-gating
-    /// group-mates above, this one shrinks (or raises) the per-frame blur work
-    /// itself. Applied through clampedBufferScale(), the single chokepoint both
-    /// buffer-target sizing (surface_capture.cpp) and the per-frame
-    /// backdrop-density resolve (paint_pipeline.cpp) go through, so capture
-    /// density and sampler density keep agreeing by construction. Mirrors
-    /// ConfigDefaults::decorationBlurScaleMultiplier() until the daemon pushes
-    /// the real value.
-    qreal m_decorationBlurScaleMultiplier = 1.0;
-
-    /// The one clamp every consumer of a pack's metadata bufferScale applies:
-    /// the user's global multiplier folded in, then bounded into the band the
-    /// buffer-target allocator accepts. m_packBufferScaleCache stores THIS
-    /// value, so the cache must clear whenever the multiplier changes (the
-    /// daemon_settings.cpp loader does).
-    qreal clampedBufferScale(qreal metadataScale) const
-    {
-        return qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale,
-                      metadataScale * m_decorationBlurScaleMultiplier,
-                      PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
-    }
+    /// group-mates above, this one shrinks (or, for a pack that declares less
+    /// than full density, raises) the per-frame blur work itself. Applied
+    /// through clampedBufferScale(), the single chokepoint both buffer-target
+    /// sizing (surface_capture.cpp) and the per-frame backdrop-density resolve
+    /// (paint_pipeline.cpp) go through, so capture density and sampler density
+    /// keep agreeing by construction. Seeded from the shared SSOT the daemon's
+    /// schema also clamps from, until the daemon pushes the real value.
+    qreal m_decorationBlurScaleMultiplier = PhosphorCompositor::DecorationDefaults::BlurScaleMultiplier;
 
     /// Whether the session is currently idle. Pushed by the daemon, which owns the
     /// idle detection: idleness is a WAYLAND CLIENT concern (ext-idle-notify-v1)
@@ -2817,6 +2805,18 @@ private:
     // the compositor thread. See ClientHelpers::asyncCall() and ClientHelpers::fireAndForget().
 
     // Screen change debouncing and reapply handled by ScreenChangeHandler
+
+    /// The one clamp every consumer of a pack's metadata bufferScale applies:
+    /// the user's global multiplier folded in, then bounded into the band the
+    /// buffer-target allocator accepts. m_packBufferScaleCache stores THIS
+    /// value, so the cache must clear whenever the multiplier changes (the
+    /// daemon_settings.cpp loader does).
+    qreal clampedBufferScale(qreal metadataScale) const
+    {
+        return qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale,
+                      metadataScale * m_decorationBlurScaleMultiplier,
+                      PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
+    }
 
     // Load cached settings from daemon (exclusions, activation triggers, etc.)
     void loadCachedSettings();

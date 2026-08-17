@@ -1096,6 +1096,10 @@ static_assert(ConfigDefaults::focusFadeDuration() >= ConfigDefaults::focusFadeDu
 static_assert(ConfigDefaults::decorationIdleTimeoutSec() >= ConfigDefaults::decorationIdleTimeoutSecMin()
                   && ConfigDefaults::decorationIdleTimeoutSec() <= ConfigDefaults::decorationIdleTimeoutSecMax(),
               "ConfigDefaults::decorationIdleTimeoutSec() outside declared [min, max] slider range");
+static_assert(ConfigDefaults::decorationBlurScaleMultiplier() >= ConfigDefaults::decorationBlurScaleMultiplierMin()
+                  && ConfigDefaults::decorationBlurScaleMultiplier()
+                      <= ConfigDefaults::decorationBlurScaleMultiplierMax(),
+              "ConfigDefaults::decorationBlurScaleMultiplier() outside declared [min, max] range");
 static_assert(ConfigDefaults::animationStaggerInterval() >= ConfigDefaults::animationStaggerIntervalMin()
                   && ConfigDefaults::animationStaggerInterval() <= ConfigDefaults::animationStaggerIntervalMax(),
               "ConfigDefaults::animationStaggerInterval() outside declared [min, max] slider range");

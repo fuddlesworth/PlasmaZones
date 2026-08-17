@@ -708,6 +708,15 @@ void PlasmaZonesEffect::updateWindowDecoration(const QString& windowId, KWin::Ef
 
 void PlasmaZonesEffect::updateAllDecorations()
 {
+    // Compositor teardown: KWin::effects can be null when a caller driven by a
+    // file watcher or a D-Bus reply fires during shutdown (the registry
+    // hot-reload handler documents exactly this case before its own guarded
+    // addRepaintFull). Nothing to reconcile against, and the stackingOrder()
+    // walk below would deref the null.
+    if (!KWin::effects) {
+        return;
+    }
+
     // Snapshot which windows are decorated BEFORE the reconcile. This serves the post-loop
     // sweep, and nothing else: it is how the sweep finds the entries this pass did not
     // revisit. (It used to also feed a "was this decorated?" hint into

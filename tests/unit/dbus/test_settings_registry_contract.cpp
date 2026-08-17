@@ -183,8 +183,10 @@ private Q_SLOTS:
     /**
      * The Decorations.Performance keys specifically, spelled out. The scrape above
      * would catch a regression on these too, but naming them pins the exact bug that
-     * shipped: all three were absent from the registry, and PauseWhenIdle's default
-     * of true was being inverted to false on every startup.
+     * shipped: the original trio (AnimateFocusedOnly, PauseWhenIdle, IdleTimeoutSec)
+     * was absent from the registry, and PauseWhenIdle's default of true was being
+     * inverted to false on every startup. BlurScaleMultiplier joined the group later
+     * and rides the same wire, so it is pinned here too.
      */
     void testDecorationPerformanceKeysAreRegistered()
     {
@@ -192,6 +194,7 @@ private Q_SLOTS:
         QVERIFY(keys.contains(QStringLiteral("decorationAnimateFocusedOnly")));
         QVERIFY(keys.contains(QStringLiteral("decorationPauseWhenIdle")));
         QVERIFY(keys.contains(QStringLiteral("decorationIdleTimeoutSec")));
+        QVERIFY(keys.contains(QStringLiteral("decorationBlurScaleMultiplier")));
     }
 
     /**
