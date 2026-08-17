@@ -249,7 +249,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("border"), PhosphorI18n::tr("color"),
                              PhosphorI18n::tr("title bar"), PhosphorI18n::tr("decoration"),
                              PhosphorI18n::tr("appearance"), PhosphorI18n::tr("gap"), PhosphorI18n::tr("gaps"),
-                             PhosphorI18n::tr("spacing"), PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin")});
+                             PhosphorI18n::tr("spacing"), PhosphorI18n::tr("padding"), PhosphorI18n::tr("margin"),
+                             PhosphorI18n::tr("blur"), PhosphorI18n::tr("performance")});
     search->setPageKeywords(QStringLiteral("rules"),
                             {PhosphorI18n::tr("rule"), PhosphorI18n::tr("exclude"), PhosphorI18n::tr("float"),
                              PhosphorI18n::tr("monitor"), PhosphorI18n::tr("priority"), PhosphorI18n::tr("activity")});
@@ -512,6 +513,13 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
         PhosphorI18n::tr("Idle after"),
         {PhosphorI18n::tr("idle"), PhosphorI18n::tr("timeout"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery")},
         /*advancedOnly=*/true);
+    // The Blur card on the same page — the per-frame cost lever, where the
+    // Performance card gates when the chain animates.
+    addSection(search, QStringLiteral("window-appearance"), QStringLiteral("decorationBlur"), PhosphorI18n::tr("Blur"));
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationBlurQuality"),
+               PhosphorI18n::tr("Blur quality"),
+               {PhosphorI18n::tr("blur"), PhosphorI18n::tr("quality"), PhosphorI18n::tr("resolution"),
+                PhosphorI18n::tr("performance"), PhosphorI18n::tr("gpu"), PhosphorI18n::tr("glass")});
 
     // Window filtering (Decorations.WindowFiltering) — the shared WindowFilterCard
     // on the Window Appearance page. Same anchors the card emits, mirroring the

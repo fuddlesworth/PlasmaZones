@@ -1568,17 +1568,18 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                         // through the lazy compile — see the comment above
                         // this lambda), and the registry lookup copies a
                         // whole SurfaceShaderEffect by value, which this
-                        // per-frame path must not pay per pack. Invalidated
-                        // alongside m_compiledPacks, since a registry
-                        // hot-reload can change the metadata too.
+                        // per-frame path must not pay per pack. The cached
+                        // value is the multiplier-folded PRODUCT, so it has
+                        // three invalidators: the two m_compiledPacks clears
+                        // (a registry hot-reload can change the metadata) and
+                        // the blur-scale-multiplier loader in
+                        // daemon_settings.cpp.
                         qreal packScale = 0.0;
                         if (const auto bsIt = m_packBufferScaleCache.find(packId);
                             bsIt != m_packBufferScaleCache.end()) {
                             packScale = bsIt->second;
                         } else {
-                            packScale = qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale,
-                                               m_surfaceShaderRegistry.effect(packId).bufferScale,
-                                               PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
+                            packScale = clampedBufferScale(m_surfaceShaderRegistry.effect(packId).bufferScale);
                             m_packBufferScaleCache.emplace(packId, packScale);
                         }
                         scale = qMax(scale, packScale);

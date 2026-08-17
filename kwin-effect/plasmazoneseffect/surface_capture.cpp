@@ -139,8 +139,11 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
     }
 
     // (Re)allocate the cached per-pack buffer textures when the chain or size
-    // changes. chainBufferTex[k] holds one texture per pack k's buffer passes,
-    // downscaled by that pack's bufferScale; a pack that fails to compile (or has
+    // changes, or when the blur-scale-multiplier loader (daemon_settings.cpp)
+    // cleared chainKey to force a reallocation at the new density.
+    // chainBufferTex[k] holds one texture per pack k's buffer passes, sized by
+    // clampedBufferScale(eff.bufferScale) — the pack's declared bufferScale
+    // with the user's global multiplier folded in; a pack that fails to compile (or has
     // no buffers) leaves an empty inner vector and renders single-pass in the fold.
     if (state.chainKey != chain) {
         // Framebuffers before textures, for the reason given at the composite realloc above.
@@ -154,9 +157,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                 continue;
             }
             const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(chain.at(k));
-            const qreal bufferScale =
-                qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale, eff.bufferScale,
-                       PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
+            const qreal bufferScale = clampedBufferScale(eff.bufferScale);
             const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
                                    qMax(1, qRound(textureSize.height() * bufferScale)));
             auto& bufs = state.chainBufferTex[k];

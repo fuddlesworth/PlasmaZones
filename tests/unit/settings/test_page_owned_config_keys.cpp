@@ -23,8 +23,8 @@
  * schema groups. The swept set is the six scrolling groups (Scrolling,
  * Scrolling.Behavior, Scrolling.TabIndicator, Scrolling.DropIndicator,
  * Scrolling.ZoneSelector and Scrolling.Behavior.DragScroll, whose page
- * manifests are the newest and least exercised) plus Rendering, whose Gpu
- * key once shipped with no manifest owner.
+ * manifests are the newest and least exercised), Rendering, whose Gpu key
+ * once shipped with no manifest owner, and Decorations.Performance.
  */
 
 #include <QSet>
@@ -145,8 +145,9 @@ private Q_SLOTS:
 
     /// The other direction, over the swept groups: every key the schema
     /// declares under Scrolling, Scrolling.Behavior, Scrolling.TabIndicator,
-    /// Scrolling.DropIndicator, Scrolling.ZoneSelector or Rendering must be
-    /// owned by exactly one page, except the entries listed in
+    /// Scrolling.DropIndicator, Scrolling.ZoneSelector,
+    /// Scrolling.Behavior.DragScroll, Rendering or Decorations.Performance
+    /// must be owned by exactly one page, except the entries listed in
     /// deliberatelyUnowned().
     ///
     /// The scrolling pages also SHOW two settings they deliberately do not
@@ -179,11 +180,15 @@ private Q_SLOTS:
         // same reason: its Gpu key shipped without a manifest owner (no
         // dirty mark, per-page Reset and Discard silently skipped it)
         // precisely because this sweep did not cover the group.
+        // Decorations.Performance joined when its fourth key
+        // (BlurScaleMultiplier) landed: all four are owned by the
+        // window-appearance page today, and sweeping the group keeps a future
+        // fifth key from shipping ownerless the way Rendering.Gpu did.
         for (const QString& group :
              {ConfigDefaults::scrollingGroup(), ConfigDefaults::scrollingBehaviorGroup(),
               ConfigDefaults::scrollingTabIndicatorGroup(), ConfigDefaults::scrollingDropIndicatorGroup(),
               ConfigDefaults::scrollingZoneSelectorGroup(), ConfigDefaults::scrollingDragScrollGroup(),
-              ConfigDefaults::renderingGroup()}) {
+              ConfigDefaults::renderingGroup(), ConfigDefaults::decorationsPerformanceGroup()}) {
             const auto it = schema.groups.constFind(group);
             QVERIFY2(it != schema.groups.constEnd(), qPrintable(group));
             for (const PhosphorConfig::KeyDef& def : *it) {

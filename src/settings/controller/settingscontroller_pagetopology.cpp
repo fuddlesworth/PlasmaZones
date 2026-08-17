@@ -522,12 +522,16 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::windowsAppearanceGroup(), CD::hideTitleBarsKey()},
              {CD::windowsAppearanceGroup(), CD::titleBarScopeKey()},
              {CD::windowsAppearanceGroup(), CD::focusFadeDurationKey()},
-             // Decoration performance — the Performance card on this page. Bounds
-             // WHEN the decoration chain animates, which is what decides whether
-             // the GPU can leave its top power state at all.
+             // Decoration performance — the first three are the Performance
+             // card on this page, bounding WHEN the decoration chain animates
+             // (what decides whether the GPU can leave its top power state at
+             // all).
              {CD::decorationsPerformanceGroup(), CD::animateFocusedOnlyKey()},
              {CD::decorationsPerformanceGroup(), CD::pauseWhenIdleKey()},
              {CD::decorationsPerformanceGroup(), CD::idleTimeoutSecKey()},
+             // Same config group, different card: the Blur card's quality
+             // multiplier, the per-frame cost lever.
+             {CD::decorationsPerformanceGroup(), CD::blurScaleMultiplierKey()},
              {CD::windowsAppearanceGroup(), CD::showOpacityTintKey()},
              {CD::windowsAppearanceGroup(), CD::opacityTintScopeKey()},
              {CD::windowsAppearanceGroup(), CD::opacityKey()},

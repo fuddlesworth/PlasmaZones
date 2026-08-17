@@ -523,13 +523,16 @@ public:
     Q_PROPERTY(QString decorationProfileTreeJson READ decorationProfileTreeJson WRITE setDecorationProfileTreeJson
                    NOTIFY decorationProfileTreeChanged)
 
-    // Decorations.Performance — bounds on WHEN the decoration chain animates.
+    // Decorations.Performance — three bounds on WHEN the decoration chain
+    // animates, plus the blur-scale multiplier that shrinks the per-frame work.
     Q_PROPERTY(bool decorationAnimateFocusedOnly READ decorationAnimateFocusedOnly WRITE setDecorationAnimateFocusedOnly
                    NOTIFY decorationAnimateFocusedOnlyChanged)
     Q_PROPERTY(bool decorationPauseWhenIdle READ decorationPauseWhenIdle WRITE setDecorationPauseWhenIdle NOTIFY
                    decorationPauseWhenIdleChanged)
     Q_PROPERTY(int decorationIdleTimeoutSec READ decorationIdleTimeoutSec WRITE setDecorationIdleTimeoutSec NOTIFY
                    decorationIdleTimeoutSecChanged)
+    Q_PROPERTY(double decorationBlurScaleMultiplier READ decorationBlurScaleMultiplier WRITE
+                   setDecorationBlurScaleMultiplier NOTIFY decorationBlurScaleMultiplierChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -1599,6 +1602,8 @@ public:
     void setDecorationPauseWhenIdle(bool value) override;
     int decorationIdleTimeoutSec() const override;
     void setDecorationIdleTimeoutSec(int value) override;
+    double decorationBlurScaleMultiplier() const override;
+    void setDecorationBlurScaleMultiplier(double value) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;

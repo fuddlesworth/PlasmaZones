@@ -5,6 +5,8 @@
 
 #include "configdefaults_limits.h"
 
+#include <PhosphorCompositor/DecorationDefaults.h>
+
 namespace PlasmaZones {
 
 // Chain link 4: rendering-backend, audio-spectrum shader, decoration-shader, and
@@ -301,7 +303,9 @@ public:
     // never lets the GPU leave its top performance state — measured at ~110 W and
     // +12 C over an idle desktop with the effect unloaded, on a GPU that is only
     // ~45% busy. What costs is not the work per frame but that there IS work every
-    // frame, so these bound WHEN the chain animates, not how much it does.
+    // frame, so most of these bound WHEN the chain animates. The one exception
+    // is the blur-scale multiplier below, which shrinks the per-frame work
+    // itself rather than gating when it happens.
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Animate only the focused window's decoration; unfocused windows hold their
@@ -337,6 +341,33 @@ public:
     static constexpr int decorationIdleTimeoutSecMax()
     {
         return 3600;
+    }
+
+    /// Multiplier on the bufferScale a surface pack's metadata declares for its
+    /// buffer passes — the resolution the shared blur pyramid (and any other
+    /// decoration buffer pass) renders at, relative to the pack author's choice.
+    /// 1.0 leaves every pack at its declared density; 0.5 halves it (cheaper on
+    /// the GPU, softer blur edges under motion); 2.0 doubles it toward full
+    /// resolution (the effect clamps the product into the same
+    /// [kMinBufferScale, kMaxBufferScale] band it already clamps the raw
+    /// metadata into). A multiplier rather than an absolute override so packs
+    /// that deliberately run their buffers sharper keep their relative intent.
+    /// The values live in PhosphorCompositor::DecorationDefaults so the effect's
+    /// pre-settings-load seed and its D-Bus boundary clamp share this SSOT.
+    /// The legal band is deliberately wider than the settings UI's three tiers
+    /// (0.5 / 1.0 / 2.0): the headroom down to the minimum exists for hand
+    /// edits and scripted writes, and the UI highlights the nearest tier.
+    static constexpr qreal decorationBlurScaleMultiplier()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplier;
+    }
+    static constexpr qreal decorationBlurScaleMultiplierMin()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplierMin;
+    }
+    static constexpr qreal decorationBlurScaleMultiplierMax()
+    {
+        return ::PhosphorCompositor::DecorationDefaults::BlurScaleMultiplierMax;
     }
 };
 
