@@ -203,6 +203,13 @@ void TestScrollEngineVerbs::wrapOnASingleColumnRefusesBothWays()
         QCOMPARE(feedback.at(i).at(2).toString(), QStringLiteral("no_target"));
     }
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+
+    // Out-of-contract deltas are rejected outright, WITHOUT feedback — the
+    // same silent-rejection contract the plain twin pins at its tail, which
+    // the wrap variant carries its own copy of.
+    engine->focusColumnWrap(0, QStringLiteral("S1"));
+    engine->focusColumnWrap(2, QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 2);
 }
 
 void TestScrollEngineVerbs::focusWindowTopBottomWalkTheColumn()
@@ -269,6 +276,19 @@ void TestScrollEngineVerbs::absoluteWidthAndHeightIntents()
     // library's own envelope; the D-Bus layer rejects before calling).
     engine->setColumnWidth(ColumnWidth::makeProportion(4.0), QStringLiteral("S1"));
     QCOMPARE(state->strip().columns().at(state->strip().activeColumnIndex()).width.proportion, 1.0);
+
+    // The LOWER half of the same clamp: zero and negative proportions floor
+    // at MinColumnWidthFraction — an unclamped non-positive value resolves a
+    // 1px column at relayout, which is the hazard the boundary comment
+    // names, and nothing drove this arm before.
+    engine->setColumnWidth(ColumnWidth::makeProportion(0.0), QStringLiteral("S1"));
+    QCOMPARE(state->strip().columns().at(state->strip().activeColumnIndex()).width.proportion, MinColumnWidthFraction);
+    engine->setColumnWidth(ColumnWidth::makeProportion(-2.0), QStringLiteral("S1"));
+    // A second floored value compares equal to the stored one, so the verb
+    // refuses rather than re-applying — the same idempotence contract the
+    // exact-repeat case above pins.
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(state->strip().columns().at(state->strip().activeColumnIndex()).width.proportion, MinColumnWidthFraction);
 
     engine->setWindowHeight(WindowHeight::makeFixed(300), QStringLiteral("S1"));
     QVERIFY(!feedback.isEmpty());

@@ -1062,8 +1062,13 @@ void TestScrollEngineSmoke::viewDeltaIsSuppressedAcrossAWorkAreaChange()
     // coordinate — by an amount proportional to how deep the anchor sits, not
     // by a pixel or two. Subtracting across two bases would describe a slide
     // nobody made, and the effect springs the WHOLE strip to ring it out.
-    QObject owner;
+    // `available` BEFORE `owner`, load-bearing: locals destroy in reverse
+    // declaration order, and the engine (owner's child, torn down in owner's
+    // destructor) holds a provider capturing &available — declared the other
+    // way round, the rect dies first and any teardown-path resolve reads a
+    // dangling reference.
     QRect available = defaultScreenRect();
+    QObject owner;
     ScrollEngine* engine = ScrollTestUtils::makeProviderEngine(
         &owner, {QStringLiteral("S1")},
         [](const QString&) {
@@ -1083,7 +1088,12 @@ void TestScrollEngineSmoke::viewDeltaIsSuppressedAcrossAWorkAreaChange()
     QVERIFY(!tiled.isEmpty());
 
     // A panel appears. Every subsequent rect is resolved in the new area.
-    available = defaultScreenRect().adjusted(0, 0, -240, 0);
+    // The shrink is TRANSPOSED with the fixture — it must eat the MAIN
+    // extent (the direction column strip positions rescale in), or the
+    // vertical arm only shrinks the cross extent and the different-basis
+    // premise this test exists for never holds there.
+    available = ScrollTestUtils::Ax::vertical() ? defaultScreenRect().adjusted(0, 0, 0, -240)
+                                                : defaultScreenRect().adjusted(0, 0, -240, 0);
     const int before = tiled.count();
     engine->focusColumnFirst(QStringLiteral("S1"));
     QVERIFY2(tiled.count() > before, "the work-area change plus focus move must emit");

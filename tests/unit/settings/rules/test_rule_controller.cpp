@@ -26,6 +26,7 @@
 #include <QTest>
 #include <QUuid>
 
+#include "settings/rules/ruleauthoring.h"
 #include "settings/rules/rulecontroller.h"
 #include "settings/rules/rulemodel.h"
 
@@ -601,6 +602,49 @@ void TestRuleController::authoringMetadata()
     // The unfloat fallback is a windowManagement action, riding Window with
     // the blanket Exclude.
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setUnfloatFallbackToZone"), -1), 8);
+
+    // The strip-axis option labels — the exact summary strings the editor
+    // combo and the rule row render, matching the Strip direction card's own
+    // wording. A token that falls through enumOptionLabel shows its raw wire
+    // spelling in the UI with everything else green.
+    QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
+                                            QString(StripAxisToken::Auto)),
+             QStringLiteral("Match the screen shape"));
+    QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
+                                            QString(StripAxisToken::Horizontal)),
+             QStringLiteral("Side to side"));
+    QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
+                                            QString(StripAxisToken::Vertical)),
+             QStringLiteral("Top to bottom"));
+
+    // The bool-phrase canary: EVERY registered action whose Value param is a
+    // bool must answer boolActionStateLabel with a non-empty, distinct phrase
+    // for both polarities. A new bool action added without its phrases used
+    // to render the raw wire string in the rule row with the whole suite
+    // green — this is the future-miss net.
+    int boolActions = 0;
+    const QStringList allTypes = PhosphorRules::ActionRegistry::instance().registeredTypes();
+    for (const QString& type : allTypes) {
+        const auto desc = PhosphorRules::ActionRegistry::instance().descriptor(type);
+        QVERIFY(desc.has_value());
+        bool valueIsBool = false;
+        for (const auto& param : desc->params) {
+            if (param.key == QString(ActionParam::Value) && param.kind == QLatin1String("bool")) {
+                valueIsBool = true;
+            }
+        }
+        if (!valueIsBool) {
+            continue;
+        }
+        ++boolActions;
+        const QString onLabel = RuleAuthoring::boolActionStateLabel(type, true);
+        const QString offLabel = RuleAuthoring::boolActionStateLabel(type, false);
+        QVERIFY2(!onLabel.isEmpty() && !offLabel.isEmpty(),
+                 qPrintable(QStringLiteral("bool action %1 lacks a polarity phrase").arg(type)));
+        QVERIFY2(onLabel != offLabel,
+                 qPrintable(QStringLiteral("bool action %1 renders both polarities identically").arg(type)));
+    }
+    QVERIFY2(boolActions > 10, "the bool-action sweep must actually cover the family, not an empty set");
 }
 
 void TestRuleController::matchIsContextOnlyClassifies()

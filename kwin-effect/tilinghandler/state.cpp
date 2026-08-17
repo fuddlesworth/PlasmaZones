@@ -20,6 +20,7 @@
 // and eligibility plus float shed (floatcleanup.cpp).
 
 #include "tilinghandler.h"
+#include "compositor/scrollbehaviourparse.h"
 #include "compositor/stripviewanimator.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 
@@ -146,41 +147,13 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     // simply stay off — but it is the WRONG direction for the axis, where it
     // silently re-lays every vertical strip horizontally on the next tile
     // batch. The axis arm below keeps the previous membership instead.
-    const auto toSet = [](const QVariant& raw, QLatin1StringView key) -> std::optional<QSet<QString>> {
-        QVariant v = raw;
-        if (v.typeId() == QMetaType::fromType<QDBusVariant>().id()) {
-            v = qvariant_cast<QDBusVariant>(v).variant();
-        }
-        // Qt's demarshaller hands an `as` back as a ready QStringList, but a
-        // container it did not special-case arrives as a raw QDBusArgument —
-        // which converts to nothing and would read as "off everywhere". Demarshal
-        // it explicitly rather than letting a transport-shape change silently
-        // disable every behaviour in the map.
-        if (v.typeId() == QMetaType::fromType<QDBusArgument>().id()) {
-            v = QVariant::fromValue(qdbus_cast<QStringList>(v));
-        }
-        QSet<QString> out;
-        if (!v.isValid()) {
-            // Absent half. Not a warning: the daemon may legitimately publish
-            // only the keys it has resolved, and an absent key reads as "off
-            // everywhere", the same safe direction bring-up takes.
-            return out;
-        }
-        if (!v.canConvert<QStringList>()) {
-            qCWarning(lcEffect) << "scrollEffectBehaviour: dropping non-list value for" << key << "type"
-                                << v.typeName();
-            return std::nullopt;
-        }
-        const QStringList list = v.toStringList();
-        out.reserve(list.size());
-        for (const QString& screenId : list) {
-            if (screenId.isEmpty()) {
-                qCWarning(lcEffect) << "scrollEffectBehaviour: dropping empty screen id from" << key;
-                continue;
-            }
-            out.insert(screenId);
-        }
-        return out;
+    //
+    // The parse itself lives in compositor/scrollbehaviourparse.h so its
+    // three-way contract is unit-tested — an on-screen failure here is
+    // silent, which is why the contract must not rest on this file alone.
+    QStringList parseWarnings;
+    const auto toSet = [&parseWarnings](const QVariant& raw, QLatin1StringView key) {
+        return ScrollBehaviourParse::parseScreenIdList(raw, key, parseWarnings);
     };
     const QSet<QString> ffm =
         toSet(behaviour.value(QStringLiteral("focusFollowsMouse")), QLatin1String("focusFollowsMouse"))
@@ -201,6 +174,11 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     const QSet<QString> verticalAxis =
         toSet(behaviour.value(QStringLiteral("verticalAxis")), QLatin1String("verticalAxis"))
             .value_or(m_scrollVerticalAxisScreens);
+    // The parser collects rather than logs (it is a headless-tested pure
+    // function); the warnings reach the journal here, once per apply.
+    for (const QString& warning : std::as_const(parseWarnings)) {
+        qCWarning(lcEffect).noquote() << warning;
+    }
     // Seeded BEFORE the change gate, the m_activeLayoutsSeeded shape: an
     // identical map is still a real map, and the daemon's first publish is
     // legitimately all-empty on a session with no scrolling screen. Gating the

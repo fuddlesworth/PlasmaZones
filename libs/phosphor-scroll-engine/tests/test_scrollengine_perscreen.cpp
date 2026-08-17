@@ -636,6 +636,19 @@ void TestScrollEnginePerScreen::fixedKindWithAProportionValueFallsThroughToTheGl
     const ColumnWidth rejectedFraction = openedWidth(engine, kS3, QStringLiteral("app|c"));
     QCOMPARE(rejectedFraction.kind, ColumnWidth::Proportion);
     QCOMPARE(rejectedFraction.proportion, 0.25);
+
+    // The UPPER bound of the same Fixed slot, previously pinned only from
+    // below: the resolver qBounds before rounding because qRound of a double
+    // past int's range is undefined, and deleting that clamp kept the suite
+    // green. 1e18 must come out as exactly kMaxFixedExtentPx.
+    QVariantMap huge;
+    huge.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::Fixed));
+    huge.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 1.0e18);
+    engine->applyPerScreenConfig(kS1, huge);
+    engine->windowOpened(QStringLiteral("app|d"), kS1, 0, 0);
+    const ColumnWidth capped = openedWidth(engine, kS1, QStringLiteral("app|d"));
+    QCOMPARE(capped.kind, ColumnWidth::Fixed);
+    QCOMPARE(capped.fixedPx, 65535); // kMaxFixedExtentPx (enginelimits.h)
 }
 
 void TestScrollEnginePerScreen::templatePresetListReplacesSettingsListWholesale()
@@ -960,10 +973,29 @@ void TestScrollEnginePerScreen::tabIndicatorOverridesArePerProperty()
 
     const TabIndicatorParams ruled = engine->tabIndicatorParamsForScreen(kS1);
     QCOMPARE(ruled.gap, -12); // the override landed, negative and all
-    // ...and nothing else moved.
+    // ...and ALL six siblings stay on their configured values — the comment
+    // above claims six, so all six are pinned (the shared stub seeds
+    // enabled=true, hideWhenSingleTab=false, lengthProportion=0.5).
     QCOMPARE(ruled.width, 4);
     QCOMPARE(ruled.placeWithinColumn, false);
     QCOMPARE(ruled.position, TabIndicatorPosition::Left);
+    QCOMPARE(ruled.enabled, true);
+    QCOMPARE(ruled.hideWhenSingleTab, false);
+    QCOMPARE(ruled.lengthProportion, 0.5);
+
+    // The two BOOL overrides applied positively — both are wired at
+    // engine_overrides but had no leg driving them, so either could be
+    // deleted with the suite still green: 965 above only asserts
+    // placeWithinColumn UNMOVED, and the round-trip case only flips
+    // hideWhenSingleTab.
+    QVariantMap bools;
+    bools.insert(ScrollPerScreenKeys::tabIndicatorEnabled(), false);
+    bools.insert(ScrollPerScreenKeys::tabIndicatorPlaceWithinColumn(), true);
+    engine->applyPerScreenConfig(kS2, bools);
+    const TabIndicatorParams booled = engine->tabIndicatorParamsForScreen(kS2);
+    QCOMPARE(booled.enabled, false);
+    QCOMPARE(booled.placeWithinColumn, true);
+    QCOMPARE(booled.gap, 5); // untouched sibling stays configured
 
     // A screen with no override map at all is the pure configured answer.
     const TabIndicatorParams global = engine->tabIndicatorParamsForScreen(kS3);
@@ -1176,6 +1208,11 @@ void TestScrollEnginePerScreen::openFocusedRuleOverridesFocusNewWindows()
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
 
     // Global OFF, rule true: the arrival is adopted as the active column.
+    // No refreshConfigFromSettings after this write, DELIBERATELY:
+    // effectiveFocusNewWindows reads the settings object live per call
+    // (engine_overrides.cpp — unlike the cached stripAxis, which the global
+    // suite must refresh). If this assignment ever stops taking effect, the
+    // engine started caching the read and this test is what catches it.
     settings->focusNewWindows = false;
     engine->setOpenParamsResolver([](const QString&, const QString&) {
         ScrollOpenParams params;

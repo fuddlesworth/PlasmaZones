@@ -90,6 +90,7 @@ private Q_SLOTS:
     void reapingAClockDropsOnlyItsOwnOutput();
     void forgettingAnOutputDropsItsAccumulator();
     void batchDeltaReportsWhetherALegStarted();
+    void midLegClockSwapRebindsWithoutRestarting();
 
 private:
     std::unique_ptr<FakeClock> m_clock;
@@ -253,8 +254,14 @@ void TestStripViewAnimator::anAxisFlipCancelsRatherThanRetargets()
     tick(50);
     QVERIFY2(m_animator->isAnimatingOn(fakeOutputA()), "precondition: a horizontal leg is mid-flight");
 
-    // The rotation lands. A new batch arrives on the other axis.
+    // The rotation lands. A new batch arrives on the other axis. The flip
+    // arm damages the output BEFORE cancelling (the offset the dying leg was
+    // contributing vanishes with the cancel, and nothing else repaints the
+    // stale frame away) — pinned by the repaint count, which deleting that
+    // arm's request left unchanged before this.
+    const int repaintsBeforeFlip = m_repaints;
     scroll(fakeOutputA(), 300, PhosphorProtocol::ScrollAxis::Vertical);
+    QVERIFY2(m_repaints > repaintsBeforeFlip, "the axis flip must damage the output it cancels");
     latch();
 
     // The new leg runs on the new axis, and it starts from the flip rather
@@ -363,6 +370,26 @@ void TestStripViewAnimator::missingClockLeavesViewAtRest()
     });
     scroll(fakeOutputA(), 600);
     QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
+    QVERIFY(!m_animator->isAnimatingOn(fakeOutputA()));
+
+    // The clock can also go away UNDER a live leg (hotplug race): the
+    // no-clock arm damages the output before cancelling, because the leg's
+    // dying offset would otherwise stay on the last presented frame with
+    // nothing scheduled to repaint it. Pinned by the repaint count, like the
+    // axis flip's twin arm.
+    m_animator->setOutputClockResolver([this](KWin::LogicalOutput*) {
+        return m_clock.get();
+    });
+    scroll(fakeOutputA(), 600);
+    latch();
+    tick(50);
+    QVERIFY2(m_animator->isAnimatingOn(fakeOutputA()), "precondition: a leg is mid-flight");
+    m_animator->setOutputClockResolver([](KWin::LogicalOutput*) -> PhosphorAnimation::IMotionClock* {
+        return nullptr;
+    });
+    const int repaintsBefore = m_repaints;
+    scroll(fakeOutputA(), 100);
+    QVERIFY2(m_repaints > repaintsBefore, "losing the clock under a live leg must damage the output it cancels");
     QVERIFY(!m_animator->isAnimatingOn(fakeOutputA()));
 }
 
@@ -478,6 +505,49 @@ void TestStripViewAnimator::batchDeltaReportsWhetherALegStarted()
         return nullptr;
     });
     QVERIFY2(!scroll(fakeOutputA(), 100), "a clockless output cannot start a leg");
+}
+
+void TestStripViewAnimator::midLegClockSwapRebindsWithoutRestarting()
+{
+    // The per-tick clock re-resolution in advanceAnimations: an output whose
+    // clock was rebuilt mid-leg (mode change, hotplug) must continue on the
+    // NEW clock rather than keep stepping the dead one — deleting the rebind
+    // kept the suite green before this.
+    scroll(fakeOutputA(), 600);
+    latch();
+    tick(50);
+    QVERIFY2(m_animator->isAnimatingOn(fakeOutputA()), "precondition: a leg is mid-flight");
+    const qreal midOffset = m_animator->offsetAlongAxis(fakeOutputA());
+    QVERIFY(midOffset > 0.0);
+
+    // A fresh clock takes over, aligned to the old one's timeline (the
+    // shared steady epoch is what the rebind's compatibility gate reads).
+    FakeClock replacement;
+    replacement.advanceMs(50);
+    m_animator->setOutputClockResolver([&replacement](KWin::LogicalOutput*) {
+        return &replacement;
+    });
+    // One tick performs the rebind (the rebase absorbs any skew between the
+    // clocks, so the offset must not jump on it)…
+    m_animator->advanceAnimations();
+    // …then advance ONLY the new clock: progress afterwards proves the leg
+    // rebound to it rather than kept reading the old one.
+    replacement.advanceMs(30);
+    m_animator->advanceAnimations();
+    const qreal afterSwap = m_animator->offsetAlongAxis(fakeOutputA());
+    QVERIFY2(afterSwap < midOffset, "the leg must keep ringing down on the NEW clock's time");
+    QVERIFY(m_animator->isAnimatingOn(fakeOutputA()));
+
+    // And it settles on the new clock alone.
+    replacement.advanceMs(1000);
+    m_animator->advanceAnimations();
+    QCOMPARE(m_animator->offsetFor(fakeOutputA()), QPointF());
+
+    // Hand the resolver back to the fixture clock so the animator member
+    // never holds a pointer into this frame after the slot returns.
+    m_animator->setOutputClockResolver([this](KWin::LogicalOutput*) {
+        return m_clock.get();
+    });
 }
 
 QTEST_MAIN(TestStripViewAnimator)

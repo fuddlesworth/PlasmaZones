@@ -55,6 +55,8 @@ private Q_SLOTS:
     void restoreStagesADuplicateWindowIdOnlyOnce();
     void restoreFocusFallsBackToASurvivingTile();
     void restoreCapsTilesPerColumn();
+    void restoreCapsColumnsPerKey();
+    void restoreCapsKeys();
     void backgroundContextClearAndReapplySkipRelayout();
 
 private:
@@ -539,6 +541,7 @@ void TestScrollEnginePersistence::pruneSpareStashStagedFromPersistence()
     engine4->restoreStripState(blob);
     engine4->windowOpened(QStringLiteral("app|m1"), QStringLiteral("S1"), 0, 0);
     engine4->windowOpened(QStringLiteral("app|n2"), QStringLiteral("S1"), 0, 0);
+    QVERIFY(engine4->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|m1")) >= 0);
     QCOMPARE(engine4->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|n2")),
              engine4->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|m1")));
     engine4->windowOpened(QStringLiteral("app|p3"), QStringLiteral("S1"), 0, 0);
@@ -943,12 +946,22 @@ void TestScrollEnginePersistence::restoreDropsMalformedKeysAndBoundsAnchor()
     // survived beside the four rejects (a rejected GOOD key would fail
     // this; an accepted BAD key has no observable strip to disagree with,
     // which is why the anchor bound below carries the other half).
+    // >= 0 first, per this file's own column-compare convention: both sides
+    // answer -1 for an untracked window, so a bare equality is vacuously
+    // true when the restore staged NOTHING.
+    QVERIFY(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")) >= 0);
     QCOMPARE(engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")),
              engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")));
     ScrollState* state = stateFor(engine2, QStringLiteral("S1"));
     QVERIFY(state);
-    // INT_MAX was clamped at the boundary to the documented sanity range.
-    QVERIFY(state->strip().viewAnchor() <= 1000000);
+    // INT_MAX was bounded at the boundary (engine_serialize's
+    // qBound(-1000000, ..., 1000000)). The LIVE anchor cannot be pinned to
+    // the exact ceiling: the arrival restore legitimately re-derives it
+    // against the strip the arrivals actually built (it reads 0 here), so
+    // the claim is two-sided — never the hostile value, always inside the
+    // documented range in BOTH directions (the old one-sided <= also passed
+    // for an underflow the bound exists to stop).
+    QVERIFY(state->strip().viewAnchor() >= -1000000 && state->strip().viewAnchor() <= 1000000);
 }
 
 void TestScrollEnginePersistence::restoreStagesADuplicateWindowIdOnlyOnce()
@@ -1066,8 +1079,111 @@ void TestScrollEnginePersistence::restoreCapsTilesPerColumn()
     const int colW0 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("a0|w0"));
     const int colW31 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("a31|w31"));
     const int colW35 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("a35|w35"));
+    QVERIFY(colW0 >= 0); // both sides answer -1 for untracked; pin a real column first
     QCOMPARE(colW31, colW0);
     QVERIFY2(colW35 != colW0, "a tile past the cap must not have been staged into the capped column");
+}
+
+void TestScrollEnginePersistence::restoreCapsColumnsPerKey()
+{
+    // kMaxRestoredColumnsPerKey (64), the tile cap's sibling — deletable
+    // green before this. A pair from a column UNDER the cap re-stacks on
+    // open; a pair from a column past it was never staged, so its windows
+    // open as separate default columns.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|s1"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|s2"), QStringLiteral("S1"), 0, 0);
+    engine1->windowFocused(QStringLiteral("app|s1"), QStringLiteral("S1"));
+    engine1->consumeWindowIntoColumn(QStringLiteral("S1")); // one two-tile column to clone
+    QJsonObject blob = engine1->serializeStripState();
+    const QString key = QStringLiteral("S1|1|");
+    QVERIFY(blob.contains(key));
+    QJsonObject payload = blob.value(key).toObject();
+    QJsonArray columns = payload.value(QLatin1String("columns")).toArray();
+    QVERIFY(!columns.isEmpty());
+    const QJsonObject seedColumn = columns.at(0).toObject();
+    const QJsonArray seedTiles = seedColumn.value(QLatin1String("tiles")).toArray();
+    QCOMPARE(seedTiles.size(), 2);
+
+    QJsonArray fatColumns;
+    for (int c = 0; c < 70; ++c) { // cap is 64
+        QJsonObject col = seedColumn;
+        QJsonArray tiles;
+        for (int t = 0; t < 2; ++t) {
+            QJsonObject tile = seedTiles.at(t).toObject();
+            // Distinct appIds per column, the tile-cap test's rationale.
+            tile.insert(QLatin1String("windowId"), QStringLiteral("c%1|t%2").arg(c).arg(t));
+            tiles.append(tile);
+        }
+        col.insert(QLatin1String("tiles"), tiles);
+        fatColumns.append(col);
+    }
+    payload.insert(QLatin1String("columns"), fatColumns);
+    blob.insert(key, payload);
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine2->restoreStripState(blob);
+    // Column 63 is the last one under the cap; column 68 is past it.
+    engine2->windowOpened(QStringLiteral("c63|t0"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("c63|t1"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("c68|t0"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("c68|t1"), QStringLiteral("S1"), 0, 0);
+    const int under0 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("c63|t0"));
+    const int under1 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("c63|t1"));
+    QVERIFY(under0 >= 0);
+    QCOMPARE(under1, under0);
+    const int over0 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("c68|t0"));
+    const int over1 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("c68|t1"));
+    QVERIFY(over0 >= 0);
+    QVERIFY2(over1 != over0, "a column past the cap must not have been staged, so its pair opens separately");
+}
+
+void TestScrollEnginePersistence::restoreCapsKeys()
+{
+    // kMaxRestoredKeys (512): a blob carrying more context keys than the cap
+    // stages only the first 512 in the walk's (sorted) order. Three-digit
+    // desktop numbers keep the lexical walk order numeric, so keys
+    // S1|100|..S1|611| stage and S1|612|.. drop.
+    QObject owner;
+    ScrollEngine* engine1 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine1->setCurrentDesktopForScreen(QStringLiteral("S1"), 1);
+    engine1->windowOpened(QStringLiteral("app|k1"), QStringLiteral("S1"), 0, 0);
+    engine1->windowOpened(QStringLiteral("app|k2"), QStringLiteral("S1"), 0, 0);
+    engine1->windowFocused(QStringLiteral("app|k1"), QStringLiteral("S1"));
+    engine1->consumeWindowIntoColumn(QStringLiteral("S1"));
+    const QJsonObject blob = engine1->serializeStripState();
+    const QJsonObject payload = blob.value(QStringLiteral("S1|1|")).toObject();
+    QVERIFY(!payload.isEmpty());
+
+    QJsonObject fatBlob;
+    for (int d = 100; d < 620; ++d) { // 520 keys, cap is 512
+        fatBlob.insert(QStringLiteral("S1|%1|").arg(d), payload);
+    }
+
+    ScrollEngine* engine2 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine2->restoreStripState(fatBlob);
+    // A desktop whose key staged re-stacks its pair; one past the cap does
+    // not, so the pair opens as separate columns.
+    engine2->setCurrentDesktopForScreen(QStringLiteral("S1"), 100);
+    engine2->windowOpened(QStringLiteral("app|k1"), QStringLiteral("S1"), 0, 0);
+    engine2->windowOpened(QStringLiteral("app|k2"), QStringLiteral("S1"), 0, 0);
+    const int staged1 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|k1"));
+    const int staged2 = engine2->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|k2"));
+    QVERIFY(staged1 >= 0);
+    QCOMPARE(staged2, staged1);
+
+    ScrollEngine* engine3 = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    engine3->restoreStripState(fatBlob);
+    engine3->setCurrentDesktopForScreen(QStringLiteral("S1"), 619);
+    engine3->windowOpened(QStringLiteral("app|k1"), QStringLiteral("S1"), 0, 0);
+    engine3->windowOpened(QStringLiteral("app|k2"), QStringLiteral("S1"), 0, 0);
+    const int dropped1 = engine3->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|k1"));
+    const int dropped2 = engine3->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|k2"));
+    QVERIFY(dropped1 >= 0);
+    QVERIFY2(dropped2 != dropped1, "a key past the cap must not have staged, so its pair opens separately");
 }
 
 void TestScrollEnginePersistence::backgroundContextClearAndReapplySkipRelayout()

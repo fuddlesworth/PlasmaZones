@@ -46,6 +46,7 @@
 #include "helpers/IsolatedConfigGuard.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorScrollEngine/ScrollTypes.h>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -97,6 +98,18 @@ private:
     }
 
 private Q_SLOTS:
+    /// The engine's ScrollPerScreenKeys::stripAxis() and the app's
+    /// PerScreenScrollingKey::StripAxis are the SAME wire key spelled in two
+    /// trees that cannot include each other (LGPL engine lib / GPL app
+    /// interfaces). The daemon's rule-over-seed merge and the settings
+    /// store's persistence both stand on the two agreeing byte for byte, so
+    /// this test — the one TU that legitimately sees both — is the pin.
+    void stripAxisKeySpellingsAgreeAcrossTheSeam()
+    {
+        QCOMPARE(PhosphorScrollEngine::ScrollPerScreenKeys::stripAxis(),
+                 QString(QLatin1String(PerScreenScrollingKey::StripAxis)));
+    }
+
     /// Every key's validator, both directions: a legal value is stored as
     /// given, an illegal one is rejected outright (no override materializes),
     /// and an out-of-range numeric value on a BOUNDED key is clamped rather

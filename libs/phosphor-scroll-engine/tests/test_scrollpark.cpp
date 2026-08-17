@@ -261,6 +261,62 @@ private Q_SLOTS:
         QCOMPARE(r.rememberedEdge.value_or(QString()), QStringLiteral("carried"));
     }
 
+    void aLeadingStraddlerClampsAtTheLeadingEdge_data()
+    {
+        QTest::addColumn<int>("axisValue");
+        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
+        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+    }
+
+    /// The LEADING half of the main-axis straddle clamp — the trailing half
+    /// has rows above, but the leading arm (straddleLow: setMainLow at the
+    /// screen's near edge) had none, so deleting it kept the suite green.
+    void aLeadingStraddlerClampsAtTheLeadingEdge()
+    {
+        QFETCH(int, axisValue);
+        const auto a = static_cast<ScrollAxis>(axisValue);
+        const StripAxis axis{a};
+
+        // Overhangs the leading end by 100px with 300px visible — far over
+        // the 48px floor, so it clamps rather than parking.
+        const ParkResult r = resolveTilePlacement(inputsFor(a, roleRect(a, -100, 400)), QString());
+        QVERIFY2(!r.parked, "a leading straddler with room to spare clamps rather than parking");
+        QCOMPARE(axis.mainPos(r.rect), axis.mainLow(screenFor(a)));
+        QCOMPARE(axis.mainHigh(r.rect), 299);
+        QVERIFY(r.emittedEdge.isEmpty());
+    }
+
+    void aCrossStraddlerBelowTheFloorHandsBackAConsumedMainEdge_data()
+    {
+        QTest::addColumn<int>("axisValue");
+        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
+        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+    }
+
+    /// The STRADDLER twin of aCrossAxisParkHandsBackAConsumedMainEdge: the
+    /// fully-beyond arm has a row above, but the below-floor straddler arm
+    /// carries its own copy of the remembered-edge hand-back, and nothing
+    /// drove it — an arm that emitted the consumed edge (or dropped it)
+    /// stayed green.
+    void aCrossStraddlerBelowTheFloorHandsBackAConsumedMainEdge()
+    {
+        QFETCH(int, axisValue);
+        const auto a = static_cast<ScrollAxis>(axisValue);
+        const StripAxis axis{a};
+        const QRect screen = screenFor(a);
+
+        // On screen along the strip, straddling the cross edge with only
+        // 10px visible — under the 48px floor, so it parks.
+        const QRect tile = axis.makeRect(100, axis.crossSize(screen) - 10, 300, 200);
+        ParkInputs in = inputsFor(a, tile);
+        in.columnRect = tile;
+
+        const ParkResult r = resolveTilePlacement(in, QStringLiteral("carried"));
+        QVERIFY2(r.parked, "10px of cross visibility is under the floor and must park");
+        QVERIFY2(r.emittedEdge.isEmpty(), "a cross-axis park emits no edge");
+        QCOMPARE(r.rememberedEdge.value_or(QString()), QStringLiteral("carried"));
+    }
+
     void aHiddenTabFollowsItsColumnsSide_data()
     {
         QTest::addColumn<int>("axisValue");

@@ -1753,6 +1753,14 @@ target_link_libraries(test_strip_view_animator PRIVATE Qt6::Test PhosphorAnimati
                                                        PhosphorProtocol::Types)
 add_test(NAME test_strip_view_animator COMMAND test_strip_view_animator)
 
+# The scrollEffectBehaviour value parser is header-only plain Qt (no KWin),
+# extracted from TilingHandler exactly so this suite exists — its three-way
+# absent/malformed/valid contract fails silently on screen.
+add_executable(test_scroll_behaviour_parse compositor-common/test_scroll_behaviour_parse.cpp)
+target_include_directories(test_scroll_behaviour_parse PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+target_link_libraries(test_scroll_behaviour_parse PRIVATE Qt6::Test Qt6::DBus)
+add_test(NAME test_scroll_behaviour_parse COMMAND test_scroll_behaviour_parse)
+
 # StripMotionSampler is header-only plain numbers (no KWin types at all), so
 # the suite includes it straight from the effect tree and drives it with a
 # hand-rolled clock — the same shape as test_strip_view_animator above.

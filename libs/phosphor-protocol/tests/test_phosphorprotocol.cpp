@@ -5,6 +5,7 @@
 #include <PhosphorProtocol/BridgeMarshalling.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/Registration.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
@@ -316,6 +317,39 @@ private Q_SLOTS:
         QVERIFY(!isValidWindowType(-1));
         QVERIFY(!isValidWindowType(9999));
         QVERIFY(isValidWindowType(static_cast<int>(WindowType::Popup)));
+    }
+
+    /// The ScrollAxis wire values are frozen: Horizontal is 0 and Vertical 1,
+    /// and both the daemon and the KWin effect cast ints that crossed the bus
+    /// against exactly these numbers. Pinned as literals — a renumber would
+    /// silently transpose every strip on the wire.
+    void testScrollAxisWireStability()
+    {
+        QCOMPARE(static_cast<int>(ScrollAxis::Horizontal), 0);
+        QCOMPARE(static_cast<int>(ScrollAxis::Vertical), 1);
+        QVERIFY(isValidScrollAxis(0));
+        QVERIFY(isValidScrollAxis(1));
+        QVERIFY(!isValidScrollAxis(-1));
+        QVERIFY(!isValidScrollAxis(2));
+        // Out-of-range ints from a skewed or malformed peer fall back to
+        // Horizontal, the same answer an absent value gives.
+        QCOMPARE(scrollAxisFromInt(1), ScrollAxis::Vertical);
+        QCOMPARE(scrollAxisFromInt(7), ScrollAxis::Horizontal);
+        QCOMPARE(scrollAxisFromInt(-3), ScrollAxis::Horizontal);
+    }
+
+    /// The Auto rule in the library BOTH processes resolve it from (the
+    /// engine per layout pass, the editor and settings previews per draw):
+    /// strictly taller than wide is Vertical; square and degenerate are
+    /// Horizontal, the historical answer.
+    void testAutoScrollAxisRule()
+    {
+        QCOMPARE(autoScrollAxisFor(1200, 800), ScrollAxis::Horizontal);
+        QCOMPARE(autoScrollAxisFor(800, 1200), ScrollAxis::Vertical);
+        QCOMPARE(autoScrollAxisFor(1000, 1000), ScrollAxis::Horizontal); // square: historical answer
+        QCOMPARE(autoScrollAxisFor(0, 0), ScrollAxis::Horizontal); // degenerate: geometry says nothing
+        QCOMPARE(autoScrollAxisFor(0, 1), ScrollAxis::Vertical); // strictly greater, even degenerate-thin
+        QCOMPARE(autoScrollAxisFor(1000, 1001), ScrollAxis::Vertical); // strictly greater, no threshold
     }
 };
 
