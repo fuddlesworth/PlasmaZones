@@ -399,6 +399,22 @@ private:
     bool dragInsertSelectorForScreen(const QString& screenId) const;
 
     /**
+     * @brief Whether the scroll engine resolves a VERTICAL strip for
+     * @p screenId. The one home for the downcast the accessor needs: the axis
+     * is a scrolling concept and deliberately not on IPlacementEngine, so
+     * every caller would otherwise re-spell the same qobject_cast off the base
+     * engine pointer. An absent or non-scrolling engine answers false, the
+     * horizontal depiction.
+     *
+     * Deliberately UNGATED on liveness: its callers are the effect-behaviour
+     * push and the OSD cards, which already know the screen is in scrolling
+     * mode and want the engine's resolved axis for it. The two providers in
+     * init_engines.cpp keep their own isActiveOnScreen-gated form, because
+     * those answer a PUBLIC overlay query that any screen can reach.
+     */
+    bool stripIsVerticalForScreen(const QString& screenId) const;
+
+    /**
      * @brief Failure OSD for a layout-selection shortcut pressed on a screen
      * whose engine does not provide layouts. Gated by navigationOsdAllowed
      * like the navigationFeedback relay in signals.cpp, so the per-context

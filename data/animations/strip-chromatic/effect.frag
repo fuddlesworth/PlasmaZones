@@ -11,8 +11,9 @@
 #include <strip_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-    float m = stripMask(uv, p_edgeFeather);
-    // Signed velocity in output-widths per second, saturating so a violent
+    float m = stripMask(uv, clamp(p_edgeFeather, 0.0, 0.2));
+    // Signed velocity in output-extents along the travel axis per second,
+    // saturating so a violent
     // fling cannot pull the channels apart by more than ~1.4% of the output.
     float shift = clamp(iStripMotion.w * 0.02 * p_strength, -0.014, 0.014) * m;
     // Die out before the shifted channels can sample past the screen edge,
@@ -22,8 +23,8 @@ vec4 pTransition(vec2 uv, float t) {
         return getStripColor(uv);
     }
     vec4 base = getStripColor(uv);
-    float r = getStripColor(uv + vec2(shift, 0.0)).r;
-    float b = getStripColor(uv - vec2(shift, 0.0)).b;
+    float r = getStripColor(uv + stripAxisOffset(shift)).r;
+    float b = getStripColor(uv - stripAxisOffset(shift)).b;
     // Taking r and b from neighbours while alpha comes from the centre can in
     // principle break the premultiplied invariant (rgb <= a). It cannot today:
     // the strip capture is the composited scene, opaque everywhere the strip

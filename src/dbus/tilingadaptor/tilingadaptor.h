@@ -45,8 +45,10 @@ class WindowTrackingAdaptor;
  * interfaces org.plasmazones.Autotile and org.plasmazones.Scrolling.
  *
  * All engine→adaptor signal connections are made at the composition root
- * (init_engines.cpp) against the relay entry points below; the adaptor
- * itself connects nothing.
+ * (init_engines.cpp), not by the adaptor itself. Most land on a relay entry
+ * point that gates or reshapes the payload before the D-Bus signal goes out.
+ * tilingChanged and focusWindowRequested are the exceptions: they are direct
+ * signal→signal forwards from each engine, because there is nothing to gate.
  */
 class PLASMAZONES_EXPORT TilingAdaptor : public QDBusAbstractAdaptor
 {
@@ -296,7 +298,7 @@ Q_SIGNALS:
      * @param tileRequests Typed list of TileRequestEntry structs, wire shape
      *        a(siiiissbbbssiiibs): (windowId, x, y, width, height, zoneId,
      *        screenId, monocle, floating, windowedFullscreen, stacking,
-     *        scrollEdge, viewDeltaX, visualX, visualY, hasVisualPos, tabFrom)
+     *        scrollEdge, viewDelta, visualX, visualY, hasVisualPos, tabFrom)
      */
     void windowsTileRequested(const PhosphorProtocol::TileRequestList& tileRequests);
 

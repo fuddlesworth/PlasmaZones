@@ -20,9 +20,6 @@
 //   * defaults()  — restore factory defaults, stage the daemon-backed
 //                   clears the config reset cannot cover, and recompute
 //                   the dirty set.
-//   * launchEditor() — fork the zone editor process.
-//   * onSettingsPropertyChanged / onExternalSettingsChanged — the
-//     two ISettings change-tracking hooks that flow into setNeedsSave.
 //
 // Same class as settingscontroller.cpp, separate TU, no API change.
 
@@ -34,12 +31,8 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 
 #include "core/platform/logging.h"
-#include "core/types/constants.h"
 
-#include <QCoreApplication>
-#include <QFileInfo>
-#include <QProcess>
-#include <QProcessEnvironment>
+#include <QScopeGuard>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -131,6 +124,25 @@ void SettingsController::load()
 void SettingsController::save()
 {
     m_saving = true;
+    // Released on EVERY exit — normal or exceptional — and still deferred by
+    // one event-loop turn (see the comment on the deferral below; the guard
+    // posts the reset rather than performing it). save() raises a suppression
+    // flag and then runs code that can throw (the config write, five D-Bus
+    // round trips, allocations); a stranded m_saving = true makes
+    // onExternalSettingsChanged drop every later daemon broadcast for the
+    // rest of the session and savingFinished never fire, which is the exact
+    // hazard defaults() guards its m_loading against with ScopedFlag. A plain
+    // ScopedFlag will not do here because the reset must stay deferred.
+    const auto savingRelease = qScopeGuard([this]() {
+        QTimer::singleShot(0, this, [this]() {
+            m_saving = false;
+            // Now that m_saving has drained, downstream consumers
+            // (SettingsStagingDomain in particular) can release any
+            // in-flight guards and emit their applyResult signals
+            // without racing this controller's deferred state reset.
+            Q_EMIT savingFinished();
+        });
+    });
 
     // Flush staged ordering to settings before persisting; emit the
     // transitioned-to-empty NOTIFY signals after the writes so QML
@@ -164,15 +176,25 @@ void SettingsController::save()
     // daemon-backed now and flush via D-Bus after notifyReload, below.
     m_staging.flushVirtualScreensToSettings(m_settings);
 
-    // Save main settings (includes editor settings + VS configs persisted above)
-    m_settings.save();
+    // Save main settings (includes editor settings + VS configs persisted
+    // above). The verdict feeds the same commitOk gate as the D-Bus flushes:
+    // Settings::save() deliberately leaves the committed baseline UNMOVED on
+    // a failed disk write so the values stay discardable and the next save
+    // retries — taking the clean transition anyway made the footer report a
+    // save that never landed while the manifest pages' value-based dirty
+    // still read staged against the unmoved baseline.
+    bool commitOk = true;
+    if (!m_settings.save()) {
+        qCWarning(lcConfig) << "save: writing the config file failed — baseline unmoved, values stay staged";
+        commitOk = false;
+    }
 
     // save() re-captured the committed baseline, so the animation controller's
     // value-based shader-tree dirty check must re-evaluate: apply() (commitPending)
     // may have run earlier in the domain walk, while the tree still read
     // "divergent" against the not-yet-recaptured baseline. This is a no-op flip
     // guard away from free when nothing changed.
-    if (m_animationsPage != nullptr)
+    if (m_animationsPage)
         m_animationsPage->refreshDirtyState();
 
     // RuleController and AnimationsPageController are registered
@@ -201,7 +223,6 @@ void SettingsController::save()
     // the edits. Transport-level only: a daemon-side rejection inside a void
     // adaptor slot (e.g. setQuickLayoutSlot ignoring an out-of-range slot)
     // still replies successfully and is not caught here.
-    bool commitOk = true;
 
     // Flush staged VS configs to daemon BEFORE notifyReload so virtual screen
     // IDs exist when assignments referencing them are processed.
@@ -299,14 +320,9 @@ void SettingsController::save()
         ExternalEditScope scope(*this, QStringLiteral("overview"));
         setNeedsSave(true);
     }
-    QTimer::singleShot(0, this, [this]() {
-        m_saving = false;
-        // Now that m_saving has drained, downstream consumers
-        // (SettingsStagingDomain in particular) can release any
-        // in-flight guards and emit their applyResult signals
-        // without racing this controller's deferred state reset.
-        Q_EMIT savingFinished();
-    });
+    // The deferred m_saving release and savingFinished emit ride the scope
+    // guard declared at the top of this function, so an exception anywhere
+    // above releases them the same way this return does.
 }
 
 void SettingsController::defaults()
@@ -433,6 +449,20 @@ void SettingsController::defaults()
         m_rulesPage->revert();
     }
 
+    // Drop a staged profile activation the same way the rules staging is
+    // dropped. The pointer half of an activation lives in
+    // ProfilePageController (staged vs committed active id), OUTSIDE the
+    // config store this reset just rewrote — its config half died with the
+    // baseline re-capture, but the pointer would survive as a dirty staging
+    // domain and the next Save would commit "profile X is active" over a
+    // factory configuration that no longer matches it. discard() reverts the
+    // staged pointer to the committed one; whether a factory reset should
+    // also clear the COMMITTED pointer is a different question this
+    // deliberately does not answer.
+    if (m_profilesPage) {
+        m_profilesPage->discard();
+    }
+
     // A factory reset is APPLIED, not staged: m_settings.reset() wrote the
     // cleared configuration to disk and reloaded from it, and the daemon has
     // been notified. So the config pages are clean, and the blanket "mark every
@@ -471,40 +501,6 @@ void SettingsController::defaults()
         // Through the wrapper (not a bare emit) so this path honours the
         // DirtyEmitScope coalescing like every other membership change.
         emitDirtyPagesChanged();
-    }
-}
-
-void SettingsController::launchEditor()
-{
-    // Prefer the editor next to our own executable (handles
-    // build-tree runs + non-PATH installs); fall back to a PATH
-    // lookup if not present. Logs the failure so a missing/broken
-    // editor doesn't silently produce a no-op click in the UI.
-    const QString colocated = QCoreApplication::applicationDirPath() + QLatin1String("/plasmazones-editor");
-    QString program = QFileInfo::exists(colocated) ? colocated : QStringLiteral("plasmazones-editor");
-    // Same GPU-var scrub contract as every spawn site in a GPU-exporting
-    // binary (see PGpuExportedVarsProperty in core/types/constants.h; the
-    // systemsettings-hosted KCM launcher exports nothing and stays on the
-    // plain static call). The settings
-    // app exports no GPU variables itself, so both properties are unset here
-    // and this is a no-op today — applied anyway so the spawn contract stays
-    // uniform rather than depending on the unstated who-exports-what chain.
-    QProcess process;
-    process.setProgram(program);
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    if (QCoreApplication::instance()) {
-        const QStringList gpuVars = QCoreApplication::instance()->property(PGpuExportedVarsProperty).toStringList();
-        for (const QString& var : gpuVars) {
-            env.remove(var);
-        }
-        const QVariantMap cleared = QCoreApplication::instance()->property(PGpuClearedVarsProperty).toMap();
-        for (auto it = cleared.constBegin(); it != cleared.constEnd(); ++it) {
-            env.insert(it.key(), it.value().toString());
-        }
-    }
-    process.setProcessEnvironment(env);
-    if (!process.startDetached()) {
-        qCWarning(lcCore) << "launchEditor: failed to start" << program << "— editor binary missing or not executable?";
     }
 }
 

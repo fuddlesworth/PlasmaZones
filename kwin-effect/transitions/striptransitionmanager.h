@@ -6,6 +6,7 @@
 #include "stripmotionsampler.h"
 
 #include <PhosphorAnimation/AnimationShaderContract.h> // kMaxCustomParams / kMaxCustomColors
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 
 #include <QHash> // std::hash<QString> specialization (used by the unordered_map key below)
 #include <QString>
@@ -90,7 +91,7 @@ public:
     /// (that ordering is load-bearing: it is what lets this method tell a
     /// fresh leg from a retarget — see below), with the already resolved
     /// `scrolling.view` @p effectId and @p params (the profile's effective
-    /// pack parameters) and the batch's @p viewDeltaX. An EMPTY id erases
+    /// pack parameters) and the batch's @p viewDelta. An EMPTY id erases
     /// any entry for the output — the user cleared the pack (or disabled
     /// animations) mid-flight, and the next frame falls through to the plain
     /// translation that was running inside the capture all along, visually
@@ -101,7 +102,7 @@ public:
     ///     accumulated iTime and velocity state all persist — a wheel batch
     ///     landing mid-leg must not restart the pass any more than it
     ///     restarts the spring. The sampler's offset baseline is shifted by
-    ///     @p viewDeltaX so the committed step never reads as velocity.
+    ///     @p viewDelta so the committed step never reads as velocity.
     ///   • FRESH LEG (spring NOT live at call time — possible because this
     ///     runs before applyBatchDelta): the motion sampler resets, so a
     ///     pass that begins after a stale armed entry (animations toggled,
@@ -109,7 +110,21 @@ public:
     ///     no inherited velocity.
     ///   • PACK SWAP (different @p effectId): the sampler resets too — pack
     ///     B must not begin at pack A's accumulated clock and frame count.
-    void notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params, int viewDeltaX);
+    ///   • AXIS FLIP (@p axis differs from the animator's current axis for
+    ///     this output): same arm as a pack swap. The spring may well be live
+    ///     at call time, but applyBatchDelta is about to CANCEL it rather than
+    ///     retarget it (an in-flight motion along the old axis has no velocity
+    ///     worth keeping), so treating this as a retarget would compensate the
+    ///     sampler's baseline against a measurement taken on the old axis and
+    ///     then hand the pack a spurious velocity spike on the next sample.
+    ///     The comparison is only meaningful because of the ordering contract
+    ///     above: running BEFORE applyBatchDelta is what leaves
+    ///     StripViewAnimator::axisFor() still reporting the PRE-batch axis.
+    ///
+    /// @p axis is the batch's strip axis for this output, the same value the
+    /// caller passes to applyBatchDelta.
+    void notifyLeg(KWin::LogicalOutput* output, const QString& effectId, const QVariantMap& params, int viewDelta,
+                   PhosphorProtocol::ScrollAxis axis);
 
     /// True while any armed output's view spring is live OR its settle fade
     /// is open. Feeds PlasmaZonesEffect::isActive() and
@@ -206,6 +221,7 @@ private:
         int iResolutionLoc = -1;
         int iFrameLoc = -1;
         int iStripMotionLoc = -1;
+        int iStripAxisLoc = -1;
         int iStripRectLoc = -1;
         // Filled with -1 rather than left value-initialised: `{}` would
         // default every slot to 0, a VALID location — see the identical note

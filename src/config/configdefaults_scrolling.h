@@ -69,6 +69,36 @@ public:
         return v == scrollingCenterFocusedColumnNever() || v == scrollingCenterFocusedColumnAlways()
             || v == scrollingCenterFocusedColumnOnOverflow();
     }
+    /// Which way the strip runs on a screen. THREE values, and the numbering
+    /// deliberately does NOT match PhosphorProtocol::ScrollAxis (whose
+    /// Horizontal is 0): this is the INTENT, which has an Auto the resolved
+    /// wire enum cannot express, and Auto must be 0 so an absent key reads as
+    /// it. NEVER static_cast between the two — same trap, and the same
+    /// discipline, as DefaultWidthKind vs ColumnWidth::Kind.
+    static constexpr int scrollingStripAxisAuto()
+    {
+        return 0;
+    }
+    static constexpr int scrollingStripAxisHorizontal()
+    {
+        return 1;
+    }
+    static constexpr int scrollingStripAxisVertical()
+    {
+        return 2;
+    }
+    /// StripAxis: 0 = auto (from the work area), 1 = horizontal, 2 = vertical.
+    static constexpr int scrollingStripAxis()
+    {
+        return scrollingStripAxisAuto();
+    }
+    /// Closed-set check, maintained in parallel with the schema's own list —
+    /// see isValidScrollingCenterFocusedColumn's note above.
+    static constexpr bool isValidScrollingStripAxis(int v)
+    {
+        return v == scrollingStripAxisAuto() || v == scrollingStripAxisHorizontal()
+            || v == scrollingStripAxisVertical();
+    }
     static constexpr bool scrollingAlwaysCenterSingleColumn()
     {
         return false;
@@ -778,7 +808,8 @@ public:
     //
     // The strip-mode drag selector popup. It mirrors the Snapping.ZoneSelector
     // family minus LayoutMode / GridColumns / MaxRows, because the strip popup
-    // is always a single horizontal card row. The values below hand-duplicate
+    // is always a single card row along the strip (so it follows the screen's
+    // strip axis, but never becomes a grid). The values below hand-duplicate
     // the snapping twins in configdefaults.h (zoneSelectorEnabled(),
     // triggerDistance(), position(), sizeMode(), previewWidth(),
     // previewHeight(), previewLockAspect()): that file is the LEAF of the
@@ -843,6 +874,8 @@ static_assert(ConfigDefaultsScrolling::scrollingDefaultColumnWidthFixedPx()
 static_assert(ConfigDefaultsScrolling::isValidScrollingCenterFocusedColumn(
                   ConfigDefaultsScrolling::scrollingCenterFocusedColumn()),
               "ConfigDefaults::scrollingCenterFocusedColumn() is not in its own closed set");
+static_assert(ConfigDefaultsScrolling::isValidScrollingStripAxis(ConfigDefaultsScrolling::scrollingStripAxis()),
+              "ConfigDefaults::scrollingStripAxis() is not in its own closed set");
 static_assert(
     ConfigDefaultsScrolling::isValidScrollingWidthKind(ConfigDefaultsScrolling::scrollingDefaultColumnWidthKind()),
     "ConfigDefaults::scrollingDefaultColumnWidthKind() is not in its own closed set");
@@ -954,5 +987,17 @@ static_assert(ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadius()
                   && ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadius()
                       <= ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadiusMax(),
               "ConfigDefaults::scrollingDropIndicatorBorderRadius() outside the declared [min, max] range");
+
+// The strip axis' load-bearing invariant, pinned where the accessors live
+// rather than only in the editor's own asserts: Auto MUST be zero. An absent
+// Scrolling.StripAxis key reads back as 0 on every path (config, per-screen
+// store, D-Bus), and that zero has to mean "resolve from the work area" rather
+// than pinning a direction. It is also why this numbering cannot be cast to
+// PhosphorProtocol::ScrollAxis, whose zero is Horizontal — the schema TU pins
+// that half.
+static_assert(ConfigDefaultsScrolling::scrollingStripAxisAuto() == 0,
+              "StripAxis Auto must be 0 so an absent key resolves from the work area");
+static_assert(ConfigDefaultsScrolling::scrollingStripAxis() == ConfigDefaultsScrolling::scrollingStripAxisAuto(),
+              "the StripAxis default must be Auto");
 
 } // namespace PlasmaZones

@@ -5,6 +5,7 @@
 
 #include <PhosphorEngine/IPlacementState.h>
 #include <PhosphorScrollEngine/ScrollStrip.h>
+#include <PhosphorScrollEngine/StripAxis.h>
 #include <phosphorscrollengine_export.h>
 
 #include <QObject>
@@ -96,14 +97,14 @@ public:
         m_floatingHasFocus = hasFocus;
     }
 
-    /// The strip `viewX` carried by the last geometry batch this state
+    /// The strip `viewOffset` carried by the last geometry batch this state
     /// actually emitted, and whether it has emitted one at all.
     ///
-    /// The difference between this and the next batch's `viewX` is the view
+    /// The difference between this and the next batch's `viewOffset` is the view
     /// DELTA: how far the whole strip slid, as opposed to how far any one
     /// window moved. The effect springs that delta once per output and lets
     /// every carried window ride it, instead of starting an independent
-    /// per-window spring each (see the `viewDeltaX` field on the tile-request
+    /// per-window spring each (see the `viewDelta` field on the tile-request
     /// wire).
     ///
     /// TRANSIENT — deliberately not serialized. A restored or freshly created
@@ -128,23 +129,54 @@ public:
     /// Stamped with the baseline so the next batch can tell whether the two
     /// share a basis. Note it does NOT catch a change to column widths or
     /// presets, which move strip positions without touching the work area.
-    bool hasLastAppliedViewX() const
+    bool hasLastAppliedViewOffset() const
     {
-        return m_hasLastAppliedViewX;
+        return m_hasLastAppliedViewOffset;
     }
-    int lastAppliedViewX() const
+    int lastAppliedViewOffset() const
     {
-        return m_lastAppliedViewX;
+        return m_lastAppliedViewOffset;
     }
     QRect lastAppliedWorkArea() const
     {
         return m_lastAppliedWorkArea;
     }
-    void setLastAppliedViewX(int viewX, const QRect& workArea)
+    /// The AXIS the baseline was measured along. Part of the basis, not a
+    /// decoration: the view offset is a coordinate ALONG the strip, so two
+    /// offsets taken on different axes are not comparable at all.
+    StripAxis lastAppliedAxis() const
     {
-        m_lastAppliedViewX = viewX;
+        return m_lastAppliedAxis;
+    }
+
+    /// The axis this state was last RESOLVED against, which is a different
+    /// question from lastAppliedAxis above.
+    ///
+    /// The applied basis is stamped only on an EMITTED batch, deliberately,
+    /// so it keeps describing what the compositor is actually showing. A flip
+    /// sweep cannot key on that: a relayout suppressed by the emit-on-change
+    /// gate would leave the old axis standing and the sweep would fire again
+    /// later against a basis it already converted. This one advances on every
+    /// resolve.
+    bool hasResolvedAxis() const
+    {
+        return m_hasResolvedAxis;
+    }
+    StripAxis resolvedAxis() const
+    {
+        return m_resolvedAxis;
+    }
+    void setResolvedAxis(StripAxis axis)
+    {
+        m_resolvedAxis = axis;
+        m_hasResolvedAxis = true;
+    }
+    void setLastAppliedViewOffset(int viewOffset, const QRect& workArea, StripAxis axis)
+    {
+        m_lastAppliedViewOffset = viewOffset;
         m_lastAppliedWorkArea = workArea;
-        m_hasLastAppliedViewX = true;
+        m_lastAppliedAxis = axis;
+        m_hasLastAppliedViewOffset = true;
     }
     /// Invalidate the baseline entirely: the next emitted batch takes the
     /// first-batch path (zero delta, outright placement). Called when the
@@ -152,11 +184,12 @@ public:
     /// baseline captured before it would describe a slide from a coordinate
     /// nothing on screen occupies, flying the repopulating window in from
     /// wherever the old view sat.
-    void clearLastAppliedViewX()
+    void clearLastAppliedViewOffset()
     {
-        m_lastAppliedViewX = 0;
+        m_lastAppliedViewOffset = 0;
         m_lastAppliedWorkArea = QRect();
-        m_hasLastAppliedViewX = false;
+        m_lastAppliedAxis = StripAxis::horizontal();
+        m_hasLastAppliedViewOffset = false;
     }
 
     /// How many entries this strip has taken from the context template's seed
@@ -183,7 +216,7 @@ public:
     /// class to buy nothing.
     ///
     /// Reset on exactly two events: the strip EMPTIES (applyLayout's empty
-    /// branch, beside clearLastAppliedViewX — a screen you cleared out starts
+    /// branch, beside clearLastAppliedViewOffset — a screen you cleared out starts
     /// its next session from the top of the blueprint), and the screen's
     /// blueprint CHANGES (applyPerScreenConfig — picking a new template is an
     /// explicit act, and a cursor describing the old template's entries would
@@ -263,9 +296,12 @@ private:
     QSet<QString> m_floating;
     QString m_lastFloatingFocus;
     bool m_floatingHasFocus = false;
-    int m_lastAppliedViewX = 0;
+    int m_lastAppliedViewOffset = 0;
     QRect m_lastAppliedWorkArea;
-    bool m_hasLastAppliedViewX = false;
+    StripAxis m_lastAppliedAxis;
+    StripAxis m_resolvedAxis;
+    bool m_hasResolvedAxis = false;
+    bool m_hasLastAppliedViewOffset = false;
     int m_blueprintCursor = 0;
 };
 

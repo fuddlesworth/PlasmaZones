@@ -107,11 +107,14 @@ inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
  * migration history), and spelled exactly like the engine's
  * ScrollPerScreenKeys settings channel so the daemon merge is a plain copy.
  *
- * Deliberately ONLY the New-columns card's sizing defaults (the analogue of
- * the tiling Algorithm card's per-monitor tuning). Scrolling's behavior and
- * view settings stay app-wide like their tiling/snapping siblings — the
- * per-context variants are the rule actions, which use the engine's rule
- * channel rather than this store.
+ * TWO disjoint sub-domains: the New-columns card's sizing defaults (the
+ * analogue of the tiling Algorithm card's per-monitor tuning) and the strip
+ * axis, which is an orientation intent surfaced by a different card. They are
+ * split by isPerScreenScrollingSizingKey / isPerScreenScrollingAxisKey in
+ * perscreen.cpp so one card's scope chip cannot report or clear the other's
+ * override. Scrolling's remaining behavior and view settings stay app-wide
+ * like their tiling/snapping siblings — the per-context variants are the rule
+ * actions, which use the engine's rule channel rather than this store.
  */
 namespace PerScreenScrollingKey {
 inline constexpr const char DefaultColumnWidthKind[] = "DefaultColumnWidthKind";
@@ -121,6 +124,11 @@ inline constexpr const char DefaultColumnDisplay[] = "DefaultColumnDisplay";
 inline constexpr const char DefaultWindowHeightKind[] = "DefaultWindowHeightKind";
 inline constexpr const char DefaultWindowHeightValue[] = "DefaultWindowHeightValue";
 inline constexpr const char DefaultWindowHeightPresetIndex[] = "DefaultWindowHeightPresetIndex";
+/// Which way this monitor's strip runs. Per-screen because the axis's only
+/// legitimate discriminator IS the monitor's shape, which is exactly what
+/// this store is keyed on — the same argument that puts the sizing defaults
+/// here rather than app-wide.
+inline constexpr const char StripAxis[] = "StripAxis";
 } // namespace PerScreenScrollingKey
 
 // Per-screen snapping overrides carry only the gap keys, spelled by the shared
@@ -414,7 +422,7 @@ public:
  *
  * The scrolling engine's peer of IZoneSelectorSettings, stored under
  * Scrolling.ZoneSelector. It carries no LayoutMode / GridColumns / MaxRows:
- * the strip popup renders one horizontal row of column cards, so the
+ * the strip popup renders one row of column cards along the strip, so the
  * grid-arrangement knobs have nothing to arrange.
  *
  * Used by: KWin Effect, KCM, Overlay Service
@@ -444,9 +452,13 @@ public:
     // The resolved value is a ZoneSelectorConfig, the SAME struct the snapping
     // selector resolves to, because both popups are laid out by the one
     // computeZoneSelectorLayout. layoutMode is stamped to Horizontal rather
-    // than read from a key: the strip popup is one horizontal card row and has
-    // no Grid or Vertical form to select. maxRows and gridColumns stay at the
-    // struct defaults for the same reason — a single row consults neither.
+    // than read from a key: the strip popup is one row of cards mirroring the
+    // strip, so it has no Grid form and no user-selected form at all. Which
+    // way that row runs is the ENGINE's strip axis, passed to
+    // computeZoneSelectorLayout as its own argument, so a vertical strip does
+    // not need (and must not take) a Vertical stamp here. maxRows and
+    // gridColumns stay at the struct defaults for the same reason — a single
+    // row of cards consults neither.
     //
     // Per-screen override keys REUSE the ZoneSelectorConfigKey constants (the
     // Position / SizeMode / PreviewWidth / PreviewHeight / PreviewLockAspect /

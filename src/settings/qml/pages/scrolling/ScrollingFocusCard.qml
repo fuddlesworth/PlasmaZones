@@ -14,7 +14,8 @@ import org.kde.kirigami as Kirigami
  * column, how a column at the screen edge is shown (crop versus resize), and
  * the Meta+wheel column-focus gesture. All belong with focus rather than on
  * a page of their own, so the card hosts them and the former Scrolling →
- * View leaf is gone.
+ * View leaf is gone. Which way the strip runs is the Strip direction card
+ * above this one — it moved out to take a per-monitor scope chip.
  *
  * All rows bind the appSettings context property, so the card carries no
  * per-page state. App-wide only, matching the tiling/snapping window pages:
@@ -32,7 +33,7 @@ SettingsCard {
         SettingsRow {
             title: i18n("Center the focused column")
             searchAnchor: "centerFocusedColumn"
-            description: i18nc("the words Never, Always, and On overflow must match the option labels shown in the picker beside this text", "With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip is wider than the screen.")
+            description: i18nc("the words Never, Always, and On overflow must match the option labels shown in the picker beside this text", "With Never, the strip stays still until the focused column would leave the screen. With Always, the focused column parks in the middle. With On overflow, it centers only once the strip runs past the edge of the screen.")
 
             WideComboBox {
                 Accessible.name: i18n("Center the focused column")

@@ -341,12 +341,14 @@ const StaticEntry kStaticEntries[] = {
          Q_EMIT sm->scrollExpelWindowRequested();
      }},
     {kIdScrollConsumeOrExpelLeft, &ConfigDefaults::scrollingConsumeOrExpelLeftShortcut,
-     &Settings::scrollingConsumeOrExpelLeftShortcut, QT_TRANSLATE_NOOP("plasmazones", "Consume or Expel Left"),
+     &Settings::scrollingConsumeOrExpelLeftShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Consume or Expel Toward the Strip Start"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollConsumeOrExpelRequested(-1);
      }},
     {kIdScrollConsumeOrExpelRight, &ConfigDefaults::scrollingConsumeOrExpelRightShortcut,
-     &Settings::scrollingConsumeOrExpelRightShortcut, QT_TRANSLATE_NOOP("plasmazones", "Consume or Expel Right"),
+     &Settings::scrollingConsumeOrExpelRightShortcut,
+     QT_TRANSLATE_NOOP("plasmazones", "Consume or Expel Toward the Strip End"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollConsumeOrExpelRequested(1);
      }},
@@ -433,36 +435,36 @@ const StaticEntry kStaticEntries[] = {
          Q_EMIT sm->scrollCenterVisibleColumnsRequested();
      }},
     {kIdScrollFocusWindowTop, &ConfigDefaults::scrollingFocusWindowTopShortcut,
-     &Settings::scrollingFocusWindowTopShortcut, QT_TRANSLATE_NOOP("plasmazones", "Focus Top Window in Column"),
+     &Settings::scrollingFocusWindowTopShortcut, QT_TRANSLATE_NOOP("plasmazones", "Focus First Window in Column"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollFocusWindowEndRequested(false);
      }},
     {kIdScrollFocusWindowBottom, &ConfigDefaults::scrollingFocusWindowBottomShortcut,
-     &Settings::scrollingFocusWindowBottomShortcut, QT_TRANSLATE_NOOP("plasmazones", "Focus Bottom Window in Column"),
+     &Settings::scrollingFocusWindowBottomShortcut, QT_TRANSLATE_NOOP("plasmazones", "Focus Last Window in Column"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollFocusWindowEndRequested(true);
      }},
     {kIdScrollFocusColumnLeft, &ConfigDefaults::scrollingFocusColumnLeftShortcut,
      &Settings::scrollingFocusColumnLeftShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left, Stopping at the Edge"),
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Previous Column, Stopping at the Edge"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollFocusColumnPlainRequested(-1);
      }},
     {kIdScrollFocusColumnRight, &ConfigDefaults::scrollingFocusColumnRightShortcut,
      &Settings::scrollingFocusColumnRightShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right, Stopping at the Edge"),
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Next Column, Stopping at the Edge"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollFocusColumnPlainRequested(1);
      }},
     {kIdScrollFocusColumnLeftOrLast, &ConfigDefaults::scrollingFocusColumnLeftOrLastShortcut,
      &Settings::scrollingFocusColumnLeftOrLastShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Focus Column Left, Wrapping"),
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Previous Column, Wrapping"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollFocusColumnWrapRequested(-1);
      }},
     {kIdScrollFocusColumnRightOrFirst, &ConfigDefaults::scrollingFocusColumnRightOrFirstShortcut,
      &Settings::scrollingFocusColumnRightOrFirstShortcut,
-     QT_TRANSLATE_NOOP("plasmazones", "Focus Column Right, Wrapping"),
+     QT_TRANSLATE_NOOP("plasmazones", "Focus Next Column, Wrapping"),
      [](ShortcutManager* sm) {
          Q_EMIT sm->scrollFocusColumnWrapRequested(1);
      }},

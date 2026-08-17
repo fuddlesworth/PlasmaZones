@@ -8,16 +8,20 @@ import "../../js/PresetList.js" as PresetList
 
 /**
  * @brief Simple-mode Scrolling page: the everyday decisions (default column
- * width, and whether tabbed columns are marked and how) plus the shared Window
- * Handling and Focus and view cards, the latter carrying the centering and
- * wheel rows. The advanced counterpart is the Columns page
+ * width, and whether tabbed columns are marked and how) plus three shared
+ * cards — Strip direction, Window Handling, and Focus and view. Which way the
+ * strip runs is the Strip direction card's own row; the Focus card carries
+ * the centering and wheel rows. The advanced counterpart is the Columns page
  * (scrolling-columns); dirtiness, Reset, and Discard delegate to all three
  * advanced leaves via simplePageBackingPages.
  *
- * Global scope only, like TilingSimplePage: every row binds appSettings
- * directly and no per-monitor scope chip is offered here. Per-monitor
- * overrides are advanced-mode depth, so this page only warns that one is in
- * effect rather than offering to edit it.
+ * Scope: every row this page OWNS binds appSettings directly, like
+ * TilingSimplePage. The one deliberate exception is the shared Strip
+ * direction card, which carries its per-monitor scope chip on both hosting
+ * pages — a portrait monitor is exactly the everyday case the card exists
+ * for, so simple mode edits the per-monitor axis in place. Column SIZING
+ * overrides stay advanced-mode depth, so for those this page only warns that
+ * one is in effect rather than offering to edit it.
  *
  * The width-kind combo offers all four kinds, so this page hosts a control
  * for each one it can host. Restricting the combo instead would leave a
@@ -61,17 +65,20 @@ SettingsFlickable {
     }
 
     // Bumped on every override change so the check below re-runs:
-    // hasPerScreenScrollingSettings is a plain invokable with no NOTIFY, so a
-    // binding over it would never re-evaluate on its own.
+    // hasPerScreenScrollingSizingSettings is a plain invokable with no NOTIFY,
+    // so a binding over it would never re-evaluate on its own.
     property int overrideRevision: 0
 
-    // True while any monitor carries a scrolling override, which would win
-    // over the global values this page edits.
+    // True while any monitor carries a column-SIZING override, which would
+    // win over the sizing values this page edits. Deliberately not widened to
+    // the axis sub-domain: the Strip direction card hosted below carries its
+    // own per-monitor chip (with an override dot), so an axis override is
+    // visible and editable in place rather than warned about.
     readonly property bool anyScreenOverridden: {
         void root.overrideRevision;
         var list = settingsController.screens || [];
         for (var i = 0; i < list.length; i++) {
-            if (settingsController.hasPerScreenScrollingSettings(list[i].name))
+            if (settingsController.hasPerScreenScrollingSizingSettings(list[i].name))
                 return true;
         }
         return false;
@@ -135,14 +142,14 @@ SettingsFlickable {
                 // hugs the row that gates it, so no separator sits between the
                 // kind combo and the controls it governs.
                 SettingsRow {
-                    title: i18n("Proportion of the screen")
+                    title: i18n("Proportion of the strip")
                     searchAnchor: "simpleDefaultColumnWidthProportion"
-                    description: i18n("How much of the usable screen width a new column takes")
+                    description: i18n("How much of the strip a new column takes")
                     enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindProportion
                     visible: true
 
                     SettingsSlider {
-                        accessibleName: i18n("Proportion of the screen")
+                        accessibleName: i18n("Proportion of the strip")
                         from: root._scrollConsts.proportionMin
                         to: root._scrollConsts.proportionMax
                         stepSize: root._scrollConsts.proportionStep
@@ -159,7 +166,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Fixed width")
                     searchAnchor: "simpleDefaultColumnWidthFixed"
-                    description: i18n("How many pixels wide a new column is")
+                    description: i18n("How many pixels a new column takes along the strip")
                     enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindFixed
                     visible: true
 
@@ -186,7 +193,7 @@ SettingsFlickable {
                 SettingsRow {
                     title: i18n("Preset width")
                     searchAnchor: "simpleDefaultColumnWidthPresetIndex"
-                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template set on Scrolling → Columns, and with no template at all the built-in width steps apply.")
+                    description: i18n("Which width a new column opens at, counted from 1 into the widths of the screen's layout template. Screens with no template of their own use the default template from Scrolling → Templates, and with no template at all the built-in width steps apply.")
                     enabled: appSettings.scrollingDefaultColumnWidthKind === root.widthKindPreset
                     visible: true
 
@@ -284,6 +291,10 @@ SettingsFlickable {
         }
 
         ScrollingWindowHandlingCard {
+            Layout.fillWidth: true
+        }
+
+        ScrollingStripDirectionCard {
             Layout.fillWidth: true
         }
 

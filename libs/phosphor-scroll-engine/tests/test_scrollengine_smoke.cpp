@@ -5,7 +5,7 @@
 // 1150 hard ceiling.
 //
 // The case for it: the split-by-concern work the rule asks for has already
-// been done. Six siblings carry the rest of the suite (enumerated below),
+// been done. Eight siblings carry the rest of the suite (enumerated below),
 // each owning a coherent concern, and what remains here is the core smoke
 // path — tracking, ordering, float state, capture, context teardown, handoff.
 // Splitting that residue again would divide one narrative across two files
@@ -13,7 +13,7 @@
 // engine regression would then have to know which half to open.
 //
 // Reviewed at the same time as the file's other exception-worthy neighbours;
-// if a seventh concern emerges, it takes a sibling rather than growing this.
+// if a ninth concern emerges, it takes a sibling rather than growing this.
 
 // Headless ScrollEngine smoke test: tracking, ordering, float state, capture,
 // context teardown, and handoff semantics.
@@ -24,16 +24,19 @@
 // retile) wire the geometry-provider seam instead, and the strip geometry they
 // assert on is the engine's own, not the strip model's.
 //
-// Six siblings carry the rest of the suite, split off at this file's size
+// Eight siblings carry the rest of the suite, split off at this file's size
 // ceiling: test_scrollengine_persistence.cpp owns the stash focus/anchor carry
 // and the serialize/restore blob, test_scrollengine_zonenumbers.cpp owns the
 // zone-number walk and the verbs that address it, test_scrollengine_perscreen
 // owns the per-screen override resolution, test_scrollengine_draginsert owns
 // the drag-insert state machine, test_scrollengine_boundary.cpp owns the
 // screen-boundary contract (the straddler clamp, the park peek floor, and
-// crop mode), and test_scrollengine_verbs.cpp owns the niri-parity verb
+// crop mode), test_scrollengine_verbs.cpp owns the niri-parity verb
 // vocabulary (column focus polarity, tile-end focus, absolute width/height
-// intents, the float moves and the layer switch).
+// intents, the float moves and the layer switch),
+// test_scrollengine_behaviour.cpp owns the per-screen BEHAVIOUR overrides,
+// and test_scrollengine_snapshot.cpp owns stripSnapshot and its index
+// contract.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -46,6 +49,8 @@
 
 using namespace PhosphorScrollEngine;
 
+namespace Ax = ScrollTestUtils::Ax;
+
 using ScrollTestUtils::defaultScreenRect;
 using ScrollTestUtils::makeProviderEngine;
 
@@ -54,6 +59,13 @@ class TestScrollEngineSmoke : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void screensSetLifecycle();
     void openTrackAndOrder();
     void floatPullsOutAndRestoresSlot();
@@ -79,7 +91,7 @@ private Q_SLOTS:
     void secondScrollMeasuresFromTheEmittedBaselineOnly();
     void aWidthChangeKeepsTheResizedColumnInTheBatch();
     void aDepartingColumnKeepsItsTabIndicator();
-    void onlyAHorizontallyParkedTileCarriesAVisualPosition();
+    void onlyAStripDepartedTileCarriesAVisualPosition();
     void aTabSwitchNamesTheTabItReplaces();
     void modeRoundTripRestoresStripStructure();
     void operationScreenFallbackIsDeterministic();
@@ -584,12 +596,27 @@ void TestScrollEngineSmoke::scheduledRetileRunsUnderEventLoop()
     // IScrollSettings so the inner gap is 0 — the 595px figure belongs to
     // the strip-ops fixture, which sets a 10px gap), so the retile MUST move
     // the rect and emit.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 900, 0);
-    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(900, 0));
+    const QSize min900 = Ax::t(QSize(900, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min900.width(), min900.height());
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), min900);
     QCOMPARE(tiledSpy.count(), 0); // nothing applied yet: the retile is queued
     QCoreApplication::processEvents();
     QCOMPARE(tiledSpy.count(), 1);
-    QVERIFY(tiledSpy.last().at(0).toString().contains(QStringLiteral("\"width\":900")));
+    // Parsed and looked up BY WINDOW, the way every sibling batch assertion in
+    // this file does. A substring match against the whole batch JSON matched
+    // the value on ANY entry, so a retile that widened the wrong window's
+    // column passed just as well.
+    const QJsonArray batch = QJsonDocument::fromJson(tiledSpy.last().at(0).toString().toUtf8()).array();
+    bool sawA = false;
+    for (const QJsonValue& v : batch) {
+        const QJsonObject o = v.toObject();
+        if (o.value(QLatin1String("windowId")).toString() != QLatin1String("app|a")) {
+            continue;
+        }
+        sawA = true;
+        QCOMPARE(Ax::entryMainLen(o), 900);
+    }
+    QVERIFY2(sawA, "the batch must carry the window whose minimum grew");
 }
 
 void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
@@ -612,12 +639,16 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
 
     QSignalSpy floatSpy(engine, &ScrollEngine::windowFloatingChanged);
     // In-bounds growth keeps the window tiled; the column widens instead.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 900, 0);
+    // Minimums ALONG the strip, so they transpose with the fixture: 900
+    // widens the column, 1300 outgrows the work area entirely.
+    const QSize min900 = Ax::t(QSize(900, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min900.width(), min900.height());
     QVERIFY(!state->isFloating(QStringLiteral("app|a")));
     QCOMPARE(floatSpy.count(), 0);
 
     // Past the work-area width: the verdict floats it mid-session.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 1300, 0);
+    const QSize min1300 = Ax::t(QSize(1300, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min1300.width(), min1300.height());
     state = stateFor(engine, QStringLiteral("S1"));
     QVERIFY(state);
     QVERIFY(state->isFloating(QStringLiteral("app|a")));
@@ -629,15 +660,16 @@ void TestScrollEngineSmoke::minSizeOutgrowingWorkAreaFloatsTheWindow()
     // mode-transition capture keys off it) and the restore entry holds the
     // clamp that forced the float.
     QVERIFY(engine->isModeSpecificFloated(QStringLiteral("app|a")));
-    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), QSize(1300, 0));
+    QCOMPARE(engine->windowMinimumSize(QStringLiteral("app|a")), min1300);
 
     // A repeat report is idempotent — already floating, nothing re-fires.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 1300, 0);
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min1300.width(), min1300.height());
     QCOMPARE(floatSpy.count(), 1);
 
     // Shrinking back below the work area does NOT auto-unfloat: the float
     // may have been rearranged, and the manual unfloat restores the slot.
-    engine->windowMinSizeUpdated(QStringLiteral("app|a"), 400, 0);
+    const QSize min400 = Ax::t(QSize(400, 0));
+    engine->windowMinSizeUpdated(QStringLiteral("app|a"), min400.width(), min400.height());
     QVERIFY(state->isFloating(QStringLiteral("app|a")));
 }
 
@@ -713,13 +745,14 @@ void TestScrollEngineSmoke::seedAdoptionClampsViewToStripEnd()
 {
     // Mode-transition seed, arrivals in REVERSE seed order (the focused
     // window announces first and becomes the active column; every earlier
-    // window then inserts to its LEFT). The anchor is active-relative, so
+    // window then inserts on its LEAD side). The anchor is active-relative, so
     // without the insert-time clamp the view drifted past the strip's end:
-    // the active column sat pinned at the LEFT edge with every other
-    // column parked off-screen and dead space on the right (the "toggle
-    // into scrolling shows one window" bug). Work area 1200x800, gap 0,
-    // three 600px half columns: the clamped view must show the active
-    // column c at x=600 with its left neighbour b visible at x=0.
+    // the active column sat pinned at the LEAD edge with every other
+    // column parked off-screen and dead space at the trail end (the "toggle
+    // into scrolling shows one window" bug). Work area 1200 along the strip by
+    // 800 across it, gap 0, three 600px half columns: the clamped view must
+    // show the active column c at main 600 with its lead neighbour b visible
+    // at main 0.
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
     engine->setInitialWindowOrder(QStringLiteral("S1"),
@@ -730,34 +763,38 @@ void TestScrollEngineSmoke::seedAdoptionClampsViewToStripEnd()
 
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              QStringList({QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
-    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|c")).x(), 600);
-    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|b")).x(), 0);
+    QCOMPARE(Ax::mainPos(engine->lastManagedRect(QStringLiteral("app|c"))), 600);
+    QCOMPARE(Ax::mainPos(engine->lastManagedRect(QStringLiteral("app|b"))), 0);
 }
 
 void TestScrollEngineSmoke::parkingAvoidsNeighbourOutputs()
 {
     // ONE park rule for every topology: an off-viewport column parks just
     // BELOW the union of all outputs, x kept within its own screen's span.
-    // No point below the union belongs to any monitor, so there is no
-    // resolver consultation, no per-side preference, and no boxed-in
-    // degraded case. The departure side travels separately as scrollEdge
-    // (pinned by parkingReportsDepartureEdge), so the park position carries
-    // no direction meaning. A resolver reporting a right neighbour is
-    // installed here to pin exactly that irrelevance: its presence must not
-    // move the park.
+    // Physical on both axes on purpose — no point below the union belongs to
+    // any monitor — so there is no resolver consultation, no per-side
+    // preference, and no boxed-in degraded case. The departure side travels
+    // separately as scrollEdge (pinned by parkingReportsDepartureEdge), so the
+    // park position carries no direction meaning. A resolver reporting a
+    // trail-side neighbour is installed here to pin exactly that irrelevance:
+    // its presence must not move the park.
     //
-    // The two geometries are deliberately DIFFERENT: a 100px panel on each
-    // side makes the work area 100..1100 while the screen stays 0..1200,
-    // and the park bound is the SCREEN rect (provider engines have no
-    // ScreenManager, so the union degrades to the parked screen's own
-    // rect).
-    ScrollTestUtils::RightNeighbourResolver resolver;
+    // The two geometries are deliberately DIFFERENT: a 100px panel at each end
+    // of the strip makes the work area run 100..1100 along the MAIN axis while
+    // the screen still runs 0..1200, and the park bound is the SCREEN rect
+    // (provider engines have no ScreenManager, so the union degrades to the
+    // parked screen's own rect). Transposed with the fixture, the same way the
+    // boundary suite builds its inset: an untransposed adjusted(100, 0, -100,
+    // 0) insets the CROSS axis on the vertical arm, which leaves the main
+    // extent equal to the screen's and the two geometries no longer tell the
+    // work area apart from the screen at all.
+    ScrollTestUtils::TrailNeighbourResolver resolver;
 
     const auto screenGeometry = [](const QString&) {
         return defaultScreenRect();
     };
     const auto panelInsetGeometry = [](const QString&) {
-        return defaultScreenRect().adjusted(100, 0, -100, 0);
+        return Ax::t(QRect(100, 0, 1000, 800));
     };
 
     QObject owner;
@@ -767,13 +804,51 @@ void TestScrollEngineSmoke::parkingAvoidsNeighbourOutputs()
     engine->windowOpened(QStringLiteral("app|b"), QStringLiteral("S1"), 0, 0);
     engine->windowOpened(QStringLiteral("app|c"), QStringLiteral("S1"), 0, 0);
     // View shows [b, c]; focusing the first column scrolls to [a, b], so c
-    // leaves by the RIGHT edge. It parks BELOW the screen regardless.
+    // leaves by the TRAIL edge. It parks BELOW the screen regardless.
+    const QRect beforePark = engine->lastManagedRect(QStringLiteral("app|c"));
+    QVERIFY(beforePark.isValid());
     engine->focusColumnFirst(QStringLiteral("S1"));
+    const QRect screen = defaultScreenRect();
     const QRect parked = engine->lastManagedRect(QStringLiteral("app|c"));
-    QVERIFY2(parked.top() > defaultScreenRect().bottom(),
+    // THE TWO ARMS DISCRIMINATE THROUGH DIFFERENT ASSERTIONS, because the
+    // fixture's inset lands on a different physical edge in each. parkTop is
+    // unionBottom + 1 + kParkMargin, and the union seeds from the screen rect.
+    //
+    // VERTICAL arm: screen 800x1200 (bottom 1199), work area inset to
+    // y 100..1099. A work-area-derived parkTop would be 1116 and fail THIS
+    // assertion. So the park-below-the-screen check is the discriminator here.
+    //
+    // HORIZONTAL arm: screen 1200x800 (bottom 799), work area inset on x only,
+    // so its bottom is ALSO 799 and both derivations give the same parkTop.
+    // This assertion cannot tell them apart on that arm; the far-edge pin
+    // below does it instead.
+    QVERIFY2(parked.top() > screen.bottom(),
              qPrintable(QStringLiteral("expected a park below the screen, got y=%1").arg(parked.y())));
-    QVERIFY2(parked.left() >= defaultScreenRect().left() && parked.left() <= defaultScreenRect().right(),
-             qPrintable(QStringLiteral("parked x must stay within the screen's span, got x=%1").arg(parked.x())));
+    // parkRect clamps the PHYSICAL x only (it is deliberately physical on both
+    // axes). This is a SHAPE pin and nothing more: qBound guarantees the lower
+    // half on either arm, and the upper half holds whenever the rect is no
+    // wider than the screen, which it never is. Neither arm's screen-vs-work-
+    // area claim rests on it.
+    QVERIFY2(parked.left() >= screen.left() && parked.right() <= screen.right(),
+             qPrintable(QStringLiteral("parked rect must stay within the screen's horizontal span, got x=%1 w=%2")
+                            .arg(parked.x())
+                            .arg(parked.width())));
+
+    // The far-edge PIN is the HORIZONTAL arm's discriminator, and gated to it
+    // deliberately rather than by oversight. c departs along the main axis, so
+    // on a horizontal strip it carries an x overhang that the clamp pulls back
+    // to the SCREEN's right edge, where a work-area clamp would stop 100px
+    // short. On a vertical strip c departs along y instead and its x is simply
+    // the work area's own span, so there is no overhang, the clamp never
+    // engages, and asserting the pin there would be true by construction and
+    // prove nothing — which is why the vertical arm leans on the park-below
+    // check above instead.
+    if (!Ax::vertical()) {
+        QCOMPARE(parked.right(), screen.right());
+    }
+    // parkRect MOVES; it never resizes. A park that trimmed the rect to fit
+    // would satisfy the containment above.
+    QCOMPARE(parked.size(), beforePark.size());
     engine->setCrossSurfaceResolver(nullptr);
 }
 
@@ -783,10 +858,13 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
     // up parked, the tile request must still name the edge it actually left
     // by, because that is what the effect animates from. These two properties
     // used to be one number (the park position), which is exactly why they
-    // could not both be satisfied on a horizontally-adjacent monitor pair.
-    // Here the right neighbour forces the park LEFT while the edge stays
-    // "right" — the pair that the old design could not express.
-    ScrollTestUtils::RightNeighbourResolver resolver;
+    // could not both be satisfied on an adjacent monitor pair. Under the
+    // current contract the park position carries NO direction at all: it lands
+    // below the union of every output no matter which end the column left by,
+    // and a neighbour cannot move it. This test installs a neighbour and pins
+    // both halves anyway — the park below the union AND the trail-edge report
+    // that travels beside it.
+    ScrollTestUtils::TrailNeighbourResolver resolver;
 
     QObject owner;
     ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
@@ -807,14 +885,14 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
         }
     }
     QVERIFY2(!cEntry.isEmpty(), "expected app|c in the tile batch");
-    QCOMPARE(cEntry.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
+    QCOMPARE(cEntry.value(QLatin1String("scrollEdge")).toString(), Ax::edgeTrail());
     // Parked BELOW the union (position carries no direction) while reporting
-    // the right edge as data. Asserting BOTH is the point: the pair is what
+    // the TRAIL edge as data. Asserting BOTH is the point: the pair is what
     // the old single-number design could not express.
     QVERIFY2(cEntry.value(QLatin1String("y")).toInt() > defaultScreenRect().bottom(),
              "expected the park itself to sit below the outputs");
 
-    // app|a was parked off the left before this move (the view opened on
+    // app|a was parked off the LEAD end before this move (the view opened on
     // [b, c]) and has just scrolled in, so it reports the edge it arrives
     // from. Same rule as c, opposite direction.
     QJsonObject aEntry;
@@ -824,7 +902,7 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
         }
     }
     QVERIFY2(!aEntry.isEmpty(), "expected app|a in the tile batch");
-    QCOMPARE(aEntry.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("left"));
+    QCOMPARE(aEntry.value(QLatin1String("scrollEdge")).toString(), Ax::edgeLead());
 
     // app|b has been on screen throughout — never parked, so nothing to
     // anchor and no edge. This is what stops the field being emitted blanket.
@@ -838,7 +916,7 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
     QVERIFY2(!bEntry.contains(QLatin1String("scrollEdge")),
              "a column that was never parked must not carry a scrollEdge");
 
-    // No committed rect from this fixture crosses the RIGHT screen edge,
+    // No committed rect from this fixture crosses the TRAIL screen edge,
     // where S2 sits. Narrow by construction: this fixture's columns are
     // either fully on screen or fully off (they park), so the clamp branches
     // never run here and only the park bound is exercised — the genuine
@@ -848,8 +926,15 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
         const QJsonArray b = QJsonDocument::fromJson(tiled.at(sig).at(0).toString().toUtf8()).array();
         for (const QJsonValue& v : b) {
             const QJsonObject o = v.toObject();
-            const int right = o.value(QLatin1String("x")).toInt() + o.value(QLatin1String("width")).toInt() - 1;
-            QVERIFY2(right <= defaultScreenRect().right(),
+            // Parked entries are excluded: parkRect is deliberately PHYSICAL
+            // (it means "off every output"), so a parked column sits below
+            // the canvas whichever way the strip runs and its main extent
+            // there says nothing about the neighbour boundary.
+            if (o.value(QLatin1String("y")).toInt() > defaultScreenRect().bottom()) {
+                continue;
+            }
+            const int right = Ax::entryMainEnd(o);
+            QVERIFY2(right <= Ax::mainEnd(defaultScreenRect()),
                      qPrintable(QStringLiteral("rect for %1 crosses the neighbour boundary (right=%2)")
                                     .arg(o.value(QLatin1String("windowId")).toString())
                                     .arg(right)));
@@ -858,9 +943,10 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
 
     // The half that matters most and the one that was missed first time
     // round: scrolling BACK must report the edge the column is arriving from.
-    // c went out by the right, so when it returns it must come back in from
-    // the right — even though it has been sitting parked off the LEFT the
-    // whole time, which is exactly why the edge cannot be read off its rect.
+    // c went out by the TRAIL end, so when it returns it must come back in
+    // from the trail end — even though it has been sitting parked BELOW the
+    // canvas the whole time, which is exactly why the edge cannot be read off
+    // its rect.
     tiled.clear();
     engine->focusColumnLast(QStringLiteral("S1"));
     QVERIFY(!tiled.isEmpty());
@@ -872,9 +958,9 @@ void TestScrollEngineSmoke::parkingReportsDepartureEdge()
         }
     }
     QVERIFY2(!cBack.isEmpty(), "expected app|c in the scroll-back batch");
-    QVERIFY2(cBack.value(QLatin1String("x")).toInt() >= defaultScreenRect().left(),
+    QVERIFY2(Ax::entryMainPos(cBack) >= Ax::mainPos(defaultScreenRect()),
              "app|c should be back on screen after scrolling to the last column");
-    QCOMPARE(cBack.value(QLatin1String("scrollEdge")).toString(), QStringLiteral("right"));
+    QCOMPARE(cBack.value(QLatin1String("scrollEdge")).toString(), Ax::edgeTrail());
     engine->setCrossSurfaceResolver(nullptr);
 }
 
@@ -904,7 +990,7 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
     const QJsonArray firstBatch = QJsonDocument::fromJson(tiled.first().at(0).toString().toUtf8()).array();
     QVERIFY2(!firstBatch.isEmpty(), "expected the opening batch to carry app|a");
     for (const QJsonValue& v : firstBatch) {
-        QVERIFY2(!v.toObject().contains(QLatin1String("viewDeltaX")),
+        QVERIFY2(!v.toObject().contains(QLatin1String("viewDelta")),
                  "a context's first batch has no previous view to slide from");
     }
 
@@ -939,7 +1025,7 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
                         o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
         const bool parked = now.top() > defaultScreenRect().bottom();
         if (parked) {
-            QVERIFY2(!o.contains(QLatin1String("viewDeltaX")),
+            QVERIFY2(!o.contains(QLatin1String("viewDelta")),
                      qPrintable(QStringLiteral("parked tile %1 must not claim to ride the view").arg(id)));
             continue;
         }
@@ -947,7 +1033,7 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
         if (prev == before.constEnd() || prev->top() > defaultScreenRect().bottom()) {
             continue; // arriving from a park: no on-screen predecessor to difference against
         }
-        QVERIFY2(o.contains(QLatin1String("viewDeltaX")),
+        QVERIFY2(o.contains(QLatin1String("viewDelta")),
                  qPrintable(QStringLiteral("on-screen tile %1 should ride the view").arg(id)));
         // The whole of this window's movement, and nothing but the view's.
         // Sign: the field is the translation that puts the window BACK where
@@ -955,12 +1041,13 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
         // ringing it out to zero — so it is the negation of the movement.
         //
         // Holds for a tile the layout left where the strip put it, which is
-        // every tile in this fixture. A straddling tile whose left edge the
-        // clamp pins at the screen edge does NOT move by the view delta, and
-        // the engine drops the field for exactly that reason — the boundary
-        // suite owns that case.
-        QCOMPARE(prev->x() - now.x(), o.value(QLatin1String("viewDeltaX")).toInt());
-        QCOMPARE(now.y(), prev->y());
+        // every tile in this fixture. A straddling tile the edge clamp pins
+        // ALSO carries the field: its position leg and the view offset cancel
+        // in the effect's residual branch while only its clamped width
+        // animates, so this position-delta equality would not hold for it —
+        // no such tile exists in this fixture.
+        QCOMPARE(Ax::mainPos(*prev) - Ax::mainPos(now), o.value(QLatin1String("viewDelta")).toInt());
+        QCOMPARE(Ax::crossPos(now), Ax::crossPos(*prev));
         QCOMPARE(now.size(), prev->size());
         ++carried;
     }
@@ -975,8 +1062,13 @@ void TestScrollEngineSmoke::viewDeltaIsSuppressedAcrossAWorkAreaChange()
     // coordinate — by an amount proportional to how deep the anchor sits, not
     // by a pixel or two. Subtracting across two bases would describe a slide
     // nobody made, and the effect springs the WHOLE strip to ring it out.
-    QObject owner;
+    // `available` BEFORE `owner`, load-bearing: locals destroy in reverse
+    // declaration order, and the engine (owner's child, torn down in owner's
+    // destructor) holds a provider capturing &available — declared the other
+    // way round, the rect dies first and any teardown-path resolve reads a
+    // dangling reference.
     QRect available = defaultScreenRect();
+    QObject owner;
     ScrollEngine* engine = ScrollTestUtils::makeProviderEngine(
         &owner, {QStringLiteral("S1")},
         [](const QString&) {
@@ -996,7 +1088,12 @@ void TestScrollEngineSmoke::viewDeltaIsSuppressedAcrossAWorkAreaChange()
     QVERIFY(!tiled.isEmpty());
 
     // A panel appears. Every subsequent rect is resolved in the new area.
-    available = defaultScreenRect().adjusted(0, 0, -240, 0);
+    // The shrink is TRANSPOSED with the fixture — it must eat the MAIN
+    // extent (the direction column strip positions rescale in), or the
+    // vertical arm only shrinks the cross extent and the different-basis
+    // premise this test exists for never holds there.
+    available = ScrollTestUtils::Ax::vertical() ? defaultScreenRect().adjusted(0, 0, 0, -240)
+                                                : defaultScreenRect().adjusted(0, 0, -240, 0);
     const int before = tiled.count();
     engine->focusColumnFirst(QStringLiteral("S1"));
     QVERIFY2(tiled.count() > before, "the work-area change plus focus move must emit");
@@ -1004,7 +1101,7 @@ void TestScrollEngineSmoke::viewDeltaIsSuppressedAcrossAWorkAreaChange()
     const QJsonArray batch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
     QVERIFY(!batch.isEmpty());
     for (const QJsonValue& v : batch) {
-        QVERIFY2(!v.toObject().contains(QLatin1String("viewDeltaX")),
+        QVERIFY2(!v.toObject().contains(QLatin1String("viewDelta")),
                  "a batch resolved in a different work area than its baseline must carry no view delta");
     }
 
@@ -1019,7 +1116,7 @@ void TestScrollEngineSmoke::viewDeltaIsSuppressedAcrossAWorkAreaChange()
     const QJsonArray settled = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
     bool anyDelta = false;
     for (const QJsonValue& v : settled) {
-        anyDelta = anyDelta || v.toObject().contains(QLatin1String("viewDeltaX"));
+        anyDelta = anyDelta || v.toObject().contains(QLatin1String("viewDelta"));
     }
     QVERIFY2(anyDelta, "once the basis matches again the view delta must come back");
 }
@@ -1051,7 +1148,7 @@ void TestScrollEngineSmoke::secondScrollMeasuresFromTheEmittedBaselineOnly()
         for (const QJsonValue& v : b) {
             const QJsonObject o = v.toObject();
             if (o.value(QLatin1String("windowId")).toString() == id) {
-                return o.value(QLatin1String("x")).toInt();
+                return Ax::entryMainPos(o);
             }
         }
         return INT_MIN;
@@ -1082,16 +1179,17 @@ void TestScrollEngineSmoke::secondScrollMeasuresFromTheEmittedBaselineOnly()
     // ARRIVING tile also carries the delta — deliberately, so translating its
     // final rect back lands it at its real pre-scroll STRIP position rather
     // than at a made-up point beside the screen edge — but its previous
-    // COMMITTED x was the park, which describes nothing. park() moves only the
-    // top edge, so a parked tile is identified by its y sitting below the
-    // screen rather than by a changed x.
+    // COMMITTED main position was the park, which describes nothing. parkRect
+    // moves only the top edge, so a parked tile is identified by its y sitting
+    // past the screen's bottom — the same `.bottom()` predicate every other
+    // park check in this file uses, physical on both axes because the park is.
     const QJsonArray second = QJsonDocument::fromJson(tiled.at(afterSecond).at(0).toString().toUtf8()).array();
     const QJsonArray first = QJsonDocument::fromJson(tiled.at(afterFirst).at(0).toString().toUtf8()).array();
     const auto wasOnScreenInFirst = [&first](const QString& id) {
         for (const QJsonValue& v : first) {
             const QJsonObject o = v.toObject();
             if (o.value(QLatin1String("windowId")).toString() == id) {
-                return o.value(QLatin1String("y")).toInt() < defaultScreenRect().height();
+                return o.value(QLatin1String("y")).toInt() <= defaultScreenRect().bottom();
             }
         }
         return false;
@@ -1100,15 +1198,14 @@ void TestScrollEngineSmoke::secondScrollMeasuresFromTheEmittedBaselineOnly()
     int checked = 0;
     for (const QJsonValue& v : second) {
         const QJsonObject o = v.toObject();
-        if (!o.contains(QLatin1String("viewDeltaX"))) {
+        if (!o.contains(QLatin1String("viewDelta"))) {
             continue;
         }
         const QString id = o.value(QLatin1String("windowId")).toString();
         if (!wasOnScreenInFirst(id)) {
             continue;
         }
-        QCOMPARE(o.value(QLatin1String("viewDeltaX")).toInt(),
-                 xOf(tiled, afterFirst, id) - o.value(QLatin1String("x")).toInt());
+        QCOMPARE(o.value(QLatin1String("viewDelta")).toInt(), xOf(tiled, afterFirst, id) - Ax::entryMainPos(o));
         ++checked;
     }
     QVERIFY2(checked > 0, "expected at least one column on screen across both emitted batches");
@@ -1121,7 +1218,7 @@ void TestScrollEngineSmoke::aWidthChangeKeepsTheResizedColumnInTheBatch()
     // spring runs. A column whose WIDTH also changed in the same batch keeps a
     // real leg — its size has to interpolate. What this test PINS is the
     // batch half of that: the resized column is present and reports its new
-    // width. Whether the same entry also carries viewDeltaX depends on
+    // width. Whether the same entry also carries viewDelta depends on
     // whether the view genuinely moved, which the clamp-suppression rule can
     // legitimately veto — so the delta is deliberately NOT asserted here.
     // The sibling smoke test deliberately asserts size EQUALITY across its
@@ -1145,9 +1242,13 @@ void TestScrollEngineSmoke::aWidthChangeKeepsTheResizedColumnInTheBatch()
 
     const QJsonArray batch = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
     QVERIFY(!batch.isEmpty());
-    QVERIFY2(engine->lastManagedRect(QStringLiteral("app|a")).width() != widthBefore.width(),
-             qPrintable(
-                 QStringLiteral("the width change must land in the managed rect (still %1)").arg(widthBefore.width())));
+    // BOTH sides read by ROLE. Comparing the new MAIN extent against the old
+    // rect's physical width made the inequality hold on the vertical arm no
+    // matter what the engine did — 800, the cross extent, never changes — so
+    // the assertion could not fail even for a no-op adjustColumnWidth.
+    QVERIFY2(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))) != Ax::mainLen(widthBefore),
+             qPrintable(QStringLiteral("the width change must land in the managed rect (main extent still %1)")
+                            .arg(Ax::mainLen(widthBefore))));
 
     // The resized column is in the batch and its geometry reflects the new
     // width — the delta field is orthogonal to that, and whether it appears
@@ -1161,7 +1262,12 @@ void TestScrollEngineSmoke::aWidthChangeKeepsTheResizedColumnInTheBatch()
             continue;
         }
         sawResized = true;
-        QCOMPARE(o.value(QLatin1String("width")).toInt(), engine->lastManagedRect(QStringLiteral("app|a")).width());
+        QCOMPARE(Ax::entryMainLen(o), Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))));
+        // Pinned, not just "differs and agrees": both sides above come out of
+        // the same resolve, so a wrong-but-consistent width satisfies them.
+        // 840 is the fixture arithmetic — a half-work-area column on the
+        // 1200px main extent is 600px, and +20% of that extent adds 240.
+        QCOMPARE(Ax::entryMainLen(o), 840);
     }
     QVERIFY2(sawResized, "the batch must carry the column whose width changed");
 }
@@ -1206,10 +1312,10 @@ void TestScrollEngineSmoke::aDepartingColumnKeepsItsTabIndicator()
              "a column scrolling out of view must keep its indicator for the leg");
 }
 
-void TestScrollEngineSmoke::onlyAHorizontallyParkedTileCarriesAVisualPosition()
+void TestScrollEngineSmoke::onlyAStripDepartedTileCarriesAVisualPosition()
 {
-    // visualX/visualY are a PAINT hint for a column the strip carried off the
-    // side: its committed rect is the park, which no translation can put back
+    // visualX/visualY are a PAINT hint for a column the strip carried off one
+    // of its ENDS: its committed rect is the park, which no translation can put back
     // on screen, so the effect draws it at its real strip position instead.
     //
     // The gate is the departure EDGE, not the park itself, and that matters
@@ -1263,7 +1369,7 @@ void TestScrollEngineSmoke::onlyAHorizontallyParkedTileCarriesAVisualPosition()
     // POSITIVE witness for the implication: nothing above carries the hint,
     // so deleting the visualX emission entirely would leave every assertion
     // green. Grow the strip and scroll back to the start so trailing columns
-    // genuinely depart by the right edge — the case the hint exists for.
+    // genuinely depart by the TRAIL edge — the case the hint exists for.
     for (const char* id : {"app|c", "app|d", "app|e"}) {
         engine->windowOpened(QString::fromLatin1(id), QStringLiteral("S1"), 0, 0);
     }
@@ -1279,7 +1385,7 @@ void TestScrollEngineSmoke::onlyAHorizontallyParkedTileCarriesAVisualPosition()
             QVERIFY2(o.contains(QLatin1String("visualY")), "the paint hint must carry both axes");
         }
     }
-    QVERIFY2(sawCarriedPark, "a horizontally departed column must carry the visual-position paint hint");
+    QVERIFY2(sawCarriedPark, "a strip-departed column must carry the visual-position paint hint");
 }
 
 void TestScrollEngineSmoke::aTabSwitchNamesTheTabItReplaces()
@@ -1361,7 +1467,7 @@ void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()
     engine->windowFocused(QStringLiteral("app|a"), QStringLiteral("S1"));
     engine->consumeWindowIntoColumn(QStringLiteral("S1")); // b joins a's stack
     engine->adjustColumnWidth(10.0, QStringLiteral("S1")); // 600px + 10% of 1200 = 720px
-    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")).width(), 720);
+    QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 720);
 
     // Mode reassignment of the SAME context (no desktop change): teardown.
     engine->setActiveScreens({});
@@ -1376,7 +1482,7 @@ void TestScrollEngineSmoke::modeRoundTripRestoresStripStructure()
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|a")), 0);
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|b")), 0);
     QCOMPARE(engine->columnIndexForWindow(QStringLiteral("S1"), QStringLiteral("app|c")), 1);
-    QCOMPARE(engine->lastManagedRect(QStringLiteral("app|a")).width(), 720);
+    QCOMPARE(Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))), 720);
     QCOMPARE(engine->managedWindowOrder(QStringLiteral("S1")),
              QStringList({QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c")}));
 }

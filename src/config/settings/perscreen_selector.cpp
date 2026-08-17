@@ -42,8 +42,8 @@ const QLatin1String kZoneSelectorKeys[9] = {
 };
 
 // The strip selector's overrides reuse the vocabulary above minus the three
-// grid-arrangement keys, which a single horizontal card row has nothing to do
-// with. The subset is ENFORCED on write, not merely left out of the load list:
+// grid-arrangement keys, which a single card row along the strip has nothing
+// to do with. The subset is ENFORCED on write, not merely left out of the load list:
 // the write path shares validateZoneSelectorValue with the snapping twin,
 // which would accept a LayoutMode pushed over D-Bus and let it displace the
 // Horizontal the strip resolver stamps.

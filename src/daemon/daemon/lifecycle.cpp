@@ -723,10 +723,11 @@ void Daemon::stop()
     // so the final shutdown save (further down, before the engine is
     // destroyed) would drop every strip mutation from the last debounce
     // window. It is cleared immediately before m_scrollEngine.reset() instead.
-    // The one remaining `this`-capturing closure on the overlay service. It
-    // is safe today (the lambda re-resolves m_scrollEngine and null-checks
-    // it), but leaving it installed breaks the grep-discoverable
-    // clear-before-teardown contract its siblings below rely on.
+    // The `this`-capturing closures on the overlay service. Each is safe today
+    // (every lambda re-resolves its dependency off the Daemon and null-checks
+    // it), but leaving any of them installed breaks the grep-discoverable
+    // clear-before-teardown contract the whole block exists for — so a new
+    // provider joins this list rather than relying on its own null check.
     if (m_overlayService) {
         m_overlayService->setScrollZonesProvider({});
         // Same contract: the layouts-provided resolver captures `this` and
@@ -734,10 +735,17 @@ void Daemon::stop()
         m_overlayService->setLayoutSupportResolver({});
         m_overlayService->setDragInsertSelectorResolver({});
         m_overlayService->setStripCardsProvider({});
+        m_overlayService->setStripAxisProvider({});
         // Symmetric clear of the late-bound drag-exclusion id: a stop() that
         // lands mid-drag never reaches the adaptor's resetDragState, and the
         // overlay service outlives this teardown.
         m_overlayService->setActiveDragWindowId({});
+    }
+    // Same clear-before-teardown contract as the overlay block above: the
+    // picker's axis provider captures `this` and reads m_scrollEngine, which
+    // is reset below.
+    if (m_unifiedLayoutController) {
+        m_unifiedLayoutController->setStripAxisProvider({});
     }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
@@ -944,8 +952,13 @@ void Daemon::stop()
     // the windows, so the order it records is still the right seed when the
     // same context re-enters after the restart. Clearing it would make every
     // mode re-entry in the new session fall back to compositor announce order.
-    // Its own prunes (closed window, removed desktop, removed screen) keep it
-    // bounded.
+    // Its own prunes keep it bounded: a closed window drops out of every order
+    // (pruneEngineOrdersForWindow), and a removed desktop or activity drops its
+    // contexts (pruneContextMapsForDesktop / pruneContextMapsForActivities).
+    // Screen ids are pruned only on a virtual-screen RECONFIGURE
+    // (pruneEngineOrdersForRemovedScreens, which keeps the new VS id set plus
+    // the bare physical id). A physical unplug deliberately keeps the screen's
+    // orders, so a replug re-enters with the order it left with.
 
     // Per-session OSD gates. A resnap armed just before the stop leaves its
     // outstanding count behind, and the screen-removal cooldown deadline can
@@ -1026,6 +1039,11 @@ void Daemon::stop()
         // drag-end snap path; no drag-end follows a stop(), so clear both
         // selection families explicitly.
         m_overlayService->clearSelectedZone();
+        // The scroll tab-strip surfaces have the same no-way-out problem as
+        // the modals above: the departing-screen loop that ordinarily clears
+        // them keys on the engine's active set, which is empty from here on,
+        // so a stale strip would sit mapped across a stop()/start() cycle.
+        m_overlayService->clearAllScrollTabState();
     }
 
     // Save state

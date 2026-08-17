@@ -59,42 +59,50 @@ public:
     /// union has already dropped.
     QStringList scrollingScreens() const;
 
-    /// The two scrolling behaviours the COMPOSITOR owns, as already-resolved
-    /// screen-id lists: `{"focusFollowsMouse": [...], "cropStraddlers": [...]}`.
+    /// The three scrolling facts the COMPOSITOR owns, as already-resolved
+    /// screen-id lists: `{"focusFollowsMouse": [...], "cropStraddlers": [...],
+    /// "verticalAxis": [...]}`.
     ///
-    /// Both are per-context rule slots
+    /// The first two are per-context rule slots
     /// (SetScrollFocusFollowsMouse / SetScrollCropStraddlers) whose consumer
     /// lives in the KWin effect, not the engine — so unlike their four
     /// siblings they cannot ride the engine's per-screen override map. The
+    /// third is the strip axis as membership (see @ref verticalAxisKey). The
     /// daemon resolves `rule ?? config` per scrolling screen and publishes the
     /// RESOLVED membership, which keeps the effect free of any config
     /// knowledge: it answers each question with a set lookup and needs no
     /// fallback of its own. A screen absent from a list has that behaviour
-    /// OFF; a screen absent from the daemon's scrolling set appears in
-    /// neither.
+    /// OFF (for verticalAxis, a horizontal strip); a screen absent from the
+    /// daemon's scrolling set appears in none of the three.
     ///
-    /// One map rather than two list properties so the compositor pays a
+    /// One map rather than three list properties so the compositor pays a
     /// single bring-up query and a single change subscription for what is
     /// really one push.
     QVariantMap scrollEffectBehaviour() const;
 
     /// Replace the published behaviour map and broadcast on a real change.
-    /// Driven by the daemon's per-screen scrolling pass, which resolves both
-    /// slots while it is already walking the scrolling screens. Emit-on-change
+    /// Driven by the daemon's per-screen scrolling pass, which resolves all
+    /// three while it is already walking the scrolling screens. Emit-on-change
     /// (unlike setScrollTabSurface's non-zero path): the compositor's copy is
     /// a plain cache it can re-query, so a redundant broadcast would only cost
     /// a rule-cache invalidation on the other side.
     ///
-    /// Both lists are SORTED and de-duplicated here rather than taken on
+    /// All three lists are SORTED and de-duplicated here rather than taken on
     /// trust. The published contract says sorted, and the change gate is a
     /// list compare, so canonicalizing at the one write site is what makes
     /// both true whatever order the producer walked its screens in.
-    void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens);
+    /// @p verticalAxisScreens are the scrolling screens whose strip runs
+    /// VERTICALLY. Absent from the list, like an absent key, means horizontal —
+    /// the historical layout — so a compositor that predates the axis reads
+    /// the whole desktop as horizontal, which is what it would have drawn
+    /// anyway.
+    void setScrollEffectBehaviour(const QStringList& focusFollowsMouseScreens, const QStringList& cropStraddlerScreens,
+                                  const QStringList& verticalAxisScreens);
 
     /// Wire keys of the @ref scrollEffectBehaviour map, in one place for the
     /// DAEMON side (this adaptor and its tests). They are not shared with the
     /// compositor: the KWin effect is a separate module that does not link
-    /// this library and spells both literals itself when it reads the map
+    /// this library and spells all three literals itself when it reads the map
     /// (kwin-effect/tilinghandler/state.cpp), and the XML DocString spells
     /// them a third time. A rename is therefore an edit here, an edit in the
     /// effect and an edit in the XML — the same kept-in-sync-BY-HAND rule the
@@ -106,6 +114,14 @@ public:
     static QString cropStraddlersKey()
     {
         return QStringLiteral("cropStraddlers");
+    }
+    /// Membership, not a per-screen value: a screen IN this list runs its
+    /// strip vertically, and absence means horizontal. Membership keeps the
+    /// map's one shape rather than introducing a second, and it makes an
+    /// absent key and an empty list mean the same safe thing.
+    static QString verticalAxisKey()
+    {
+        return QStringLiteral("verticalAxis");
     }
 
     /// Clear the engine pointer during shutdown (same late-D-Bus-call
@@ -127,7 +143,11 @@ public Q_SLOTS:
      * the engine's own screen fallback would otherwise redirect a wheel
      * event from a non-scrolling monitor onto the active scrolling one.
      *
-     * A press at the strip's edge CROSSES onto the adjacent output when
+     * @p delta is STRIP-RELATIVE, not screen-relative: -1 is the previous
+     * column along the strip and +1 the next one, which reads as left/right
+     * on a horizontal strip and up/down on a vertical one.
+     *
+     * A press at the strip's END CROSSES onto the adjacent output when
      * one exists (a different-mode neighbour defers to the daemon, which
      * activates that engine's entry-edge window), and a press on an EMPTY
      * scrolling screen crosses the same way instead of dead-ending — so a
@@ -140,8 +160,8 @@ public Q_SLOTS:
      *
      * @param screenId Screen whose strip should move (the cursor's screen);
      *                 an empty string is ignored
-     * @param delta -1 focuses the column to the left, +1 to the right; any
-     *              other value is ignored
+     * @param delta -1 focuses the previous column along the strip, +1 the
+     *              next one; any other value is ignored
      */
     void focusColumn(const QString& screenId, int delta);
 

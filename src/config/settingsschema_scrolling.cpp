@@ -10,6 +10,7 @@
 #include "settingsschema.h"
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "configdefaults.h"
@@ -121,6 +122,16 @@ static_assert(ConfigDefaults::scrollingTabIndicatorPositionBottom()
                   == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Bottom),
               "TabIndicatorPosition::Bottom wire value drifted from ConfigDefaults");
 
+// The strip axis is the one enum here that must NOT line up with its engine
+// counterpart: the config value is the three-valued INTENT (Auto is its zero),
+// the wire value is the resolved two-valued PhosphorProtocol::ScrollAxis
+// (Horizontal is its zero). Pin the mismatch so a future "tidy-up" that makes
+// the two numberings agree has to delete this assert deliberately rather than
+// making a silent static_cast between them start looking safe.
+static_assert(ConfigDefaults::scrollingStripAxisHorizontal()
+                  != static_cast<int>(PhosphorProtocol::ScrollAxis::Horizontal),
+              "StripAxis is the config INTENT space and must not share ScrollAxis' numbering");
+
 // The preset-index ceiling is a consequence of the preset-list length cap, not
 // an independent number: an index past the last entry a canonicalized list can
 // hold could never resolve.
@@ -157,6 +168,21 @@ void appendScrollingSchema(PhosphorConfig::Schema& schema)
          intChoices({{static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Never), "never"_L1},
                      {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always), "always"_L1},
                      {static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::OnOverflow), "onOverflow"_L1}})},
+        // StripAxis. Spelled from the ConfigDefaults accessors rather than an
+        // engine enum, because this is the INTENT space and its Auto has no
+        // engine enumerator — PhosphorProtocol::ScrollAxis is two-valued and
+        // numbers Horizontal 0 where this space numbers it 1. Never cast
+        // between them; the engine translates with an explicit switch.
+        {CD::stripAxisKey(),
+         CD::scrollingStripAxis(),
+         QMetaType::Int,
+         {},
+         validIntOr(
+             {CD::scrollingStripAxisAuto(), CD::scrollingStripAxisHorizontal(), CD::scrollingStripAxisVertical()},
+             CD::scrollingStripAxis()),
+         intChoices({{CD::scrollingStripAxisAuto(), "auto"_L1},
+                     {CD::scrollingStripAxisHorizontal(), "horizontal"_L1},
+                     {CD::scrollingStripAxisVertical(), "vertical"_L1}})},
         {CD::alwaysCenterSingleColumnKey(), CD::scrollingAlwaysCenterSingleColumn(), QMetaType::Bool},
         {CD::cropStraddlersKey(), CD::scrollingCropStraddlers(), QMetaType::Bool},
         // NOTE: the width-kind CONFIG space {0 proportion, 1 fixed,

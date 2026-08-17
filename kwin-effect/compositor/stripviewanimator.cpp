@@ -37,15 +37,42 @@ void StripViewAnimator::setEnabled(bool enabled)
     }
 }
 
-bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
+bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaIn, PhosphorProtocol::ScrollAxis axis,
                                         const PhosphorAnimation::Profile& profile)
 {
-    if (!output || deltaX == 0) {
+    if (!output || deltaIn == 0) {
         return false;
     }
-    const qreal delta = qBound(-kMaxViewDeltaPx, deltaX, kMaxViewDeltaPx);
+    const qreal delta = qBound(-kMaxViewDeltaPx, deltaIn, kMaxViewDeltaPx);
 
     ViewMotion& motion = m_motions[output];
+    if (motion.axis != axis) {
+        // Also taken by the FIRST batch for any vertical output, not only by a
+        // genuine flip: ViewMotion default-constructs Horizontal, so a freshly
+        // inserted entry for a vertical strip lands here. Harmless — there is
+        // no leg to cancel and the accumulator is already zero — and it is what
+        // stamps the axis onto the new entry.
+        //
+        // The strip's axis flipped under a live leg. CANCEL rather than
+        // retarget: the in-flight motion describes travel along an axis this
+        // output no longer has, so there is no velocity worth preserving and
+        // retargeting would carry sideways momentum into a vertical slide.
+        //
+        // Damage first, for the same reason the no-clock arm below does: the
+        // offset the leg was contributing vanishes with the cancel, and the
+        // committed geometry is already final, so nothing else would repaint
+        // the stale frame away.
+        //
+        // The accumulator resets too. It is an accumulated coordinate ALONG an
+        // axis, so carrying it across a flip would leave the new axis's first
+        // leg starting from a distance measured on the old one.
+        if (motion.animation.isAnimating() && m_repaintRequest) {
+            m_repaintRequest(output);
+        }
+        motion.animation.cancel();
+        motion.committed = 0.0;
+        motion.axis = axis;
+    }
     const qreal previousCommitted = motion.committed;
     motion.committed += delta;
 
@@ -107,7 +134,7 @@ bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
     return true;
 }
 
-qreal StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
+qreal StripViewAnimator::offsetAlongAxis(KWin::LogicalOutput* output) const
 {
     if (!output) {
         return 0.0;
@@ -117,6 +144,39 @@ qreal StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
         return 0.0;
     }
     return it->second.committed - it->second.animation.value();
+}
+
+PhosphorProtocol::ScrollAxis StripViewAnimator::axisFor(KWin::LogicalOutput* output) const
+{
+    if (!output) {
+        return PhosphorProtocol::ScrollAxis::Horizontal;
+    }
+    const auto it = m_motions.find(output);
+    return it == m_motions.end() ? PhosphorProtocol::ScrollAxis::Horizontal : it->second.axis;
+}
+
+QPointF StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
+{
+    if (!output) {
+        return {};
+    }
+    // ONE map lookup for both halves, deliberately not offsetAlongAxis() +
+    // axisFor(): those would find the same entry twice on every frame of a
+    // live leg (this is a per-frame paint-path call), and the second would
+    // restate axisFor's absent-entry default here, where a divergence between
+    // the two copies would silently put the offset in the wrong component.
+    const auto it = m_motions.find(output);
+    if (it == m_motions.end() || !it->second.animation.isAnimating()) {
+        return {};
+    }
+    const qreal along = it->second.committed - it->second.animation.value();
+    if (qFuzzyIsNull(along)) {
+        return {};
+    }
+    // The axis is resolved HERE rather than at each paint site, so a caller
+    // cannot put the scalar in the wrong component — which is the whole
+    // failure this returns a point to prevent.
+    return it->second.axis == PhosphorProtocol::ScrollAxis::Horizontal ? QPointF(along, 0.0) : QPointF(0.0, along);
 }
 
 bool StripViewAnimator::hasActiveAnimations() const

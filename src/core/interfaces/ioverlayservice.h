@@ -15,6 +15,7 @@
 
 #include <PhosphorProtocol/ZoneTypes.h>
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QRect>
@@ -150,13 +151,31 @@ public:
     // rather than absorbing the strip floor.
     virtual int selectorCardCount(const QString& screenId) const = 0;
 
-    // Strip-selector screens only: one work-area width share per rendered
-    // strip card, in card order (empty everywhere else, and for an empty
-    // strip). The other half of the trigger-edge sizing contract above:
-    // strip cards render variable-width, so isNearTriggerEdge needs the
-    // fractions, not just the count, for its computeZoneSelectorLayout call
-    // to reproduce the real bar width.
+    // Strip-selector screens only: one ALONG-THE-STRIP extent share of the
+    // work area per rendered strip card, in card order (empty everywhere
+    // else, and for an empty strip) — on a vertical strip these are HEIGHT
+    // shares, matching the snapshot's widthFraction role convention. The
+    // other half of the trigger-edge sizing contract above: strip cards
+    // render variable-extent, so isNearTriggerEdge needs the fractions, not
+    // just the count, for its computeZoneSelectorLayout call to reproduce
+    // the real bar extent.
     virtual QList<qreal> selectorStripFractions(const QString& screenId) const = 0;
+
+    // Strip-selector screens only (false everywhere else, so the answer is
+    // conjoined with strip mode at the source rather than by the caller):
+    // whether that screen's strip runs top to bottom. The third part of the
+    // trigger-edge sizing contract above — the
+    // cards stack down the popup on a vertical strip, so a bar rect computed
+    // on the horizontal assumption is the transpose of the popup actually
+    // painted, and the keep-visible band stops matching what the cursor is
+    // over. Default-implemented as "horizontal" so an implementation without
+    // strip support stays source-compatible, matching the strip-target block
+    // below.
+    virtual bool selectorStripVerticalAxis(const QString& screenId) const
+    {
+        Q_UNUSED(screenId)
+        return false;
+    }
 
     // PhosphorZones::Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;

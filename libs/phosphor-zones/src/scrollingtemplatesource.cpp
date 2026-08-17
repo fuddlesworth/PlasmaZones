@@ -16,7 +16,7 @@ namespace {
 constexpr qreal kPreviewEdgeEps = 0.001;
 } // namespace
 
-PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTemplate& templ)
+PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTemplate& templ, bool verticalAxis)
 {
     PhosphorLayout::LayoutPreview preview;
     if (!templ.isValid()) {
@@ -29,10 +29,11 @@ PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTempla
     preview.isScrollingTemplate = true;
 
     // Strip snapshot: blueprint columns (else the preset width vocabulary)
-    // laid left to right as full-height bands. The preview is a fixed-size
-    // card, so a strip wider than the screen is clamped to fit rather than
-    // drawn overhanging: the band that crosses the right edge ends at 1.0,
-    // and any column that would start at or past the edge is dropped.
+    // laid along the strip axis as full-cross-extent bands — left to right on
+    // a horizontal strip, top to bottom on a vertical one. The preview is a
+    // fixed-size card, so a strip longer than the screen is clamped to fit
+    // rather than drawn overhanging: the band that crosses the far edge ends
+    // at 1.0, and any column that would start at or past the edge is dropped.
     // A defaults-only template previews as one column at its own default
     // width.
     QList<qreal> widths;
@@ -57,15 +58,19 @@ PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTempla
     }
     preview.zones.reserve(widths.size());
     preview.zoneNumbers.reserve(widths.size());
-    qreal x = 0.0;
+    // `along` is the offset down the strip axis; the cross extent is always
+    // the full 0..1 of the other axis. One walk for both axes, so the two
+    // depictions cannot drift in their clamping or their zone numbering.
+    qreal along = 0.0;
     int zoneNumber = 1;
     for (qreal width : widths) {
-        if (x >= 1.0 - kPreviewEdgeEps) {
+        if (along >= 1.0 - kPreviewEdgeEps) {
             break;
         }
-        preview.zones.append(QRectF(x, 0.0, qMin(width, 1.0 - x), 1.0));
+        const qreal extent = qMin(width, 1.0 - along);
+        preview.zones.append(verticalAxis ? QRectF(0.0, along, 1.0, extent) : QRectF(along, 0.0, extent, 1.0));
         preview.zoneNumbers.append(zoneNumber++);
-        x += width;
+        along += width;
     }
     preview.zoneCount = preview.zones.size();
     return preview;

@@ -8,6 +8,8 @@
 #include <PhosphorEngine/EngineTypes.h>
 #include <PhosphorEngine/IPlacementEngine.h>
 
+#include <PhosphorProtocol/ScrollAxisEnum.h>
+
 #include <QString>
 #include <QVector>
 
@@ -91,6 +93,15 @@ struct StashedStrip
     QVector<StashedColumn> columns;
     QString focusedWindowId;
     int viewAnchor = 0;
+    /// The axis this stash was captured under.
+    ///
+    /// The stash is a THIRD carrier of axis-dependent state, alongside the
+    /// live strip and the persisted blob, and the easiest of the three to
+    /// forget: a scrolling -> snap -> scrolling round trip that spans a flip
+    /// replays whatever was captured. The anchor is the piece that matters —
+    /// it is main-axis pixels, so replaying one captured on the other axis
+    /// scrolls the restored strip to a nonsense position.
+    PhosphorProtocol::ScrollAxis axis = PhosphorProtocol::ScrollAxis::Horizontal;
     /// Monotonic stamp of when this entry was staged (mode exit or
     /// persistence load), from m_stashSequence. serializeStripState
     /// resolves a window listed by two DIFFERENT stash keys in favour of

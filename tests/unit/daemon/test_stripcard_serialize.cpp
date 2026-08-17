@@ -176,6 +176,35 @@ private Q_SLOTS:
         QCOMPARE(layout.rows, 1);
     }
 
+    /// The VERTICAL arm of the same chokepoint, which had zero unit coverage:
+    /// the cards stack DOWN the popup, the per-card extent is measured
+    /// against indicatorHeight, and each card adds labelSpace + cardPadding
+    /// chrome where the horizontal arm adds side padding. The formula is
+    /// rebuilt from stripCardPreviewWidth (pinned independently above) so
+    /// this does not use the arm's own answer as its expectation.
+    void stripCardWidthParityAnchorVertical()
+    {
+        using PlasmaZones::stripCardPreviewWidth;
+        PlasmaZones::ZoneSelectorConfig config;
+        config.sizeMode = 1; // Manual
+        config.previewWidth = 180;
+        config.previewLockAspect = false;
+        config.previewHeight = 101;
+        config.layoutMode = 1;
+        const QList<qreal> fractions{0.5, 0.25, 1.0};
+        const PlasmaZones::ZoneSelectorLayout layout = PlasmaZones::computeZoneSelectorLayout(
+            config, QRect(0, 0, 1440, 2560), 3, fractions, /*stripVerticalAxis=*/true);
+        QCOMPARE(layout.rows, 3);
+        QCOMPARE(layout.columns, 1);
+        QCOMPARE(layout.totalRows, 3);
+        const int perCardChrome = layout.labelSpace + layout.cardPadding;
+        QCOMPARE(
+            layout.scrollContentHeight,
+            stripCardPreviewWidth(layout.indicatorHeight, 0.5) + stripCardPreviewWidth(layout.indicatorHeight, 0.25)
+                + stripCardPreviewWidth(layout.indicatorHeight, 1.0) + 3 * perCardChrome + 2 * layout.indicatorSpacing);
+        QCOMPARE(layout.scrollContentWidth, layout.indicatorWidth + layout.cardSidePadding * 2);
+    }
+
     void emptySnapshotSerializesEmpty()
     {
         QCOMPARE(PlasmaZones::stripColumnsToVariantList(ScrollStripSnapshot{}).size(), 0);

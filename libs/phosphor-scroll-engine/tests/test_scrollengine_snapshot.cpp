@@ -25,6 +25,13 @@ class TestScrollEngineSnapshot : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void invalidForUnmanagedScreen();
     void emptyStripIsValidWithZeroColumns();
     void columnsFollowStripOrder();
@@ -37,10 +44,11 @@ private Q_SLOTS:
     void excludeActiveTilePromotesSurvivor();
     void excludeActiveTilePromotesByPosition();
     void excludeActiveTabPromotesVisibleTab();
+    void excludeActivePromotionSkipsMinimizedSurvivors();
     void excludeSoloWindowLeavesNoActiveColumn();
     void overWideColumnClampsFractionToOne();
     void invalidWorkAreaAnswersInvalid();
-    void gapsShareTheColumnHeight();
+    void gapsShareTheColumnCrossExtent();
     void livePreviewOmitsDraggedWindow();
 
 private:
@@ -329,6 +337,81 @@ void TestScrollEngineSnapshot::excludeActiveTabPromotesVisibleTab()
     QVERIFY(!snap.columns.at(1).tiles.at(0).relRect.isNull());
 }
 
+void TestScrollEngineSnapshot::excludeActivePromotionSkipsMinimizedSurvivors()
+{
+    // The minimized skip in the promotion scan — a DELIBERATE divergence from
+    // the real detach, which does no such skip: a preview highlighting an
+    // invisible tile would be a lie. Three legs, one per scan outcome.
+    const auto params = ScrollTestUtils::engineParams();
+
+    // Forward skip: [b, c(active), d(min), e] excluding c — the inheriting
+    // slot is d, which is minimized, so the FORWARD scan moves on to e. A
+    // scan that promoted the inheriting slot regardless highlights d.
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        openWindows(
+            engine, QStringLiteral("S1"),
+            {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d"), QStringLiteral("e")});
+        ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(state);
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("e")));
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("d")));
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+        QVERIFY(state->strip().setWindowMinimized(QStringLiteral("d"), true, params));
+
+        const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+        QVERIFY(snap.valid);
+        QCOMPARE(snap.columns.at(1).tiles.size(), 3);
+        for (const auto& tile : snap.columns.at(1).tiles) {
+            QCOMPARE(tile.activeTab, tile.windowId == QStringLiteral("e"));
+        }
+    }
+
+    // Backward scan: [b, c(active), d(min)] excluding c — nothing visible at
+    // or after the inheriting slot, so the promotion walks back to b.
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        openWindows(engine, QStringLiteral("S1"),
+                    {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d")});
+        ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(state);
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("d")));
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+        QVERIFY(state->strip().setWindowMinimized(QStringLiteral("d"), true, params));
+
+        const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+        QVERIFY(snap.valid);
+        QCOMPARE(snap.columns.at(1).tiles.size(), 2);
+        for (const auto& tile : snap.columns.at(1).tiles) {
+            QCOMPARE(tile.activeTab, tile.windowId == QStringLiteral("b"));
+        }
+    }
+
+    // Every survivor minimized (embedder-only state): the flag stays unset
+    // rather than highlighting an invisible tile.
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        openWindows(engine, QStringLiteral("S1"),
+                    {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d")});
+        ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(state);
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("d")));
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+        QVERIFY(state->strip().setWindowMinimized(QStringLiteral("b"), true, params));
+        QVERIFY(state->strip().setWindowMinimized(QStringLiteral("d"), true, params));
+
+        const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+        QVERIFY(snap.valid);
+        QCOMPARE(snap.columns.at(1).tiles.size(), 2);
+        for (const auto& tile : snap.columns.at(1).tiles) {
+            QVERIFY2(!tile.activeTab, "with every survivor minimized, nothing may be highlighted");
+        }
+    }
+}
+
 void TestScrollEngineSnapshot::excludeSoloWindowLeavesNoActiveColumn()
 {
     QObject owner;
@@ -354,10 +437,11 @@ void TestScrollEngineSnapshot::overWideColumnClampsFractionToOne()
     const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"));
     QVERIFY(snap.valid);
     QCOMPARE(snap.columns.size(), 1);
-    // The share is clamped to 1: the preview shows the visible share,
-    // matching the committed clip, never an over-unit fraction.
-    QVERIFY(snap.columns.at(0).widthFraction > 0.0);
-    QVERIFY(snap.columns.at(0).widthFraction <= 1.0);
+    // The share is clamped to EXACTLY 1: a 2000px intent on a 1200px work
+    // area fills the whole viewport, so the preview must show the full
+    // visible share, matching the committed clip. The old range assertion
+    // (> 0, <= 1) also passed for a fraction that silently degraded to 0.5.
+    QCOMPARE(snap.columns.at(0).widthFraction, 1.0);
 }
 
 void TestScrollEngineSnapshot::invalidWorkAreaAnswersInvalid()
@@ -373,12 +457,15 @@ void TestScrollEngineSnapshot::invalidWorkAreaAnswersInvalid()
     QVERIFY(!snap.valid);
 }
 
-void TestScrollEngineSnapshot::gapsShareTheColumnHeight()
+void TestScrollEngineSnapshot::gapsShareTheColumnCrossExtent()
 {
     // The zero-gap fixture cannot observe a gap-dependent defect (its own
     // header says so, and that blind spot hid a real drop-indicator bug), so
     // pin the rel math under a NON-ZERO gap: two stacked tiles must NOT sum
-    // to the full column height — the gap between them takes its share.
+    // to the column's full CROSS extent — the gap between them takes its
+    // share. relRect is ROLE-normalized (x/width along the strip, y/height
+    // across it), so the .height() reads below mean the cross fraction on
+    // either axis.
     QObject owner;
     ScrollEngine* engine = ScrollTestUtils::makeGappedProviderEngine(&owner, {QStringLiteral("S1")});
     openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
@@ -392,13 +479,14 @@ void TestScrollEngineSnapshot::gapsShareTheColumnHeight()
     QCOMPARE(snap.columns.size(), 2);
     const ScrollStripSnapshotColumn& stacked = snap.columns.at(1);
     QCOMPARE(stacked.tiles.size(), 2);
-    const qreal topHeight = stacked.tiles.at(0).relRect.height();
-    const qreal bottomHeight = stacked.tiles.at(1).relRect.height();
-    QVERIFY(topHeight > 0.0);
-    QVERIFY(bottomHeight > 0.0);
-    QVERIFY2(topHeight + bottomHeight < 1.0, "the inner gap must take its share of the column height");
-    // And the second tile starts BELOW the first plus the gap, not flush.
-    QVERIFY(stacked.tiles.at(1).relRect.y() > topHeight);
+    const qreal leadCross = stacked.tiles.at(0).relRect.height();
+    const qreal trailCross = stacked.tiles.at(1).relRect.height();
+    QVERIFY(leadCross > 0.0);
+    QVERIFY(trailCross > 0.0);
+    QVERIFY2(leadCross + trailCross < 1.0, "the inner gap must take its share of the column's cross extent");
+    // And the second tile starts past the first plus the gap ACROSS the
+    // column, not flush against it.
+    QVERIFY(stacked.tiles.at(1).relRect.y() > leadCross);
 }
 
 void TestScrollEngineSnapshot::livePreviewOmitsDraggedWindow()

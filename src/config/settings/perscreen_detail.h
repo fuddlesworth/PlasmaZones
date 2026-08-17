@@ -48,12 +48,23 @@ QString canonicalWriteKey(const QString& screenIdOrName);
 // to 0, which the validators would then accept or clamp as a real override
 // (e.g. Position "garbage" -> 0 = TopLeft stored). These reject a
 // non-convertible payload with an invalid QVariant instead.
+//
+// BOOLS are refused explicitly: toInt(&ok) happily converts one (true -> 1),
+// so without the check a bool payload aimed at the wrong key would PIN a real
+// enum member (StripAxis true -> 1 = Horizontal) instead of being rejected —
+// the mirror of the strict bool keys, which refuse everything that is not a
+// bool.
+
+inline bool numericPayload(const QVariant& value)
+{
+    return value.typeId() != QMetaType::Bool;
+}
 
 inline QVariant boundedInt(const QVariant& value, int min, int max)
 {
     bool ok = false;
     const int v = value.toInt(&ok);
-    return ok ? QVariant(qBound(min, v, max)) : QVariant();
+    return (ok && numericPayload(value)) ? QVariant(qBound(min, v, max)) : QVariant();
 }
 
 /// Enum-range check over [0, max]; rejects non-numeric payloads.
@@ -61,7 +72,7 @@ inline QVariant enumInRange(const QVariant& value, int max)
 {
     bool ok = false;
     const int v = value.toInt(&ok);
-    return (ok && v >= 0 && v <= max) ? QVariant(v) : QVariant();
+    return (ok && numericPayload(value) && v >= 0 && v <= max) ? QVariant(v) : QVariant();
 }
 
 // ── Entry lookup across both keying conventions ─────────────────────────────

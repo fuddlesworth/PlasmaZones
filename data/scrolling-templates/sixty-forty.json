@@ -1,7 +1,7 @@
 {
     "id": "{b7c9d4e1-2a5f-4c3b-8e6d-1f0a9b8c7e02}",
     "name": "Sixty forty",
-    "description": "Starts the strip with a wide main column and a narrower side column. Later columns open at the side width and the shortcut cycles forty, fifty, and sixty percent.",
+    "description": "Starts the strip with a large main column and a smaller one after it. Later columns open at the smaller size and the shortcut cycles forty, fifty, and sixty percent of the strip.",
     "columns": [
         { "width": 0.6 },
         { "width": 0.4 }

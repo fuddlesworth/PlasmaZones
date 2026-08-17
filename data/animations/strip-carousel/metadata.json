@@ -1,7 +1,7 @@
 {
     "id": "strip-carousel",
     "name": "Strip Carousel",
-    "description": "The strip tilts like a spinning drum while it scrolls. The side you are scrolling toward leans away with a gentle perspective and shade, and the strip flattens back out as it settles.",
+    "description": "The strip tilts like a spinning drum while it scrolls. The side the content slides toward leans away with a gentle perspective and shade, and the strip flattens back out as it settles.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Distortion",

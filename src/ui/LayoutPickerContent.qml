@@ -70,9 +70,11 @@ Item {
     // Mirrors the global "Auto-assign for all layouts" master toggle (#370).
     // Forwarded into LayoutCard so the category badge shows effective state.
     property bool globalAutoAssign: false
-    // Screen info for aspect ratio
+    // Screen info for aspect ratio. Symmetric clamp about 1:1, matching
+    // LayoutOsdContent: a 0.5 floor drew a rotated 21:9 (about 0.43) as a
+    // 1:2 box no window on that screen has.
     property real screenAspectRatio: 16 / 9
-    readonly property real safeAspectRatio: Math.max(0.5, Math.min(4, screenAspectRatio))
+    readonly property real safeAspectRatio: Math.max(0.25, Math.min(4, screenAspectRatio))
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor

@@ -33,6 +33,21 @@ inline QLatin1String kFocused()
 {
     return QLatin1String("focusedWindow");
 }
+/// The AXIS the blob was written under. ADDITIVE, and absent reads Horizontal
+/// — which is correct by construction for every blob written before strips
+/// could run vertically.
+///
+/// No schema version bump: this file's format is deliberately version-free
+/// and additive (see the header note), and three keys have already landed
+/// exactly this way — presetFraction, windowedFullscreen and
+/// unclaimedSessions. Absent-key-means-default IS the migration mechanism
+/// here, and it is not the ad-hoc per-key migration the project rule forbids:
+/// that rule governs Settings/ConfigDefaults keys, which this is not.
+inline QLatin1String kAxis()
+{
+    return QLatin1String("axis");
+}
+
 inline QLatin1String kViewAnchor()
 {
     return QLatin1String("viewAnchor");
@@ -255,6 +270,7 @@ QJsonObject ScrollEngine::serializeStripState() const
         obj.insert(kColumns(), columns);
         obj.insert(kFocused(), stash.focusedWindowId);
         obj.insert(kViewAnchor(), stash.viewAnchor);
+        obj.insert(kAxis(), static_cast<int>(stash.axis));
         return obj;
     };
     // Every window id that is LIVE on some strip right now. Writing the stash
@@ -440,10 +456,13 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         stash.focusedWindowId = obj.value(kFocused()).toString();
         // Same boundary hardening as widthFromJson. The anchor is deliberately
         // NOT clamped to the strip (restoreViewAnchor: centered anchors imply
-        // out-of-range viewX by design), so the bound is only a sanity range
+        // out-of-range viewOffset by design), so the bound is only a sanity range
         // wide enough for any real strip — it stops a hand-edited INT_MIN/MAX
-        // from overflowing the viewX arithmetic it later feeds.
+        // from overflowing the viewOffset arithmetic it later feeds.
         stash.viewAnchor = qBound(-1000000, obj.value(kViewAnchor()).toInt(0), 1000000);
+        // Absent reads Horizontal, and an out-of-range int degrades the same
+        // way rather than inventing an axis.
+        stash.axis = PhosphorProtocol::scrollAxisFromInt(obj.value(kAxis()).toInt(0));
         const QJsonArray columns = obj.value(kColumns()).toArray();
         for (const QJsonValue& colVal : columns) {
             if (stash.columns.size() >= kMaxRestoredColumnsPerKey) {

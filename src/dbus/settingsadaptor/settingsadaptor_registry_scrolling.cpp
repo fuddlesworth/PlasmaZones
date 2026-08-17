@@ -202,7 +202,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
         m_settings->setScrollingDragInsertTriggers(v.toList());
         return true;
     };
-    m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("stringlist");
+    // "maplist", not "stringlist": the payload is a QVariantList of trigger
+    // MAPS and the setter refuses anything else, so a schema-honouring client
+    // that sent an actual string list would be silently refused. The token is
+    // advisory JSON for external clients; nothing in-repo parses it.
+    m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
 
@@ -325,8 +329,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
     // keys above, whose getter+no-op-setter default pairs exist so a
     // non-Settings backend keeps the keys), so they register through the
     // interface rather than in the concrete block below. No LayoutMode /
-    // GridColumns / MaxRows twin: the strip popup is one horizontal card
-    // row. The int/bool keys keep the shared macros' coercing setters ON
+    // GridColumns / MaxRows twin: the strip popup is one card row along the
+    // strip. The int/bool keys keep the shared macros' coercing setters ON
     // PURPOSE (the macros are frozen boilerplate across four registry TUs,
     // and the config schema's clampInt one layer down bounds anything a
     // coerced 0 could write); only the two ENUM keys need the hand-written
@@ -423,6 +427,34 @@ void SettingsAdaptor::initializeRegistryScrolling()
             return true;
         };
         m_schemas[QStringLiteral("scrollingCenterFocusedColumn")] = QStringLiteral("int");
+        // scrollingStripAxis: enum (0=Auto, 1=Horizontal, 2=Vertical) — same
+        // shape as the mode above, including the refuse-do-not-coerce rule on
+        // a non-numeric payload. The closed-set check matters more here than
+        // usual: a coerced 0 would silently mean Auto and quietly undo the
+        // user's explicit choice.
+        //
+        // Registered in the CONCRETE block only because the SETTER is
+        // concrete-only; the getter is already an IScrollSettings virtual. That
+        // is the pattern isettings.h calls "a backlog to hoist, not a second
+        // sanctioned pattern", so this entry belongs on that hoist backlog:
+        // once ISettings carries a setScrollingStripAxis virtual it moves up to
+        // the ISettings-level block above with its siblings.
+        m_getters[QStringLiteral("scrollingStripAxis")] = [concrete]() {
+            return concrete->scrollingStripAxis();
+        };
+        m_setters[QStringLiteral("scrollingStripAxis")] = [concrete](const QVariant& v) {
+            bool axisOk = false;
+            const int axis = v.toInt(&axisOk);
+            if (!axisOk) {
+                return false;
+            }
+            if (!ConfigDefaults::isValidScrollingStripAxis(axis)) {
+                return false;
+            }
+            concrete->setScrollingStripAxis(axis);
+            return true;
+        };
+        m_schemas[QStringLiteral("scrollingStripAxis")] = QStringLiteral("int");
         REGISTER_CONCRETE_BOOL("scrollingAlwaysCenterSingleColumn", scrollingAlwaysCenterSingleColumn,
                                setScrollingAlwaysCenterSingleColumn)
         REGISTER_CONCRETE_BOOL("scrollingCropStraddlers", scrollingCropStraddlers, setScrollingCropStraddlers)

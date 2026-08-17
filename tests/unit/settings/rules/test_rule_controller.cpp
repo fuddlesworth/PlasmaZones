@@ -26,6 +26,7 @@
 #include <QTest>
 #include <QUuid>
 
+#include "settings/rules/ruleauthoring.h"
 #include "settings/rules/rulecontroller.h"
 #include "settings/rules/rulemodel.h"
 
@@ -52,6 +53,7 @@ private Q_SLOTS:
     void validationIssuesForJsonFlags();
     void asyncCommitAndRevertAreInvokable();
     void stageUserRulesEnforcesTheAddRuleBoundary();
+    void stageUserRulesRaisesTheCommitGate();
 };
 
 void TestRuleController::newEmptyRuleShapesBySubject()
@@ -575,7 +577,7 @@ void TestRuleController::authoringMetadata()
     // bucket (or Other=99) with no other test noticing.
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludePlacement"), -1), 8); // Window (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeDecorations"), -1), 7); // Appearance (window)
-    // The per-context scrolling behaviour toggles ride the Scrolling bucket
+    // The per-context scrolling behaviour toggles and enums ride the Scrolling bucket
     // with the sizing knobs they sit beside. Every one of them shares the
     // `layoutEngine` descriptor category with the engine controls, so the
     // bucket is decided by a hand-written per-type dispatch: an action left
@@ -589,6 +591,7 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollSmartGaps"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusFollowsMouse"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStickyWindowHandling"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStripAxis"), -1), 4);
     // The per-window Open* actions are window-domain and share plain Window's
     // order 8 through the Window/Scrolling submenu, the same way openTabbed
     // above does. A miss here puts them above the picker's context/window
@@ -599,6 +602,49 @@ void TestRuleController::authoringMetadata()
     // The unfloat fallback is a windowManagement action, riding Window with
     // the blanket Exclude.
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setUnfloatFallbackToZone"), -1), 8);
+
+    // The strip-axis option labels — the exact summary strings the editor
+    // combo and the rule row render, matching the Strip direction card's own
+    // wording. A token that falls through enumOptionLabel shows its raw wire
+    // spelling in the UI with everything else green.
+    QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
+                                            QString(StripAxisToken::Auto)),
+             QStringLiteral("Match the screen shape"));
+    QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
+                                            QString(StripAxisToken::Horizontal)),
+             QStringLiteral("Side to side"));
+    QCOMPARE(RuleAuthoring::enumOptionLabel(QString(ActionType::SetScrollStripAxis), QString(ActionParam::Value),
+                                            QString(StripAxisToken::Vertical)),
+             QStringLiteral("Top to bottom"));
+
+    // The bool-phrase canary: EVERY registered action whose Value param is a
+    // bool must answer boolActionStateLabel with a non-empty, distinct phrase
+    // for both polarities. A new bool action added without its phrases used
+    // to render the raw wire string in the rule row with the whole suite
+    // green — this is the future-miss net.
+    int boolActions = 0;
+    const QStringList allTypes = PhosphorRules::ActionRegistry::instance().registeredTypes();
+    for (const QString& type : allTypes) {
+        const auto desc = PhosphorRules::ActionRegistry::instance().descriptor(type);
+        QVERIFY(desc.has_value());
+        bool valueIsBool = false;
+        for (const auto& param : desc->params) {
+            if (param.key == QString(ActionParam::Value) && param.kind == QLatin1String("bool")) {
+                valueIsBool = true;
+            }
+        }
+        if (!valueIsBool) {
+            continue;
+        }
+        ++boolActions;
+        const QString onLabel = RuleAuthoring::boolActionStateLabel(type, true);
+        const QString offLabel = RuleAuthoring::boolActionStateLabel(type, false);
+        QVERIFY2(!onLabel.isEmpty() && !offLabel.isEmpty(),
+                 qPrintable(QStringLiteral("bool action %1 lacks a polarity phrase").arg(type)));
+        QVERIFY2(onLabel != offLabel,
+                 qPrintable(QStringLiteral("bool action %1 renders both polarities identically").arg(type)));
+    }
+    QVERIFY2(boolActions > 10, "the bool-action sweep must actually cover the family, not an empty set");
 }
 
 void TestRuleController::matchIsContextOnlyClassifies()
@@ -765,6 +811,43 @@ void TestRuleController::stageUserRulesEnforcesTheAddRuleBoundary()
     // the seeded user subset wholesale.
     QCOMPARE(controller.model()->rowCount(), 1);
     QCOMPARE(controller.model()->rules().first().id, good.id);
+}
+
+/// Staging into a CLEAN controller must raise the commit gate, not only the
+/// badge. The two ride different mechanisms: the Rules page badge derives from
+/// the value-based userRulesDirty(), while asyncCommit refuses to push and
+/// reload() overwrites the model whenever m_dirty is false. A regression that
+/// stages the profile's rules without flipping isDirty() therefore badges the
+/// page while the global Save silently commits nothing and the next daemon
+/// broadcast erases the staged set — which is why this asserts the BOOLEAN,
+/// not the badge. The boundary test above cannot catch it: it seeds through
+/// addRuleFromJson first, which is already dirty by then.
+void TestRuleController::stageUserRulesRaisesTheCommitGate()
+{
+    RuleController controller;
+    QVERIFY(!controller.isDirty());
+
+    Rule good;
+    good.id = QUuid::createUuid();
+    good.name = QStringLiteral("profile rule");
+    good.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("z"));
+    RuleAction floatAction;
+    floatAction.type = QString(ActionType::Float);
+    good.actions = {floatAction};
+    QVERIFY(good.isValid());
+
+    QSignalSpy dirtySpy(&controller, &RuleController::dirtyChanged);
+    controller.stageUserRules({good});
+
+    QVERIFY(controller.isDirty());
+    QVERIFY(controller.userRulesDirty());
+    QCOMPARE(dirtySpy.count(), 1);
+
+    // Re-staging while already dirty keeps the gate up and still notifies, so
+    // the reconcile re-runs against the new model contents.
+    controller.stageUserRules({good});
+    QVERIFY(controller.isDirty());
+    QCOMPARE(dirtySpy.count(), 2);
 }
 
 QTEST_MAIN(TestRuleController)

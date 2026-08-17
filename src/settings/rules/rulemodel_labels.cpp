@@ -468,8 +468,13 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                                   : PhosphorI18n::tr("Open on monitor: %1").arg(resolveWith(screenId, screenLookup));
     }
     if (action.type == ActionType::RouteToDesktop) {
+        // Both ends of the descriptor's bound, not just the floor: a
+        // hand-edited ordinal the loader would have rejected must fall back to
+        // the bare label rather than being printed as a real target.
         const int desktop = action.params.value(PhosphorRules::ActionParam::TargetDesktop).toInt();
-        return desktop >= 1 ? PhosphorI18n::tr("Open on desktop %1").arg(desktop) : PhosphorI18n::tr("Open on desktop");
+        return (desktop >= 1 && desktop <= PhosphorRules::MaxVirtualDesktopOrdinal)
+            ? PhosphorI18n::tr("Open on desktop %1").arg(desktop)
+            : PhosphorI18n::tr("Open on desktop");
     }
     if (action.type == ActionType::SetOpacity) {
         // Mirror EVERY resolver reject path (shader_resolve.cpp's
@@ -561,9 +566,23 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // "Hide border", …). The wording lives in RuleAuthoring so the editor
         // toggle caption and this summary always read the same; a non-boolean
         // action type returns empty and falls through to the cases below.
-        if (const QString boolLabel = RuleAuthoring::boolActionStateLabel(action.type, raw.toBool());
-            !boolLabel.isEmpty()) {
-            return boolLabel;
+        //
+        // Gated on the payload being a bool OR absent, the same reject-don't-
+        // coerce posture every numeric branch below takes through its
+        // *ValueParam helper: toBool() on a staged string or number invents
+        // a polarity ("Hide border" for a payload nobody set that way), and
+        // this family was the one branch with no such guard. An ABSENT value
+        // (a freshly-added action) still renders the off-polarity phrase —
+        // missing is the editor's normal pre-configuration state, not a
+        // staged mistake.
+        if (raw.isBool() || raw.isUndefined() || raw.isNull()) {
+            if (const QString boolLabel = RuleAuthoring::boolActionStateLabel(action.type, raw.toBool());
+                !boolLabel.isEmpty()) {
+                return boolLabel;
+            }
+        } else if (!RuleAuthoring::boolActionStateLabel(action.type, true).isEmpty()) {
+            // A bool action whose staged payload is present but not a bool.
+            return PhosphorI18n::tr("Invalid value");
         }
         if (action.type == ActionType::SetBorderWidth) {
             const auto px = intValueParam(action.type, raw);
@@ -688,6 +707,12 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
             return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Sticky windows (invalid)")
                                                        : PhosphorI18n::tr("Sticky windows: %1").arg(shown);
+        }
+        if (action.type == ActionType::SetScrollStripAxis) {
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Strip direction (invalid)")
+                                                       : PhosphorI18n::tr("Strip direction: %1").arg(shown);
         }
         if (action.type == ActionType::SetCenterFocusedColumn) {
             const QString token = raw.toString();

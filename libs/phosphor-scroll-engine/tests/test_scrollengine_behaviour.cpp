@@ -5,9 +5,12 @@
 // config-seeded behaviour globals rather than over the width/height defaults
 // (those are test_scrollengine_perscreen's subject).
 //
-// One case per key, and every one of them drives TWO screens off the same
-// engine: the screen carrying the override and a screen carrying none. That
-// pairing is the point. An assertion on the overridden screen alone passes
+// One case per key, and each *OverrideIsPerScreen case drives TWO screens
+// off the same engine: the screen carrying the override and a screen
+// carrying none. That pairing is the point. (The two rejection cases at the
+// end — the out-of-range width rule and the wrong-typed overrides — are
+// single-screen by nature: they assert a value is REFUSED, so there is no
+// override side for a pairing to discriminate.) An assertion on the overridden screen alone passes
 // just as happily when the engine reads the global everywhere, which is the
 // exact regression these keys keep having — an effective* call site quietly
 // reverting to the member read, with the suite still green because nothing
@@ -32,8 +35,9 @@
 
 using namespace PhosphorScrollEngine;
 
-using ScrollTestUtils::kScreenHeight;
-using ScrollTestUtils::kScreenWidth;
+namespace Ax = ScrollTestUtils::Ax;
+
+using ScrollTestUtils::kMainExtent;
 using ScrollTestUtils::makeProviderEngine;
 using ScrollTestUtils::StubScrollSettings;
 using ScrollTestUtils::StubWindowTracking;
@@ -59,6 +63,13 @@ class TestScrollEngineBehaviour : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void focusNewWindowsOverrideIsPerScreen();
     void alwaysCenterSingleColumnOverrideIsPerScreen();
     void centerFocusedColumnOverrideIsPerScreen();
@@ -126,8 +137,8 @@ void TestScrollEngineBehaviour::focusNewWindowsOverrideIsPerScreen()
 
 void TestScrollEngineBehaviour::alwaysCenterSingleColumnOverrideIsPerScreen()
 {
-    // A lone column narrower than the work area: centered on the overridden
-    // screen, left-anchored on the other.
+    // A lone column narrower than the work area's main extent: centered on
+    // the overridden screen, LEAD-anchored on the other.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->alwaysCenterSingleColumn = false;
@@ -141,12 +152,12 @@ void TestScrollEngineBehaviour::alwaysCenterSingleColumnOverrideIsPerScreen()
 
     const QVector<QRect> centered = engine->visibleTileRects(kS1);
     QCOMPARE(centered.size(), 1);
-    QCOMPARE(centered.first().width(), kScreenWidth / 2);
-    QCOMPARE(centered.first().x(), kScreenWidth / 4);
+    QCOMPARE(Ax::mainLen(centered.first()), kMainExtent / 2);
+    QCOMPARE(Ax::mainPos(centered.first()), kMainExtent / 4);
 
     const QVector<QRect> anchored = engine->visibleTileRects(kS2);
     QCOMPARE(anchored.size(), 1);
-    QCOMPARE(anchored.first().x(), 0);
+    QCOMPARE(Ax::mainPos(anchored.first()), 0);
 }
 
 void TestScrollEngineBehaviour::centerFocusedColumnOverrideIsPerScreen()
@@ -172,14 +183,14 @@ void TestScrollEngineBehaviour::centerFocusedColumnOverrideIsPerScreen()
     engine->windowFocused(QStringLiteral("app|a1"), kS1);
     engine->windowFocused(QStringLiteral("app|b1"), kS2);
 
-    // Centered: a 600px column on a 1200px work area sits at x=300. The
+    // Centered: a 600px column on a 1200px main extent sits at main 300. The
     // found flag keeps each assertion honest — a tile missing from the walk
     // would otherwise satisfy the loop vacuously.
     bool sawCentered = false;
     for (const ScrollEngine::VisibleTile& tile : engine->visibleTiles(kS1)) {
         if (tile.windowId == QStringLiteral("app|a1")) {
             sawCentered = true;
-            QCOMPARE(tile.rect.x(), kScreenWidth / 4);
+            QCOMPARE(Ax::mainPos(tile.rect), kMainExtent / 4);
         }
     }
     QVERIFY(sawCentered);
@@ -188,7 +199,7 @@ void TestScrollEngineBehaviour::centerFocusedColumnOverrideIsPerScreen()
     for (const ScrollEngine::VisibleTile& tile : engine->visibleTiles(kS2)) {
         if (tile.windowId == QStringLiteral("app|b1")) {
             sawAnchored = true;
-            QCOMPARE(tile.rect.x(), 0);
+            QCOMPARE(Ax::mainPos(tile.rect), 0);
         }
     }
     QVERIFY(sawAnchored);
@@ -207,16 +218,19 @@ void TestScrollEngineBehaviour::respectMinimumSizeOverrideIsPerScreen()
     ScrollEngine* engine = makeEngine(&owner, settings);
     engine->applyPerScreenConfig(kS1, onlyKey(ScrollPerScreenKeys::respectMinimumSize(), true));
 
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 800, 0);
-    engine->windowOpened(QStringLiteral("app|b"), kS2, 800, 0);
+    // A minimum ALONG the strip, so it transposes with the fixture: what
+    // widens a column on a horizontal strip lengthens it on a vertical one.
+    const QSize minMain = Ax::t(QSize(800, 0));
+    engine->windowOpened(QStringLiteral("app|a"), kS1, minMain.width(), minMain.height());
+    engine->windowOpened(QStringLiteral("app|b"), kS2, minMain.width(), minMain.height());
 
     const QVector<QRect> clamped = engine->visibleTileRects(kS1);
     QCOMPARE(clamped.size(), 1);
-    QCOMPARE(clamped.first().width(), 800);
+    QCOMPARE(Ax::mainLen(clamped.first()), 800);
 
     const QVector<QRect> unclamped = engine->visibleTileRects(kS2);
     QCOMPARE(unclamped.size(), 1);
-    QCOMPARE(unclamped.first().width(), kScreenWidth / 4);
+    QCOMPARE(Ax::mainLen(unclamped.first()), kMainExtent / 4);
 }
 
 void TestScrollEngineBehaviour::smartGapsOverrideIsPerScreen()
@@ -238,19 +252,19 @@ void TestScrollEngineBehaviour::smartGapsOverrideIsPerScreen()
 
     const QVector<QRect> ungapped = engine->visibleTileRects(kS1);
     QCOMPARE(ungapped.size(), 1);
-    QCOMPARE(ungapped.first().x(), 0);
-    QCOMPARE(ungapped.first().width(), kScreenWidth);
+    QCOMPARE(Ax::mainPos(ungapped.first()), 0);
+    QCOMPARE(Ax::mainLen(ungapped.first()), kMainExtent);
 
     const QVector<QRect> gapped = engine->visibleTileRects(kS2);
     QCOMPARE(gapped.size(), 1);
-    QCOMPARE(gapped.first().x(), 20);
-    QCOMPARE(gapped.first().width(), kScreenWidth - 40);
+    QCOMPARE(Ax::mainPos(gapped.first()), 20);
+    QCOMPARE(Ax::mainLen(gapped.first()), kMainExtent - 40);
 }
 
 void TestScrollEngineBehaviour::insertPositionOverrideIsPerScreen()
 {
     // Global right-of-active. S1 is scoped to First, so its second window
-    // opens LEFTMOST while S2's opens to the right of the active column.
+    // opens LEADMOST while S2's opens trailward of the active column.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     settings->insertPosition = static_cast<int>(ScrollInsertPosition::RightOfActive);
@@ -303,7 +317,10 @@ void TestScrollEngineBehaviour::widthClientDecidesOverrideIsPerScreen()
     settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
     settings->widthValue = 0.25;
     auto* tracker = new StubWindowTracking(&owner);
-    tracker->unmanagedGeometry = QRect(0, 0, 640, 400);
+    // Transposed with the arm: the client's MAIN extent must be 640 on both
+    // axes, so the 640 the assertions expect is the column's length along the
+    // strip rather than a number that happens to match a physical width.
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
     ScrollEngine* engine = makeEngine(&owner, settings, tracker);
     engine->applyPerScreenConfig(
         kS1, onlyKey(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::ClientDecides)));
@@ -313,11 +330,11 @@ void TestScrollEngineBehaviour::widthClientDecidesOverrideIsPerScreen()
 
     const QVector<QRect> client = engine->visibleTileRects(kS1);
     QCOMPARE(client.size(), 1);
-    QCOMPARE(client.first().width(), 640);
+    QCOMPARE(Ax::mainLen(client.first()), 640);
 
     const QVector<QRect> configured = engine->visibleTileRects(kS2);
     QCOMPARE(configured.size(), 1);
-    QCOMPARE(configured.first().width(), kScreenWidth / 4);
+    QCOMPARE(Ax::mainLen(configured.first()), kMainExtent / 4);
 }
 
 void TestScrollEngineBehaviour::outOfRangeWidthRuleDoesNotSuppressClientDecides()
@@ -330,7 +347,10 @@ void TestScrollEngineBehaviour::outOfRangeWidthRuleDoesNotSuppressClientDecides(
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     auto* tracker = new StubWindowTracking(&owner);
-    tracker->unmanagedGeometry = QRect(0, 0, 640, 400);
+    // Transposed with the arm: the client's MAIN extent must be 640 on both
+    // axes, so the 640 the assertions expect is the column's length along the
+    // strip rather than a number that happens to match a physical width.
+    tracker->unmanagedGeometry = Ax::t(QRect(0, 0, 640, 400));
     ScrollEngine* engine = makeEngine(&owner, settings, tracker);
 
     QVariantMap rejected;
@@ -348,11 +368,11 @@ void TestScrollEngineBehaviour::outOfRangeWidthRuleDoesNotSuppressClientDecides(
 
     const QVector<QRect> clientSized = engine->visibleTileRects(kS1);
     QCOMPARE(clientSized.size(), 1);
-    QCOMPARE(clientSized.first().width(), 640);
+    QCOMPARE(Ax::mainLen(clientSized.first()), 640);
 
     const QVector<QRect> rulePinned = engine->visibleTileRects(kS2);
     QCOMPARE(rulePinned.size(), 1);
-    QCOMPARE(rulePinned.first().width(), qRound(0.75 * kScreenWidth));
+    QCOMPARE(Ax::mainLen(rulePinned.first()), qRound(0.75 * kMainExtent));
 }
 
 void TestScrollEngineBehaviour::wrongTypedBehaviourOverridesAreRejected()
@@ -398,16 +418,17 @@ void TestScrollEngineBehaviour::wrongTypedBehaviourOverridesAreRejected()
     engine->windowOpened(QStringLiteral("app|a2"), kS1, 0, 0);
     QCOMPARE(activeWindowOn(engine, kS1), QStringLiteral("app|a2"));
 
-    // Insert position stays First, so the arrival lands LEFT of the existing
-    // column. A coerced garbage value would be RightOfActive and put it on the
-    // right, so this ordering is what discriminates. Centering stays Always,
-    // so the focused column sits centered rather than at the left edge.
+    // Insert position stays First, so the arrival lands on the LEAD side of
+    // the existing column. A coerced garbage value would be RightOfActive and
+    // put it trailward, so this ordering is what discriminates. Centering
+    // stays Always, so the focused column sits centered rather than at the
+    // lead edge.
     QCOMPARE(orderOn(engine, kS1), QStringList({QStringLiteral("app|a2"), QStringLiteral("app|a1")}));
     bool sawActive = false;
     for (const ScrollEngine::VisibleTile& tile : engine->visibleTiles(kS1)) {
         if (tile.windowId == QStringLiteral("app|a2")) {
             sawActive = true;
-            QCOMPARE(tile.rect.x(), kScreenWidth / 4);
+            QCOMPARE(Ax::mainPos(tile.rect), kMainExtent / 4);
         }
     }
     QVERIFY(sawActive);

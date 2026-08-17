@@ -1,12 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned): TilingHandler is one class declaration,
+// and the implementation is already partitioned across this directory
+// (tiling.cpp, state.cpp, wiring.cpp, windowedfullscreen.cpp,
+// pretilegeometry.cpp, floatcleanup.cpp) — every one of those TUs calls back
+// through this single declaration, which C++ requires to be whole. Most of the
+// length is the per-member invariant prose the split files depend on: the
+// per-session daemon state (managed/scrolling/axis sets and their teardown
+// pairings), the generation guards, and the inline predicates those TUs share.
+// Splitting the class itself would mean a second handler type with the same
+// state, which is the coupling this file exists to avoid.
+
 #pragma once
 
 #include "compositor/deferredwindowcommits.h"
 
 #include <PhosphorCompositor/TilingState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 
 #include <QHash>
 #include <QObject>
@@ -373,6 +385,18 @@ public:
         return !m_scrollCropStraddlerScreens.isEmpty();
     }
 
+    /// Which way @p screenId's strip runs. NEVER derive this from the output's
+    /// aspect ratio: the axis is resolved by the engine against the work area
+    /// and may be an explicit user choice, so a guess here can disagree with
+    /// the geometry the daemon actually committed — and the disagreement shows
+    /// up as a full-strip shear for the length of every leg, on exactly the
+    /// near-square topologies where a guess is least reliable.
+    PhosphorProtocol::ScrollAxis scrollAxisForScreen(const QString& screenId) const
+    {
+        return m_scrollVerticalAxisScreens.contains(screenId) ? PhosphorProtocol::ScrollAxis::Vertical
+                                                              : PhosphorProtocol::ScrollAxis::Horizontal;
+    }
+
     /// True once the daemon's scrollEffectBehaviour map has landed (live
     /// signal or the bring-up Properties.Get reply), false again after either
     /// teardown path clears it.
@@ -407,10 +431,12 @@ public:
         ++m_scrollingScreensGeneration;
         m_scrollingScreens.clear();
         // The per-screen behaviour sets belong to the same dead session, and
-        // BOTH outlive the screen set they are keyed by if they are not
+        // ALL THREE outlive the screen set they are keyed by if they are not
         // cleared here: a stale crop entry keeps forcing composition
-        // session-wide, and a stale focus-follows-mouse entry answers for a
-        // screen the new daemon may not run the scrolling engine on at all.
+        // session-wide, a stale focus-follows-mouse entry answers for a
+        // screen the new daemon may not run the scrolling engine on at all,
+        // and a stale vertical-axis entry answers Vertical for a screen the
+        // new daemon may lay out horizontally.
         clearScrollEffectBehaviourForTeardown();
         // Release Meta+wheel with the dead session (no repaint interplay,
         // unlike the border sweep this path deliberately skips): a consumed
@@ -418,12 +444,14 @@ public:
         updateScrollWheelShortcuts();
     }
 
-    /// Drop the dead session's resolved scroll-behaviour map (both per-screen
-    /// sets plus the seeded flag). Shared by the serviceUnregistered teardown
+    /// Drop the dead session's resolved scroll-behaviour map (all three
+    /// per-screen sets plus the seeded flag). Shared by the serviceUnregistered teardown
     /// (via clearScrollingScreensForTeardown) and by onDaemonReady, which a
     /// straight old→new owner handover reaches WITHOUT any unregistered edge
     /// having fired. Takes the crop set's repaint bookend itself — that set is
-    /// painted state, so dropping it changes what the clip cuts.
+    /// painted state, so dropping it changes what the clip cuts. The axis set
+    /// needs no bookend of its own: the paint path reads StripViewAnimator's
+    /// per-output copy, which its own reset() drops on the same teardown.
     void clearScrollEffectBehaviourForTeardown();
 
     /// True when @p screenId runs the SCROLLING engine. A subset of the
@@ -901,13 +929,15 @@ private:
     /// loadRuleAnimationsFromDbus has over fetchAllRulesOnce.
     void fetchScrollingScreens();
     /// Bring-up fetch of the daemon-resolved scrolling behaviour the
-    /// compositor owns (focus-follows-mouse, straddler crop). Bounded retry,
-    /// the fetchScrollingScreens pattern.
+    /// compositor owns (focus-follows-mouse, straddler crop, strip axis).
+    /// Bounded retry, the fetchScrollingScreens pattern.
     void fetchScrollEffectBehaviour();
-    /// Shared apply for the fetch reply and the live signal: replaces both
-    /// sets from the wire map. Repaints when the CROP set moved, because the
-    /// clip is painted state the compositor will not otherwise revisit;
-    /// focus-follows-mouse is consulted per pointer move and needs nothing.
+    /// Shared apply for the fetch reply and the live signal: replaces all
+    /// three sets from the wire map. Repaints when the CROP set moved (it is
+    /// painted state the compositor will not otherwise revisit) and,
+    /// defensively, when the AXIS set moved, which signals a re-resolved
+    /// layout rather than stale pixels of its own. Focus-follows-mouse is
+    /// consulted per pointer move and needs nothing.
     void applyScrollEffectBehaviour(const QVariantMap& behaviour);
     void fetchActiveLayouts();
     /// Meta+wheel axis shortcuts for column focus (niri's Mod+wheel).
@@ -988,10 +1018,19 @@ private:
     int m_activeLayoutsFetchRetriesLeft = 0;
     int m_scrollingScreensFetchRetriesLeft = 0;
     int m_scrollEffectBehaviourFetchRetriesLeft = 0;
-    /// Per-dispatch guard for the scroll-effect-behaviour fetch. No write
-    /// generation twin: nothing writes these two sets except the daemon, so
-    /// there is no local authoritative writer for a reply to race.
+    /// Per-dispatch guard for the scroll-effect-behaviour fetch.
     quint64 m_scrollEffectBehaviourQueryGeneration = 0;
+    /// Write-generation twin of m_scrollingScreensGeneration for the
+    /// scroll-effect-behaviour sets. The daemon IS the only origin of the
+    /// data, but its live signal writes locally through
+    /// applyScrollEffectBehaviour, and that write races the bring-up
+    /// property reply exactly like the scrolling-screens pair: signal lands
+    /// first, stale reply lands second and reverts the axis membership for
+    /// the rest of the session (silently — the strip just shears along the
+    /// wrong component on every leg). Bumped on EVERY apply, before the
+    /// change gate, because an identical-content signal still proves the
+    /// current state is newer than any reply dispatched earlier.
+    quint64 m_scrollEffectBehaviourGeneration = 0;
     /// Screens whose RESOLVED scrolling focus-follows-mouse is on, and whose
     /// RESOLVED straddler crop is on (`rule ?? config`, decided daemon-side).
     /// Membership is the whole answer — the effect holds no config fallback
@@ -999,6 +1038,25 @@ private:
     /// bring-up before the daemon's first reply looks like.
     QSet<QString> m_scrollFocusFollowsMouseScreens;
     QSet<QString> m_scrollCropStraddlerScreens;
+    /// Scrolling screens whose strip runs VERTICALLY. Membership, so an absent
+    /// key or an empty list means horizontal everywhere — which is exactly
+    /// what a session with no vertical strip publishes. It is NOT a
+    /// compatibility fallback: MinPeerApiVersion rejects any daemon old enough
+    /// to omit the key at the handshake, so an absent key is a live daemon
+    /// saying "none", never an old one saying nothing. That is why a MALFORMED
+    /// value keeps the current membership instead of emptying it (see
+    /// applyScrollEffectBehaviour) — empty is a positive claim here, not a
+    /// safe default.
+    ///
+    /// Held CONTINUOUSLY rather than read off a tile batch, because the batch
+    /// path needs it for entries the batch itself carries no axis for, and
+    /// because the axis outlives any one batch.
+    ///
+    /// NOT the copy the paint path reads. StripViewAnimator stamps the axis
+    /// per output when a batch lands, and offsetFor / axisFor answer from that
+    /// stamp — which is why the teardown clear here needs no repaint bookend.
+    /// This set is consulted only when a batch is in hand.
+    QSet<QString> m_scrollVerticalAxisScreens;
     /// Set by applyScrollEffectBehaviour on every apply (before its change
     /// gate, the m_activeLayoutsSeeded shape: an identical map is still a real
     /// map, and the daemon's first publish is legitimately all-empty on a

@@ -1,8 +1,24 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// FILE-SIZE EXCEPTION (sanctioned), CEILING 1250 LINES: this is one Q_OBJECT
+// class declaration, and moc needs the whole class in a single header, so the
+// only available "split" would fragment one class across several headers and
+// cost every reader the hunt for where a property lives (the settings.h and
+// settingscontroller.h precedent). The bulk here is the Q_PROPERTY /
+// Q_INVOKABLE surface QML binds to, which cannot move without rewriting every
+// binding in src/editor/qml. The IMPLEMENTATION is already split by concern
+// under src/editor/controller/ (settings.cpp, scrollingtemplate.cpp, and
+// siblings), which is where the real per-concern boundary is.
+//
+// The ceiling is a budget, not a description of where the file sits: a new
+// declaration that would pass it has to buy its room by retiring another. Long
+// rationale belongs on the definition in the matching controller/*.cpp when it
+// will not fit here.
+
 #pragma once
 
+#include <QHash>
 #include <QObject>
 #include <QVariantList>
 #include <QFont>
@@ -27,6 +43,12 @@
 namespace PhosphorZones {
 class Layout;
 class ScrollingTemplateStore;
+}
+
+namespace PhosphorConfig {
+// Forward-declared for refreshScrollingStripAxisSnapshot's reference
+// parameter; the .cpp includes the backend headers directly.
+class IBackend;
 }
 
 namespace PhosphorRules {
@@ -104,6 +126,15 @@ class EditorController : public QObject, public IShaderPreviewBackend
 
     // Screen
     Q_PROPERTY(QString targetScreen READ targetScreen WRITE setTargetScreen NOTIFY targetScreenChanged)
+
+    // Scrolling-template preview axis: true when the strip on the TARGET
+    // SCREEN runs vertically. Read-only and derived, never a preference of its
+    // own — the strip canvas is a picture of what the engine will do with this
+    // template, so it resolves the same per-screen-override / global-setting /
+    // Auto ladder the engine resolves, against the target screen's size. A
+    // template itself carries no axis: its column extents are fractions ALONG
+    // the strip whichever way that strip happens to run.
+    Q_PROPERTY(bool templatePreviewVertical READ templatePreviewVertical NOTIFY templatePreviewVerticalChanged)
 
     // PhosphorZones::Zone gap settings (per-layout override + global mirrors).
     // Extracted into a sub-model exposed by pointer; QML reads
@@ -231,7 +262,6 @@ public:
     int selectionCount() const;
     bool hasMultipleSelection() const;
     bool hasUnsavedChanges() const;
-    bool isNewLayout() const;
     bool gridSnappingEnabled() const;
     bool edgeSnappingEnabled() const;
     qreal snapIntervalX() const;
@@ -246,6 +276,7 @@ public:
     bool fillOnDropEnabled() const;
     int fillOnDropModifier() const;
     QString targetScreen() const;
+    bool templatePreviewVertical() const;
     EditorGapsModel* gaps() const
     {
         return m_gaps;
@@ -542,6 +573,11 @@ public Q_SLOTS:
     // Daemon scrollingTemplatesChanged subscriber: the store watches
     // nothing, so this reload is how other-process writes reach us.
     void reloadLocalTemplates();
+    /// Daemon settingsChanged subscriber (debounced by
+    /// m_stripAxisReloadTimer): re-snapshots the strip-axis inputs so an
+    /// axis authored in the settings app while the editor is open reaches
+    /// the template preview without a restart.
+    void reloadScrollingStripAxis();
     /// Persist the current layout. False = the save did not land
     /// (layoutSaveFailed carries the reason, the unsaved flag stays set); a
     /// caller chaining a layout-replacing action (screen switch, close)
@@ -799,6 +835,7 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     void targetScreenChanged();
+    void templatePreviewVerticalChanged();
 
     /// A screen switch was requested while unsaved edits were pending, so it
     /// was parked instead of applied. The UI prompts, then calls
@@ -1018,6 +1055,15 @@ private:
     /// entire config, so running that per tick is a drag-long stutter. Batch
     /// the burst into one write once the value settles.
     QTimer m_editorSettingsSaveTimer;
+    /// Debounces settingsChanged bursts (a settings-app Save emits per key
+    /// group) into one reloadScrollingStripAxis() re-read.
+    QTimer m_stripAxisReloadTimer;
+
+    /// The one snapshot writer for the strip-axis inputs (global value +
+    /// per-screen overrides), shared by loadEditorSettings and the
+    /// settingsChanged reload; routes a genuine change through
+    /// refreshTemplatePreviewVertical's own change gate.
+    void refreshScrollingStripAxisSnapshot(PhosphorConfig::IBackend& backend);
 
     /// Recompute zone geometry for every manual layout against the primary
     /// screen so a layout opened through the in-process registry carries its
@@ -1042,6 +1088,33 @@ private:
 
     // Screen
     QString m_targetScreen;
+
+    // Strip-axis inputs for templatePreviewVertical(), snapshotted by
+    // loadEditorSettings(). The tri-state config enum (Auto / Horizontal /
+    // Vertical), NOT PhosphorProtocol::ScrollAxis — the two numberings differ
+    // on purpose and are never cast between.
+    /// Auto. Spelled as the literal rather than ConfigDefaults::
+    /// scrollingStripAxis() so this header need not pull in configdefaults.h;
+    /// loadEditorSettings() carries a static_assert tying the two together.
+    int m_scrollingStripAxis = 0;
+    /// Per-screen StripAxis overrides, keyed by the screen id or name the
+    /// group was stored under. Absent screen means "use the global value".
+    QHash<QString, int> m_perScreenStripAxis;
+    /// The NOTIFY comparand: the last answer refreshTemplatePreviewVertical()
+    /// resolved, and that refresh is its ONLY writer. The getter computes
+    /// fresh per read instead of stamping, so a binding evaluating between an
+    /// input change and the refresh cannot consume the flip and suppress the
+    /// change signal for every other consumer.
+    bool m_templatePreviewVertical = false;
+    /// The pure resolution behind both the getter and the refresh: per-screen
+    /// override (looked up under every ScreenIdentity spelling of the
+    /// target), then the global setting, then the Auto size rule. Const and
+    /// side-effect free.
+    bool resolveTemplatePreviewVertical() const;
+    /// Re-resolve the preview axis and emit the change signal only when the
+    /// answer actually flipped. Every input that feeds the axis routes here
+    /// rather than emitting directly.
+    void refreshTemplatePreviewVertical();
     /// Launch arguments parked by requestLaunch() while unsaved edits are
     /// pending. nullopt when nothing is awaiting confirmation.
     struct PendingLaunch

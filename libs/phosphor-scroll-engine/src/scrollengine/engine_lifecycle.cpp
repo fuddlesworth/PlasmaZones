@@ -204,7 +204,12 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // Open at the client's own size when one is on record; the first
         // client resize reconciles it afterwards.
         if (const auto geo = m_windowTracker->validatedUnmanagedGeometry(windowId, screenId)) {
-            width = ColumnWidth::makeFixed(geo->width());
+            // The tracked geometry is a PHYSICAL rect from the compositor, so
+            // it has to be decoded by role. Reading .width() unconditionally
+            // would, on a vertical strip, feed the client's cross extent into
+            // the column's MAIN intent and open every client-sized window at
+            // the wrong length along the strip.
+            width = ColumnWidth::makeFixed(params.axis.mainSize(geo->size()));
         }
     }
 
@@ -410,11 +415,18 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // pixels are PERSISTED intent, so the error would not self-heal on
         // the next relayout the way a transient anchor does. The override
         // pins the resolve to the post-insert count.
+        //
+        // Resolved against the work area's CROSS extent, which is what a
+        // window height divides — the within-column stack. Physical height on
+        // a vertical strip is the extent the STRIP runs along, so committing
+        // a fraction of it hands the tile an intent that can be larger than
+        // the column it lives in.
         const ScrollLayoutParams postParams = layoutParamsForScreen(screenId, state->strip().columnCount());
-        if (postParams.workArea.height() > 0) {
+        const int crossExtent = postParams.axis.crossSize(postParams.workArea);
+        if (crossExtent > 0) {
             const qreal fraction = qBound<qreal>(MinWindowHeightFraction, *openParams.heightFraction, 1.0);
-            state->strip().setWindowHeightIntent(
-                windowId, WindowHeight::makeFixed(qMax(1, qRound(fraction * postParams.workArea.height()))));
+            state->strip().setWindowHeightIntent(windowId,
+                                                 WindowHeight::makeFixed(qMax(1, qRound(fraction * crossExtent))));
         }
     }
     if (!inserted) {
@@ -672,7 +684,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // anything, and firing an activation per arrival would fight the
         // burst's own deferred focus restore.
         if (m_arrivalBurstDepth == 0) {
-            m_declinedOpenFocus = windowId;
+            m_declinedOpenFocus.insert(windowId);
             queueSelfActivation(priorActive);
             Q_EMIT activateWindowRequested(priorActive);
         }
@@ -752,9 +764,7 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // Same reasoning for the declined-open mark: the arrival that was denied
     // focus can close before its one report arrives, and a stale mark would
     // then eat the first genuine focus of a reused id.
-    if (m_declinedOpenFocus == windowId) {
-        m_declinedOpenFocus.clear();
-    }
+    m_declinedOpenFocus.remove(windowId);
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
@@ -841,8 +851,7 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // not the "genuine focus" the reclaim reasons about, and clearing the queue
     // here would drop the prior window's activation echo that the rewind just
     // queued, letting that echo rewind the strip a second time when it lands.
-    if (!m_declinedOpenFocus.isEmpty() && m_declinedOpenFocus == windowId) {
-        m_declinedOpenFocus.clear();
+    if (m_declinedOpenFocus.remove(windowId)) {
         return;
     }
     // A genuine focus report implies every previously-sent echo already
@@ -1021,9 +1030,15 @@ void ScrollEngine::onWindowResized(const QString& rawWindowId, const QRect& oldF
         }
         return;
     }
-    const bool widthChanged = lastApplied.width() != newFrame.width();
-    const bool heightChanged = lastApplied.height() != newFrame.height();
-    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), widthChanged, heightChanged)) {
+    // Derived in ROLE terms against the same params the reconcile decodes the
+    // acked size with. Comparing physical width/height here while the
+    // reconcile reads main/cross would make each guard protect the intent it
+    // was not written for.
+    const ScrollLayoutParams resizeParams = layoutParamsForScreen(key.screenId);
+    const StripAxis resizeAxis = resizeParams.axis;
+    const bool mainChanged = resizeAxis.mainSize(lastApplied) != resizeAxis.mainSize(newFrame);
+    const bool crossChanged = resizeAxis.crossSize(lastApplied) != resizeAxis.crossSize(newFrame);
+    if (state->strip().reconcileWindowSize(windowId, newFrame.size(), mainChanged, crossChanged, resizeParams)) {
         // The reconcile WROTE persisted intent (the column's Fixed width, the
         // tile's Fixed height — both serialized by serializeStripState), and
         // placementChanged is the sole producer of DirtyScrollStrips. Without

@@ -332,7 +332,7 @@ public:
 
     // Strip-Mode Selector — the Scrolling.ZoneSelector peer of the block
     // above, minus LayoutMode / GridColumns / MaxRows (the strip popup is one
-    // horizontal card row, so it has no grid to arrange).
+    // card row along the strip, so it has no grid to arrange).
     Q_PROPERTY(bool scrollingZoneSelectorEnabled READ scrollingZoneSelectorEnabled WRITE setScrollingZoneSelectorEnabled
                    NOTIFY scrollingZoneSelectorEnabledChanged)
     Q_PROPERTY(int scrollingZoneSelectorTriggerDistance READ scrollingZoneSelectorTriggerDistance WRITE
@@ -387,6 +387,8 @@ public:
     Q_PROPERTY(bool scrollingEnabled READ scrollingEnabled WRITE setScrollingEnabled NOTIFY scrollingEnabledChanged)
     Q_PROPERTY(int scrollingCenterFocusedColumn READ scrollingCenterFocusedColumn WRITE setScrollingCenterFocusedColumn
                    NOTIFY scrollingCenterFocusedColumnChanged)
+    Q_PROPERTY(
+        int scrollingStripAxis READ scrollingStripAxis WRITE setScrollingStripAxis NOTIFY scrollingStripAxisChanged)
     Q_PROPERTY(bool scrollingAlwaysCenterSingleColumn READ scrollingAlwaysCenterSingleColumn WRITE
                    setScrollingAlwaysCenterSingleColumn NOTIFY scrollingAlwaysCenterSingleColumnChanged)
     Q_PROPERTY(bool scrollingCropStraddlers READ scrollingCropStraddlers WRITE setScrollingCropStraddlers NOTIFY
@@ -1175,6 +1177,18 @@ public:
                                                   const QVariant& value) override;
     Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenIdOrName) const override;
+    // Sizing sub-domain: the New-columns card's chip surface. The strip axis
+    // shares the same per-screen entry but is NOT a sizing default, so the
+    // card must not report or clear it. Plain members rather than ISettings
+    // virtuals, matching the autotile Algorithm twins above: the D-Bus
+    // per-screen dispatch only needs get/set/clear, which are unchanged.
+    bool hasPerScreenScrollingSizingSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingSizingSettings(const QString& screenIdOrName);
+    // Axis sub-domain: the Strip direction card's chip surface, the sizing
+    // pair's complement — one key, disjoint from the sizing set by
+    // construction (isPerScreenScrollingAxisKey).
+    bool hasPerScreenScrollingAxisSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingAxisSettings(const QString& screenIdOrName);
 
     // Per-screen snapping gaps project the config-backed per-monitor gap
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so
@@ -1287,6 +1301,8 @@ public:
     void setScrollingEnabled(bool enabled);
     int scrollingCenterFocusedColumn() const override;
     void setScrollingCenterFocusedColumn(int mode);
+    int scrollingStripAxis() const override;
+    void setScrollingStripAxis(int value);
     bool scrollingAlwaysCenterSingleColumn() const override;
     void setScrollingAlwaysCenterSingleColumn(bool center);
     bool scrollingCropStraddlers() const override;

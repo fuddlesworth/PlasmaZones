@@ -10,10 +10,18 @@
 //
 // Vocabulary (mirrors IPlacementEngine::DragInsertTarget through
 // OverlayService's int-only SelectorStripTarget):
+// All positional words below are ALONG THE STRIP AXIS, not on the screen: a
+// vertical strip reads "before/after" down the popup and "top/bottom" of a
+// card as its left/right. The vocabulary itself is axis-neutral in meaning,
+// which is what lets the vertical case transpose into the horizontal math.
 //   gapIndex g   → open a NEW column at strip position g (boundary g sits
-//                  before card g; boundary count() trails the last card).
-//   columnIndex i, half 0 → join column i at the TOP (tile index 0).
-//   columnIndex i, half 1 → join column i at the BOTTOM (append).
+//                  before card g along the axis; boundary count() trails the
+//                  last card).
+//   columnIndex i, half 0 → join column i at its FIRST tile (tile index 0) —
+//                  the top half of the card on a horizontal strip, the left
+//                  half on a vertical one.
+//   columnIndex i, half 1 → join column i at its LAST tile (append) — the
+//                  bottom half horizontally, the right half vertically.
 //   columnIndex i, half 2 → whole-card join (tabbed column tab dock).
 //                  A distinct hit for highlight purposes only: the consumer
 //                  encodes it as the same append (-1) DragInsertTarget as
@@ -50,23 +58,60 @@ struct StripSelectorHit
 };
 
 /// @p cardRects is index-aligned with the snapshot's columns, and the rects
-/// must be monotonically increasing in x — the interior-band math assumes
-/// index order is visual left-to-right order (rects out of order compute
-/// negative-width bands, which silently never match). A null/empty rect
-/// means QML has not laid that card out (scrolled out or first frame) and
+/// must be monotonically increasing ALONG THE STRIP AXIS — in x when
+/// @p verticalAxis is false, in y when it is true. The interior-band math
+/// assumes index order is visual order along that axis (rects out of order
+/// compute negative-extent bands, which silently never match). A null/empty
+/// rect means QML has not laid that card out (scrolled out or first frame) and
 /// it can be neither hit nor used as a gap edge; an un-laid-out card in the
 /// MIDDLE of the row therefore silences both of its adjacent boundaries —
-/// latent by construction, since a horizontally scrolled row only ever
-/// un-lays the ends. @p tabbed is the per-card tabbed flag, same indexing
+/// latent by construction, since a scrolled row/stack only ever un-lays the
+/// ends. @p tabbed is the per-card tabbed flag, same indexing
 /// (a shorter vector deliberately degrades the surplus cards to top/bottom
 /// halves rather than asserting). @p gapInflate is how far a gap band
 /// reaches into each neighbouring card (clamped so a card always keeps a
 /// hittable middle). An EMPTY @p cardRects yields no hit at all: the
 /// empty-strip "whole bar opens the first column" target is the CALLER's
 /// branch (selector_strip.cpp), not this function's.
+///
+/// @p verticalAxis keeps its default because the horizontal case IS the
+/// identity here (the vertical arm transposes into it), and the pinned tests
+/// take the default deliberately to say so. The sole production caller passes
+/// it explicitly, read back off the property the row was laid out with, and a
+/// future caller should do the same: a wrong axis is silent, so guessing it
+/// from the rects is not an option this function offers.
 inline StripSelectorHit classifyStripSelectorPoint(const QVector<QRectF>& cardRects, const QVector<bool>& tabbed,
-                                                   const QPointF& pos, qreal gapInflate)
+                                                   const QPointF& pos, qreal gapInflate, bool verticalAxis = false)
 {
+    // The popup is a MINIATURE of the strip, so it must mirror the axis. If
+    // the strip runs vertically and this row stayed horizontal, half 0/1 would
+    // still mean "top/bottom of the card" while a column has become a
+    // horizontal band — which silently REVERSES insert order, with no error
+    // and no visual tell.
+    //
+    // Transposed at the BOUNDARY rather than by forking the math below: swap
+    // every rect and the point through the line y = x, run the existing
+    // classification untouched, and return the hit as-is. The returned
+    // vocabulary is already axis-neutral in meaning (gapIndex, columnIndex,
+    // half 0 = first tile, 1 = append, 2 = whole card), so nothing downstream
+    // changes — and the horizontal case stays byte-identical, which keeps
+    // every pinned test meaningful as the identity case.
+    if (verticalAxis) {
+        // Unconditional: emptiness survives the transpose (a non-positive
+        // width becomes a non-positive height), so an un-laid-out card stays
+        // un-laid-out either way and the laidOut gate reads the same. Skipping
+        // the swap for those would leave one rect in the untransposed space,
+        // which is a shape this arm should never hand on.
+        const auto flip = [](const QRectF& r) {
+            return QRectF(r.y(), r.x(), r.height(), r.width());
+        };
+        QVector<QRectF> swapped;
+        swapped.reserve(cardRects.size());
+        for (const QRectF& r : cardRects) {
+            swapped.append(flip(r));
+        }
+        return classifyStripSelectorPoint(swapped, tabbed, QPointF(pos.y(), pos.x()), gapInflate, false);
+    }
     StripSelectorHit hit;
     const int count = cardRects.size();
 

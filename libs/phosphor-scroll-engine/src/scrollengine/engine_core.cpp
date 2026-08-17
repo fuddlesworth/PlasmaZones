@@ -8,6 +8,7 @@
 #include <PhosphorIdentity/WindowId.h>
 #include <PhosphorScrollEngine/IScrollSettings.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 #include <QMetaObject>
@@ -132,17 +133,24 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // pruneStatesForDesktop / pruneStatesForActivities /
         // pruneStatesForRemovedScreen when their context or output dies.
         const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
+        // Resolved BEFORE the prune walk: the stash's never-relaid fallback
+        // otherwise called layoutParamsForScreen — and through it the
+        // injected geometry/gap providers — from inside removeStatesIf's
+        // onRemove, mid-iteration over the state map. The in-tree providers
+        // are pure, but the provider seam makes no such promise to an
+        // embedder, so nothing injected may run inside the walk.
+        const PhosphorProtocol::ScrollAxis fallbackAxis = stripAxisForScreen(screenId).axis();
         m_states.removeStatesIf(
             [&currentKey](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
                 return key == currentKey;
             },
-            [this, &releasedWindows, &releasedScreens, &screenId](const PhosphorEngine::PlacementStateKey& key,
-                                                                  ScrollState* state) {
+            [this, &releasedWindows, &releasedScreens, &screenId,
+             fallbackAxis](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
                 // Mode reassignment: remember the strip's structure so a
                 // cycle back to Scrolling rebuilds it (stacks, widths,
                 // tabbed flags) instead of a default one-window-per-column
                 // strip. Captured BEFORE the release strips the state.
-                stashStripStructure(key, state);
+                stashStripStructure(key, state, fallbackAxis);
                 releaseScreenState(state, releasedWindows);
                 // Inside the callback so the payload names only screens that
                 // had a MATCHING STATE — the daemon's release handler uses
@@ -225,13 +233,21 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // Only the unfloat-slot memory dies here. The float markers and the
     // last-applied rects are inputs to the daemon's windowsReleased handler,
     // which has not run yet — see the contract on the declaration.
-    // The pending self-activation entries go too, for windowClosed's reason:
-    // a released window's echo can never be answered while the screen sits in
-    // another mode, and the stale entry would eat the first genuine focus
-    // report when the window comes back to scrolling.
+    // The pending self-activation entries and the declined-open marks go
+    // too, for windowClosed's reason: a released window's echo can never be
+    // answered while the screen sits in another mode, and a stale entry (or
+    // mark) would eat the first genuine focus report when the window comes
+    // back to scrolling. The parked-edge and windowed-fullscreen memories go
+    // for the eviction symmetry every other exit path holds: neither is an
+    // input to windowsReleased, windowClosed cannot sweep them later
+    // (stateForWindow answers null after this), and pruneStaleWindows only
+    // runs once per session at bring-up.
     for (const QString& windowId : windows) {
         m_floatRestore.remove(windowId);
         m_pendingSelfActivations.removeAll(windowId);
+        m_declinedOpenFocus.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
     }
     releasedWindows.append(windows);
     // Per-screen bookkeeping dies with the state: a stale seed must not
@@ -269,7 +285,9 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     state->deleteLater();
 }
 
-StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
+StashedStrip
+ScrollEngine::buildStashFromState(const ScrollState* state,
+                                  std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis) const
 {
     StashedStrip out;
     if (!state || state->strip().isEmpty()) {
@@ -306,12 +324,33 @@ StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
     // trip re-anchored the strip on whichever window arrived first.
     out.focusedWindowId = state->strip().activeWindowId();
     out.viewAnchor = state->strip().viewAnchor();
+    // Stamped so the restore can tell whether that anchor still means
+    // anything. The state's RESOLVED axis is the right source: it advances on
+    // every relayout, where the applied basis only advances on an emitted
+    // batch and would be stale for a strip whose last pass the emit gate
+    // suppressed.
+    //
+    // A state that has never been through applyLayout has no resolved axis
+    // yet, and that is reachable — applyLayout is deferred to the end of an
+    // arrival burst, so a save landing mid-burst sees exactly this. Resolve
+    // the screen's LIVE axis rather than assuming Horizontal, which on a
+    // portrait screen would mis-stamp the stash and make the restore drop a
+    // view anchor that was in fact still meaningful. Degrades safely either
+    // way (a wrong stamp only costs the anchor), so the fallback stays a
+    // single resolve with no state of its own.
+    // The pre-resolved fallback exists for callers running inside a state-map
+    // walk, where resolving live would invoke the injected providers
+    // mid-iteration (see setActiveScreens).
+    out.axis = state->hasResolvedAxis() ? state->resolvedAxis().axis()
+        : preResolvedFallbackAxis       ? *preResolvedFallbackAxis
+                                        : stripAxisForScreen(state->screenId()).axis();
     return out;
 }
 
-void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state)
+void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state,
+                                       std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis)
 {
-    StashedStrip stash = buildStashFromState(state);
+    StashedStrip stash = buildStashFromState(state, preResolvedFallbackAxis);
     if (stash.isEmpty()) {
         return;
     }
@@ -520,7 +559,16 @@ bool ScrollEngine::restoreFromStripStash(ScrollState* state, const PhosphorEngin
     // fix. focusWindow is a no-op once the state already matches.
     if (!stashStrip.focusedWindowId.isEmpty() && state->strip().containsWindow(stashStrip.focusedWindowId)) {
         state->strip().focusWindow(stashStrip.focusedWindowId, params);
-        state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
+        // The anchor is main-axis pixels, so it only means anything if it was
+        // captured on THIS axis. Replaying one from the other axis scrolls the
+        // restored strip to a nonsense position, and an out-of-range anchor is
+        // legitimate under the current axis (restoreViewAnchor refuses to
+        // clamp for exactly that reason), so there is no way to tell a good
+        // one from a stale one after a flip. Drop it: the focus restore above
+        // still lands, and the centering policy re-derives a view around it.
+        if (stashStrip.axis == params.axis.axis()) {
+            state->strip().restoreViewAnchor(stashStrip.viewAnchor, params);
+        }
     }
     const int total = stashStrip.tileCount();
     // The CLAIMED tile's per-tile lease resets too: it was just consumed, so
@@ -762,6 +810,11 @@ void ScrollEngine::refreshConfigFromSettings()
         (center >= 0 && center <= 2) ? static_cast<CenterFocusedColumn>(center) : CenterFocusedColumn::Never;
     m_alwaysCenterSingleColumn = settings->scrollingAlwaysCenterSingleColumn();
     m_cropStraddlers = settings->scrollingCropStraddlers();
+    // The TRI-STATE intent, kept as-is. Auto is deliberately NOT collapsed
+    // here: there is no work area at this point, and collapsing it would
+    // freeze one screen's verdict for every screen.
+    const int axisIntent = settings->scrollingStripAxis();
+    m_stripAxis = (axisIntent >= 0 && axisIntent <= 2) ? axisIntent : 0;
 
     // Guarded cast, matching every sibling enum in this function (center,
     // insertPos, sticky, indicator position): the shared value key can hold
@@ -776,7 +829,11 @@ void ScrollEngine::refreshConfigFromSettings()
     const qreal widthValue = settings->scrollingDefaultColumnWidthValue();
     m_defaultWidthClientDecides = (widthKind == DefaultWidthKind::ClientDecides);
     if (widthKind == DefaultWidthKind::Fixed) {
-        m_defaultColumnWidth = ColumnWidth::makeFixed(qMax(1, qRound(widthValue)));
+        // Bounded before the round, symmetric with the Proportion arm's qBound
+        // below: ISettings is an injected interface an embedder implements, so
+        // the value is untrusted, and qRound of a double past int's range is
+        // undefined.
+        m_defaultColumnWidth = ColumnWidth::makeFixed(qRound(qBound(1.0, widthValue, kMaxFixedExtentPx)));
     } else if (widthKind == DefaultWidthKind::Preset) {
         // Config stays index-based (the spin names a slot in the list the
         // user edits on the same page); the VALUE anchor is resolved here,
@@ -794,7 +851,9 @@ void ScrollEngine::refreshConfigFromSettings()
     // (Auto/Fixed/Preset, see DefaultHeightKind), so a guarded cast is fine.
     const int heightKind = settings->scrollingDefaultWindowHeightKind();
     if (heightKind == static_cast<int>(DefaultHeightKind::Fixed)) {
-        m_defaultWindowHeight = WindowHeight::makeFixed(qMax(1, qRound(settings->scrollingDefaultWindowHeightValue())));
+        // Bounded before the round, for the width twin's reason.
+        m_defaultWindowHeight = WindowHeight::makeFixed(
+            qRound(qBound(1.0, settings->scrollingDefaultWindowHeightValue(), kMaxFixedExtentPx)));
     } else if (heightKind == static_cast<int>(DefaultHeightKind::Preset)) {
         // Same idx-to-value resolution as the width twin above.
         m_defaultWindowHeight = WindowHeight::makePreset(m_presetWindowHeights.at(

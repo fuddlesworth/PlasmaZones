@@ -54,6 +54,12 @@ bool overrideInt(const QVariantMap& overrides, const QString& key, int& out)
     if (it == overrides.constEnd()) {
         return false;
     }
+    // Bools refused explicitly, the effectiveBoolOverride stance in the
+    // other direction: toInt(&ok) happily converts one (true -> 1), which
+    // would pin a real enumerator for a payload aimed at the wrong key.
+    if (it->typeId() == QMetaType::Bool) {
+        return false;
+    }
     bool ok = false;
     const int value = it->toInt(&ok);
     if (!ok) {
@@ -71,6 +77,10 @@ bool overrideDouble(const QVariantMap& overrides, const QString& key, qreal& out
 {
     const auto it = overrides.constFind(key);
     if (it == overrides.constEnd()) {
+        return false;
+    }
+    // Same bool refusal as overrideInt: toDouble on a bool answers 1.0.
+    if (it->typeId() == QMetaType::Bool) {
         return false;
     }
     bool ok = false;
@@ -141,6 +151,34 @@ CenterFocusedColumn ScrollEngine::effectiveCenterFocusedColumn(const QVariantMap
     return m_centerFocusedColumn;
 }
 
+StripAxis ScrollEngine::effectiveStripAxis(const QVariantMap& overrides, const QRect& workArea) const
+{
+    // Reads the TRI-STATE intent (0 auto, 1 horizontal, 2 vertical) and
+    // returns the RESOLVED two-valued axis. Returning the resolved type is
+    // what makes it structurally impossible for Auto to escape into layout
+    // math — there is no third value for a caller to mishandle.
+    //
+    // The two numberings deliberately disagree (config Horizontal is 1, the
+    // protocol's is 0), so this is a switch and never a cast.
+    int intent = 0;
+    if (!overrideInt(overrides, ScrollPerScreenKeys::stripAxis(), intent)) {
+        intent = m_stripAxis;
+    }
+    switch (intent) {
+    case 1:
+        return StripAxis::horizontal();
+    case 2:
+        return StripAxis::vertical();
+    default:
+        break;
+    }
+    // Auto, and anything unrecognised: derive from the work area. An
+    // out-of-range intent degrades to Auto rather than to a fixed axis,
+    // because Auto is the setting's own default and the one answer that is
+    // never wrong for the shape of the screen.
+    return resolveStripAxis(workArea);
+}
+
 // ── behaviour toggles ──
 // One shape for all eight callers (the five behaviour toggles plus the three
 // tab-indicator bools): a rule-written per-screen key wins, an absent key
@@ -168,10 +206,9 @@ bool ScrollEngine::effectiveRespectMinimumSize(const QVariantMap& overrides) con
     return effectiveBoolOverride(overrides, ScrollPerScreenKeys::respectMinimumSize(), m_respectMinimumSize);
 }
 
-bool ScrollEngine::effectiveCropStraddlers(const QString& screenId) const
+bool ScrollEngine::effectiveCropStraddlers(const QVariantMap& overrides) const
 {
-    return effectiveBoolOverride(m_perScreenOverrides.value(screenId), ScrollPerScreenKeys::cropStraddlers(),
-                                 m_cropStraddlers);
+    return effectiveBoolOverride(overrides, ScrollPerScreenKeys::cropStraddlers(), m_cropStraddlers);
 }
 
 bool ScrollEngine::effectiveFocusNewWindows(const QString& screenId) const
@@ -223,6 +260,12 @@ QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QString& screenId)
     return effectivePresetWindowHeights(m_perScreenOverrides.value(screenId));
 }
 
+QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QVariantMap& overrides) const
+{
+    return presetListFromOverride(overrides, ScrollPerScreenKeys::presetWindowHeights(), MinWindowHeightFraction,
+                                  m_presetWindowHeights);
+}
+
 ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& screenId) const
 {
     ScrollBlueprintProgress progress;
@@ -257,12 +300,6 @@ ScrollBlueprintProgress ScrollEngine::blueprintProgressForScreen(const QString& 
     const int spent = qMax(state->blueprintCursor(), int(state->strip().columns().size()));
     progress.used = qMin(spent, progress.total);
     return progress;
-}
-
-QList<qreal> ScrollEngine::effectivePresetWindowHeights(const QVariantMap& overrides) const
-{
-    return presetListFromOverride(overrides, ScrollPerScreenKeys::presetWindowHeights(), MinWindowHeightFraction,
-                                  m_presetWindowHeights);
 }
 
 ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QString& screenId) const
@@ -324,7 +361,11 @@ ColumnWidth ScrollEngine::effectiveDefaultColumnWidth(const QVariantMap& overrid
                 ? slotValue
                 : (m_defaultColumnWidth.kind == ColumnWidth::Fixed ? qreal(m_defaultColumnWidth.fixedPx) : 0.0);
             if (value >= 1.0) {
-                return ColumnWidth::makeFixed(qRound(value));
+                // Bounded before the round, like every other numeric slot
+                // resolved out of this map: the value arrives unvalidated
+                // from applyPerScreenConfig, and qRound of a double past
+                // int's range is undefined.
+                return ColumnWidth::makeFixed(qRound(qBound(1.0, value, kMaxFixedExtentPx)));
             }
         }
         if (kind == static_cast<int>(DefaultWidthKind::Preset)) {
@@ -385,25 +426,31 @@ bool ScrollEngine::effectiveWidthClientDecides(const QVariantMap& overrides) con
     return m_defaultWidthClientDecides;
 }
 
-WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea) const
+WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QString& screenId, const QRect& workArea,
+                                                        StripAxis axis) const
 {
-    return effectiveDefaultWindowHeight(m_perScreenOverrides.value(screenId), workArea);
-}
-
-WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea) const
-{
-    return effectiveDefaultWindowHeight(overrides, workArea, effectivePresetWindowHeights(overrides));
+    return effectiveDefaultWindowHeight(m_perScreenOverrides.value(screenId), workArea, axis);
 }
 
 WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
-                                                        const QList<qreal>& presetHeights) const
+                                                        StripAxis axis) const
 {
-    // Rule channel: a bare work-area fraction, committed as Fixed pixels
-    // against the CURRENT work area (same resolution the adjust verbs use).
+    return effectiveDefaultWindowHeight(overrides, workArea, axis, effectivePresetWindowHeights(overrides));
+}
+
+WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overrides, const QRect& workArea,
+                                                        StripAxis axis, const QList<qreal>& presetHeights) const
+{
+    // Rule channel: a bare fraction of the work area's CROSS extent, committed
+    // as Fixed pixels against the CURRENT work area (same resolution the
+    // adjust verbs use). Cross, not physical height: a window height divides
+    // the within-column stack, which runs across the strip whichever way the
+    // strip itself runs.
+    const int crossExtent = axis.crossSize(workArea);
     qreal fraction = 0.0;
-    if (workArea.height() > 0 && overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction)
+    if (crossExtent > 0 && overrideDouble(overrides, ScrollPerScreenKeys::defaultWindowHeight(), fraction)
         && fraction > 0.0 && fraction <= 1.0) {
-        return WindowHeight::makeFixed(qMax(1, qRound(fraction * workArea.height())));
+        return WindowHeight::makeFixed(qMax(1, qRound(fraction * crossExtent)));
     }
     // Settings channel: the kind trio, resolved per SLOT against the cached
     // global — see effectiveDefaultColumnWidth for why a partial trio is the
@@ -421,7 +468,8 @@ WindowHeight ScrollEngine::effectiveDefaultWindowHeight(const QVariantMap& overr
                 ? slotValue
                 : (m_defaultWindowHeight.kind == WindowHeight::Fixed ? qreal(m_defaultWindowHeight.fixedPx) : 0.0);
             if (value >= 1.0) {
-                return WindowHeight::makeFixed(qRound(value));
+                // Bounded before the round, for the width twin's reason.
+                return WindowHeight::makeFixed(qRound(qBound(1.0, value, kMaxFixedExtentPx)));
             }
         } else if (kind == static_cast<int>(DefaultHeightKind::Preset)) {
             // Same spin-to-value resolution as the width twin above.

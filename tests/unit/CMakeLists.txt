@@ -389,7 +389,12 @@ add_executable(test_settings_validation config/settings/test_settings_validation
 target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_settings_validation COMMAND test_settings_validation)
 
-p_add_test(test_settings_perscreen config/settings/test_settings_perscreen.cpp)
+# Explicit Qt6::Gui like its scrolling sibling below: the test uses QTEST_MAIN
+# (not guiless) for the palette-backed colour getters, and would otherwise get
+# Gui only through plasmazones_core's PUBLIC link.
+add_executable(test_settings_perscreen config/settings/test_settings_perscreen.cpp)
+target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
 
 p_add_test(test_settings_disable_per_mode config/settings/test_settings_disable_per_mode.cpp)
 
@@ -1725,6 +1730,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 #   test_tiling_state: TilingStateHelpers + WindowId tests
 #   test_decoration_manager: DecorationManager ownership/veto behavioral spec
 #   test_strip_view_animator: StripViewAnimator per-output view-spring behaviour
+#   test_strip_motion_sampler: StripMotionSampler distance/speed sampling
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_wire_types compositor-common/test_wire_types.cpp)
 target_link_libraries(test_wire_types PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor
@@ -1748,8 +1754,17 @@ add_test(NAME test_tiling_state COMMAND test_tiling_state)
 add_executable(test_strip_view_animator compositor-common/test_strip_view_animator.cpp
                ${CMAKE_SOURCE_DIR}/kwin-effect/compositor/stripviewanimator.cpp)
 target_include_directories(test_strip_view_animator PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
-target_link_libraries(test_strip_view_animator PRIVATE Qt6::Test PhosphorAnimation::PhosphorAnimation)
+target_link_libraries(test_strip_view_animator PRIVATE Qt6::Test PhosphorAnimation::PhosphorAnimation
+                                                       PhosphorProtocol::Types)
 add_test(NAME test_strip_view_animator COMMAND test_strip_view_animator)
+
+# The scrollEffectBehaviour value parser is header-only plain Qt (no KWin),
+# extracted from TilingHandler exactly so this suite exists — its three-way
+# absent/malformed/valid contract fails silently on screen.
+add_executable(test_scroll_behaviour_parse compositor-common/test_scroll_behaviour_parse.cpp)
+target_include_directories(test_scroll_behaviour_parse PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+target_link_libraries(test_scroll_behaviour_parse PRIVATE Qt6::Test Qt6::DBus)
+add_test(NAME test_scroll_behaviour_parse COMMAND test_scroll_behaviour_parse)
 
 # StripMotionSampler is header-only plain numbers (no KWin types at all), so
 # the suite includes it straight from the effect tree and drives it with a
@@ -1759,6 +1774,14 @@ target_include_directories(test_strip_motion_sampler PRIVATE ${CMAKE_SOURCE_DIR}
 target_link_libraries(test_strip_motion_sampler PRIVATE Qt6::Test)
 add_test(NAME test_strip_motion_sampler COMMAND test_strip_motion_sampler)
 
+add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
+target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
+add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# shadervalidate/ - Offline Pack Validator Tests
+#   test_pack_validators: metadata lints + the multipass buffer-pass bake
+# ═══════════════════════════════════════════════════════════════════════════════
 # The offline pack validator's metadata lints. The bundled-pack gate
 # (shader_validate_animations) only proves the shipped packs are clean; this
 # builds deliberately-broken packs in a temp dir and asserts the diagnostic.
@@ -1781,10 +1804,6 @@ target_link_libraries(test_pack_validators
 )
 target_compile_definitions(test_pack_validators PRIVATE "P_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 add_test(NAME test_pack_validators COMMAND test_pack_validators)
-
-add_executable(test_decoration_manager compositor-common/test_decoration_manager.cpp)
-target_link_libraries(test_decoration_manager PRIVATE Qt6::Test PhosphorCompositor::PhosphorCompositor)
-add_test(NAME test_decoration_manager COMMAND test_decoration_manager)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # editor/ - Zone z-order

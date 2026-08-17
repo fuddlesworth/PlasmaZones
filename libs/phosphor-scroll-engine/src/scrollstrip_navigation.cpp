@@ -15,10 +15,10 @@ bool ScrollStrip::focusColumn(int columnIndex, const ScrollLayoutParams& params)
         return false;
     }
     const int prevIdx = m_activeColumnIdx;
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     m_activeColumnIdx = target;
     clampActiveIndices();
-    reanchorAfterFocusChange(prevIdx, oldViewX, params);
+    reanchorAfterFocusChange(prevIdx, oldViewOffset, params);
     return true;
 }
 
@@ -113,20 +113,20 @@ bool ScrollStrip::focusWindow(const QString& windowId, const ScrollLayoutParams&
         return false;
     }
     const int prevIdx = m_activeColumnIdx;
-    const int oldViewX = viewXFor(params);
+    const int oldViewOffset = viewOffsetFor(params);
     if (tileFocusable) {
         col.activeTileIdx = tileIdx;
     }
     m_activeColumnIdx = colIdx;
     // Re-anchor only when the active COLUMN changed. A same-column tile focus
-    // moves no strip geometry (columnWidthPx folds in every non-minimized
+    // moves no strip geometry (columnExtentPx folds in every non-minimized
     // tile regardless of activeTileIdx), and running the re-anchor anyway
     // clamps away the deliberately-unclamped anchors centerActiveColumn /
     // centerVisibleColumns leave behind — the applyLayout entry point guards
     // this exact hazard in updateViewForFocus, and the sibling tile-focus
     // verbs never touch the anchor at all.
     if (colIdx != prevIdx) {
-        reanchorAfterFocusChange(prevIdx, oldViewX, params);
+        reanchorAfterFocusChange(prevIdx, oldViewOffset, params);
     }
     return true;
 }

@@ -17,9 +17,19 @@ class ScrollingTemplateStore;
 
 /// Project a native scrolling template into the shared LayoutPreview shape:
 /// the blueprint columns (or, for a vocabulary-only template, its preset
-/// widths) become full-height x-band zones laid left to right, so the
-/// shared thumbnail renderer draws a strip snapshot with no
-/// template-specific code. isScrollingTemplate marks the family.
+/// widths) become band zones laid along the strip axis, so the shared
+/// thumbnail renderer draws a strip snapshot with no template-specific code.
+/// isScrollingTemplate marks the family.
+///
+/// @p verticalAxis picks the axis the bands run along. False (the default)
+/// lays full-HEIGHT bands left to right, the shape a horizontal strip adopts.
+/// True lays full-WIDTH bands top to bottom, which is what the engine actually
+/// produces on a screen whose strip runs vertically — a card drawn the other
+/// way depicts a shape that screen will never show. A template carries no axis
+/// of its own (a column vocabulary is fractions along the strip, whichever way
+/// it runs), so the axis comes from the SCREEN, and the callers that have no
+/// screen in scope (the screen-agnostic management catalogue, this file's
+/// ILayoutSource) keep the horizontal default deliberately.
 ///
 /// PRECONDITION: @p templ is normalized (every template the store hands out
 /// is, and ScrollingTemplate::fromJson normalizes on parse). The width fallback
@@ -27,7 +37,8 @@ class ScrollingTemplateStore;
 /// on normalize() having demoted a Preset default kind that has nothing to
 /// index; an un-normalized Preset kind previews at half width rather than at
 /// the width it names.
-PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTemplate& templ);
+PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromScrollingTemplate(const ScrollingTemplate& templ,
+                                                                                bool verticalAxis = false);
 
 /// ILayoutSource over a ScrollingTemplateStore — the third card family
 /// beside manual zone layouts and autotile algorithms. Null-tolerant like
@@ -37,6 +48,9 @@ class PHOSPHORZONES_EXPORT ScrollingTemplateSource : public PhosphorLayout::ILay
     Q_OBJECT
 
 public:
+    /// Construct over a borrowed template store. Caller owns @p store and
+    /// must keep it alive for the source's lifetime (the ZonesLayoutSource
+    /// contract); null is tolerated and reports an empty list.
     explicit ScrollingTemplateSource(ScrollingTemplateStore* store, QObject* parent = nullptr);
     ~ScrollingTemplateSource() override;
 

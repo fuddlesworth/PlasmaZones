@@ -95,7 +95,9 @@ void SettingsAdaptor::initializeRegistryAutotile()
         m_settings->setAutotileDragInsertTriggers(v.toList());
         return true;
     };
-    m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("stringlist");
+    // "maplist" for the same reason as the scrolling twin: the payload is a
+    // list of trigger maps, and "stringlist" invited a refused write.
+    m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
     REGISTER_BOOL_SETTING("autotileRestoreFloatedWindowsOnLogin", autotileRestoreFloatedWindowsOnLogin,

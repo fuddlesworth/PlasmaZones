@@ -927,8 +927,13 @@ void OverlayService::hideDisabledAndRefresh()
     }
 
     // Update remaining zone selector (disabled-gated) and overlay (suppress-gated) windows.
-    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        const QString& screenId = it.key();
+    // Over a FRESH key snapshot, like the destroy loop above and for the same
+    // hazard: every body below reaches back into the service and can create or
+    // drop screen states, which would invalidate a live iterator. Fresh rather
+    // than the destroy loop's list, because that loop's callbacks can add
+    // entries the first snapshot never saw.
+    const QStringList refreshScreenIds = m_screenStates.keys();
+    for (const QString& screenId : refreshScreenIds) {
         // Fall back to a LIVE evaluation for a screen the snapshot missed
         // (an entry created re-entrantly by the destroy loop's callbacks):
         // gates.value()'s default {false,false} would treat it as enabled
@@ -945,7 +950,12 @@ void OverlayService::hideDisabledAndRefresh()
         // a strip screen the re-push now costs a full strip snapshot +
         // serialization, which a desktop switch must not pay for a popup that
         // is not on screen.
-        if (m_zoneSelectorVisible && !g.disabled && it.value().zoneSelectorSlot()) {
+        // Each arm looks its state up at the moment it uses it: a screen the
+        // destroy loop's callbacks dropped is simply absent, and the selector
+        // arm can itself reshape m_screenStates before the overlay arm runs.
+        const auto selectorIt = m_screenStates.constFind(screenId);
+        if (m_zoneSelectorVisible && !g.disabled && selectorIt != m_screenStates.constEnd()
+            && selectorIt->zoneSelectorSlot()) {
             if (isStripSelectorScreen(screenId)) {
                 // A desktop/activity switch re-keys the engine state this
                 // screen's strip mirrors, so the model AND any stored popup
@@ -958,8 +968,11 @@ void OverlayService::hideDisabledAndRefresh()
                 updateZoneSelectorWindow(screenId);
             }
         }
-        if (!g.inactive && m_visible && it.value().overlayPhysScreen) {
-            updateOverlayWindow(screenId, it.value().overlayPhysScreen);
+        if (!g.inactive && m_visible) {
+            const auto overlayIt = m_screenStates.constFind(screenId);
+            if (overlayIt != m_screenStates.constEnd() && overlayIt->overlayPhysScreen) {
+                updateOverlayWindow(screenId, overlayIt->overlayPhysScreen);
+            }
         }
     }
 }
@@ -1105,7 +1118,11 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId, QSize aut
         // The None row: this list is a PICKER of the context's template, so it
         // carries the opt-out alongside the templates themselves. Mirrored in
         // visibleLayoutCount below, which must agree with this row for row.
-        inc.templates);
+        inc.templates,
+        // Template cards depict the columns this screen's strip will hold, so
+        // they follow the screen's strip axis. Count-neutral, which is why
+        // visibleLayoutCount does not pay for the same resolve.
+        stripIsVertical(resolvedId));
     return PlasmaZones::toVariantList(entries);
 }
 
@@ -1187,7 +1204,12 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
         // the row-for-row agreement the header of that function calls out: a
         // count short by one here would size the popup for fewer cards than
         // it draws.
-        inc.templates);
+        inc.templates
+        // No strip axis: this function is asked per cursor tick by the
+        // trigger-edge probe, and the axis only transposes each card's bands.
+        // It cannot add or drop a row, so taking the default here leaves the
+        // row-for-row agreement above intact at no per-tick cost.
+    );
     return entries.size();
 }
 

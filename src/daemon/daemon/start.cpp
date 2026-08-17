@@ -239,6 +239,16 @@ void Daemon::connectScreenSignals()
                         ? m_lastTiledCountByScreen.erase(it)
                         : std::next(it);
                 }
+                // The OverlayService's strip model and paint-override maps for
+                // the removed output (virtual sub-screens included): the
+                // departing-screen loop keys on the engine's set, which the
+                // prune above already shrank, so nothing else ever sweeps
+                // them and a same-id replug would replay stale overrides.
+                if (m_overlayService) {
+                    m_overlayService->clearScrollTabStateWhere([&removedScreenId](const QString& screenId) {
+                        return PhosphorIdentity::VirtualScreenId::samePhysical(screenId, removedScreenId);
+                    });
+                }
 
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
                 PhosphorScreens::ScreenIdentity::invalidateEdidCache(removedName);
@@ -277,10 +287,22 @@ void Daemon::connectScreenSignals()
                 m_geometryUpdateTimer.start();
             });
 
-    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this, [this] {
-        m_geometryUpdatePending = true;
-        m_geometryUpdateTimer.start();
-    });
+    connect(m_screenManager.get(), &PhosphorScreens::ScreenManager::screenGeometryChanged, this,
+            [this](const PhosphorScreens::PhysicalScreen& screen) {
+                // Same cancel-before-context-change rule as the screen-removed,
+                // desktop-switch and activity handlers: a rotation or a
+                // resolution change reshapes the strip this output's live
+                // preview was detached into, so the view slides under a
+                // stationary cursor and the drag's detach-once invariant no
+                // longer holds. Scoped to the output that changed, keyed on
+                // its identifier the way the removal path is, so a rotation of
+                // monitor A leaves monitor B's preview alone.
+                if (m_windowDragAdaptor) {
+                    m_windowDragAdaptor->cancelDragInsertPreviewsForScreen(screen.identifier);
+                }
+                m_geometryUpdatePending = true;
+                m_geometryUpdateTimer.start();
+            });
 
     // Connect to available geometry changes (panels added/removed/resized)
     // This is reactive - the sensor windows automatically track panel changes
@@ -817,6 +839,17 @@ void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
         } else {
             ++it;
         }
+    }
+
+    // The OverlayService's per-screen strip model and paint-override maps sit
+    // on the same boundary: the departing-screen loop cannot sweep a screen
+    // the engine no longer names, so without this a dropped vs:N id keeps its
+    // overrides (and would replay stale paint on a same-id return).
+    if (m_overlayService) {
+        m_overlayService->clearScrollTabStateWhere([&](const QString& screenId) {
+            return PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId) == physicalScreenId
+                && !keepIds.contains(screenId);
+        });
     }
 }
 

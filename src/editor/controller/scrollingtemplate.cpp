@@ -47,6 +47,11 @@ void EditorController::setEditorModeInternal(int mode)
     // a no-op.
     m_pendingTargetScreen.reset();
     m_pendingTargetEditsLayout = false;
+    // m_pendingLaunch is deliberately NOT dropped here, unlike the park
+    // above: a parked launch has its own confirmation dialog whose Confirm
+    // applies the launch wholesale (mode included), so it stays meaningful
+    // across a mode change — dropping it would strand that open dialog
+    // acting on nothing.
     // The rest of the layout session (zones, shader, gap overrides, bounds)
     // deliberately stays loaded when entering template mode: QML gates every
     // reader on the mode, and each route back into layout mode
@@ -80,6 +85,26 @@ void EditorController::beginTemplateSession(const QString& id, const QString& na
                                             const QVariantMap& state, bool isSystem)
 {
     setEditorModeInternal(ModeScrollingTemplate);
+    // The mode setter drops the parked screen switch only on a genuine mode
+    // CHANGE (it early-returns otherwise), so a template loaded over an open
+    // template session — the same-mode swap — would keep a park answering
+    // for the PREVIOUS template and later save or discard the wrong one.
+    // Same rationale as the setter's own clear, applied per session.
+    m_pendingTargetScreen.reset();
+    m_pendingTargetEditsLayout = false;
+
+    // A template has no fixed-zone reference, so the layout bounding box a
+    // previous FIXED-geometry layout left behind is never the right basis for
+    // it. targetScreenSize() prefers that override, and templatePreviewVertical
+    // resolves the Auto axis from whatever it returns, so a template launched
+    // for the SAME screen an editing session already targeted would take its
+    // strip direction from the old layout's bounding box instead of the
+    // monitor. Neither clearer on the launch path runs in that case, because
+    // applyLaunch's screen switch early-returns when the target is unchanged.
+    if (m_layoutBoundsOverride.isValid()) {
+        m_layoutBoundsOverride = QSize();
+        Q_EMIT targetScreenSizeChanged();
+    }
 
     m_layoutId = id;
     m_layoutName = name;
@@ -213,6 +238,7 @@ bool EditorController::saveScrollingTemplateNow()
         Q_EMIT layoutNameChanged();
     }
     m_isNewLayout = false;
+    const bool unsavedCleared = m_hasUnsavedChanges;
     m_hasUnsavedChanges = false;
     // Reconcile the model with what actually persisted: both paths normalize
     // (drop degenerate columns, sort/dedupe/cap presets, demote an
@@ -225,7 +251,9 @@ bool EditorController::saveScrollingTemplateNow()
     if (m_undoController) {
         m_undoController->setClean();
     }
-    Q_EMIT hasUnsavedChangesChanged();
+    if (unsavedCleared) {
+        Q_EMIT hasUnsavedChangesChanged();
+    }
     Q_EMIT layoutSaved();
     return true;
 }

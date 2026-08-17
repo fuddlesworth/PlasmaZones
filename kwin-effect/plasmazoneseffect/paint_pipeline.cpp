@@ -774,7 +774,7 @@ void PlasmaZonesEffect::postPaintScreen()
             if (!it->shaderApplied && !cededToTransition) {
                 continue;
             }
-            // The driver quarter of scrollParkedOffscreen's contract: stop
+            // The repaint-driver site of scrollParkedOffscreen's contract: stop
             // driving a column parked off the viewport. Without this the
             // ~30fps backdrop pump below re-armed for every parked glass
             // column forever (backdropDue takes the focus exemption, so
@@ -1241,6 +1241,16 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // flag alone. The indicator is translated off its committed rect for the
     // whole view leg (paintWindow adds the strip's offset to it), so KWin must
     // stop deciding where it goes from that rect.
+    //
+    // Sliding COLUMNS deliberately get no such per-window flag for the same
+    // view offset: prePaintScreen's screen-level mask already keeps the
+    // whole strip output's paint honest while a view leg runs, and the block
+    // above adds the per-window flag only where a window is RELOCATED off
+    // its committed rect (a visualDelta entry). The indicator keeps its own
+    // flag as the one surface whose paint slot is REORDERED (the anchor
+    // injection) as well as translated — belt-and-braces against a pass
+    // where the screen mask alone would let KWin reason from the committed
+    // rect of a surface that is not even painted at its natural position.
     if (tabIndicatorSliding) {
         data.setTransformed();
     }
@@ -1703,7 +1713,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     // The stored strip-minus-park delta, matching the draw.
                     animatedFrame.translate(visualIt->x(), visualIt->y());
                 }
-                animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut), 0.0);
+                animatedFrame.translate(m_stripViewAnimator->offsetFor(scrollOut));
             }
             captureWindowBackdrop(renderTarget, viewport, w, *backIt, deviceRegion, animatedFrame, backdropScale);
         }
@@ -1815,9 +1825,9 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                     data += QPointF(vit->x(), vit->y());
                 }
             }
-            const qreal viewOffset = m_stripViewAnimator->offsetFor(managed);
-            if (!qFuzzyIsNull(viewOffset)) {
-                data += QPointF(viewOffset, 0.0);
+            const QPointF viewOffset = m_stripViewAnimator->offsetFor(managed);
+            if (!viewOffset.isNull()) {
+                data += viewOffset;
             }
         } else if (KWin::LogicalOutput* out = w ? w->screen() : nullptr;
                    out && m_stripViewAnimator->isAnimatingOn(out) && isScrollTabIndicatorSurface(w)) {
@@ -1837,7 +1847,10 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
             // behind it resolves the window's surface and compares its window
             // class, and no surface needs an offset on an output whose strip is
             // at rest.
-            data += QPointF(m_stripViewAnimator->offsetFor(out), 0.0);
+            // The tab-indicator surface has no tile entry of its own, which is
+            // exactly why the axis is held per output rather than read off a
+            // batch.
+            data += m_stripViewAnimator->offsetFor(out);
         }
     }
 

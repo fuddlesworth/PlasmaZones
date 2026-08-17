@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <functional>
 #include <optional>
 
 #include "core/utils/unifiedlayoutlist.h"
@@ -257,6 +258,24 @@ public:
      */
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
 
+    /**
+     * @brief Inject the scroll engine's strip-axis answer for a screen.
+     *
+     * The picker's template cards depict the strip's bands, and a card drawn
+     * the other way shows a shape that screen will never display — so the
+     * per-screen build has to know the axis, and this controller deliberately
+     * holds no scroll-engine handle to derive it itself. Injected from the
+     * composition root beside OverlayService's identical provider, and
+     * cleared alongside it in stop() (the grep-discoverable
+     * clear-before-teardown contract; the lambda also null-checks, but the
+     * clear is the documented mechanism).
+     *
+     * layouts() consults the provider per rebuild and compares its answer to
+     * the cached one, so a rotation or an axis rule flipping the strip
+     * invalidates the card list without a dedicated signal.
+     */
+    void setStripAxisProvider(std::function<bool(const QString&)> provider);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a manual layout is applied (for OSD)
@@ -350,6 +369,13 @@ private:
     /// guard keys on the same thing layouts() does. Mutable for the same reason
     /// the cache itself is: layouts() is const and fills it lazily.
     mutable int m_cachedScreenDesktop = -1;
+    /// See setStripAxisProvider. Empty when scrolling never wired one.
+    std::function<bool(const QString&)> m_stripAxisProvider;
+    /// The axis the cached template cards were drawn for: layouts() compares
+    /// the provider's live answer against this and drops the cache on a
+    /// mismatch, so the first picker open after a rotation (or an axis rule
+    /// flip) rebuilds instead of serving wrong-axis cards.
+    mutable bool m_cachedStripVertical = false;
     /// The template store the cache-invalidation subscription below is bound
     /// to. The store is injected into the registry after this controller is
     /// constructed, so the subscription is made on the first resolve that

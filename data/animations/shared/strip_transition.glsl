@@ -38,7 +38,8 @@
 //
 // WHAT IS ACTUALLY BOUND ON THIS PASS. StripTransitionManager caches and
 // pushes exactly: uStrip, iTime, iResolution, iFrame, iStripMotion,
-// iStripRect, plus the customParams / customColors pools behind p_<id>.
+// iStripAxis, iStripRect, plus the customParams / customColors pools behind
+// p_<id>.
 // NOTE iResolution carries DEVICE pixels on this pass (the manager uploads
 // viewport.deviceSize()), unlike the per-window path where it is logical —
 // same convention as the desktop transitions. EVERY other uniform the
@@ -54,11 +55,20 @@
 //     but returns black: iWindowOpacity and iAnchorRectInTexture are both
 //     zero.
 //   - surfaceSeed() (shared/noise.glsl, which a pack may well include for its
-//     own noise) derives its value from iAnchorRectInTexture, so it is a
+//     own noise) derives its value from iSurfaceScreenPos, so it is a
 //     constant 0.0 on every fragment of every strip pass. A pack that varies
 //     anything per-surface through it gets no variation at all. Seed off
 //     iTime or the uv instead.
-//   oldColor() lives in shared/old_content.glsl, which no strip pack
+//   - iStripAxis is bound by StripTransitionManager, and it is the one uniform
+//     here whose zero default is catastrophic rather than merely wrong. At
+//     vec2(0) stripAxisOffset() returns vec2(0), so every displacing pack
+//     renders the identity image and looks like it does nothing at all, and
+//     stripEdgeFade()'s dot(uv, vec2(0)) is 0 on every fragment, so every fade
+//     collapses to zero and takes the effect it scales with it. Any NEW
+//     consumer of this pass (the preview renderer, the thumbnail path) must
+//     bind it before it binds anything else here, or every strip pack it
+//     renders comes out blank rather than merely mis-oriented.
+//   - oldColor() lives in shared/old_content.glsl, which no strip pack
 //     includes, so reaching for it is a COMPILE error — the manager caches a
 //     null-shader sentinel, abandons the pass (the plain translation shows),
 //     warns on the journal once, and never recompiles that pack this
@@ -71,19 +81,28 @@ uniform sampler2D uStrip;
 
 // vec4 iStripMotion — the spring's live displacement and speed, pushed every
 // frame by the kwin-effect:
-//   .x  residual view offset in DEVICE px, signed. The strip is currently
-//       drawn displaced this far along +x from its committed rest position;
-//       it decays to 0 as the spring settles. Its SIGN is the direction the
-//       strip content is travelling from, so -sign(.x) points where the
-//       content is heading. None of the bundled packs read .x or .z: they
+//   .x  residual view offset in DEVICE px, signed, measured ALONG iStripAxis.
+//       The strip is currently drawn displaced this far along +iStripAxis
+//       from its committed rest position — +x on a horizontal strip, +y
+//       (downward, matching this pass's y-down uv) on a vertical one. It
+//       decays to 0 as the spring settles. Its SIGN is the direction the
+//       strip content is travelling from, so -sign(.x) * iStripAxis is the 2D
+//       direction the content is heading. None of the bundled packs read
+//       .x or .z: they
 //       key off velocity alone. The offset lanes are part of the contract
 //       and are uploaded every frame, but they ship unexercised, so treat
 //       them as the less-travelled path when something looks wrong.
 //   .y  view velocity in DEVICE px per second, signed (the smoothed rate of
 //       change of .x, with the per-batch commit jump compensated out so a
 //       new wheel batch does not spike or invert the sign for one frame).
-//   .z  = .x / iResolution.x (offset as a fraction of the output width).
-//   .w  = .y / iResolution.x (velocity in output-widths per second).
+//   .z  = .x divided by the output's DEVICE extent ALONG iStripAxis, so the
+//       offset as a fraction of the output measured the way the strip
+//       travels: its width on a horizontal strip, its height on a vertical
+//       one. The manager divides by that extent and not by iResolution.x, so
+//       a displacement tuned on one orientation is not rescaled by the aspect
+//       ratio on the other.
+//   .w  = .y divided by the same extent, so the velocity in output-extents
+//       along the travel axis per second.
 // All four converge to 0 at settle — the identity contract above keys off
 // exactly this.
 uniform vec4 iStripMotion;
@@ -94,6 +113,44 @@ uniform vec4 iStripMotion;
 // the work area could not be resolved, in which case stripMask() below
 // returns 1.0 everywhere (mask nothing rather than everything).
 uniform vec4 iStripRect;
+
+// vec2 iStripAxis — a unit vector along the strip's own travel axis for THIS
+// output: (1,0) horizontal, (0,1) vertical. Pushed every frame beside
+// iStripMotion.
+//
+// It exists because iStripMotion's lanes are SIGNED SCALARS ALONG THE STRIP,
+// not along x. On a portrait monitor the strip runs top to bottom and the
+// same velocity displaces content vertically. A pack that hardcodes a
+// horizontal displacement still COMPILES and still looks right on a
+// horizontal strip; it simply smears the wrong way on a vertical one.
+//
+// Multiply displacements by this (or use stripAxisOffset below) instead of
+// writing vec2(amount, 0.0). Note .z/.w of iStripMotion are normalized by the
+// output's extent ALONG THIS AXIS, so they stay comparable across both.
+uniform vec2 iStripAxis;
+
+// A displacement of `amount` uv units along the strip's travel axis. This is
+// the axis-correct replacement for vec2(amount, 0.0).
+vec2 stripAxisOffset(float amount) {
+    return iStripAxis * amount;
+}
+
+// The unit vector ACROSS the strip's travel axis: (0,1) for a horizontal
+// strip, (1,0) for a vertical one. Pair it with iStripAxis to write a warp in
+// along/across terms instead of x/y.
+//
+// This is the axis SWAP, deliberately not a rotation. vec2(-iStripAxis.y,
+// iStripAxis.x) would hand a vertical strip (-1, 0) and silently mirror every
+// across coordinate against the horizontal case. The swap keeps
+// {iStripAxis, stripAxisPerp()} orthonormal for BOTH bound values, (1,0) with
+// (0,1) and (0,1) with (1,0), so iStripAxis * along + stripAxisPerp() * across
+// reconstructs the original uv exactly on either axis. It is a reflection, and
+// that is harmless because iStripAxis is only ever one of those two
+// axis-aligned unit vectors and nothing here depends on a consistent
+// orientation of the pair.
+vec2 stripAxisPerp() {
+    return vec2(iStripAxis.y, iStripAxis.x);
+}
 
 // The captured scene FBO is KWin Y-up (origin bottom-left), while the
 // full-screen quad hands us a top-down uv, so flip Y on the sample — same
@@ -119,24 +176,45 @@ float stripMask(vec2 uv, float feather) {
     return inX * inY;
 }
 
-// 1.0 well inside the output, falling to 0.0 at the LEFT and RIGHT screen
-// edges over `span` uv units OF THE OUTPUT WIDTH (unlike stripMask's feather,
-// which is measured on the shorter axis — an easy mismatch to carry between
-// the two on a wide output). Content beyond the output edge does not exist
-// in the capture: uStrip is CLAMP_TO_EDGE, so a sample past the edge repeats
-// the last pixel column and any displaced sample there smears/stretches the
-// edge.
+// 1.0 well inside the output, falling to 0.0 at the two screen edges the
+// strip TRAVELS TOWARD — left/right on a horizontal strip, top/bottom on a
+// vertical one — over `span` uv units of the output extent along that axis
+// (unlike stripMask's feather, which is measured on the shorter axis — an
+// easy mismatch to carry between the two). Content beyond the output edge
+// does not exist in the capture: uStrip is CLAMP_TO_EDGE, so a sample past
+// the edge repeats the last pixel row/column and any displaced sample there
+// smears/stretches the edge.
 //
-// Every pack that displaces its sample horizontally MUST handle that edge one
-// of two ways. Either scale the displacement by this fade, with `span` at
-// least twice the maximum displacement, so the displacement dies out before
-// its sample can cross the edge (blur, chromatic, jelly), or detect the
+// Following the axis is what pairs this helper with stripAxisOffset: the fade
+// dies out in the direction the AXIS-CORRECT displacement actually goes. It is
+// therefore NOT a safety net for an unported pack. A pack that still writes
+// vec2(amount, 0.0) displaces horizontally on a vertical strip while this fade
+// protects the top and bottom, so the two edges its samples are heading for
+// get no protection at all. Port the displacement and the fade together.
+//
+// PRECONDITION on `span`: at least twice the maximum displacement, and never
+// more than 0.5. The 2x floor is what makes the fade a guarantee rather than a
+// hope — with d(a) = maxDisp * smoothstep(0, s, a) and s >= 2*maxDisp, the
+// derivative of the faded displacement peaks at maxDisp * 1.5 / s <= 0.75, so
+// a - d(a) is strictly increasing and a faded sample can never reach the edge.
+// Above 0.5 the two ramps OVERLAP and the product never reaches 1.0 anywhere,
+// which silently attenuates the whole effect in the middle of the screen
+// rather than only at its edges. Jelly and motion-blur sit exactly at the 2x
+// floor (0.04/0.08 and 0.035/0.07); chromatic sits just above it (0.014/0.03).
+//
+// Every pack that displaces its sample along the travel axis MUST handle that
+// edge one of two ways. Either scale the displacement by this fade, with
+// `span` at least twice the maximum displacement, so the displacement dies out
+// before its sample can cross the edge (blur, chromatic, jelly), or detect the
 // out-of-range sample and paint something deliberate there instead of the
 // clamped smear (carousel fades those samples into shadow). What is not
 // allowed is displacing into the clamp and showing the result.
 float stripEdgeFade(vec2 uv, float span) {
     float s = max(span, 1.0e-4);
-    return smoothstep(0.0, s, uv.x) * (1.0 - smoothstep(1.0 - s, 1.0, uv.x));
+    // The coordinate along the travel axis. dot() with the unit axis picks
+    // uv.x horizontally and uv.y vertically without a branch.
+    float along = dot(uv, iStripAxis);
+    return smoothstep(0.0, s, along) * (1.0 - smoothstep(1.0 - s, 1.0, along));
 }
 
 // The uv remapped into the strip work area: (0,0) at the rect's top-left,

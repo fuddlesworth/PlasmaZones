@@ -287,10 +287,10 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
     // for keys like dragActivationTriggers (list-of-maps) that would
     // otherwise always take the full setter path on every idle UI tick.
     //
-    // The schema map's type string is NOT used as the gate because at
-    // least one key (dragActivationTriggers) advertises "stringlist" while
-    // actually storing a list-of-maps — the actual QVariant type is the
-    // authoritative source. Types outside this allow-list (custom QObject
+    // The schema map's type string is NOT used as the gate — the actual
+    // QVariant type is the authoritative source (the advertised token is
+    // advisory for external clients and could drift again the way the old
+    // "stringlist" mislabel on the trigger keys did). Types outside this allow-list (custom QObject
     // pointers, exotic Q_DECLARE_METATYPE payloads) fall through to the
     // full setter to avoid false negatives from a non-structural operator==.
     //

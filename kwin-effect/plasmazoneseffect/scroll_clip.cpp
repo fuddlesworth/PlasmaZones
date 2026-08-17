@@ -134,8 +134,30 @@ bool PlasmaZonesEffect::scrollParkedOffscreen(KWin::EffectWindow* w, const QStri
         // every other unknown in this predicate.
         return false;
     }
+    // A live per-window geometry leg draws at the ANIMATOR's current rect,
+    // not the committed frame — the backdrop predictor models the same term
+    // for the same reason (paint_pipeline's captureWindowBackdrop preamble).
+    // Testing the committed band instead judges the window at its
+    // destination for the whole leg: a column animating into (or out of)
+    // its park blinks at the cull, drops setTransformed early, and clocks
+    // the park reap off a rect nothing is drawn at yet. Relocate the
+    // expanded band by the animator's frame, keeping the decoration margins
+    // the frame rect does not carry. (The backdrop helper itself is not
+    // shareable here — it composes a device-space capture rect, not the
+    // logical band this intersects test needs.)
+    const QRectF frame = w->frameGeometry();
+    const QRectF animated = m_windowAnimator->currentValue(w, QRectF());
+    if (animated.isValid() && !frame.isEmpty()) {
+        visual = animated.adjusted(visual.left() - frame.left(), visual.top() - frame.top(),
+                                   visual.right() - frame.right(), visual.bottom() - frame.bottom());
+    }
     visual.translate(vit->x(), vit->y());
-    visual.translate(m_stripViewAnimator->offsetFor(managed), 0.0);
+    // The clip predicate has to follow the SAME axis the strip is sliding on,
+    // or an off-view column is judged against a band ninety degrees from where
+    // it is actually drawn. This one gates the park reap, the setTransformed
+    // flag and the strip-capture anchor election, so getting it wrong either
+    // culls a visible column or keeps a parked one painting forever.
+    visual.translate(m_stripViewAnimator->offsetFor(managed));
     if (const auto decoIt = m_windowDecorations.constFind(windowId); decoIt != m_windowDecorations.constEnd()) {
         const qreal pad = decoIt->outerPadding;
         visual.adjust(-pad, -pad, pad, pad);

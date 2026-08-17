@@ -5,6 +5,7 @@
 #include <PhosphorProtocol/BridgeMarshalling.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/Registration.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 #include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorProtocol/WindowTypeEnum.h>
@@ -124,11 +125,24 @@ private Q_SLOTS:
         e.screenId = QStringLiteral("s");
         e.width = 100;
         e.height = 100;
+        // Four values since v12: the strip's axis is per-screen, and a
+        // departure names the SCREEN EDGE the column left through, so the pair
+        // widens with the axis.
         e.scrollEdge = QStringLiteral("left");
         QVERIFY(e.validationError().isEmpty());
         e.scrollEdge = QStringLiteral("right");
         QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("top");
+        QVERIFY(e.validationError().isEmpty());
+        e.scrollEdge = QStringLiteral("bottom");
+        QVERIFY(e.validationError().isEmpty());
+        // Still a CLOSED set. "up"/"down" are the within-column direction
+        // vocabulary, not screen edges, and the effect re-anchors an animation
+        // origin on any non-empty value — so an unrecognised string would
+        // silently move a window's apparent entry side rather than failing.
         e.scrollEdge = QStringLiteral("up");
+        QVERIFY(e.validationError().contains(QStringLiteral("scrollEdge")));
+        e.scrollEdge = QStringLiteral("sideways");
         QVERIFY(e.validationError().contains(QStringLiteral("scrollEdge")));
     }
 
@@ -222,13 +236,19 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 11 alongside the TileRequestEntry tabFrom widening
-        // (a(siiiissbbbssiiib) → a(siiiissbbbssiiibs)), for the same reason
-        // v6 through v10 were bumped: Qt matches signal-hook signatures
-        // before demarshalling, so a v10 effect's tiling slot would silently
-        // never fire — both sides must move together.
-        QCOMPARE(Service::ApiVersion, 11);
-        QCOMPARE(Service::MinPeerApiVersion, 11);
+        // Bumped to 12 for the per-screen strip axis: viewDeltaX became
+        // viewDelta (a signed scalar along that screen's own axis) and
+        // scrollEdge widened to {left,right,top,bottom}.
+        //
+        // UNLIKE v6 THROUGH v11, THIS BUMP WIDENED NO SIGNATURE. Those relied
+        // on Qt's signature matching as a second line of defence — a stale
+        // peer's slot simply never fired. Here a v11 effect would demarshal a
+        // v12 batch perfectly and then drop every vertical park as an invalid
+        // scrollEdge while reading a vertical delta as a horizontal slide. The
+        // handshake is the only thing rejecting that pairing, which is why the
+        // bump must not be "optimized away" as unnecessary later.
+        QCOMPARE(Service::ApiVersion, 12);
+        QCOMPARE(Service::MinPeerApiVersion, 12);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.
@@ -297,6 +317,39 @@ private Q_SLOTS:
         QVERIFY(!isValidWindowType(-1));
         QVERIFY(!isValidWindowType(9999));
         QVERIFY(isValidWindowType(static_cast<int>(WindowType::Popup)));
+    }
+
+    /// The ScrollAxis wire values are frozen: Horizontal is 0 and Vertical 1,
+    /// and both the daemon and the KWin effect cast ints that crossed the bus
+    /// against exactly these numbers. Pinned as literals — a renumber would
+    /// silently transpose every strip on the wire.
+    void testScrollAxisWireStability()
+    {
+        QCOMPARE(static_cast<int>(ScrollAxis::Horizontal), 0);
+        QCOMPARE(static_cast<int>(ScrollAxis::Vertical), 1);
+        QVERIFY(isValidScrollAxis(0));
+        QVERIFY(isValidScrollAxis(1));
+        QVERIFY(!isValidScrollAxis(-1));
+        QVERIFY(!isValidScrollAxis(2));
+        // Out-of-range ints from a skewed or malformed peer fall back to
+        // Horizontal, the same answer an absent value gives.
+        QCOMPARE(scrollAxisFromInt(1), ScrollAxis::Vertical);
+        QCOMPARE(scrollAxisFromInt(7), ScrollAxis::Horizontal);
+        QCOMPARE(scrollAxisFromInt(-3), ScrollAxis::Horizontal);
+    }
+
+    /// The Auto rule in the library BOTH processes resolve it from (the
+    /// engine per layout pass, the editor and settings previews per draw):
+    /// strictly taller than wide is Vertical; square and degenerate are
+    /// Horizontal, the historical answer.
+    void testAutoScrollAxisRule()
+    {
+        QCOMPARE(autoScrollAxisFor(1200, 800), ScrollAxis::Horizontal);
+        QCOMPARE(autoScrollAxisFor(800, 1200), ScrollAxis::Vertical);
+        QCOMPARE(autoScrollAxisFor(1000, 1000), ScrollAxis::Horizontal); // square: historical answer
+        QCOMPARE(autoScrollAxisFor(0, 0), ScrollAxis::Horizontal); // degenerate: geometry says nothing
+        QCOMPARE(autoScrollAxisFor(0, 1), ScrollAxis::Vertical); // strictly greater, even degenerate-thin
+        QCOMPARE(autoScrollAxisFor(1000, 1001), ScrollAxis::Vertical); // strictly greater, no threshold
     }
 };
 

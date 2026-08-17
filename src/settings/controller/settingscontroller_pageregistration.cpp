@@ -356,7 +356,7 @@ void SettingsController::buildApplicationController()
                /*divider=*/false, AdvancedOnly);
     // Strip Selector — the drag popup's scrolling twin, a single top leaf
     // like Snapping's Zone Selector (enable + trigger + position + preview
-    // size; no arrangement page, the strip popup is one horizontal row).
+    // size; no arrangement page, the strip popup is one row along the strip).
     // Divider after it closes the mode-specific block before the shared
     // Configuration category, the same seam its snapping twin carries.
     regVirtual(QStringLiteral("scrolling-zoneselector"), QStringLiteral("scrolling"),

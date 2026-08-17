@@ -619,10 +619,8 @@ public:
                                             const QString& templateId);
     Q_INVOKABLE void stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                           int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
-    /// Remove any staged entry for the (screen × desktop × activity)
-    /// assignment context — a true unstage: on Apply the daemon-side
-    /// assignment is left untouched. No QML page calls this today; kept
-    /// as stageAssignmentEntry's inverse so the surface stays two-way.
+    /// A true unstage. No QML page calls it today and it is kept deliberately;
+    /// the reasoning is on the definition in settingscontroller_session.cpp.
     Q_INVOKABLE void removeStagedAssignment(const QString& screenName, int virtualDesktop, const QString& activityId);
 
     // ── Ordering helpers (staged — flushed to settings on save) ────────────
@@ -677,10 +675,13 @@ public:
     // ── Per-screen scrolling overrides ───────────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenScrollingSettings(const QString& screenName) const;
     Q_INVOKABLE void setPerScreenScrollingSetting(const QString& screenName, const QString& key, const QVariant& value);
-    Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenName);
-    // No sub-domain split: the scrolling map carries only the New-columns
-    // card's sizing keys, so the whole-domain pair is that card's chip.
-    Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenName) const;
+    // Each chip drives its own sub-domain pair below (sizing / axis). NO
+    // whole-domain clear/has pair on purpose: callerless, and wipe-prone.
+    Q_INVOKABLE void clearPerScreenScrollingSizingSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingSizingSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenScrollingAxisSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingAxisSettings(const QString& screenName) const;
+    Q_INVOKABLE bool scrollingStripVerticalForScreen(const QString& screenName) const;
 
     // Per-screen gaps are config-backed: a per-monitor override is the gap-
     // dimension sub-domain of the per-screen autotile store (unified snap+tile).
@@ -719,8 +720,8 @@ public:
 
     // ── Per-screen strip selector overrides ──────────────────────────────────
     // Same per-card sub-domain contract as the snapping block above, minus
-    // the Arrangement pair — the strip popup is a single horizontal card row
-    // and has no arrangement card, so do not add one for symmetry. The
+    // the Arrangement pair — the strip popup is a single card row along the
+    // strip and has no arrangement card, so do not add one for symmetry. The
     // whole-domain has/clear pair is kept for API symmetry with the snapping
     // twin even though the scope chips call only the per-card pairs (the
     // Settings-level members behind both are live via the D-Bus category).
@@ -740,7 +741,6 @@ public:
     Q_INVOKABLE void load();
     Q_INVOKABLE void save();
     Q_INVOKABLE void defaults();
-    Q_INVOKABLE void launchEditor();
 
     /// Why a `resetPage` refused, carried by `pageResetFailed`. These are
     /// stable tokens the shell branches on to pick wording, not user-facing

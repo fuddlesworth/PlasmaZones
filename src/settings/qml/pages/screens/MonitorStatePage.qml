@@ -21,6 +21,11 @@ SettingsFlickable {
         readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
         readonly property var layouts: settingsController.layouts
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
+        // LayoutComboBox's effectiveDefaultLayoutId reads this on its
+        // layoutFilter === 2 arm (the scrolling dropdown below is the one
+        // filter-2 user in the app); without it the Default row resolved
+        // `undefined` and drew no preview or name.
+        readonly property string defaultScrollingTemplate: appSettings.defaultScrollingTemplate
         // LayoutComboBox's preview CategoryBadge reads `autoAssignAllLayouts` for
         // the global-auto-assign indicator; expose it so the Monitor State
         // dropdowns light it like the rest of the app.
@@ -352,6 +357,13 @@ SettingsFlickable {
             root._refresh();
         }
 
+        // The empty-strip sketch is drawn along the selected screen's resolved
+        // strip axis, and a per-monitor StripAxis override changes that answer
+        // without touching anything else this page reads.
+        function onPerScreenOverridesChanged() {
+            root._revision++;
+        }
+
         // The daemon going away mid-session leaves the last read on screen
         // with nothing saying it is stale, and coming back leaves it stale the
         // other way. Either transition is worth one re-read (which _refresh
@@ -519,44 +531,66 @@ SettingsFlickable {
             // daemon mode is not scrolling, so what is retained is always
             // THIS context's last strip.
             property var scrollingStripZones: []
+            // Which way the selected screen's strip runs, resolved through the
+            // same ladder the engine walks (per-screen override, global value,
+            // then the Auto rule). The invokable is opaque to the binding, so
+            // the global setting is read here explicitly and the per-monitor
+            // override arrives through the _revision bump on
+            // perScreenOverridesChanged.
+            readonly property bool stripVertical: {
+                void root._revision;
+                void appSettings.scrollingStripAxis;
+                // The shown-state fallback _selectedScreenAspectRatio uses,
+                // for the same reason: an empty selection (or one naming the
+                // other list's spelling) would miss the override AND make the
+                // Auto arm resolve against no screen, sketching a horizontal
+                // strip beside a preview box that already shows portrait.
+                var target = root._selectedScreen;
+                if (!target) {
+                    var state = root._currentState();
+                    target = state ? (state.screenId || "") : "";
+                }
+                return settingsController.scrollingStripVerticalForScreen(target);
+            }
             // Representative endless strip: a full column mid-view with a
             // clipped column at each edge, so the sketch reads as a window
-            // onto a longer strip rather than a fixed zone layout.
-            readonly property var scrollingFallbackZones: [
-                {
-                    "id": "strip:fallback:0",
-                    "name": "",
-                    "useCustomColors": false,
-                    "relativeGeometry": {
-                        "x": 0,
-                        "y": 0,
-                        "width": 0.1,
-                        "height": 1
+            // onto a longer strip rather than a fixed zone layout. The three
+            // fractions and their transposition are the twin of
+            // StripZones::sketchRects (src/daemon/daemon/stripzones.h), so the
+            // Monitors page and the OSD card draw the same shape for the same
+            // empty strip. On a vertical strip the same three bands stack
+            // instead of sitting in a row: drawing the horizontal sketch there
+            // would depict a direction that screen never takes.
+            readonly property var scrollingFallbackZones: {
+                const spans = [
+                    {
+                        "offset": 0,
+                        "extent": 0.1
+                    },
+                    {
+                        "offset": 0.115,
+                        "extent": 0.5
+                    },
+                    {
+                        "offset": 0.63,
+                        "extent": 0.37
                     }
-                },
-                {
-                    "id": "strip:fallback:1",
-                    "name": "",
-                    "useCustomColors": false,
-                    "relativeGeometry": {
-                        "x": 0.115,
-                        "y": 0,
-                        "width": 0.5,
-                        "height": 1
-                    }
-                },
-                {
-                    "id": "strip:fallback:2",
-                    "name": "",
-                    "useCustomColors": false,
-                    "relativeGeometry": {
-                        "x": 0.63,
-                        "y": 0,
-                        "width": 0.37,
-                        "height": 1
-                    }
-                }
-            ]
+                ];
+                const vertical = stateView.stripVertical;
+                return spans.map(function (span, index) {
+                    return {
+                        "id": "strip:fallback:" + (index + 1),
+                        "name": "",
+                        "useCustomColors": false,
+                        "relativeGeometry": {
+                            "x": vertical ? 0 : span.offset,
+                            "y": vertical ? span.offset : 0,
+                            "width": vertical ? 1 : span.extent,
+                            "height": vertical ? span.extent : 1
+                        }
+                    };
+                });
+            }
 
             // Fetch the live strip for the current selection. The daemon's
             // strip is briefly empty while a mode flip's re-announce batch is
@@ -770,10 +804,16 @@ SettingsFlickable {
                 // mode 2), so the retained array from the PREVIOUS context
                 // must be dropped here or a later local "Scrolling" pick on
                 // this monitor renders the other monitor's tiles as its live
-                // strip. Not a read, so the single-read-path rule holds.
-                if ((screenState.mode || 0) !== 2)
+                // strip. The blueprint counters ride the same read and go
+                // with it — left standing, monitor A's "2 of its 3 starting
+                // columns" note appended itself to monitor B's explainer
+                // (zero total is the documented nothing-to-say state). Not a
+                // read, so the single-read-path rule holds.
+                if ((screenState.mode || 0) !== 2) {
                     scrollingStripZones = [];
-                else
+                    blueprintTotal = 0;
+                    blueprintUsed = 0;
+                } else
                 // Nudge the live strip preview into re-reading for the new
                 // context. Placed after the local state is initialized so the
                 // timer's own gates (isScrolling) see the mode this handler
@@ -786,170 +826,14 @@ SettingsFlickable {
                     stripLiveRefresh.restart();
             }
 
-            // Layout preview (snapping)
-            LayoutThumbnail {
-                id: snappingPreview
-
+            // The per-mode preview thumbnails (snapping layout, tiling
+            // algorithm, scrolling strip) live in MonitorModePreviews.qml —
+            // split out when this page crossed the file-size ceiling. Pure
+            // view over the two handles it is given.
+            MonitorModePreviews {
                 Layout.alignment: Qt.AlignHCenter
-                visible: stateView.isSnapping
-                layout: {
-                    if (stateView.currentLayout)
-                        return stateView.currentLayout;
-
-                    // A staged CLEAR means "Default", which resolves to the
-                    // global default layout — the same layout the selector's
-                    // own Default row previews. Drawing an empty box here left
-                    // the big preview blank while the row right below it showed
-                    // the zones. Gated on the cleared flag, not on any empty
-                    // id: the daemon also reports an EMPTY layoutId for a
-                    // context whose active layout is suppressed, and that
-                    // screen must keep showing as unassigned rather than have
-                    // the preview reinstate the default the daemon withheld.
-                    if (stateView.localLayoutCleared) {
-                        var fallback = root._findLayout(root._layoutBridge.defaultLayoutId);
-                        if (fallback)
-                            return fallback;
-                    }
-                    // The local list does not carry this layout, so there are
-                    // no zones to draw. The daemon still reports the resolved
-                    // name, so show that rather than nothing.
-                    return {
-                        "displayName": (stateView.screenState && stateView.screenState.layoutName) || i18n("Default"),
-                        "zones": []
-                    };
-                }
-                isSelected: true
-                globalAutoAssign: root._layoutBridge.autoAssignAllLayouts
-                baseHeight: stateView._previewHeight
-                maxThumbnailWidth: stateView._previewMaxWidth
-                screenAspectRatio: root._selectedScreenAspectRatio
-                fontFamily: appSettings.labelFontFamily
-                fontSizeScale: appSettings.labelFontSizeScale
-                fontWeight: appSettings.labelFontWeight
-                fontItalic: appSettings.labelFontItalic
-                fontUnderline: appSettings.labelFontUnderline
-                fontStrikeout: appSettings.labelFontStrikeout
-                Accessible.name: {
-                    var name = snappingPreview.layout ? (snappingPreview.layout.displayName || "") : "";
-                    return name ? i18nc("accessible name of the layout preview; %1 is the layout name", "Snapping layout preview, %1", name) : i18nc("accessible name of the layout preview when no layout name is known", "Snapping layout preview");
-                }
-            }
-
-            // Algorithm preview (tiling)
-            LayoutThumbnail {
-                id: tilingPreview
-
-                Layout.alignment: Qt.AlignHCenter
-                visible: stateView.isTiling
-                layout: {
-                    var found = root._findLayout(root._autotilePrefix + stateView.localAlgorithmId);
-                    if (found)
-                        return found;
-
-                    // Same reasoning AND the same predicate as the snapping
-                    // preview: an explicit "Default" pick resolves to the
-                    // global default algorithm the selector's Default row
-                    // already previews. Gated on the cleared flag, not on an
-                    // empty id, because the daemon also reports an empty
-                    // algorithmId for a context whose algorithm is suppressed,
-                    // and that screen must keep showing as unassigned.
-                    if (stateView.localAlgorithmCleared) {
-                        var fallback = root._findLayout(root._autotilePrefix + root._layoutBridge.defaultAutotileAlgorithm);
-                        if (fallback)
-                            return fallback;
-                    }
-                    // getScreenStates reports the algorithm's display name, so
-                    // prefer it over the raw id ("bsp") the local list missed.
-                    // category 1 badges it as an algorithm, matching the real
-                    // entries this literal stands in for — without it the card
-                    // fell back to 0 and badged the algorithm "Manual".
-                    return {
-                        "displayName": (stateView.screenState && stateView.screenState.algorithmName) || stateView.localAlgorithmId || i18n("Default"),
-                        "category": 1,
-                        "zones": []
-                    };
-                }
-                isSelected: true
-                globalAutoAssign: root._layoutBridge.autoAssignAllLayouts
-                baseHeight: stateView._previewHeight
-                maxThumbnailWidth: stateView._previewMaxWidth
-                screenAspectRatio: root._selectedScreenAspectRatio
-                fontFamily: appSettings.labelFontFamily
-                fontSizeScale: appSettings.labelFontSizeScale
-                fontWeight: appSettings.labelFontWeight
-                fontItalic: appSettings.labelFontItalic
-                fontUnderline: appSettings.labelFontUnderline
-                fontStrikeout: appSettings.labelFontStrikeout
-                Accessible.name: {
-                    var name = tilingPreview.layout ? (tilingPreview.layout.displayName || "") : "";
-                    return name ? i18nc("accessible name of the tiling preview; %1 is the algorithm name", "Tiling algorithm preview, %1", name) : i18nc("accessible name of the tiling preview when no algorithm name is known", "Tiling algorithm preview");
-                }
-            }
-
-            // Strip preview (scrolling): the live strip when the screen is
-            // scrolling right now, else a representative endless-strip
-            // sketch (clipped columns at both edges suggest continuation).
-            LayoutThumbnail {
-                Layout.alignment: Qt.AlignHCenter
-                visible: stateView.isScrolling
-                // No onVisibleChanged re-read here: the live timer's
-                // triggeredOnStart covers the same visibility and mode
-                // transitions (its running binding includes both), and two
-                // paths meant two blocking reads in the same frame.
-                // category 1 renders the "Dynamic" badge (a live strip
-                // snapshot is generated, not editable). Tiles are numbered
-                // sequentially in strip order so every visible window gets
-                // its own distinct label. Only the first nine of those numbers
-                // are reachable from the keyboard: there are nine Snap to Zone
-                // digit shortcuts, so a tenth visible tile is drawn with a
-                // label no key can address.
-                //
-                // The daemon normalizes the strip rects against the screen's
-                // FULL geometry (the tiles are clipped to the gap-inset work
-                // area, so the fractions show the panel gap), which matches
-                // this box's screen-shaped aspect. The daemon's own OSD card
-                // draws the same shapes on the same basis.
-                //
-                // No id on this literal, deliberately. LayoutCard reads
-                // displayName, category, zones and zoneNumberDisplay off it,
-                // and LayoutThumbnail reads aspectRatioClass,
-                // referenceAspectRatio, producesOverlappingZones, isAutotile,
-                // supportsMasterCount and masterCount — all absent here, all
-                // defaulting. A stable id would only invite code elsewhere to
-                // treat this throwaway snapshot as a real layout.
-                layout: ({
-                        // The template's name when the screen has one, so the
-                        // card names what actually shapes the strip. A screen
-                        // on the default template keeps the bare mode name:
-                        // the wire field is the raw assignment, so naming a
-                        // template here would claim an assignment the screen
-                        // does not have.
-                        "displayName": stateView.scrollingTemplateName.length > 0 ? stateView.scrollingTemplateName : i18nc("tiling mode name", "Scrolling"),
-                        "category": 1,
-                        // The sketch is unnumbered, matching the daemon's OSD
-                        // card: its shapes stand for "a strip", not tiles, so
-                        // a labelled 1/2/3 would offer digit targets that do
-                        // not exist. A real strip labels every tile.
-                        "zoneNumberDisplay": stateView.scrollingStripZones.length > 0 ? "all" : "none",
-                        "zones": stateView.scrollingStripZones.length > 0 ? stateView.scrollingStripZones : stateView.scrollingFallbackZones
-                    })
-                isSelected: true
-                globalAutoAssign: root._layoutBridge.autoAssignAllLayouts
-                baseHeight: stateView._previewHeight
-                maxThumbnailWidth: stateView._previewMaxWidth
-                screenAspectRatio: root._selectedScreenAspectRatio
-                // Every tile here is a digit target, so no tile may render
-                // without its number. ZonePreview hides the label below 16px,
-                // and the default 8px floor let a clipped edge column draw at
-                // 8px wide — numberless, but still reachable from the keyboard.
-                minZoneSize: 16
-                fontFamily: appSettings.labelFontFamily
-                fontSizeScale: appSettings.labelFontSizeScale
-                fontWeight: appSettings.labelFontWeight
-                fontItalic: appSettings.labelFontItalic
-                fontUnderline: appSettings.labelFontUnderline
-                fontStrikeout: appSettings.labelFontStrikeout
-                Accessible.name: stateView.scrollingStripZones.length > 0 ? i18np("Scrolling strip preview with %n window", "Scrolling strip preview with %n windows", stateView.scrollingStripZones.length) : i18nc("accessible name of the placeholder strip preview shown when the screen is not scrolling yet", "Scrolling strip preview, example strip")
+                view: stateView
+                page: root
             }
 
             // Mode toggle (below preview)

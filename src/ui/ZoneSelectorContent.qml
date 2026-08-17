@@ -39,6 +39,11 @@ Item {
     // (tabbed dock) on the selectedStripColumn card.
     property bool stripMode: false
     property var stripColumns: []
+    /// Whether the strip this popup mirrors runs VERTICALLY. The popup is a
+    /// miniature, so the card row and each card's along-strip extent follow
+    /// the same axis the real columns do — otherwise the drop halves under the
+    /// cursor stop meaning what the picture shows.
+    property bool stripVerticalAxis: false
     property int selectedStripColumn: -1
     property int selectedStripGap: -1
     property int selectedStripHalf: -1
@@ -385,13 +390,15 @@ Item {
                 width: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
                 height: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
 
-                // Strip mode (scrolling screens): one VARIABLE-WIDTH card
-                // per column in a plain Row — each card is its column's real
-                // work-area share of the full-screen preview width.
-                // stripCardWidth mirrors stripCardPreviewWidth in
+                // Strip mode (scrolling screens): one VARIABLE-EXTENT card per
+                // column — each card is its column's real work-area share
+                // ALONG the strip, which is the preview's width on a
+                // horizontal strip and its height on a vertical one.
+                // stripCardExtent mirrors stripCardPreviewWidth in
                 // zoneselectorlayout.h (which sizes the bar off the same
-                // fractions) and the card's own width binding — change one,
-                // change all three. The C++ hit-test reads the CARD rects
+                // fractions) and the card's own alongExtent binding — change
+                // one, change all three, and remember each of the three has to
+                // swap BOTH its base extent and its chrome with the axis. The C++ hit-test reads the CARD rects
                 // back by objectName + index and derives gap targets from
                 // adjacent cards itself, so no width-taking gap items exist
                 // to skew the content width.
@@ -401,33 +408,53 @@ Item {
                     objectName: "zoneSelectorStripLayer"
                     visible: root.stripMode
                     anchors.fill: parent
-                    readonly property real cellHeight: root.indicatorHeight + root.labelSpace + root.cardPadding
+                    /// The card's extent ACROSS the strip. Both the base
+                    /// dimension and the chrome swap with the axis, matching
+                    /// ZoneSelectorStripCard's own width/height split.
+                    readonly property real cellCross: root.stripVerticalAxis ? root.indicatorWidth + root.cardSidePadding * 2 : root.indicatorHeight + root.labelSpace + root.cardPadding
 
-                    function stripCardWidth(i) {
+                    /// The card's extent ALONG the strip. Two things swap with
+                    /// the axis here, not one: the base extent widthFraction
+                    /// scales (indicatorWidth horizontally, indicatorHeight
+                    /// vertically) AND the chrome added to it. Changing only
+                    /// the base and keeping cardSidePadding * 2 would put
+                    /// every interior bar in the wrong place.
+                    function stripCardExtent(i) {
                         var f = root.stripColumns[i] ? root.stripColumns[i].widthFraction : 0;
                         if (!(f > 0 && f <= 1))
                             f = 1;
-                        return Math.max(8, Math.round(root.indicatorWidth * f)) + root.cardSidePadding * 2;
+                        var base = Math.max(8, Math.round((root.stripVerticalAxis ? root.indicatorHeight : root.indicatorWidth) * f));
+                        return root.stripVerticalAxis ? base + root.labelSpace + root.cardPadding : base + root.cardSidePadding * 2;
                     }
 
-                    /// Left edge of card @p i in strip-row coordinates.
-                    function stripCardX(i) {
-                        var x = 0;
+                    /// Leading edge of card @p i in strip-row coordinates,
+                    /// measured along the strip.
+                    function stripCardOffset(i) {
+                        var p = 0;
                         for (var j = 0; j < i; ++j)
-                            x += stripCardWidth(j) + root.indicatorSpacing;
-                        return x;
+                            p += stripCardExtent(j) + root.indicatorSpacing;
+                        return p;
                     }
 
-                    Row {
+                    // Grid rather than Row so ONE container serves both axes:
+                    // it positions children by their own width/height exactly
+                    // as Row does, so rows:1 reproduces the previous layout
+                    // bit for bit, while columns:1 stacks the same cards down
+                    // the popup for a vertical strip. Swapping between a Row
+                    // and a Column would have meant two copies of the delegate.
+                    Grid {
                         id: stripRow
 
                         objectName: "zoneSelectorStripRow"
                         spacing: root.indicatorSpacing
+                        rows: root.stripVerticalAxis ? Math.max(1, root.stripColumns.length) : 1
+                        columns: root.stripVerticalAxis ? 1 : Math.max(1, root.stripColumns.length)
 
                         Repeater {
                             model: root.stripMode ? root.stripColumns : []
 
                             delegate: ZoneSelectorStripCard {
+                                verticalAxis: root.stripVerticalAxis
                                 previewWidth: root.indicatorWidth
                                 previewHeight: root.indicatorHeight
                                 cardPadding: root.cardPadding
@@ -475,8 +502,12 @@ Item {
                             // so deliberately not theme-scaled (and a Units
                             // change would skew the bar against the 8 px
                             // card-width floor).
-                            width: 4
-                            height: stripLayer.cellHeight
+                            // 4 px is the bar's thickness along the strip and
+                            // cellCross its extent across it, so the two swap
+                            // with the axis.
+                            readonly property int barThickness: 4
+                            width: root.stripVerticalAxis ? stripLayer.cellCross : barThickness
+                            height: root.stripVerticalAxis ? barThickness : stripLayer.cellCross
                             radius: 2
                             z: 10
                             color: root.highlightColor
@@ -491,13 +522,18 @@ Item {
                             // footprint (there is no inter-card gap to centre
                             // in at the strip ends) — deliberate, not drift
                             // from the interior bars' centred placement.
-                            x: {
+                            /// Offset ALONG the strip; the axis decides whether
+                            /// it lands on x or y. The three cases are
+                            /// unchanged from the horizontal-only form.
+                            readonly property real alongOffset: {
                                 if (index === 0)
                                     return 0;
                                 if (index === cardCount)
-                                    return stripLayer.stripCardX(cardCount - 1) + stripLayer.stripCardWidth(cardCount - 1) - width;
-                                return stripLayer.stripCardX(index) - root.indicatorSpacing / 2 - width / 2;
+                                    return stripLayer.stripCardOffset(cardCount - 1) + stripLayer.stripCardExtent(cardCount - 1) - barThickness;
+                                return stripLayer.stripCardOffset(index) - root.indicatorSpacing / 2 - barThickness / 2;
                             }
+                            x: root.stripVerticalAxis ? 0 : alongOffset
+                            y: root.stripVerticalAxis ? alongOffset : 0
                         }
                     }
 
