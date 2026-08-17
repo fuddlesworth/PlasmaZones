@@ -11,6 +11,7 @@
 #include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/ScrollAxisEnum.h>
 #include <PhosphorProtocol/ServiceConstants.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 #include "phosphor_i18n.h"
 #include "../../config/configdefaults.h"
@@ -302,48 +303,56 @@ void EditorController::loadEditorSettings()
 
 void EditorController::refreshTemplatePreviewVertical()
 {
-    // templatePreviewVertical() re-stamps m_templatePreviewVertical, so the
-    // previous answer has to be taken before the call.
-    const bool previous = m_templatePreviewVertical;
-    if (templatePreviewVertical() != previous)
+    // The ONE writer of the NOTIFY comparand: the getter is a pure read, so a
+    // binding evaluating between an input change and this refresh cannot
+    // consume the flip and suppress the emit for every other consumer.
+    const bool vertical = resolveTemplatePreviewVertical();
+    if (m_templatePreviewVertical != vertical) {
+        m_templatePreviewVertical = vertical;
         Q_EMIT templatePreviewVerticalChanged();
+    }
 }
 
 bool EditorController::templatePreviewVertical() const
 {
+    return resolveTemplatePreviewVertical();
+}
+
+bool EditorController::resolveTemplatePreviewVertical() const
+{
     // Per-screen override first, then the global setting, then the Auto rule
-    // against the target screen's size — the same ladder the engine walks, so
-    // the preview cannot disagree with the strip it depicts.
+    // against the target screen's size — the settings ladder the engine walks
+    // (a SetScrollStripAxis rule can still outrank all three on the live
+    // strip; the editor has no rule-resolution seam, and the settings app's
+    // preview shares that documented limit).
     //
-    // The screen key is matched against BOTH the id and the display name: the
-    // settings app stores per-screen groups under whichever the user's config
-    // carried, and the editor's target is an id.
+    // The screen key is matched against EVERY config spelling of the target:
+    // ScreenIdentity::variantsFor answers the id and its connector-name
+    // alternate (input first), which are the two forms per-screen groups are
+    // stored under. The old fallback matched screenDisplayName, a decorated
+    // human label ("DP-2 — Vendor Model") that is never a stored key on a
+    // monitor with EDID metadata.
     int configured = m_scrollingStripAxis;
-    const auto exact = m_perScreenStripAxis.constFind(m_targetScreen);
-    if (exact != m_perScreenStripAxis.constEnd()) {
-        configured = exact.value();
-    } else {
-        const QString name = screenDisplayName(m_targetScreen);
-        const auto byName = m_perScreenStripAxis.constFind(name);
-        if (!name.isEmpty() && byName != m_perScreenStripAxis.constEnd())
-            configured = byName.value();
+    const QStringList spellings = PhosphorScreens::ScreenIdentity::variantsFor(m_targetScreen);
+    for (const QString& spelling : spellings) {
+        const auto it = m_perScreenStripAxis.constFind(spelling);
+        if (it != m_perScreenStripAxis.constEnd()) {
+            configured = it.value();
+            break;
+        }
     }
 
     // Auto (and any out-of-range value a hand-edited config could carry) falls
     // through to the size rule.
-    bool vertical = false;
     if (configured == ConfigDefaults::scrollingStripAxisVertical()) {
-        vertical = true;
-    } else if (configured != ConfigDefaults::scrollingStripAxisHorizontal()) {
-        const QSize size = targetScreenSize();
-        vertical =
-            PhosphorProtocol::autoScrollAxisFor(size.width(), size.height()) == PhosphorProtocol::ScrollAxis::Vertical;
+        return true;
     }
-
-    // Stamp the cache on every read so refreshTemplatePreviewVertical() always
-    // compares against the answer the last reader actually saw.
-    m_templatePreviewVertical = vertical;
-    return vertical;
+    if (configured != ConfigDefaults::scrollingStripAxisHorizontal()) {
+        const QSize size = targetScreenSize();
+        return PhosphorProtocol::autoScrollAxisFor(size.width(), size.height())
+            == PhosphorProtocol::ScrollAxis::Vertical;
+    }
+    return false;
 }
 
 void EditorController::saveEditorSettings()

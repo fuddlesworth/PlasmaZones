@@ -42,6 +42,7 @@ vec4 pTransition(vec2 uv, float t) {
     // the mask has not yet reached zero. Clamp the profile so the bow never
     // exceeds the amplitude the stripEdgeFade budget above was sized for.
     float across = dot(stripUv(uv), stripAxisPerp());
-    float prof = pow(min(abs(across - 0.5) * 2.0, 1.0), 2.0);
+    float edge = min(abs(across - 0.5) * 2.0, 1.0);
+    float prof = edge * edge;
     return getStripColor(uv + stripAxisOffset(lag * prof));
 }

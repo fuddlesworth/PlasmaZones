@@ -8,17 +8,20 @@ import "../../js/PresetList.js" as PresetList
 
 /**
  * @brief Simple-mode Scrolling page: the everyday decisions (default column
- * width, and whether tabbed columns are marked and how) plus the shared Window
- * Handling and Focus and view cards, the latter carrying the strip direction
- * along with the centering and wheel rows, so simple mode does expose which
- * way the strip runs. The advanced counterpart is the Columns page
+ * width, and whether tabbed columns are marked and how) plus three shared
+ * cards — Strip direction, Window Handling, and Focus and view. Which way the
+ * strip runs is the Strip direction card's own row; the Focus card carries
+ * the centering and wheel rows. The advanced counterpart is the Columns page
  * (scrolling-columns); dirtiness, Reset, and Discard delegate to all three
  * advanced leaves via simplePageBackingPages.
  *
- * Global scope only, like TilingSimplePage: every row binds appSettings
- * directly and no per-monitor scope chip is offered here. Per-monitor
- * overrides are advanced-mode depth, so this page only warns that one is in
- * effect rather than offering to edit it.
+ * Scope: every row this page OWNS binds appSettings directly, like
+ * TilingSimplePage. The one deliberate exception is the shared Strip
+ * direction card, which carries its per-monitor scope chip on both hosting
+ * pages — a portrait monitor is exactly the everyday case the card exists
+ * for, so simple mode edits the per-monitor axis in place. Column SIZING
+ * overrides stay advanced-mode depth, so for those this page only warns that
+ * one is in effect rather than offering to edit it.
  *
  * The width-kind combo offers all four kinds, so this page hosts a control
  * for each one it can host. Restricting the combo instead would leave a
@@ -66,8 +69,11 @@ SettingsFlickable {
     // so a binding over it would never re-evaluate on its own.
     property int overrideRevision: 0
 
-    // True while any monitor carries a scrolling override, which would win
-    // over the global values this page edits.
+    // True while any monitor carries a column-SIZING override, which would
+    // win over the sizing values this page edits. Deliberately not widened to
+    // the axis sub-domain: the Strip direction card hosted below carries its
+    // own per-monitor chip (with an override dot), so an axis override is
+    // visible and editable in place rather than warned about.
     readonly property bool anyScreenOverridden: {
         void root.overrideRevision;
         var list = settingsController.screens || [];

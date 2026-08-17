@@ -535,7 +535,17 @@ SettingsFlickable {
             readonly property bool stripVertical: {
                 void root._revision;
                 void appSettings.scrollingStripAxis;
-                return settingsController.scrollingStripVerticalForScreen(root._selectedScreen);
+                // The shown-state fallback _selectedScreenAspectRatio uses,
+                // for the same reason: an empty selection (or one naming the
+                // other list's spelling) would miss the override AND make the
+                // Auto arm resolve against no screen, sketching a horizontal
+                // strip beside a preview box that already shows portrait.
+                var target = root._selectedScreen;
+                if (!target) {
+                    var state = root._currentState();
+                    target = state ? (state.screenId || "") : "";
+                }
+                return settingsController.scrollingStripVerticalForScreen(target);
             }
             // Representative endless strip: a full column mid-view with a
             // clipped column at each edge, so the sketch reads as a window
@@ -789,10 +799,16 @@ SettingsFlickable {
                 // mode 2), so the retained array from the PREVIOUS context
                 // must be dropped here or a later local "Scrolling" pick on
                 // this monitor renders the other monitor's tiles as its live
-                // strip. Not a read, so the single-read-path rule holds.
-                if ((screenState.mode || 0) !== 2)
+                // strip. The blueprint counters ride the same read and go
+                // with it — left standing, monitor A's "2 of its 3 starting
+                // columns" note appended itself to monitor B's explainer
+                // (zero total is the documented nothing-to-say state). Not a
+                // read, so the single-read-path rule holds.
+                if ((screenState.mode || 0) !== 2) {
                     scrollingStripZones = [];
-                else
+                    blueprintTotal = 0;
+                    blueprintUsed = 0;
+                } else
                 // Nudge the live strip preview into re-reading for the new
                 // context. Placed after the local state is initialized so the
                 // timer's own gates (isScrolling) see the mode this handler

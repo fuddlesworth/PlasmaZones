@@ -290,6 +290,15 @@ void Daemon::initEnginesAndWiring()
         const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
         return scroll && scroll->isActiveOnScreen(screenId) && scroll->stripAxisForScreen(screenId).isVertical();
     });
+    // The layout picker's per-screen row builds template cards too, and a
+    // card drawn the other way depicts a shape that screen will never show —
+    // same provider shape, same liveness gate, same stop() clear.
+    if (m_unifiedLayoutController) {
+        m_unifiedLayoutController->setStripAxisProvider([this](const QString& screenId) -> bool {
+            const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+            return scroll && scroll->isActiveOnScreen(screenId) && scroll->stripAxisForScreen(screenId).isVertical();
+        });
+    }
 
     // Autotile provider. setContextGapProvider is derived-only
     // (AutotileEngine); m_autotileEngine is held as the base

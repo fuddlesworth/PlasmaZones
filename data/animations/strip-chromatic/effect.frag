@@ -11,7 +11,7 @@
 #include <strip_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-    float m = stripMask(uv, p_edgeFeather);
+    float m = stripMask(uv, clamp(p_edgeFeather, 0.0, 0.2));
     // Signed velocity in output-extents along the travel axis per second,
     // saturating so a violent
     // fling cannot pull the channels apart by more than ~1.4% of the output.

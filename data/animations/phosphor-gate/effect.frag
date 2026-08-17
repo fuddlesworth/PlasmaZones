@@ -120,7 +120,7 @@ vec3 applyGate(vec3 col, float lum, vec3 sil, float q, float m, float A, float P
     // the rim is consuming them (the locality gate).
     float embers = clamp(p_embers, 0.0, 1.0);
     if (embers > 0.001 && A > 0.01) {
-        float rows = max(p_density, 8.0);
+        float rows = clamp(p_density, 8.0, 60.0);
         // Work-area-relative, the SAME space the gate field itself lives in
         // (the callers pass the across-axis component of stripUv(uv)): under a
         // panel on either across-axis side the p_density bands now span the
@@ -158,7 +158,7 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     // Smooth monotone amplitude: 0 at settle, saturating toward 1 with
     // speed. No thresholds anywhere, so user-steered scrolling can never
     // flicker the gates.
-    float amp = spd / (spd + max(p_speedRef, 0.05));
+    float amp = spd / (spd + max(p_speedRef, 0.1));
     float D = clamp(p_depth, 0.05, 0.22) * amp;
     if (spd < 1.0e-4 || D < 1.0e-4) {
         return getStripColor(uv); // identity contract: the settle frame is untouched
@@ -207,10 +207,26 @@ vec4 pTransition(vec2 uv, float t) { // t = iTime SECONDS, monotonic
     // clamp is matched to the metadata bound (0.2) rather than the old 0.5, so
     // the unreachable range no longer suggests headroom that is not there.
     float mask = stripMask(uv, clamp(p_edgeFeather, 0.0, 0.2));
+    // Zero-mask fragments are the strut/margin band outside the work area,
+    // where every additive term below carries a factor of A or P (both mask
+    // a) and the embers gate on A — the output is exactly `base` there. Bail
+    // before resolveStops(), the fbm meander and the two applyGate bodies pay
+    // their full per-fragment cost for it; on a full-canvas pass of a
+    // GPU-bound effect that band runs every frame. The three sibling strip
+    // packs already bail on the mask the same way.
+    if (mask < 1.0e-3) {
+        return base;
+    }
     vec3 col = base.rgb;
     float lum = dot(col, vec3(0.299, 0.587, 0.114));
 
     resolveStops();
+    // The unset-probe corollary (see the gradient stops above) bites hardest
+    // HERE: colorTint's declared purpose is the unlit navy silhouette, so a
+    // deliberately near-black pick (under roughly #030303) reads as unset and
+    // snaps back to the default navy. Accepted family-wide limitation — the
+    // uniform cannot distinguish unset from black, and a slot-local threshold
+    // would desync this probe from the four stops sharing the idiom.
     vec3 tint = length(p_colorTint.rgb) > 0.01 ? p_colorTint.rgb : vec3(0.043, 0.090, 0.188);
     // The family silhouette: navy shaped by the content. Deliberately NOT
     // scaled by base.a the way phosphor-iris scales its copy: the strip

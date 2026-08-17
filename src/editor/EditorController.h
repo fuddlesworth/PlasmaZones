@@ -1081,11 +1081,17 @@ private:
     /// Per-screen StripAxis overrides, keyed by the screen id or name the
     /// group was stored under. Absent screen means "use the global value".
     QHash<QString, int> m_perScreenStripAxis;
-    /// Last value templatePreviewVertical() resolved to. The getter stamps it
-    /// on every call (hence mutable), so it is seeded by the first read and
-    /// refreshTemplatePreviewVertical() can tell a real flip from an input
-    /// change that resolves the same way.
-    mutable bool m_templatePreviewVertical = false;
+    /// The NOTIFY comparand: the last answer refreshTemplatePreviewVertical()
+    /// resolved, and that refresh is its ONLY writer. The getter computes
+    /// fresh per read instead of stamping, so a binding evaluating between an
+    /// input change and the refresh cannot consume the flip and suppress the
+    /// change signal for every other consumer.
+    bool m_templatePreviewVertical = false;
+    /// The pure resolution behind both the getter and the refresh: per-screen
+    /// override (looked up under every ScreenIdentity spelling of the
+    /// target), then the global setting, then the Auto size rule. Const and
+    /// side-effect free.
+    bool resolveTemplatePreviewVertical() const;
     /// Re-resolve the preview axis and emit the change signal only when the
     /// answer actually flipped. Every input that feeds the axis routes here
     /// rather than emitting directly.

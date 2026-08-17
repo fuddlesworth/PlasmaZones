@@ -55,7 +55,7 @@
 //     but returns black: iWindowOpacity and iAnchorRectInTexture are both
 //     zero.
 //   - surfaceSeed() (shared/noise.glsl, which a pack may well include for its
-//     own noise) derives its value from iAnchorRectInTexture, so it is a
+//     own noise) derives its value from iSurfaceScreenPos, so it is a
 //     constant 0.0 on every fragment of every strip pass. A pack that varies
 //     anything per-surface through it gets no variation at all. Seed off
 //     iTime or the uv instead.
@@ -68,7 +68,7 @@
 //     consumer of this pass (the preview renderer, the thumbnail path) must
 //     bind it before it binds anything else here, or every strip pack it
 //     renders comes out blank rather than merely mis-oriented.
-//   oldColor() lives in shared/old_content.glsl, which no strip pack
+//   - oldColor() lives in shared/old_content.glsl, which no strip pack
 //     includes, so reaching for it is a COMPILE error — the manager caches a
 //     null-shader sentinel, abandons the pass (the plain translation shows),
 //     warns on the journal once, and never recompiles that pack this
@@ -199,8 +199,8 @@ float stripMask(vec2 uv, float feather) {
 // a - d(a) is strictly increasing and a faded sample can never reach the edge.
 // Above 0.5 the two ramps OVERLAP and the product never reaches 1.0 anywhere,
 // which silently attenuates the whole effect in the middle of the screen
-// rather than only at its edges. All three bundled consumers sit exactly at
-// the 2x floor: jelly 0.04/0.08, chromatic 0.014/0.03, motion-blur 0.035/0.07.
+// rather than only at its edges. Jelly and motion-blur sit exactly at the 2x
+// floor (0.04/0.08 and 0.035/0.07); chromatic sits just above it (0.014/0.03).
 //
 // Every pack that displaces its sample along the travel axis MUST handle that
 // edge one of two ways. Either scale the displacement by this fade, with

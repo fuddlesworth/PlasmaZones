@@ -662,6 +662,30 @@ public:
     /// see it.
     void setScrollDropIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
 
+    /// Tear down every screen's scroll tab-strip model and both per-screen
+    /// override maps, for the daemon's stop(). The per-screen surfaces live on
+    /// this service, which OUTLIVES stop(), and the ordinary departing-screen
+    /// clear (Daemon::updateScrollingScreens' difference loop) can never run
+    /// again once the engine's active set is empty — so without this a
+    /// stop()/start() cycle or an init() re-run comes up with tab-indicator
+    /// surfaces mapped over strips that no longer exist. Order per screen is
+    /// the one the departing loop documents: the MODEL first, then the
+    /// overrides, because an override drop replays the cached model through
+    /// updateScrollTabStrips's full show choreography.
+    void clearAllScrollTabState();
+
+    /// The per-screen form of the teardown above, for the two hot-removal
+    /// boundaries (physical unplug, virtual-screen reconfigure): clears the
+    /// strip model and both override maps for every screen id
+    /// @p screenMatches accepts, in the same model-first order. The predicate
+    /// lives with the caller because the survivor set does (which virtual
+    /// sub-screens still exist is the daemon's knowledge, which ids this
+    /// service holds state for is ours). Without this the override maps were
+    /// only swept by the departing-screen loop, which a removed screen never
+    /// reaches — a bounded leak that also replayed stale paint overrides on a
+    /// same-id replug.
+    void clearScrollTabStateWhere(const std::function<bool(const QString&)>& screenMatches);
+
     /// Per-DRAG drop-indicator colour overrides, resolved from the dragged
     /// window's rules at drag start. Outranks the per-context map above, which
     /// outranks the settings, which fall back to the theme. Cleared with an

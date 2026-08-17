@@ -125,26 +125,29 @@ bool SettingsController::hasPerScreenScrollingAxisSettings(const QString& screen
 
 bool SettingsController::scrollingStripVerticalForScreen(const QString& screenName) const
 {
-    // The same ladder the engine walks (per-screen override, then the global
-    // value, then the Auto rule), so a preview cannot claim a direction the
-    // strip will not take. The Auto arm is measured against the screen rect
-    // rather than the gap-adjusted work area the engine uses: the settings app
-    // does not resolve per-screen gaps, and the two disagree only for a screen
-    // whose reserved panels are deep enough to flip the longer side. Same
-    // approximation EditorController::templatePreviewVertical() makes for the
-    // template preview.
+    // The SETTINGS ladder the engine's seed walks (per-screen override, then
+    // the global value, then the Auto rule). Two documented approximations
+    // keep this a preview rather than the engine's own answer: the Auto arm
+    // measures the screen rect rather than the gap-adjusted work area (the
+    // settings app does not resolve per-screen gaps, and the two disagree
+    // only when reserved panels are deep enough to flip the longer side),
+    // and the SetScrollStripAxis RULE tier is not consulted at all — this
+    // process has no rule-resolution seam, so a rule-flipped axis previews
+    // the settings answer. EditorController's template preview shares both
+    // limits.
     //
-    // The override is looked up under EVERY spelling of the screen (id and
-    // connector name): per-screen groups are stored under whichever the user's
-    // config carried, and callers here pass whichever they hold.
-    QVariant axisOverride;
-    const QStringList spellings = PhosphorScreens::ScreenIdentity::variantsFor(screenName);
-    for (const QString& spelling : spellings) {
-        const QVariantMap overrides = m_settings.getPerScreenScrollingSettings(spelling);
-        axisOverride = overrides.value(QLatin1String(PerScreenScrollingKey::StripAxis));
-        if (axisOverride.isValid())
-            break;
+    // ONE store read: getPerScreenScrollingSettings itself resolves every
+    // config spelling (id and connector, any /vs:N suffix preserved) through
+    // perScreenKeyVariants, so a spellings loop here re-asked the same two.
+    // The virtual→physical retry mirrors the daemon's seed
+    // (Daemon::updateScrollingScreens) byte for byte: a virtual sub-screen
+    // with NO map of its own inherits its physical parent's wholesale.
+    QVariantMap overrides = m_settings.getPerScreenScrollingSettings(screenName);
+    if (overrides.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenName)) {
+        overrides =
+            m_settings.getPerScreenScrollingSettings(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenName));
     }
+    const QVariant axisOverride = overrides.value(QLatin1String(PerScreenScrollingKey::StripAxis));
     const int configured = axisOverride.isValid() ? axisOverride.toInt() : m_settings.scrollingStripAxis();
 
     if (configured == ConfigDefaults::scrollingStripAxisVertical())

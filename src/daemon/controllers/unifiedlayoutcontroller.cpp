@@ -120,6 +120,15 @@ void UnifiedLayoutController::setAutotileLayoutSource(PhosphorLayout::ILayoutSou
     m_cacheValid = false;
 }
 
+void UnifiedLayoutController::setStripAxisProvider(std::function<bool(const QString&)> provider)
+{
+    m_stripAxisProvider = std::move(provider);
+    // Anything cached before the provider arrived (or after it is cleared)
+    // was built under a different axis authority; cheap, and both calls are
+    // composition-root/teardown events, not per-frame.
+    m_cacheValid = false;
+}
+
 void UnifiedLayoutController::ensureTemplateStoreSubscription() const
 {
     PhosphorZones::ScrollingTemplateStore* store =
@@ -168,6 +177,16 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
     // change signal — without this the cached list keeps a deleted or
     // renamed template until some other invalidator happened to fire.
     ensureTemplateStoreSubscription();
+    // The strip axis the template cards would be drawn for, resolved per call
+    // so a rotation or an axis rule flip invalidates the cache with no
+    // dedicated signal. Consulted only when template cards can appear — the
+    // provider's answer is meaningless for a manual/autotile-only list and
+    // must not churn its cache.
+    const bool stripVertical =
+        m_includeScrollingTemplates && m_stripAxisProvider && m_stripAxisProvider(m_currentScreenName);
+    if (m_cacheValid && stripVertical != m_cachedStripVertical) {
+        m_cacheValid = false;
+    }
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
         // and mode-based filtering (manual-only vs autotile-only).
@@ -191,9 +210,10 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             // applyLayoutById resolves the picked id against this cache, so a
             // row the picker draws but this list omits would be refused as
             // "layout not found" and the press would do nothing.
-            m_includeScrollingTemplates);
+            m_includeScrollingTemplates, stripVertical);
 
         m_cachedScreenDesktop = desktop;
+        m_cachedStripVertical = stripVertical;
         m_cacheValid = true;
     }
     return m_cachedLayouts;

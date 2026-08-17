@@ -1,7 +1,7 @@
 {
     "id": "phosphor-gate",
     "name": "Phosphor Gate",
-    "description": "Edge gates for the scrolling strip in the official Phosphor style. Columns arriving on screen materialize through a cyan energize gate at the leading edge, and columns leaving drain to a dark navy silhouette with a rose afterglow at the trailing edge. The gates breathe in with scroll speed and never touch the middle of the screen. Everything settles to the plain strip the instant scrolling stops.",
+    "description": "Edge gates for the scrolling strip in the official Phosphor style. Columns arriving on screen materialize through a cyan energize gate at the edge they enter from, and columns leaving drain to a dark navy silhouette with a rose afterglow at the edge they leave by. The gates breathe in with scroll speed and never touch the middle of the screen. Everything settles to the plain strip the instant scrolling stops.",
     "author": "PlasmaZones",
     "version": "1.0",
     "category": "Reveal",
@@ -104,7 +104,7 @@
             "min": 8.0,
             "max": 60.0,
             "step": 1.0,
-            "description": "How many bands of ember sparks the arrival gate carries. More bands also means smaller sparks, since each one is sized to its band.",
+            "description": "How many bands of ember sparks the arrival gate carries. More bands mean narrower sparks, since each one is sized to its band.",
             "group": "Embers"
         },
         {

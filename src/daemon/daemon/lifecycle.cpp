@@ -741,6 +741,12 @@ void Daemon::stop()
         // overlay service outlives this teardown.
         m_overlayService->setActiveDragWindowId({});
     }
+    // Same clear-before-teardown contract as the overlay block above: the
+    // picker's axis provider captures `this` and reads m_scrollEngine, which
+    // is reset below.
+    if (m_unifiedLayoutController) {
+        m_unifiedLayoutController->setStripAxisProvider({});
+    }
 
     // Drop the D-Bus borrowers' non-owning resolver / router / WTA pointers.
     // Explicit symmetric clear across all three borrowers — SnapAdaptor's
@@ -1028,6 +1034,11 @@ void Daemon::stop()
         // drag-end snap path; no drag-end follows a stop(), so clear both
         // selection families explicitly.
         m_overlayService->clearSelectedZone();
+        // The scroll tab-strip surfaces have the same no-way-out problem as
+        // the modals above: the departing-screen loop that ordinarily clears
+        // them keys on the engine's active set, which is empty from here on,
+        // so a stale strip would sit mapped across a stop()/start() cycle.
+        m_overlayService->clearAllScrollTabState();
     }
 
     // Save state

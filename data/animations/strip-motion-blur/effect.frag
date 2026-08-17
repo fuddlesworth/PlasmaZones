@@ -18,7 +18,7 @@
 // progress — and this pack keys everything off iStripMotion instead.
 vec4 pTransition(vec2 uv, float t) {
     vec4 base = getStripColor(uv);
-    float mask = stripMask(uv, p_edgeFeather);
+    float mask = stripMask(uv, clamp(p_edgeFeather, 0.0, 0.2));
     // Half-width of the smear kernel in uv units. The 3.5% clamp is what
     // binds in practice: it is reached at roughly 0.6 output-extents along the
     // travel axis per second at full strength, and a wheel fling runs well

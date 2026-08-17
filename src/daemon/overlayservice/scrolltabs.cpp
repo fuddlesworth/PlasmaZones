@@ -41,6 +41,41 @@
 
 namespace PlasmaZones {
 
+void OverlayService::clearAllScrollTabState()
+{
+    clearScrollTabStateWhere([](const QString&) {
+        return true;
+    });
+}
+
+void OverlayService::clearScrollTabStateWhere(const std::function<bool(const QString&)>& screenMatches)
+{
+    // Model FIRST, then the overrides, matching the departing-screen loop's
+    // documented ordering: dropping an override replays the cached model, and
+    // replaying a strip that is being torn down would run the full show
+    // choreography just to animate it away again. Load-bearing copies, same
+    // reason as replayScrollTabStrips below — the setters mutate the maps
+    // being walked.
+    const QHash<QString, QVariantList> strips = m_lastScrollTabStrips;
+    for (auto it = strips.constBegin(); it != strips.constEnd(); ++it) {
+        if (screenMatches(it.key())) {
+            updateScrollTabStrips(it.key(), {});
+        }
+    }
+    const QStringList tabScreens = m_scrollTabIndicatorOverrides.keys();
+    for (const QString& screenId : tabScreens) {
+        if (screenMatches(screenId)) {
+            setScrollTabIndicatorOverrides(screenId, {});
+        }
+    }
+    const QStringList dropScreens = m_scrollDropIndicatorOverrides.keys();
+    for (const QString& screenId : dropScreens) {
+        if (screenMatches(screenId)) {
+            setScrollDropIndicatorOverrides(screenId, {});
+        }
+    }
+}
+
 void OverlayService::replayScrollTabStrips()
 {
     // Load-bearing copy: updateScrollTabStrips writes m_lastScrollTabStrips

@@ -17,10 +17,13 @@
 #include <strip_transition.glsl>
 
 vec4 pTransition(vec2 uv, float t) {
-    float m = stripMask(uv, p_edgeFeather);
-    // Signed velocity in output-extents along the travel axis per second. The
-    // tilt saturates well
-    // before anything folds over.
+    float m = stripMask(uv, clamp(p_edgeFeather, 0.0, 0.2));
+    // Signed velocity in output-extents along the travel axis per second.
+    // FOLD-OVER INVARIANT, coupled constants: the warp's derivative in sx is
+    // 1 + 4*tilt*sx (from the 2.0 depth coefficient below), so it stays
+    // positive only while 4 * |tilt|max * |sx|max < 1. The 0.22 clamp against
+    // |sx| < 1 leaves a 12% margin — change the clamp and the depth
+    // coefficient together or the receding side folds over itself.
     float tilt = clamp(iStripMotion.w * 0.35 * p_tilt, -0.22, 0.22);
     if (abs(tilt) < 1.0e-4 || m < 1.0e-3) {
         return getStripColor(uv);
@@ -86,11 +89,16 @@ vec4 pTransition(vec2 uv, float t) {
     // frame at the early-out above instead of fading, which is the pop the
     // identity contract forbids. Subtracting the fragment's own margin makes
     // an undisplaced sample score exactly zero, and the push gate is smooth so
-    // nothing seams.
+    // nothing seams. The pairing is PER AXIS: gating one axis's near-edge
+    // position by the OTHER axis's push re-created the position-only band on
+    // the two edges perpendicular to travel — on the receding side the across
+    // taper is the identity, so a fragment hugging an across edge scored the
+    // position gate from that axis while the along squeeze supplied the push,
+    // and the whole receding half grew a dark border there.
     vec2 sampleOut = max(-su, su - 1.0); // the sample's overshoot, negative while inside
     vec2 fragOut = max(-uv, uv - 1.0);   // the same measure undisplaced, always <= 0
     vec2 pushed = max(sampleOut - fragOut, vec2(0.0));
-    float voidAmt = smoothstep(-0.006, 0.0, max(sampleOut.x, sampleOut.y))
-        * smoothstep(0.0, 0.006, max(pushed.x, pushed.y));
+    vec2 voidGate = smoothstep(vec2(-0.006), vec2(0.0), sampleOut) * smoothstep(vec2(0.0), vec2(0.006), pushed);
+    float voidAmt = max(voidGate.x, voidGate.y);
     return vec4(c.rgb * shade * (1.0 - voidAmt), c.a);
 }

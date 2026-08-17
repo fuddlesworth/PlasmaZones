@@ -50,6 +50,18 @@ void Daemon::captureScrollingOrders(const QSet<QString>& scrollingScreens)
     const QString activity = currentActivity();
     const QSet<QString> currentScrollScreens = m_scrollEngine->activeScreens();
     for (const QString& screenId : currentScrollScreens - scrollingScreens) {
+        // The non-creating state gate the autotile capture carries, and for
+        // its exact documented corruption: a per-output desktop switch runs
+        // setCurrentDesktopForScreen BEFORE this capture, so the read below
+        // resolves through the NEW desktop's key — usually empty — and the
+        // store then filed that empty order under the new desktop, wiping
+        // whatever it had saved from an earlier toggle. No state for the
+        // screen's current context means there is nothing true to capture.
+        // (Both stateForScreen overloads are non-creating; this is the
+        // autotile twin's exact shape.)
+        if (!m_scrollEngine->stateForScreen(screenId)) {
+            continue;
+        }
         const int desktop = currentDesktopForScreen(screenId);
         // Stored UNCONDITIONALLY, empty included. An empty order must
         // overwrite a stale non-empty entry from an earlier toggle, or
