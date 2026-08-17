@@ -92,6 +92,7 @@ private Q_SLOTS:
     void heightChannelsRankRuleOverSettingsOverGlobal();
     void perScreenStripAxisOverridesTheResolvedAxis();
     void globalStripAxisChannelReachesTheEngine();
+    void ruleSlotOverwritesTheSeededAxisInTheMergedMap();
     void absentTrioSlotsFallBackPerSlotToTheGlobal();
     void presetIndexIsClampedToTheLivePresetList();
     void fixedKindWithAProportionValueFallsThroughToTheGlobal();
@@ -387,6 +388,54 @@ void TestScrollEnginePerScreen::globalStripAxisChannelReachesTheEngine()
     QCOMPARE(globalStill.size(), 1);
     QCOMPARE(Ax::mainLen(globalStill.first()), kMainExtent);
     QVERIFY(Ax::crossLen(globalStill.first()) < kCrossExtent);
+}
+
+// The DAEMON's precedence collapse for the shared StripAxis key, pinned at the
+// engine boundary. Unlike the width/height channels, the rule and the
+// per-screen setting share ONE key (PerScreenScrollingKey::StripAxis ==
+// ScrollPerScreenKeys::stripAxis()), so "rule > per-screen setting" is not a
+// two-channel read in the engine — it is the daemon's INSERT ORDER in
+// updateScrollingScreens: the settings map seeds the overrides, then a filled
+// rule slot overwrites the same key. This replicates that exact merge
+// sequence and asserts both directions the finding named: a filled rule slot
+// wins the shared key, and an ABSENT rule slot leaves the seeded setting
+// standing (the daemon's `if (params.stripAxis)` guard — an unconditional
+// insert of a disengaged optional would wipe the seed).
+void TestScrollEnginePerScreen::ruleSlotOverwritesTheSeededAxisInTheMergedMap()
+{
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    const bool fixtureIsVertical = ScrollTestUtils::Ax::vertical();
+    const int seededOpposing = fixtureIsVertical ? 1 : 2; // per-screen setting, against the fixture
+    const int ruleMatchingFixture = fixtureIsVertical ? 2 : 1; // rule verdict, back to the fixture's own axis
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+
+    // Leg 1 — no rule: the seeded per-screen value survives the merge alone
+    // and flips the screen against its aspect.
+    QVariantMap merged;
+    merged.insert(ScrollPerScreenKeys::stripAxis(), seededOpposing);
+    engine->applyPerScreenConfig(kS1, merged);
+    QCoreApplication::processEvents();
+    const QVector<QRect> seededWins = engine->visibleTileRects(kS1);
+    QCOMPARE(seededWins.size(), 1);
+    QCOMPARE(Ax::mainLen(seededWins.first()), kMainExtent);
+    QVERIFY(Ax::crossLen(seededWins.first()) < kCrossExtent);
+
+    // Leg 2 — filled rule slot: the daemon's second insert overwrites the
+    // seeded value in the SAME map, and the engine resolves the rule's axis.
+    // Leg 1 just proved the seeded value alone flips this screen, so reading
+    // the fixture's own aspect here can only mean the overwrite was read —
+    // not that the key was ignored.
+    merged.insert(ScrollPerScreenKeys::stripAxis(), ruleMatchingFixture);
+    engine->applyPerScreenConfig(kS1, merged);
+    QCoreApplication::processEvents();
+    const QVector<QRect> ruleWins = engine->visibleTileRects(kS1);
+    QCOMPARE(ruleWins.size(), 1);
+    QCOMPARE(Ax::crossLen(ruleWins.first()), kCrossExtent);
+    QVERIFY(Ax::mainLen(ruleWins.first()) < kMainExtent);
 }
 
 void TestScrollEnginePerScreen::heightChannelsRankRuleOverSettingsOverGlobal()

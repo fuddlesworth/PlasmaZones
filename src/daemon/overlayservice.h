@@ -1128,7 +1128,11 @@ private:
     }
     /// The folded per-screen selector-enable verdict: a SetDragSelectorEnabled
     /// rule outranks the global toggle in either direction, matching the drag
-    /// adaptor's checkZoneSelectorTrigger fold. Strip-selector screens read the
+    /// adaptor's checkZoneSelectorTrigger fold — including the snapping MASTER
+    /// switch, which is ANDed outside the rule fold on the classic arm (a pick
+    /// there commits inside dragStopped, unreachable with snapping off) and
+    /// which strip-selector screens are exempt from (their drop commits
+    /// through the scroll engine). Strip-selector screens read the
     /// scrolling toggle, everything else the snapping one. Resolved against
     /// this class's own desktop/activity mirrors (never the drag adaptor's
     /// context handle) so the verdict cannot transiently disagree with the

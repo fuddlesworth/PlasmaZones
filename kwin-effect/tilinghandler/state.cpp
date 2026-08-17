@@ -119,6 +119,11 @@ void TilingHandler::slotScrollEffectBehaviourChanged(const QVariantMap& behaviou
 
 void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
 {
+    // Any apply voids in-flight property replies, identical map or not — the
+    // writer is always newer than a reply dispatched earlier (the
+    // setScrollingScreens shape; see the m_scrollEffectBehaviourGeneration
+    // doc). Before the change gate for the same reason the twin bumps first.
+    ++m_scrollEffectBehaviourGeneration;
     // The daemon publishes the whole map every time (never a delta), so a
     // straight replace is correct even if a previous signal was missed.
     //

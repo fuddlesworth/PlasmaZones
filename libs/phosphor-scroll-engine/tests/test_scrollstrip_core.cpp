@@ -164,6 +164,7 @@ private Q_SLOTS:
     void tabIndicatorGapKeepsMovingWithinColumn();
     void tabIndicatorRightAndBottomAnchorTheOppositeEdge();
     void tabIndicatorNarrowerThanItsReservationKeepsTheColumn();
+    void tabReservationRaisesTheMinExtentFloorOnTheMainAxisOnly();
     void windowedFullscreenFlagsActiveTileOnly();
     void windowedFullscreenTravelsWithConsume();
 };
@@ -714,6 +715,49 @@ void TestScrollStripCore::tabIndicatorNarrowerThanItsReservationKeepsTheColumn()
     for (const ResolvedTile& tile : column.tiles) {
         QVERIFY2(tile.rect.isValid(), "an over-large reservation must not invert the tile rect");
         QCOMPARE(tile.rect, column.rect);
+    }
+}
+
+void TestScrollStripCore::tabReservationRaisesTheMinExtentFloorOnTheMainAxisOnly()
+{
+    // The respectMinimumSize floor in columnExtentPx grows by the indicator's
+    // reservation ONLY when the reservation eats the strip's MAIN axis: a
+    // Left/Right indicator is thick along x, which is the main axis on a
+    // horizontal strip and the cross axis on a vertical one. The gate is an
+    // EQUALITY between the indicator's orientation and the axis for exactly
+    // that reason, and this case fails if it flips either way — the
+    // horizontal arm expects the widened column, the vertical arm the bare
+    // minimum.
+    ScrollLayoutParams params = defaultParams();
+    params.tabIndicator.enabled = true;
+    params.tabIndicator.placeWithinColumn = true;
+    params.tabIndicator.position = TabIndicatorPosition::Left;
+    params.tabIndicator.width = 10;
+    params.tabIndicator.gap = 6; // reservation = 16px
+
+    // Two tabs whose client minimum (400px ALONG the strip, transposed as a
+    // physical fact) is what sets the column width — the asked-for 0.1
+    // proportion resolves far below it.
+    const QSize minMain = Ax::t(QSize(400, 0));
+    ScrollStrip strip;
+    QVERIFY(strip.insertWindow(QStringLiteral("t0"), ColumnWidth::makeProportion(0.1), ColumnDisplay::Tabbed, params,
+                               minMain.width(), minMain.height()));
+    QVERIFY(strip.insertWindowIntoActiveColumn(QStringLiteral("t1"), ColumnWidth::makeProportion(0.1), std::nullopt,
+                                               params, minMain.width(), minMain.height()));
+
+    const ResolvedStrip resolved = strip.relayout(params);
+    QCOMPARE(resolved.columns.size(), 1);
+    const ResolvedColumn& column = resolved.columns.first();
+    QVERIFY(column.tabbed);
+    if (ScrollTestUtils::Ax::vertical()) {
+        // Left eats the CROSS extent here: no main-axis correction, so a
+        // reservation added unconditionally overshoots this arm by 16px.
+        QCOMPARE(Ax::mainLen(column.rect), 400);
+    } else {
+        // The column widens by the reservation so the TILE, after the
+        // indicator takes its band, still honours the client's minimum.
+        QCOMPARE(Ax::mainLen(column.rect), 416);
+        QCOMPARE(rectOf(resolved, strip.activeWindowId()).width(), 400);
     }
 }
 

@@ -262,9 +262,17 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         // notifications, floating windows, panels, daemon overlays): the
         // pack must not smear surfaces that are not scrolling. "Above" is a
         // STACKING fact, not a role: the boundary is the topmost strip
-        // member (a column managed by this output, or its tab-indicator
-        // surface) in KWin's stacking order, and only windows above that
-        // boundary are excluded. A floating window stacked BELOW a raised
+        // COLUMN managed by this output in KWin's stacking order, and only
+        // windows above that boundary are excluded. The tab-indicator
+        // surface is deliberately NOT a boundary candidate: it rides
+        // layer-shell, which stacks above every ordinary toplevel, so a
+        // boundary elected on it sat above ALL toplevels and every non-strip
+        // window — OSDs, dialogs, floating windows — fell inside the capture
+        // and smeared with the strip. The indicator itself belongs INSIDE
+        // the capture (paintWindow's anchor injection draws it there, offset
+        // with the strip), which is why the insertion loop below skips it
+        // rather than compositing it sharp a second time on top.
+        // A floating window stacked BELOW a raised
         // column stays in the capture and is smeared with it, which is what
         // its stacking says should happen; a closing or dragged column that
         // is genuinely below the topmost live column likewise stays inside.
@@ -289,8 +297,22 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 if (!sw) {
                     continue;
                 }
-                if (m_effect->scrollManagedOutputFor(sw) != screen
-                    && !(m_effect->isScrollTabIndicatorSurface(sw) && sw->screen() == screen)) {
+                // The five-state paintability filter the tab-anchor election
+                // (paint_pipeline prePaintScreen) applies, for the same
+                // reason: KWin plainly will not draw these, so a boundary
+                // elected on one never paints in this capture, and everything
+                // stacked between it and the topmost PAINTING column would be
+                // captured and smeared instead of composited sharp. The
+                // reachable case is a desktop switch: off-desktop columns
+                // stay tiled-tracked (#808), unparked, and can sit above the
+                // current desktop's strip in the stacking order — the next
+                // scroll then smeared every above-strip window. isDeleted()
+                // first also keeps getWindowId off a corpse.
+                if (sw->isDeleted() || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop()
+                    || !sw->isOnCurrentDesktop()) {
+                    continue;
+                }
+                if (m_effect->scrollManagedOutputFor(sw) != screen) {
                     continue;
                 }
                 // Parked columns do not win the election, the same way the
@@ -324,9 +346,18 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 const QRectF outputGeoF = screen->geometryF();
                 for (int i = topStrip + 1; i < stack.size(); ++i) {
                     KWin::EffectWindow* sw = stack.at(i);
-                    if (sw && QRectF(sw->expandedGeometry()).intersects(outputGeoF)) {
-                        m_effect->m_stripCaptureAboveStrip.insert(sw);
+                    if (!sw || !QRectF(sw->expandedGeometry()).intersects(outputGeoF)) {
+                        continue;
                     }
+                    // Never exclude a tab-indicator surface. It always sits
+                    // above the boundary (layer-shell), but the anchor
+                    // injection draws it INSIDE the capture, offset with the
+                    // strip — excluding it here would composite it sharp a
+                    // second time on top of the pack's copy.
+                    if (m_effect->isScrollTabIndicatorSurface(sw)) {
+                        continue;
+                    }
+                    m_effect->m_stripCaptureAboveStrip.insert(sw);
                 }
             }
             // topStrip < 0 (no strip member found — a mode teardown race)

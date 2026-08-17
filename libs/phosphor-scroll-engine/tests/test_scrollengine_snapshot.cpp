@@ -46,6 +46,7 @@ private Q_SLOTS:
     void excludeActiveTilePromotesSurvivor();
     void excludeActiveTilePromotesByPosition();
     void excludeActiveTabPromotesVisibleTab();
+    void excludeActivePromotionSkipsMinimizedSurvivors();
     void excludeSoloWindowLeavesNoActiveColumn();
     void overWideColumnClampsFractionToOne();
     void invalidWorkAreaAnswersInvalid();
@@ -336,6 +337,81 @@ void TestScrollEngineSnapshot::excludeActiveTabPromotesVisibleTab()
     QVERIFY(snap.columns.at(1).tiles.at(0).activeTab);
     QVERIFY(!snap.columns.at(1).tiles.at(0).hidden);
     QVERIFY(!snap.columns.at(1).tiles.at(0).relRect.isNull());
+}
+
+void TestScrollEngineSnapshot::excludeActivePromotionSkipsMinimizedSurvivors()
+{
+    // The minimized skip in the promotion scan — a DELIBERATE divergence from
+    // the real detach, which does no such skip: a preview highlighting an
+    // invisible tile would be a lie. Three legs, one per scan outcome.
+    const auto params = ScrollTestUtils::engineParams();
+
+    // Forward skip: [b, c(active), d(min), e] excluding c — the inheriting
+    // slot is d, which is minimized, so the FORWARD scan moves on to e. A
+    // scan that promoted the inheriting slot regardless highlights d.
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        openWindows(
+            engine, QStringLiteral("S1"),
+            {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d"), QStringLiteral("e")});
+        ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(state);
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("e")));
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("d")));
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+        QVERIFY(state->strip().setWindowMinimized(QStringLiteral("d"), true, params));
+
+        const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+        QVERIFY(snap.valid);
+        QCOMPARE(snap.columns.at(1).tiles.size(), 3);
+        for (const auto& tile : snap.columns.at(1).tiles) {
+            QCOMPARE(tile.activeTab, tile.windowId == QStringLiteral("e"));
+        }
+    }
+
+    // Backward scan: [b, c(active), d(min)] excluding c — nothing visible at
+    // or after the inheriting slot, so the promotion walks back to b.
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        openWindows(engine, QStringLiteral("S1"),
+                    {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d")});
+        ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(state);
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("d")));
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+        QVERIFY(state->strip().setWindowMinimized(QStringLiteral("d"), true, params));
+
+        const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+        QVERIFY(snap.valid);
+        QCOMPARE(snap.columns.at(1).tiles.size(), 2);
+        for (const auto& tile : snap.columns.at(1).tiles) {
+            QCOMPARE(tile.activeTab, tile.windowId == QStringLiteral("b"));
+        }
+    }
+
+    // Every survivor minimized (embedder-only state): the flag stays unset
+    // rather than highlighting an invisible tile.
+    {
+        QObject owner;
+        ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+        openWindows(engine, QStringLiteral("S1"),
+                    {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d")});
+        ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+        QVERIFY(state);
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("d")));
+        QVERIFY(stackUnder(state, 1, 1, QStringLiteral("c")));
+        QVERIFY(state->strip().setWindowMinimized(QStringLiteral("b"), true, params));
+        QVERIFY(state->strip().setWindowMinimized(QStringLiteral("d"), true, params));
+
+        const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"), QStringLiteral("c"));
+        QVERIFY(snap.valid);
+        QCOMPARE(snap.columns.at(1).tiles.size(), 2);
+        for (const auto& tile : snap.columns.at(1).tiles) {
+            QVERIFY2(!tile.activeTab, "with every survivor minimized, nothing may be highlighted");
+        }
+    }
 }
 
 void TestScrollEngineSnapshot::excludeSoloWindowLeavesNoActiveColumn()

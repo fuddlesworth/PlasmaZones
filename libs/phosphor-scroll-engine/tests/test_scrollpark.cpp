@@ -261,6 +261,141 @@ private Q_SLOTS:
         QCOMPARE(r.rememberedEdge.value_or(QString()), QStringLiteral("carried"));
     }
 
+    void aHiddenTabFollowsItsColumnsSide_data()
+    {
+        QTest::addColumn<int>("axisValue");
+        QTest::addColumn<int>("columnMainPos");
+        QTest::addColumn<QString>("expectedEdge");
+        QTest::newRow("horizontal leading") << int(ScrollAxis::Horizontal) << -500 << QStringLiteral("left");
+        QTest::newRow("horizontal trailing") << int(ScrollAxis::Horizontal) << 1400 << QStringLiteral("right");
+        QTest::newRow("vertical leading") << int(ScrollAxis::Vertical) << -500 << QStringLiteral("top");
+        QTest::newRow("vertical trailing") << int(ScrollAxis::Vertical) << 1400 << QStringLiteral("bottom");
+    }
+
+    /// The HIDDEN arm, never driven before: a tabbed column's non-active tile
+    /// parks unconditionally, and its departure side is a fact about the
+    /// COLUMN, not the tile. The tile rect here is deliberately ON screen, so
+    /// an arm that reads the tile instead of the column answers "no edge" and
+    /// fails every row.
+    void aHiddenTabFollowsItsColumnsSide()
+    {
+        QFETCH(int, axisValue);
+        QFETCH(int, columnMainPos);
+        QFETCH(QString, expectedEdge);
+        const auto a = static_cast<ScrollAxis>(axisValue);
+
+        ParkInputs in = inputsFor(a, roleRect(a, 100, 300));
+        in.columnRect = roleRect(a, columnMainPos, 300);
+        in.hidden = true;
+
+        const ParkResult r = resolveTilePlacement(in, QString());
+        QVERIFY2(r.parked, "a hidden tab parks regardless of its own rect");
+        QCOMPARE(r.emittedEdge, expectedEdge);
+        QCOMPARE(r.rememberedEdge.value_or(QString()), expectedEdge);
+    }
+
+    void aHiddenTabOfAnOnScreenColumnParksEdgeless_data()
+    {
+        QTest::addColumn<int>("axisValue");
+        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
+        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+    }
+
+    /// The other half of the hidden arm: an ON-screen column's hidden tabs
+    /// are parked for input reasons, not because the strip scrolled them
+    /// away, so no edge is emitted AND a stale remembered departure is
+    /// erased — leaving it would slide the next tab switch in from a side
+    /// the column has already returned from.
+    void aHiddenTabOfAnOnScreenColumnParksEdgeless()
+    {
+        QFETCH(int, axisValue);
+        const auto a = static_cast<ScrollAxis>(axisValue);
+
+        ParkInputs in = inputsFor(a, roleRect(a, 100, 300));
+        in.columnRect = roleRect(a, 100, 300);
+        in.hidden = true;
+
+        const ParkResult r = resolveTilePlacement(in, QStringLiteral("stale"));
+        QVERIFY(r.parked);
+        QVERIFY2(r.emittedEdge.isEmpty(), "no departure happened, so no edge may be emitted");
+        QVERIFY2(!r.rememberedEdge.has_value(), "the stale memory must be erased, not kept or emitted");
+    }
+
+    void theClientMinimumRaisesThePeekFloor_data()
+    {
+        QTest::addColumn<int>("axisValue");
+        QTest::addColumn<QString>("expectedEdge");
+        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal) << QStringLiteral("right");
+        QTest::newRow("vertical") << int(ScrollAxis::Vertical) << QStringLiteral("bottom");
+    }
+
+    /// Under respectMinimumSize the peek floor rises from the 48px constant to
+    /// the client's declared minimum ALONG the strip. The straddler here keeps
+    /// 100px visible — comfortably over the constant, as the control leg
+    /// proves — and still parks once a 300px minimum is declared, because a
+    /// committed 100px extent is one the client would refuse and regrow across
+    /// the boundary.
+    void theClientMinimumRaisesThePeekFloor()
+    {
+        QFETCH(int, axisValue);
+        QFETCH(QString, expectedEdge);
+        const auto a = static_cast<ScrollAxis>(axisValue);
+        const StripAxis axis{a};
+
+        const QRect tile = roleRect(a, 1100, 400); // 100px visible at the trailing end
+
+        // Control: with no declared minimum the same straddler clamps.
+        const ParkResult clamped = resolveTilePlacement(inputsFor(a, tile), QString());
+        QVERIFY2(!clamped.parked, "precondition: 100px visible clears the constant floor");
+
+        ParkInputs in = inputsFor(a, tile);
+        in.tileMin = axis.makeRect(0, 0, 300, 0).size();
+        const ParkResult r = resolveTilePlacement(in, QString());
+        QVERIFY2(r.parked, "a visible span under the client minimum must park, not peek");
+        QCOMPARE(r.emittedEdge, expectedEdge);
+    }
+
+    void anOversizedMinimumStillPeeksAtFullScreen_data()
+    {
+        QTest::addColumn<int>("axisValue");
+        QTest::addColumn<QString>("expectedEdge");
+        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal) << QStringLiteral("right");
+        QTest::newRow("vertical") << int(ScrollAxis::Vertical) << QStringLiteral("bottom");
+    }
+
+    /// The cap on that floor: a declared minimum LARGER than the screen would
+    /// otherwise park the column forever (no straddle can keep more visible
+    /// than the screen holds). Capped at the screen's extent, a straddler
+    /// covering the whole screen clamps to it — the regrow hazard is knowingly
+    /// re-accepted, because a straddle beats a permanently invisible window —
+    /// while one covering any less still parks.
+    void anOversizedMinimumStillPeeksAtFullScreen()
+    {
+        QFETCH(int, axisValue);
+        QFETCH(QString, expectedEdge);
+        const auto a = static_cast<ScrollAxis>(axisValue);
+        const StripAxis axis{a};
+        const QRect screen = screenFor(a);
+
+        const QSize oversizedMin = axis.makeRect(0, 0, 2000, 0).size();
+
+        // Covers the full main extent (0..1499 over a 1200 screen): visible
+        // equals the capped floor, so it clamps to exactly the screen.
+        ParkInputs covering = inputsFor(a, roleRect(a, 0, 1500));
+        covering.tileMin = oversizedMin;
+        const ParkResult peeked = resolveTilePlacement(covering, QString());
+        QVERIFY2(!peeked.parked, "full-screen coverage must peek, or the column can never return");
+        QCOMPARE(axis.mainPos(peeked.rect), axis.mainLow(screen));
+        QCOMPARE(axis.mainHigh(peeked.rect), axis.mainHigh(screen));
+
+        // 100px short of full coverage: under the capped floor, parks.
+        ParkInputs partial = inputsFor(a, roleRect(a, 100, 1500));
+        partial.tileMin = oversizedMin;
+        const ParkResult parked = resolveTilePlacement(partial, QString());
+        QVERIFY(parked.parked);
+        QCOMPARE(parked.emittedEdge, expectedEdge);
+    }
+
     /// parkRect is deliberately physical: its safety claim is "below every
     /// output", which is about the desktop, not the strip. It takes no axis
     /// at all, so there is nothing here to run twice.

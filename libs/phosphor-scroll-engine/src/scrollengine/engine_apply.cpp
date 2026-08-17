@@ -343,6 +343,19 @@ QVector<QRectF> ScrollEngine::visibleTileRectsRelative(const QString& screenId) 
 
 void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
 {
+    // Membership guard, the same one every retile entry point applies
+    // (retile, scheduleRetileForScreen and its queued callback) — but here
+    // rather than only there, because applyLayout has direct callers too.
+    // The guard matters beyond wasted work: setActiveScreens prunes a
+    // departing screen's CURRENT context and drops its per-output desktop
+    // entry (m_context.removeScreen), so a later call naming that screen
+    // resolves currentKeyForScreen against the GLOBAL desktop fallback. If
+    // that aliased key happens to match a surviving background state, an
+    // unguarded pass would emit a tile batch — and possibly a focus
+    // activation — for a screen this engine no longer owns.
+    if (!m_scrollingScreens.contains(screenId)) {
+        return;
+    }
     ScrollState* state = stateForKey(currentKeyForScreen(screenId), false);
     if (!state) {
         // No state for the CURRENT context (fresh desktop, or the state was

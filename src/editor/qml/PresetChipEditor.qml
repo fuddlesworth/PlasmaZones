@@ -66,6 +66,16 @@ ColumnLayout {
                     if (!isFinite(percent))
                         return;
 
+                    // No-change bail, against the DISPLAYED percent rather
+                    // than the stored fraction: the field opens rounded, so
+                    // an untouched commit would rewrite a bundled 0.33333 as
+                    // 0.33 — exactly the exact-stored-fraction contract the
+                    // header promises to keep. It also keeps a plain
+                    // click-away from rebuilding the whole chip row (the
+                    // rebuild mid-click is what swallowed the next press).
+                    if (percent === Math.round(chip.modelData * 100))
+                        return;
+
                     const fraction = Math.max(chipEditor.minPercent, Math.min(100, percent)) / 100;
                     for (let i = 0; i < chipEditor.values.length; i++) {
                         if (i !== chip.index && Math.abs(chipEditor.values[i] - fraction) < chipEditor.dedupeEpsilon)
@@ -153,33 +163,63 @@ ColumnLayout {
                         Keys.onEscapePressed: chip.editing = false
                         onAccepted: Qt.callLater(chip.commitEdit)
                         onActiveFocusChanged: {
-                            if (!activeFocus)
-                                Qt.callLater(chip.commitEdit);
+                            if (activeFocus)
+                                return;
+                            // Mid-gesture the overlay catcher owns the
+                            // commit and fires it on RELEASE. Committing
+                            // here too would land the Repeater rebuild
+                            // between the press that stole the focus and its
+                            // release, destroying the pressed delegate and
+                            // swallowing that click (QQC2 buttons take focus
+                            // on press, so this path fires exactly then).
+                            // With no gesture running (Tab-away,
+                            // programmatic focus) this is the sole commit.
+                            if (catcherPoint.active)
+                                return;
+                            Qt.callLater(chip.commitEdit);
                         }
                     }
 
                     // Focus-out alone cannot close the edit: QML only moves
                     // active focus when another item TAKES it, and most of
                     // the editor (canvas, panel dead space) takes none. So
-                    // while editing, park a catcher on the window overlay:
-                    // any press outside the field commits, and accepted =
-                    // false lets the same press continue to whatever it hit.
-                    // The commit is deferred a tick because it triggers the
-                    // delegate rebuild, and tearing this item down inside
-                    // its own press handler is the popup-UAF shape the
-                    // shared context menu comment warns about.
-                    MouseArea {
+                    // while editing, park a catcher on the window overlay.
+                    // A passive PointHandler rather than a MouseArea, for the
+                    // release timing: the commit rebuilds the chip row, and a
+                    // commit scheduled from the PRESS ran between that press
+                    // and its release, destroying whichever delegate the
+                    // click had landed on and swallowing its activation. The
+                    // handler observes without grabbing (the press continues
+                    // to whatever it hit) and commits only when the gesture
+                    // ENDS outside the field. The commit still defers a tick:
+                    // tearing this item down inside its own handler is the
+                    // popup-UAF shape the shared context menu comment warns
+                    // about.
+                    Item {
+                        id: outsideCatcher
+
+                        property bool pressedOutside: false
+
                         parent: chip.editing ? chipEditor.Overlay.overlay : null
                         anchors.fill: parent ? parent : undefined
-                        enabled: chip.editing
-                        z: 1000
-                        onPressed: mouse => {
-                            mouse.accepted = false;
-                            const p = mapToItem(editField, mouse.x, mouse.y);
-                            if (p.x >= 0 && p.y >= 0 && p.x <= editField.width && p.y <= editField.height)
-                                return; // A click INTO the field must not commit.
+                        visible: chip.editing
 
-                            Qt.callLater(chip.commitEdit);
+                        PointHandler {
+                            id: catcherPoint
+
+                            enabled: chip.editing
+                            onActiveChanged: {
+                                if (active) {
+                                    const p = outsideCatcher.mapToItem(editField, point.position.x, point.position.y);
+                                    // A click INTO the field must not commit.
+                                    outsideCatcher.pressedOutside = !(p.x >= 0 && p.y >= 0 && p.x <= editField.width && p.y <= editField.height);
+                                    return;
+                                }
+                                if (outsideCatcher.pressedOutside) {
+                                    outsideCatcher.pressedOutside = false;
+                                    Qt.callLater(chip.commitEdit);
+                                }
+                            }
                         }
                     }
 

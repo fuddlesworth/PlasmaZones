@@ -21,6 +21,11 @@ SettingsFlickable {
         readonly property string defaultAutotileAlgorithm: appSettings.defaultAutotileAlgorithm
         readonly property var layouts: settingsController.layouts
         readonly property string defaultLayoutId: appSettings.defaultLayoutId
+        // LayoutComboBox's effectiveDefaultLayoutId reads this on its
+        // layoutFilter === 2 arm (the scrolling dropdown below is the one
+        // filter-2 user in the app); without it the Default row resolved
+        // `undefined` and drew no preview or name.
+        readonly property string defaultScrollingTemplate: appSettings.defaultScrollingTemplate
         // LayoutComboBox's preview CategoryBadge reads `autoAssignAllLayouts` for
         // the global-auto-assign indicator; expose it so the Monitor State
         // dropdowns light it like the rest of the app.

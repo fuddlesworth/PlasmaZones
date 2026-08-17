@@ -89,6 +89,7 @@ private Q_SLOTS:
     void repaintsAreRequestedWhileInFlight();
     void reapingAClockDropsOnlyItsOwnOutput();
     void forgettingAnOutputDropsItsAccumulator();
+    void batchDeltaReportsWhetherALegStarted();
 
 private:
     std::unique_ptr<FakeClock> m_clock;
@@ -134,10 +135,14 @@ private:
     ///
     /// The delta is a signed scalar ALONG @p axis, which defaults to
     /// horizontal so every pre-existing case keeps its meaning unchanged.
-    void scroll(KWin::LogicalOutput* output, int delta,
+    /// Hands applyBatchDelta's verdict through: the bool is the SOLE input to
+    /// the tiling handler's startedViewScreens set, which gates the
+    /// residual-origin viewDelta branch — so the return arms are contract,
+    /// not convenience, and batchDeltaReportsWhetherALegStarted pins them.
+    bool scroll(KWin::LogicalOutput* output, int delta,
                 PhosphorProtocol::ScrollAxis axis = PhosphorProtocol::ScrollAxis::Horizontal)
     {
-        m_animator->applyBatchDelta(output, delta, axis, m_profile);
+        return m_animator->applyBatchDelta(output, delta, axis, m_profile);
     }
 
     PhosphorAnimation::Profile m_profile;
@@ -447,6 +452,32 @@ void TestStripViewAnimator::forgettingAnOutputDropsItsAccumulator()
     QVERIFY2(!m_animator->isAnimatingOn(fakeOutputA()), "the forgotten output must hold no leg");
     QCOMPARE(m_animator->offsetAlongAxis(fakeOutputA()), 0.0);
     QVERIFY2(m_animator->isAnimatingOn(fakeOutputB()), "forgetting one output must not touch another");
+}
+
+void TestStripViewAnimator::batchDeltaReportsWhetherALegStarted()
+{
+    // The verdict is load-bearing at the caller: tiling.cpp inserts a screen
+    // into startedViewScreens only when this answers true, and that set is
+    // the sole gate on the residual-origin viewDelta branch — a "true" for a
+    // declined leg re-origins windows against a spring that never runs, and
+    // a "false" for a live one drops the residual and the strip double-moves.
+    // Pin every arm.
+    QVERIFY2(!scroll(fakeOutputA(), 0), "a zero delta moves nothing and starts nothing");
+    QVERIFY2(!scroll(nullptr, 100), "a null output cannot host a leg");
+    QVERIFY2(scroll(fakeOutputA(), 100), "a real delta with a clock starts a leg");
+    QVERIFY2(scroll(fakeOutputA(), 100), "a retarget of a live leg is still a running leg");
+
+    // Animations off: committed placement is outright, no leg to report.
+    m_animator->setEnabled(false);
+    QVERIFY2(!scroll(fakeOutputA(), 100), "disabled must decline — the apply path already placed outright");
+    m_animator->setEnabled(true);
+
+    // No clock for the output (hotplug race, headless harness): nothing can
+    // drive the leg, so it must be declined rather than started frozen.
+    m_animator->setOutputClockResolver([](KWin::LogicalOutput*) -> PhosphorAnimation::IMotionClock* {
+        return nullptr;
+    });
+    QVERIFY2(!scroll(fakeOutputA(), 100), "a clockless output cannot start a leg");
 }
 
 QTEST_MAIN(TestStripViewAnimator)

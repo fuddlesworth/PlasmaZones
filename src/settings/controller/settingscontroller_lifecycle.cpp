@@ -451,6 +451,20 @@ void SettingsController::defaults()
         m_rulesPage->revert();
     }
 
+    // Drop a staged profile activation the same way the rules staging is
+    // dropped. The pointer half of an activation lives in
+    // ProfilePageController (staged vs committed active id), OUTSIDE the
+    // config store this reset just rewrote — its config half died with the
+    // baseline re-capture, but the pointer would survive as a dirty staging
+    // domain and the next Save would commit "profile X is active" over a
+    // factory configuration that no longer matches it. discard() reverts the
+    // staged pointer to the committed one; whether a factory reset should
+    // also clear the COMMITTED pointer is a different question this
+    // deliberately does not answer.
+    if (m_profilesPage) {
+        m_profilesPage->discard();
+    }
+
     // A factory reset is APPLIED, not staged: m_settings.reset() wrote the
     // cleared configuration to disk and reloaded from it, and the daemon has
     // been notified. So the config pages are clean, and the blanket "mark every

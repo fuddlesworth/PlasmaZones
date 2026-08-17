@@ -20,6 +20,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTextStream>
 
@@ -365,8 +366,15 @@ private Q_SLOTS:
                                    "layout(location = 0) out vec4 fragColor;\n"
                                    "void main() { fragColor = vec4(1.0); }\n"));
         const PackResult good = validate(tmp, QStringLiteral("mp-good"), obj);
-        QVERIFY2(!good.report.contains(QStringLiteral("buffer0.frag    ERROR")),
+        // Spacing-independent: the report pads the label with leftJustified(15),
+        // so a literal with a hand-counted gap silently stops matching the
+        // moment the label length or the pad width moves (the previous
+        // four-space literal could never occur — "buffer0.frag" pads to three —
+        // making this assertion vacuously green).
+        QVERIFY2(!good.report.contains(QRegularExpression(QStringLiteral("buffer0\\.frag\\s+ERROR"))),
                  qPrintable(QStringLiteral("a valid buffer pass must bake clean:\n") + good.report));
+        // Belt: the error count is spacing-proof and must be zero too.
+        QCOMPARE(good.errors, 0);
 
         // The same pack with a syntax error in the buffer must be caught
         // HERE, not at the live daemon.

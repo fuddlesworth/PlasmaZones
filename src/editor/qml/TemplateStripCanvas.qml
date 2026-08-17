@@ -537,8 +537,20 @@ Item {
                         anchors.right: parent.right
                         anchors.margins: Kirigami.Units.smallSpacing
                         spacing: Kirigami.Units.smallSpacing
-                        visible: (band.isSelected || bandArea.containsMouse) && band.width >= requiredWidth && band.height >= requiredHeight
+                        // The buttons are hover items, so the moment the
+                        // cursor reaches one of them bandArea.containsMouse
+                        // drops and the row would hide under the cursor on an
+                        // unselected band — the same class the zone canvas
+                        // fixed by ORing its buttons' hover back in
+                        // (EditorZone.anyButtonHovered). A HoverHandler on the
+                        // row observes without taking the grab, so one term
+                        // covers all four buttons and their spacing gaps.
+                        visible: (band.isSelected || bandArea.containsMouse || bandActionsHover.hovered) && band.width >= requiredWidth && band.height >= requiredHeight
                         z: 2
+
+                        HoverHandler {
+                            id: bandActionsHover
+                        }
 
                         ZoneActionButton {
                             buttonSize: bandActions.buttonSize

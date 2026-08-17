@@ -25,6 +25,7 @@
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "scrollstriptestutils.h"
+#include "scrollstubsettings.h"
 
 using PhosphorScrollEngine::ScrollEngine;
 namespace Ax = ScrollTestUtils::Ax;
@@ -39,151 +40,32 @@ const QString kS1 = QStringLiteral("S1");
 /// override map, so the only difference between the two is the rule slot.
 const QString kS2 = QStringLiteral("S2");
 
-/// Minimal IScrollSettings whose centering and crop answers are test-set.
-/// Everything else answers the engine's own defaults.
-class BoundaryStubSettings : public QObject, public PhosphorEngine::IScrollSettings
+/// The SHARED stub, re-seeded for this suite instead of a local subclass: a
+/// second IScrollSettings copy here drifted from the shared one on the very
+/// values the two suites' cases compare against (column width 0.5 vs 0.25,
+/// the tab-indicator enable inverted), which is exactly the hazard the
+/// shared header's comment warns about. Everything a case here mutates
+/// (cropStraddlers, centerFocused, respectMinimumSize, insertPosition,
+/// tabIndicatorEnabled) is a public field on the shared stub already.
+ScrollTestUtils::StubScrollSettings* makeBoundarySettings(QObject* owner)
 {
-    Q_OBJECT
-    Q_INTERFACES(PhosphorEngine::IScrollSettings)
-
-public:
-    using QObject::QObject;
-
-    bool cropStraddlers = false;
-    int centerFocused = 1; // always — the straddler generator
-    bool respectMinimumSize = false;
-    int insertPosition = static_cast<int>(PhosphorScrollEngine::ScrollInsertPosition::RightOfActive);
-
-    int scrollingInnerGap() const override
-    {
-        return 0;
-    }
-    bool scrollingUsePerSideOuterGap() const override
-    {
-        return false;
-    }
-    int scrollingOuterGap() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapTop() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapBottom() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapLeft() const override
-    {
-        return 0;
-    }
-    int scrollingOuterGapRight() const override
-    {
-        return 0;
-    }
-    bool scrollingFocusNewWindows() const override
-    {
-        return true;
-    }
-    int scrollingStickyWindowHandling() const override
-    {
-        return 0;
-    }
-    bool scrollingRespectMinimumSize() const override
-    {
-        return respectMinimumSize;
-    }
-    bool scrollingSmartGaps() const override
-    {
-        return false;
-    }
-    int scrollingCenterFocusedColumn() const override
-    {
-        return centerFocused;
-    }
-    bool scrollingAlwaysCenterSingleColumn() const override
-    {
-        return false;
-    }
-    bool scrollingCropStraddlers() const override
-    {
-        return cropStraddlers;
-    }
-    int scrollingDefaultColumnWidthKind() const override
-    {
-        return 0; // proportion
-    }
-    qreal scrollingDefaultColumnWidthValue() const override
-    {
-        return 0.5;
-    }
-    int scrollingDefaultColumnWidthPresetIndex() const override
-    {
-        return 0;
-    }
-    int scrollingDefaultWindowHeightKind() const override
-    {
-        return 0; // auto
-    }
-    qreal scrollingDefaultWindowHeightValue() const override
-    {
-        return 0.0;
-    }
-    int scrollingDefaultWindowHeightPresetIndex() const override
-    {
-        return 0;
-    }
-    QStringList scrollingPresetColumnWidths() const override
-    {
-        return {QStringLiteral("0.25"), QStringLiteral("0.5"), QStringLiteral("0.75")};
-    }
-    QStringList scrollingPresetWindowHeights() const override
-    {
-        return {QStringLiteral("0.25"), QStringLiteral("0.5"), QStringLiteral("0.75")};
-    }
-    int scrollingDefaultColumnDisplay() const override
-    {
-        return 0;
-    }
-    int scrollingInsertPosition() const override
-    {
-        return insertPosition;
-    }
+    auto* settings = new ScrollTestUtils::StubScrollSettings(owner);
+    // Half-work-area columns: the straddler fixtures below reason in 500px
+    // columns on the 1000px inset work area.
+    settings->widthValue = 0.5;
+    // Always-center is the straddler generator — it is what makes BOTH
+    // neighbours of the focused column cross a screen edge.
+    settings->centerFocused = static_cast<int>(PhosphorScrollEngine::CenterFocusedColumn::Always);
     // Off by default so the geometry tests stay indicator-free; the orphan
     // tab-bar test flips it on, since a null tabIndicatorRect would gate the
-    // strip emitter shut before the skip under test could ever matter.
-    bool tabIndicatorEnabled = false;
-
-    bool scrollingTabIndicatorEnabled() const override
-    {
-        return tabIndicatorEnabled;
-    }
-    bool scrollingTabIndicatorHideWhenSingleTab() const override
-    {
-        return true;
-    }
-    bool scrollingTabIndicatorPlaceWithinColumn() const override
-    {
-        return false;
-    }
-    int scrollingTabIndicatorGap() const override
-    {
-        return 0;
-    }
-    int scrollingTabIndicatorWidth() const override
-    {
-        return 2;
-    }
-    qreal scrollingTabIndicatorLengthProportion() const override
-    {
-        return 0.5;
-    }
-    int scrollingTabIndicatorPosition() const override
-    {
-        return 0;
-    }
-};
+    // strip emitter shut before the skip under test could ever matter. The
+    // remaining indicator values keep this suite's historical seeds.
+    settings->tabIndicatorEnabled = false;
+    settings->tabIndicatorHideWhenSingleTab = true;
+    settings->tabIndicatorGap = 0;
+    settings->tabIndicatorWidth = 2;
+    return settings;
+}
 
 /// The latest windowsTiled batch entry for @p windowId, or an empty object.
 QJsonObject lastEntryFor(QSignalSpy& tiled, const QString& windowId)
@@ -215,15 +97,18 @@ private Q_SLOTS:
 
     /// A monitor that ROTATES while the strip is populated. The geometry
     /// provider hands back a portrait rect on the second pass, so Auto
-    /// resolves the other axis and the engine must not carry any old-axis
-    /// state across the flip.
+    /// resolves the other axis. What is ASSERTED is exactly the re-resolve
+    /// (the committed aspect inverts); the axis-flip sweep's state drop
+    /// (anchor re-derivation, pinned-intent conversion) has no clean
+    /// observable at this level and is NOT claimed here — the name used to
+    /// say "AndDropsOldAxisState", which nothing below ever checked.
     ///
     /// Both geometries are hardcoded PHYSICAL rects and neither is transposed
     /// with the fixture, so the two arms run this identically: it always
     /// starts landscape and always rotates to portrait. That is on purpose —
     /// what is under test is the ENGINE re-resolving Auto from the new
     /// geometry, which has nothing to do with the harness's axis.
-    void aRotationFlipsTheAxisAndDropsOldAxisState()
+    void aRotationFlipsTheResolvedAxis()
     {
         QObject owner;
         // Mutable geometry: the provider answers landscape until the test
@@ -269,7 +154,7 @@ private Q_SLOTS:
     void clampModeClampsBothEdgesAtTheScreenRect()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         // Panel inset: the work area is 100px narrower on each side than the
         // screen. The clamp bound is the SCREEN edge; a work-area clamp
         // would stop 100px short and this fixture is what tells them apart.
@@ -313,7 +198,7 @@ private Q_SLOTS:
     void cropModeCommitsTrueRectsForStraddlers()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->cropStraddlers = true;
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);
@@ -344,7 +229,7 @@ private Q_SLOTS:
     void peekFloorParksAThinRemainder()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);
         engine->refreshConfigFromSettings();
@@ -383,7 +268,7 @@ private Q_SLOTS:
     void cropStraddlersOverrideIsPerScreen()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->cropStraddlers = false;
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1, kS2});
         engine->setEngineSettings(settings);
@@ -427,7 +312,7 @@ private Q_SLOTS:
     void parkLandsBelowTheUnionOfAllOutputs()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->centerFocused = 0; // plain edge-aligned view
         const QRect top = defaultScreenRect();
         // Stacked directly BENEATH the primary, keyed off it rather than
@@ -470,7 +355,7 @@ private Q_SLOTS:
     void crossOverflowParksEvenInCropMode()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->cropStraddlers = true;
         settings->respectMinimumSize = true;
         settings->centerFocused = 0;
@@ -509,7 +394,7 @@ private Q_SLOTS:
     void hiddenTabOfAnOnScreenColumnCarriesNoScrollEdge()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->centerFocused = 0;
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);
@@ -553,7 +438,7 @@ private Q_SLOTS:
     void fullyParkedTabbedColumnEmitsNoTabStrip()
     {
         QObject owner;
-        auto* settings = new BoundaryStubSettings(&owner);
+        auto* settings = makeBoundarySettings(&owner);
         settings->tabIndicatorEnabled = true;
         ScrollEngine* engine = makeProviderEngine(&owner, {kS1});
         engine->setEngineSettings(settings);

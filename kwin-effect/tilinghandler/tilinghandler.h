@@ -1018,10 +1018,19 @@ private:
     int m_activeLayoutsFetchRetriesLeft = 0;
     int m_scrollingScreensFetchRetriesLeft = 0;
     int m_scrollEffectBehaviourFetchRetriesLeft = 0;
-    /// Per-dispatch guard for the scroll-effect-behaviour fetch. No write
-    /// generation twin: nothing writes these two sets except the daemon, so
-    /// there is no local authoritative writer for a reply to race.
+    /// Per-dispatch guard for the scroll-effect-behaviour fetch.
     quint64 m_scrollEffectBehaviourQueryGeneration = 0;
+    /// Write-generation twin of m_scrollingScreensGeneration for the
+    /// scroll-effect-behaviour sets. The daemon IS the only origin of the
+    /// data, but its live signal writes locally through
+    /// applyScrollEffectBehaviour, and that write races the bring-up
+    /// property reply exactly like the scrolling-screens pair: signal lands
+    /// first, stale reply lands second and reverts the axis membership for
+    /// the rest of the session (silently — the strip just shears along the
+    /// wrong component on every leg). Bumped on EVERY apply, before the
+    /// change gate, because an identical-content signal still proves the
+    /// current state is newer than any reply dispatched earlier.
+    quint64 m_scrollEffectBehaviourGeneration = 0;
     /// Screens whose RESOLVED scrolling focus-follows-mouse is on, and whose
     /// RESOLVED straddler crop is on (`rule ?? config`, decided daemon-side).
     /// Membership is the whole answer — the effect holds no config fallback

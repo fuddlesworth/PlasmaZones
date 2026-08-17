@@ -297,43 +297,51 @@ void TilingHandler::fetchScrollEffectBehaviour()
     msg << PhosphorProtocol::Service::Interface::Scrolling << QStringLiteral("scrollEffectBehaviour");
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
-    // Per-dispatch guard only — unlike the scrolling-screens set there is no
-    // authoritative local writer to race, so a write generation would have
-    // nothing to compare against. A live signal landing first simply wins,
-    // and this reply is discarded when a newer query superseded it.
+    // Both guards the scrolling-screens fetch carries. The write generation
+    // voids this reply when a live scrollEffectBehaviourChanged signal
+    // applied between dispatch and landing — the daemon's signal writes
+    // locally through applyScrollEffectBehaviour, so "no local writer" never
+    // held here, and without the check a stale reply reverted the live axis
+    // membership for the rest of the session. The query generation handles
+    // the write-free race (two loadSettings runs across a daemon restart).
+    const quint64 generationAtDispatch = m_scrollEffectBehaviourGeneration;
     const quint64 queryGeneration = ++m_scrollEffectBehaviourQueryGeneration;
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, queryGeneration](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        if (queryGeneration != m_scrollEffectBehaviourQueryGeneration) {
-            return; // a newer query superseded this one
-        }
-        QDBusPendingReply<QDBusVariant> reply = *w;
-        if (reply.isValid()) {
-            // a{sv} arrives as a QDBusArgument-wrapped variant; toMap() on it
-            // returns EMPTY — demarshal explicitly, exactly as fetchActiveLayouts
-            // does. reply.isValid() is true either way, so the silent-empty
-            // failure had no retry and logged two empty sets as a success:
-            // per-screen focus-follows-mouse and straddler cropping never
-            // populated at bring-up.
-            applyScrollEffectBehaviour(qdbus_cast<QVariantMap>(reply.value().variant()));
-            // The axis set is logged too: a wrong crop or focus-follows-mouse
-            // membership at least announces itself as a behaviour that does
-            // not happen, but a wrong axis is silent on screen — the strip
-            // just shears along the wrong component for the length of every
-            // leg — so bring-up is the one place it can be confirmed.
-            qCInfo(lcEffect) << "Loaded scrolling effect behaviour: ffm=" << m_scrollFocusFollowsMouseScreens
-                             << "crop=" << m_scrollCropStraddlerScreens
-                             << "verticalAxis=" << m_scrollVerticalAxisScreens;
-        } else {
-            qCDebug(lcEffect) << "Scrolling effect behaviour: query failed, daemon may not be running";
-            if (m_scrollEffectBehaviourFetchRetriesLeft > 0) {
-                --m_scrollEffectBehaviourFetchRetriesLeft;
-                QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
-                    fetchScrollEffectBehaviour();
-                });
-            }
-        }
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, generationAtDispatch, queryGeneration](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                if (queryGeneration != m_scrollEffectBehaviourQueryGeneration) {
+                    return; // a newer query superseded this one
+                }
+                if (m_scrollEffectBehaviourGeneration != generationAtDispatch) {
+                    return; // a live signal carried a newer map
+                }
+                QDBusPendingReply<QDBusVariant> reply = *w;
+                if (reply.isValid()) {
+                    // a{sv} arrives as a QDBusArgument-wrapped variant; toMap() on it
+                    // returns EMPTY — demarshal explicitly, exactly as fetchActiveLayouts
+                    // does. reply.isValid() is true either way, so the silent-empty
+                    // failure had no retry and logged two empty sets as a success:
+                    // per-screen focus-follows-mouse and straddler cropping never
+                    // populated at bring-up.
+                    applyScrollEffectBehaviour(qdbus_cast<QVariantMap>(reply.value().variant()));
+                    // The axis set is logged too: a wrong crop or focus-follows-mouse
+                    // membership at least announces itself as a behaviour that does
+                    // not happen, but a wrong axis is silent on screen — the strip
+                    // just shears along the wrong component for the length of every
+                    // leg — so bring-up is the one place it can be confirmed.
+                    qCInfo(lcEffect) << "Loaded scrolling effect behaviour: ffm=" << m_scrollFocusFollowsMouseScreens
+                                     << "crop=" << m_scrollCropStraddlerScreens
+                                     << "verticalAxis=" << m_scrollVerticalAxisScreens;
+                } else {
+                    qCDebug(lcEffect) << "Scrolling effect behaviour: query failed, daemon may not be running";
+                    if (m_scrollEffectBehaviourFetchRetriesLeft > 0) {
+                        --m_scrollEffectBehaviourFetchRetriesLeft;
+                        QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this] {
+                            fetchScrollEffectBehaviour();
+                        });
+                    }
+                }
+            });
 }
 
 // Rules-visible active layout map — a pure ruleQuery input like the

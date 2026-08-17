@@ -59,6 +59,17 @@ endfunction()
 function(pse_add_test _name)
     pse_add_axis_free_test(${_name} ${ARGN})
 
+    # The BASE arm gets the same two-sided vacuity guard as the vertical one
+    # below, in mirror image. Without the pin, an ambient
+    # PZ_SCROLL_TEST_AXIS=vertical (a polluted shell, a CI job exporting it
+    # for one suite and leaking it to all) runs this arm vertically under a
+    # name claiming horizontal — the exact lie the vertical arm's guard
+    # exists to catch, in the other direction. Only for suites registered
+    # through THIS function: they all call AX_GUARD_SUITE, so the printed
+    # axis word is guaranteed to exist for the regex to see.
+    phosphor_append_test_environment(${_name} "PZ_SCROLL_TEST_AXIS=horizontal")
+    set_tests_properties(${_name} PROPERTIES FAIL_REGULAR_EXPRESSION "axis=vertical")
+
     # SECOND registration of the SAME binary, transposed. The axis is a
     # property of the process (PZ_SCROLL_TEST_AXIS, read once by
     # ScrollTestUtils::Ax), so one build serves both arms and the two report
@@ -107,5 +118,5 @@ pse_add_test(test_scrollengine_perscreen test_scrollengine_perscreen.cpp scrolls
 pse_add_test(test_scrollengine_behaviour test_scrollengine_behaviour.cpp scrollstubsettings.h scrollstubtracking.h)
 pse_add_test(test_scrollengine_draginsert test_scrollengine_draginsert.cpp)
 pse_add_test(test_scrollengine_snapshot test_scrollengine_snapshot.cpp)
-pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp)
+pse_add_test(test_scrollengine_boundary test_scrollengine_boundary.cpp scrollstubsettings.h)
 pse_add_test(test_scrollengine_verbs test_scrollengine_verbs.cpp)

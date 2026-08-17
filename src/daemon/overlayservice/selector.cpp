@@ -48,19 +48,29 @@ struct LaidOutCard
 
 bool OverlayService::selectorEnabledForScreen(const QString& screenId) const
 {
+    const bool stripScreen = isStripSelectorScreen(screenId);
     // Strip-selector screens are governed by the SCROLLING selector enable;
     // everything else by the snapping one.
-    const bool toggle = !m_settings
-        || (isStripSelectorScreen(screenId) ? m_settings->scrollingZoneSelectorEnabled()
-                                            : m_settings->zoneSelectorEnabled());
+    const bool toggle =
+        !m_settings || (stripScreen ? m_settings->scrollingZoneSelectorEnabled() : m_settings->zoneSelectorEnabled());
+    // The snapping MASTER switch, ANDed outside the rule fold exactly as the
+    // drag adaptor's checkZoneSelectorTrigger does: a classic pick commits
+    // inside dragStopped, which a snapping-disabled drag never reaches, so
+    // offering (or keeping) the popup would discard the choice on release —
+    // that is a "pick could not be committed" gate no SetDragSelectorEnabled
+    // rule may override. Strip screens are exempt for the adaptor's reason
+    // too: their drop commits through the scroll engine, not a snap.
+    const bool masterAllowed = stripScreen || !m_settings || m_settings->snappingEnabled();
     if (!m_layoutManager) {
-        return toggle;
+        return toggle && masterAllowed;
     }
     // A SetDragSelectorEnabled rule overrides the toggle in either direction;
     // no rule filling the slot means the toggle decides.
     return m_layoutManager
-        ->resolveContextDragSelectorEnabled(screenId, currentVirtualDesktopForScreen(screenId), m_currentActivity)
-        .value_or(toggle);
+               ->resolveContextDragSelectorEnabled(screenId, currentVirtualDesktopForScreen(screenId),
+                                                   m_currentActivity)
+               .value_or(toggle)
+        && masterAllowed;
 }
 
 void OverlayService::showZoneSelector(const QString& targetScreenId)
@@ -328,6 +338,20 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
     auto cursorStateIt = m_screenStates.constFind(cursorScreenId);
     if (cursorStateIt != m_screenStates.constEnd() && cursorStateIt->zoneSelectorSlot()) {
         auto* slot = cursorStateIt->zoneSelectorSlot();
+        // A slot the shell has hidden (a modal overlay claimed the screen,
+        // a hide is animating out) must not keep hit-testing: the geometry
+        // walk below reads rendered rects that are simply invisible, and a
+        // hit written here arms BOTH selection families that the drop path
+        // (drop.cpp, `hasSelectedZone()` branch) prefers over the release
+        // cursor — so an invisible popup could drive the drop. A bare
+        // return is not enough: the LAST visible tick's pick would stay
+        // armed for the same drop. Clear everything, which also blanks the
+        // painted highlights so the next show cannot trip the hit-tests'
+        // changed-gates against stale slot properties.
+        if (!slot->isVisible()) {
+            clearSelectedZone();
+            return;
+        }
         auto* window = cursorStateIt->shell ? cursorStateIt->shell->shellWindow() : nullptr;
         // Convert global cursor position to window-local coordinates.
         int localX, localY;

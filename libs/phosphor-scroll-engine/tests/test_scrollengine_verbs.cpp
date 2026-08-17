@@ -10,6 +10,7 @@
 // the activation/echo bookkeeping and the focus-side float memory.
 
 #include <PhosphorEngine/ICrossSurfaceResolver.h>
+#include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 
@@ -68,6 +69,7 @@ private Q_SLOTS:
     void everyVerbAnswersNoWindowsOnAnEmptyScreen();
     void moveToFloatingAndBackAnswersEveryPress();
     void switchFocusRoundTripsBetweenLayers();
+    void registryMinimizedStateGatesTheLayerVerbs();
     void focusCrossesToTheScrollNeighboursEntryWindow();
     void crossAxisFocusCrossesToTheNeighbourOutput();
     void crossAxisMoveCrossesToTheNeighbourOutput();
@@ -438,6 +440,79 @@ void TestScrollEngineVerbs::switchFocusRoundTripsBetweenLayers()
     engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
     QVERIFY(state->floatingHasFocus());
     QCOMPARE(state->lastFloatingFocus(), QStringLiteral("app|b"));
+}
+
+void TestScrollEngineVerbs::registryMinimizedStateGatesTheLayerVerbs()
+{
+    // Every other fixture in this suite runs with a NULL WindowRegistry, so
+    // the registry-gated refusals in the layer verbs were unreachable —
+    // deleting any of the isMinimized terms kept the suite green. A real
+    // registry is installed here: isMinimized keys on the INSTANCE id
+    // ("app|b" → "b"), and upsert never freezes canonical ids, so the
+    // engine's tracked ids are untouched.
+    QObject owner;
+    ScrollEngine* engine = threeWindows(&owner);
+    ScrollState* state = stateFor(engine, QStringLiteral("S1"));
+    QVERIFY(state);
+    auto* registry = new PhosphorEngine::WindowRegistry(&owner);
+    engine->setWindowRegistry(registry);
+    const auto inst = [](const QString& id) {
+        return id.section(QLatin1Char('|'), 1, 1);
+    };
+    PhosphorEngine::WindowMetadata minimizedMeta;
+    minimizedMeta.isMinimized = true;
+
+    // Float b with the focus memory on it, then minimize it — the daemon
+    // models minimize as a float, so a stale focus memory can name one.
+    engine->windowFocused(QStringLiteral("app|b"), QStringLiteral("S1"));
+    engine->setWindowFloat(QStringLiteral("app|b"), true, QStringLiteral("S1"));
+    QVERIFY(state->floatingHasFocus());
+    registry->upsert(inst(QStringLiteral("app|b")), minimizedMeta);
+
+    // moveFocusedToTiling refuses: a minimized float must not materialise as
+    // a visible strip tile.
+    QSignalSpy feedback(engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
+    engine->moveFocusedToTiling(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(1).toString(), QStringLiteral("restore"));
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+    QVERIFY(state->isFloating(QStringLiteral("app|b")));
+
+    // The layer switch's TILED side: with the strip's active window
+    // minimized, the float → tiling switch refuses instead of "activating" a
+    // hidden window.
+    const QString tiledActive = state->strip().activeWindowId();
+    QVERIFY(!tiledActive.isEmpty());
+    registry->upsert(inst(tiledActive), minimizedMeta);
+    feedback.clear();
+    engine->switchFocusBetweenFloatingAndTiling(QStringLiteral("S1"));
+    QCOMPARE(feedback.count(), 1);
+    QCOMPARE(feedback.last().at(0).toBool(), false);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("no_target"));
+
+    // The FLOAT side filters both the remembered focus and the fallback
+    // pool. Restore the tiled side, hand focus back to a tile, float the
+    // other strip window so the focus memory names it, minimize it, and
+    // clear b: the switch must skip the minimized memory and activate the
+    // eligible fallback.
+    registry->upsert(inst(tiledActive), PhosphorEngine::WindowMetadata{});
+    engine->windowFocused(tiledActive, QStringLiteral("S1"));
+    QVERIFY(!state->floatingHasFocus());
+    const QString otherTile = tiledActive == QLatin1String("app|a") ? QStringLiteral("app|c") : QStringLiteral("app|a");
+    engine->setWindowFloat(otherTile, true, QStringLiteral("S1"));
+    engine->windowFocused(tiledActive, QStringLiteral("S1"));
+    QVERIFY(!state->floatingHasFocus());
+    registry->upsert(inst(otherTile), minimizedMeta);
+    registry->upsert(inst(QStringLiteral("app|b")), PhosphorEngine::WindowMetadata{});
+
+    QSignalSpy activate(engine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested);
+    feedback.clear();
+    engine->switchFocusBetweenFloatingAndTiling(QStringLiteral("S1"));
+    QCOMPARE(activate.count(), 1);
+    QCOMPARE(activate.last().at(0).toString(), QStringLiteral("app|b"));
+    QCOMPARE(feedback.last().at(0).toBool(), true);
+    QCOMPARE(feedback.last().at(2).toString(), QStringLiteral("floating"));
 }
 
 void TestScrollEngineVerbs::focusCrossesToTheScrollNeighboursEntryWindow()
