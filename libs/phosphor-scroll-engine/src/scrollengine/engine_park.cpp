@@ -206,12 +206,15 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
         // The !out.parked below is LOAD-BEARING, not defensive: a tile the
         // off-viewport or main-axis arms already parked sits at parkTop,
         // which is below every output's bottom (engine_apply's
-        // unionBottom + kParkMargin), so on a horizontal strip (cross == y)
-        // a parked rect satisfies this cross-overflow predicate too. The
-        // first arm's own !out.parked skips it for such a tile, which lands
-        // evaluation HERE — and without this term the body below would move
-        // the emitted edge into the memory and clear it, killing the
-        // arrival-edge animation for every parked tile.
+        // unionBottom + 1 + kParkMargin), so on a horizontal strip
+        // (cross == y) a parked rect satisfies this cross-overflow predicate
+        // too. The first arm's own !out.parked skips it for such a tile,
+        // which lands evaluation HERE — and without this term the body below
+        // would clear the emitted edge (the memory already holds it, set at
+        // the off-viewport and straddle parks above), dropping the scrollEdge
+        // that engine_apply puts on the wire and the visualX/visualY paint
+        // hint gated on it: a main-axis-parked column would lose its
+        // slide-out and stop travelling with the strip.
     } else if (!out.parked && axis.crossHigh(rect) > axis.crossHigh(in.screenRect)) {
         const int peekFloor = qMin(axis.crossSize(in.screenRect), qMax(kMinVisiblePeekPx, axis.crossSize(in.tileMin)));
         const int visible = axis.crossHigh(in.screenRect) + 1 - axis.crossPos(rect);

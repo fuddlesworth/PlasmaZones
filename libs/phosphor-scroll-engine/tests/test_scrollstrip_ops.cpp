@@ -1007,8 +1007,8 @@ void TestScrollStripOps::minHeightClampStaysInBudget()
     // column (as here: 400+400+200 = 1000 > ~780 avail), the overflow
     // STANDS and trailing tiles lay out below the work area — that is the
     // documented accepted outcome, not a bug. What the budget must
-    // guarantee: every tile keeps at least its floor, no tile collapses
-    // below 1px, and the total never exceeds
+    // guarantee: every tile keeps at least its floor, no tile
+    // collapses below 1px, and the total never exceeds
     // the sum of the floors (the clamp adds no overflow beyond what the
     // floors demand).
     const auto params = defaultParams();

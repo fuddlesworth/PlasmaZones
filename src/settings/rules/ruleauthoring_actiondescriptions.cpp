@@ -360,8 +360,9 @@ QString actionDescription(const QString& type)
         return PhosphorI18n::tr(
             "Chooses which way the matched context's strip runs, overriding the Strip direction "
             "setting and any per-monitor choice. Match the screen shape resolves from the usable "
-            "area, so it can put a pinned monitor back on Match the screen shape for one desktop "
-            "or activity.");
+            "area, so the rule can hand a pinned monitor back to that option for one desktop "
+            "or activity.",
+            "'Match the screen shape' must stay identical to the option label shown in the picker");
     }
     // ── Tab indicator (context + window colours) ──
     if (type == ActionType::SetTabIndicatorEnabled) {
