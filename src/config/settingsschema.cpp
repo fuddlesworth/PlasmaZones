@@ -1187,9 +1187,10 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
         {CD::decorationProfileTreeKey(), PhosphorSurfaceShaders::DecorationProfileTree().toJson().toVariantMap(),
          QMetaType::QVariantMap},
     };
-    // What the decoration chain is allowed to keep redrawing. An animated pack
-    // repaints every window carrying it on every vsync, which never lets the GPU
-    // leave its top performance state.
+    // Mostly what the decoration chain is allowed to keep redrawing (an animated
+    // pack repaints every window carrying it on every vsync, which never lets the
+    // GPU leave its top performance state), plus one per-frame-cost knob, the
+    // blur-scale multiplier.
     schema.groups[CD::decorationsPerformanceGroup()] = {
         {CD::animateFocusedOnlyKey(), CD::decorationAnimateFocusedOnly(), QMetaType::Bool},
         {CD::pauseWhenIdleKey(), CD::decorationPauseWhenIdle(), QMetaType::Bool},
@@ -1204,6 +1205,21 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::decorationIdleTimeoutSecMin(), CD::decorationIdleTimeoutSecMax())},
+        // Multiplier on each pack's declared buffer-pass resolution (the blur
+        // pyramid density). Clamped so the persisted value stays inside its
+        // declared band and every surface agrees on it: without this a
+        // hand-edited 5.0 would ride the wire as 5.0 and render as "500%" in
+        // the profile diff. Defence in depth rather than the only guard — the
+        // effect's own loader independently rejects non-numeric, non-finite,
+        // and non-positive replies, and clamps to the same shared bounds. The
+        // band is deliberately wider on the low end than the UI's three tiers
+        // (headroom down to 0.25 for hand edits); the combo highlights the
+        // nearest tier for an off-tier value.
+        {CD::blurScaleMultiplierKey(),
+         CD::decorationBlurScaleMultiplier(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::decorationBlurScaleMultiplierMin(), CD::decorationBlurScaleMultiplierMax())},
     };
 }
 

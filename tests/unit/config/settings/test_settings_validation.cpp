@@ -161,6 +161,47 @@ private Q_SLOTS:
     }
 
     /**
+     * Same clampDouble contract on the blur-scale multiplier
+     * (Decorations.Performance/BlurScaleMultiplier). Load-bearing like the
+     * timeout above: the effect multiplies this straight into its buffer-target
+     * sizing, and the settings combo assumes the stored value is inside the
+     * declared band. The default (1.0) is neither the min (0.25) nor the max
+     * (2.0), so both legs are unambiguous — a fall-back-to-default validator
+     * fails both.
+     */
+    void testReadValidatedBlurScaleMultiplier_aboveMax_clampsToMax()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto perf = backend->group(ConfigDefaults::decorationsPerformanceGroup());
+            perf->writeDouble(ConfigDefaults::blurScaleMultiplierKey(), 99.0);
+            perf.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplierMax());
+    }
+
+    void testReadValidatedBlurScaleMultiplier_belowMin_clampsToMin()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto perf = backend->group(ConfigDefaults::decorationsPerformanceGroup());
+            perf->writeDouble(ConfigDefaults::blurScaleMultiplierKey(), -1.0);
+            perf.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplierMin());
+    }
+
+    /**
      * A config with NO Decorations.Performance group at all must report the DEFAULTS,
      * and PauseWhenIdle's default is TRUE.
      *
@@ -187,6 +228,7 @@ private Q_SLOTS:
                  "catch a regression that flips the ConfigDefaults value itself.");
         QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplier());
     }
 
     /**
@@ -209,6 +251,7 @@ private Q_SLOTS:
         QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
         QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplier());
 
         // Flip AnimateFocusedOnly FIRST while PauseWhenIdle STAYS at its
         // default (both are true since PR #872): asserting the two bools on
@@ -216,12 +259,17 @@ private Q_SLOTS:
         // getter/setter pair — with both flipped together, a copy-paste key
         // swap in the storescalars macros passes every compare. PauseWhenIdle
         // is flipped in a SECOND step so its reset leg below is exercised
-        // too. (120 is in-range and distinct from the default of 30.)
+        // too. (120 is in-range and distinct from the default of 30; 0.5 is
+        // in-range and distinct from the multiplier's default of 1.0, holding
+        // the group's two scalars at different offsets from their defaults for
+        // the same cross-wiring reason.)
         settings.setDecorationAnimateFocusedOnly(false);
         settings.setDecorationIdleTimeoutSec(120);
+        settings.setDecorationBlurScaleMultiplier(0.5);
         QCOMPARE(settings.decorationPauseWhenIdle(), true);
         QCOMPARE(settings.decorationAnimateFocusedOnly(), false);
         QCOMPARE(settings.decorationIdleTimeoutSec(), 120);
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), 0.5);
         settings.setDecorationPauseWhenIdle(false);
         QCOMPARE(settings.decorationPauseWhenIdle(), false);
 
@@ -229,6 +277,7 @@ private Q_SLOTS:
         QCOMPARE(settings.decorationPauseWhenIdle(), ConfigDefaults::decorationPauseWhenIdle());
         QCOMPARE(settings.decorationAnimateFocusedOnly(), ConfigDefaults::decorationAnimateFocusedOnly());
         QCOMPARE(settings.decorationIdleTimeoutSec(), ConfigDefaults::decorationIdleTimeoutSec());
+        QCOMPARE(settings.decorationBlurScaleMultiplier(), ConfigDefaults::decorationBlurScaleMultiplier());
     }
 
     // =========================================================================

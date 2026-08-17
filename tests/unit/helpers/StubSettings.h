@@ -2025,6 +2025,31 @@ public:
         Q_EMIT decorationIdleTimeoutSecChanged();
         Q_EMIT settingsChanged();
     }
+    double decorationBlurScaleMultiplier() const override
+    {
+        return m_decorationBlurScaleMultiplier;
+    }
+    void setDecorationBlurScaleMultiplier(double value) override
+    {
+        // Mirror the schema's clampDouble, same rationale as the timeout above.
+        // Including its NaN branch, made explicit rather than left to qBound:
+        // Qt's qBound(min, val, max) composes as qMax(min, qMin(max, val)),
+        // whose all-false NaN comparisons happen to collapse to the minimum
+        // with this argument order — the same value clampDouble pins NaN to
+        // deliberately. Spelling the branch out keeps the stub's contract
+        // readable and independent of that composition detail.
+        if (qIsNaN(value)) {
+            value = ConfigDefaults::decorationBlurScaleMultiplierMin();
+        }
+        const double clamped = qBound(ConfigDefaults::decorationBlurScaleMultiplierMin(), value,
+                                      ConfigDefaults::decorationBlurScaleMultiplierMax());
+        if (qFuzzyCompare(m_decorationBlurScaleMultiplier, clamped)) {
+            return;
+        }
+        m_decorationBlurScaleMultiplier = clamped;
+        Q_EMIT decorationBlurScaleMultiplierChanged();
+        Q_EMIT settingsChanged();
+    }
 
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
@@ -2904,6 +2929,7 @@ private:
     bool m_decorationAnimateFocusedOnly = ConfigDefaults::decorationAnimateFocusedOnly();
     bool m_decorationPauseWhenIdle = ConfigDefaults::decorationPauseWhenIdle();
     int m_decorationIdleTimeoutSec = ConfigDefaults::decorationIdleTimeoutSec();
+    double m_decorationBlurScaleMultiplier = ConfigDefaults::decorationBlurScaleMultiplier();
     bool m_showWindowOpacityTint = ConfigDefaults::showWindowOpacityTint();
     QString m_windowOpacityTintScope = ConfigDefaults::windowOpacityTintScope();
     double m_windowOpacity = ConfigDefaults::windowOpacity();
