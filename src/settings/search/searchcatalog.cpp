@@ -127,7 +127,8 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                             {PhosphorI18n::tr("window"), PhosphorI18n::tr("snap"), PhosphorI18n::tr("drag"),
                              PhosphorI18n::tr("modifier"), PhosphorI18n::tr("key")});
     search->setPageKeywords(QStringLiteral("snapping-ordering"),
-                            {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
+                            {PhosphorI18n::tr("snap"), PhosphorI18n::tr("snapping"), PhosphorI18n::tr("layout"),
+                             PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
     search->setPageKeywords(QStringLiteral("snapping-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
@@ -167,13 +168,14 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
                              // the one exception to this section's tr-for-extraction rule.
                              QStringLiteral("niri")});
     search->setPageKeywords(QStringLiteral("tiling-ordering"),
-                            {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
+                            {PhosphorI18n::tr("tile"), PhosphorI18n::tr("tiling"), PhosphorI18n::tr("algorithm"),
+                             PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence")});
     search->setPageKeywords(QStringLiteral("tiling-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key")});
     search->setPageKeywords(QStringLiteral("scrolling-ordering"),
-                            {PhosphorI18n::tr("priority"), PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence"),
-                             PhosphorI18n::tr("template")});
+                            {PhosphorI18n::tr("scroll"), PhosphorI18n::tr("scrolling"), PhosphorI18n::tr("priority"),
+                             PhosphorI18n::tr("order"), PhosphorI18n::tr("precedence"), PhosphorI18n::tr("template")});
     search->setPageKeywords(QStringLiteral("scrolling-shortcuts"),
                             {PhosphorI18n::tr("shortcut"), PhosphorI18n::tr("hotkey"), PhosphorI18n::tr("keybind"),
                              PhosphorI18n::tr("keyboard"), PhosphorI18n::tr("key"), PhosphorI18n::tr("template")});

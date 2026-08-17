@@ -15,16 +15,17 @@ OrderingPage {
     emptyText: i18n("No algorithms available")
     emptyExplanation: i18n("Algorithms are registered by the daemon.")
     resetAccessibleName: i18n("Reset algorithm order to default")
+    // Seed only: hasCustomTilingOrder() is a non-reactive Q_INVOKABLE, so the
+    // first updateCustomOrderState() JS write severs this binding on purpose —
+    // the Connections below are the refresh path from then on.
     hasCustomOrder: settingsController.hasCustomTilingOrder()
     previewZonesKey: "previewZones"
     zoneCountKey: "defaultMaxWindows"
     nameKey: "name"
     hideZeroBadge: true
     resolveOrder: function () {
-        let items = settingsController.resolvedTilingOrder();
-        for (let i = 0; i < items.length; i++)
-            items[i].previewZones = settingsController.generateAlgorithmDefaultPreview(items[i].id);
-        return items;
+        // Rows arrive with previewZones already stamped by the controller.
+        return settingsController.resolvedTilingOrder();
     }
     moveItem: function (from, to) {
         settingsController.moveTilingAlgorithm(from, to);
@@ -44,9 +45,7 @@ OrderingPage {
 
     Connections {
         function onStagedTilingOrderChanged() {
-            if (!root._rebuilding && !root._movingLocally)
-                root.rebuildModel();
-
+            root.refreshFromStagedOrder();
             root.updateCustomOrderState();
         }
 

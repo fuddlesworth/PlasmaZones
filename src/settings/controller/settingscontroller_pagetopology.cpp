@@ -39,15 +39,15 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 {
     // Single source of truth: parent name → set of leaf child page
     // names. Used by `isPageDirty` to propagate dirty state from a
-    // leaf to any group it belongs to. Covers parents at every level, fifteen
+    // leaf to any group it belongs to. Covers parents at every level, sixteen
     // in all. Top-level categories: placement, appearance. Mid-level
     // virtual parents nested beneath them: snapping, tiling and scrolling under
     // placement; animations and decorations under appearance, each of those two
     // also a map key in its own right and not only a component of appearance;
     // animations-transitions, animations-motion and animations-library under
     // animations; decorations-surfaces and decorations-library under
-    // decorations. Then the three *-cat collapsible headers (snapping-overlay-cat,
-    // snapping-config-cat, tiling-config-cat). Their children don't share their
+    // decorations. Then the four *-cat collapsible headers (snapping-overlay-cat,
+    // snapping-config-cat, tiling-config-cat, scrolling-config-cat). Their children don't share their
     // name prefix, so the explicit set sidesteps the asymmetry between a
     // prefix-walk and a direct membership lookup.
     //

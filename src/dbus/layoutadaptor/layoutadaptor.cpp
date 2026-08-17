@@ -323,6 +323,13 @@ QString LayoutAdaptor::getActiveLayout()
 
 QStringList LayoutAdaptor::getLayoutList()
 {
+    // Sort order is pull-model: this re-sorts from the current ordering
+    // settings on every call, and no layoutListChanged is wired to an
+    // ordering change (none of the three order signals reaches the emit
+    // sites — same contract as the pre-existing snapping/tiling orders).
+    // A client that caches the list keeps its old order until the next
+    // layout mutation broadcast; the shipping settings app is unaffected
+    // because it writes orders through its own in-process Settings.
     QStringList result;
 
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
@@ -338,7 +345,7 @@ QStringList LayoutAdaptor::getLayoutList()
         // defaultOrder, allow-lists).
         auto uuidOpt = Utils::parseUuid(entry.id);
         if (uuidOpt && entry.isScrollingTemplate) {
-            // Template entries share the bare-UUID id form with layouts but
+            // Template entries share the unprefixed braced-UUID id form with layouts but
             // have no Layout object; their one enrichment is the shadow mark
             // (a user copy of a bundled template), read from the store.
             if (const auto* store = m_layoutManager->scrollingTemplateStore()) {

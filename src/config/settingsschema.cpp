@@ -97,7 +97,8 @@ auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
 
 /// Normalize a comma-joined list: split, trim each entry, drop empties,
 /// drop duplicates, rejoin. Shared by every setting whose wire format is a
-/// comma-separated list (layout order, algorithm order, exclusion lists).
+/// comma-separated list: the three picker orders (snapping layout, tiling
+/// algorithm, scrolling template) and the tiling locked-screens list.
 QVariant canonicalCommaList(const QVariant& v)
 {
     QStringList parts = v.toString().split(QLatin1Char(','));

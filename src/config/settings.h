@@ -2049,6 +2049,17 @@ private:
     void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                           TriggerListSignalFn specificSignal);
 
+    /// Member-function-pointer alias for the per-order NOTIFY signal passed
+    /// into @ref writeOrderList, peer of @ref TriggerListSignalFn above.
+    using OrderListSignalFn = void (Settings::*)();
+
+    /// Shared comma-list order setter used by the three ordering setters
+    /// (snapping layout / tiling algorithm / scrolling template). Reads the
+    /// canonical stored form before and after the write so the
+    /// canonicalCommaList validator picks the comparison points, and only
+    /// emits @p specificSignal + @c settingsChanged on a real change.
+    void writeOrderList(const QString& key, const QStringList& order, OrderListSignalFn specificSignal);
+
     /// Member-function-pointer alias for the three per-mode disable NOTIFY
     /// signals passed into @ref writeDisableEntries. The signals carry the mode
     /// that flipped so listeners only react to their own axis.

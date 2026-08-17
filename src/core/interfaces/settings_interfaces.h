@@ -518,7 +518,7 @@ public:
 };
 
 /**
- * @brief Settings related to manual layout/algorithm ordering
+ * @brief Settings related to manual layout / algorithm / scrolling-template ordering
  *
  * Used by: Daemon (layout cycling, zone selector, overlay), Settings UI
  */

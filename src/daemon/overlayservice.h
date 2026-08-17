@@ -331,6 +331,7 @@ public:
     // Filtered layout count (layout/template vocabulary — the shortcut gates'
     // emptiness test; never strip cards)
     int visibleLayoutCount(const QString& screenId) const override;
+    bool screenResolvesToTemplates(const QString& screenId) const override;
     // Popup cell count for trigger edge computation (strip cards on strip
     // screens, layouts elsewhere)
     int selectorCardCount(const QString& screenId) const override;

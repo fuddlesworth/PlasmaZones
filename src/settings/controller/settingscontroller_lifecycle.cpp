@@ -344,12 +344,16 @@ void SettingsController::defaults()
     // as load() / save()) — CLAUDE.md emit-on-change rule.
     const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
     const bool hadStagedTile = m_stagedTilingOrder.has_value();
+    const bool hadStagedScroll = m_stagedScrollingOrder.has_value();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
+    m_stagedScrollingOrder.reset();
     if (hadStagedSnap)
         Q_EMIT stagedSnappingOrderChanged();
     if (hadStagedTile)
         Q_EMIT stagedTilingOrderChanged();
+    if (hadStagedScroll)
+        Q_EMIT stagedScrollingOrderChanged();
 
     // Drop the animations page's in-memory staged edits so the page
     // matches the reset settings (on-disk animation overrides in

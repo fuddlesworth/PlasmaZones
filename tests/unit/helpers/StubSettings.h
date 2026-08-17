@@ -9,6 +9,7 @@
 #include <PhosphorEngine/PerScreenKeys.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 
+#include <QColor>
 #include <QHash>
 #include <QJsonDocument>
 #include <QSet>
@@ -1652,6 +1653,87 @@ public:
         Q_EMIT scrollingTabIndicatorUrgentColorChanged();
         Q_EMIT settingsChanged();
     }
+    // The scrolling drop-indicator family: all six pairs are DEFAULTED
+    // virtuals on ISettings answering frozen constants — the same hazard the
+    // tab-indicator block above records, with a live interface consumer
+    // (overlayservice's scrolldropindicator reads enabled). Member-backed and
+    // ConfigDefaults-seeded like that block. Simplification relative to
+    // production: the colour setters store whatever they are handed instead
+    // of translating an invalid QColor into the follow-the-theme sentinel —
+    // a stub has no palette to resolve against, so tests drive concrete
+    // colours.
+    bool scrollingDropIndicatorEnabled() const override
+    {
+        return m_scrollingDropIndicatorEnabled;
+    }
+    void setScrollingDropIndicatorEnabled(bool enabled) override
+    {
+        if (m_scrollingDropIndicatorEnabled == enabled)
+            return;
+        m_scrollingDropIndicatorEnabled = enabled;
+        Q_EMIT scrollingDropIndicatorEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+    QColor scrollingDropIndicatorColor() const override
+    {
+        return m_scrollingDropIndicatorColor;
+    }
+    void setScrollingDropIndicatorColor(const QColor& color) override
+    {
+        if (m_scrollingDropIndicatorColor == color)
+            return;
+        m_scrollingDropIndicatorColor = color;
+        Q_EMIT scrollingDropIndicatorColorChanged();
+        Q_EMIT settingsChanged();
+    }
+    QColor scrollingDropIndicatorBorderColor() const override
+    {
+        return m_scrollingDropIndicatorBorderColor;
+    }
+    void setScrollingDropIndicatorBorderColor(const QColor& color) override
+    {
+        if (m_scrollingDropIndicatorBorderColor == color)
+            return;
+        m_scrollingDropIndicatorBorderColor = color;
+        Q_EMIT scrollingDropIndicatorBorderColorChanged();
+        Q_EMIT settingsChanged();
+    }
+    double scrollingDropIndicatorOpacity() const override
+    {
+        return m_scrollingDropIndicatorOpacity;
+    }
+    void setScrollingDropIndicatorOpacity(double opacity) override
+    {
+        if (qFuzzyCompare(m_scrollingDropIndicatorOpacity, opacity))
+            return;
+        m_scrollingDropIndicatorOpacity = opacity;
+        Q_EMIT scrollingDropIndicatorOpacityChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingDropIndicatorBorderWidth() const override
+    {
+        return m_scrollingDropIndicatorBorderWidth;
+    }
+    void setScrollingDropIndicatorBorderWidth(int px) override
+    {
+        if (m_scrollingDropIndicatorBorderWidth == px)
+            return;
+        m_scrollingDropIndicatorBorderWidth = px;
+        Q_EMIT scrollingDropIndicatorBorderWidthChanged();
+        Q_EMIT settingsChanged();
+    }
+    int scrollingDropIndicatorBorderRadius() const override
+    {
+        return m_scrollingDropIndicatorBorderRadius;
+    }
+    void setScrollingDropIndicatorBorderRadius(int px) override
+    {
+        if (m_scrollingDropIndicatorBorderRadius == px)
+            return;
+        m_scrollingDropIndicatorBorderRadius = px;
+        Q_EMIT scrollingDropIndicatorBorderRadiusChanged();
+        Q_EMIT settingsChanged();
+    }
     // ISettings getter/setter; the ISnapSettings bridge (unfloatFallbackToZone)
     // is defined alongside the other ISnapSettings overrides below.
     bool snapUnfloatFallbackToZone() const override
@@ -2640,6 +2722,14 @@ private:
     QString m_scrollingTabIndicatorActiveColor = ConfigDefaults::scrollingTabIndicatorActiveColor();
     QString m_scrollingTabIndicatorInactiveColor = ConfigDefaults::scrollingTabIndicatorInactiveColor();
     QString m_scrollingTabIndicatorUrgentColor = ConfigDefaults::scrollingTabIndicatorUrgentColor();
+    bool m_scrollingDropIndicatorEnabled = ConfigDefaults::scrollingDropIndicatorEnabled();
+    // The FALLBACK colour, matching what the defaulted interface getter (and
+    // production with no palette) resolves to for the empty stored string.
+    QColor m_scrollingDropIndicatorColor = ConfigDefaults::scrollingDropIndicatorFallbackColor();
+    QColor m_scrollingDropIndicatorBorderColor = ConfigDefaults::scrollingDropIndicatorFallbackColor();
+    double m_scrollingDropIndicatorOpacity = ConfigDefaults::scrollingDropIndicatorOpacity();
+    int m_scrollingDropIndicatorBorderWidth = ConfigDefaults::scrollingDropIndicatorBorderWidth();
+    int m_scrollingDropIndicatorBorderRadius = ConfigDefaults::scrollingDropIndicatorBorderRadius();
     bool m_snapUnfloatFallbackToZone = ConfigDefaults::snapUnfloatFallbackToZone();
     bool m_snappingFocusNewWindows = ConfigDefaults::snappingFocusNewWindows();
     bool m_snappingFocusFollowsMouse = ConfigDefaults::snappingFocusFollowsMouse();

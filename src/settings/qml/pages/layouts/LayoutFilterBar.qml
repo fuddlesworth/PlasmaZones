@@ -98,6 +98,20 @@ RowLayout {
 
     function _refreshHasPriorityOrder() {
         _hasPriorityOrder = viewMode === 2 ? settingsController.hasCustomScrollingOrder() : (viewMode === 0 ? settingsController.hasCustomSnappingOrder() : settingsController.hasCustomTilingOrder());
+        // Greying the Priority entry only blocks NEW picks (GroupSortBar makes
+        // selecting an unavailable entry a no-op) — a selection already on
+        // Priority survives the order's reset, leaving the closed combo
+        // reading "Priority" while the sort silently falls back to name.
+        // Coerce back to Name so the displayed sort matches the applied one.
+        // Persist directly: the Component.onCompleted caller runs AFTER
+        // loadState's own emit, and syncFromState assigns combo indices
+        // without emitting changed, so nothing downstream would re-save.
+        if (!_hasPriorityOrder && sortByIndex === 2) {
+            sortByIndex = 0;
+            groupSort.sortByIndex = 0;
+            groupSort.syncFromState();
+            saveState();
+        }
     }
 
     // The state map for this instance's fixed view mode — the one authority
@@ -316,7 +330,7 @@ RowLayout {
         groupModel: root.viewMode === 2 ? root.templateGroupModel : (root.viewMode === 0 ? root.snappingGroupModel : root.tilingGroupModel)
         sortModel: root.viewMode === 2 ? root.templateSortModel : (root.viewMode === 0 ? root.snappingSortModel : root.tilingSortModel)
         sortItemAvailable: [true, true, root._hasPriorityOrder]
-        disabledSortTooltip: i18n("Set a layout order on the Priority page first")
+        disabledSortTooltip: i18n("Set a priority order on the Priority page first")
         onChanged: {
             root.groupByIndex = groupByIndex;
             root.sortByIndex = sortByIndex;

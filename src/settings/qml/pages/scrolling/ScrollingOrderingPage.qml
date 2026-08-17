@@ -15,10 +15,13 @@ OrderingPage {
     emptyText: i18n("No templates available")
     emptyExplanation: i18n("Create templates on the Scrolling → Templates page first.")
     resetAccessibleName: i18n("Reset template order to default")
+    // Seed only: hasCustomScrollingOrder() is a non-reactive Q_INVOKABLE, so
+    // the first updateCustomOrderState() JS write severs this binding on
+    // purpose — the Connections below are the refresh path from then on.
     hasCustomOrder: settingsController.hasCustomScrollingOrder()
     previewZonesKey: "zones"
     zoneCountKey: "zoneCount"
-    countNoun: "column"
+    countNoun: "width"
     resolveOrder: function () {
         return settingsController.resolvedScrollingOrder();
     }
@@ -40,9 +43,7 @@ OrderingPage {
 
     Connections {
         function onStagedScrollingOrderChanged() {
-            if (!root._rebuilding && !root._movingLocally)
-                root.rebuildModel();
-
+            root.refreshFromStagedOrder();
             root.updateCustomOrderState();
         }
 

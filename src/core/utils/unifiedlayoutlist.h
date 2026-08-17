@@ -105,6 +105,11 @@ buildUnifiedLayoutList(PhosphorZones::IZoneLayoutRegistry* layoutManager,
  * them (a column vocabulary is not a placement, so screen shape says nothing
  * about its fit).
  *
+ * @p includeNoTemplateRow adds the synthetic "None" picker row (prepended
+ * ahead of the template rows in the raw list; the sort pins it last). The row
+ * is store-independent — it appears even when the store is empty or null —
+ * see appendScrollingTemplatePreviews in the .cpp for the contract.
+ *
  * See the non-filtered overload for @p autotileSource / @p algorithmRegistry
  * semantics - same fallback rules apply.
  */
@@ -119,10 +124,16 @@ PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview> buildUnifiedLayoutList
 /**
  * @brief Build a combined custom order list from settings
  *
- * Each flag mirrors the matching include* argument of buildUnifiedLayoutList:
- * pass the same values so the order list covers exactly the families the
- * preview list carries. Template ids need no namespace prefix (the order and
- * the previews both use the braced-UUID string), unlike the tiling arm.
+ * Each flag mirrors the matching include* argument of the FILTERED
+ * buildUnifiedLayoutList overload: pass the same values so the order list
+ * covers exactly the families the preview list carries. The flat overload
+ * takes only includeAutotile — its manual arm is unconditional and its
+ * template arm is gated on a non-null template store — so a flat-overload
+ * caller mirrors includeAutotile and passes includeManual = true, plus
+ * includeScrollingTemplates = true iff it also passes a store (unmatched ids
+ * in the order are inert either way). Template ids need no namespace prefix
+ * (the order and the previews both use the braced-UUID string), unlike the
+ * tiling arm.
  */
 PLASMAZONES_EXPORT QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual,
                                                 bool includeAutotile, bool includeScrollingTemplates = false);

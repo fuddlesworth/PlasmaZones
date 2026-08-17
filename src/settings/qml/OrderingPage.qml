@@ -31,8 +31,11 @@ SettingsFlickable {
     property string nameKey: "displayName"
     // Whether to hide the badge when count is 0
     property bool hideZeroBadge: false
-    // What the badge counts: "zone" (layouts/algorithms) or "column"
-    // (scrolling templates, whose zoneCount is the starting column count)
+    // What the badge counts: "zone" (layouts/algorithms) or "width"
+    // (scrolling templates, whose zoneCount is the number of bands the
+    // preview draws — starting columns, or width presets, or the single
+    // fallback band; LayoutComboBox documents why "widths" is the honest
+    // noun for that count)
     property string countNoun: "zone"
     property bool _rebuilding: false
     property bool _movingLocally: false
@@ -40,29 +43,50 @@ SettingsFlickable {
 
     function rebuildModel() {
         _rebuilding = true;
+        // A rebuild destroys every delegate, including the MouseArea that
+        // owns the only drag-state reset path — clear the drag state first,
+        // or a rebuild landing mid-drag (an ungated layoutsChanged from the
+        // daemon) strands isDragging/from/to on orderContainer and every
+        // freshly built row picks up a permanent visualOffset shift.
+        orderContainer.resetDragState();
         orderModel.clear();
         let items = resolveOrder();
         let cache = {};
         for (let i = 0; i < items.length; i++) {
-            let item = items[i];
-            let key = root.previewZonesKey;
-            if (item[key]) {
-                cache[item.id] = item[key];
-                // Append a shallow copy without the zones payload instead of
-                // deleting the key off the caller's object — resolveOrder may
-                // return references the controller still owns, and mutating
-                // them would strip the zones from the source data.
-                let copy = {};
-                for (let prop in item) {
-                    if (prop !== key)
-                        copy[prop] = item[prop];
-                }
-                item = copy;
+            const source = items[i];
+            const key = root.previewZonesKey;
+            // Always append a shallow copy instead of the caller's object:
+            // resolveOrder may return references the controller still owns
+            // (mutating them would strip data from the source), and the
+            // zones payload stays out of the ListModel either way.
+            let copy = {};
+            for (let prop in source) {
+                if (prop !== key)
+                    copy[prop] = source[prop];
             }
-            orderModel.append(item);
+            if (source[key])
+                cache[source.id] = source[key];
+            // ListModel locks its role set on the first append when
+            // dynamicRoles is off, and the serializer omits `description`
+            // for rows without one — stamp it so every row carries the same
+            // keys and the description label cannot go blank for rows that
+            // follow a description-less first row.
+            if (copy.description === undefined)
+                copy.description = "";
+            orderModel.append(copy);
         }
         root._zoneCache = cache;
         _rebuilding = false;
+    }
+
+    // Single guard point for the wrapper pages' staged-order Connections:
+    // rebuild unless the change originated from this page's own local move
+    // or an in-progress rebuild. Keeps the guard (and the underscore-private
+    // flags it reads) inside this component instead of copied into every
+    // wrapper.
+    function refreshFromStagedOrder() {
+        if (!_rebuilding && !_movingLocally)
+            rebuildModel();
     }
 
     // Move locally within the QML model and notify the controller without a full rebuild
@@ -108,6 +132,15 @@ SettingsFlickable {
                     property int dragFromIndex: -1
                     property int dropTargetIndex: -1
                     property bool isDragging: false
+
+                    // Shared teardown for every way a drag can end without a
+                    // release: cancellation (grab steal, window deactivation)
+                    // and a model rebuild that destroys the delegates.
+                    function resetDragState() {
+                        isDragging = false;
+                        dragFromIndex = -1;
+                        dropTargetIndex = -1;
+                    }
 
                     Layout.fillWidth: true
                     // No horizontal Layout margin here: each drag row already
@@ -167,6 +200,9 @@ SettingsFlickable {
 
                                 property bool isDragging: dragArea.drag.active
 
+                                Accessible.role: Accessible.ListItem
+                                Accessible.name: i18nc("@info:accessibility reorderable priority row: name, position, total", "%1, position %2 of %3", delegateRoot.model[root.nameKey] || "", delegateRoot.index + 1, orderModel.count)
+
                                 width: parent.width
                                 height: orderContainer.rowHeight
                                 radius: Kirigami.Units.smallSpacing
@@ -191,12 +227,27 @@ SettingsFlickable {
                                 MouseArea {
                                     id: dragArea
 
+                                    // Restore the container's drag state and this row's
+                                    // severed y binding. Shared by onReleased and
+                                    // onCanceled so the two teardown paths cannot drift.
+                                    function endDrag() {
+                                        orderContainer.resetDragState();
+                                        delegateRoot.y = Qt.binding(function () {
+                                            return delegateRoot.baseY + delegateRoot.visualOffset;
+                                        });
+                                    }
+
                                     anchors.fill: parent
                                     drag.target: delegateRoot
                                     drag.axis: Drag.YAxis
                                     drag.minimumY: 0
                                     drag.maximumY: (orderModel.count - 1) * orderContainer.rowHeight
                                     cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                                    // The page scrolls on the same axis the rows drag on.
+                                    // Without this the enclosing SettingsFlickable can
+                                    // steal the grab mid-drag (every other drag surface
+                                    // in a scroller here sets it — see EasingPreview).
+                                    preventStealing: true
                                     onPressed: {
                                         orderContainer.dragFromIndex = delegateRoot.index;
                                         orderContainer.dropTargetIndex = delegateRoot.index;
@@ -205,16 +256,16 @@ SettingsFlickable {
                                     onReleased: {
                                         let from = orderContainer.dragFromIndex;
                                         let to = orderContainer.dropTargetIndex;
-                                        orderContainer.isDragging = false;
-                                        orderContainer.dragFromIndex = -1;
-                                        orderContainer.dropTargetIndex = -1;
-                                        // Reset position — the model move will reposition
-                                        delegateRoot.y = Qt.binding(function () {
-                                            return delegateRoot.baseY + delegateRoot.visualOffset;
-                                        });
+                                        endDrag();
                                         if (from >= 0 && to >= 0 && from !== to && from < orderModel.count && to < orderModel.count)
                                             root.moveLocal(from, to);
                                     }
+                                    // Grab loss (window deactivation, another handler
+                                    // taking the grab) fires canceled, not released —
+                                    // without teardown here the stranded drag state
+                                    // keeps every row between from and to shifted a
+                                    // full rowHeight for the lifetime of the page.
+                                    onCanceled: endDrag()
                                     onPositionChanged: {
                                         if (drag.active) {
                                             // Calculate target index from dragged item center
@@ -257,6 +308,11 @@ SettingsFlickable {
                                         font.bold: true
                                         color: Kirigami.Theme.disabledTextColor
                                         Layout.preferredWidth: Kirigami.Units.gridUnit * 1.5
+                                        // Deliberately NOT a LayoutMirroring ternary: Qt
+                                        // mirrors an explicitly-set horizontalAlignment on
+                                        // its own (see ThemeFallbackColorControl, which has
+                                        // to DISABLE mirroring to defeat exactly that), so
+                                        // a ternary here would double-flip under RTL.
                                         horizontalAlignment: Text.AlignRight
                                     }
 
@@ -336,7 +392,7 @@ SettingsFlickable {
                                             id: badgeLabel
 
                                             anchors.centerIn: parent
-                                            text: root.countNoun === "column" ? i18np("%n column", "%n columns", parent.count) : i18np("%n zone", "%n zones", parent.count)
+                                            text: root.countNoun === "width" ? i18np("%n width", "%n widths", parent.count) : i18np("%n zone", "%n zones", parent.count)
                                             font: Kirigami.Theme.smallFont
                                             color: Kirigami.Theme.highlightColor
                                         }
@@ -344,12 +400,23 @@ SettingsFlickable {
 
                                     // Move up
                                     ToolButton {
+                                        id: moveUpButton
+
                                         icon.name: "arrow-up"
                                         icon.width: Kirigami.Units.iconSizes.smallMedium
                                         icon.height: Kirigami.Units.iconSizes.smallMedium
                                         enabled: delegateRoot.index > 0
                                         opacity: enabled ? 1 : 0.3
-                                        onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index - 1)
+                                        onClicked: {
+                                            // Reaching the top disables this button, and Qt
+                                            // drops active focus from a disabled item — hand
+                                            // focus to the sibling so a keyboard-driven
+                                            // reorder is not stranded on the last press.
+                                            const handOff = activeFocus && delegateRoot.index - 1 === 0;
+                                            root.moveLocal(delegateRoot.index, delegateRoot.index - 1);
+                                            if (handOff)
+                                                moveDownButton.forceActiveFocus(Qt.OtherFocusReason);
+                                        }
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move up")
                                         Accessible.name: i18n("Move %1 up", delegateRoot.model[root.nameKey] || "")
@@ -364,12 +431,21 @@ SettingsFlickable {
 
                                     // Move down
                                     ToolButton {
+                                        id: moveDownButton
+
                                         icon.name: "arrow-down"
                                         icon.width: Kirigami.Units.iconSizes.smallMedium
                                         icon.height: Kirigami.Units.iconSizes.smallMedium
                                         enabled: delegateRoot.index < orderModel.count - 1
                                         opacity: enabled ? 1 : 0.3
-                                        onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index + 1)
+                                        onClicked: {
+                                            // Same focus hand-off as the up button, for the
+                                            // bottom boundary.
+                                            const handOff = activeFocus && delegateRoot.index + 1 === orderModel.count - 1;
+                                            root.moveLocal(delegateRoot.index, delegateRoot.index + 1);
+                                            if (handOff)
+                                                moveUpButton.forceActiveFocus(Qt.OtherFocusReason);
+                                        }
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move down")
                                         Accessible.name: i18n("Move %1 down", delegateRoot.model[root.nameKey] || "")

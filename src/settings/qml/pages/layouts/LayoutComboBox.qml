@@ -639,6 +639,12 @@ ComboBox {
                         if (isDefaultOption && !hasLayout) {
                             // "Default"/"None" with no resolution (e.g., quick layout slots)
                             return i18n("No layout assigned");
+                        } else if (!hasLayout && root.explicitNoneValue !== "" && modelData.value === root.explicitNoneValue) {
+                            // The explicit-none row means "deliberately no
+                            // template", not an unresolved default — without
+                            // this branch it fell into the wording below and
+                            // read as a configuration warning.
+                            return i18n("No template");
                         } else if (!hasLayout) {
                             return i18n("No default configured");
                         }

@@ -17,8 +17,9 @@
 //
 //   2. Free helpers shared by more than one partial: the disable-list
 //      canonicalization (used by settings.cpp's load()/reset() and by
-//      settings/disable.cpp), parseCommaList (used by settings.cpp's
-//      Ordering section and by settings/disable.cpp's lockedScreens), and
+//      settings/disable.cpp), parseCommaList (used by storescalars.cpp's
+//      Ordering section, by settings/disable.cpp's lockedScreens, and by
+//      settings/scrolling.cpp's column-width lists), and
 //      the scrolling column-width kind repair pair (used by
 //      settings/scrolling.cpp for the global width key and by
 //      settings/perscreen.cpp for the per-monitor one).

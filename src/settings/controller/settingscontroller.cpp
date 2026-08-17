@@ -573,6 +573,30 @@ SettingsController::SettingsController(QObject* parent)
     wirePerScreenOverrideSignal(&Settings::perScreenScrollingZoneSelectorSettingsChanged);
     wirePerScreenOverrideSignal(&Settings::perScreenScrollingSettingsChanged);
 
+    // The three ordering pages (and the layout library's Priority sort
+    // availability) bind to the staged*OrderChanged signals only. When
+    // nothing is staged the effective order is the Settings value, so a
+    // settings-layer-only change (factory reset, profile apply, external
+    // config reload) must re-emit the staged signal or those surfaces keep
+    // rendering the stale order until restart. Gated on the optional being
+    // disengaged: an engaged staged edit already shadows the settings value,
+    // and the save()/defaults() flush paths emit their own transition signal
+    // after resetting the optional — this guard is what stops each of those
+    // from double-firing (their Settings write lands while the optional is
+    // still engaged).
+    connect(&m_settings, &Settings::snappingLayoutOrderChanged, this, [this] {
+        if (!m_stagedSnappingOrder.has_value())
+            Q_EMIT stagedSnappingOrderChanged();
+    });
+    connect(&m_settings, &Settings::tilingAlgorithmOrderChanged, this, [this] {
+        if (!m_stagedTilingOrder.has_value())
+            Q_EMIT stagedTilingOrderChanged();
+    });
+    connect(&m_settings, &Settings::scrollingTemplateOrderChanged, this, [this] {
+        if (!m_stagedScrollingOrder.has_value())
+            Q_EMIT stagedScrollingOrderChanged();
+    });
+
     // An external config reload parks while the user has unsaved edits, so it
     // drains on the same signal the dirty tracking above emits.
     connect(this, &SettingsController::dirtyPagesChanged, this, &SettingsController::maybeDrainPendingExternalReload);

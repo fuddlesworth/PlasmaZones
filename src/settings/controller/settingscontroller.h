@@ -620,18 +620,14 @@ public:
     Q_INVOKABLE void stageAssignmentEntry(const QString& screenName, int virtualDesktop, const QString& activityId,
                                           int mode, const QString& snappingLayoutId, const QString& tilingAlgorithmId);
     /// Remove any staged entry for the (screen × desktop × activity)
-    /// assignment context — a true unstage: on Apply the context's
-    /// daemon-side assignment is left untouched.
-    ///
-    /// No QML page calls this today. It is kept as the staging surface's
-    /// inverse: stageAssignmentEntry is the only way in, and a page that stages
-    /// a pick and then wants to take it back (rather than stage the opposite)
-    /// has no other route. Deleting it would leave the surface one-way.
+    /// assignment context — a true unstage: on Apply the daemon-side
+    /// assignment is left untouched. No QML page calls this today; kept
+    /// as stageAssignmentEntry's inverse so the surface stays two-way.
     Q_INVOKABLE void removeStagedAssignment(const QString& screenName, int virtualDesktop, const QString& activityId);
 
     // ── Ordering helpers (staged — flushed to settings on save) ────────────
     Q_INVOKABLE QVariantList resolvedSnappingOrder() const;
-    Q_INVOKABLE QVariantList resolvedTilingOrder() const;
+    Q_INVOKABLE QVariantList resolvedTilingOrder(bool stampPreviews = true) const;
     Q_INVOKABLE QVariantList resolvedScrollingOrder() const;
     Q_INVOKABLE void moveSnappingLayout(int fromIndex, int toIndex);
     Q_INVOKABLE void moveTilingAlgorithm(int fromIndex, int toIndex);
@@ -1258,8 +1254,8 @@ private:
     // All staged (not-yet-saved) state owned by StagingService — assignments,
     // virtual screen configs, quick layout slots. Flushed by save() in a
     // specific order (persistence → Settings::save → D-Bus). Ordering
-    // (m_stagedSnappingOrder / m_stagedTilingOrder below) stays here because
-    // it couples to per-page NOTIFY signals, and the service isn't a QObject
+    // (the three m_staged*Order optionals below) stays here because it
+    // couples to per-page NOTIFY signals, and the service isn't a QObject
     // so it can't emit them itself.
     StagingService m_staging;
 
