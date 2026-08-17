@@ -145,10 +145,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // Four-tier precedence, collapsed daemon-side exactly like autotile's
     // updateEngineScreens: per-screen SETTINGS seed the map first,
     // per-context RULES overwrite where a slot is filled, the context's
-    // TEMPLATE vocabulary adds its two preset-list keys (disjoint from every
-    // rule slot, so its position in the merge cannot collide), and the
-    // engine's effective* readers keep the final two-way
-    // `override ?? global-config` fallback.
+    // TEMPLATE pushes its whole shape over the settings-channel slots (preset
+    // vocabularies, seed blueprint and the beyond-blueprint width trio, which
+    // are all keys the rule channel never writes, plus the one display key it
+    // shares with a rule slot and therefore only writes when no rule filled
+    // it), and the engine's effective* readers keep the final two-way
+    // `override ?? global-config` fallback. So: rule > template > settings >
+    // engine fallback, described in full at the template block below.
     // The settings map is engine-spelled (PerScreenScrollingKey ==
     // ScrollPerScreenKeys settings channel), so the seed is a plain copy;
     // rules write their own channel keys (bare-fraction width/height plus the
@@ -442,26 +445,25 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // that) and every scheduleRetileForScreen, whose queued retiles coalesce
     // onto a later turn.
     //
-    // The base pointer does not carry the accessor: the axis is a scrolling
-    // concept and deliberately not on IPlacementEngine, so this is a downcast
-    // rather than a widening of the shared contract. It is loop-invariant, so
-    // it is resolved once rather than per screen.
+    // Through stripIsVerticalForScreen, which owns the downcast the accessor
+    // needs (the axis is a scrolling concept and deliberately not on
+    // IPlacementEngine, so reaching it off the base pointer is a downcast
+    // rather than a widening of the shared contract).
     QStringList verticalAxisScreens;
-    if (const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get())) {
-        for (const QString& screenId : scrollingScreens) {
-            if (scroll->stripAxisForScreen(screenId).axis() == PhosphorProtocol::ScrollAxis::Vertical) {
-                verticalAxisScreens.append(screenId);
-            }
+    for (const QString& screenId : scrollingScreens) {
+        if (stripIsVerticalForScreen(screenId)) {
+            verticalAxisScreens.append(screenId);
         }
     }
 
-    // Publish the three effect-owned lists in ONE push, after the walk. SORTED here,
-    // not by construction: the walk iterates a QSet, whose order is hash order
-    // and is not stable across insertions, so the same membership could be
-    // built in two different orders and the adaptor's emit-on-change compare —
-    // an order-sensitive list compare — would report a change that isn't one.
-    // The canonicalization itself lives in ScrollingAdaptor::setScrollEffectBehaviour,
-    // which sorts and de-duplicates on entry. That is the published-contract
+    // Publish the three effect-owned lists in ONE push, after the walk. They
+    // leave here UNSORTED and are canonicalized at the ADAPTOR boundary: the
+    // walk iterates a QSet, whose order is hash order and is not stable across
+    // insertions, so the same membership could be built in two different orders
+    // and the adaptor's emit-on-change compare — an order-sensitive list
+    // compare — would report a change that isn't one.
+    // ScrollingAdaptor::setScrollEffectBehaviour sorts and de-duplicates on
+    // entry. That is the published-contract
     // boundary and it covers every producer, not just this one, so sorting a
     // second time here would be dead work claiming the same ownership. Screens
     // that LEFT scrolling are absent by construction (the walk only visits the
@@ -523,6 +525,12 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             m_scrollEngine->scheduleRetileForScreen(screenId);
         }
     }
+}
+
+bool Daemon::stripIsVerticalForScreen(const QString& screenId) const
+{
+    const auto* scroll = qobject_cast<const PhosphorScrollEngine::ScrollEngine*>(m_scrollEngine.get());
+    return scroll && scroll->stripAxisForScreen(screenId).isVertical();
 }
 
 } // namespace PlasmaZones

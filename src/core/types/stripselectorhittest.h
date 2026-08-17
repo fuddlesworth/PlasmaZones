@@ -97,8 +97,13 @@ inline StripSelectorHit classifyStripSelectorPoint(const QVector<QRectF>& cardRe
     // changes — and the horizontal case stays byte-identical, which keeps
     // every pinned test meaningful as the identity case.
     if (verticalAxis) {
+        // Unconditional: emptiness survives the transpose (a non-positive
+        // width becomes a non-positive height), so an un-laid-out card stays
+        // un-laid-out either way and the laidOut gate reads the same. Skipping
+        // the swap for those would leave one rect in the untransposed space,
+        // which is a shape this arm should never hand on.
         const auto flip = [](const QRectF& r) {
-            return r.isEmpty() ? r : QRectF(r.y(), r.x(), r.height(), r.width());
+            return QRectF(r.y(), r.x(), r.height(), r.width());
         };
         QVector<QRectF> swapped;
         swapped.reserve(cardRects.size());

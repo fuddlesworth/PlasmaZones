@@ -224,6 +224,48 @@ void TestScrollEnginePerScreen::widthChannelsRankRuleOverSettingsOverGlobal()
     QCOMPARE(global.proportion, 0.25);
 }
 
+void TestScrollEnginePerScreen::heightChannelsRankRuleOverSettingsOverGlobal()
+{
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    settings->heightKind = static_cast<int>(DefaultHeightKind::Fixed);
+    settings->heightValue = 200.0; // the global, in pixels
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // Rule channel: a work-area FRACTION, committed as pixels against the
+    // live work area (the gaps are zero here, so the work area is the screen).
+    QVariantMap both;
+    both.insert(ScrollPerScreenKeys::defaultWindowHeight(), 0.5);
+    both.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::Fixed));
+    both.insert(ScrollPerScreenKeys::defaultWindowHeightValue(), 300.0);
+    engine->applyPerScreenConfig(kS1, both);
+
+    QVariantMap settingsOnly;
+    settingsOnly.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::Fixed));
+    settingsOnly.insert(ScrollPerScreenKeys::defaultWindowHeightValue(), 300.0);
+    engine->applyPerScreenConfig(kS2, settingsOnly);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+    engine->windowOpened(QStringLiteral("app|c"), kS3, 0, 0);
+
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
+    QVERIFY(columnExists(engine, kS2, QStringLiteral("app|b")));
+    QVERIFY(columnExists(engine, kS3, QStringLiteral("app|c")));
+
+    const WindowHeight ruled = openedHeight(engine, kS1, QStringLiteral("app|a"));
+    QCOMPARE(ruled.kind, WindowHeight::Fixed);
+    QCOMPARE(ruled.fixedPx, kCrossExtent / 2);
+
+    const WindowHeight perScreen = openedHeight(engine, kS2, QStringLiteral("app|b"));
+    QCOMPARE(perScreen.kind, WindowHeight::Fixed);
+    QCOMPARE(perScreen.fixedPx, 300);
+
+    const WindowHeight global = openedHeight(engine, kS3, QStringLiteral("app|c"));
+    QCOMPARE(global.kind, WindowHeight::Fixed);
+    QCOMPARE(global.fixedPx, 200);
+}
+
 // The per-screen StripAxis key is the PR's headline knob and had ZERO coverage
 // anywhere in the repo: nothing wrote ScrollPerScreenKeys::stripAxis(), so the
 // whole intent switch in effectiveStripAxis was dead as far as the suite was
@@ -245,7 +287,7 @@ void TestScrollEnginePerScreen::perScreenStripAxisOverridesTheResolvedAxis()
     // to resolve from its work-area aspect. Auto is 0, Horizontal 1, Vertical 2
     // in the config tri-state, which is deliberately NOT the protocol's
     // numbering — the engine switches rather than casting.
-    const bool fixtureIsVertical = ScrollTestUtils::Ax::vertical();
+    const bool fixtureIsVertical = Ax::vertical();
     QVariantMap forced;
     forced.insert(ScrollPerScreenKeys::stripAxis(), fixtureIsVertical ? 1 : 2);
     engine->applyPerScreenConfig(kS1, forced);
@@ -270,14 +312,14 @@ void TestScrollEnginePerScreen::perScreenStripAxisOverridesTheResolvedAxis()
     QCOMPARE(forcedRects.size(), 1);
     QCOMPARE(autoRects.size(), 1);
 
-    QCOMPARE(ScrollTestUtils::Ax::crossLen(autoRects.first()), ScrollTestUtils::kCrossExtent);
-    QVERIFY(ScrollTestUtils::Ax::mainLen(autoRects.first()) < ScrollTestUtils::kMainExtent);
-    QCOMPARE(ScrollTestUtils::Ax::mainLen(forcedRects.first()), ScrollTestUtils::kMainExtent);
+    QCOMPARE(Ax::crossLen(autoRects.first()), kCrossExtent);
+    QVERIFY(Ax::mainLen(autoRects.first()) < kMainExtent);
+    QCOMPARE(Ax::mainLen(forcedRects.first()), kMainExtent);
     // Both roles, not just one: a regression that hands back the full screen
     // rect satisfies the mainLen compare above, so the forced leg also has to
     // bound the harness-cross extent (the engine's MAIN there — a lone column
     // takes only the default share of it).
-    QVERIFY(ScrollTestUtils::Ax::crossLen(forcedRects.first()) < ScrollTestUtils::kCrossExtent);
+    QVERIFY(Ax::crossLen(forcedRects.first()) < kCrossExtent);
 
     // Clearing the override drops the screen back onto the resolved axis, so
     // it looks like the untouched one again. applyPerScreenConfig and its
@@ -288,8 +330,8 @@ void TestScrollEnginePerScreen::perScreenStripAxisOverridesTheResolvedAxis()
     QCoreApplication::processEvents();
     const QVector<QRect> cleared = engine->visibleTileRects(kS1);
     QCOMPARE(cleared.size(), 1);
-    QCOMPARE(ScrollTestUtils::Ax::crossLen(cleared.first()), ScrollTestUtils::kCrossExtent);
-    QVERIFY(ScrollTestUtils::Ax::mainLen(cleared.first()) < ScrollTestUtils::kMainExtent);
+    QCOMPARE(Ax::crossLen(cleared.first()), kCrossExtent);
+    QVERIFY(Ax::mainLen(cleared.first()) < kMainExtent);
 
     // An out-of-range intent degrades to Auto rather than to a fixed axis.
     QVariantMap garbage;
@@ -298,8 +340,8 @@ void TestScrollEnginePerScreen::perScreenStripAxisOverridesTheResolvedAxis()
     QCoreApplication::processEvents();
     const QVector<QRect> degraded = engine->visibleTileRects(kS1);
     QCOMPARE(degraded.size(), 1);
-    QCOMPARE(ScrollTestUtils::Ax::crossLen(degraded.first()), ScrollTestUtils::kCrossExtent);
-    QVERIFY(ScrollTestUtils::Ax::mainLen(degraded.first()) < ScrollTestUtils::kMainExtent);
+    QCOMPARE(Ax::crossLen(degraded.first()), kCrossExtent);
+    QVERIFY(Ax::mainLen(degraded.first()) < kMainExtent);
 
     // The COMMIT path, not only the on-demand resolve the reads above take:
     // re-force the axis and assert a committed windowsTiled entry flips its
@@ -319,7 +361,7 @@ void TestScrollEnginePerScreen::perScreenStripAxisOverridesTheResolvedAxis()
             }
             const QRect committed(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
                                   o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
-            QCOMPARE(ScrollTestUtils::Ax::mainLen(committed), ScrollTestUtils::kMainExtent);
+            QCOMPARE(Ax::mainLen(committed), kMainExtent);
             sawCommitted = true;
         }
     }
@@ -340,7 +382,7 @@ void TestScrollEnginePerScreen::globalStripAxisChannelReachesTheEngine()
     auto* settings = new StubScrollSettings(&owner);
     // Forced AGAINST the fixture aspect before the engine's construction-time
     // refresh, so the very first resolve already runs on the global.
-    const bool fixtureIsVertical = ScrollTestUtils::Ax::vertical();
+    const bool fixtureIsVertical = Ax::vertical();
     const int forcedGlobal = fixtureIsVertical ? 1 : 2;
     settings->stripAxis = forcedGlobal;
     ScrollEngine* engine = makeEngine(&owner, settings);
@@ -407,7 +449,7 @@ void TestScrollEnginePerScreen::ruleSlotOverwritesTheSeededAxisInTheMergedMap()
     auto* settings = new StubScrollSettings(&owner);
     ScrollEngine* engine = makeEngine(&owner, settings);
 
-    const bool fixtureIsVertical = ScrollTestUtils::Ax::vertical();
+    const bool fixtureIsVertical = Ax::vertical();
     const int seededOpposing = fixtureIsVertical ? 1 : 2; // per-screen setting, against the fixture
     const int ruleMatchingFixture = fixtureIsVertical ? 2 : 1; // rule verdict, back to the fixture's own axis
 
@@ -436,48 +478,6 @@ void TestScrollEnginePerScreen::ruleSlotOverwritesTheSeededAxisInTheMergedMap()
     QCOMPARE(ruleWins.size(), 1);
     QCOMPARE(Ax::crossLen(ruleWins.first()), kCrossExtent);
     QVERIFY(Ax::mainLen(ruleWins.first()) < kMainExtent);
-}
-
-void TestScrollEnginePerScreen::heightChannelsRankRuleOverSettingsOverGlobal()
-{
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    settings->heightKind = static_cast<int>(DefaultHeightKind::Fixed);
-    settings->heightValue = 200.0; // the global, in pixels
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    // Rule channel: a work-area FRACTION, committed as pixels against the
-    // live work area (the gaps are zero here, so the work area is the screen).
-    QVariantMap both;
-    both.insert(ScrollPerScreenKeys::defaultWindowHeight(), 0.5);
-    both.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::Fixed));
-    both.insert(ScrollPerScreenKeys::defaultWindowHeightValue(), 300.0);
-    engine->applyPerScreenConfig(kS1, both);
-
-    QVariantMap settingsOnly;
-    settingsOnly.insert(ScrollPerScreenKeys::defaultWindowHeightKind(), static_cast<int>(DefaultHeightKind::Fixed));
-    settingsOnly.insert(ScrollPerScreenKeys::defaultWindowHeightValue(), 300.0);
-    engine->applyPerScreenConfig(kS2, settingsOnly);
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
-    engine->windowOpened(QStringLiteral("app|c"), kS3, 0, 0);
-
-    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
-    QVERIFY(columnExists(engine, kS2, QStringLiteral("app|b")));
-    QVERIFY(columnExists(engine, kS3, QStringLiteral("app|c")));
-
-    const WindowHeight ruled = openedHeight(engine, kS1, QStringLiteral("app|a"));
-    QCOMPARE(ruled.kind, WindowHeight::Fixed);
-    QCOMPARE(ruled.fixedPx, kCrossExtent / 2);
-
-    const WindowHeight perScreen = openedHeight(engine, kS2, QStringLiteral("app|b"));
-    QCOMPARE(perScreen.kind, WindowHeight::Fixed);
-    QCOMPARE(perScreen.fixedPx, 300);
-
-    const WindowHeight global = openedHeight(engine, kS3, QStringLiteral("app|c"));
-    QCOMPARE(global.kind, WindowHeight::Fixed);
-    QCOMPARE(global.fixedPx, 200);
 }
 
 void TestScrollEnginePerScreen::absentTrioSlotsFallBackPerSlotToTheGlobal()
@@ -631,7 +631,7 @@ void TestScrollEnginePerScreen::fixedKindWithAProportionValueFallsThroughToTheGl
     // layout would satisfy the intent assertion above on its own.
     const QVector<QRect> committedRects = engine->visibleTileRects(kS2);
     QCOMPARE(committedRects.size(), 1);
-    QCOMPARE(ScrollTestUtils::Ax::mainLen(committedRects.first()), 640);
+    QCOMPARE(Ax::mainLen(committedRects.first()), 640);
 
     const ColumnWidth rejectedFraction = openedWidth(engine, kS3, QStringLiteral("app|c"));
     QCOMPARE(rejectedFraction.kind, ColumnWidth::Proportion);
@@ -857,6 +857,20 @@ void TestScrollEnginePerScreen::templateListsAreCappedAtTheKeepAndScanBounds()
     scan.insert(ScrollPerScreenKeys::presetColumnWidths(), mostlyRejects);
     engine->applyPerScreenConfig(kS2, scan);
     QCOMPARE(engine->effectivePresetColumnWidths(kS2), QList<qreal>({0.25, 0.5, 0.75}));
+
+    // AT the bound, which the leg above cannot reach: it only proves the scan
+    // stops at or before 256. The last scanned index is kScanCap - 1, so a
+    // valid entry there must still be found — a window even one short of the
+    // cap would fall back to the settings vocabulary instead.
+    QVariantList validAtTheBound;
+    for (int i = 0; i < kScanCap - 1; ++i) {
+        validAtTheBound.append(0.001);
+    }
+    validAtTheBound.append(0.6);
+    QVariantMap atBound;
+    atBound.insert(ScrollPerScreenKeys::presetColumnWidths(), validAtTheBound);
+    engine->applyPerScreenConfig(kS3, atBound);
+    QCOMPARE(engine->effectivePresetColumnWidths(kS3), QList<qreal>({0.6}));
 }
 
 void TestScrollEnginePerScreen::wrongTypedKindAndSpinValuesFallThrough()
@@ -1228,6 +1242,32 @@ void TestScrollEnginePerScreen::openFocusedRuleOverridesFocusNewWindows()
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
 }
 
+void TestScrollEnginePerScreen::openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival()
+{
+    // The rewind arm needs a prior active column to rewind TO. On an empty
+    // strip there is none, so the first window becomes the active column
+    // whatever the rule says — a strip whose only column were not active
+    // would leave every later direction verb navigating from nowhere. The
+    // rule still governs the SECOND arrival, which is what makes this a
+    // guard on the empty case rather than the rule being inert.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.focused = false;
+        return params;
+    });
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+}
+
 void TestScrollEnginePerScreen::openFocusedFalseSurvivesTheCompositorsOwnFocusReport()
 {
     // The regression this pins was observed live, not theorised: declining
@@ -1264,32 +1304,6 @@ void TestScrollEnginePerScreen::openFocusedFalseSurvivesTheCompositorsOwnFocusRe
     // window unfocusable, which is why the mark is one-shot.
     engine->windowFocused(QStringLiteral("app|b"), kS1);
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|b"));
-}
-
-void TestScrollEnginePerScreen::openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival()
-{
-    // The rewind arm needs a prior active column to rewind TO. On an empty
-    // strip there is none, so the first window becomes the active column
-    // whatever the rule says — a strip whose only column were not active
-    // would leave every later direction verb navigating from nowhere. The
-    // rule still governs the SECOND arrival, which is what makes this a
-    // guard on the empty case rather than the rule being inert.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.focused = false;
-        return params;
-    });
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
-    QVERIFY(state);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
-
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
 }
 
 void TestScrollEnginePerScreen::openMaximizedFalseLeavesTheDefaultWidth()

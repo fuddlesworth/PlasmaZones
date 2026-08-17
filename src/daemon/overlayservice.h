@@ -1108,8 +1108,13 @@ private:
     /// a full engine strip snapshot plus QVariant serialization per tick.
     /// Invalidated wherever the card list can change shape or share: the
     /// exclusion id (setActiveDragWindowId), the preview boundaries and
-    /// structural strip changes (refreshStripSelector), and the
-    /// desktop/activity/exclusion/settings refresh (hideDisabledAndRefresh).
+    /// structural strip changes (refreshStripSelector), the
+    /// desktop/activity/exclusion/settings refresh (hideDisabledAndRefresh),
+    /// the whole-popup teardowns (hideZoneSelector clears every entry,
+    /// destroyZoneSelectorWindow drops the one screen's), and the screen
+    /// rekey (which drops BOTH keys rather than moving one). The remaining
+    /// writer is updateZoneSelectorWindow's write-through, which refreshes
+    /// the entry from the authoritative list it just built.
     mutable QHash<QString, QList<qreal>> m_stripCardFractionsCache;
     /// Strip-mode selection twin of the zone triple below. Exactly one of
     /// the two families is set (each hit-test arm clears the other on

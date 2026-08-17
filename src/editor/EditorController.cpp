@@ -30,6 +30,7 @@
 #include <QClipboard>
 #include <QDBusConnection>
 #include <QGuiApplication>
+#include <QStringList>
 #include <PhosphorScreens/ScreenIdentity.h>
 
 #include "../common/screenidresolver.h"
@@ -136,10 +137,23 @@ EditorController::EditorController(QObject* parent)
     const QString svc = QString(PhosphorProtocol::Service::Name);
     const QString path = QString(PhosphorProtocol::Service::ObjectPath);
     const QString iface = QString(PhosphorProtocol::Service::Interface::LayoutRegistry);
+    // A subscription that returns false leaves the editor on a stale snapshot
+    // with nothing to say so. Accumulate the misses and report them in one
+    // line at the end of the wiring, the same batched shape as
+    // SettingsController::wireDaemonSubscriptions: when the daemon is not up
+    // at construction they all fail together, and one summary reads far
+    // better than seven scattered warnings.
+    QStringList failedSubscriptions;
+    const auto subscribe = [&](const QString& interfaceName, const QString& signalName, QObject* receiver,
+                               const char* slot) {
+        if (!bus.connect(svc, path, interfaceName, signalName, receiver, slot)) {
+            failedSubscriptions.append(interfaceName + QStringLiteral(".") + signalName);
+        }
+    };
     for (const auto& sig :
          {QStringLiteral("layoutCreated"), QStringLiteral("layoutDeleted"), QStringLiteral("layoutChanged"),
           QStringLiteral("layoutListChanged"), QStringLiteral("layoutPropertyChanged")}) {
-        bus.connect(svc, path, iface, sig, &m_layoutReloadTimer, SLOT(start()));
+        subscribe(iface, sig, &m_layoutReloadTimer, SLOT(start()));
     }
 
     // Strip-axis inputs follow the live config: the daemon's settingsChanged
@@ -150,8 +164,8 @@ EditorController::EditorController(QObject* parent)
     m_stripAxisReloadTimer.setSingleShot(true);
     m_stripAxisReloadTimer.setInterval(250);
     connect(&m_stripAxisReloadTimer, &QTimer::timeout, this, &EditorController::reloadScrollingStripAxis);
-    bus.connect(svc, path, QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("settingsChanged"),
-                &m_stripAxisReloadTimer, SLOT(start()));
+    subscribe(QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("settingsChanged"),
+              &m_stripAxisReloadTimer, SLOT(start()));
 
     // Local read view of the scrolling templates, the template sibling of
     // m_localLayoutManager: instant template opens without the daemon, plus
@@ -160,7 +174,14 @@ EditorController::EditorController(QObject* parent)
     // needed, template CRUD emits once per operation.
     m_templateStore = std::make_unique<PhosphorZones::ScrollingTemplateStore>();
     m_templateStore->loadTemplates();
-    bus.connect(svc, path, iface, QStringLiteral("scrollingTemplatesChanged"), this, SLOT(reloadLocalTemplates()));
+    subscribe(iface, QStringLiteral("scrollingTemplatesChanged"), this, SLOT(reloadLocalTemplates()));
+
+    if (!failedSubscriptions.isEmpty()) {
+        qCWarning(lcEditor) << "EditorController:" << failedSubscriptions.size()
+                            << "D-Bus signal subscription(s) failed at construction — affected routes:"
+                            << failedSubscriptions.join(QStringLiteral(", "))
+                            << "— the editor will not see another process's writes until the next launch.";
+    }
 
     // Scrolling-template edit state sub-model (see the gaps model above for
     // the pattern: child QObject that reaches back for undo + dirty flag).

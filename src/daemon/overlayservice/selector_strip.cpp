@@ -62,6 +62,15 @@ QList<qreal> OverlayService::selectorStripFractions(const QString& screenId) con
 
 bool OverlayService::selectorStripVerticalAxis(const QString& screenId) const
 {
+    // Strip screens only, the same gate selectorStripFractions carries: this
+    // answers "which way does the CARD ROW run", and a layout-mode popup has
+    // no strip axis at all. Without the gate the answer relied on the caller
+    // ignoring it whenever the fractions came back empty, which is a
+    // coincidence rather than a contract — the two would part company the
+    // moment an empty strip on a scrolling screen met a rotated monitor.
+    if (!isStripSelectorScreen(screenId)) {
+        return false;
+    }
     // The axis the popup was PUSHED with wins over the live provider, the
     // same slot-read-back rule updateStripSelectorHit follows: the caller is
     // the drag adaptor's keep-visible band, which must match the bar AS

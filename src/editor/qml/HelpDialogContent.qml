@@ -47,7 +47,6 @@ ScrollView {
             // File component (SectionHeader.qml); title-only, no icon
             SectionHeader {
                 title: i18nc("@title:group", "Keyboard Shortcuts")
-                Layout.columnSpan: 2
             }
 
             GridLayout {
@@ -238,7 +237,6 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             SectionHeader {
                 title: i18nc("@title:group", "Mouse Actions")
-                Layout.columnSpan: 2
             }
 
             GridLayout {
@@ -308,7 +306,6 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             SectionHeader {
                 title: i18nc("@title:group", "Tips")
-                Layout.columnSpan: 2
             }
 
             ColumnLayout {
@@ -362,7 +359,6 @@ ScrollView {
             // ═══════════════════════════════════════════════════════════════
             SectionHeader {
                 title: i18nc("@title:group", "Accessibility")
-                Layout.columnSpan: 2
             }
 
             Label {

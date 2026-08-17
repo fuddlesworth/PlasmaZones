@@ -10,6 +10,7 @@
 #include "settingsschema.h"
 
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorProtocol/ScrollAxisEnum.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
 
 #include "configdefaults.h"
@@ -120,6 +121,16 @@ static_assert(ConfigDefaults::scrollingTabIndicatorPositionTop()
 static_assert(ConfigDefaults::scrollingTabIndicatorPositionBottom()
                   == static_cast<int>(PhosphorScrollEngine::TabIndicatorPosition::Bottom),
               "TabIndicatorPosition::Bottom wire value drifted from ConfigDefaults");
+
+// The strip axis is the one enum here that must NOT line up with its engine
+// counterpart: the config value is the three-valued INTENT (Auto is its zero),
+// the wire value is the resolved two-valued PhosphorProtocol::ScrollAxis
+// (Horizontal is its zero). Pin the mismatch so a future "tidy-up" that makes
+// the two numberings agree has to delete this assert deliberately rather than
+// making a silent static_cast between them start looking safe.
+static_assert(ConfigDefaults::scrollingStripAxisHorizontal()
+                  != static_cast<int>(PhosphorProtocol::ScrollAxis::Horizontal),
+              "StripAxis is the config INTENT space and must not share ScrollAxis' numbering");
 
 // The preset-index ceiling is a consequence of the preset-list length cap, not
 // an independent number: an index past the last entry a canonicalized list can

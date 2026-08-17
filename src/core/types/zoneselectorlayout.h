@@ -62,10 +62,15 @@ struct ZoneSelectorLayout
 /// returns the PREVIEW width (callers add cardSidePadding * 2 separately),
 /// while the QML twins return the full CELL width with the padding already
 /// folded in.
-inline int stripCardPreviewWidth(int indicatorWidth, qreal widthFraction)
+///
+/// @p indicatorExtent is the card extent ALONG THE STRIP, so the horizontal
+/// arm passes indicatorWidth and the vertical arm passes indicatorHeight. It
+/// is not named for either one, because a "width" that is a height on half
+/// the call sites is how the two arms drift.
+inline int stripCardPreviewWidth(int indicatorExtent, qreal widthFraction)
 {
     const qreal f = (widthFraction > 0.0 && widthFraction <= 1.0) ? widthFraction : 1.0;
-    return std::max(8, qRound(indicatorWidth * f));
+    return std::max(8, qRound(indicatorExtent * f));
 }
 
 /**
@@ -131,6 +136,14 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
 
     // Card chrome: showCardBackground adds top margin + internal padding around
     // the preview in LayoutCard.qml.  Account for this in per-card cell size.
+    //
+    // Both are AXIS-NEUTRAL and stand for either arm, which is why neither
+    // arm below recomputes them. On the vertical strip arm cellWidth is the
+    // cross extent it derives scrollContentWidth from, and cellHeight is the
+    // along-strip extent of a FULL-share card — the same value
+    // stripCardPreviewWidth(indicatorHeight, 1.0) plus that arm's per-card
+    // chrome yields. Only the per-card variable share differs there, and the
+    // arm accumulates that itself.
     layout.cellWidth = layout.indicatorWidth + layout.cardSidePadding * 2;
     layout.cellHeight = layout.indicatorHeight + layout.labelSpace + layout.cardPadding;
 

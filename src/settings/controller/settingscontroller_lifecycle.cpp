@@ -20,8 +20,6 @@
 //   * defaults()  — restore factory defaults, stage the daemon-backed
 //                   clears the config reset cannot cover, and recompute
 //                   the dirty set.
-//   * onSettingsPropertyChanged / onExternalSettingsChanged — the
-//     two ISettings change-tracking hooks that flow into setNeedsSave.
 //
 // Same class as settingscontroller.cpp, separate TU, no API change.
 
@@ -196,7 +194,7 @@ void SettingsController::save()
     // may have run earlier in the domain walk, while the tree still read
     // "divergent" against the not-yet-recaptured baseline. This is a no-op flip
     // guard away from free when nothing changed.
-    if (m_animationsPage != nullptr)
+    if (m_animationsPage)
         m_animationsPage->refreshDirtyState();
 
     // RuleController and AnimationsPageController are registered

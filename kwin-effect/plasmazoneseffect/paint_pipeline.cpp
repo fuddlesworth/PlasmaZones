@@ -774,7 +774,7 @@ void PlasmaZonesEffect::postPaintScreen()
             if (!it->shaderApplied && !cededToTransition) {
                 continue;
             }
-            // The driver quarter of scrollParkedOffscreen's contract: stop
+            // The repaint-driver site of scrollParkedOffscreen's contract: stop
             // driving a column parked off the viewport. Without this the
             // ~30fps backdrop pump below re-armed for every parked glass
             // column forever (backdropDue takes the focus exemption, so

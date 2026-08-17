@@ -54,6 +54,12 @@ bool overrideInt(const QVariantMap& overrides, const QString& key, int& out)
     if (it == overrides.constEnd()) {
         return false;
     }
+    // Bools refused explicitly, the effectiveBoolOverride stance in the
+    // other direction: toInt(&ok) happily converts one (true -> 1), which
+    // would pin a real enumerator for a payload aimed at the wrong key.
+    if (it->typeId() == QMetaType::Bool) {
+        return false;
+    }
     bool ok = false;
     const int value = it->toInt(&ok);
     if (!ok) {
@@ -71,6 +77,10 @@ bool overrideDouble(const QVariantMap& overrides, const QString& key, qreal& out
 {
     const auto it = overrides.constFind(key);
     if (it == overrides.constEnd()) {
+        return false;
+    }
+    // Same bool refusal as overrideInt: toDouble on a bool answers 1.0.
+    if (it->typeId() == QMetaType::Bool) {
         return false;
     }
     bool ok = false;

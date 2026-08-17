@@ -549,7 +549,7 @@ private Q_SLOTS:
         QVERIFY(f.registry->resolveContextTilingParams(QStringLiteral("DP-2"), 0, QString()).isEmpty());
     }
 
-    // ─── Context scrolling-parameter resolution (width / centering / display) ──
+    // ── Context scrolling-parameter resolution (width / centering / display / axis) ──
     // resolveContextScrollingParams is a per-slot read like its tiling sibling:
     // independent SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
     // SetScrollDefaultColumnDisplay rules compose, and an unpinned screen resolves

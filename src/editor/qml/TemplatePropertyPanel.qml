@@ -303,6 +303,7 @@ Rectangle {
                     accessibleLabel: i18nc("@label", "Width presets")
                     values: templatePanel.templateModel ? templatePanel.templateModel.presetWidths : []
                     minPercent: templatePanel.proportionMinPercent
+                    maxPercent: templatePanel.proportionMaxPercent
                     maxCount: templatePanel.constants.maxTemplateColumns || 16
                     dedupeEpsilon: templatePanel.constants.fractionDedupeEpsilon || 0.01
                     onEdited: newValues => {
@@ -318,6 +319,7 @@ Rectangle {
                     accessibleLabel: i18nc("@label", "Height presets")
                     values: templatePanel.templateModel ? templatePanel.templateModel.presetHeights : []
                     minPercent: templatePanel.proportionMinPercent
+                    maxPercent: templatePanel.proportionMaxPercent
                     maxCount: templatePanel.constants.maxTemplateColumns || 16
                     dedupeEpsilon: templatePanel.constants.fractionDedupeEpsilon || 0.01
                     onEdited: newValues => {

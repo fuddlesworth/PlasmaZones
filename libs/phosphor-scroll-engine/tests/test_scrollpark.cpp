@@ -49,13 +49,37 @@ private:
         return in;
     }
 
-private Q_SLOTS:
-    void offTheTrailingEndParksWithTheTrailingEdge_data()
+    /// The dual-axis table every slot below runs on. It was copied out
+    /// verbatim eight times, so a row rename had eight places to miss.
+    static void addAxisRows()
+    {
+        QTest::addColumn<int>("axisValue");
+        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
+        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+    }
+
+    /// The same table plus the edge name the strip's TRAILING end carries on
+    /// each axis, which is the whole point of running these slots twice.
+    static void addAxisTrailingEdgeRows()
     {
         QTest::addColumn<int>("axisValue");
         QTest::addColumn<QString>("expectedEdge");
         QTest::newRow("horizontal") << int(ScrollAxis::Horizontal) << QStringLiteral("right");
         QTest::newRow("vertical") << int(ScrollAxis::Vertical) << QStringLiteral("bottom");
+    }
+
+    static void addAxisLeadingEdgeRows()
+    {
+        QTest::addColumn<int>("axisValue");
+        QTest::addColumn<QString>("expectedEdge");
+        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal) << QStringLiteral("left");
+        QTest::newRow("vertical") << int(ScrollAxis::Vertical) << QStringLiteral("top");
+    }
+
+private Q_SLOTS:
+    void offTheTrailingEndParksWithTheTrailingEdge_data()
+    {
+        addAxisTrailingEdgeRows();
     }
 
     /// A MAIN-axis departure always names the end it left by. This is the
@@ -76,10 +100,7 @@ private Q_SLOTS:
 
     void offTheLeadingEndParksWithTheLeadingEdge_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::addColumn<QString>("expectedEdge");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal) << QStringLiteral("left");
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical) << QStringLiteral("top");
+        addAxisLeadingEdgeRows();
     }
 
     void offTheLeadingEndParksWithTheLeadingEdge()
@@ -91,19 +112,48 @@ private Q_SLOTS:
         const ParkResult r = resolveTilePlacement(inputsFor(a, roleRect(a, -500, 300)), QString());
         QVERIFY(r.parked);
         QCOMPARE(r.emittedEdge, expectedEdge);
+        QCOMPARE(r.rememberedEdge.value_or(QString()), expectedEdge);
+    }
+
+    void theWorkAreaNotTheScreenDecidesDeparture_data()
+    {
+        addAxisTrailingEdgeRows();
+    }
+
+    /// Every other fixture here sets workArea == screenRect, which makes the
+    /// two interchangeable: the departure test reads the WORK AREA, the park
+    /// and the clamps read the SCREEN, and a swap of the two is invisible while
+    /// they are equal. This slot insets the work area's trailing end by 100px
+    /// and places a tile past it but still inside the screen, so reading the
+    /// screen there clamps instead of parking.
+    void theWorkAreaNotTheScreenDecidesDeparture()
+    {
+        QFETCH(int, axisValue);
+        QFETCH(QString, expectedEdge);
+        const auto a = static_cast<ScrollAxis>(axisValue);
+        const StripAxis axis{a};
+        const QRect screen = screenFor(a);
+
+        ParkInputs in = inputsFor(a, roleRect(a, 1150, 200));
+        in.workArea = axis.makeRect(0, 0, 1100, axis.crossSize(screen));
+
+        const ParkResult r = resolveTilePlacement(in, QString());
+        QVERIFY2(r.parked, "past the work area's trailing end is a departure, screen room or not");
+        QCOMPARE(r.emittedEdge, expectedEdge);
+        QCOMPARE(r.rememberedEdge.value_or(QString()), expectedEdge);
     }
 
     void crossAxisOverflowParksWithoutAnEdge_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+        addAxisRows();
     }
 
     /// THE ROLE PAIR. A park caused by stack overflow carries NO edge, because
-    /// the strip made no departure — enforced in both crop and clamp mode.
-    /// Under transposition this arm swaps physical axes with the one above, so
-    /// keying it on x-vs-y rather than main-vs-cross fails exactly one row.
+    /// the strip made no departure. This slot drives the CROP-mode half of
+    /// that, which is the half a main-axis reading of the arm would let
+    /// through; the clamp-mode half is the slot below. Under transposition
+    /// this arm swaps physical axes with the one above, so keying it on
+    /// x-vs-y rather than main-vs-cross fails exactly one row.
     void crossAxisOverflowParksWithoutAnEdge()
     {
         QFETCH(int, axisValue);
@@ -125,9 +175,7 @@ private Q_SLOTS:
 
     void aCrossAxisStraddlerClampsToTheCrossEdge_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+        addAxisRows();
     }
 
     /// The clamping half of the cross-axis arm, which the parking cases above
@@ -159,9 +207,7 @@ private Q_SLOTS:
 
     void cropModeOptsOutOfTheMainAxisClampOnly_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+        addAxisRows();
     }
 
     /// The other half of the same asymmetry: a main-axis straddler keeps its
@@ -189,10 +235,7 @@ private Q_SLOTS:
 
     void aThinRemainderParksInsteadOfPeeking_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::addColumn<QString>("expectedEdge");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal) << QStringLiteral("right");
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical) << QStringLiteral("bottom");
+        addAxisTrailingEdgeRows();
     }
 
     /// Below the peek floor the straddler parks rather than committing a
@@ -215,9 +258,7 @@ private Q_SLOTS:
 
     void arrivingOnScreenConsumesTheRememberedEdge_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+        addAxisRows();
     }
 
     /// A window coming back on screen emits the edge it left by, and the
@@ -236,9 +277,7 @@ private Q_SLOTS:
 
     void aCrossAxisParkHandsBackAConsumedMainEdge_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+        addAxisRows();
     }
 
     /// The subtle one. A tile arriving on screen consumes its remembered
@@ -263,9 +302,7 @@ private Q_SLOTS:
 
     void aLeadingStraddlerClampsAtTheLeadingEdge_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+        addAxisRows();
     }
 
     /// The LEADING half of the main-axis straddle clamp — the trailing half
@@ -288,9 +325,7 @@ private Q_SLOTS:
 
     void aCrossStraddlerBelowTheFloorHandsBackAConsumedMainEdge_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+        addAxisRows();
     }
 
     /// The STRADDLER twin of aCrossAxisParkHandsBackAConsumedMainEdge: the
@@ -352,9 +387,7 @@ private Q_SLOTS:
 
     void aHiddenTabOfAnOnScreenColumnParksEdgeless_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal);
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical);
+        addAxisRows();
     }
 
     /// The other half of the hidden arm: an ON-screen column's hidden tabs
@@ -379,10 +412,7 @@ private Q_SLOTS:
 
     void theClientMinimumRaisesThePeekFloor_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::addColumn<QString>("expectedEdge");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal) << QStringLiteral("right");
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical) << QStringLiteral("bottom");
+        addAxisTrailingEdgeRows();
     }
 
     /// Under respectMinimumSize the peek floor rises from the 48px constant to
@@ -413,10 +443,7 @@ private Q_SLOTS:
 
     void anOversizedMinimumStillPeeksAtFullScreen_data()
     {
-        QTest::addColumn<int>("axisValue");
-        QTest::addColumn<QString>("expectedEdge");
-        QTest::newRow("horizontal") << int(ScrollAxis::Horizontal) << QStringLiteral("right");
-        QTest::newRow("vertical") << int(ScrollAxis::Vertical) << QStringLiteral("bottom");
+        addAxisTrailingEdgeRows();
     }
 
     /// The cap on that floor: a declared minimum LARGER than the screen would

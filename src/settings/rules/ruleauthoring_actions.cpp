@@ -242,7 +242,7 @@ QString actionTypeLabelImpl(const QString& type)
         return PhosphorI18n::tr("Set sticky window handling");
     }
     if (type == ActionType::SetScrollStripAxis) {
-        return PhosphorI18n::tr("Set the strip direction");
+        return PhosphorI18n::tr("Set strip direction");
     }
     if (type == ActionType::OpenMaximized) {
         return PhosphorI18n::tr("Open maximized");

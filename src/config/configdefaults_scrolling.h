@@ -988,4 +988,16 @@ static_assert(ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadius()
                       <= ConfigDefaultsScrolling::scrollingDropIndicatorBorderRadiusMax(),
               "ConfigDefaults::scrollingDropIndicatorBorderRadius() outside the declared [min, max] range");
 
+// The strip axis' load-bearing invariant, pinned where the accessors live
+// rather than only in the editor's own asserts: Auto MUST be zero. An absent
+// Scrolling.StripAxis key reads back as 0 on every path (config, per-screen
+// store, D-Bus), and that zero has to mean "resolve from the work area" rather
+// than pinning a direction. It is also why this numbering cannot be cast to
+// PhosphorProtocol::ScrollAxis, whose zero is Horizontal — the schema TU pins
+// that half.
+static_assert(ConfigDefaultsScrolling::scrollingStripAxisAuto() == 0,
+              "StripAxis Auto must be 0 so an absent key resolves from the work area");
+static_assert(ConfigDefaultsScrolling::scrollingStripAxis() == ConfigDefaultsScrolling::scrollingStripAxisAuto(),
+              "the StripAxis default must be Auto");
+
 } // namespace PlasmaZones

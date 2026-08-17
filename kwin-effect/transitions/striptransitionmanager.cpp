@@ -211,6 +211,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // pass only to throw it away when the shader turns out not to compile —
     // and the failure sentinel stops re-COMPILES, not re-captures, so that
     // waste would repeat every frame for the rest of the leg.
+    // Unlike `it`/`pass`, `cs` survives the nested paintScreen below: the
+    // shader cache is a std::unordered_map, whose references and pointers stay
+    // valid across inserts and rehashes, and nothing erases from it inside the
+    // walk.
     CompiledStripShader* cs = compiledShader(pass->effectId);
     if (!cs || !cs->shader) {
         // Compile failed — abandon the pass rather than paint a black
@@ -612,6 +616,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
             // per-window opacity or a notification mid-fade must keep it.
             aboveData.setOpacity(w->opacity());
             const int aboveMask = KWin::Effect::PAINT_WINDOW_TRANSFORMED | KWin::Effect::PAINT_WINDOW_TRANSLUCENT;
+            // infinite() rather than the injected-paint deviceRegion clip: the
+            // shader quad already repainted the whole output, so this pass
+            // damages full-output anyway and every pixel of these windows has
+            // to be redrawn over it. A region clip would only risk dropping
+            // parts the scene's own damage never listed.
             m_effect->paintWindow(renderTarget, viewport, w, aboveMask, KWin::Region::infinite(), aboveData);
         }
     }

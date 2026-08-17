@@ -105,7 +105,7 @@ public:
     /// gate on this rather than on the wire delta: with no leg the paint
     /// path's offset is zero, so an origin placed a delta behind the target
     /// pops backwards and slides double.
-    /// @p delta is a SIGNED SCALAR along @p axis, that output's strip axis.
+    /// @p deltaIn is a SIGNED SCALAR along @p axis, that output's strip axis.
     ///
     /// The animated value stays one-dimensional on purpose. kMaxViewDeltaPx is
     /// a scalar budget the design leans on twice (the wire boundary clamps to
@@ -116,7 +116,7 @@ public:
     /// An axis MISMATCH against a live leg cancels rather than retargets: the
     /// in-flight motion describes travel along an axis the strip no longer
     /// has, so there is nothing to preserve velocity through.
-    bool applyBatchDelta(KWin::LogicalOutput* output, int delta, PhosphorProtocol::ScrollAxis axis,
+    bool applyBatchDelta(KWin::LogicalOutput* output, int deltaIn, PhosphorProtocol::ScrollAxis axis,
                          const PhosphorAnimation::Profile& profile);
 
     /// Paint translation for a window carried by @p output's view, in logical

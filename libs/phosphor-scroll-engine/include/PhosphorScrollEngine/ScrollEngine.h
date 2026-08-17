@@ -21,6 +21,7 @@
 #include <PhosphorScrollEngine/ScrollStashTypes.h>
 #include <PhosphorScrollEngine/ScrollState.h>
 #include <PhosphorScrollEngine/ScrollTypes.h>
+#include <PhosphorScrollEngine/StripAxis.h>
 
 #include <QHash>
 #include <QJsonObject>
@@ -66,8 +67,10 @@ namespace PhosphorScrollEngine {
  * can occupy, and never at extreme coordinates — so input hit-testing stays
  * sane; the enter/leave animation origin comes from the tile request's
  * scrollEdge field, not from where the park happens to sit. A column
- * STRADDLING a screen edge is committed CLAMPED at that edge (both edges,
- * both axes) unless the crop-straddlers setting keeps the true rect for the
+ * STRADDLING a screen edge is committed CLAMPED at that edge (both MAIN
+ * edges, plus the cross-axis overflow edge; a cross-axis UNDERFLOW cannot
+ * occur, since a column starts at the work area's cross origin by
+ * construction) unless the crop-straddlers setting keeps the true rect for the
  * effect to crop; a remainder below the peek floor parks instead. Hidden
  * tiles of a tabbed column park the same way (a hidden tab must not sit
  * under the active tile stealing clicks).

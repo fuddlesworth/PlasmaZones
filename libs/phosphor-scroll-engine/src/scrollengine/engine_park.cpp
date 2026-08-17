@@ -203,6 +203,12 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
         }
         parkRect(rect, in.screenRect, in.parkTop);
         out.parked = true;
+        // The !out.parked below is defensively kept though it is
+        // unreachable-false today (the fully-beyond arm above either parked
+        // and skipped this else-if, or did not park at all): unlike the
+        // load-bearing term at the main-axis clamp, this one only guards a
+        // future arm reordering — where a park-twice would corrupt the edge
+        // memory silently.
     } else if (!out.parked && axis.crossHigh(rect) > axis.crossHigh(in.screenRect)) {
         const int peekFloor = qMin(axis.crossSize(in.screenRect), qMax(kMinVisiblePeekPx, axis.crossSize(in.tileMin)));
         const int visible = axis.crossHigh(in.screenRect) + 1 - axis.crossPos(rect);

@@ -1263,6 +1263,11 @@ void TestScrollEngineSmoke::aWidthChangeKeepsTheResizedColumnInTheBatch()
         }
         sawResized = true;
         QCOMPARE(Ax::entryMainLen(o), Ax::mainLen(engine->lastManagedRect(QStringLiteral("app|a"))));
+        // Pinned, not just "differs and agrees": both sides above come out of
+        // the same resolve, so a wrong-but-consistent width satisfies them.
+        // 840 is the fixture arithmetic — a half-work-area column on the
+        // 1200px main extent is 600px, and +20% of that extent adds 240.
+        QCOMPARE(Ax::entryMainLen(o), 840);
     }
     QVERIFY2(sawResized, "the batch must carry the column whose width changed");
 }
@@ -1380,7 +1385,7 @@ void TestScrollEngineSmoke::onlyAStripDepartedTileCarriesAVisualPosition()
             QVERIFY2(o.contains(QLatin1String("visualY")), "the paint hint must carry both axes");
         }
     }
-    QVERIFY2(sawCarriedPark, "a horizontally departed column must carry the visual-position paint hint");
+    QVERIFY2(sawCarriedPark, "a strip-departed column must carry the visual-position paint hint");
 }
 
 void TestScrollEngineSmoke::aTabSwitchNamesTheTabItReplaces()

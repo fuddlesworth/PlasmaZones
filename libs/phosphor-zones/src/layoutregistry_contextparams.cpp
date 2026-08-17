@@ -275,21 +275,25 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
     // 5% minimum, and a 50.0 would saturate to full width — both of them
     // applying an override the user never wrote. Left unset, the field falls
     // through to the configured default instead. The bounds are the installed
-    // PhosphorRules constants, the same pair the descriptor validator checks.
-    // Both fractions share that pair: it is named for column WIDTH but bounds
+    // PhosphorRules constants, the same pair the descriptor validator checks —
+    // which is why the bounds are per call rather than baked in: the tab
+    // indicator's length and the drop indicator's opacity are read through this
+    // same helper further down against their own descriptors' pairs. The two
+    // column fractions share one pair: it is named for column WIDTH but bounds
     // the window HEIGHT fraction too (see the Min/MaxColumnWidthRatio doc).
-    const auto readFraction = [&resolved](QLatin1StringView slot, std::optional<double>& out) {
+    const auto readFraction = [&resolved](QLatin1StringView slot, std::optional<double>& out, double lo, double hi) {
         const auto action = resolved.slot(QString(slot));
         if (!action) {
             return;
         }
         const QJsonValue v = action->params.value(PWR::ActionParam::Value);
         const double fraction = v.toDouble();
-        if (v.isDouble() && fraction >= PWR::MinColumnWidthRatio && fraction <= PWR::MaxColumnWidthRatio) {
+        if (v.isDouble() && fraction >= lo && fraction <= hi) {
             out = fraction;
         }
     };
-    readFraction(PWR::ActionSlot::ScrollDefaultColumnWidth, params.defaultColumnWidth);
+    readFraction(PWR::ActionSlot::ScrollDefaultColumnWidth, params.defaultColumnWidth, PWR::MinColumnWidthRatio,
+                 PWR::MaxColumnWidthRatio);
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::CenterFocusedColumn))) {
         // Wire token → the centering int (never 0 / always 1 / on overflow 2), the
         // same value the config store holds.
@@ -326,7 +330,8 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
             params.insertPosition = 4;
         }
     }
-    readFraction(PWR::ActionSlot::ScrollDefaultWindowHeight, params.defaultWindowHeight);
+    readFraction(PWR::ActionSlot::ScrollDefaultWindowHeight, params.defaultWindowHeight, PWR::MinColumnWidthRatio,
+                 PWR::MaxColumnWidthRatio);
 
     // ── tab indicator (niri's `tab-indicator` layout block) ──
     // Same REJECT AND FALL THROUGH policy as readFraction above: a hand-edited
@@ -399,24 +404,14 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
             PWR::MinDropIndicatorBorderWidth, PWR::MaxDropIndicatorBorderWidth);
     readInt(PWR::ActionSlot::DropIndicatorBorderRadius, params.dropIndicatorBorderRadius,
             PWR::MinDropIndicatorBorderRadius, PWR::MaxDropIndicatorBorderRadius);
-    // Fraction, not an int: read the way TabIndicatorLength is, and bounded to
-    // the same [min, max] the descriptor validates so a hand-edited rule
-    // cannot smuggle an out-of-range opacity past the authoring UI.
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::DropIndicatorOpacity))) {
-        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        const double fraction = v.toDouble();
-        if (v.isDouble() && fraction >= PWR::MinDropIndicatorOpacity && fraction <= PWR::MaxDropIndicatorOpacity) {
-            params.dropIndicatorOpacity = fraction;
-        }
-    }
-    if (const auto action = resolved.slot(QString(PWR::ActionSlot::TabIndicatorLength))) {
-        const QJsonValue v = action->params.value(PWR::ActionParam::Value);
-        const double fraction = v.toDouble();
-        if (v.isDouble() && fraction >= PWR::MinTabIndicatorLengthRatio
-            && fraction <= PWR::MaxTabIndicatorLengthRatio) {
-            params.tabIndicatorLength = fraction;
-        }
-    }
+    // Fractions, not ints, so they go through readFraction with their own
+    // descriptors' bounds — the same pair the validator checks, so a
+    // hand-edited rule cannot smuggle an out-of-range value past the authoring
+    // UI.
+    readFraction(PWR::ActionSlot::DropIndicatorOpacity, params.dropIndicatorOpacity, PWR::MinDropIndicatorOpacity,
+                 PWR::MaxDropIndicatorOpacity);
+    readFraction(PWR::ActionSlot::TabIndicatorLength, params.tabIndicatorLength, PWR::MinTabIndicatorLengthRatio,
+                 PWR::MaxTabIndicatorLengthRatio);
     if (const auto action = resolved.slot(QString(PWR::ActionSlot::TabIndicatorStyle))) {
         // Wire token → the style int (chips 0 / bar 1).
         const QString token = action->params.value(PWR::ActionParam::Value).toString();

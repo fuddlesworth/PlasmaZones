@@ -357,7 +357,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         int localX, localY;
         const QRect& storedGeom = cursorStateIt->zoneSelectorGeometry;
         const QRect winGeom = storedGeom.isValid() ? storedGeom : (window ? window->geometry() : QRect());
-        if (winGeom.isValid() && winGeom.width() > 0) {
+        if (winGeom.isValid()) {
             localX = cursorX - winGeom.x();
             localY = cursorY - winGeom.y();
         } else if (window) {

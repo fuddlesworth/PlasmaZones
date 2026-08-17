@@ -436,6 +436,11 @@ void SettingsController::onVirtualDesktopsChanged()
         }
     }
 
+    // Unconditional on purpose, against the usual emit-on-change discipline.
+    // This is an externally driven session event: the compositor is the change
+    // authority, so it only tells us when something actually moved, and a
+    // spurious re-emit costs a model refresh and nothing else. No snapshot
+    // compare.
     Q_EMIT virtualDesktopsChanged();
 }
 
@@ -483,6 +488,8 @@ void SettingsController::onActivitiesChanged()
         }
     }
 
+    // Unconditional for the same reason as virtualDesktopsChanged above: KDE
+    // is the change authority for this event, so no snapshot compare.
     Q_EMIT activitiesChanged();
 }
 
@@ -773,13 +780,22 @@ QVariantMap SettingsController::loadWindowGeometry() const
     for (auto* screen : QGuiApplication::screens())
         virtualGeo = virtualGeo.united(screen->availableGeometry());
 
-    if (w > 0 && h > 0 && !virtualGeo.isEmpty()) {
-        w = qMin(w, virtualGeo.width());
-        h = qMin(h, virtualGeo.height());
+    if (w > 0 && h > 0) {
+        // The clamp needs a screen to clamp against, so it is skipped when the
+        // query came back empty. The floor is not: with no screens to ask, a
+        // hand-edited 12x8 would otherwise be handed to QML verbatim.
+        if (!virtualGeo.isEmpty()) {
+            w = qMin(w, virtualGeo.width());
+            h = qMin(h, virtualGeo.height());
+        }
         // Floor after the screen clamp, and never above what the screen can
         // actually hold.
-        w = qMax(qMin(kMinRestoredWindowWidth, virtualGeo.width()), w);
-        h = qMax(qMin(kMinRestoredWindowHeight, virtualGeo.height()), h);
+        const int minWidth =
+            virtualGeo.isEmpty() ? kMinRestoredWindowWidth : qMin(kMinRestoredWindowWidth, virtualGeo.width());
+        const int minHeight =
+            virtualGeo.isEmpty() ? kMinRestoredWindowHeight : qMin(kMinRestoredWindowHeight, virtualGeo.height());
+        w = qMax(minWidth, w);
+        h = qMax(minHeight, h);
     }
 
     // Check if the centre of the saved window is on any screen. Hoisted OUT of

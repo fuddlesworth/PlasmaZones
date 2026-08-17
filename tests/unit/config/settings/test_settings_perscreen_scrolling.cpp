@@ -331,7 +331,7 @@ private Q_SLOTS:
     }
 
     /// The load path repairs a jointly-impossible pair that never passed the
-    /// setter — a hand edit, a config import, or a staged profile blob. Per-key
+    /// setter — a hand edit or a config import. Per-key
     /// validation cannot catch it, because each half is in range on its own.
     void loadRepairsJointlyImpossiblePair()
     {
@@ -441,6 +441,11 @@ private Q_SLOTS:
         Settings settings;
         const QString screen = QStringLiteral("DP-axisdomain");
 
+        // A screen with no entry at all answers false, so the positives below
+        // are the predicate reading the axis key rather than never answering
+        // false in the first place.
+        QVERIFY(!settings.hasPerScreenScrollingAxisSettings(QStringLiteral("DP-axisdomain-absent")));
+
         settings.setPerScreenScrollingSetting(screen, key(K::StripAxis), ConfigDefaults::scrollingStripAxisVertical());
         QVERIFY(settings.hasPerScreenScrollingSettings(screen));
         QVERIFY2(!settings.hasPerScreenScrollingSizingSettings(screen),
@@ -467,7 +472,9 @@ private Q_SLOTS:
         // takes the axis while the sizing key survives.
         QVERIFY(settings.hasPerScreenScrollingAxisSettings(screen));
         settings.setPerScreenScrollingSetting(screen, key(K::DefaultColumnWidthPresetIndex), 3);
+        const int beforeAxisClear = changedSpy.count();
         settings.clearPerScreenScrollingAxisSettings(screen);
+        QCOMPARE(changedSpy.count(), beforeAxisClear + 1);
         QVERIFY(!settings.hasPerScreenScrollingAxisSettings(screen));
         QVERIFY2(settings.hasPerScreenScrollingSizingSettings(screen),
                  "the axis Clear must leave the sizing sub-domain standing");

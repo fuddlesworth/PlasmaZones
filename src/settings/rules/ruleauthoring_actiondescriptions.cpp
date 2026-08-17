@@ -360,7 +360,7 @@ QString actionDescription(const QString& type)
         return PhosphorI18n::tr(
             "Chooses which way the matched context's strip runs, overriding the Strip direction "
             "setting and any per-monitor choice. Match the screen shape resolves from the usable "
-            "area, so it can put a pinned monitor back on automatic for one desktop or activity.");
+            "area, so it can put a pinned monitor back on that for one desktop or activity.");
     }
     // ── Tab indicator (context + window colours) ──
     if (type == ActionType::SetTabIndicatorEnabled) {

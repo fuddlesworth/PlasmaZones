@@ -36,6 +36,14 @@ private Q_SLOTS:
         QCOMPARE(axis.crossHigh(r), r.bottom());
         QCOMPARE(axis.makeRect(10, 20, 300, 400), r);
         QCOMPARE(axis.translatedMain(r, 25), r.translated(25, 0));
+
+        // The orientation accessors belong in the table too: isVertical is a
+        // separate expression from isHorizontal, not the compiler's negation
+        // of it, and axis() is what the wire and the effect's vertical list
+        // read.
+        QVERIFY(axis.isHorizontal());
+        QVERIFY(!axis.isVertical());
+        QCOMPARE(axis.axis(), ScrollAxis::Horizontal);
     }
 
     /// Vertical reads the same rect through swapped roles. Note the rect
@@ -54,6 +62,10 @@ private Q_SLOTS:
         QCOMPARE(axis.mainHigh(r), r.bottom());
         QCOMPARE(axis.crossLow(r), r.left());
         QCOMPARE(axis.crossHigh(r), r.right());
+
+        QVERIFY(axis.isVertical());
+        QVERIFY(!axis.isHorizontal());
+        QCOMPARE(axis.axis(), ScrollAxis::Vertical);
     }
 
     /// makeRect is the one rect constructor the relayout should use, so its
@@ -183,9 +195,10 @@ private Q_SLOTS:
         QCOMPARE(static_cast<int>(PhosphorProtocol::scrollAxisFromInt(0)), 0);
     }
 
-    /// Out-of-range ints (version skew, a malformed caller) degrade to the
-    /// historical behaviour rather than to a vertical strip.
-    void outOfRangeIntsFallBackToHorizontal()
+    /// Both halves of the int mapping: the two valid codes map to their own
+    /// axis, and out-of-range ints (version skew, a malformed caller) degrade
+    /// to the historical behaviour rather than to a vertical strip.
+    void intMappingCoversInRangeAndOutOfRange()
     {
         QCOMPARE(PhosphorProtocol::scrollAxisFromInt(1), ScrollAxis::Vertical);
         QCOMPARE(PhosphorProtocol::scrollAxisFromInt(2), ScrollAxis::Horizontal);

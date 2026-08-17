@@ -15,6 +15,7 @@
 
 #include <PhosphorProtocol/ZoneTypes.h>
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QRect>
@@ -160,8 +161,10 @@ public:
     // the real bar extent.
     virtual QList<qreal> selectorStripFractions(const QString& screenId) const = 0;
 
-    // Strip-selector screens only: whether that screen's strip runs top to
-    // bottom. The third half of the trigger-edge sizing contract above — the
+    // Strip-selector screens only (false everywhere else, so the answer is
+    // conjoined with strip mode at the source rather than by the caller):
+    // whether that screen's strip runs top to bottom. The third part of the
+    // trigger-edge sizing contract above — the
     // cards stack down the popup on a vertical strip, so a bar rect computed
     // on the horizontal assumption is the transpose of the popup actually
     // painted, and the keep-visible band stops matching what the cursor is

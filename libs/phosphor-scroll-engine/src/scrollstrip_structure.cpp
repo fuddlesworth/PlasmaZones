@@ -216,7 +216,6 @@ bool ScrollStrip::insertWindowIntoActiveColumn(const QString& windowId, const Co
     // minimum can widen the host column, and updateViewForFocus backstops
     // the view for that case. The anchor is active-relative, so it still
     // means exactly what it did before the append.
-    Q_UNUSED(width)
     return true;
 }
 
@@ -383,7 +382,10 @@ bool ScrollStrip::removeWindowInternal(const QString& windowId, const ScrollLayo
     // left-edge rule below collapses any positive anchor to 0 — and the
     // anchor is PERSISTED. The removal itself stands; only the anchor
     // bookkeeping is skipped, and the first relayout against a real area
-    // re-clamps whatever survived.
+    // re-clamps whatever survived. Deliberately narrower than the
+    // isValid() guards elsewhere in this file: the anchor arithmetic here
+    // consumes only main-axis extents, so a zero CROSS extent is not the
+    // degeneracy this guard exists for.
     if (params.axis.mainSize(params.workArea) > 0) {
         const int activeMainPos = columnStripPos(m_activeColumnIdx, params);
         int anchor = removedLeftOfActive ? m_viewAnchor : activeMainPos - oldViewOffset;
@@ -529,6 +531,12 @@ bool ScrollStrip::setWindowMinimumSize(const QString& windowId, int minWidth, in
 
 bool ScrollStrip::moveActiveColumn(int delta, const ScrollLayoutParams& params)
 {
+    // The header promises delta is -1/+1 and the sibling verbs reject any
+    // other value; without this a caller-side slip swapped the active column
+    // with a NON-neighbour, which is moveActiveColumnTo's job.
+    if (delta != -1 && delta != 1) {
+        return false;
+    }
     const int target = m_activeColumnIdx + delta;
     if (m_activeColumnIdx < 0 || target < 0 || target >= m_columns.size()) {
         return false;

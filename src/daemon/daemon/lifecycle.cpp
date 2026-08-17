@@ -952,8 +952,13 @@ void Daemon::stop()
     // the windows, so the order it records is still the right seed when the
     // same context re-enters after the restart. Clearing it would make every
     // mode re-entry in the new session fall back to compositor announce order.
-    // Its own prunes (closed window, removed desktop, removed screen) keep it
-    // bounded.
+    // Its own prunes keep it bounded: a closed window drops out of every order
+    // (pruneEngineOrdersForWindow), and a removed desktop or activity drops its
+    // contexts (pruneContextMapsForDesktop / pruneContextMapsForActivities).
+    // Screen ids are pruned only on a virtual-screen RECONFIGURE
+    // (pruneEngineOrdersForRemovedScreens, which keeps the new VS id set plus
+    // the bare physical id). A physical unplug deliberately keeps the screen's
+    // orders, so a replug re-enters with the order it left with.
 
     // Per-session OSD gates. A resnap armed just before the stop leaves its
     // outstanding count behind, and the screen-removal cooldown deadline can

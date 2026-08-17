@@ -468,8 +468,13 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                                   : PhosphorI18n::tr("Open on monitor: %1").arg(resolveWith(screenId, screenLookup));
     }
     if (action.type == ActionType::RouteToDesktop) {
+        // Both ends of the descriptor's bound, not just the floor: a
+        // hand-edited ordinal the loader would have rejected must fall back to
+        // the bare label rather than being printed as a real target.
         const int desktop = action.params.value(PhosphorRules::ActionParam::TargetDesktop).toInt();
-        return desktop >= 1 ? PhosphorI18n::tr("Open on desktop %1").arg(desktop) : PhosphorI18n::tr("Open on desktop");
+        return (desktop >= 1 && desktop <= PhosphorRules::MaxVirtualDesktopOrdinal)
+            ? PhosphorI18n::tr("Open on desktop %1").arg(desktop)
+            : PhosphorI18n::tr("Open on desktop");
     }
     if (action.type == ActionType::SetOpacity) {
         // Mirror EVERY resolver reject path (shader_resolve.cpp's

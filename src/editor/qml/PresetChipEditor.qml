@@ -25,6 +25,9 @@ ColumnLayout {
     /// The stops, as work-area fractions 0..1.
     property var values: []
     property int minPercent: 5
+    /// The ceiling, parameterized like @ref minPercent so a store whose
+    /// proportion maximum is below a full work area cannot be overshot here.
+    property int maxPercent: 100
     property int maxCount: 16
     property real dedupeEpsilon: 0.01
     /// Names the vocabulary for assistive tech ("Width presets").
@@ -35,6 +38,9 @@ ColumnLayout {
 
     readonly property int count: values ? values.length : 0
     readonly property bool full: count >= maxCount
+    // One sentence, two surfaces (the chip's edit field and the add button),
+    // hoisted so the pair cannot drift apart.
+    readonly property string duplicateText: i18nc("@info:tooltip", "This size is already a preset")
 
     spacing: Kirigami.Units.smallSpacing
 
@@ -78,7 +84,7 @@ ColumnLayout {
                 function duplicatePercent(percent) {
                     if (!isFinite(percent))
                         return false;
-                    const fraction = Math.max(chipEditor.minPercent, Math.min(100, percent)) / 100;
+                    const fraction = Math.max(chipEditor.minPercent, Math.min(chipEditor.maxPercent, percent)) / 100;
                     for (let i = 0; i < chipEditor.values.length; i++) {
                         if (i !== chip.index && Math.abs(chipEditor.values[i] - fraction) < chipEditor.dedupeEpsilon)
                             return true;
@@ -108,7 +114,7 @@ ColumnLayout {
                     if (chip.duplicatePercent(percent))
                         return; // Another stop already holds this size (warned live in the field).
 
-                    const fraction = Math.max(chipEditor.minPercent, Math.min(100, percent)) / 100;
+                    const fraction = Math.max(chipEditor.minPercent, Math.min(chipEditor.maxPercent, percent)) / 100;
                     const next = chipEditor.values.slice();
                     next[chip.index] = fraction;
                     next.sort((a, b) => a - b);
@@ -183,10 +189,10 @@ ColumnLayout {
                         horizontalAlignment: TextInput.AlignHCenter
                         color: duplicateValue ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
                         ToolTip.visible: duplicateValue
-                        ToolTip.text: i18nc("@info:tooltip", "This size is already a preset")
+                        ToolTip.text: chipEditor.duplicateText
                         validator: IntValidator {
                             bottom: chipEditor.minPercent
-                            top: 100
+                            top: chipEditor.maxPercent
                         }
                         Accessible.name: i18nc("@label:textbox", "Edit preset percentage in %1", chipEditor.accessibleLabel)
                         // Escape cancels without committing; Enter and
@@ -289,7 +295,7 @@ ColumnLayout {
                 id: addSpin
 
                 from: chipEditor.minPercent
-                to: 100
+                to: chipEditor.maxPercent
                 value: 50
                 editable: true
                 // Greyed rather than disabled when the list is full, matching
@@ -339,7 +345,7 @@ ColumnLayout {
                     if (chipEditor.full)
                         return i18np("This list can hold at most %n preset", "This list can hold at most %n presets", chipEditor.maxCount);
                     if (duplicate)
-                        return i18nc("@info:tooltip", "This size is already a preset");
+                        return chipEditor.duplicateText;
                     return i18nc("@info:tooltip", "Add this size as a preset");
                 }
                 onClicked: {

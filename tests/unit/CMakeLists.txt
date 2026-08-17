@@ -389,7 +389,12 @@ add_executable(test_settings_validation config/settings/test_settings_validation
 target_link_libraries(test_settings_validation PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
 add_test(NAME test_settings_validation COMMAND test_settings_validation)
 
-p_add_test(test_settings_perscreen config/settings/test_settings_perscreen.cpp)
+# Explicit Qt6::Gui like its scrolling sibling below: the test uses QTEST_MAIN
+# (not guiless) for the palette-backed colour getters, and would otherwise get
+# Gui only through plasmazones_core's PUBLIC link.
+add_executable(test_settings_perscreen config/settings/test_settings_perscreen.cpp)
+target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core Qt6::Gui plasmazones_core)
+add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
 
 p_add_test(test_settings_disable_per_mode config/settings/test_settings_disable_per_mode.cpp)
 

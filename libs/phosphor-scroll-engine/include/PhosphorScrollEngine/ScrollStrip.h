@@ -76,7 +76,10 @@ public:
     /// If that tile is MINIMIZED it falls back to the column's first
     /// non-minimized tile, so this can name a different window than
     /// `activeColumn()->activeTileIdx` points at. The mutating verbs
-    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight) all act
+    /// (moveActiveTile, expelWindowFromColumn, setActiveWindowHeight, and
+    /// cycleActiveWindowPresetHeight — adjustActiveWindowHeight is NOT on
+    /// this list; it self-guards by resolving the tile from the relayout)
+    /// all act
     /// on activeTileIdx, so a caller pairing this accessor with one of them
     /// could report a window the operation did not touch. Not reachable in
     /// production today, where the daemon models minimize as float and a
@@ -383,6 +386,12 @@ private:
     /// [0, stripMain - workMain] (pinned at the strip's START when the strip
     /// fits the viewport entirely).
     int clampedAnchor(int anchor, const ScrollLayoutParams& params) const;
+    /// The anchor a structural mutation ends on: KEEP the view where it was
+    /// (an anchor reproducing @p oldViewOffset, clamped at BOTH strip edges —
+    /// deliberately stricter than removeWindowInternal's trail-only clamp,
+    /// because these mutations can shrink the strip from either end) unless
+    /// the centering policy says the focused column re-centers, in which
+    /// case RECENTER wins.
     int keepOrRecenterAnchor(int oldViewOffset, const ScrollLayoutParams& params) const;
     /// Apply the center-focused-column policy after the active column moved
     /// from @p prevIdx at @p oldViewOffset (strip coords) to the current active.

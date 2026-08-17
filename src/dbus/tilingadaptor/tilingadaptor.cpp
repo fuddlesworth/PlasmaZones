@@ -42,7 +42,9 @@ void TilingAdaptor::setLifecycleEngines(const QVector<PhosphorEngine::IPlacement
     m_lifecycleEngines = engines;
     m_lifecycleEngines.removeAll(nullptr);
     if (m_lifecycleEngines.isEmpty()) {
-        // Teardown contract (header: "pass an empty list on teardown"):
+        // Real teardown goes through clearEngine(); this empty-list form
+        // exists for symmetry and has no production caller (see the header).
+        // It still clears the parked opens, because
         // parked opens can never be retried without a pipeline, and the
         // announce path's empty-union bail deliberately skips the retry, so
         // they would otherwise sit for the rest of the process.

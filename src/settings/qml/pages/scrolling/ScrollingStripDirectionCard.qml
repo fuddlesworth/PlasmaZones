@@ -45,7 +45,7 @@ SettingsCard {
         spacing: Kirigami.Units.smallSpacing
 
         SettingsRow {
-            title: i18n("Strip direction")
+            title: i18nc("row inside the Strip direction card", "Direction")
             searchAnchor: "stripAxis"
             description: i18nc("the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text", "Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.")
 

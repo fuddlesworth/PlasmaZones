@@ -103,6 +103,11 @@ QJsonObject basePack(const QString& id)
 ///
 /// Returns an empty string when the source tree is not available, the same
 /// skip cue as linkSharedIncludes.
+///
+/// The strip is textual, not a lexer: a `//` inside a string or a block
+/// comment would confuse it. GLSL has no string literals and the shared
+/// helpers use line comments throughout, so the fixtures this reads never hit
+/// that case. Left simple on purpose rather than hardened.
 QString sharedHelperCode(const QString& fileName)
 {
     QFile file(QStringLiteral(P_SOURCE_DIR "/data/animations/shared/") + fileName);
@@ -119,6 +124,11 @@ QString sharedHelperCode(const QString& fileName)
 
 /// The body of the GLSL function named @p name in @p code, between its opening
 /// brace and the matching close. Empty when the function is absent.
+///
+/// Matches the FIRST occurrence of the name, so a call site appearing before
+/// the definition, or a longer name ending in @p name, would pick the wrong
+/// body. The helpers this reads define each function before any use and share
+/// no such name suffix. Left simple on purpose rather than hardened.
 QString glslFunctionBody(const QString& code, const QString& name)
 {
     const int signature = code.indexOf(name + QLatin1Char('('));

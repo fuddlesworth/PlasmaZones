@@ -238,6 +238,7 @@ bool EditorController::saveScrollingTemplateNow()
         Q_EMIT layoutNameChanged();
     }
     m_isNewLayout = false;
+    const bool unsavedCleared = m_hasUnsavedChanges;
     m_hasUnsavedChanges = false;
     // Reconcile the model with what actually persisted: both paths normalize
     // (drop degenerate columns, sort/dedupe/cap presets, demote an
@@ -250,7 +251,9 @@ bool EditorController::saveScrollingTemplateNow()
     if (m_undoController) {
         m_undoController->setClean();
     }
-    Q_EMIT hasUnsavedChangesChanged();
+    if (unsavedCleared) {
+        Q_EMIT hasUnsavedChangesChanged();
+    }
     Q_EMIT layoutSaved();
     return true;
 }

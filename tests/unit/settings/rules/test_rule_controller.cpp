@@ -577,7 +577,7 @@ void TestRuleController::authoringMetadata()
     // bucket (or Other=99) with no other test noticing.
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludePlacement"), -1), 8); // Window (window)
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("excludeDecorations"), -1), 7); // Appearance (window)
-    // The per-context scrolling behaviour toggles ride the Scrolling bucket
+    // The per-context scrolling behaviour toggles and enums ride the Scrolling bucket
     // with the sizing knobs they sit beside. Every one of them shares the
     // `layoutEngine` descriptor category with the engine controls, so the
     // bucket is decided by a hand-written per-type dispatch: an action left

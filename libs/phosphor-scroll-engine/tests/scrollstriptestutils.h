@@ -108,10 +108,6 @@ inline QSize t(const QSize& s)
 {
     return vertical() ? QSize(s.height(), s.width()) : s;
 }
-inline QPoint t(const QPoint& p)
-{
-    return vertical() ? QPoint(p.y(), p.x()) : p;
-}
 
 // -- Role readers over a PHYSICAL rect the engine produced --------------
 

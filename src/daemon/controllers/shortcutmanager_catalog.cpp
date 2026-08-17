@@ -339,11 +339,13 @@ CatalogMeta catalogMetaForId(const QString& id)
                               "column's space evenly."));
         add(kIdScrollCenterVisibleColumns, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Scrolls the view so the fully visible columns sit centered as a group."));
-        add(kIdScrollFocusWindowTop, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus First Window in Column"),
+        // No shortLabel on this pair: the registration names ("Focus First /
+        // Last Window in Column") are already short enough for the column, so
+        // an override would have to repeat them verbatim and ship a second
+        // translatable string saying the same thing.
+        add(kIdScrollFocusWindowTop, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the first window of the focused column."));
-        add(kIdScrollFocusWindowBottom, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
-            QT_TRANSLATE_NOOP("plasmazones", "Focus Last Window in Column"),
+        add(kIdScrollFocusWindowBottom, kScrollingCategory.source, 10, "scrolling", kModeNameContext, nullptr,
             QT_TRANSLATE_NOOP("plasmazones", "Moves focus to the last window of the focused column."));
         add(kIdScrollFocusColumnLeft, kScrollingCategory.source, 10, "scrolling", kModeNameContext,
             QT_TRANSLATE_NOOP("plasmazones", "Focus Previous Column (Edge Stop)"),

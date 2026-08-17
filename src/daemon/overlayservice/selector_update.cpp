@@ -24,8 +24,8 @@ namespace PlasmaZones {
 namespace {
 
 void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, QObject* window, QScreen* screen,
-                                          const QString& virtualScreenId, const ZoneSelectorConfig& config,
-                                          ISettings* settings, const ZoneSelectorLayout& layout,
+                                          const QString& virtualScreenId, ISettings* settings,
+                                          const ZoneSelectorLayout& layout,
                                           const PhosphorZones::ContextOverlayOverride& overlayOverride, int zonePadding,
                                           bool stripVerticalAxis)
 {
@@ -48,10 +48,10 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
     const qreal previewScale = screenExtent > 0 ? static_cast<qreal>(indicatorExtent) / screenExtent : 0.09375;
     writeQmlProperty(window, QStringLiteral("previewScale"), previewScale);
 
-    // Compute positionIsVertical from per-screen config
-    const auto pos = static_cast<ZoneSelectorPosition>(config.position);
-    writeQmlProperty(window, QStringLiteral("positionIsVertical"),
-                     (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
+    // No positionIsVertical write here: the caller sets it from the same
+    // config.position BEFORE the layout properties, because the QML anchors
+    // need it there. Repeating it after would be a second write of a value
+    // that cannot have changed in between.
 
     // Compute scaled zone appearance values. Zone padding honors per-monitor gap
     // RULES (cascade: context-rule override → global → default) via the layout
@@ -116,8 +116,7 @@ void applyZoneSelectorLayout(QObject* window, const ZoneSelectorLayout& layout)
 // QQuickWindow). The QML root uses internal anchors (selectorPosition
 // state) to position the visible bar in the chosen corner of the
 // transparent slot.
-void applyZoneSelectorGeometry(QQuickItem* slot, const QRect& screenGeom, const ZoneSelectorLayout& /*layout*/,
-                               ZoneSelectorPosition /*pos*/)
+void applyZoneSelectorGeometry(QQuickItem* slot, const QRect& screenGeom)
 {
     if (!slot || !screenGeom.isValid()) {
         return;
@@ -289,14 +288,14 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     applyZoneSelectorLayout(window, layout);
 
     // Update computed properties that depend on layout and settings
-    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout,
-                                         overlayOverride, zonePadding, stripVerticalAxis);
+    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, m_settings, layout, overlayOverride,
+                                         zonePadding, stripVerticalAxis);
 
     // Positioning is entirely QML-internal: ZoneSelectorContent.qml's
     // selectorPosition state anchors the inner container to the requested
     // corner of the full-screen transparent surface. Anchors/margins are
     // baked at attach time (AnchorAll) and never mutated afterwards.
-    applyZoneSelectorGeometry(window, screenGeom, layout, pos);
+    applyZoneSelectorGeometry(window, screenGeom);
 
     // Keep stored geometry in sync so hit-testing uses the current value
     m_screenStates[screenId].zoneSelectorGeometry = screenGeom;

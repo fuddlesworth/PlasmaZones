@@ -37,7 +37,6 @@ using namespace PhosphorScrollEngine;
 
 namespace Ax = ScrollTestUtils::Ax;
 
-using ScrollTestUtils::kCrossExtent;
 using ScrollTestUtils::kMainExtent;
 using ScrollTestUtils::makeProviderEngine;
 using ScrollTestUtils::StubScrollSettings;

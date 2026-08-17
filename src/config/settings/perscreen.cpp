@@ -29,22 +29,17 @@ namespace PlasmaZones {
 
 namespace {
 
-// D-Bus boundary guards: per-screen values arrive as raw QVariants from the
-// settings adaptor dispatch. QVariant::toInt()/toDouble() silently coerce a
-// non-numeric payload to 0, which the validators would then accept or clamp
-// as a real override (e.g. Position "garbage" -> 0 = TopLeft stored). These
-// helpers reject non-convertible payloads with an invalid QVariant instead,
-// matching the contract the enum-range validators already use.
 using PerScreenDetail::boundedInt;
 
+// The double-valued D-Bus boundary guard, TU-local because this is its only
+// caller. See the guard block in perscreen_detail.h for why the numericPayload
+// check carries as much weight as the bound.
 QVariant boundedDouble(const QVariant& value, double min, double max)
 {
     bool ok = false;
     const double v = value.toDouble(&ok);
     return (ok && PerScreenDetail::numericPayload(value)) ? QVariant(qBound(min, v, max)) : QVariant();
 }
-
-using PerScreenDetail::enumInRange;
 
 /// Closed-set check for enums whose legal values are not a contiguous range
 /// from 0 — the ConfigDefaults isValid* predicates. The ok-check matters as
@@ -571,11 +566,11 @@ void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
                        m_perScreenScrollingSettings);
     // The width pair's per-key validation cannot see the pair, so a
     // {Kind, Value} combination that is individually legal but jointly
-    // impossible survives it — from a hand edit, a config import, or a staged
-    // profile blob. Repair it here, the load-path twin of the kind-aware
-    // re-seed setPerScreenScrollingSetting applies on a kind write. Screens
-    // overriding the value WITHOUT a kind are skipped inside the helper (the
-    // engine ignores such a value entirely).
+    // impossible survives it — from a hand edit or a config import. Repair it
+    // here, the load-path twin of the kind-aware re-seed
+    // setPerScreenScrollingSetting applies on a kind write. Screens overriding
+    // the value WITHOUT a kind are skipped inside the helper (the engine
+    // ignores such a value entirely).
     for (auto it = m_perScreenScrollingSettings.begin(); it != m_perScreenScrollingSettings.end(); ++it) {
         repairPerScreenScrollingWidth(it.value());
     }

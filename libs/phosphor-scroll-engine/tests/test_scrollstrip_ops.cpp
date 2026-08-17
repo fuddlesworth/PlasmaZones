@@ -9,7 +9,8 @@
 // over the same threeColumns fixture; splitting by operation family would
 // duplicate the fixture and the declaration-order table of contents below is
 // what keeps the length navigable. The ENGINE-level behaviour is already
-// split across seven sibling files.
+// split across the sibling test_scrollengine_* files (deliberately uncounted
+// here: the split grows, and a stale number reads as a claim about coverage).
 
 #include <PhosphorScrollEngine/ScrollStrip.h>
 
@@ -1029,12 +1030,16 @@ void TestScrollStripOps::minHeightClampStaysInBudget()
     // iterations and pass every floor check vacuously.
     QCOMPARE(r.columns.size(), 1);
     QCOMPARE(r.columns.at(0).tiles.size(), 3);
-    const int availH = Ax::crossLen(params.workArea);
+    // Compared against the declared floor directly. The qMin that used to
+    // guard this read the work area's full cross extent (800), which is
+    // neither the budget the relayout actually distributes (that is 800 less
+    // the gap term, 780) nor small enough to ever bind — every floor here is
+    // far under both, so it only made the bound look conditional.
     int total = 0;
     for (const ResolvedColumn& rc : r.columns) {
         for (const ResolvedTile& rt : rc.tiles) {
             const int floor_ = rt.windowId == QStringLiteral("c") ? 200 : 400;
-            QVERIFY2(Ax::crossLen(rt.rect) >= qMin(floor_, availH),
+            QVERIFY2(Ax::crossLen(rt.rect) >= floor_,
                      qPrintable(
                          QStringLiteral("%1 shrank below its floor: %2").arg(rt.windowId).arg(Ax::crossLen(rt.rect))));
             total += Ax::crossLen(rt.rect);
@@ -1270,9 +1275,14 @@ void TestScrollStripOps::centerVisibleColumnsCentersTheSpanAndFallsBack()
     QVERIFY(strip.centerVisibleColumns(params));
     const ResolvedStrip r = strip.relayout(params);
     QVERIFY(resolveContains(r, QStringLiteral("a")));
-    const int colW = Ax::mainLen(rectOf(r, QStringLiteral("a")));
-    const int spanW = 3 * colW + 2 * params.gap;
-    QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("a"))), (workW - spanW) / 2);
+    // Fixture literals rather than a re-derivation off the resolve, which
+    // would agree with any centering the code happened to do: a 0.25 column
+    // on the 1200px main extent under a 10px gap resolves to
+    // round(0.25 * 1210) - 10 = 293, so the three-column span is
+    // 3 * 293 + 2 * 10 = 899 and centering it leaves (1200 - 899) / 2 = 150.
+    QCOMPARE(workW, 1200);
+    QCOMPARE(Ax::mainLen(rectOf(r, QStringLiteral("a"))), 293);
+    QCOMPARE(Ax::mainPos(rectOf(r, QStringLiteral("a"))), 150);
 
     // Already centered: NO change reported (same contract as
     // centerActiveColumn — the return value gates relayout and the OSD).

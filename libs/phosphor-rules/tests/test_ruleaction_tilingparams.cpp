@@ -388,10 +388,10 @@ private Q_SLOTS:
                 != QLatin1StringView(ActionSlot::DragDropIndicatorBorderColor));
     }
 
-    /// The seven per-context scrolling BEHAVIOUR actions — the six bools and
-    /// the sticky-handling enum — each pinned to its OWN slot, plus the enum's
-    /// closed vocabulary and the per-window unfloat-fallback bool that shipped
-    /// beside them.
+    /// The eight per-context scrolling BEHAVIOUR actions — the six bools plus
+    /// the sticky-handling and strip-axis enums — each pinned to its OWN slot,
+    /// plus both enums' closed vocabularies and the per-window
+    /// unfloat-fallback bool that shipped beside them.
     ///
     /// The slot pins are the point, for the reason
     /// testTabIndicatorActions_slotsBoundsAndVocabularies spells out: the six

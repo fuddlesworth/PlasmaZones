@@ -613,6 +613,12 @@ void TestScrollStripCore::tabIndicatorLengthIsCenteredOnTheEdge()
 
     ScrollStrip strip;
     const ResolvedColumn column = tabbedColumn(strip, 2, indicator);
+    // Derived from the resolved column's PHYSICAL width on purpose, not
+    // pinned to a literal like the rest of this block: a Top indicator's
+    // length runs along the screen's x, which is the column's 595px main
+    // extent on the horizontal arm and its 800px cross extent on the
+    // vertical one. A literal would pin one arm and fail the other, and the
+    // property under test is the even trim, not the number.
     const int expectedLength = qRound(column.rect.width() * 0.5);
     QCOMPARE(column.tabIndicatorRect.width(), expectedLength);
     QCOMPARE(column.tabIndicatorRect.x(), column.rect.x() + (column.rect.width() - expectedLength) / 2);

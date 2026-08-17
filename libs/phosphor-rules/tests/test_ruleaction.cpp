@@ -882,8 +882,8 @@ private Q_SLOTS:
         rejectsStray(ActionType::SetScrollDefaultColumnDisplay, QJsonValue(QStringLiteral("tabbed")));
         rejectsStray(ActionType::SetScrollInsertPosition, QJsonValue(QStringLiteral("last")));
         rejectsStray(ActionType::SetScrollDefaultWindowHeight, QJsonValue(0.5));
-        // The six behaviour toggles and the sticky-handling enum beside them
-        // declare the same {Value} key set.
+        // The behaviour toggles and the two enums beside them declare the same
+        // {Value} key set.
         rejectsStray(ActionType::SetScrollAlwaysCenterSingleColumn, QJsonValue(true));
         rejectsStray(ActionType::SetScrollRespectMinimumSize, QJsonValue(true));
         rejectsStray(ActionType::SetScrollCropStraddlers, QJsonValue(true));
