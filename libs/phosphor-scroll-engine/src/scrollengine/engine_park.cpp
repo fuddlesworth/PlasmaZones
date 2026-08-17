@@ -209,8 +209,8 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
         // unionBottom + 1 + kParkMargin), so on a horizontal strip
         // (cross == y) a parked rect satisfies this cross-overflow predicate
         // too. The first arm's own !out.parked skips it for such a tile,
-        // which lands evaluation HERE — and without this term the body below
-        // would clear the emitted edge (the memory already holds it, set at
+        // which lands evaluation at the else-if below — and without this
+        // term its body would clear the emitted edge (the memory already holds it, set at
         // the off-viewport and straddle parks above), dropping the scrollEdge
         // that engine_apply puts on the wire and the visualX/visualY paint
         // hint gated on it: a main-axis-parked column would lose its
