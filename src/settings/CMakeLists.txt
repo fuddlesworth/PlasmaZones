@@ -399,6 +399,7 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/animations/StockAnimationConflictChip.qml
         qml/AboutPage.qml
         qml/WhatsNewPage.qml
+        qml/pages/screens/MonitorModePreviews.qml
         qml/pages/screens/MonitorStatePage.qml
         qml/pages/screens/VirtualScreensPage.qml
         qml/pages/screens/VirtualScreenPreview.qml

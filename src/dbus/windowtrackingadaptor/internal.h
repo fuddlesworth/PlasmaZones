@@ -355,4 +355,43 @@ inline QString indicatorBorderColor()
 }
 } // namespace WindowColorKeys
 
+/// The NON-colour overlay paint keys, WindowColorKeys' sibling for the same
+/// reason: each spelling is at once the rule-override map key the daemon
+/// produces, the key the overlay's layering step reads, and the QML property
+/// name the slot exposes — seven literals that were hand-repeated across
+/// producer and consumer, where a rename silently drops the rule override
+/// instead of failing to build.
+namespace WindowPaintKeys {
+inline QString tabStyle()
+{
+    // "tabStyle", not "style": the name addresses the SLOT's declared
+    // property (see the push block in overlayservice/scrolltabs.cpp).
+    return QStringLiteral("tabStyle");
+}
+inline QString gapsBetweenTabs()
+{
+    return QStringLiteral("gapsBetweenTabs");
+}
+inline QString cornerRadius()
+{
+    return QStringLiteral("cornerRadius");
+}
+inline QString indicatorEnabled()
+{
+    return QStringLiteral("indicatorEnabled");
+}
+inline QString indicatorOpacity()
+{
+    return QStringLiteral("indicatorOpacity");
+}
+inline QString indicatorBorderWidth()
+{
+    return QStringLiteral("indicatorBorderWidth");
+}
+inline QString indicatorBorderRadius()
+{
+    return QStringLiteral("indicatorBorderRadius");
+}
+} // namespace WindowPaintKeys
+
 } // namespace PlasmaZones

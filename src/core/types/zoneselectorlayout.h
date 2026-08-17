@@ -178,15 +178,18 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
 
         layout.contentWidth = layout.scrollContentWidth;
         layout.contentHeight = layout.scrollContentHeight;
+        // The flags come from the UNCLAMPED comparison so a degenerate work
+        // area (maxContent* == 0 on a screen a few pixels tall) still
+        // reports the overflow to QML instead of a false "fits". Only the
+        // clamp itself stays gated on a positive bound — clamping to 0
+        // would zero the popup outright.
+        layout.needsScrolling = layout.contentHeight > qMax(0, maxContentH);
         if (maxContentH > 0 && layout.contentHeight > maxContentH) {
             layout.contentHeight = maxContentH;
-            layout.needsScrolling = true;
-        } else {
-            layout.needsScrolling = false;
         }
+        layout.needsHorizontalScrolling = layout.contentWidth > qMax(0, maxContentW);
         if (maxContentW > 0 && layout.contentWidth > maxContentW) {
             layout.contentWidth = maxContentW;
-            layout.needsHorizontalScrolling = true;
         }
 
         layout.containerWidth = layout.contentWidth + layout.containerPadding;
@@ -218,9 +221,11 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.contentWidth = layout.scrollContentWidth;
     layout.contentHeight = visibleRows * layout.cellHeight + (visibleRows - 1) * layout.indicatorSpacing;
 
-    if (layout.contentWidth > maxContentW && maxContentW > 0) {
+    // Unclamped comparison for the flag, positive-bound gate for the clamp
+    // — the vertical arm's rationale, applied to this arm's one clamp.
+    layout.needsHorizontalScrolling = layout.contentWidth > qMax(0, maxContentW);
+    if (maxContentW > 0 && layout.contentWidth > maxContentW) {
         layout.contentWidth = maxContentW;
-        layout.needsHorizontalScrolling = true;
     }
 
     layout.containerWidth = layout.contentWidth + layout.containerPadding;

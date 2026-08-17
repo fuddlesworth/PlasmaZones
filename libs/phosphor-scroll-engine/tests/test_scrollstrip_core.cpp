@@ -476,6 +476,16 @@ ResolvedColumn tabbedColumn(ScrollStrip& strip, int windowCount, const TabIndica
     return resolved.columns.isEmpty() ? ResolvedColumn{} : resolved.columns.first();
 }
 
+/// The build-really-happened companion for the NEGATIVE isNull rows: a failed
+/// build hands back a default ResolvedColumn whose tabIndicatorRect is ALSO
+/// null, so an isNull assertion alone is vacuous — pairing it with the
+/// column's own rect validity is what makes "no indicator" mean "a real
+/// column resolved without one".
+bool builtWithoutIndicator(const ResolvedColumn& column)
+{
+    return column.rect.isValid() && column.tabIndicatorRect.isNull();
+}
+
 } // namespace
 
 void TestScrollStripCore::tabIndicatorResolvesOnlyForTabbedColumns()
@@ -502,7 +512,7 @@ void TestScrollStripCore::tabIndicatorResolvesOnlyForTabbedColumns()
     // payload emitter reads.
     ScrollStrip off;
     indicator.enabled = false;
-    QVERIFY(tabbedColumn(off, 2, indicator).tabIndicatorRect.isNull());
+    QVERIFY(builtWithoutIndicator(tabbedColumn(off, 2, indicator)));
 }
 
 void TestScrollStripCore::tabIndicatorHidesForASingleTab()
@@ -512,7 +522,7 @@ void TestScrollStripCore::tabIndicatorHidesForASingleTab()
     indicator.hideWhenSingleTab = true;
 
     ScrollStrip single;
-    QVERIFY(tabbedColumn(single, 1, indicator).tabIndicatorRect.isNull());
+    QVERIFY(builtWithoutIndicator(tabbedColumn(single, 1, indicator)));
 
     ScrollStrip pair;
     QVERIFY(!tabbedColumn(pair, 2, indicator).tabIndicatorRect.isNull());

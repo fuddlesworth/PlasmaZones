@@ -26,7 +26,8 @@ namespace {
 void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, QObject* window, QScreen* screen,
                                           const QString& virtualScreenId, const ZoneSelectorConfig& config,
                                           ISettings* settings, const ZoneSelectorLayout& layout,
-                                          PhosphorZones::IZoneLayoutRegistry* layoutRegistry, bool stripVerticalAxis)
+                                          const PhosphorZones::ContextOverlayOverride& overlayOverride, int zonePadding,
+                                          bool stripVerticalAxis)
 {
     if (!window || !screen) {
         return;
@@ -59,10 +60,10 @@ void updateZoneSelectorComputedProperties(PhosphorScreens::ScreenManager* mgr, Q
     // SetOverlayBorderRadius context rule over the global setting, matching the
     // zoneBorderWidth/Radius written for the same window in updateZoneSelectorWindow.
     if (settings) {
-        const PhosphorZones::ContextOverlayOverride overlayOverride =
-            overlayOverrideForScreen(layoutRegistry, virtualScreenId);
-        const int zonePadding = GeometryUtils::getEffectiveInnerGap(
-            nullptr, settings, GeometryUtils::currentContextGapOverride(layoutRegistry, settings, virtualScreenId));
+        // overlayOverride and zonePadding arrive PRE-RESOLVED from the one
+        // resolve updateZoneSelectorWindow performs for its raw-property
+        // writes — the same inputs, resolved twice per popup update before
+        // this was threaded through.
         const int zoneBorderWidth = overlayOverride.borderWidth.value_or(settings->borderWidth());
         const int zoneBorderRadius = overlayOverride.borderRadius.value_or(settings->borderRadius());
 
@@ -151,9 +152,11 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     // Clamped symmetrically about 1:1 — the lower bound is the inverse of the
-    // upper. A 0.5 floor reported a rotated 21:9 (about 0.43) as 1:2, and the
-    // preview box was then drawn in a shape no window on that screen has.
-    // Rotated ultrawides are exactly the monitors the vertical strip serves.
+    // upper, so a rotated 21:9 (about 0.43) keeps its shape. NOTE: for the
+    // SELECTOR slot this write is currently declared-but-unforwarded
+    // (ZoneSelectorContent derives its own aspect; see the contract note in
+    // PassiveOverlayShell.qml), so the clamp's live consumers are the OSD
+    // and picker contents, whose own safeAspectRatio floors match this one.
     aspectRatio = qBound(0.25, aspectRatio, 4.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
@@ -175,22 +178,30 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
                      : m_settings->resolvedZoneSelectorConfig(screenId))
         : defaultZoneSelectorConfig();
 
+    // Resolved ONCE for the whole update: the raw-property writes below and
+    // the scaled-preview writes in updateZoneSelectorComputedProperties read
+    // the same per-screen context, and resolving it twice per popup rebuild
+    // both duplicated the rule walk and let a context switch landing between
+    // the two resolves hand each half a different answer.
+    PhosphorZones::ContextOverlayOverride overlayOverride;
+    int zonePadding = 0;
+    if (m_settings) {
+        overlayOverride = overlayOverrideForScreen(m_layoutManager, screenId);
+        zonePadding = GeometryUtils::getEffectiveInnerGap(
+            nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId));
+    }
+
     // Update settings-based properties
     if (m_settings) {
         // Context overlay-appearance overrides layer over config for this
         // screen's live context, matching the main zone overlay.
-        const PhosphorZones::ContextOverlayOverride overlayOverride =
-            overlayOverrideForScreen(m_layoutManager, screenId);
         writeColorSettings(window, m_settings, &overlayOverride);
         // PhosphorZones::Zone appearance for the scaled preview. Zone padding
         // honors per-monitor gap RULES (context-rule override → global → default)
         // via the layout registry's current context. This preview passes no
         // layout, so the per-layout tier does not apply here; border width/radius
         // layer the context overlay rule over the global config value.
-        writeQmlProperty(
-            window, QStringLiteral("zonePadding"),
-            GeometryUtils::getEffectiveInnerGap(
-                nullptr, m_settings, GeometryUtils::currentContextGapOverride(m_layoutManager, m_settings, screenId)));
+        writeQmlProperty(window, QStringLiteral("zonePadding"), zonePadding);
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"),
                          overlayOverride.borderWidth.value_or(m_settings->borderWidth()));
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"),
@@ -279,7 +290,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
 
     // Update computed properties that depend on layout and settings
     updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout,
-                                         m_layoutManager, stripVerticalAxis);
+                                         overlayOverride, zonePadding, stripVerticalAxis);
 
     // Positioning is entirely QML-internal: ZoneSelectorContent.qml's
     // selectorPosition state anchors the inner container to the requested

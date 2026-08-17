@@ -228,8 +228,29 @@ void TilingHandler::applyScrollEffectBehaviour(const QVariantMap& behaviour)
     if (!cropChanged && !axisChanged) {
         return;
     }
+    // Screens whose axis MEMBERSHIP flipped, captured before the write below
+    // consumes the old set. Consumed after the write, but derived here.
+    const QSet<QString> axisFlipped =
+        (verticalAxis - m_scrollVerticalAxisScreens) + (m_scrollVerticalAxisScreens - verticalAxis);
     m_scrollCropStraddlerScreens = crop;
     m_scrollVerticalAxisScreens = verticalAxis;
+    // An axis flip landing MID-LEG must cancel that screen's view spring and
+    // armed strip pass, the setScrollingScreens teardown shape: the painted
+    // axis lives in StripViewAnimator's per-output stamp, which only
+    // applyBatchDelta rewrites — and it early-returns on a ZERO delta, so
+    // the flip's own re-layout batch (a reflow, not a scroll) never
+    // restamps it. Without this the stale leg keeps sliding the strip along
+    // the axis the screen no longer has until the next genuine scroll.
+    // forgetOutput fires no repaint of its own, so damage the output too.
+    for (const QString& flippedScreen : axisFlipped) {
+        if (KWin::LogicalOutput* out = m_effect->outputForScreenId(flippedScreen)) {
+            m_effect->m_stripTransition.outputRemoved(out);
+            m_effect->m_stripViewAnimator->forgetOutput(out);
+            if (KWin::effects) {
+                KWin::effects->addRepaint(out->geometry());
+            }
+        }
+    }
     // Crop is PAINTED state: a screen that just started (or stopped) cropping
     // has stale pixels on it, and nothing else will revisit them, since the
     // strip's geometry did not necessarily move and no tile batch is

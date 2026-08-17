@@ -95,9 +95,11 @@ void Daemon::updateEngineScreens()
     if (!m_autotileEngine || !m_layoutManager || !m_screenManager || !m_algorithmRegistry) {
         return;
     }
-    // Re-entrancy latch: the engines' placementChanged fires SYNCHRONOUSLY
-    // from setActiveScreens/scheduleRetileForScreen inside this pass, and
-    // the tiled-count gates recompute through here — running the
+    // Re-entrancy latch: the autotile engine's setActiveScreens emits
+    // placementChanged SYNCHRONOUSLY from its tail (context.cpp; the
+    // RETILE-driven emissions are queued — scheduleRetileForScreen
+    // coalesces onto a later turn and cannot re-enter this pass), and the
+    // tiled-count gates recompute through here — running the
     // capture/seed/apply phases against partially-applied state. Defer the
     // nested request to a queued re-run instead.
     if (m_updateEngineScreensInProgress) {

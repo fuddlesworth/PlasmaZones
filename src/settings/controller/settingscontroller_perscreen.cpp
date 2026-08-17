@@ -93,16 +93,6 @@ void SettingsController::setPerScreenScrollingSetting(const QString& screenName,
     m_settings.setPerScreenScrollingSetting(screenName, key, value);
 }
 
-void SettingsController::clearPerScreenScrollingSettings(const QString& screenName)
-{
-    m_settings.clearPerScreenScrollingSettings(screenName);
-}
-
-bool SettingsController::hasPerScreenScrollingSettings(const QString& screenName) const
-{
-    return m_settings.hasPerScreenScrollingSettings(screenName);
-}
-
 void SettingsController::clearPerScreenScrollingSizingSettings(const QString& screenName)
 {
     m_settings.clearPerScreenScrollingSizingSettings(screenName);

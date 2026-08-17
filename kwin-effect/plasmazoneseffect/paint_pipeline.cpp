@@ -1241,6 +1241,16 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     // flag alone. The indicator is translated off its committed rect for the
     // whole view leg (paintWindow adds the strip's offset to it), so KWin must
     // stop deciding where it goes from that rect.
+    //
+    // Sliding COLUMNS deliberately get no such per-window flag for the same
+    // view offset: prePaintScreen's screen-level mask already keeps the
+    // whole strip output's paint honest while a view leg runs, and the block
+    // above adds the per-window flag only where a window is RELOCATED off
+    // its committed rect (a visualDelta entry). The indicator keeps its own
+    // flag as the one surface whose paint slot is REORDERED (the anchor
+    // injection) as well as translated — belt-and-braces against a pass
+    // where the screen mask alone would let KWin reason from the committed
+    // rect of a surface that is not even painted at its natural position.
     if (tabIndicatorSliding) {
         data.setTransformed();
     }

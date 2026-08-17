@@ -366,15 +366,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         if (m_overlayService) {
             QVariantMap paint;
             if (params.tabIndicatorStyle) {
-                // "tabStyle" — the overlay SLOT's property name, see the push
-                // block in overlayservice/scrolltabs.cpp.
-                paint.insert(QStringLiteral("tabStyle"), *params.tabIndicatorStyle);
+                paint.insert(WindowPaintKeys::tabStyle(), *params.tabIndicatorStyle);
             }
             if (params.tabIndicatorGapsBetweenTabs) {
-                paint.insert(QStringLiteral("gapsBetweenTabs"), *params.tabIndicatorGapsBetweenTabs);
+                paint.insert(WindowPaintKeys::gapsBetweenTabs(), *params.tabIndicatorGapsBetweenTabs);
             }
             if (params.tabIndicatorCornerRadius) {
-                paint.insert(QStringLiteral("cornerRadius"), *params.tabIndicatorCornerRadius);
+                paint.insert(WindowPaintKeys::cornerRadius(), *params.tabIndicatorCornerRadius);
             }
             // The three colour slots go through WindowColorKeys: the same
             // spellings are the map keys the tab-strip enrichment layers on and
@@ -397,7 +395,7 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             // rect is the engine's own layout answer and no rule can move it.
             QVariantMap drop;
             if (params.dropIndicatorEnabled) {
-                drop.insert(QStringLiteral("indicatorEnabled"), *params.dropIndicatorEnabled);
+                drop.insert(WindowPaintKeys::indicatorEnabled(), *params.dropIndicatorEnabled);
             }
             // Its two colour slots, same shared spellings — the remaining drop
             // keys (enabled, opacity, borderWidth, borderRadius) are not colour
@@ -409,13 +407,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
                 drop.insert(WindowColorKeys::indicatorBorderColor(), *params.dropIndicatorBorderColor);
             }
             if (params.dropIndicatorOpacity) {
-                drop.insert(QStringLiteral("indicatorOpacity"), *params.dropIndicatorOpacity);
+                drop.insert(WindowPaintKeys::indicatorOpacity(), *params.dropIndicatorOpacity);
             }
             if (params.dropIndicatorBorderWidth) {
-                drop.insert(QStringLiteral("indicatorBorderWidth"), *params.dropIndicatorBorderWidth);
+                drop.insert(WindowPaintKeys::indicatorBorderWidth(), *params.dropIndicatorBorderWidth);
             }
             if (params.dropIndicatorBorderRadius) {
-                drop.insert(QStringLiteral("indicatorBorderRadius"), *params.dropIndicatorBorderRadius);
+                drop.insert(WindowPaintKeys::indicatorBorderRadius(), *params.dropIndicatorBorderRadius);
             }
             m_overlayService->setScrollDropIndicatorOverrides(screenId, drop);
         }
@@ -439,8 +437,10 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
     // layoutParamsForScreen resolves the work area live from the
     // ScreenManager and caches nothing, so a rotation is visible on the first
     // read either way. Ordering is unchanged — this still runs before the
-    // single push, which still precedes setActiveScreens and every
-    // scheduleRetileForScreen, all of which coalesce onto a later turn.
+    // single push, which still precedes setActiveScreens (which itself runs
+    // INLINE, sync signals included — the autotile latch exists for exactly
+    // that) and every scheduleRetileForScreen, whose queued retiles coalesce
+    // onto a later turn.
     //
     // The base pointer does not carry the accessor: the axis is a scrolling
     // concept and deliberately not on IPlacementEngine, so this is a downcast

@@ -675,12 +675,8 @@ public:
     // ── Per-screen scrolling overrides ───────────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenScrollingSettings(const QString& screenName) const;
     Q_INVOKABLE void setPerScreenScrollingSetting(const QString& screenName, const QString& key, const QVariant& value);
-    Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenName);
-    // The scrolling map carries TWO sub-domains: the New-columns card's sizing
-    // keys and the Strip direction card's axis key. Each card's chip drives
-    // its own pair below, not the whole-domain pair here, so neither card's
-    // reset can wipe the other's override.
-    Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenName) const;
+    // Each chip drives its own sub-domain pair below (sizing / axis). NO
+    // whole-domain clear/has pair on purpose: callerless, and wipe-prone.
     Q_INVOKABLE void clearPerScreenScrollingSizingSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenScrollingSizingSettings(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenScrollingAxisSettings(const QString& screenName);

@@ -85,7 +85,7 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     // back as "has overrides" in the change-gate above. The settings-layering
     // block further down reuses this same lookup for the same reason.
     const QVariantMap& screenOverrides = m_scrollDropIndicatorOverrides.value(screenId);
-    if (const auto it = screenOverrides.constFind(QStringLiteral("indicatorEnabled"));
+    if (const auto it = screenOverrides.constFind(WindowPaintKeys::indicatorEnabled());
         it != screenOverrides.constEnd()) {
         indicatorEnabled = it.value().toBool();
     }
@@ -247,14 +247,14 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
         writeQmlProperty(slot, WindowColorKeys::indicatorBorderColor(),
                          layered(WindowColorKeys::indicatorBorderColor(),
                                  m_settings->scrollingDropIndicatorBorderColor().name(QColor::HexArgb)));
-        writeQmlProperty(slot, QStringLiteral("indicatorOpacity"),
-                         layered(QStringLiteral("indicatorOpacity"), m_settings->scrollingDropIndicatorOpacity()));
+        writeQmlProperty(slot, WindowPaintKeys::indicatorOpacity(),
+                         layered(WindowPaintKeys::indicatorOpacity(), m_settings->scrollingDropIndicatorOpacity()));
         writeQmlProperty(
-            slot, QStringLiteral("indicatorBorderWidth"),
-            layered(QStringLiteral("indicatorBorderWidth"), m_settings->scrollingDropIndicatorBorderWidth()));
+            slot, WindowPaintKeys::indicatorBorderWidth(),
+            layered(WindowPaintKeys::indicatorBorderWidth(), m_settings->scrollingDropIndicatorBorderWidth()));
         writeQmlProperty(
-            slot, QStringLiteral("indicatorBorderRadius"),
-            layered(QStringLiteral("indicatorBorderRadius"), m_settings->scrollingDropIndicatorBorderRadius()));
+            slot, WindowPaintKeys::indicatorBorderRadius(),
+            layered(WindowPaintKeys::indicatorBorderRadius(), m_settings->scrollingDropIndicatorBorderRadius()));
     }
 
     if (slot->isVisible() && !hideWasInFlight) {

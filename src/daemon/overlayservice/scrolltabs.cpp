@@ -318,9 +318,9 @@ void OverlayService::updateScrollTabStrips(const QString& screenId, const QVaria
         // them into the content item. The slot is a shared-shape Item, so the
         // tab-specific spelling keeps it unambiguous there; the content item's
         // own property is plain `style`.
-        push(QStringLiteral("tabStyle"), m_settings->scrollingTabIndicatorStyle());
-        push(QStringLiteral("gapsBetweenTabs"), m_settings->scrollingTabIndicatorGapsBetweenTabs());
-        push(QStringLiteral("cornerRadius"), m_settings->scrollingTabIndicatorCornerRadius());
+        push(WindowPaintKeys::tabStyle(), m_settings->scrollingTabIndicatorStyle());
+        push(WindowPaintKeys::gapsBetweenTabs(), m_settings->scrollingTabIndicatorGapsBetweenTabs());
+        push(WindowPaintKeys::cornerRadius(), m_settings->scrollingTabIndicatorCornerRadius());
         // The three colour keys come from WindowColorKeys, the shared home for
         // the spellings the daemon-side producer writes into this override map
         // (daemon/scrolling.cpp) and this slot exposes as QML properties. The

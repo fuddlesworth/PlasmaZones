@@ -439,10 +439,11 @@ void TestScrollEngineSnapshot::overWideColumnClampsFractionToOne()
     const ScrollStripSnapshot snap = engine->stripSnapshot(QStringLiteral("S1"));
     QVERIFY(snap.valid);
     QCOMPARE(snap.columns.size(), 1);
-    // The share is clamped to 1: the preview shows the visible share,
-    // matching the committed clip, never an over-unit fraction.
-    QVERIFY(snap.columns.at(0).widthFraction > 0.0);
-    QVERIFY(snap.columns.at(0).widthFraction <= 1.0);
+    // The share is clamped to EXACTLY 1: a 2000px intent on a 1200px work
+    // area fills the whole viewport, so the preview must show the full
+    // visible share, matching the committed clip. The old range assertion
+    // (> 0, <= 1) also passed for a fraction that silently degraded to 0.5.
+    QCOMPARE(snap.columns.at(0).widthFraction, 1.0);
 }
 
 void TestScrollEngineSnapshot::invalidWorkAreaAnswersInvalid()

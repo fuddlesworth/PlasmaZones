@@ -406,8 +406,9 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
         // flat config keys, so — like the Tiling Algorithm page's per-monitor
         // split/master/max overrides and the Gaps card's — they are NOT part of
         // this page's per-page dirty/Reset/Discard. They are cleared through the
-        // card's scope chip (clearPerScreenScrollingSettings), and the global
-        // footer Save/Discard handles them via the per-screen save path.
+        // card's scope chip (clearPerScreenScrollingSizingSettings — each card
+        // owns its own sub-domain pair), and the global footer Save/Discard
+        // handles them via the per-screen save path.
         {QStringLiteral("scrolling-columns"),
          {
              {CD::scrollingGroup(), CD::enabledKey()},

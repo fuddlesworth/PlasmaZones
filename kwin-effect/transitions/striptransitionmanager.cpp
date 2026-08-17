@@ -109,7 +109,16 @@ void StripTransitionManager::notifyLeg(KWin::LogicalOutput* output, const QStrin
         return;
     }
     OutputStripPass& pass = it->second;
-    if (!springLive || axisFlipped || pass.effectId != effectId) {
+    // holdsAfterSettle keeps an OPEN settle fade out of the reset arm: a
+    // wheel notch landing just after the spring settles reaches here with
+    // springLive false (this runs before the batch's applyBatchDelta starts
+    // the new spring), and resetting then swallowed the fade with a hard
+    // velocity cut — the exact mid-fade restart sampleLive documents as
+    // resuming seamlessly. The retarget arm's baseline compensation is right
+    // for this case too: the batch steps the committed value with no time
+    // passing either way.
+    const bool settleFadeOpen = pass.motion.holdsAfterSettle(ShaderInternal::shaderClockNowMs());
+    if ((!springLive && !settleFadeOpen) || axisFlipped || pass.effectId != effectId) {
         // Fresh leg on a stale armed entry (spring cleared outside the
         // paint bracket: animations toggled, teardown races), an AXIS FLIP,
         // or a pack SWAP mid-flight — in every case the new pass must not
@@ -618,6 +627,12 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
 void StripTransitionManager::reapSettled()
 {
     bool contextEnsured = false;
+    // LIVE clock, while paintOutput samples the frame-pinned one — a known,
+    // accepted skew (isRunning / isRunningForOutput read live too). The gap
+    // is sub-millisecond, and the worst it can do is reap a fade whose final
+    // frame the pinned clock would still have painted: one truncated fade
+    // frame, cosmetic. Pinning a clock here would need this postPaintScreen
+    // hook threaded into the paint bracket for no visible gain.
     const qint64 nowMs = ShaderInternal::shaderClockNowMs();
     for (auto it = m_active.begin(); it != m_active.end();) {
         if (!m_effect->m_stripViewAnimator->isAnimatingOn(it->first) && !it->second.motion.holdsAfterSettle(nowMs)) {
