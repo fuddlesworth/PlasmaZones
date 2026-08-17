@@ -105,6 +105,20 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // before the rest of the effective* reads. One fetch still serves them
     // all — the later reads take this same map.
     const QVariantMap overrides = m_perScreenOverrides.value(screenId);
+    // The Auto axis basis, captured BEFORE smart gaps may zero the outer
+    // gaps. Smart-gap zeroing is CONTENT-driven — it reads the strip's live
+    // column count — and folding it into the axis basis coupled the resolved
+    // axis to how many columns happen to exist: on a near-square monitor
+    // with asymmetric per-side outer gaps, a 1↔2 column transition could
+    // flip the engine's own axis while the effect's published membership
+    // (which refreshes on mode/rules/geometry passes, never on a window
+    // open/close) stayed stale — the exact daemon/effect split
+    // stripAxisForScreen's contract note calls the worst possible failure
+    // mode. The axis still measures the outer-gap-ADJUSTED rect, so the
+    // near-square asymmetric-gap resolve the comment below defends is
+    // unchanged; it just no longer depends on the strip's contents.
+    const QRect axisBasisRaw = area.adjusted(qMax(0, left), qMax(0, top), -qMax(0, right), -qMax(0, bottom));
+    const QRect axisBasis = (axisBasisRaw.width() > 0 && axisBasisRaw.height() > 0) ? axisBasisRaw : QRect();
     if (effectiveSmartGaps(overrides)) {
         if (columnCountOverride >= 0) {
             if (columnCountOverride == 1) {
@@ -129,18 +143,20 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // and is threaded through every effective* read here — the accessors'
     // screenId wrappers would otherwise re-fetch it per call on this
     // per-relayout path.
-    // Resolved BEFORE the defaults below and AFTER the work area above, and
-    // both halves of that are load-bearing. It reads params.workArea, which is
-    // not final until the outer-gap adjust and the smart-gaps zeroing have
-    // run: resolving Auto against an unadjusted rect would disagree on a
-    // near-square monitor with asymmetric outer gaps. And the default window
-    // height reads the axis, because a height fraction resolves against the
-    // work area's CROSS extent.
+    // Resolved BEFORE the defaults below and against the axisBasis captured
+    // above, and both halves of that are load-bearing. The basis is the
+    // outer-gap-adjusted rect: resolving Auto against an unadjusted rect
+    // would disagree on a near-square monitor with asymmetric outer gaps.
+    // It is NOT params.workArea, which additionally folds in the smart-gaps
+    // zeroing and would couple the axis to the live column count (see the
+    // basis capture above). The default window height reads the axis,
+    // because a height fraction resolves against the work area's CROSS
+    // extent.
     //
     // Resolved PER CALL and never cached: under Auto two screens with no
     // per-screen key at all resolve differently, so a cached verdict would
     // hand one monitor the other's axis.
-    params.axis = effectiveStripAxis(overrides, params.workArea);
+    params.axis = effectiveStripAxis(overrides, axisBasis);
     params.respectMinimumSize = effectiveRespectMinimumSize(overrides);
     // Each template preset VOCABULARY is likewise parsed once and threaded
     // through: the two default resolvers below resolve a Preset kind against
@@ -374,7 +390,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // handles BACKGROUND contexts lazily — a background desktop's strip
     // converts when you switch to it, because its own recorded basis still
     // says the old axis until then.
-    if (state->hasResolvedAxis() && state->resolvedAxis() != params.axis) {
+    const bool axisFlipPending = state->hasResolvedAxis() && state->resolvedAxis() != params.axis;
+    if (axisFlipPending && !dragPreviewSteersView) {
         // The anchor is main-axis pixels measured against a viewport extent
         // that just changed meaning. Out-of-range anchors are LEGITIMATE under
         // the current axis (a centred anchor implies one by design, which is
@@ -394,7 +411,18 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             m_parkedScrollEdge.remove(windowId);
         }
     }
-    state->setResolvedAxis(params.axis);
+    // The whole sweep — conversion AND basis stamp — defers while a drag
+    // preview steers the view, for updateViewForFocus's DETACH-ONCE reason: a
+    // non-geometry flip (an axis rule or template pick routing through
+    // applyPerScreenConfig with a byte-identical work area) reaches here
+    // mid-drag without the geometry path's preview cancel, and re-centring
+    // would slide the layout under a stationary cursor. Leaving the recorded
+    // basis on the OLD axis is what makes the sweep re-fire and convert on
+    // the next non-drag applyLayout; stamping it while skipping the
+    // conversion would strand the old-axis anchor forever.
+    if (!(axisFlipPending && dragPreviewSteersView)) {
+        state->setResolvedAxis(params.axis);
+    }
 
     // Re-apply the centering policy before resolving: a work-area change
     // (resolution, panels, outer gaps) or a centering-settings flip leaves
@@ -724,7 +752,6 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
             rect = parkOut.rect;
             const bool parkedNow = parkOut.parked;
-            const bool clampPinnedMain = parkOut.clampPinnedMain;
             QString scrollEdge = parkOut.emittedEdge;
             // The helper is pure, so applying its verdict to the edge memory is
             // the caller's job. nullopt erases, a value stores — every path
@@ -789,18 +816,21 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // which is where it actually was, rather than at a made-up point
             // just outside the screen edge.
             //
-            // Suppressed when the left-edge clamp pinned this tile's x. The
-            // field asserts that the view carried the window by exactly this
-            // much, which the effect relies on to build a DEGENERATE per-window
-            // leg — origin = current - delta lands on the target, so no second
-            // spring runs. A pinned tile sits at the same x across consecutive
-            // batches while the delta says otherwise, so that leg would be real
-            // and would fight the view spring over the same pixels with a
-            // different profile: the peek column would visibly swing out and
-            // back instead of staying against the edge. Dropping the field
-            // costs it the ride and leaves it to its own motion, which is the
-            // honest description of a window the layout is holding still.
-            if (!parkedNow && viewDelta != 0 && !clampPinnedMain) {
+            // A tile the edge clamp pinned rides the view like every other
+            // on-screen tile. The effect adds the per-output view offset to
+            // EVERY scroll-managed window unconditionally, so withholding the
+            // field from a pinned tile does not exempt it from the ride — it
+            // only denies the effect the residual-origin leg that keeps frame
+            // zero on the window, and the pinned peek column then detaches
+            // from its edge by a full delta and slides back. With the field,
+            // the effect's residual branch handles the pin with no special
+            // case: the position leg and the view offset cancel (they start
+            // and end together), while the clamped WIDTH change animates as
+            // the residual — the exact contract the effect documents on its
+            // own branch ("an edge column whose width changed in the same
+            // batch keeps a real leg, so its width interpolates while its
+            // position rides the strip").
+            if (!parkedNow && viewDelta != 0) {
                 obj[QLatin1String("viewDelta")] = viewDelta;
             }
             // A parked column keeps its strip position as a PAINT hint. The

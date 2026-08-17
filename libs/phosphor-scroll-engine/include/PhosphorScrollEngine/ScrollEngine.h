@@ -967,6 +967,15 @@ private:
     /// the daemon via crossModeFocusRequested. True when a crossing was
     /// initiated (feedback already emitted, on the destination).
     bool focusAcrossBoundary(const QString& screenId, const QString& direction, const QString& focusedBefore);
+    /// focusInDirection's body behind the resolve: the public entry runs
+    /// P_SCROLL_RESOLVE and delegates here, and focusColumnByDelta — which
+    /// already resolved the same screen to derive its direction token — calls
+    /// this directly, so the wheel path pays ONE layoutParamsForScreen per
+    /// notch instead of two (each is a ScreenManager query plus a context-gap
+    /// rule cascade plus two preset-vocabulary parses). @p params is consumed
+    /// only when @p state is non-null, matching the macro's own contract.
+    void focusInDirectionResolved(const QString& direction, const PhosphorEngine::NavigationContext& ctx,
+                                  const QString& screen, ScrollState* state, const ScrollLayoutParams& params);
 
     /// After a SUCCESSFUL focus crossing (either arm), the source state's
     /// floatingHasFocus must drop — focus demonstrably left that output.
@@ -1016,11 +1025,15 @@ private:
     /// and must adopt normally, which is why this is a one-shot rather than a
     /// standing veto.
     ///
-    /// A single slot rather than a FIFO: only one window opens per rewind, and
-    /// a second declined open before the first report lands simply overwrites,
-    /// which degrades to the pre-fix behaviour for the older arrival instead of
-    /// growing without bound.
-    QString m_declinedOpenFocus;
+    /// A SET rather than a single slot: two non-burst opens can both decline
+    /// focus before either compositor report lands, and a slot's overwrite
+    /// did not merely degrade the OLDER arrival — its report then fell
+    /// through to the reclaim below, clearing BOTH queued prior-window
+    /// echoes and adopting the arrival, the exact rewind-undo the mark
+    /// exists to prevent. Growth is bounded the same way
+    /// m_pendingSelfActivations' is: entries are consumed on match and swept
+    /// on windowClosed, handoffRelease and releaseScreenState.
+    QSet<QString> m_declinedOpenFocus;
     /// Arrival-burst bracket depth (IPlacementEngine::beginArrivalBurst).
     /// While positive, windowOpened defers its per-arrival applyLayout into
     /// m_burstPendingApplies (context key → whether any deferred arrival took

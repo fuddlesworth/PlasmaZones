@@ -45,6 +45,13 @@ public:
     // to the inert answer, so a case that flips one on a single screen is
     // asserting the OVERRIDE and not the global.
     bool focusNewWindows = true;
+    /// The GLOBAL strip-axis intent (config tri-state: 0 auto / 1 horizontal /
+    /// 2 vertical — deliberately NOT the protocol enum's numbering). Seeded to
+    /// Auto so the harness's transposed work area decides the axis, which is
+    /// what every case that does not name an axis expects. A case driving it
+    /// must call engine->refreshConfigFromSettings() afterwards: the engine
+    /// caches the read at refresh, not per relayout.
+    int stripAxis = 0;
     bool respectMinimumSize = false;
     bool smartGaps = false;
     bool alwaysCenterSingleColumn = false;
@@ -90,6 +97,10 @@ public:
     bool scrollingFocusNewWindows() const override
     {
         return focusNewWindows;
+    }
+    int scrollingStripAxis() const override
+    {
+        return stripAxis;
     }
     int scrollingStickyWindowHandling() const override
     {

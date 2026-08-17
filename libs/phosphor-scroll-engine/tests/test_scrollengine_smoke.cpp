@@ -1041,10 +1041,11 @@ void TestScrollEngineSmoke::viewDeltaCarriesOnScreenTilesOnly()
         // ringing it out to zero — so it is the negation of the movement.
         //
         // Holds for a tile the layout left where the strip put it, which is
-        // every tile in this fixture. A straddling tile whose left edge the
-        // clamp pins at the screen edge does NOT move by the view delta, and
-        // the engine drops the field for exactly that reason — the boundary
-        // suite owns that case.
+        // every tile in this fixture. A straddling tile the edge clamp pins
+        // ALSO carries the field: its position leg and the view offset cancel
+        // in the effect's residual branch while only its clamped width
+        // animates, so this position-delta equality would not hold for it —
+        // no such tile exists in this fixture.
         QCOMPARE(Ax::mainPos(*prev) - Ax::mainPos(now), o.value(QLatin1String("viewDelta")).toInt());
         QCOMPARE(Ax::crossPos(now), Ax::crossPos(*prev));
         QCOMPARE(now.size(), prev->size());

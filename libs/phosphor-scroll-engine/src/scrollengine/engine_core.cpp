@@ -226,13 +226,21 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     // Only the unfloat-slot memory dies here. The float markers and the
     // last-applied rects are inputs to the daemon's windowsReleased handler,
     // which has not run yet — see the contract on the declaration.
-    // The pending self-activation entries go too, for windowClosed's reason:
-    // a released window's echo can never be answered while the screen sits in
-    // another mode, and the stale entry would eat the first genuine focus
-    // report when the window comes back to scrolling.
+    // The pending self-activation entries and the declined-open marks go
+    // too, for windowClosed's reason: a released window's echo can never be
+    // answered while the screen sits in another mode, and a stale entry (or
+    // mark) would eat the first genuine focus report when the window comes
+    // back to scrolling. The parked-edge and windowed-fullscreen memories go
+    // for the eviction symmetry every other exit path holds: neither is an
+    // input to windowsReleased, windowClosed cannot sweep them later
+    // (stateForWindow answers null after this), and pruneStaleWindows only
+    // runs once per session at bring-up.
     for (const QString& windowId : windows) {
         m_floatRestore.remove(windowId);
         m_pendingSelfActivations.removeAll(windowId);
+        m_declinedOpenFocus.remove(windowId);
+        m_parkedScrollEdge.remove(windowId);
+        m_lastAppliedWindowedFs.remove(windowId);
     }
     releasedWindows.append(windows);
     // Per-screen bookkeeping dies with the state: a stale seed must not

@@ -684,7 +684,7 @@ void ScrollEngine::windowOpened(const QString& rawWindowId, const QString& scree
         // anything, and firing an activation per arrival would fight the
         // burst's own deferred focus restore.
         if (m_arrivalBurstDepth == 0) {
-            m_declinedOpenFocus = windowId;
+            m_declinedOpenFocus.insert(windowId);
             queueSelfActivation(priorActive);
             Q_EMIT activateWindowRequested(priorActive);
         }
@@ -764,9 +764,7 @@ void ScrollEngine::windowClosed(const QString& rawWindowId)
     // Same reasoning for the declined-open mark: the arrival that was denied
     // focus can close before its one report arrives, and a stale mark would
     // then eat the first genuine focus of a reused id.
-    if (m_declinedOpenFocus == windowId) {
-        m_declinedOpenFocus.clear();
-    }
+    m_declinedOpenFocus.remove(windowId);
     PhosphorEngine::PlacementStateKey key;
     ScrollState* state = stateForWindow(windowId, &key);
     if (!state) {
@@ -853,8 +851,7 @@ void ScrollEngine::windowFocused(const QString& rawWindowId, const QString& scre
     // not the "genuine focus" the reclaim reasons about, and clearing the queue
     // here would drop the prior window's activation echo that the rewind just
     // queued, letting that echo rewind the strip a second time when it lands.
-    if (!m_declinedOpenFocus.isEmpty() && m_declinedOpenFocus == windowId) {
-        m_declinedOpenFocus.clear();
+    if (m_declinedOpenFocus.remove(windowId)) {
         return;
     }
     // A genuine focus report implies every previously-sent echo already

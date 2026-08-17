@@ -173,7 +173,6 @@ ParkResult resolveTilePlacement(const ParkInputs& in, const QString& remembered)
             if (!out.parked && straddleLow) {
                 const int visible = axis.mainHigh(rect) + 1 - axis.mainLow(in.screenRect);
                 if (visible >= peekFloor) {
-                    out.clampPinnedMain = axis.mainLow(rect) != axis.mainLow(in.screenRect);
                     axis.setMainLow(rect, axis.mainLow(in.screenRect));
                 } else {
                     out.emittedEdge = leadingEdge(axis);

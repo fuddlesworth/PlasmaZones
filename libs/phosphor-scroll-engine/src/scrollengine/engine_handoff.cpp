@@ -47,8 +47,12 @@ void ScrollEngine::handoffRelease(const QString& rawWindowId)
     }
     // A released window's queued echo can never be answered — the stale
     // entry would eat the first genuine focus when the window comes back
-    // (releaseScreenState documents the same sweep).
+    // (releaseScreenState documents the same sweep). The declined-open mark
+    // goes for the identical reason: its consume site swallows exactly one
+    // report, and a mark surviving the release would eat the first genuine
+    // focus after re-adoption.
     m_pendingSelfActivations.removeAll(windowId);
+    m_declinedOpenFocus.remove(windowId);
     // m_lastAppliedRect deliberately retained (same rationale as
     // windowClosed: a close/capture racing the handoff still needs the
     // poison-guard memory; pruneStaleWindows reclaims it).
@@ -102,6 +106,14 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         migratedWindowedFs = staleState->strip().isWindowedFullscreen(windowId);
         staleState->strip().takeWindow(windowId, staleParams);
         staleState->removeFloating(windowId);
+        // Track BEFORE emitting, the doctrine windowOpened's migration states:
+        // the two emits below are synchronous, and a subscriber that queries
+        // back during them must already see the window as this handoff's —
+        // with the reverse map still naming staleKey, heldScreenForWindow
+        // answers empty and screenForTrackedWindow answers the OLD screen.
+        // Every subsequent path re-stamps the same key unconditionally, so
+        // stamping it here changes no end state.
+        m_states.setKeyForWindow(windowId, key);
         m_lastAppliedRect.remove(windowId);
         m_lastAppliedWindowedFs.remove(windowId);
         m_parkedScrollEdge.remove(windowId);
@@ -186,7 +198,15 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         Q_EMIT placementChanged(ctx.toScreenId);
         return;
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(ctx.toScreenId);
+    // Resolved against the POST-insert column count: this path always creates
+    // a new column, and the live count still excludes it, so live params on a
+    // single-column strip would run the smart-gaps zero-gap regime and bake a
+    // Fixed default height — persisted intent, no relayout self-heal — against
+    // a work area the received window never occupies. Same discipline as
+    // insertOpenedWindow's re-resolve and commitDragInsertPreview's predicted
+    // count; unlike the cross-monitor move, nothing re-stamps the height after
+    // this insert, so the params have to be right the first time.
+    const ScrollLayoutParams params = layoutParamsForScreen(ctx.toScreenId, state->strip().columnCount() + 1);
     ColumnWidth width = effectiveDefaultColumnWidth(ctx.toScreenId);
     if (ctx.sourceGeometry.isValid()) {
         // sourceGeometry is the window's PHYSICAL frame at handoff time, so

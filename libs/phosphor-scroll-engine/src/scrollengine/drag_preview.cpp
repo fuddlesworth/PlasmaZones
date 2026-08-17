@@ -265,8 +265,20 @@ void ScrollEngine::commitDragInsertPreview()
                                   << "— a context-change handler failed to cancel first; the drop lands in the "
                                      "captured context";
     }
-    const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId);
     ScrollStrip& strip = targetState->strip();
+    // Params resolved against the POST-drop column count, mirroring
+    // dragInsertIndicatorRect's own resolve: while the preview holds the
+    // dragged window detached, a strip that will have two columns still
+    // reads as one, so live params would run the smart-gaps single-column
+    // regime and bake a Fixed default height — persisted intent with no
+    // relayout self-heal — against a work area the dropped window never
+    // occupies. The join arm keeps the count; every column-creating arm
+    // (new slot, empty strip, and the no-target append/restore fallbacks
+    // below) adds one, so absent a valid join target the +1 is the better
+    // prediction for the defensive arms too.
+    const int postDropColumns =
+        strip.columnCount() + ((!p.lastTarget.isValid() || p.lastTarget.newSlot || strip.isEmpty()) ? 1 : 0);
+    const ScrollLayoutParams params = layoutParamsForScreen(p.targetScreenId, postDropColumns);
     bool inserted = false;
     if (p.lastTarget.isValid()) {
         if (p.lastTarget.newSlot || strip.isEmpty()) {

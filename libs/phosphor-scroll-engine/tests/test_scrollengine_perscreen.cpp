@@ -48,6 +48,9 @@
 #include "scrollstriptestutils.h"
 #include "scrollstubsettings.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QVariantMap>
 #include <QtTest>
 
@@ -88,6 +91,7 @@ private Q_SLOTS:
     void widthChannelsRankRuleOverSettingsOverGlobal();
     void heightChannelsRankRuleOverSettingsOverGlobal();
     void perScreenStripAxisOverridesTheResolvedAxis();
+    void globalStripAxisChannelReachesTheEngine();
     void absentTrioSlotsFallBackPerSlotToTheGlobal();
     void presetIndexIsClampedToTheLivePresetList();
     void fixedKindWithAProportionValueFallsThroughToTheGlobal();
@@ -268,11 +272,19 @@ void TestScrollEnginePerScreen::perScreenStripAxisOverridesTheResolvedAxis()
     QCOMPARE(ScrollTestUtils::Ax::crossLen(autoRects.first()), ScrollTestUtils::kCrossExtent);
     QVERIFY(ScrollTestUtils::Ax::mainLen(autoRects.first()) < ScrollTestUtils::kMainExtent);
     QCOMPARE(ScrollTestUtils::Ax::mainLen(forcedRects.first()), ScrollTestUtils::kMainExtent);
+    // Both roles, not just one: a regression that hands back the full screen
+    // rect satisfies the mainLen compare above, so the forced leg also has to
+    // bound the harness-cross extent (the engine's MAIN there — a lone column
+    // takes only the default share of it).
+    QVERIFY(ScrollTestUtils::Ax::crossLen(forcedRects.first()) < ScrollTestUtils::kCrossExtent);
 
     // Clearing the override drops the screen back onto the resolved axis, so
-    // it looks like the untouched one again.
+    // it looks like the untouched one again. applyPerScreenConfig and its
+    // clear schedule the retile QUEUED — drain the loop rather than calling
+    // retile(): the assertions below read the resolve-on-demand path either
+    // way, and draining is what the committed-rect spy leg at the end needs.
     engine->clearPerScreenConfig(kS1);
-    engine->retile(kS1);
+    QCoreApplication::processEvents();
     const QVector<QRect> cleared = engine->visibleTileRects(kS1);
     QCOMPARE(cleared.size(), 1);
     QCOMPARE(ScrollTestUtils::Ax::crossLen(cleared.first()), ScrollTestUtils::kCrossExtent);
@@ -282,11 +294,99 @@ void TestScrollEnginePerScreen::perScreenStripAxisOverridesTheResolvedAxis()
     QVariantMap garbage;
     garbage.insert(ScrollPerScreenKeys::stripAxis(), 99);
     engine->applyPerScreenConfig(kS1, garbage);
-    engine->retile(kS1);
+    QCoreApplication::processEvents();
     const QVector<QRect> degraded = engine->visibleTileRects(kS1);
     QCOMPARE(degraded.size(), 1);
     QCOMPARE(ScrollTestUtils::Ax::crossLen(degraded.first()), ScrollTestUtils::kCrossExtent);
     QVERIFY(ScrollTestUtils::Ax::mainLen(degraded.first()) < ScrollTestUtils::kMainExtent);
+
+    // The COMMIT path, not only the on-demand resolve the reads above take:
+    // re-force the axis and assert a committed windowsTiled entry flips its
+    // main extent once the queued retile drains. Without this leg an axis
+    // flip that never reaches applyLayout would pass everything above.
+    QSignalSpy tiledSpy(engine, &ScrollEngine::windowsTiled);
+    engine->applyPerScreenConfig(kS1, forced);
+    QCoreApplication::processEvents();
+    QVERIFY(tiledSpy.count() > 0);
+    bool sawCommitted = false;
+    for (const auto& emission : std::as_const(tiledSpy)) {
+        const QJsonArray batch = QJsonDocument::fromJson(emission.at(0).toString().toUtf8()).array();
+        for (const QJsonValue& v : batch) {
+            const QJsonObject o = v.toObject();
+            if (o.value(QLatin1String("windowId")).toString() != QStringLiteral("app|a")) {
+                continue;
+            }
+            const QRect committed(o.value(QLatin1String("x")).toInt(), o.value(QLatin1String("y")).toInt(),
+                                  o.value(QLatin1String("width")).toInt(), o.value(QLatin1String("height")).toInt());
+            QCOMPARE(ScrollTestUtils::Ax::mainLen(committed), ScrollTestUtils::kMainExtent);
+            sawCommitted = true;
+        }
+    }
+    QVERIFY2(sawCommitted, "the queued retile after the axis re-force must commit app|a on the forced axis");
+}
+
+// The GLOBAL settings channel, which the per-screen test above cannot reach:
+// with every stub answering Auto, effectiveStripAxis's m_stripAxis fallback
+// always lands on the resolve-from-geometry default, so replacing the
+// refreshConfigFromSettings read with a literal 0 kept every suite green.
+// Three legs pin the channel as a PRECEDENCE claim like every other key in
+// this file: a forced global flips BOTH screens, an out-of-range global
+// degrades to Auto (the range clamp, not a fixed axis), and a per-screen key
+// beats a forced global.
+void TestScrollEnginePerScreen::globalStripAxisChannelReachesTheEngine()
+{
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    // Forced AGAINST the fixture aspect before the engine's construction-time
+    // refresh, so the very first resolve already runs on the global.
+    const bool fixtureIsVertical = ScrollTestUtils::Ax::vertical();
+    const int forcedGlobal = fixtureIsVertical ? 1 : 2;
+    settings->stripAxis = forcedGlobal;
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+
+    // Both screens flip: the global is not a per-screen value, so the lone
+    // column on EACH runs full length along the harness's main direction
+    // (the engine's cross there) and takes only a share of the harness cross.
+    for (const QString& screen : {kS1, kS2}) {
+        const QVector<QRect> rects = engine->visibleTileRects(screen);
+        QCOMPARE(rects.size(), 1);
+        QCOMPARE(Ax::mainLen(rects.first()), kMainExtent);
+        QVERIFY(Ax::crossLen(rects.first()) < kCrossExtent);
+    }
+
+    // Out of range degrades to Auto, not to either fixed axis: the refresh
+    // clamp (0..2, else 0) is the branch under test.
+    settings->stripAxis = 7;
+    engine->refreshConfigFromSettings();
+    QCoreApplication::processEvents();
+    const QVector<QRect> degraded = engine->visibleTileRects(kS1);
+    QCOMPARE(degraded.size(), 1);
+    QCOMPARE(Ax::crossLen(degraded.first()), kCrossExtent);
+    QVERIFY(Ax::mainLen(degraded.first()) < kMainExtent);
+
+    // A per-screen key OPPOSING a forced global wins — the precedence claim
+    // the sibling test cannot make with an Auto global. kS1 names the
+    // fixture's own aspect (so it reads like an untouched screen), kS2 stays
+    // on the forced global.
+    settings->stripAxis = forcedGlobal;
+    engine->refreshConfigFromSettings();
+    QVariantMap opposing;
+    opposing.insert(ScrollPerScreenKeys::stripAxis(), fixtureIsVertical ? 2 : 1);
+    engine->applyPerScreenConfig(kS1, opposing);
+    QCoreApplication::processEvents();
+
+    const QVector<QRect> perScreenWins = engine->visibleTileRects(kS1);
+    QCOMPARE(perScreenWins.size(), 1);
+    QCOMPARE(Ax::crossLen(perScreenWins.first()), kCrossExtent);
+    QVERIFY(Ax::mainLen(perScreenWins.first()) < kMainExtent);
+
+    const QVector<QRect> globalStill = engine->visibleTileRects(kS2);
+    QCOMPARE(globalStill.size(), 1);
+    QCOMPARE(Ax::mainLen(globalStill.first()), kMainExtent);
+    QVERIFY(Ax::crossLen(globalStill.first()) < kCrossExtent);
 }
 
 void TestScrollEnginePerScreen::heightChannelsRankRuleOverSettingsOverGlobal()

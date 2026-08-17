@@ -52,6 +52,7 @@ private Q_SLOTS:
     void validationIssuesForJsonFlags();
     void asyncCommitAndRevertAreInvokable();
     void stageUserRulesEnforcesTheAddRuleBoundary();
+    void stageUserRulesRaisesTheCommitGate();
 };
 
 void TestRuleController::newEmptyRuleShapesBySubject()
@@ -766,6 +767,43 @@ void TestRuleController::stageUserRulesEnforcesTheAddRuleBoundary()
     // the seeded user subset wholesale.
     QCOMPARE(controller.model()->rowCount(), 1);
     QCOMPARE(controller.model()->rules().first().id, good.id);
+}
+
+/// Staging into a CLEAN controller must raise the commit gate, not only the
+/// badge. The two ride different mechanisms: the Rules page badge derives from
+/// the value-based userRulesDirty(), while asyncCommit refuses to push and
+/// reload() overwrites the model whenever m_dirty is false. A regression that
+/// stages the profile's rules without flipping isDirty() therefore badges the
+/// page while the global Save silently commits nothing and the next daemon
+/// broadcast erases the staged set — which is why this asserts the BOOLEAN,
+/// not the badge. The boundary test above cannot catch it: it seeds through
+/// addRuleFromJson first, which is already dirty by then.
+void TestRuleController::stageUserRulesRaisesTheCommitGate()
+{
+    RuleController controller;
+    QVERIFY(!controller.isDirty());
+
+    Rule good;
+    good.id = QUuid::createUuid();
+    good.name = QStringLiteral("profile rule");
+    good.match = MatchExpression::makeLeaf(Field::AppId, Operator::Equals, QStringLiteral("z"));
+    RuleAction floatAction;
+    floatAction.type = QString(ActionType::Float);
+    good.actions = {floatAction};
+    QVERIFY(good.isValid());
+
+    QSignalSpy dirtySpy(&controller, &RuleController::dirtyChanged);
+    controller.stageUserRules({good});
+
+    QVERIFY(controller.isDirty());
+    QVERIFY(controller.userRulesDirty());
+    QCOMPARE(dirtySpy.count(), 1);
+
+    // Re-staging while already dirty keeps the gate up and still notifies, so
+    // the reconcile re-runs against the new model contents.
+    controller.stageUserRules({good});
+    QVERIFY(controller.isDirty());
+    QCOMPARE(dirtySpy.count(), 2);
 }
 
 QTEST_MAIN(TestRuleController)

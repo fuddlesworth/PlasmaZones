@@ -58,11 +58,6 @@ struct ParkResult
 {
     QRect rect;
     bool parked = false;
-    /// Set when the clamp MOVED the tile's low main edge, pinning it at the
-    /// screen edge instead of leaving it where the strip put it. The high-edge
-    /// clamp holds the position and only changes the extent, so it does not
-    /// qualify — the asymmetry is QRect's own.
-    bool clampPinnedMain = false;
     /// What goes on the wire. Empty means the tile is emitting no departure.
     QString emittedEdge;
     /// What to do with this window's REMEMBERED departure edge: nullopt
