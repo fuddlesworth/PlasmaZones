@@ -84,6 +84,7 @@ enum class OrderingPageKind {
     None,
     Snapping,
     Tiling,
+    Scrolling,
 };
 OrderingPageKind orderingPageKind(const QString& page);
 

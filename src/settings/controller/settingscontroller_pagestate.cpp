@@ -461,6 +461,8 @@ bool SettingsController::isPageDirty(const QString& page) const
         return m_stagedSnappingOrder.has_value() && *m_stagedSnappingOrder != m_settings.snappingLayoutOrder();
     case OrderingPageKind::Tiling:
         return m_stagedTilingOrder.has_value() && *m_stagedTilingOrder != m_settings.tilingAlgorithmOrder();
+    case OrderingPageKind::Scrolling:
+        return m_stagedScrollingOrder.has_value() && *m_stagedScrollingOrder != m_settings.scrollingTemplateOrder();
     case OrderingPageKind::None:
         break;
     }

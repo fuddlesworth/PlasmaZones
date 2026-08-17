@@ -97,7 +97,8 @@ auto validStringOr(std::initializer_list<QLatin1String> valid, QString fallback)
 
 /// Normalize a comma-joined list: split, trim each entry, drop empties,
 /// drop duplicates, rejoin. Shared by every setting whose wire format is a
-/// comma-separated list (layout order, algorithm order, exclusion lists).
+/// comma-separated list: the three picker orders (snapping layout, tiling
+/// algorithm, scrolling template) and the tiling locked-screens list.
 QVariant canonicalCommaList(const QVariant& v)
 {
     QStringList parts = v.toString().split(QLatin1Char(','));
@@ -341,9 +342,10 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
-// User-defined sort order for the layout picker and tiling algorithm menu.
-// Both are comma-joined lists on disk; the canonicalCommaList validator
-// normalizes formatting (trim, de-dupe) on every read/write.
+// User-defined sort order for the layout picker, the tiling algorithm menu
+// and the scrolling template picker. All are comma-joined lists on disk; the
+// canonicalCommaList validator normalizes formatting (trim, de-dupe) on every
+// read/write.
 
 void appendOrderingSchema(PhosphorConfig::Schema& schema)
 {
@@ -351,6 +353,7 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::orderingGroup()] = {
         {CD::snappingLayoutOrderKey(), CD::snappingLayoutOrder(), QMetaType::QString, {}, canonicalCommaList},
         {CD::tilingAlgorithmOrderKey(), CD::tilingAlgorithmOrder(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::scrollingTemplateOrderKey(), CD::scrollingTemplateOrder(), QMetaType::QString, {}, canonicalCommaList},
     };
 }
 

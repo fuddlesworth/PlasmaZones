@@ -263,14 +263,18 @@ void SettingsController::resetPage(const QString& page)
     }
 
     // Ordering pages: "reset to defaults" means dropping the custom order.
-    // resetSnappingOrder/resetTilingOrder stage the empty (default) order and
-    // mark the active page dirty themselves.
+    // resetSnappingOrder/resetTilingOrder/resetScrollingOrder stage the empty
+    // (default) order and reconcile their own page's dirty membership
+    // themselves.
     switch (orderingPageKind(page)) {
     case OrderingPageKind::Snapping:
         resetSnappingOrder();
         return;
     case OrderingPageKind::Tiling:
         resetTilingOrder();
+        return;
+    case OrderingPageKind::Scrolling:
+        resetScrollingOrder();
         return;
     case OrderingPageKind::None:
         break;
@@ -522,6 +526,13 @@ void SettingsController::discardPage(const QString& page)
         if (m_stagedTilingOrder.has_value()) {
             m_stagedTilingOrder.reset();
             Q_EMIT stagedTilingOrderChanged();
+        }
+        reconcilePageDirty(page);
+        return;
+    case OrderingPageKind::Scrolling:
+        if (m_stagedScrollingOrder.has_value()) {
+            m_stagedScrollingOrder.reset();
+            Q_EMIT stagedScrollingOrderChanged();
         }
         reconcilePageDirty(page);
         return;

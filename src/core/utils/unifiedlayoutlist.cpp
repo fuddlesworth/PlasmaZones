@@ -254,21 +254,18 @@ void sortPreviews(QVector<LayoutPreview>& list, const QStringList& customOrder =
 
 } // namespace
 
-// Scrolling templates contribute nothing here on purpose: there is no
-// user-facing template order setting yet, so their ids miss the order map in
-// sortPreviews and resolve to INT_MAX, which parks them after the ordered
-// entries. They share that INT_MAX with every other unordered id, so
-// defaultPreviewLessThan sorts them against those rows as well, not only
-// against each other.
-QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual, bool includeAutotile)
+QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual, bool includeAutotile,
+                             bool includeScrollingTemplates)
 {
     QStringList order;
     if (!settings) {
         return order;
     }
     if (includeManual) {
-        // Snapping layouts are keyed by bare UUID in both the order and the
-        // preview ids, so they match sortPreviews directly.
+        // Snapping layouts are keyed by the UNPREFIXED braced-UUID string in
+        // both the order and the preview ids, so they match sortPreviews
+        // directly. ("Unprefixed", not "bare": in this repo's QUuid vocabulary
+        // bare/braced is the WithoutBraces axis, and these ids keep braces.)
         order.append(settings->snappingLayoutOrder());
     }
     if (includeAutotile) {
@@ -280,6 +277,23 @@ QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManu
         order.reserve(order.size() + algoOrder.size());
         for (const QString& algoId : algoOrder) {
             order.append(PhosphorLayout::LayoutId::makeAutotileId(algoId));
+        }
+    }
+    if (includeScrollingTemplates) {
+        // Template previews are keyed by the template's braced-UUID string
+        // (previewFromScrollingTemplate), which is also what the order stores,
+        // so no namespace prefix is needed. The None row deliberately has no
+        // order entry — it must resolve to the INT_MAX bucket so
+        // defaultPreviewLessThan pins it last — and that invariant must hold
+        // for EVERY writer of the key, including a hand-edited config.json
+        // that the UI and D-Bus validators never saw, so the reserved word is
+        // skipped here rather than trusted absent.
+        const QStringList templateOrder = settings->scrollingTemplateOrder();
+        order.reserve(order.size() + templateOrder.size());
+        for (const QString& id : templateOrder) {
+            if (id != PhosphorZones::NoScrollingTemplate) {
+                order.append(id);
+            }
         }
     }
     return order;

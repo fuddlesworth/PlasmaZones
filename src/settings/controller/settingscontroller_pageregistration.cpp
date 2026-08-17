@@ -329,14 +329,15 @@ void SettingsController::buildApplicationController()
     regVirtual(QStringLiteral("scrolling-templates"), QStringLiteral("scrolling"), PhosphorI18n::tr("Templates"),
                QStringLiteral("pages/scrolling/ScrollingTemplatesPage.qml"), QStringLiteral("view-grid"),
                /*collapsible=*/false, /*divider=*/true);
-    // The advanced tree mirrors Tiling's per-concern split, five leaves:
-    // Columns (fresh-column/tile defaults + presets), Tabs (the tab
-    // indicator's own thirteen-knob family), Window (window handling plus
-    // the Focus and view card, which carries viewport centering and the
-    // Meta+wheel gesture — those follow focus, so they sit with it rather
-    // than on a View leaf of their own), Strip Selector (the drag popup)
-    // and Quick Shortcuts. Columns is the simple page's counterpart, like
-    // tiling-simple ↔ tiling-algorithm.
+    // The advanced tree mirrors Tiling's per-concern split: Columns
+    // (fresh-column/tile defaults + presets), Tabs (the tab indicator's own
+    // thirteen-knob family), Window (window handling plus the Focus and view
+    // card, which carries viewport centering and the Meta+wheel gesture —
+    // those follow focus, so they sit with it rather than on a View leaf of
+    // their own), Strip Selector (the drag popup), then the shared
+    // Configuration category (Priority + Quick Shortcuts) registered further
+    // down. Columns is the simple page's counterpart, like tiling-simple ↔
+    // tiling-algorithm.
     regVirtual(QStringLiteral("scrolling-columns"), QStringLiteral("scrolling"), PhosphorI18n::tr("Columns"),
                QStringLiteral("pages/scrolling/ScrollingColumnsPage.qml"), QStringLiteral("view-file-columns"),
                /*collapsible=*/false,
@@ -356,17 +357,27 @@ void SettingsController::buildApplicationController()
     // Strip Selector — the drag popup's scrolling twin, a single top leaf
     // like Snapping's Zone Selector (enable + trigger + position + preview
     // size; no arrangement page, the strip popup is one horizontal row).
-    // Unlike that twin it carries NO divider: Snapping's rail seam separates
-    // its selector from a config-cat header that Scrolling does not have,
-    // so the advanced run reads as one undivided block here on purpose.
+    // Divider after it closes the mode-specific block before the shared
+    // Configuration category, the same seam its snapping twin carries.
     regVirtual(QStringLiteral("scrolling-zoneselector"), QStringLiteral("scrolling"),
                PhosphorI18n::tr("Strip Selector"), QStringLiteral("pages/scrolling/ScrollingZoneSelectorPage.qml"),
                QStringLiteral("view-choose"),
                /*collapsible=*/false,
+               /*divider=*/true, AdvancedOnly);
+
+    // Configuration — the shared trailing category, mirroring the snapping and
+    // tiling sections: Priority (the template order used by cycling and the
+    // pickers) and Quick Shortcuts.
+    regVirtual(QStringLiteral("scrolling-config-cat"), QStringLiteral("scrolling"), PhosphorI18n::tr("Configuration"),
+               QString(), QStringLiteral("configure"), /*collapsible=*/true);
+    regVirtual(QStringLiteral("scrolling-ordering"), QStringLiteral("scrolling-config-cat"),
+               PhosphorI18n::tr("Priority"), QStringLiteral("pages/scrolling/ScrollingOrderingPage.qml"),
+               QStringLiteral("view-sort"),
+               /*collapsible=*/false,
                /*divider=*/false, AdvancedOnly);
-    regVirtual(QStringLiteral("scrolling-shortcuts"), QStringLiteral("scrolling"), PhosphorI18n::tr("Quick Shortcuts"),
-               QStringLiteral("pages/scrolling/ScrollingQuickShortcutsPage.qml"), QStringLiteral("bookmark"),
-               /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
+    regVirtual(QStringLiteral("scrolling-shortcuts"), QStringLiteral("scrolling-config-cat"),
+               PhosphorI18n::tr("Quick Shortcuts"), QStringLiteral("pages/scrolling/ScrollingQuickShortcutsPage.qml"),
+               QStringLiteral("bookmark"), /*collapsible=*/false, /*divider=*/false, AdvancedOnly);
 
     // Animations children — Transitions / Motion / Library categories drill in.
     // The simple-mode surface leads: a SimpleOnly leaf that replaces the whole
