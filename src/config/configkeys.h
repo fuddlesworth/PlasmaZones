@@ -752,6 +752,7 @@ public:
 
     P_CONFIG_KEY(snappingLayoutOrderKey, "SnappingLayoutOrder")
     P_CONFIG_KEY(tilingAlgorithmOrderKey, "TilingAlgorithmOrder")
+    P_CONFIG_KEY(scrollingTemplateOrderKey, "ScrollingTemplateOrder")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-Screen Config Group Prefixes

@@ -109,7 +109,7 @@ public:
     //   - IScrollingZoneSelectorSettings: strip-mode drag selector UI configuration
     //   - IWindowBehaviorSettings: snap restore, sticky handling
     //   - IDefaultLayoutSettings: default layout ID
-    //   - IOrderingSettings: manual layout/algorithm ordering
+    //   - IOrderingSettings: manual layout / algorithm / scrolling-template ordering
     //   - IAnimationSettings: animation/shader-profile state + window filtering
     //
     // See settings_interfaces.h for the full API.
@@ -885,6 +885,7 @@ Q_SIGNALS:
     // Ordering
     void snappingLayoutOrderChanged();
     void tilingAlgorithmOrderChanged();
+    void scrollingTemplateOrderChanged();
     // Animation settings (general)
     void animationsEnabledChanged();
     void animationDurationChanged();

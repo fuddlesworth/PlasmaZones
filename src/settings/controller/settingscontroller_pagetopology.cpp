@@ -39,15 +39,15 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
 {
     // Single source of truth: parent name → set of leaf child page
     // names. Used by `isPageDirty` to propagate dirty state from a
-    // leaf to any group it belongs to. Covers parents at every level, fifteen
+    // leaf to any group it belongs to. Covers parents at every level, sixteen
     // in all. Top-level categories: placement, appearance. Mid-level
     // virtual parents nested beneath them: snapping, tiling and scrolling under
     // placement; animations and decorations under appearance, each of those two
     // also a map key in its own right and not only a component of appearance;
     // animations-transitions, animations-motion and animations-library under
     // animations; decorations-surfaces and decorations-library under
-    // decorations. Then the three *-cat collapsible headers (snapping-overlay-cat,
-    // snapping-config-cat, tiling-config-cat). Their children don't share their
+    // decorations. Then the four *-cat collapsible headers (snapping-overlay-cat,
+    // snapping-config-cat, tiling-config-cat, scrolling-config-cat). Their children don't share their
     // name prefix, so the explicit set sidesteps the asymmetry between a
     // prefix-walk and a direct membership lookup.
     //
@@ -150,10 +150,14 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
     static const QString kScrollingColumns = QStringLiteral("scrolling-columns");
     static const QString kScrollingTabs = QStringLiteral("scrolling-tabs");
     static const QString kScrollingWindow = QStringLiteral("scrolling-window");
-    static const QString kScrollingShortcuts = QStringLiteral("scrolling-shortcuts");
     static const QString kScrollingZoneSelector = QStringLiteral("scrolling-zoneselector");
-    static const QSet<QString> kScrollingAllLeaves{kScrollingSimple, kScrollingColumns,   kScrollingTabs,
-                                                   kScrollingWindow, kScrollingShortcuts, kScrollingZoneSelector};
+    static const QSet<QString> kScrollingConfigChildren{
+        QStringLiteral("scrolling-ordering"),
+        QStringLiteral("scrolling-shortcuts"),
+    };
+    static const QSet<QString> kScrollingAllLeaves =
+        QSet<QString>{kScrollingSimple, kScrollingColumns, kScrollingTabs, kScrollingWindow, kScrollingZoneSelector}
+        + kScrollingConfigChildren;
     static const QHash<QString, QSet<QString>> groups{
         {QStringLiteral("snapping"), kSnappingAllLeaves},
         {QStringLiteral("tiling"), kTilingAllLeaves},
@@ -165,6 +169,7 @@ const QHash<QString, QSet<QString>>& SettingsController::pageGroupChildren()
         {QStringLiteral("snapping-overlay-cat"), kSnappingOverlayChildren},
         {QStringLiteral("snapping-config-cat"), kSnappingConfigChildren},
         {QStringLiteral("tiling-config-cat"), kTilingConfigChildren},
+        {QStringLiteral("scrolling-config-cat"), kScrollingConfigChildren},
         {QStringLiteral("animations"), kAnimationsAllLeaves},
         {QStringLiteral("animations-transitions"), kAnimationsTransitionsChildren},
         {QStringLiteral("animations-motion"), kAnimationsMotionChildren},
@@ -689,6 +694,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("scrolling-zoneselector"),
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
+        QStringLiteral("scrolling-ordering"),
         QStringLiteral("window-appearance"),
         QStringLiteral("decorations-windows"),
         QStringLiteral("decorations-osds"),

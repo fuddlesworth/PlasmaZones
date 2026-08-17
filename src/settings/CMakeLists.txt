@@ -329,14 +329,15 @@ qt_add_qml_module(plasmazones-settings
         qml/pages/tiling/TilingWindowHandlingCard.qml
         qml/pages/tiling/TilingFocusCard.qml
         # Scrolling: the condensed simple page, the advanced leaves
-        # (Columns / Tabs / Window / Strip Selector), the quick-shortcuts
-        # page binding templates to the quick digits, and the cards both
-        # surfaces share.
+        # (Columns / Tabs / Window / Strip Selector), the Configuration
+        # leaves (template priority + the quick-shortcuts page binding
+        # templates to the quick digits), and the cards both surfaces share.
         qml/pages/scrolling/ScrollingZoneSelectorPage.qml
         qml/pages/scrolling/ScrollingSimplePage.qml
         qml/pages/scrolling/ScrollingColumnsPage.qml
         qml/pages/scrolling/ScrollingTabsPage.qml
         qml/pages/scrolling/ScrollingWindowPage.qml
+        qml/pages/scrolling/ScrollingOrderingPage.qml
         qml/pages/scrolling/ScrollingQuickShortcutsPage.qml
         qml/pages/scrolling/PresetListEditor.qml
         qml/pages/scrolling/ScrollingWindowHandlingCard.qml

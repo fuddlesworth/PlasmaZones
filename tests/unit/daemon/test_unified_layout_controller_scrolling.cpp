@@ -194,6 +194,69 @@ private Q_SLOTS:
         QCOMPARE(mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), desktop, QString()).id, templId);
     }
 
+    void noneCard_sortsLastUnderCustomOrder()
+    {
+        // The None-last invariant on the OTHER comparator: with a non-empty
+        // template priority order, sortPreviews takes its stable_sort branch
+        // (order-index primary key) instead of the plain defaultPreviewLessThan
+        // sort the case above exercises. The None row has no order entry, so
+        // it must resolve to the INT_MAX bucket and still land last — and a
+        // stale id in the order (a template deleted after the drag) must be
+        // skipped harmlessly rather than disturb the result.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        Settings settings(nullptr);
+        auto* store = attachTemplateStore(mgr.data());
+        const QUuid aId = createTestTemplate(store, QStringLiteral("Alpha"));
+        const QUuid bId = createTestTemplate(store, QStringLiteral("Beta"));
+
+        UnifiedLayoutController controller(mgr.data(), &settings, nullptr, nullptr);
+        controller.setCurrentScreenName(QStringLiteral("DP-1"));
+        controller.setCurrentLayoutSupport(LayoutSupport::Templates);
+        controller.setLayoutFilter(/*manual=*/false, /*autotile=*/false, /*templates=*/true);
+
+        // Beta before Alpha — inverting the alphabetical fallback proves the
+        // order is actually consulted — plus a stale id matching nothing.
+        settings.setScrollingTemplateOrder(
+            {bId.toString(), aId.toString(), QStringLiteral("{99999999-9999-9999-9999-999999999999}")});
+
+        const auto listed = controller.layouts();
+        QCOMPARE(listed.size(), 3);
+        QCOMPARE(listed.at(0).id, bId.toString());
+        QCOMPARE(listed.at(1).id, aId.toString());
+        QCOMPARE(listed.last().id, QString(PhosphorZones::NoScrollingTemplate));
+    }
+
+    void cyclePrevious_noSelection_skipsNoneRow()
+    {
+        // The backward arm of cycle() with no current selection: it must land
+        // on the last REAL template, not the None row the sort pins last —
+        // pressing "previous" on a screen already in the no-template state
+        // would otherwise re-apply that state and read as a dead press.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        Settings settings(nullptr);
+        auto* store = attachTemplateStore(mgr.data());
+        createTestTemplate(store, QStringLiteral("Alpha"));
+        const QUuid lastId = createTestTemplate(store, QStringLiteral("Beta"));
+
+        UnifiedLayoutController controller(mgr.data(), &settings, nullptr, nullptr);
+        controller.setCurrentScreenName(QStringLiteral("DP-1"));
+        controller.setCurrentLayoutSupport(LayoutSupport::Templates);
+        controller.setLayoutFilter(/*manual=*/false, /*autotile=*/false, /*templates=*/true);
+
+        const int desktop = mgr->currentVirtualDesktopForScreen(QStringLiteral("DP-1"));
+        mgr->assignLayoutById(QStringLiteral("DP-1"), desktop, QString(),
+                              QString(PhosphorLayout::LayoutId::ScrollingId));
+
+        // Sanity: alphabetical order puts Beta last among the real rows, with
+        // the None row pinned after it.
+        const auto listed = controller.layouts();
+        QCOMPARE(listed.size(), 3);
+        QCOMPARE(listed.last().id, QString(PhosphorZones::NoScrollingTemplate));
+
+        controller.cyclePrevious();
+        QCOMPARE(mgr->scrollingTemplateLayoutForScreen(QStringLiteral("DP-1"), desktop), lastId.toString());
+    }
+
     void applyEntry_templatesScreen_refusesManualPick()
     {
         QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());

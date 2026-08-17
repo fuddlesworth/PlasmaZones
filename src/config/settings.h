@@ -266,6 +266,8 @@ public:
                    snappingLayoutOrderChanged)
     Q_PROPERTY(QStringList tilingAlgorithmOrder READ tilingAlgorithmOrder WRITE setTilingAlgorithmOrder NOTIFY
                    tilingAlgorithmOrderChanged)
+    Q_PROPERTY(QStringList scrollingTemplateOrder READ scrollingTemplateOrder WRITE setScrollingTemplateOrder NOTIFY
+                   scrollingTemplateOrderChanged)
 
     // Window filtering — the global knobs. The per-application /
     // per-class exclusion list Q_PROPERTYs (excludedApplications,
@@ -1043,6 +1045,8 @@ public:
     void setSnappingLayoutOrder(const QStringList& order) override;
     QStringList tilingAlgorithmOrder() const override;
     void setTilingAlgorithmOrder(const QStringList& order) override;
+    QStringList scrollingTemplateOrder() const override;
+    void setScrollingTemplateOrder(const QStringList& order) override;
 
     // Window filtering — PhosphorConfig::Store-backed. The per-app /
     // per-class exclusion list accessors retired in v4 — see the
@@ -2060,6 +2064,17 @@ private:
     /// the legacy single-modifier key.
     void writeTriggerList(const QString& group, const QString& key, const QVariantList& triggers,
                           TriggerListSignalFn specificSignal);
+
+    /// Member-function-pointer alias for the per-order NOTIFY signal passed
+    /// into @ref writeOrderList, peer of @ref TriggerListSignalFn above.
+    using OrderListSignalFn = void (Settings::*)();
+
+    /// Shared comma-list order setter used by the three ordering setters
+    /// (snapping layout / tiling algorithm / scrolling template). Reads the
+    /// canonical stored form before and after the write so the
+    /// canonicalCommaList validator picks the comparison points, and only
+    /// emits @p specificSignal + @c settingsChanged on a real change.
+    void writeOrderList(const QString& key, const QStringList& order, OrderListSignalFn specificSignal);
 
     /// Member-function-pointer alias for the three per-mode disable NOTIFY
     /// signals passed into @ref writeDisableEntries. The signals carry the mode

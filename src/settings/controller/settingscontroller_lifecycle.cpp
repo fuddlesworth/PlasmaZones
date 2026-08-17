@@ -100,12 +100,16 @@ bool SettingsController::adoptOnDiskState(bool treatAsyncRevertAsClean)
     // call, including the startup load when nothing was staged.
     const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
     const bool hadStagedTile = m_stagedTilingOrder.has_value();
+    const bool hadStagedScroll = m_stagedScrollingOrder.has_value();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
+    m_stagedScrollingOrder.reset();
     if (hadStagedSnap)
         Q_EMIT stagedSnappingOrderChanged();
     if (hadStagedTile)
         Q_EMIT stagedTilingOrderChanged();
+    if (hadStagedScroll)
+        Q_EMIT stagedScrollingOrderChanged();
     return animationsClean;
 }
 
@@ -135,6 +139,7 @@ void SettingsController::save()
     // the asymmetric outlier).
     const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
     const bool hadStagedTile = m_stagedTilingOrder.has_value();
+    const bool hadStagedScroll = m_stagedScrollingOrder.has_value();
     if (hadStagedSnap) {
         m_settings.setSnappingLayoutOrder(*m_stagedSnappingOrder);
         m_stagedSnappingOrder.reset();
@@ -143,10 +148,16 @@ void SettingsController::save()
         m_settings.setTilingAlgorithmOrder(*m_stagedTilingOrder);
         m_stagedTilingOrder.reset();
     }
+    if (hadStagedScroll) {
+        m_settings.setScrollingTemplateOrder(*m_stagedScrollingOrder);
+        m_stagedScrollingOrder.reset();
+    }
     if (hadStagedSnap)
         Q_EMIT stagedSnappingOrderChanged();
     if (hadStagedTile)
         Q_EMIT stagedTilingOrderChanged();
+    if (hadStagedScroll)
+        Q_EMIT stagedScrollingOrderChanged();
 
     // Persistence phase (pre-save): staged VS configs need to be in Settings
     // before the save flushes to disk. Quick-layout slots (all three modes) are
@@ -333,12 +344,16 @@ void SettingsController::defaults()
     // as load() / save()) — CLAUDE.md emit-on-change rule.
     const bool hadStagedSnap = m_stagedSnappingOrder.has_value();
     const bool hadStagedTile = m_stagedTilingOrder.has_value();
+    const bool hadStagedScroll = m_stagedScrollingOrder.has_value();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
+    m_stagedScrollingOrder.reset();
     if (hadStagedSnap)
         Q_EMIT stagedSnappingOrderChanged();
     if (hadStagedTile)
         Q_EMIT stagedTilingOrderChanged();
+    if (hadStagedScroll)
+        Q_EMIT stagedScrollingOrderChanged();
 
     // Drop the animations page's in-memory staged edits so the page
     // matches the reset settings (on-disk animation overrides in
