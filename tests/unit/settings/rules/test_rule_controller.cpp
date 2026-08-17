@@ -589,6 +589,7 @@ void TestRuleController::authoringMetadata()
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollSmartGaps"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollFocusFollowsMouse"), -1), 4);
     QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStickyWindowHandling"), -1), 4);
+    QCOMPARE(actionCategoryOrder.value(QStringLiteral("setScrollStripAxis"), -1), 4);
     // The per-window Open* actions are window-domain and share plain Window's
     // order 8 through the Window/Scrolling submenu, the same way openTabbed
     // above does. A miss here puts them above the picker's context/window

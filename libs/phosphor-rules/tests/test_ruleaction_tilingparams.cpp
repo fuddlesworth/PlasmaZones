@@ -460,6 +460,23 @@ private Q_SLOTS:
             acceptsWithSlot(ActionType::SetScrollStickyWindowHandling, QString::fromLatin1(token),
                             ActionSlot::ScrollStickyWindowHandling);
         }
+
+        // ── the strip-axis enum: a CLOSED three-token vocabulary in the
+        // Scrolling.StripAxis config INTENT space. `auto` is a real member
+        // (it puts a context back on shape-matching), so the load boundary
+        // must keep all three and refuse near-misses, ordinals and the
+        // engine's two-valued ScrollAxis numbering. ──
+        QJsonObject missingAxis;
+        missingAxis.insert(QStringLiteral("type"), QString(ActionType::SetScrollStripAxis));
+        QVERIFY(!RuleAction::fromJson(missingAxis).has_value());
+        rejects(ActionType::SetScrollStripAxis, QStringLiteral("matchScreenShape")); // the UI label's idea, not a token
+        rejects(ActionType::SetScrollStripAxis, QStringLiteral("Vertical")); // case-sensitive vocabulary
+        rejects(ActionType::SetScrollStripAxis, true); // bool rejected — the wire is a token string
+        rejects(ActionType::SetScrollStripAxis, 2); // nor an ordinal
+        for (const QLatin1StringView token :
+             {StripAxisToken::Auto, StripAxisToken::Horizontal, StripAxisToken::Vertical}) {
+            acceptsWithSlot(ActionType::SetScrollStripAxis, QString::fromLatin1(token), ActionSlot::ScrollStripAxis);
+        }
     }
 
     void testScrollingParamActions_range()

@@ -1184,6 +1184,11 @@ public:
     // per-screen dispatch only needs get/set/clear, which are unchanged.
     bool hasPerScreenScrollingSizingSettings(const QString& screenIdOrName) const;
     void clearPerScreenScrollingSizingSettings(const QString& screenIdOrName);
+    // Axis sub-domain: the Strip direction card's chip surface, the sizing
+    // pair's complement — one key, disjoint from the sizing set by
+    // construction (isPerScreenScrollingAxisKey).
+    bool hasPerScreenScrollingAxisSettings(const QString& screenIdOrName) const;
+    void clearPerScreenScrollingAxisSettings(const QString& screenIdOrName);
 
     // Per-screen snapping gaps project the config-backed per-monitor gap
     // overrides (perScreenGapOverrides) — the geometry path only reads them, so

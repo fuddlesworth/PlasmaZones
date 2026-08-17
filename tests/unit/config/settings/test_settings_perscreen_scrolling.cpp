@@ -446,8 +446,26 @@ private Q_SLOTS:
                  ConfigDefaults::scrollingStripAxisVertical());
         QVERIFY(!settings.getPerScreenScrollingSettings(screen).contains(key(K::DefaultColumnWidthPresetIndex)));
 
+        // The mirror image, for the Strip direction card's own chip: the axis
+        // override lights it, a sizing key beside it does not, and its Clear
+        // takes the axis while the sizing key survives.
+        QVERIFY(settings.hasPerScreenScrollingAxisSettings(screen));
+        settings.setPerScreenScrollingSetting(screen, key(K::DefaultColumnWidthPresetIndex), 3);
+        settings.clearPerScreenScrollingAxisSettings(screen);
+        QVERIFY(!settings.hasPerScreenScrollingAxisSettings(screen));
+        QVERIFY2(settings.hasPerScreenScrollingSizingSettings(screen),
+                 "the axis Clear must leave the sizing sub-domain standing");
+        QVERIFY(!settings.getPerScreenScrollingSettings(screen).contains(key(K::StripAxis)));
+        // A sizing-only entry keeps the axis chip dark, and its Clear must not
+        // announce a change it did not make.
+        const int changesSoFar = changedSpy.count();
+        QVERIFY(!settings.hasPerScreenScrollingAxisSettings(screen));
+        settings.clearPerScreenScrollingAxisSettings(screen);
+        QCOMPARE(changedSpy.count(), changesSoFar);
+
         // The whole-domain Clear still takes everything, axis included: it is
         // the D-Bus category surface, not a card's chip.
+        settings.setPerScreenScrollingSetting(screen, key(K::StripAxis), ConfigDefaults::scrollingStripAxisVertical());
         settings.clearPerScreenScrollingSettings(screen);
         QVERIFY(!settings.hasPerScreenScrollingSettings(screen));
         QVERIFY(settings.getPerScreenScrollingSettings(screen).isEmpty());

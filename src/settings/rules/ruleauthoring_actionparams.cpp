@@ -99,6 +99,9 @@ QString paramLabel(const QString& type, const QString& key)
     if (type == ActionType::SetScrollStickyWindowHandling && key == ActionParam::Value) {
         return PhosphorI18n::tr("Handling");
     }
+    if (type == ActionType::SetScrollStripAxis && key == ActionParam::Value) {
+        return PhosphorI18n::tr("Direction");
+    }
     if (type == ActionType::OpenFocused && key == ActionParam::Value) {
         return PhosphorI18n::tr("Focus the window when it opens (off = keep the current focus)");
     }

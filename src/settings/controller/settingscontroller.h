@@ -677,12 +677,14 @@ public:
     Q_INVOKABLE void setPerScreenScrollingSetting(const QString& screenName, const QString& key, const QVariant& value);
     Q_INVOKABLE void clearPerScreenScrollingSettings(const QString& screenName);
     // The scrolling map carries TWO sub-domains: the New-columns card's sizing
-    // keys and the strip axis, which no card scopes per monitor. The chip on
-    // that card therefore drives the SIZING pair below, not the whole-domain
-    // pair here, so its reset cannot wipe a monitor's strip direction.
+    // keys and the Strip direction card's axis key. Each card's chip drives
+    // its own pair below, not the whole-domain pair here, so neither card's
+    // reset can wipe the other's override.
     Q_INVOKABLE bool hasPerScreenScrollingSettings(const QString& screenName) const;
     Q_INVOKABLE void clearPerScreenScrollingSizingSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenScrollingSizingSettings(const QString& screenName) const;
+    Q_INVOKABLE void clearPerScreenScrollingAxisSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenScrollingAxisSettings(const QString& screenName) const;
     Q_INVOKABLE bool scrollingStripVerticalForScreen(const QString& screenName) const;
 
     // Per-screen gaps are config-backed: a per-monitor override is the gap-

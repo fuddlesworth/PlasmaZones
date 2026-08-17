@@ -464,8 +464,9 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
          {
              // Scrolling — the viewport rows the Focus and view card carries
              // (they followed the card over when the View leaf was folded in).
-             // Which way the strip runs. Sits with the viewport rows because
-             // it changes what every "width"/"height" row beneath it means.
+             // Which way the strip runs — its own card above the Focus and
+             // view card, still on this page. Sits with the viewport rows
+             // because it changes what every "width"/"height" row means.
              {CD::scrollingGroup(), CD::stripAxisKey()},
              {CD::scrollingGroup(), CD::centerFocusedColumnKey()},
              {CD::scrollingGroup(), CD::alwaysCenterSingleColumnKey()},

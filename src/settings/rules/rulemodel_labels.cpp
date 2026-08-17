@@ -689,6 +689,12 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Sticky windows (invalid)")
                                                        : PhosphorI18n::tr("Sticky windows: %1").arg(shown);
         }
+        if (action.type == ActionType::SetScrollStripAxis) {
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Strip direction (invalid)")
+                                                       : PhosphorI18n::tr("Strip direction: %1").arg(shown);
+        }
         if (action.type == ActionType::SetCenterFocusedColumn) {
             const QString token = raw.toString();
             const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);

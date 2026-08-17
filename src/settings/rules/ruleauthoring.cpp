@@ -475,6 +475,20 @@ QString enumOptionLabel(const QString& type, const QString& key, const QString& 
             return PhosphorI18n::tr("Ignore entirely");
         }
     }
+    if (type == ActionType::SetScrollStripAxis && key == ActionParam::Value) {
+        // Same phrasing as the Strip direction row's own choices
+        // (settingsvaluelabels.cpp), so the rule and the setting it overrides
+        // read alike.
+        if (wireValue == PhosphorRules::StripAxisToken::Auto) {
+            return PhosphorI18n::tr("Match the screen shape");
+        }
+        if (wireValue == PhosphorRules::StripAxisToken::Horizontal) {
+            return PhosphorI18n::tr("Side to side");
+        }
+        if (wireValue == PhosphorRules::StripAxisToken::Vertical) {
+            return PhosphorI18n::tr("Top to bottom");
+        }
+    }
     if (type == ActionType::SetWindowLayer && key == ActionParam::Value) {
         if (wireValue == PhosphorRules::WindowLayerToken::Above) {
             return PhosphorI18n::tr("Above other windows");

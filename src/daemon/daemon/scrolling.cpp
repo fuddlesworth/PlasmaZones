@@ -204,6 +204,15 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::stickyWindowHandling(),
                              *params.stickyWindowHandling);
         }
+        // The strip axis shares its key with the settings channel (the seed
+        // above may already carry it from the per-screen store), so this
+        // insert IS the precedence collapse: rule > per-screen setting >
+        // global. The axis membership the second walk below publishes to the
+        // effect resolves through the engine's merged map, so the rule's
+        // verdict reaches the compositor with no channel of its own.
+        if (params.stripAxis) {
+            overrides.insert(PhosphorScrollEngine::ScrollPerScreenKeys::stripAxis(), *params.stripAxis);
+        }
         // The effect-owned pair, resolved to a verdict here rather than
         // forwarded as an override: `rule ?? config`, so the compositor gets
         // membership it can answer with a set lookup. cropStraddlers ALSO

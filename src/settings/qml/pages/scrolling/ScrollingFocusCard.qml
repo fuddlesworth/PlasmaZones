@@ -10,12 +10,12 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief The scrolling Focus and view card, the peer of TilingFocusCard and
  * SnappingFocusCard. Alongside the two focus rows those siblings carry, it
- * holds the viewport rows the strip needs: which way the strip runs (the
- * Strip direction row at the top of the card), how the view follows the
- * focused column, how a column at the screen edge is shown (crop versus
- * resize), and the Meta+wheel column-focus gesture. All belong with focus
- * rather than on a page of their own, so the card hosts them and the former
- * Scrolling → View leaf is gone.
+ * holds the viewport rows the strip needs: how the view follows the focused
+ * column, how a column at the screen edge is shown (crop versus resize), and
+ * the Meta+wheel column-focus gesture. All belong with focus rather than on
+ * a page of their own, so the card hosts them and the former Scrolling →
+ * View leaf is gone. Which way the strip runs is the Strip direction card
+ * above this one — it moved out to take a per-monitor scope chip.
  *
  * All rows bind the appSettings context property, so the card carries no
  * per-page state. App-wide only, matching the tiling/snapping window pages:
@@ -29,23 +29,6 @@ SettingsCard {
 
     contentItem: ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
-
-        SettingsRow {
-            title: i18n("Strip direction")
-            searchAnchor: "stripAxis"
-            description: i18nc("the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text", "Which way the strip runs. Match the screen shape runs it top to bottom when the usable area is taller than it is wide, and side to side otherwise. Columns still divide across the strip whichever way it runs.")
-
-            WideComboBox {
-                Accessible.name: i18n("Strip direction")
-                textRole: "text"
-                valueRole: "value"
-                model: settingsController.valueOptions("Scrolling", "StripAxis")
-                storedValue: appSettings.scrollingStripAxis
-                onActivated: appSettings.scrollingStripAxis = currentValue
-            }
-        }
-
-        SettingsSeparator {}
 
         SettingsRow {
             title: i18n("Center the focused column")

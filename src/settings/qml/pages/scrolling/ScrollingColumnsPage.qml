@@ -120,13 +120,13 @@ SettingsFlickable {
             headerText: i18n("New columns")
             searchAnchor: "newColumns"
             collapsible: true
-            // The one per-monitor scrolling card, the analogue of the Tiling
-            // Algorithm card: default column/tile sizing is layout tuning a
-            // monitor legitimately owns. Everything else scrolling offers is
-            // app-wide, with rules as the per-context escape hatch. The map
-            // ALSO carries the strip axis, which this card does not show, so
-            // the chip scopes to the sizing sub-domain and its reset leaves
-            // the monitor's strip direction alone.
+            // Per-monitor like the Tiling Algorithm card: default column/tile
+            // sizing is layout tuning a monitor legitimately owns. The map
+            // ALSO carries the strip axis, which the Strip direction card on
+            // the Window page scopes with a chip of its own, so this chip
+            // scopes to the sizing sub-domain and its reset leaves the
+            // monitor's strip direction alone. Everything else scrolling
+            // offers is app-wide, with rules as the per-context escape hatch.
             scopeEnabled: true
             scopeAppSettings: settingsController
             scopeHasOverridesMethod: "hasPerScreenScrollingSizingSettings"

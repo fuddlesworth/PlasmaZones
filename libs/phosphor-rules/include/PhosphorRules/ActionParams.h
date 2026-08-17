@@ -278,6 +278,20 @@ inline constexpr QLatin1StringView RestoreOnly{"restoreOnly"};
 inline constexpr QLatin1StringView IgnoreAll{"ignoreAll"};
 } // namespace StickyWindowHandlingToken
 
+/// Wire tokens for SetScrollStripAxis's `value` param — which way the matched
+/// context's strip runs. Ints match the Scrolling.StripAxis config space
+/// (auto 0 / horizontal 1 / vertical 2) and the spellings match the settings
+/// schema's intChoices (settingsschema_scrolling.cpp) so a rule and the
+/// setting it overrides name the same thing. This is the INTENT space, not
+/// PhosphorProtocol::ScrollAxis: auto has no engine enumerator (it resolves
+/// from the work-area shape at relayout), and the two spaces number
+/// horizontal differently, so never cast between them.
+namespace StripAxisToken {
+inline constexpr QLatin1StringView Auto{"auto"};
+inline constexpr QLatin1StringView Horizontal{"horizontal"};
+inline constexpr QLatin1StringView Vertical{"vertical"};
+} // namespace StripAxisToken
+
 /// Wire tokens for SetWindowLayer's `value` param — the closed vocabulary the
 /// descriptor validator, the KWin-effect consumer (resolveWindowLayer), and the
 /// settings label layers all read from this single source. The tokens map onto

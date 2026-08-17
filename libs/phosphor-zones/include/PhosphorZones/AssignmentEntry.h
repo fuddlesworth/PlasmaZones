@@ -426,6 +426,14 @@ struct ContextScrollingParams
     /// ignoreAll 2); the resolver maps the wire token to the int the config
     /// store uses, matching centerFocusedColumn's treatment.
     std::optional<int> stickyWindowHandling;
+    /// Which way the strip runs, in the Scrolling.StripAxis config INTENT
+    /// space (auto 0 / horizontal 1 / vertical 2 — auto resolves from the
+    /// work-area shape at relayout). Layered onto the engine's per-screen
+    /// override map over the settings-channel seed, so the collapse is
+    /// rule > per-screen setting > global. Not a behaviour toggle: it is a
+    /// geometry intent, so it sits beside the sizing fields rather than in
+    /// hasBehaviourOverrides.
+    std::optional<int> stripAxis;
 
     /// The tab indicator's overrides, niri's `tab-indicator` layout block.
     /// Split the way IScrollSettings splits the family: the GEOMETRY fields
@@ -490,7 +498,7 @@ struct ContextScrollingParams
     bool isEmpty() const
     {
         return !defaultColumnWidth && !centerFocusedColumn && !defaultColumnDisplay && !insertPosition
-            && !defaultWindowHeight && !hasTabIndicatorOverrides() && !hasDropIndicatorOverrides()
+            && !defaultWindowHeight && !stripAxis && !hasTabIndicatorOverrides() && !hasDropIndicatorOverrides()
             && !hasBehaviourOverrides();
     }
 };

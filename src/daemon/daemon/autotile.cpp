@@ -620,10 +620,11 @@ void Daemon::reconcileActiveAssignments()
     // inside updateEngineScreens (see the comment there); SCROLLING TEMPLATE
     // rules (SetScrollingTemplate), whose id stays the bare "scrolling:" sentinel
     // while the resolved template — and so the pushed preset vocabulary — changes;
-    // and the per-context SCROLLING BEHAVIOUR rules, which updateScrollingScreens
-    // resolves into the same per-screen override map plus the effect-owned
-    // focus-follows-mouse / crop-straddlers membership push. SetDragBehavior needs
-    // no retile — it is read live by the drag adaptor.
+    // and the per-context SCROLLING BEHAVIOUR and STRIP AXIS rules, which
+    // updateScrollingScreens resolves into the same per-screen override map
+    // plus the effect-owned focus-follows-mouse / crop-straddlers / vertical-
+    // axis membership pushes. SetDragBehavior needs no retile — it is read
+    // live by the drag adaptor.
     updateEngineScreens();
     // A rule edit that demotes a screen from tiling to snapping releases its
     // windows in the recompute above, and nothing on this path consumes the

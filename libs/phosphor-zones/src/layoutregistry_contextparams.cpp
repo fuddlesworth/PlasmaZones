@@ -246,6 +246,7 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
         QString(PWR::ActionSlot::ScrollSmartGaps),
         QString(PWR::ActionSlot::ScrollFocusFollowsMouse),
         QString(PWR::ActionSlot::ScrollStickyWindowHandling),
+        QString(PWR::ActionSlot::ScrollStripAxis),
     };
     const PWR::ActionRegistry& registry = PWR::ActionRegistry::instance();
     const PWR::ResolvedActions resolved = m_evaluator->resolveFiltered(query, [&registry](const PWR::Rule& r) {
@@ -460,6 +461,19 @@ ContextScrollingParams LayoutRegistry::resolveContextScrollingParams(const QStri
             params.stickyWindowHandling = 1;
         } else if (token == PWR::StickyWindowHandlingToken::IgnoreAll) {
             params.stickyWindowHandling = 2;
+        }
+    }
+    if (const auto action = resolved.slot(QString(PWR::ActionSlot::ScrollStripAxis))) {
+        // Wire token → the Scrolling.StripAxis config int (auto 0 /
+        // horizontal 1 / vertical 2). Same closed-vocabulary fall-through as
+        // its neighbours: an unrecognized token leaves the field unset.
+        const QString token = action->params.value(PWR::ActionParam::Value).toString();
+        if (token == PWR::StripAxisToken::Auto) {
+            params.stripAxis = 0;
+        } else if (token == PWR::StripAxisToken::Horizontal) {
+            params.stripAxis = 1;
+        } else if (token == PWR::StripAxisToken::Vertical) {
+            params.stripAxis = 2;
         }
     }
     return params;

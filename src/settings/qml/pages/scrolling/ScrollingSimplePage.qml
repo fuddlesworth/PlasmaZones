@@ -288,6 +288,10 @@ SettingsFlickable {
             Layout.fillWidth: true
         }
 
+        ScrollingStripDirectionCard {
+            Layout.fillWidth: true
+        }
+
         ScrollingFocusCard {
             Layout.fillWidth: true
         }

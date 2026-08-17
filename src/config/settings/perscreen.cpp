@@ -924,6 +924,21 @@ void Settings::clearPerScreenScrollingSizingSettings(const QString& screenIdOrNa
     }
 }
 
+bool Settings::hasPerScreenScrollingAxisSettings(const QString& screenIdOrName) const
+{
+    return hasPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingAxisKey,
+                                 /*wantMatch=*/true);
+}
+
+void Settings::clearPerScreenScrollingAxisSettings(const QString& screenIdOrName)
+{
+    if (clearPerScreenKeySubset(m_perScreenScrollingSettings, screenIdOrName, isPerScreenScrollingAxisKey,
+                                /*clearMatch=*/true)) {
+        Q_EMIT perScreenScrollingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 // ── Per-Screen Snapping Config ───────────────────────────────────────────────
 
 // Snapping per-screen gaps share the unified per-screen gap store (one value per

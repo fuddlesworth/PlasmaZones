@@ -356,6 +356,12 @@ QString actionDescription(const QString& type)
             "Chooses how the matched context treats windows shown on all desktops. Anything other "
             "than treating them as normal keeps them floating instead of in a column.");
     }
+    if (type == ActionType::SetScrollStripAxis) {
+        return PhosphorI18n::tr(
+            "Chooses which way the matched context's strip runs, overriding the Strip direction "
+            "setting and any per-monitor choice. Match the screen shape resolves from the usable "
+            "area, so it can put a pinned monitor back on automatic for one desktop or activity.");
+    }
     // ── Tab indicator (context + window colours) ──
     if (type == ActionType::SetTabIndicatorEnabled) {
         return PhosphorI18n::tr("Shows or hides the tab indicator on tabbed columns for the matched context.");

@@ -147,6 +147,7 @@ inline constexpr QLatin1StringView ScrollSmartGaps{"scroll-smart-gaps"};
 /// screen and pushes the resolved set to the compositor.
 inline constexpr QLatin1StringView ScrollFocusFollowsMouse{"scroll-focus-follows-mouse"};
 inline constexpr QLatin1StringView ScrollStickyWindowHandling{"scroll-sticky-window-handling"};
+inline constexpr QLatin1StringView ScrollStripAxis{"scroll-strip-axis"};
 // Per-context tab-indicator slots, one per property so independent context
 // rules cascade per-property. Filled by the SetTabIndicator* actions and read
 // by LayoutRegistry::resolveContextScrollingParams into ContextScrollingParams.

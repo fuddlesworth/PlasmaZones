@@ -113,6 +113,16 @@ bool SettingsController::hasPerScreenScrollingSizingSettings(const QString& scre
     return m_settings.hasPerScreenScrollingSizingSettings(screenName);
 }
 
+void SettingsController::clearPerScreenScrollingAxisSettings(const QString& screenName)
+{
+    m_settings.clearPerScreenScrollingAxisSettings(screenName);
+}
+
+bool SettingsController::hasPerScreenScrollingAxisSettings(const QString& screenName) const
+{
+    return m_settings.hasPerScreenScrollingAxisSettings(screenName);
+}
+
 bool SettingsController::scrollingStripVerticalForScreen(const QString& screenName) const
 {
     // The same ladder the engine walks (per-screen override, then the global

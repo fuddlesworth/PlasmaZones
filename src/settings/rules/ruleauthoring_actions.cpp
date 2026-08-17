@@ -79,7 +79,7 @@ PickerCategory actionCategory(const QString& type)
             || type == ActionType::SetScrollAlwaysCenterSingleColumn || type == ActionType::SetScrollRespectMinimumSize
             || type == ActionType::SetScrollCropStraddlers || type == ActionType::SetScrollFocusNewWindows
             || type == ActionType::SetScrollSmartGaps || type == ActionType::SetScrollFocusFollowsMouse
-            || type == ActionType::SetScrollStickyWindowHandling) {
+            || type == ActionType::SetScrollStickyWindowHandling || type == ActionType::SetScrollStripAxis) {
             return {PhosphorI18n::tr("Scrolling", "tiling mode name"), 4};
         }
         // The per-app open actions are WINDOW-domain: they must sit in the
@@ -240,6 +240,9 @@ QString actionTypeLabelImpl(const QString& type)
     }
     if (type == ActionType::SetScrollStickyWindowHandling) {
         return PhosphorI18n::tr("Set sticky window handling");
+    }
+    if (type == ActionType::SetScrollStripAxis) {
+        return PhosphorI18n::tr("Set the strip direction");
     }
     if (type == ActionType::OpenMaximized) {
         return PhosphorI18n::tr("Open maximized");
