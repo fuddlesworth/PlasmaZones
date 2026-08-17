@@ -207,7 +207,10 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
     // count; unlike the cross-monitor move, nothing re-stamps the height after
     // this insert, so the params have to be right the first time.
     const ScrollLayoutParams params = layoutParamsForScreen(ctx.toScreenId, state->strip().columnCount() + 1);
-    ColumnWidth width = effectiveDefaultColumnWidth(ctx.toScreenId);
+    // params already resolved this screen's default width one line up —
+    // re-fetching the override map for the same value is the duplicate
+    // resolve this params-first convention exists to avoid.
+    ColumnWidth width = params.defaultColumnWidth;
     if (ctx.sourceGeometry.isValid()) {
         // sourceGeometry is the window's PHYSICAL frame at handoff time, so
         // decode it by the TARGET strip's role: the value being minted is an

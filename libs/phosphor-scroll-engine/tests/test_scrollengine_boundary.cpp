@@ -158,7 +158,7 @@ private Q_SLOTS:
         // Panel inset: the work area is 100px narrower on each side than the
         // screen. The clamp bound is the SCREEN edge; a work-area clamp
         // would stop 100px short and this fixture is what tells them apart.
-        const QRect screen = defaultScreenRect(); // 0,0 1200x800
+        const QRect screen = defaultScreenRect(); // 1200 along the strip, 800 across it (transposed with the arm)
         const QRect inset = Ax::t(QRect(100, 0, 1000, 800));
         ScrollEngine* engine = makeProviderEngine(
             &owner, {kS1},
@@ -483,10 +483,18 @@ private Q_SLOTS:
         QCoreApplication::processEvents();
 
         const QRect screen = defaultScreenRect();
-        const QJsonObject b = lastEntryFor(tiled, QStringLiteral("app|b"));
-        QVERIFY2(!b.isEmpty(), "expected the tabbed column's active tile in the tile batch");
-        QVERIFY2(b.value(QLatin1String("y")).toInt() > screen.bottom(),
-                 "the fixture must actually park the tabbed column's every tile");
+        // BOTH of the column's tiles, so the message's "every tile" claim is
+        // what the assertions actually check — reading only the shown tab
+        // left a hidden tab that failed to park invisible to the case.
+        for (const char* id : {"app|b", "app|c"}) {
+            const QJsonObject entry = lastEntryFor(tiled, QString::fromLatin1(id));
+            QVERIFY2(!entry.isEmpty(),
+                     qPrintable(QStringLiteral("expected %1 of the tabbed column in the tile batch")
+                                    .arg(QString::fromLatin1(id))));
+            QVERIFY2(entry.value(QLatin1String("y")).toInt() > screen.bottom(),
+                     qPrintable(QStringLiteral("the fixture must park the tabbed column's every tile, including %1")
+                                    .arg(QString::fromLatin1(id))));
+        }
 
         QVERIFY2(!namesB(QJsonDocument::fromJson(strips.last().at(1).toString().toUtf8()).array()),
                  "a fully parked tabbed column must not leave an orphan tab bar at the edge");

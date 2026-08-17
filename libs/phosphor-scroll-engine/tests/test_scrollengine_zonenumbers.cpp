@@ -186,8 +186,10 @@ void TestScrollEngineZoneNumbers::zoneNumbersAreViewportRelativeVisibleSlots()
     // shared column ordinal (per-column numbering was the old model; it
     // rendered duplicate labels in every preview).
     // Focus pinned explicitly: consumeOrExpel acts on the ACTIVE column, and
-    // the assertions below hold only because c's column is the consumer
-    // (it pulls its LEAD neighbour b into the stack).
+    // the assertions below hold only because c is the one that MOVES — a
+    // solo active window is taken out of its own column and appended into
+    // the LEAD neighbour's (b's) stack; b's column is the survivor, c's
+    // ceases to exist.
     engine->windowFocused(wid("c"), QStringLiteral("S1"));
     engine->consumeOrExpelWindow(-1, QStringLiteral("S1"));
     const QVector<ScrollEngine::VisibleTile> stacked = engine->visibleTiles(QStringLiteral("S1"));

@@ -534,7 +534,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     // target defaults false and the crossing silently un-toggles it.
     const bool windowWindowedFs = state->strip().isWindowedFullscreen(windowId);
     const int sourceColIdx = state->strip().columnOfWindow(windowId);
-    ColumnWidth windowWidth = effectiveDefaultColumnWidth(target);
+    ColumnWidth windowWidth = targetParams.defaultColumnWidth;
     ColumnDisplay windowDisplay = effectiveDefaultColumnDisplay(target);
     if (sourceColIdx >= 0) {
         windowWidth = state->strip().columns().at(sourceColIdx).width;
@@ -560,7 +560,7 @@ bool ScrollEngine::moveActiveWindowAcrossBoundary(ScrollState* state, const QStr
     WindowHeight partnerHeight;
     bool partnerWindowedFs = false;
     StackSlot moverLandingSlot;
-    ColumnWidth partnerWidth = effectiveDefaultColumnWidth(screenId);
+    ColumnWidth partnerWidth = sourceParams.defaultColumnWidth;
     ColumnDisplay partnerDisplay = effectiveDefaultColumnDisplay(screenId);
     if (!partner.isEmpty()) {
         const int partnerColIdx = targetState->strip().columnOfWindow(partner);

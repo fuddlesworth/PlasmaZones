@@ -332,7 +332,7 @@ public:
 
     // Strip-Mode Selector — the Scrolling.ZoneSelector peer of the block
     // above, minus LayoutMode / GridColumns / MaxRows (the strip popup is one
-    // horizontal card row, so it has no grid to arrange).
+    // card row along the strip, so it has no grid to arrange).
     Q_PROPERTY(bool scrollingZoneSelectorEnabled READ scrollingZoneSelectorEnabled WRITE setScrollingZoneSelectorEnabled
                    NOTIFY scrollingZoneSelectorEnabledChanged)
     Q_PROPERTY(int scrollingZoneSelectorTriggerDistance READ scrollingZoneSelectorTriggerDistance WRITE

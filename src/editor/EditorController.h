@@ -45,6 +45,12 @@ class Layout;
 class ScrollingTemplateStore;
 }
 
+namespace PhosphorConfig {
+// Forward-declared for refreshScrollingStripAxisSnapshot's reference
+// parameter; the .cpp includes the backend headers directly.
+class IBackend;
+}
+
 namespace PhosphorRules {
 // Forward-declared for the std::unique_ptr<RuleStoreWatcher> member.
 // (The complete RuleStore type is pulled in transitively via
@@ -256,7 +262,6 @@ public:
     int selectionCount() const;
     bool hasMultipleSelection() const;
     bool hasUnsavedChanges() const;
-    bool isNewLayout() const;
     bool gridSnappingEnabled() const;
     bool edgeSnappingEnabled() const;
     qreal snapIntervalX() const;
@@ -568,6 +573,11 @@ public Q_SLOTS:
     // Daemon scrollingTemplatesChanged subscriber: the store watches
     // nothing, so this reload is how other-process writes reach us.
     void reloadLocalTemplates();
+    /// Daemon settingsChanged subscriber (debounced by
+    /// m_stripAxisReloadTimer): re-snapshots the strip-axis inputs so an
+    /// axis authored in the settings app while the editor is open reaches
+    /// the template preview without a restart.
+    void reloadScrollingStripAxis();
     /// Persist the current layout. False = the save did not land
     /// (layoutSaveFailed carries the reason, the unsaved flag stays set); a
     /// caller chaining a layout-replacing action (screen switch, close)
@@ -1045,6 +1055,15 @@ private:
     /// entire config, so running that per tick is a drag-long stutter. Batch
     /// the burst into one write once the value settles.
     QTimer m_editorSettingsSaveTimer;
+    /// Debounces settingsChanged bursts (a settings-app Save emits per key
+    /// group) into one reloadScrollingStripAxis() re-read.
+    QTimer m_stripAxisReloadTimer;
+
+    /// The one snapshot writer for the strip-axis inputs (global value +
+    /// per-screen overrides), shared by loadEditorSettings and the
+    /// settingsChanged reload; routes a genuine change through
+    /// refreshTemplatePreviewVertical's own change gate.
+    void refreshScrollingStripAxisSnapshot(PhosphorConfig::IBackend& backend);
 
     /// Recompute zone geometry for every manual layout against the primary
     /// screen so a layout opened through the in-process registry carries its

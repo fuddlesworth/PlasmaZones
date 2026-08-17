@@ -133,17 +133,24 @@ void ScrollEngine::setActiveScreens(const QSet<QString>& screens)
         // pruneStatesForDesktop / pruneStatesForActivities /
         // pruneStatesForRemovedScreen when their context or output dies.
         const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
+        // Resolved BEFORE the prune walk: the stash's never-relaid fallback
+        // otherwise called layoutParamsForScreen — and through it the
+        // injected geometry/gap providers — from inside removeStatesIf's
+        // onRemove, mid-iteration over the state map. The in-tree providers
+        // are pure, but the provider seam makes no such promise to an
+        // embedder, so nothing injected may run inside the walk.
+        const PhosphorProtocol::ScrollAxis fallbackAxis = stripAxisForScreen(screenId).axis();
         m_states.removeStatesIf(
             [&currentKey](const PhosphorEngine::PlacementStateKey& key, ScrollState*) {
                 return key == currentKey;
             },
-            [this, &releasedWindows, &releasedScreens, &screenId](const PhosphorEngine::PlacementStateKey& key,
-                                                                  ScrollState* state) {
+            [this, &releasedWindows, &releasedScreens, &screenId,
+             fallbackAxis](const PhosphorEngine::PlacementStateKey& key, ScrollState* state) {
                 // Mode reassignment: remember the strip's structure so a
                 // cycle back to Scrolling rebuilds it (stacks, widths,
                 // tabbed flags) instead of a default one-window-per-column
                 // strip. Captured BEFORE the release strips the state.
-                stashStripStructure(key, state);
+                stashStripStructure(key, state, fallbackAxis);
                 releaseScreenState(state, releasedWindows);
                 // Inside the callback so the payload names only screens that
                 // had a MATCHING STATE — the daemon's release handler uses
@@ -278,7 +285,8 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     state->deleteLater();
 }
 
-StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
+StashedStrip ScrollEngine::buildStashFromState(
+    const ScrollState* state, std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis) const
 {
     StashedStrip out;
     if (!state || state->strip().isEmpty()) {
@@ -329,13 +337,19 @@ StashedStrip ScrollEngine::buildStashFromState(const ScrollState* state) const
     // view anchor that was in fact still meaningful. Degrades safely either
     // way (a wrong stamp only costs the anchor), so the fallback stays a
     // single resolve with no state of its own.
-    out.axis = state->hasResolvedAxis() ? state->resolvedAxis().axis() : stripAxisForScreen(state->screenId()).axis();
+    // The pre-resolved fallback exists for callers running inside a state-map
+    // walk, where resolving live would invoke the injected providers
+    // mid-iteration (see setActiveScreens).
+    out.axis = state->hasResolvedAxis() ? state->resolvedAxis().axis()
+        : preResolvedFallbackAxis      ? *preResolvedFallbackAxis
+                                       : stripAxisForScreen(state->screenId()).axis();
     return out;
 }
 
-void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state)
+void ScrollEngine::stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state,
+                                       std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis)
 {
-    StashedStrip stash = buildStashFromState(state);
+    StashedStrip stash = buildStashFromState(state, preResolvedFallbackAxis);
     if (stash.isEmpty()) {
         return;
     }

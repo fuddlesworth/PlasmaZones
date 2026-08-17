@@ -150,12 +150,14 @@ public:
     // rather than absorbing the strip floor.
     virtual int selectorCardCount(const QString& screenId) const = 0;
 
-    // Strip-selector screens only: one work-area width share per rendered
-    // strip card, in card order (empty everywhere else, and for an empty
-    // strip). The other half of the trigger-edge sizing contract above:
-    // strip cards render variable-width, so isNearTriggerEdge needs the
-    // fractions, not just the count, for its computeZoneSelectorLayout call
-    // to reproduce the real bar width.
+    // Strip-selector screens only: one ALONG-THE-STRIP extent share of the
+    // work area per rendered strip card, in card order (empty everywhere
+    // else, and for an empty strip) — on a vertical strip these are HEIGHT
+    // shares, matching the snapshot's widthFraction role convention. The
+    // other half of the trigger-edge sizing contract above: strip cards
+    // render variable-extent, so isNearTriggerEdge needs the fractions, not
+    // just the count, for its computeZoneSelectorLayout call to reproduce
+    // the real bar extent.
     virtual QList<qreal> selectorStripFractions(const QString& screenId) const = 0;
 
     // Strip-selector screens only: whether that screen's strip runs top to

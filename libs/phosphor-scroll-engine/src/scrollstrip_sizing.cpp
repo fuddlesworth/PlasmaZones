@@ -15,9 +15,14 @@ qreal ScrollStrip::currentHeightFraction(const Tile& t, const ScrollLayoutParams
         return nearestPresetValue(params.presetWindowHeights, t.height.presetFraction, -1);
     case WindowHeight::Fixed: {
         // A tile's Fixed extent is pixels ACROSS the strip, so it becomes a
-        // fraction of the cross extent.
+        // fraction of the cross extent — via the EXACT inverse of relayout's
+        // proportionalPx (px = round(f * (cross + gap)) - gap), the same
+        // (px + gap) / (extent + gap) form the width cycle uses. The bare
+        // px / cross form was biased by roughly gap/cross and could enter
+        // the preset cycle one entry off when the vocabulary's stops sit
+        // closer together than the gap.
         const int cross = params.axis.crossSize(params.workArea);
-        return cross > 0 ? static_cast<qreal>(t.height.fixedPx) / cross : -1;
+        return cross > 0 ? static_cast<qreal>(t.height.fixedPx + params.gap) / (cross + params.gap) : -1;
     }
     case WindowHeight::Auto:
         return -1;
@@ -168,7 +173,15 @@ bool ScrollStrip::expandActiveColumnToAvailableWidth(const ScrollLayoutParams& p
         return false;
     }
     const int current = resolveColumnWidthPx(col->width, params);
-    col->width = ColumnWidth::makeFixed(qMin(workW, current + leftover));
+    const int target = qMin(workW, current + leftover);
+    if (target == current) {
+        // Same pixels: rewriting the intent (a Proportion(1.0) becoming a
+        // Fixed of the identical extent) moves nothing on screen but would
+        // report success and destroy the proportional anchor a later
+        // work-area change would have honoured.
+        return false;
+    }
+    col->width = ColumnWidth::makeFixed(target);
     if (m_preMaximizeColumnIdx == m_activeColumnIdx) {
         m_preMaximizeColumnIdx = -1;
     }
@@ -258,7 +271,10 @@ bool ScrollStrip::adjustActiveWindowHeight(qreal deltaPercent, const ScrollLayou
     // drops to 1 — keeping it would invert the failure (the verb refusing a
     // shrink relayout would happily apply).
     // minCross, matching the clamp relayout applies to this same value.
-    const int floorPx = params.respectMinimumSize ? qMax(1, tile->minCross(params.axis)) : 1;
+    // Capped at workH as well: a client cross-minimum LARGER than the work
+    // area (reachable through a work-area shrink after the minimum was
+    // recorded) would otherwise invert the qBound below (min > max is UB).
+    const int floorPx = params.respectMinimumSize ? qBound(1, tile->minCross(params.axis), workH) : 1;
     const int target = qBound(floorPx, currentPx + qRound(deltaPercent / 100.0 * workH), workH);
     if (target == currentPx) {
         return false;

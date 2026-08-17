@@ -158,6 +158,7 @@ ScrollLayoutParams ScrollEngine::layoutParamsForScreen(const QString& screenId, 
     // hand one monitor the other's axis.
     params.axis = effectiveStripAxis(overrides, axisBasis);
     params.respectMinimumSize = effectiveRespectMinimumSize(overrides);
+    params.cropStraddlers = effectiveCropStraddlers(overrides);
     // Each template preset VOCABULARY is likewise parsed once and threaded
     // through: the two default resolvers below resolve a Preset kind against
     // the same list the params already carry, so the plain map-taking
@@ -655,12 +656,25 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // override map on every call — which, inside the emit loop, is once per
     // window per relayout. Same doctrine as layoutParamsForScreen's single
     // fetch at the top of this file.
-    const bool cropStraddlers = effectiveCropStraddlers(screenId);
+    // Resolved once with the rest of the per-screen bools in
+    // layoutParamsForScreen — reading it off params keeps this batch from
+    // fetching the override map a second time for one value.
+    const bool cropStraddlers = params.cropStraddlers;
     // The park's top edge, the one number that separates "was on screen last
     // batch" from "was parked last batch" in m_lastAppliedRect. Every park
     // this pass commits lands exactly here (the park lambda moves only the
     // top), so a remembered rect at or below it was a park and one above it
     // was a real placement.
+    //
+    // KNOWN TRANSIENT: the remembered rects are classified against THIS
+    // batch's park line, and a monitor ADD between batches raises the union
+    // bottom without any sweep of the old entries (removal IS swept, at the
+    // context prune). For exactly one batch after the add, a rect parked
+    // below the OLD line can read as on-screen and mis-source a tab
+    // cross-fade; the batch then rewrites every entry and the window heals.
+    // Storing the park line per state would close it, at the cost of one
+    // more cross-batch memory for a single cosmetic frame — deliberately not
+    // taken.
     const int parkTop = unionBottom + 1 + Detail::kParkMargin;
     // BOTH pairing predicates demand POSITIVE evidence, symmetrically: an
     // entry must exist AND sit on the right side of the park line. A missing

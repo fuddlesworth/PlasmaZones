@@ -253,52 +253,68 @@ void EditorController::loadEditorSettings()
     }
 
     // Strip axis, read ONLY (the editor never writes a scrolling setting).
+    // Snapshotted from the same backend, and RE-snapshotted while the editor
+    // runs: reloadScrollingStripAxis below is wired to the daemon's
+    // settingsChanged signal, so an axis authored in the settings app while
+    // the editor is open reaches the preview without a restart.
+    refreshScrollingStripAxisSnapshot(*backend);
+}
+
+void EditorController::refreshScrollingStripAxisSnapshot(PhosphorConfig::IBackend& backend)
+{
     // Both the global value and every per-screen override are snapshotted,
     // because the target screen changes without a settings reload and
     // templatePreviewVertical() has to answer for whichever screen is current.
-    {
-        static_assert(ConfigDefaults::scrollingStripAxisAuto() == 0,
-                      "EditorController::m_scrollingStripAxis defaults to the literal 0 to keep configdefaults.h out "
-                      "of EditorController.h; that literal has to stay Auto.");
+    static_assert(ConfigDefaults::scrollingStripAxisAuto() == 0,
+                  "EditorController::m_scrollingStripAxis defaults to the literal 0 to keep configdefaults.h out "
+                  "of EditorController.h; that literal has to stay Auto.");
 
-        auto scrolling = backend->group(ConfigDefaults::scrollingGroup());
-        const int axis = scrolling->readInt(ConfigDefaults::stripAxisKey(), ConfigDefaults::scrollingStripAxis());
-        bool axisChanged = false;
-        if (m_scrollingStripAxis != axis) {
-            m_scrollingStripAxis = axis;
-            axisChanged = true;
-        }
-
-        // Per-screen groups are "<prefix><screen id or name>"; only the ones
-        // that actually carry the key are recorded, so an absent screen falls
-        // through to the global value rather than to a stale default.
-        const QString prefix = ConfigDefaults::scrollingScreenGroupPrefix();
-        QHash<QString, int> perScreen;
-        const QStringList groups = backend->groupList();
-        for (const QString& groupName : groups) {
-            if (!groupName.startsWith(prefix))
-                continue;
-            const QString screenKey = groupName.mid(prefix.size());
-            if (screenKey.isEmpty())
-                continue;
-            auto screenGroup = backend->group(groupName);
-            if (!screenGroup->hasKey(ConfigDefaults::stripAxisKey()))
-                continue;
-            perScreen.insert(
-                screenKey, screenGroup->readInt(ConfigDefaults::stripAxisKey(), ConfigDefaults::scrollingStripAxis()));
-        }
-        if (m_perScreenStripAxis != perScreen) {
-            m_perScreenStripAxis = perScreen;
-            axisChanged = true;
-        }
-
-        // Through the refresh, not a bare emit: a config-input change does not
-        // have to change the ANSWER (a per-screen override for some other
-        // monitor, an Auto value that resolves the same way), and the property
-        // must only announce a real flip.
-        if (axisChanged)
-            refreshTemplatePreviewVertical();
+    auto scrolling = backend.group(ConfigDefaults::scrollingGroup());
+    const int axis = scrolling->readInt(ConfigDefaults::stripAxisKey(), ConfigDefaults::scrollingStripAxis());
+    bool axisChanged = false;
+    if (m_scrollingStripAxis != axis) {
+        m_scrollingStripAxis = axis;
+        axisChanged = true;
     }
+
+    // Per-screen groups are "<prefix><screen id or name>"; only the ones
+    // that actually carry the key are recorded, so an absent screen falls
+    // through to the global value rather than to a stale default.
+    const QString prefix = ConfigDefaults::scrollingScreenGroupPrefix();
+    QHash<QString, int> perScreen;
+    const QStringList groups = backend.groupList();
+    for (const QString& groupName : groups) {
+        if (!groupName.startsWith(prefix))
+            continue;
+        const QString screenKey = groupName.mid(prefix.size());
+        if (screenKey.isEmpty())
+            continue;
+        auto screenGroup = backend.group(groupName);
+        if (!screenGroup->hasKey(ConfigDefaults::stripAxisKey()))
+            continue;
+        perScreen.insert(screenKey,
+                         screenGroup->readInt(ConfigDefaults::stripAxisKey(), ConfigDefaults::scrollingStripAxis()));
+    }
+    if (m_perScreenStripAxis != perScreen) {
+        m_perScreenStripAxis = perScreen;
+        axisChanged = true;
+    }
+
+    // Through the refresh, not a bare emit: a config-input change does not
+    // have to change the ANSWER (a per-screen override for some other
+    // monitor, an Auto value that resolves the same way), and the property
+    // must only announce a real flip.
+    if (axisChanged)
+        refreshTemplatePreviewVertical();
+}
+
+void EditorController::reloadScrollingStripAxis()
+{
+    // The debounced settingsChanged arm: re-read from a fresh backend (the
+    // daemon just rewrote the file) and let the snapshot's own change gates
+    // decide whether anything is announced.
+    auto backend = PlasmaZones::createDefaultConfigBackend();
+    refreshScrollingStripAxisSnapshot(*backend);
 }
 
 void EditorController::refreshTemplatePreviewVertical()

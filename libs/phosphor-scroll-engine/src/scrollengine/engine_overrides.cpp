@@ -196,10 +196,9 @@ bool ScrollEngine::effectiveRespectMinimumSize(const QVariantMap& overrides) con
     return effectiveBoolOverride(overrides, ScrollPerScreenKeys::respectMinimumSize(), m_respectMinimumSize);
 }
 
-bool ScrollEngine::effectiveCropStraddlers(const QString& screenId) const
+bool ScrollEngine::effectiveCropStraddlers(const QVariantMap& overrides) const
 {
-    return effectiveBoolOverride(m_perScreenOverrides.value(screenId), ScrollPerScreenKeys::cropStraddlers(),
-                                 m_cropStraddlers);
+    return effectiveBoolOverride(overrides, ScrollPerScreenKeys::cropStraddlers(), m_cropStraddlers);
 }
 
 bool ScrollEngine::effectiveFocusNewWindows(const QString& screenId) const

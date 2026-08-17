@@ -89,7 +89,7 @@ bool ScrollEngine::dragPreviewRestoreSlot(ScrollState* state, const QString& win
         inserted = strip.insertWindowAt(slot.column, windowId, slot.width, slot.display, params);
     }
     if (!inserted) {
-        inserted = strip.insertWindow(windowId, effectiveDefaultColumnWidth(screenId),
+        inserted = strip.insertWindow(windowId, params.defaultColumnWidth,
                                       effectiveDefaultColumnDisplay(screenId), params, slot.minWidth, slot.minHeight);
     }
     if (inserted) {
@@ -168,7 +168,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
                 // A floating window with no restore entry carries no intents
                 // of its own — seed the screen's configured defaults, not
                 // FloatRestore's default-constructed 50% proportion.
-                preview.carried.width = effectiveDefaultColumnWidth(screenId);
+                preview.carried.width = params.defaultColumnWidth;
                 preview.carried.display = effectiveDefaultColumnDisplay(screenId);
             }
         } else if (preview.priorSlot.column >= 0) {
@@ -184,7 +184,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
             // the window into the strip.
             qCWarning(lcScrollEngine) << "beginDragInsertPreview:" << windowId
                                       << "tracked but absent from strip and floating set — adopting to heal";
-            preview.carried.width = effectiveDefaultColumnWidth(screenId);
+            preview.carried.width = params.defaultColumnWidth;
             preview.carried.display = effectiveDefaultColumnDisplay(screenId);
         }
         // Keep the window tracked against the TARGET context while detached
@@ -192,7 +192,7 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
         // answering). Fresh adoption stays untracked until commit.
         m_states.setKeyForWindow(windowId, targetKey);
     } else {
-        preview.carried.width = effectiveDefaultColumnWidth(screenId);
+        preview.carried.width = params.defaultColumnWidth;
         preview.carried.display = effectiveDefaultColumnDisplay(screenId);
     }
     // Defensive: a stale forward state left the window in the target strip

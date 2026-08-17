@@ -65,8 +65,10 @@ public:
     {
         return m_axis == PhosphorProtocol::ScrollAxis::Vertical;
     }
-    /// Main and cross exchanged, for the few sites that reason about the CROSS
-    /// axis in main-axis vocabulary.
+    /// Main and cross exchanged. NO engine call site uses this today — it
+    /// completes the role algebra for embedders of this library (a consumer
+    /// reasoning about the cross axis in main-axis vocabulary should not
+    /// hand-roll the flip), and the unit tests pin the involution.
     constexpr StripAxis transposed() const
     {
         return StripAxis(isHorizontal() ? PhosphorProtocol::ScrollAxis::Vertical

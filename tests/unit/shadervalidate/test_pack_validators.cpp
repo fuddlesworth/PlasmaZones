@@ -193,11 +193,12 @@ private Q_SLOTS:
     /// Nothing else can catch this. Strip packs are compositor-only, so the
     /// validator skips their stage compile entirely and the bundled-pack gate
     /// never reads a line of their GLSL — a stripAxisOffset reverted to
-    /// `vec2(amount, 0.0)` compiles, links, bakes and ships, and every one of
-    /// the four packs that displace through it smears sideways on a vertical
-    /// strip with no diagnostic anywhere. The helper is the single point every
-    /// one of them goes through, which is what makes a source assertion worth
-    /// making here instead of per pack.
+    /// `vec2(amount, 0.0)` compiles, links, bakes and ships, and each of the
+    /// three packs that displace through it (jelly, chromatic, motion-blur;
+    /// carousel builds its displacement from the axis directly) smears
+    /// sideways on a vertical strip with no diagnostic anywhere. The helper
+    /// is the single point they all go through, which is what makes a source
+    /// assertion worth making here instead of per pack.
     void stripHelpersDisplaceAlongTheBoundAxis()
     {
         const QString code = sharedHelperCode(QStringLiteral("strip_transition.glsl"));
@@ -230,6 +231,17 @@ private Q_SLOTS:
                             + perp.simplified()));
         QVERIFY2(componentSwap || swizzleSwap,
                  qPrintable(QStringLiteral("stripAxisPerp is not the plain component swap: ") + perp.simplified()));
+
+        // stripEdgeFade is the third axis-coupled helper: its travel
+        // coordinate must come from dot(uv, iStripAxis), not from a bare
+        // uv.x — a revert fades the wrong edges on a vertical strip in every
+        // pack that budgets its displacement against the fade (the same
+        // silent, compositor-only failure mode as the offset above).
+        const QString fade = glslFunctionBody(code, QStringLiteral("stripEdgeFade"));
+        QVERIFY2(!fade.isEmpty(), "stripEdgeFade is missing from shared/strip_transition.glsl");
+        QVERIFY2(fade.contains(QLatin1String("iStripAxis")),
+                 qPrintable(QStringLiteral("stripEdgeFade does not derive its travel coordinate from the bound axis: ")
+                            + fade.simplified()));
     }
 
     /// The complement: an unknown token IS linted, and the message names the
@@ -347,13 +359,19 @@ private Q_SLOTS:
         if (!linkSharedIncludes(tmp))
             QSKIP("data/animations/shared not found — running outside source tree");
 
+        // Returns bool for the caller to QVERIFY: a QVERIFY inside the lambda
+        // only returns from the LAMBDA, so a failed open used to let the test
+        // run on against a missing buffer file and fail somewhere misleading.
         const auto writeBuffer = [&tmp](const QString& pack, const QString& body) {
             const QString dir = tmp.filePath(pack);
             QDir().mkpath(dir);
             QFile buf(dir + QStringLiteral("/buffer0.frag"));
-            QVERIFY(buf.open(QIODevice::WriteOnly));
+            if (!buf.open(QIODevice::WriteOnly)) {
+                return false;
+            }
             buf.write(body.toUtf8());
             buf.close();
+            return true;
         };
 
         QJsonObject obj = basePack(QStringLiteral("mp-good"));
@@ -361,10 +379,10 @@ private Q_SLOTS:
         obj.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer0.frag")}));
 
         // A buffer pass ships its own main() and no entry scaffold.
-        writeBuffer(QStringLiteral("mp-good"),
-                    QStringLiteral("#version 440\n"
-                                   "layout(location = 0) out vec4 fragColor;\n"
-                                   "void main() { fragColor = vec4(1.0); }\n"));
+        QVERIFY(writeBuffer(QStringLiteral("mp-good"),
+                            QStringLiteral("#version 440\n"
+                                           "layout(location = 0) out vec4 fragColor;\n"
+                                           "void main() { fragColor = vec4(1.0); }\n")));
         const PackResult good = validate(tmp, QStringLiteral("mp-good"), obj);
         // Spacing-independent: the report pads the label with leftJustified(15),
         // so a literal with a hand-counted gap silently stops matching the
@@ -381,10 +399,10 @@ private Q_SLOTS:
         QJsonObject bad = basePack(QStringLiteral("mp-bad"));
         bad.insert(QStringLiteral("multipass"), true);
         bad.insert(QStringLiteral("bufferShaders"), toArray({QStringLiteral("buffer0.frag")}));
-        writeBuffer(QStringLiteral("mp-bad"),
-                    QStringLiteral("#version 440\n"
-                                   "layout(location = 0) out vec4 fragColor;\n"
-                                   "void main() { fragColor = notADeclaredThing; }\n"));
+        QVERIFY(writeBuffer(QStringLiteral("mp-bad"),
+                            QStringLiteral("#version 440\n"
+                                           "layout(location = 0) out vec4 fragColor;\n"
+                                           "void main() { fragColor = notADeclaredThing; }\n")));
         const PackResult r = validate(tmp, QStringLiteral("mp-bad"), bad);
         QVERIFY2(r.errors > 0, qPrintable(QStringLiteral("a broken buffer pass must fail the gate:\n") + r.report));
         QVERIFY(r.report.contains(QStringLiteral("buffer0.frag")));

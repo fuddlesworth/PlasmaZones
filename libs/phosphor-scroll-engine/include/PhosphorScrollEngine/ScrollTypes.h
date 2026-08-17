@@ -778,6 +778,12 @@ struct ScrollLayoutParams
     /// overhangs. The open-time work-area-oversized float escape ignores
     /// this flag.
     bool respectMinimumSize = true;
+    /// Whether main-axis straddlers keep their TRUE rect for the effect to
+    /// crop (`true`) instead of being clamped at the screen edge. Resolved
+    /// once in layoutParamsForScreen like every other per-screen bool, so
+    /// the apply path does not fetch the override map a second time per
+    /// batch for this one value.
+    bool cropStraddlers = false;
     /// The context's default window height intent, seeded onto every
     /// fresh-created tile (restore paths overwrite it via
     /// setWindowHeightIntent). Default-constructed = Auto weight 1, the

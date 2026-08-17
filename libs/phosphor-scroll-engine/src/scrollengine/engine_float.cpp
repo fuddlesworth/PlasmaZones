@@ -195,7 +195,7 @@ bool ScrollEngine::unfloatWindowInternal(ScrollState* state, const QString& wind
         inserted = state->strip().insertWindowAt(restore.column, windowId, restore.width, restore.display, params);
     }
     if (!inserted) {
-        inserted = state->strip().insertWindow(windowId, effectiveDefaultColumnWidth(contextScreen),
+        inserted = state->strip().insertWindow(windowId, params.defaultColumnWidth,
                                                effectiveDefaultColumnDisplay(contextScreen), params);
     }
     if (!inserted) {
@@ -307,7 +307,7 @@ void ScrollEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat, 
         // re-apply the adopted tile relayouts unclamped until the client
         // happens to re-report, which for a fixed-size window is never.
         const FloatRestore adopted = m_floatRestore.value(windowId);
-        if (target->strip().insertWindow(windowId, effectiveDefaultColumnWidth(targetScreen),
+        if (target->strip().insertWindow(windowId, params.defaultColumnWidth,
                                          effectiveDefaultColumnDisplay(targetScreen), params, adopted.minWidth,
                                          adopted.minHeight)) {
             // The tile owns the clamp from here; a refused insert keeps the

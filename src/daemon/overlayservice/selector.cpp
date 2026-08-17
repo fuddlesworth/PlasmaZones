@@ -561,6 +561,17 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                         // behind (the mirror of the strip arm's zone clear).
                         m_selectedStripTarget = {};
                         m_selectedStripScreenId.clear();
+                        // The strip family's PAINTED half too, or a screen
+                        // that flipped from strip mode to layout mode keeps
+                        // the old card highlight drawn under the zone cards
+                        // (the strip arm blanks the zone props the same way).
+                        // Gated on a read so the common case writes nothing.
+                        if (slot->property("selectedStripColumn").toInt() >= 0
+                            || slot->property("selectedStripGap").toInt() >= 0) {
+                            writeQmlProperty(slot, QStringLiteral("selectedStripColumn"), -1);
+                            writeQmlProperty(slot, QStringLiteral("selectedStripGap"), -1);
+                            writeQmlProperty(slot, QStringLiteral("selectedStripHalf"), -1);
+                        }
                         writeQmlProperty(slot, QStringLiteral("selectedLayoutId"), layoutId);
                         writeQmlProperty(slot, QStringLiteral("selectedZoneIndex"), z);
                     }

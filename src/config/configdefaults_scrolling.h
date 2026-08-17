@@ -808,7 +808,8 @@ public:
     //
     // The strip-mode drag selector popup. It mirrors the Snapping.ZoneSelector
     // family minus LayoutMode / GridColumns / MaxRows, because the strip popup
-    // is always a single horizontal card row. The values below hand-duplicate
+    // is always a single card row along the strip (so it follows the screen's
+    // strip axis, but never becomes a grid). The values below hand-duplicate
     // the snapping twins in configdefaults.h (zoneSelectorEnabled(),
     // triggerDistance(), position(), sizeMode(), previewWidth(),
     // previewHeight(), previewLockAspect()): that file is the LEAF of the

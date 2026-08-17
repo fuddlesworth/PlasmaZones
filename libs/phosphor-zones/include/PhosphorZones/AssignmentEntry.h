@@ -134,7 +134,8 @@ struct AssignmentEntry
         Snapping = 0,
         Autotile = 1,
         /// The niri-style scrolling engine (PhosphorScrollEngine): windows
-        /// form columns on an endless horizontal strip per context.
+        /// form columns on an endless strip per context (horizontal or
+        /// vertical, resolved per screen).
         /// `ScreenModeRouter::engineFor` hands Scrolling screens to the
         /// live ScrollEngine; the (Mode, Family) settings table here still
         /// drives all downstream config routing. Scrolling consumes no manual
@@ -379,10 +380,10 @@ struct ContextTilingParams
  * Each field is set only when a matching context rule fills the corresponding
  * slot (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
  * SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
- * SetScrollDefaultWindowHeight, the seven scrolling behaviour toggles, the
- * thirteen SetTabIndicator* slots and the six SetDropIndicator* slots, each
- * documented in its own block below); an unset field means "use the config
- * value".
+ * SetScrollDefaultWindowHeight / SetScrollStripAxis, the seven scrolling
+ * behaviour toggles, the thirteen SetTabIndicator* slots and the six
+ * SetDropIndicator* slots, each documented in its own block below); an unset
+ * field means "use the config value".
  * Consumed daemon-side: the values are layered onto the scrolling engine's
  * per-screen parameters (config stays the base, the rule wins where present),
  * the same way @ref ContextTilingParams is layered onto the autotile override
@@ -467,17 +468,20 @@ struct ContextScrollingParams
     std::optional<int> dropIndicatorBorderWidth; ///< px; 0 is a fill with no edge
     std::optional<int> dropIndicatorBorderRadius; ///< px; 0 is square, no sentinel
 
-    /// True when at least one drop-indicator slot resolved. Same purpose as
-    /// the tab-indicator predicate below.
+    // The three block-level aggregates below exist for isEmpty() — their
+    // ONLY caller. Earlier docs claimed the daemon consulted them to skip
+    // whole override blocks; it never did (it tests each optional it
+    // consumes directly), so do not add such a gate on the strength of a
+    // predicate existing here.
+
+    /// True when at least one drop-indicator slot resolved.
     bool hasDropIndicatorOverrides() const
     {
         return dropIndicatorEnabled || dropIndicatorColor || dropIndicatorBorderColor || dropIndicatorOpacity
             || dropIndicatorBorderWidth || dropIndicatorBorderRadius;
     }
 
-    /// True when at least one tab-indicator slot resolved, so the daemon can
-    /// skip the whole indicator-override path when it is false rather than
-    /// testing thirteen optionals.
+    /// True when at least one of the thirteen tab-indicator slots resolved.
     bool hasTabIndicatorOverrides() const
     {
         return tabIndicatorEnabled || tabIndicatorHideWhenSingleTab || tabIndicatorPlaceWithinColumn || tabIndicatorGap
@@ -486,9 +490,7 @@ struct ContextScrollingParams
             || tabIndicatorInactiveColor || tabIndicatorUrgentColor;
     }
 
-    /// True when at least one of the seven behaviour toggles resolved. Same
-    /// purpose as the two indicator predicates: the daemon skips the whole
-    /// behaviour-override block when it is false.
+    /// True when at least one of the seven behaviour toggles resolved.
     bool hasBehaviourOverrides() const
     {
         return alwaysCenterSingleColumn || respectMinimumSize || cropStraddlers || focusNewWindows || smartGaps

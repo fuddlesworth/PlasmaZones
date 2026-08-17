@@ -48,6 +48,9 @@ class PHOSPHORZONES_EXPORT ScrollingTemplateSource : public PhosphorLayout::ILay
     Q_OBJECT
 
 public:
+    /// Construct over a borrowed template store. Caller owns @p store and
+    /// must keep it alive for the source's lifetime (the ZonesLayoutSource
+    /// contract); null is tolerated and reports an empty list.
     explicit ScrollingTemplateSource(ScrollingTemplateStore* store, QObject* parent = nullptr);
     ~ScrollingTemplateSource() override;
 

@@ -422,7 +422,7 @@ public:
  *
  * The scrolling engine's peer of IZoneSelectorSettings, stored under
  * Scrolling.ZoneSelector. It carries no LayoutMode / GridColumns / MaxRows:
- * the strip popup renders one horizontal row of column cards, so the
+ * the strip popup renders one row of column cards along the strip, so the
  * grid-arrangement knobs have nothing to arrange.
  *
  * Used by: KWin Effect, KCM, Overlay Service

@@ -14,9 +14,11 @@
 #
 # The eleven fixture-driven suites register TWICE, once per axis, via
 # pse_add_test. The two axis-free ones use pse_add_axis_free_test and register
-# once: they carry neither the fixture header nor AX_GUARD_SUITE, so they print
-# no axis line, the FAIL_REGULAR_EXPRESSION guard below would be inert for
-# them, and a second identical run would only cost wall time.
+# once: the shared fixture HEADER still rides their target (the function adds
+# it to every target, and automoc produces nothing for it), but they never
+# call AX_GUARD_SUITE, so they print no axis line, the
+# FAIL_REGULAR_EXPRESSION guard below would be inert for them, and a second
+# identical run would only cost wall time.
 #
 # These route through phosphor_apply_test_isolation like every other
 # libs/phosphor-*/tests tree. Nothing here touches the session bus today, so
@@ -76,8 +78,12 @@ function(pse_add_test _name)
     # independent pass/fail under readable names.
     #
     # phosphor_apply_test_isolation takes the ctest test name as its second
-    # argument, which is what gives this arm its own XDG sandbox and its own
-    # 120s timeout rather than sharing the horizontal arm's.
+    # argument, which is what gives this arm its own ENVIRONMENT property and
+    # its own 120s timeout. The XDG sandbox directory itself is keyed on the
+    # TARGET, so the two arms share one tree — acceptable here because these
+    # headless suites write nothing under XDG, but a suite that starts
+    # persisting state must split the sandbox before its arms can run under
+    # a parallel ctest.
     add_test(NAME ${_name}_vertical COMMAND ${_name})
     set_tests_properties(${_name}_vertical PROPERTIES LABELS "phosphorscrollengine")
     phosphor_apply_test_isolation(${_name} ${_name}_vertical)

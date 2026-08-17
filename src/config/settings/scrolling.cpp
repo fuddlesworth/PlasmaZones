@@ -39,6 +39,11 @@ static_assert(ConfigDefaults::scrollingRestoreFloatedWindowsOnLogin(),
 // same pin, different interface and direction.
 static_assert(!ConfigDefaults::scrollingCropStraddlers(),
               "IScrollSettings::scrollingCropStraddlers defaults to false — update it with this default");
+// The strip-axis tri-state gets the identical pin: IScrollSettings'
+// defaulted getter answers 0 (Auto), and an implementor that has not heard
+// of the option must resolve the axis from its work area, never force one.
+static_assert(ConfigDefaults::scrollingStripAxis() == ConfigDefaults::scrollingStripAxisAuto(),
+              "IScrollSettings::scrollingStripAxis defaults to 0 (Auto) — update it with this default");
 // The tab indicator's paint half carries the same interface-side defaults, for
 // the same reason: the overlay service reads them through ISettings.
 static_assert(ConfigDefaults::scrollingTabIndicatorStyle() == 1,

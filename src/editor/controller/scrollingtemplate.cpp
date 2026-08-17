@@ -47,6 +47,11 @@ void EditorController::setEditorModeInternal(int mode)
     // a no-op.
     m_pendingTargetScreen.reset();
     m_pendingTargetEditsLayout = false;
+    // m_pendingLaunch is deliberately NOT dropped here, unlike the park
+    // above: a parked launch has its own confirmation dialog whose Confirm
+    // applies the launch wholesale (mode included), so it stays meaningful
+    // across a mode change — dropping it would strand that open dialog
+    // acting on nothing.
     // The rest of the layout session (zones, shader, gap overrides, bounds)
     // deliberately stays loaded when entering template mode: QML gates every
     // reader on the mode, and each route back into layout mode
@@ -80,6 +85,13 @@ void EditorController::beginTemplateSession(const QString& id, const QString& na
                                             const QVariantMap& state, bool isSystem)
 {
     setEditorModeInternal(ModeScrollingTemplate);
+    // The mode setter drops the parked screen switch only on a genuine mode
+    // CHANGE (it early-returns otherwise), so a template loaded over an open
+    // template session — the same-mode swap — would keep a park answering
+    // for the PREVIOUS template and later save or discard the wrong one.
+    // Same rationale as the setter's own clear, applied per session.
+    m_pendingTargetScreen.reset();
+    m_pendingTargetEditsLayout = false;
 
     // A template has no fixed-zone reference, so the layout bounding box a
     // previous FIXED-geometry layout left behind is never the right basis for

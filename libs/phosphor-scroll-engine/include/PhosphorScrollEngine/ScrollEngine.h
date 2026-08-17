@@ -744,8 +744,11 @@ public:
     // screen with three producer channels the daemon merges (rules win): the
     // RULE channel (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
     // SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
-    // SetScrollDefaultWindowHeight), the SETTINGS channel (the per-monitor
-    // New-columns sizing trio pairs), and the TEMPLATE channel (from the
+    // SetScrollDefaultWindowHeight / SetScrollStripAxis), the SETTINGS
+    // channel (the per-monitor New-columns sizing trio pairs and the
+    // per-monitor StripAxis — the axis SHARES its key across both channels,
+    // so the daemon's rule-after-seed insert IS the precedence collapse),
+    // and the TEMPLATE channel (from the
     // context's assigned ScrollingTemplate: the presetColumnWidths /
     // presetWindowHeights lists, replaced wholesale per list; the
     // TemplateColumns seed blueprint that engine_lifecycle consumes at column
@@ -859,7 +862,8 @@ private:
     /// left instead of one default-width column per window — the scroll
     /// twin of AutotileEngine's script-state stash. Keyed per context;
     /// overwritten on every teardown of the same key.
-    void stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state);
+    void stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state,
+                             std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis = std::nullopt);
     /// insertOpenedWindow's stash restore: place @p windowId per the
     /// stashed structure for @p key (rejoin its stashed column beside an
     /// already-arrived sibling, or recreate the column at its stashed
@@ -1160,7 +1164,9 @@ private:
     QHash<QString, QSet<QString>> m_consumedInitialOrder;
     /// Snapshot @p state's strip as a stash entry (columns + focus + view
     /// anchor). Empty columns list when the state is null or empty.
-    StashedStrip buildStashFromState(const ScrollState* state) const;
+    StashedStrip buildStashFromState(const ScrollState* state,
+                                     std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis
+                                     = std::nullopt) const;
     /// Mode-round-trip structure stash (see stashStripStructure). The
     /// stashed lists stay INTACT while they live (positions are counted
     /// against windows already present); consumption is tracked in
@@ -1190,7 +1196,7 @@ private:
     /// Effective per-screen values: the rule override when present, else the
     /// cached config default. Each accessor is a thin screenId wrapper over a
     /// map-taking overload, so a caller resolving several values for one
-    /// screen (layoutParamsForScreen resolves nine per relayout, and the open
+    /// screen (layoutParamsForScreen resolves ten per relayout, and the open
     /// path four more) fetches the override map ONCE and threads it through
     /// instead of re-looking it up per accessor.
     CenterFocusedColumn effectiveCenterFocusedColumn(const QString& screenId) const;
@@ -1210,7 +1216,7 @@ private:
     /// Hoisted out of the emit loop by its one caller: it is a per-SCREEN
     /// verdict, so re-resolving it per tile would rebuild the override map
     /// once per window on the relayout path.
-    bool effectiveCropStraddlers(const QString& screenId) const;
+    bool effectiveCropStraddlers(const QVariantMap& overrides) const;
     /// Falls back to the LIVE IScrollSettings read rather than a cached
     /// member: focus-new-windows is the one behaviour the engine never
     /// cached, and reading it live keeps a settings change effective without

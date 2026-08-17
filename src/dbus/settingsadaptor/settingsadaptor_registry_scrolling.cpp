@@ -202,7 +202,11 @@ void SettingsAdaptor::initializeRegistryScrolling()
         m_settings->setScrollingDragInsertTriggers(v.toList());
         return true;
     };
-    m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("stringlist");
+    // "maplist", not "stringlist": the payload is a QVariantList of trigger
+    // MAPS and the setter refuses anything else, so a schema-honouring client
+    // that sent an actual string list would be silently refused. The token is
+    // advisory JSON for external clients; nothing in-repo parses it.
+    m_schemas[QStringLiteral("scrollingDragInsertTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("scrollingDragInsertToggle", scrollingDragInsertToggle, setScrollingDragInsertToggle)
 
@@ -325,8 +329,8 @@ void SettingsAdaptor::initializeRegistryScrolling()
     // keys above, whose getter+no-op-setter default pairs exist so a
     // non-Settings backend keeps the keys), so they register through the
     // interface rather than in the concrete block below. No LayoutMode /
-    // GridColumns / MaxRows twin: the strip popup is one horizontal card
-    // row. The int/bool keys keep the shared macros' coercing setters ON
+    // GridColumns / MaxRows twin: the strip popup is one card row along the
+    // strip. The int/bool keys keep the shared macros' coercing setters ON
     // PURPOSE (the macros are frozen boilerplate across four registry TUs,
     // and the config schema's clampInt one layer down bounds anything a
     // coerced 0 could write); only the two ENUM keys need the hand-written

@@ -138,9 +138,11 @@ struct ScrollStripSnapshotTile
 struct ScrollStripSnapshotColumn
 {
     bool tabbed = false;
-    /// Resolved column width as a fraction of the work-area width, clamped
-    /// to (0, 1]. 0 when the column resolves no rect (fully minimized) —
-    /// renderers fall back to a full-width preview for that case.
+    /// Resolved column extent ALONG THE STRIP as a fraction of the work
+    /// area's extent on that same axis (engine_snapshot computes both in
+    /// main-axis role terms, so on a vertical strip this is a HEIGHT share),
+    /// clamped to (0, 1]. 0 when the column resolves no rect (fully
+    /// minimized) — renderers fall back to a full-extent preview there.
     qreal widthFraction = 0.0;
     /// MODEL tile order, minimized tiles included.
     QVector<ScrollStripSnapshotTile> tiles;

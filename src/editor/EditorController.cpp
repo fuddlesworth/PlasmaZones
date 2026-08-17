@@ -142,6 +142,17 @@ EditorController::EditorController(QObject* parent)
         bus.connect(svc, path, iface, sig, &m_layoutReloadTimer, SLOT(start()));
     }
 
+    // Strip-axis inputs follow the live config: the daemon's settingsChanged
+    // fires once per key group on a settings-app Save, so debounce the burst
+    // into one config re-read. Without this, a per-screen axis authored
+    // while the editor is open never reached the template preview until a
+    // restart (loadEditorSettings runs only from this constructor).
+    m_stripAxisReloadTimer.setSingleShot(true);
+    m_stripAxisReloadTimer.setInterval(250);
+    connect(&m_stripAxisReloadTimer, &QTimer::timeout, this, &EditorController::reloadScrollingStripAxis);
+    bus.connect(svc, path, QString(PhosphorProtocol::Service::Interface::Settings), QStringLiteral("settingsChanged"),
+                &m_stripAxisReloadTimer, SLOT(start()));
+
     // Local read view of the scrolling templates, the template sibling of
     // m_localLayoutManager: instant template opens without the daemon, plus
     // the offline save fallback. The store watches nothing, so subscribe to
@@ -338,10 +349,6 @@ bool EditorController::hasMultipleSelection() const
 bool EditorController::hasUnsavedChanges() const
 {
     return m_hasUnsavedChanges;
-}
-bool EditorController::isNewLayout() const
-{
-    return m_isNewLayout;
 }
 bool EditorController::gridSnappingEnabled() const
 {

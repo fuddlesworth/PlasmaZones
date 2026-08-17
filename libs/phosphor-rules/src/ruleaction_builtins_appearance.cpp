@@ -832,8 +832,16 @@ void ActionRegistry::registerBuiltinsAppearance()
         .domain = ActionDomain::Context,
         .params = {P{.key = QString(ActionParam::Value),
                      .kind = QStringLiteral("enum"),
-                     .enumWireValues = {QString(StripAxisToken::Auto), QString(StripAxisToken::Horizontal),
-                                        QString(StripAxisToken::Vertical)}}},
+                     // Vertical FIRST, deliberately out of config-intent
+                     // order: the editor seeds a fresh enum action with the
+                     // first wire value, and Auto is the global default, so
+                     // an Auto-seeded rule looked like it did nothing on any
+                     // setup without a per-screen pin to override. Forcing
+                     // an axis (portrait monitors are the feature's whole
+                     // point) is what a fresh axis rule is for; Auto stays
+                     // available as the put-it-back-on-shape-matching arm.
+                     .enumWireValues = {QString(StripAxisToken::Vertical), QString(StripAxisToken::Horizontal),
+                                        QString(StripAxisToken::Auto)}}},
         .category = QStringLiteral("layoutEngine"),
         .displayOrder = 37,
         .tags = {QString(Tag::LayoutEngine)},

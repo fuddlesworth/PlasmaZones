@@ -328,20 +328,23 @@ bool ScrollStrip::centerVisibleColumns(const ScrollLayoutParams& params)
     // no strip position and are skipped the same way stripExtentPx skips them.
     int spanStart = -1;
     int spanEnd = -1;
+    // Running accumulator, the columnStripPos pattern inlined once: asking
+    // columnStripPos per column re-walks the prefix each time, which is
+    // quadratic in the column count for a walk this loop already performs.
+    int colMainPos = 0;
     for (int i = 0; i < m_columns.size(); ++i) {
         const int colMain = columnExtentPx(m_columns.at(i), params);
         if (colMain <= 0) {
             continue;
         }
-        const int colMainPos = columnStripPos(i, params);
         const int pos = colMainPos - viewOffset;
-        if (pos < 0 || pos + colMain > viewMain) {
-            continue;
+        if (pos >= 0 && pos + colMain <= viewMain) {
+            if (spanStart < 0) {
+                spanStart = colMainPos;
+            }
+            spanEnd = colMainPos + colMain;
         }
-        if (spanStart < 0) {
-            spanStart = colMainPos;
-        }
-        spanEnd = colMainPos + colMain;
+        colMainPos += colMain + params.gap;
     }
     if (spanStart < 0) {
         // Nothing fully visible (a lone over-wide column, or a viewport mid

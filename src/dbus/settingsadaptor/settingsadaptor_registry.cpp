@@ -251,7 +251,9 @@ void SettingsAdaptor::initializeRegistry()
         m_settings->setDragActivationTriggers(v.toList());
         return true;
     };
-    m_schemas[QStringLiteral("dragActivationTriggers")] = QStringLiteral("stringlist");
+    // "maplist" for the same reason as the two drag-insert twins: the payload
+    // is a list of trigger maps.
+    m_schemas[QStringLiteral("dragActivationTriggers")] = QStringLiteral("maplist");
 
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
 

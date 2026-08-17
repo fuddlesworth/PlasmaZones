@@ -159,11 +159,21 @@ Item {
             return;
 
         const viewport = stripCanvas.verticalAxis ? stripFlickable.height : stripFlickable.width;
-        const content = stripCanvas.verticalAxis ? stripFlickable.contentHeight : stripFlickable.contentWidth;
         let low = 0;
         for (let i = 0; i < index; i++)
             low += columns[i].width * stripCanvas.mainExtent;
         const high = low + columns[index].width * stripCanvas.mainExtent;
+        // Content extent recomputed from the MODEL, not read off the
+        // Flickable: the keyboard-resize caller runs before the Grid's
+        // relayout polish delivers, so contentWidth/Height still describe
+        // the pre-resize strip and the trailing clamp would stop one step
+        // short of the grown edge on every press. Same band pitch as
+        // low/high above, plus the spacing term the contentWidth binding
+        // adds back.
+        let total = high;
+        for (let i = index + 1; i < columnCount; i++)
+            total += columns[i].width * stripCanvas.mainExtent;
+        const content = Math.max(viewport, total + stripCanvas.bandSpacing);
         const offset = stripCanvas._mainOffset();
         if (low < offset)
             stripCanvas._setMainOffset(Math.max(0, low));

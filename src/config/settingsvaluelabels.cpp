@@ -123,7 +123,7 @@ const QHash<QString, QHash<QString, QString>>& enumLabelTable()
                  });
         t.insert(pairKey(CD::snappingZoneSelectorGroup(), CD::sizeModeKey()), selectorSizeModeLabels);
         // The strip selector twin reuses the same vocabularies (no
-        // LayoutMode: the strip popup is a single horizontal card row).
+        // LayoutMode: the strip popup is a single card row along the strip).
         t.insert(pairKey(CD::scrollingZoneSelectorGroup(), CD::positionKey()), selectorPositionLabels);
         t.insert(pairKey(CD::scrollingZoneSelectorGroup(), CD::sizeModeKey()), selectorSizeModeLabels);
 
@@ -343,6 +343,12 @@ const QHash<QString, ValueDescriptor>& descriptorTable()
         t.insert(pairKey(CD::snappingBehaviorWindowHandlingGroup(), CD::defaultLayoutIdKey()),
                  idKind(ValueKind::LayoutId));
         t.insert(pairKey(CD::tilingAlgorithmGroup(), CD::defaultKey()), idKind(ValueKind::TilingAlgorithm));
+        // The default scrolling template is a braced template UUID. Described
+        // as LayoutId on purpose: templates ride the unified layout list
+        // under their own ids, so the diff view's layout resolver answers
+        // for them (and falls back to the raw id like every id kind) with no
+        // resolver of their own.
+        t.insert(pairKey(CD::scrollingGroup(), CD::defaultTemplateKey()), idKind(ValueKind::LayoutId));
         t.insert(pairKey(CD::tilingBehaviorGroup(), CD::lockedScreensKey()), idKind(ValueKind::ScreenId));
         t.insert(pairKey(CD::animationsGroup(), CD::shaderProfileTreeKey()), idKind(ValueKind::ShaderPack));
         t.insert(pairKey(CD::decorationsGroup(), CD::decorationProfileTreeKey()), idKind(ValueKind::DecorationPack));

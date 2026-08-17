@@ -5,6 +5,31 @@
 
 namespace PhosphorScrollEngine {
 
+namespace {
+
+/// Nearest non-minimized tile index to @p fromIdx (itself excluded), ties
+/// breaking DOWNWARD (at equal distance the below sibling wins); -1 when
+/// every other tile is minimized. setWindowMinimized's active-slot promotion
+/// and the trail consume's take share this ONE definition so the two
+/// "nearest visible tile" answers cannot drift apart — the must-agree
+/// contract both sites used to state over hand-duplicated loops.
+int nearestVisibleTileIdx(const QVector<Tile>& tiles, int fromIdx)
+{
+    for (int dist = 1; dist < tiles.size(); ++dist) {
+        const int below = fromIdx + dist;
+        if (below < tiles.size() && !tiles.at(below).minimized) {
+            return below;
+        }
+        const int above = fromIdx - dist;
+        if (above >= 0 && !tiles.at(above).minimized) {
+            return above;
+        }
+    }
+    return -1;
+}
+
+} // namespace
+
 // ── Introspection ───────────────────────────────────────────────────────────
 
 const Column* ScrollStrip::activeColumn() const
@@ -427,19 +452,11 @@ bool ScrollStrip::setWindowMinimized(const QString& windowId, bool minimized, co
     tile.minimized = minimized;
     if (minimized && col.activeTileIdx == tileIdx) {
         // Prefer the NEAREST visible sibling as the column's active tile
-        // (ties break downward), so focus does not jump to the top of a
-        // tall stack when a middle tile minimizes.
-        for (int dist = 1; dist < col.tiles.size(); ++dist) {
-            const int below = tileIdx + dist;
-            const int above = tileIdx - dist;
-            if (below < col.tiles.size() && !col.tiles.at(below).minimized) {
-                col.activeTileIdx = below;
-                break;
-            }
-            if (above >= 0 && !col.tiles.at(above).minimized) {
-                col.activeTileIdx = above;
-                break;
-            }
+        // (ties break downward, via the shared walk), so focus does not jump
+        // to the top of a tall stack when a middle tile minimizes.
+        const int promoted = nearestVisibleTileIdx(col.tiles, tileIdx);
+        if (promoted >= 0) {
+            col.activeTileIdx = promoted;
         }
     }
     if (!minimized) {
@@ -641,15 +658,7 @@ bool ScrollStrip::consumeWindowIntoColumn(const ScrollLayoutParams& params)
     // and must not answer it differently. (consumeOrExpel does NOT walk at
     // all in this situation — it refuses outright.)
     if (source.tiles.at(takeIdx).minimized) {
-        int visible = -1;
-        for (int off = 1; off < source.tiles.size() && visible < 0; ++off) {
-            for (const int cand : {takeIdx + off, takeIdx - off}) {
-                if (cand >= 0 && cand < source.tiles.size() && !source.tiles.at(cand).minimized) {
-                    visible = cand;
-                    break;
-                }
-            }
-        }
+        const int visible = nearestVisibleTileIdx(source.tiles, takeIdx);
         if (visible < 0) {
             return false;
         }

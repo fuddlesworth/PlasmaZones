@@ -212,8 +212,12 @@ Rectangle {
                     Kirigami.FormData.label: defaultWidthValueSpin.isFixed ? i18nc("@label:spinbox", "Width in pixels:") : i18nc("@label:spinbox", "Width:")
                     Accessible.name: defaultWidthValueSpin.isFixed ? i18nc("@label:spinbox", "Default column width in pixels") : i18nc("@label:spinbox", "Default column width")
                     visible: templatePanel.templateModel !== null && (defaultWidthKindCombo.currentValue === templatePanel.constants.kindProportion || defaultWidthValueSpin.isFixed)
-                    from: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMin) : templatePanel.proportionMinPercent
-                    to: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMax) : templatePanel.proportionMaxPercent
+                    // The || fallbacks mirror ConfigDefaults' fixed range, per
+                    // the file's convention note at the top: a constants map
+                    // missing a key must degrade to the shipped bound, not to
+                    // a 0..0 spin.
+                    from: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMin || 100) : templatePanel.proportionMinPercent
+                    to: defaultWidthValueSpin.isFixed ? Math.round(templatePanel.constants.fixedMax || 10000) : templatePanel.proportionMaxPercent
                     textFromValue: (value, locale) => defaultWidthValueSpin.isFixed ? String(value) : i18nc("@info:spinbox width percentage", "%1%", value)
                     // Locale-aware on purpose: parseInt reads only ASCII
                     // digits and a locale that writes its numbers any other

@@ -57,12 +57,41 @@ ColumnLayout {
                 // follows.
                 property bool editing: false
 
+                // Locale-aware, the twin of addSpin's valueFromText below:
+                // parseInt reads only ASCII digits, so a locale that writes
+                // its numbers any other way parsed the retyped chip as NaN
+                // and silently dropped the edit while the ADD path accepted
+                // the same text.
+                function parsedPercent(text) {
+                    const locale = Qt.locale();
+                    const trimmed = text.replace(locale.percent, "").trim();
+                    try {
+                        return Math.round(Number.fromLocaleString(locale, trimmed));
+                    } catch (e) {
+                        return NaN;
+                    }
+                }
+
+                /// Whether @p percent collides with ANOTHER stop within the
+                /// dedupe epsilon — the refusal commitEdit enforces, exposed
+                /// so the field can surface it while typing.
+                function duplicatePercent(percent) {
+                    if (!isFinite(percent))
+                        return false;
+                    const fraction = Math.max(chipEditor.minPercent, Math.min(100, percent)) / 100;
+                    for (let i = 0; i < chipEditor.values.length; i++) {
+                        if (i !== chip.index && Math.abs(chipEditor.values[i] - fraction) < chipEditor.dedupeEpsilon)
+                            return true;
+                    }
+                    return false;
+                }
+
                 function commitEdit() {
                     if (!chip.editing)
                         return;
 
                     chip.editing = false;
-                    const percent = parseInt(editField.text);
+                    const percent = chip.parsedPercent(editField.text);
                     if (!isFinite(percent))
                         return;
 
@@ -76,11 +105,10 @@ ColumnLayout {
                     if (percent === Math.round(chip.modelData * 100))
                         return;
 
+                    if (chip.duplicatePercent(percent))
+                        return; // Another stop already holds this size (warned live in the field).
+
                     const fraction = Math.max(chipEditor.minPercent, Math.min(100, percent)) / 100;
-                    for (let i = 0; i < chipEditor.values.length; i++) {
-                        if (i !== chip.index && Math.abs(chipEditor.values[i] - fraction) < chipEditor.dedupeEpsilon)
-                            return; // Another stop already holds this size.
-                    }
                     const next = chipEditor.values.slice();
                     next[chip.index] = fraction;
                     next.sort((a, b) => a - b);
@@ -143,9 +171,19 @@ ColumnLayout {
                     TextField {
                         id: editField
 
+                        // Surfacing the dedupe refusal UP FRONT, matching the
+                        // Add button's grey-with-tooltip convention: a commit
+                        // of a size another stop already holds is dropped, and
+                        // before this the drop was silent — the field closed
+                        // and the typed value simply vanished.
+                        readonly property bool duplicateValue: chip.editing && chip.duplicatePercent(chip.parsedPercent(text))
+
                         visible: chip.editing
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 3
                         horizontalAlignment: TextInput.AlignHCenter
+                        color: duplicateValue ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.textColor
+                        ToolTip.visible: duplicateValue
+                        ToolTip.text: i18nc("@info:tooltip", "This size is already a preset")
                         validator: IntValidator {
                             bottom: chipEditor.minPercent
                             top: 100
@@ -254,7 +292,11 @@ ColumnLayout {
                 to: 100
                 value: 50
                 editable: true
-                enabled: !chipEditor.full
+                // Greyed rather than disabled when the list is full, matching
+                // the Add button's documented convention beside it (a
+                // disabled control receives no hover for the explanatory
+                // tooltip, and a half-greyed pair read as broken).
+                opacity: chipEditor.full ? 0.5 : 1
                 textFromValue: (value, locale) => i18nc("@info preset percentage", "%1%", value)
                 // Locale-aware, the twin of TemplatePropertyPanel's width
                 // spin: parseInt reads only ASCII digits, so a locale that

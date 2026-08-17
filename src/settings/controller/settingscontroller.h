@@ -724,8 +724,8 @@ public:
 
     // ── Per-screen strip selector overrides ──────────────────────────────────
     // Same per-card sub-domain contract as the snapping block above, minus
-    // the Arrangement pair — the strip popup is a single horizontal card row
-    // and has no arrangement card, so do not add one for symmetry. The
+    // the Arrangement pair — the strip popup is a single card row along the
+    // strip and has no arrangement card, so do not add one for symmetry. The
     // whole-domain has/clear pair is kept for API symmetry with the snapping
     // twin even though the scope chips call only the per-card pairs (the
     // Settings-level members behind both are live via the D-Bus category).

@@ -41,7 +41,7 @@ QVariant boundedDouble(const QVariant& value, double min, double max)
 {
     bool ok = false;
     const double v = value.toDouble(&ok);
-    return ok ? QVariant(qBound(min, v, max)) : QVariant();
+    return (ok && PerScreenDetail::numericPayload(value)) ? QVariant(qBound(min, v, max)) : QVariant();
 }
 
 using PerScreenDetail::enumInRange;
@@ -55,7 +55,7 @@ QVariant closedSetInt(const QVariant& value, Predicate isValid)
 {
     bool ok = false;
     const int v = value.toInt(&ok);
-    return (ok && isValid(v)) ? QVariant(v) : QVariant();
+    return (ok && PerScreenDetail::numericPayload(value) && isValid(v)) ? QVariant(v) : QVariant();
 }
 
 // The two zone-selector families' key tables, validators and accessors live in
@@ -208,8 +208,20 @@ bool repairPerScreenScrollingWidth(QVariantMap& overrides)
     if (qFuzzyCompare(1.0 + stored, 1.0 + coerced)) {
         return false;
     }
-    qCWarning(lcConfig) << "scrolling: per-screen column width" << stored << "is out of range for kind" << kind
-                        << "— using" << coerced;
+    // Warning once per process, debug after: this repair runs on every read
+    // of the map, and a D-Bus writer that keeps re-installing an
+    // inconsistent pair would otherwise emit one warning per call
+    // indefinitely without adding information. Main-thread only (Settings'
+    // threading contract), so a plain static latch suffices.
+    static bool warnedOnce = false;
+    if (!warnedOnce) {
+        warnedOnce = true;
+        qCWarning(lcConfig) << "scrolling: per-screen column width" << stored << "is out of range for kind" << kind
+                            << "— using" << coerced << "(further repairs log at debug)";
+    } else {
+        qCDebug(lcConfig) << "scrolling: per-screen column width" << stored << "is out of range for kind" << kind
+                          << "— using" << coerced;
+    }
     *valueIt = coerced;
     return true;
 }

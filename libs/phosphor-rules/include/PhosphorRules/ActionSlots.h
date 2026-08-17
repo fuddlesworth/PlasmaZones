@@ -132,12 +132,18 @@ inline constexpr QLatin1StringView CenterFocusedColumn{"center-focused-column"};
 inline constexpr QLatin1StringView ScrollDefaultColumnDisplay{"scroll-default-column-display"};
 inline constexpr QLatin1StringView ScrollInsertPosition{"scroll-insert-position"};
 inline constexpr QLatin1StringView ScrollDefaultWindowHeight{"scroll-default-window-height"};
-/// Per-context scrolling BEHAVIOUR slots — the toggles that had no rule seam
-/// until now. The five below ride the same per-screen override map as the
-/// sizing slots above, and the engine reads each through an `effective*`
-/// accessor that falls back to the global config value; the sixth,
-/// ScrollFocusFollowsMouse, is resolved per screen and pushed to the
-/// compositor instead (see its own note).
+/// Per-context scrolling BEHAVIOUR slots — the knobs that had no rule seam
+/// until now; this block holds eight. Seven ride the same per-screen
+/// override map as the sizing slots above, each read through an
+/// `effective*` accessor that falls back to the global config value —
+/// including ScrollStickyWindowHandling and ScrollStripAxis (the axis
+/// SHARES its map key with the per-screen settings channel, so the rule's
+/// insert is the precedence collapse, and its resolved membership is ALSO
+/// pushed to the compositor; ScrollCropStraddlers is likewise dual-consumed
+/// by the engine's clamp and the effect's paint clip). The remaining one,
+/// ScrollFocusFollowsMouse, has no engine consumer at all: the daemon
+/// resolves it per screen and pushes the resolved set to the compositor
+/// (see its own note).
 inline constexpr QLatin1StringView ScrollAlwaysCenterSingleColumn{"scroll-always-center-single-column"};
 inline constexpr QLatin1StringView ScrollRespectMinimumSize{"scroll-respect-minimum-size"};
 inline constexpr QLatin1StringView ScrollCropStraddlers{"scroll-crop-straddlers"};

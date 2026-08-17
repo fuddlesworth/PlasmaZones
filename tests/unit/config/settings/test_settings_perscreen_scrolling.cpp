@@ -273,8 +273,11 @@ private Q_SLOTS:
     /// round trip covers all eight keys at once, because a key missing from
     /// either the save list or the load ladder is invisible until it is the one
     /// the user set. StripAxis is written as Vertical rather than the default
-    /// Auto on purpose: a default-equal write is dropped on save, so an Auto
-    /// row would round-trip through an absent key and prove nothing.
+    /// Auto on purpose — not because of sparse persistence (default-equal
+    /// dropping is the FLAT config store's property; the per-screen store
+    /// persists whatever keys its map holds), but because an assertion
+    /// reading the value back through toInt() cannot tell a surviving Auto
+    /// (0) from a key the load ladder silently lost (absent also reads 0).
     void overridesRoundTripThroughDisk()
     {
         IsolatedConfigGuard guard;

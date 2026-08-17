@@ -5,9 +5,12 @@
 // config-seeded behaviour globals rather than over the width/height defaults
 // (those are test_scrollengine_perscreen's subject).
 //
-// One case per key, and every one of them drives TWO screens off the same
-// engine: the screen carrying the override and a screen carrying none. That
-// pairing is the point. An assertion on the overridden screen alone passes
+// One case per key, and each *OverrideIsPerScreen case drives TWO screens
+// off the same engine: the screen carrying the override and a screen
+// carrying none. That pairing is the point. (The two rejection cases at the
+// end — the out-of-range width rule and the wrong-typed overrides — are
+// single-screen by nature: they assert a value is REFUSED, so there is no
+// override side for a pairing to discriminate.) An assertion on the overridden screen alone passes
 // just as happily when the engine reads the global everywhere, which is the
 // exact regression these keys keep having — an effective* call site quietly
 // reverting to the member read, with the suite still green because nothing

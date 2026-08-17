@@ -60,6 +60,28 @@ QList<qreal> OverlayService::selectorStripFractions(const QString& screenId) con
     return stripCardFractions(screenId);
 }
 
+bool OverlayService::selectorStripVerticalAxis(const QString& screenId) const
+{
+    // The axis the popup was PUSHED with wins over the live provider, the
+    // same slot-read-back rule updateStripSelectorHit follows: the caller is
+    // the drag adaptor's keep-visible band, which must match the bar AS
+    // PAINTED — on the tick where a rotation has already moved the engine's
+    // answer but the popup has not been rebuilt yet, the live provider
+    // describes the transpose of what is on screen and the band would stop
+    // covering the bar under the pointer. The provider answers whenever no
+    // VISIBLE slot exists — pre-show trigger math, where nothing is painted
+    // to disagree with, and where a HIDDEN slot's property is the previous
+    // show's stale value (the show path re-pushes with the live axis).
+    if (const auto it = m_screenStates.constFind(screenId);
+        it != m_screenStates.constEnd() && it->zoneSelectorSlot() && it->zoneSelectorSlot()->isVisible()) {
+        const QVariant pushed = it->zoneSelectorSlot()->property("stripVerticalAxis");
+        if (pushed.isValid()) {
+            return pushed.toBool();
+        }
+    }
+    return stripIsVertical(screenId);
+}
+
 void OverlayService::refreshStripSelector(const QString& screenId)
 {
     // The reshaped strip renumbers targets, so a stored selection keyed to
@@ -75,6 +97,19 @@ void OverlayService::refreshStripSelector(const QString& screenId)
     }
     // The strip changed shape, so any memoized card count for it is stale.
     m_stripCardFractionsCache.remove(screenId);
+    // Blank the painted highlight triple BEFORE the visibility gates below,
+    // not after them: slot properties survive a hide (only setVisible
+    // flips), and with the C++ mirror just cleared above,
+    // updateStripSelectorHit's changed-gate would compare equal on an
+    // invalid first hit after the next show and leave the stale highlight
+    // painted. The gates below guard only the EXPENSIVE model re-push.
+    if (const auto blankIt = m_screenStates.constFind(screenId);
+        blankIt != m_screenStates.constEnd() && blankIt->zoneSelectorSlot()) {
+        auto* blankSlot = blankIt->zoneSelectorSlot();
+        writeQmlProperty(blankSlot, QStringLiteral("selectedStripColumn"), -1);
+        writeQmlProperty(blankSlot, QStringLiteral("selectedStripGap"), -1);
+        writeQmlProperty(blankSlot, QStringLiteral("selectedStripHalf"), -1);
+    }
     if (!m_zoneSelectorVisible) {
         return;
     }
@@ -91,17 +126,6 @@ void OverlayService::refreshStripSelector(const QString& screenId)
     // new card count, and the scroll math all shift together when the strip
     // gains or loses the drag window's column at a preview boundary.
     updateZoneSelectorWindow(screenId);
-    // Re-find after the update: updateZoneSelectorWindow writes the screen
-    // state through non-const operator[], so an iterator held across it is
-    // the detach hazard hideZoneSelector's comment warns about.
-    const auto it = m_screenStates.constFind(screenId);
-    if (it == m_screenStates.constEnd() || !it->zoneSelectorSlot()) {
-        return;
-    }
-    auto* slot = it->zoneSelectorSlot();
-    writeQmlProperty(slot, QStringLiteral("selectedStripColumn"), -1);
-    writeQmlProperty(slot, QStringLiteral("selectedStripGap"), -1);
-    writeQmlProperty(slot, QStringLiteral("selectedStripHalf"), -1);
 }
 
 void OverlayService::updateStripSelectorHit(QQuickItem* slot, int localX, int localY, const QString& screenId)
@@ -201,6 +225,14 @@ void OverlayService::updateStripSelectorHit(QQuickItem* slot, int localX, int lo
     m_selectedLayoutId.clear();
     m_selectedZoneIndex = -1;
     m_selectedZoneRelGeo = QRectF();
+    // The other family's PAINTED half too, or a screen that flipped from
+    // layout mode to strip mode keeps the old zone highlight drawn under the
+    // strip cards (slot properties survive the mode flip). Gated on a read
+    // so the common every-tick case (already blank) writes nothing.
+    if (!slot->property("selectedLayoutId").toString().isEmpty()) {
+        writeQmlProperty(slot, QStringLiteral("selectedLayoutId"), QString());
+        writeQmlProperty(slot, QStringLiteral("selectedZoneIndex"), -1);
+    }
 
     const bool changed = target.columnIndex != m_selectedStripTarget.columnIndex
         || target.tileIndex != m_selectedStripTarget.tileIndex || target.newColumn != m_selectedStripTarget.newColumn
