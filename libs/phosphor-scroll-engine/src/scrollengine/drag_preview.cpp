@@ -89,8 +89,8 @@ bool ScrollEngine::dragPreviewRestoreSlot(ScrollState* state, const QString& win
         inserted = strip.insertWindowAt(slot.column, windowId, slot.width, slot.display, params);
     }
     if (!inserted) {
-        inserted = strip.insertWindow(windowId, params.defaultColumnWidth,
-                                      effectiveDefaultColumnDisplay(screenId), params, slot.minWidth, slot.minHeight);
+        inserted = strip.insertWindow(windowId, params.defaultColumnWidth, effectiveDefaultColumnDisplay(screenId),
+                                      params, slot.minWidth, slot.minHeight);
     }
     if (inserted) {
         if (slot.minWidth > 0 || slot.minHeight > 0) {

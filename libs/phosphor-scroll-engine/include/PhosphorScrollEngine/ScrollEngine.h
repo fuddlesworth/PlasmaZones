@@ -1164,9 +1164,9 @@ private:
     QHash<QString, QSet<QString>> m_consumedInitialOrder;
     /// Snapshot @p state's strip as a stash entry (columns + focus + view
     /// anchor). Empty columns list when the state is null or empty.
-    StashedStrip buildStashFromState(const ScrollState* state,
-                                     std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis
-                                     = std::nullopt) const;
+    StashedStrip
+    buildStashFromState(const ScrollState* state,
+                        std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis = std::nullopt) const;
     /// Mode-round-trip structure stash (see stashStripStructure). The
     /// stashed lists stay INTACT while they live (positions are counted
     /// against windows already present); consumption is tracked in

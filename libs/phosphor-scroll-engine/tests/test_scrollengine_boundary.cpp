@@ -488,9 +488,10 @@ private Q_SLOTS:
         // left a hidden tab that failed to park invisible to the case.
         for (const char* id : {"app|b", "app|c"}) {
             const QJsonObject entry = lastEntryFor(tiled, QString::fromLatin1(id));
-            QVERIFY2(!entry.isEmpty(),
-                     qPrintable(QStringLiteral("expected %1 of the tabbed column in the tile batch")
-                                    .arg(QString::fromLatin1(id))));
+            QVERIFY2(
+                !entry.isEmpty(),
+                qPrintable(
+                    QStringLiteral("expected %1 of the tabbed column in the tile batch").arg(QString::fromLatin1(id))));
             QVERIFY2(entry.value(QLatin1String("y")).toInt() > screen.bottom(),
                      qPrintable(QStringLiteral("the fixture must park the tabbed column's every tile, including %1")
                                     .arg(QString::fromLatin1(id))));

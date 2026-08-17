@@ -285,8 +285,9 @@ void ScrollEngine::releaseScreenState(ScrollState* state, QStringList& releasedW
     state->deleteLater();
 }
 
-StashedStrip ScrollEngine::buildStashFromState(
-    const ScrollState* state, std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis) const
+StashedStrip
+ScrollEngine::buildStashFromState(const ScrollState* state,
+                                  std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis) const
 {
     StashedStrip out;
     if (!state || state->strip().isEmpty()) {
@@ -341,8 +342,8 @@ StashedStrip ScrollEngine::buildStashFromState(
     // walk, where resolving live would invoke the injected providers
     // mid-iteration (see setActiveScreens).
     out.axis = state->hasResolvedAxis() ? state->resolvedAxis().axis()
-        : preResolvedFallbackAxis      ? *preResolvedFallbackAxis
-                                       : stripAxisForScreen(state->screenId()).axis();
+        : preResolvedFallbackAxis       ? *preResolvedFallbackAxis
+                                        : stripAxisForScreen(state->screenId()).axis();
     return out;
 }
 
