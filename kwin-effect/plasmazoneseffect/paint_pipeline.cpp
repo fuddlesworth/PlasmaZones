@@ -1576,9 +1576,7 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                             bsIt != m_packBufferScaleCache.end()) {
                             packScale = bsIt->second;
                         } else {
-                            packScale = qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale,
-                                               m_surfaceShaderRegistry.effect(packId).bufferScale,
-                                               PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
+                            packScale = clampedBufferScale(m_surfaceShaderRegistry.effect(packId).bufferScale);
                             m_packBufferScaleCache.emplace(packId, packScale);
                         }
                         scale = qMax(scale, packScale);

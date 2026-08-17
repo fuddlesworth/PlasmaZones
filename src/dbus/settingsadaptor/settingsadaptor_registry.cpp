@@ -563,6 +563,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("decorationAnimateFocusedOnly", decorationAnimateFocusedOnly, setDecorationAnimateFocusedOnly)
     REGISTER_BOOL_SETTING("decorationPauseWhenIdle", decorationPauseWhenIdle, setDecorationPauseWhenIdle)
     REGISTER_INT_SETTING("decorationIdleTimeoutSec", decorationIdleTimeoutSec, setDecorationIdleTimeoutSec)
+    REGISTER_DOUBLE_SETTING("decorationBlurScaleMultiplier", decorationBlurScaleMultiplier,
+                            setDecorationBlurScaleMultiplier)
     // animationExcludedApplications / animationExcludedWindowClasses
     // retired in v4 — folded into ExcludeAnimations Rules; the
     // effect derives its animation exclusion rule set from the unified

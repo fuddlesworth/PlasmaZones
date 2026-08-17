@@ -1855,13 +1855,15 @@ private:
     /// (WindowDecoration::basePackId) here.
     std::unordered_map<QString, CompiledSurfacePack> m_compiledPacks;
 
-    /// Per-pack CLAMPED bufferScale, cached off the registry's by-value
+    /// Per-pack CLAMPED bufferScale (clampedBufferScale() — the user's global
+    /// multiplier already folded in), cached off the registry's by-value
     /// SurfaceShaderEffect lookup for the per-frame backdrop-density resolve
     /// (chainBackdropScale in paint_pipeline.cpp). Metadata only — the
     /// linked-uniform verdicts are compile state and deliberately NOT cached
     /// here (see that lambda's comment for the two bugs a raw probe caused).
-    /// Cleared wherever m_compiledPacks clears: a registry hot-reload can
-    /// change the metadata too.
+    /// Cleared wherever m_compiledPacks clears (a registry hot-reload can
+    /// change the metadata too) AND when m_decorationBlurScaleMultiplier
+    /// changes, since the cached product bakes the multiplier in.
     std::unordered_map<QString, qreal> m_packBufferScaleCache;
 
     /// Has ANY compiled pack ever declared iMouse in the current compile generation?
@@ -2780,6 +2782,29 @@ private:
 
     /// Stop animating once the session goes idle, resume on the first input.
     bool m_pauseAnimationWhenIdle = true;
+
+    /// Multiplier on each pack's declared buffer-pass bufferScale
+    /// (Decorations.Performance.BlurScaleMultiplier) — unlike its WHEN-gating
+    /// group-mates above, this one shrinks (or raises) the per-frame blur work
+    /// itself. Applied through clampedBufferScale(), the single chokepoint both
+    /// buffer-target sizing (surface_capture.cpp) and the per-frame
+    /// backdrop-density resolve (paint_pipeline.cpp) go through, so capture
+    /// density and sampler density keep agreeing by construction. Mirrors
+    /// ConfigDefaults::decorationBlurScaleMultiplier() until the daemon pushes
+    /// the real value.
+    qreal m_decorationBlurScaleMultiplier = 1.0;
+
+    /// The one clamp every consumer of a pack's metadata bufferScale applies:
+    /// the user's global multiplier folded in, then bounded into the band the
+    /// buffer-target allocator accepts. m_packBufferScaleCache stores THIS
+    /// value, so the cache must clear whenever the multiplier changes (the
+    /// daemon_settings.cpp loader does).
+    qreal clampedBufferScale(qreal metadataScale) const
+    {
+        return qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale,
+                      metadataScale * m_decorationBlurScaleMultiplier,
+                      PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
+    }
 
     /// Whether the session is currently idle. Pushed by the daemon, which owns the
     /// idle detection: idleness is a WAYLAND CLIENT concern (ext-idle-notify-v1)

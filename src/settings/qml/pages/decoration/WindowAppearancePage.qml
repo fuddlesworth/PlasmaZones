@@ -44,6 +44,37 @@ SettingsFlickable {
     // table, so a picker cannot offer a scope the effect would reject.
     readonly property var scopeOptions: settingsController.valueOptions("Windows", "BorderScope")
 
+    // Blur-quality tiers for the Blur card: a multiplier on the buffer-pass
+    // resolution each decoration pack declares. Fixed tiers rather than a free
+    // slider, because the useful values cluster at halve / keep / double and
+    // the effect clamps the product into its allocator band anyway.
+    readonly property var blurQualityOptions: [
+        {
+            text: i18n("Low"),
+            value: 0.5
+        },
+        {
+            text: i18n("Balanced"),
+            value: 1.0
+        },
+        {
+            text: i18n("High"),
+            value: 2.0
+        }
+    ]
+
+    // Nearest tier for the stored multiplier, so a hand-edited config value
+    // still highlights the closest option instead of a blank combo.
+    function blurQualityIndex(value) {
+        var best = 0;
+        for (var i = 1; i < root.blurQualityOptions.length; ++i) {
+            if (Math.abs(root.blurQualityOptions[i].value - value) < Math.abs(root.blurQualityOptions[best].value - value)) {
+                best = i;
+            }
+        }
+        return best;
+    }
+
     // Index of @p scope in scopeOptions, or -1 when it is not a listed token.
     function scopeIndex(scope) {
         for (var i = 0; i < root.scopeOptions.length; ++i) {
@@ -641,6 +672,41 @@ SettingsFlickable {
                         onMoved: value => {
                             appSettings.decorationIdleTimeoutSec = Math.round(value);
                         }
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // BLUR CARD
+        // =====================================================================
+        // The base blur every glass-family decoration pack builds on renders at
+        // the pack's declared buffer resolution. This card scales that
+        // resolution globally, which is the per-frame cost lever (the
+        // Performance card above gates WHEN the chain animates instead). Stays
+        // in simple mode: on an integrated GPU this single knob is the
+        // difference between affordable and expensive blur, and it changes
+        // what the user sees.
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Blur")
+            searchAnchor: "decorationBlur"
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Blur quality")
+                    searchAnchor: "decorationBlurQuality"
+                    description: i18n("The resolution decoration shaders compute their blur at, relative to what each shader pack chooses for itself. Lower is cheaper on the graphics card and looks a little softer in motion. Higher is sharper and costs more.")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Blur quality")
+                        textRole: "text"
+                        model: root.blurQualityOptions
+                        currentIndex: root.blurQualityIndex(appSettings.decorationBlurScaleMultiplier)
+                        onActivated: index => appSettings.decorationBlurScaleMultiplier = root.blurQualityOptions[index].value
                     }
                 }
             }

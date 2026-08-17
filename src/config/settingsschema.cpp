@@ -1204,6 +1204,17 @@ void appendDecorationsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::decorationIdleTimeoutSecMin(), CD::decorationIdleTimeoutSecMax())},
+        // Multiplier on each pack's declared buffer-pass resolution (the blur
+        // pyramid density). Clamped here for the same reason as the timeout
+        // above: the effect multiplies this straight into its bufferScale
+        // clamp, and a hand-edited 0 or negative value would collapse every
+        // buffer target to the minimum (or invert the sense of the knob)
+        // rather than fail loudly.
+        {CD::blurScaleMultiplierKey(),
+         CD::decorationBlurScaleMultiplier(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::decorationBlurScaleMultiplierMin(), CD::decorationBlurScaleMultiplierMax())},
     };
 }
 

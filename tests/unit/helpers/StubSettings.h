@@ -2025,6 +2025,22 @@ public:
         Q_EMIT decorationIdleTimeoutSecChanged();
         Q_EMIT settingsChanged();
     }
+    double decorationBlurScaleMultiplier() const override
+    {
+        return m_decorationBlurScaleMultiplier;
+    }
+    void setDecorationBlurScaleMultiplier(double value) override
+    {
+        // Mirror the schema's clampDouble, same rationale as the timeout above.
+        const double clamped = qBound(ConfigDefaults::decorationBlurScaleMultiplierMin(), value,
+                                      ConfigDefaults::decorationBlurScaleMultiplierMax());
+        if (qFuzzyCompare(m_decorationBlurScaleMultiplier, clamped)) {
+            return;
+        }
+        m_decorationBlurScaleMultiplier = clamped;
+        Q_EMIT decorationBlurScaleMultiplierChanged();
+        Q_EMIT settingsChanged();
+    }
 
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override
@@ -2904,6 +2920,7 @@ private:
     bool m_decorationAnimateFocusedOnly = ConfigDefaults::decorationAnimateFocusedOnly();
     bool m_decorationPauseWhenIdle = ConfigDefaults::decorationPauseWhenIdle();
     int m_decorationIdleTimeoutSec = ConfigDefaults::decorationIdleTimeoutSec();
+    double m_decorationBlurScaleMultiplier = ConfigDefaults::decorationBlurScaleMultiplier();
     bool m_showWindowOpacityTint = ConfigDefaults::showWindowOpacityTint();
     QString m_windowOpacityTintScope = ConfigDefaults::windowOpacityTintScope();
     double m_windowOpacity = ConfigDefaults::windowOpacity();

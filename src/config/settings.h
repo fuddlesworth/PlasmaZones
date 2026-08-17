@@ -522,6 +522,8 @@ public:
                    decorationPauseWhenIdleChanged)
     Q_PROPERTY(int decorationIdleTimeoutSec READ decorationIdleTimeoutSec WRITE setDecorationIdleTimeoutSec NOTIFY
                    decorationIdleTimeoutSecChanged)
+    Q_PROPERTY(double decorationBlurScaleMultiplier READ decorationBlurScaleMultiplier WRITE
+                   setDecorationBlurScaleMultiplier NOTIFY decorationBlurScaleMultiplierChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -1583,6 +1585,8 @@ public:
     void setDecorationPauseWhenIdle(bool value) override;
     int decorationIdleTimeoutSec() const override;
     void setDecorationIdleTimeoutSec(int value) override;
+    double decorationBlurScaleMultiplier() const override;
+    void setDecorationBlurScaleMultiplier(double value) override;
 
     // Additional Autotiling Settings — PhosphorConfig::Store-backed.
     bool autotileFocusFollowsMouse() const override;

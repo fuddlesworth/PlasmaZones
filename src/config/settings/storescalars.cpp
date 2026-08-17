@@ -255,6 +255,13 @@ P_STORE_GET(int, decorationIdleTimeoutSec, decorationsPerformanceGroup, idleTime
 P_STORE_SET_INT(setDecorationIdleTimeoutSec, decorationsPerformanceGroup, idleTimeoutSecKey,
                 decorationIdleTimeoutSecChanged)
 
+// Unlike its WHEN-gating group-mates this one shrinks the per-frame work: it
+// scales the resolution every pack's buffer passes (the blur pyramid) render
+// at, relative to the pack's own declared bufferScale.
+P_STORE_GET(double, decorationBlurScaleMultiplier, decorationsPerformanceGroup, blurScaleMultiplierKey, double)
+P_STORE_SET_DOUBLE(setDecorationBlurScaleMultiplier, decorationsPerformanceGroup, blurScaleMultiplierKey,
+                   decorationBlurScaleMultiplierChanged)
+
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values
 // to a known backend, so a hand-edited "Rendering.Backend = foobar" reads

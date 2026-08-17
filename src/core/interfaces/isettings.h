@@ -189,6 +189,13 @@ public:
     virtual void setDecorationPauseWhenIdle(bool value) = 0;
     virtual int decorationIdleTimeoutSec() const = 0;
     virtual void setDecorationIdleTimeoutSec(int value) = 0;
+    /// Multiplier on the bufferScale each decoration pack declares for its
+    /// buffer passes (the blur pyramid density). Not a WHEN gate like its
+    /// group-mates: it shrinks the per-frame work instead, which is the lever
+    /// that matters on integrated GPUs where the blur passes themselves are
+    /// the cost.
+    virtual double decorationBlurScaleMultiplier() const = 0;
+    virtual void setDecorationBlurScaleMultiplier(double value) = 0;
 
     /// The system colour scheme as a "light" / "dark" token, or empty when the
     /// process cannot observe a palette (no GUI application, or an off-GUI-thread
@@ -900,6 +907,7 @@ Q_SIGNALS:
     void decorationAnimateFocusedOnlyChanged();
     void decorationPauseWhenIdleChanged();
     void decorationIdleTimeoutSecChanged();
+    void decorationBlurScaleMultiplierChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

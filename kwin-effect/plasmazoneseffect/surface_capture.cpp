@@ -154,9 +154,7 @@ bool PlasmaZonesEffect::ensureSurfaceTargets(const QString& windowId, SurfaceMul
                 continue;
             }
             const PhosphorSurfaceShaders::SurfaceShaderEffect eff = m_surfaceShaderRegistry.effect(chain.at(k));
-            const qreal bufferScale =
-                qBound(PhosphorSurfaceShaders::SurfaceShaderEffect::kMinBufferScale, eff.bufferScale,
-                       PhosphorSurfaceShaders::SurfaceShaderEffect::kMaxBufferScale);
+            const qreal bufferScale = clampedBufferScale(eff.bufferScale);
             const QSize bufferSize(qMax(1, qRound(textureSize.width() * bufferScale)),
                                    qMax(1, qRound(textureSize.height() * bufferScale)));
             auto& bufs = state.chainBufferTex[k];

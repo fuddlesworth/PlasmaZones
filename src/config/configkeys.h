@@ -510,6 +510,7 @@ public:
     P_CONFIG_KEY(animateFocusedOnlyKey, "AnimateFocusedOnly")
     P_CONFIG_KEY(pauseWhenIdleKey, "PauseWhenIdle")
     P_CONFIG_KEY(idleTimeoutSecKey, "IdleTimeoutSec")
+    P_CONFIG_KEY(blurScaleMultiplierKey, "BlurScaleMultiplier")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Tiling.Gaps

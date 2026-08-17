@@ -176,6 +176,37 @@ void PlasmaZonesEffect::loadCachedSettings()
             repaintAllDecorations();
         }
     });
+    // Multiplier on each pack's declared buffer-pass bufferScale — the blur
+    // pyramid density. On change every derived artifact that baked the old
+    // density is stale: the per-pack clamped-scale cache stores the PRODUCT
+    // (clampedBufferScale), and each window's buffer targets were allocated at
+    // the old size. Clearing chainKey makes the next fold's ensureSurfaceTargets
+    // reallocate them (with the GL context current there, where the FBO
+    // deletion is safe), and the fold invalidation forces that next fold — a
+    // static chain would otherwise early-return its cached composite forever
+    // and never notice. The capture density self-heals: captureScaleKey is
+    // recomputed per frame from the (now cleared) scale cache.
+    loadSettingAsync(QStringLiteral("decorationBlurScaleMultiplier"), [this](const QVariant& v) {
+        // Numeric-or-bust guard, same rationale as the bool loaders above: an
+        // older daemon answers unknown keys with a valid EMPTY reply, and
+        // QVariant("").toReal() is 0.0 — which would floor every buffer target
+        // to kMinBufferScale instead of leaving the default multiplier alone.
+        bool ok = false;
+        const qreal m = v.toReal(&ok);
+        if (!ok || m <= 0.0) {
+            return;
+        }
+        if (!qFuzzyCompare(m_decorationBlurScaleMultiplier, m)) {
+            m_decorationBlurScaleMultiplier = m;
+            m_packBufferScaleCache.clear();
+            for (auto& [id, surfaceState] : m_surfaceMultipass) {
+                surfaceState.chainKey.clear();
+                surfaceState.compositeValid = false;
+                surfaceState.prefixValid = false;
+            }
+            repaintAllDecorations();
+        }
+    });
 
     loadSettingAsync(QStringLiteral("showWindowBorder"), [this](const QVariant& v) {
         // Type-guard every bool loader in this file, not only the default-true

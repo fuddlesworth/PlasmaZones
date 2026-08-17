@@ -512,6 +512,13 @@ void seedSearchCatalog(PhosphorControl::SearchController* search)
         PhosphorI18n::tr("Idle after"),
         {PhosphorI18n::tr("idle"), PhosphorI18n::tr("timeout"), PhosphorI18n::tr("power"), PhosphorI18n::tr("battery")},
         /*advancedOnly=*/true);
+    // The Blur card on the same page — the per-frame cost lever, where the
+    // Performance card gates when the chain animates.
+    addSection(search, QStringLiteral("window-appearance"), QStringLiteral("decorationBlur"), PhosphorI18n::tr("Blur"));
+    addSetting(search, QStringLiteral("window-appearance"), QStringLiteral("decorationBlurQuality"),
+               PhosphorI18n::tr("Blur quality"),
+               {PhosphorI18n::tr("blur"), PhosphorI18n::tr("quality"), PhosphorI18n::tr("resolution"),
+                PhosphorI18n::tr("performance"), PhosphorI18n::tr("gpu"), PhosphorI18n::tr("glass")});
 
     // Window filtering (Decorations.WindowFiltering) — the shared WindowFilterCard
     // on the Window Appearance page. Same anchors the card emits, mirroring the

@@ -521,6 +521,7 @@ const QHash<QString, Settings::ConfigKeyList>& SettingsController::pageOwnedConf
              {CD::decorationsPerformanceGroup(), CD::animateFocusedOnlyKey()},
              {CD::decorationsPerformanceGroup(), CD::pauseWhenIdleKey()},
              {CD::decorationsPerformanceGroup(), CD::idleTimeoutSecKey()},
+             {CD::decorationsPerformanceGroup(), CD::blurScaleMultiplierKey()},
              {CD::windowsAppearanceGroup(), CD::showOpacityTintKey()},
              {CD::windowsAppearanceGroup(), CD::opacityTintScopeKey()},
              {CD::windowsAppearanceGroup(), CD::opacityKey()},

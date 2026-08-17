@@ -338,6 +338,28 @@ public:
     {
         return 3600;
     }
+
+    /// Multiplier on the bufferScale a surface pack's metadata declares for its
+    /// buffer passes — the resolution the shared blur pyramid (and any other
+    /// decoration buffer pass) renders at, relative to the pack author's choice.
+    /// 1.0 leaves every pack at its declared density; 0.5 halves it (cheaper on
+    /// the GPU, softer blur edges under motion); 2.0 doubles it toward full
+    /// resolution (the effect clamps the product into the same
+    /// [kMinBufferScale, kMaxBufferScale] band it already clamps the raw
+    /// metadata into). A multiplier rather than an absolute override so packs
+    /// that deliberately run their buffers sharper keep their relative intent.
+    static constexpr double decorationBlurScaleMultiplier()
+    {
+        return 1.0;
+    }
+    static constexpr double decorationBlurScaleMultiplierMin()
+    {
+        return 0.25;
+    }
+    static constexpr double decorationBlurScaleMultiplierMax()
+    {
+        return 2.0;
+    }
 };
 
 } // namespace PlasmaZones
