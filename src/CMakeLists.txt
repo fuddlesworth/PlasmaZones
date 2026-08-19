@@ -163,6 +163,8 @@ set(plasmazones_core_SRCS
     dbus/windowtrackingadaptor/queries.cpp
     dbus/windowtrackingadaptor/enginewiring.cpp
     dbus/windowtrackingadaptor/rules.cpp
+    dbus/windowtrackingadaptor/rules_placement.cpp
+    dbus/windowtrackingadaptor/rules_admission.h
     dbus/windowtrackingadaptor/crossmode.cpp
     dbus/windowtrackingadaptor/navigation.cpp
     dbus/windowtrackingadaptor/float.cpp

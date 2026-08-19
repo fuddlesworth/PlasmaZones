@@ -51,6 +51,7 @@ private:
     PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettings* m_settings = nullptr;
     PhosphorPlacement::WindowTrackingService* m_wts = nullptr;
+    std::unique_ptr<SnapEngine> m_engine;
 
     // Register a fresh equal-split layout of zoneCount zones as the active layout
     // and return it, so callers can assert on specific zone ids. (Engine/SnapState
@@ -64,8 +65,11 @@ private:
     }
 
     // Seed a placement record whose snap slot has @p state + @p zoneIds, as a
-    // prior daemon session's capture would have persisted it.
-    void seedSnapSlotRecord(SnapEngine& engine, const QString& windowId, const QString& state,
+    // prior daemon session's capture would have persisted it. Returns the
+    // store's verdict rather than asserting it: a QVERIFY inside a helper
+    // returns only from the helper, so the caller QVERIFYs the result and
+    // stops the slot on failure.
+    bool seedSnapSlotRecord(SnapEngine& engine, const QString& windowId, const QString& state,
                             const QStringList& zoneIds, const QString& screenId = QStringLiteral("DP-1"))
     {
         PhosphorEngine::WindowPlacement p;
@@ -76,7 +80,7 @@ private:
         slot.state = state;
         slot.zoneIds = zoneIds;
         p.engines.insert(engine.engineId(), slot);
-        QVERIFY(m_wts->placementStore().record(p));
+        return m_wts->placementStore().record(p);
     }
 
 private Q_SLOTS:
@@ -89,15 +93,22 @@ private Q_SLOTS:
         // QGuiApplication::primaryScreen() (valid under the offscreen QPA), which
         // is exactly what makes the on-success geometry path reachable here.
         m_wts = new PhosphorPlacement::WindowTrackingService(m_layoutManager, nullptr, nullptr);
+        // One engine per test, wired the way every slot used to wire its own
+        // stack local: settings injected and its snap state installed on the
+        // service. The slots alias it as `engine`.
+        m_engine = std::make_unique<SnapEngine>(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
+        m_engine->setEngineSettings(m_settings);
+        m_wts->setSnapState(m_engine->snapState());
     }
 
-    // Runs after EVERY test function, so the per-test bodies do not repeat the
-    // snap-state detach: the engine they wired is a stack local that has already
-    // gone away by the time this runs, and setSnapState(nullptr) only drops the
-    // resolver (it never dereferences the outgoing store).
+    // Runs after EVERY test function. Detach the engine's snap state from the
+    // service before the engine goes (setSnapState(nullptr) only drops the
+    // resolver, it never dereferences the outgoing store), then the engine
+    // before the service it borrows.
     void cleanup()
     {
         m_wts->setSnapState(nullptr);
+        m_engine.reset();
         delete m_wts;
         delete m_settings;
         delete m_layoutManager;
@@ -120,9 +131,7 @@ private Q_SLOTS:
     // valid geometry on the requested screen.
     void testFallback_on_noLastUsed_selectsFirstEmptyZone()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString firstZone = layout->zones().first()->id().toString();
@@ -143,9 +152,7 @@ private Q_SLOTS:
     // resolver prefers the last-used zone over the first-empty fallback.
     void testFallback_on_prefersLastUsedZone()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString secondZone = layout->zones().at(1)->id().toString();
@@ -169,9 +176,7 @@ private Q_SLOTS:
     // guard.
     void testFallback_on_lastUsedFromOtherLayout_fallsThroughToFirstEmpty()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         // `layout` is installed FIRST, so it is the registry's default
         // (resolveLayoutForScreen → defaultLayout() → m_layouts.first() when no
@@ -205,9 +210,7 @@ private Q_SLOTS:
     // snapping stacks multiple windows per zone).
     void testFallback_on_allZonesOccupied_fallsBackToFirstZone()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString firstZone = layout->zones().first()->id().toString();
@@ -234,9 +237,7 @@ private Q_SLOTS:
     // the result is driven by the gate, not merely by geometry availability.
     void testFallback_off_returnsNotFoundDespiteValidGeometry()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(2);
         engine.snapState()->setFloatingOnScreen(QStringLiteral("app|w"), QStringLiteral("DP-1"), 0);
@@ -253,9 +254,7 @@ private Q_SLOTS:
     // receives the resolved restore screen.
     void testFallback_predicateOverridesSettingBothWays()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString firstZone = layout->zones().first()->id().toString();
@@ -315,9 +314,7 @@ private Q_SLOTS:
     // exists here.
     void testFallback_callerScreenNotALiveOutput_resolvesOnTrackedScreen()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString firstZone = layout->zones().first()->id().toString();
@@ -351,9 +348,7 @@ private Q_SLOTS:
     // rule's snap only resolves with valid zone geometry.
     void testResolveWindowRestore_placementRule_beatsFloatedRecord_preservesFreeGeo()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(3);
         engine.setPlacementZonesResolver([](const QString&, const QString&) {
@@ -394,9 +389,7 @@ private Q_SLOTS:
     // (nothing to inherit, so no float-back to preserve).
     void testResolveWindowRestore_placementRule_noRecord_snaps()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(3);
         engine.setPlacementZonesResolver([](const QString&, const QString&) {
@@ -415,9 +408,7 @@ private Q_SLOTS:
     // result.screenId is the target (the apply path then moves the window there).
     void testResolveWindowRestore_routeToScreen_resolvesOnTargetScreen()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(3);
         // Window opens on DP-1 but the rule routes it to DP-2 and snaps zone 1.
@@ -439,9 +430,7 @@ private Q_SLOTS:
     // momentarily opened on).
     void testResolveWindowRestore_routeToDesktop_stampsResultDesktop()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(3);
         // Snap zone 1, and route to virtual desktop 2.
@@ -468,9 +457,7 @@ private Q_SLOTS:
     // path (resolveWindowRestore → commitSnap forwards result.virtualDesktop).
     void testUnfloatToZone_routeToDesktop_commitsAssignmentOnRoutedDesktop()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(3);
         // Snap zone 1, and route to virtual desktop 2.
@@ -495,9 +482,7 @@ private Q_SLOTS:
     // falls through to the normal restore/float path.
     void testResolveWindowRestore_placementRule_emptyResolver_doesNotSnap()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(3);
         engine.setPlacementZonesResolver([](const QString&, const QString&) {
@@ -517,9 +502,7 @@ private Q_SLOTS:
     // ordinal is added once so the span does not double-count it.
     void testResolveWindowRestore_placementRule_zoneNames_resolveByName()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         PhosphorZones::Layout* layout = installLayout(3);
         layout->zones().at(2)->setName(QStringLiteral("Editor"));
@@ -555,6 +538,33 @@ private Q_SLOTS:
         });
         result = engine.resolveWindowRestore(QStringLiteral("fresh|win3"), QStringLiteral("DP-1"), /*sticky*/ false);
         QVERIFY2(!result.shouldSnap, "a name absent from the active layout must not snap");
+
+        // Two spellings of ONE name resolve to one zone id, not two: the dedupe
+        // is by zone id, and the lookup is case-insensitive and trimmed.
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PlacementDirective d;
+            d.zoneNames = {QStringLiteral("Editor"), QStringLiteral("  EDITOR  ")};
+            return d;
+        });
+        result = engine.resolveWindowRestore(QStringLiteral("fresh|win4"), QStringLiteral("DP-1"), /*sticky*/ false);
+        QVERIFY(result.shouldSnap);
+        QCOMPARE(result.zoneIds, QStringList{editorId});
+
+        // Two DISTINCT names span two zones — the name path is a real span, not
+        // a first-match-and-stop — and the ids come back in DIRECTIVE order (the
+        // first becomes the anchor zoneId), not zone-number order, so the names
+        // are listed against the numbering on purpose.
+        layout->zones().at(0)->setName(QStringLiteral("Browser"));
+        const QString browserId = layout->zones().at(0)->id().toString();
+        engine.setPlacementZonesResolver([](const QString&, const QString&) {
+            PlacementDirective d;
+            d.zoneNames = {QStringLiteral("Editor"), QStringLiteral("Browser")};
+            return d;
+        });
+        result = engine.resolveWindowRestore(QStringLiteral("fresh|win5"), QStringLiteral("DP-1"), /*sticky*/ false);
+        QVERIFY(result.shouldSnap);
+        QCOMPARE(result.zoneIds, (QStringList{editorId, browserId}));
+        QCOMPARE(result.zoneId, editorId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -570,9 +580,7 @@ private Q_SLOTS:
 
     void testResolveUnfloat_noLiveCapture_fallsBackToRecordFloatingSlot()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().first()->id().toString();
@@ -582,7 +590,7 @@ private Q_SLOTS:
         // in-memory pre-float capture is gone.
         engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
         QVERIFY(m_wts->preFloatZones(w).isEmpty());
-        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateFloating()), {homeZone});
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateFloating()), {homeZone}));
 
         const PhosphorEngine::UnfloatResult r = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
         QVERIFY2(r.found, "record's floating slot carries the pre-float zones — unfloat must find them");
@@ -592,16 +600,14 @@ private Q_SLOTS:
 
     void testResolveUnfloat_noLiveCapture_fallsBackToRecordSnappedSlot()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().last()->id().toString();
         const QString w = QStringLiteral("app|stalerec");
 
         engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
-        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone});
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone}));
 
         const PhosphorEngine::UnfloatResult r = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
         QVERIFY2(r.found, "a stale snapped slot still names the window's home zone — unfloat must use it");
@@ -616,9 +622,7 @@ private Q_SLOTS:
     // instead of resolving against the missing monitor or failing outright.
     void testResolveUnfloat_recordScreenGone_degradesToFallbackScreen()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().first()->id().toString();
@@ -630,8 +634,8 @@ private Q_SLOTS:
         // name like DP-2 would resolve as a REAL monitor when the test binary
         // is run directly on a developer's session instead of under ctest's
         // offscreen QPA).
-        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
-                           QStringLiteral("PZTEST-UNPLUGGED-1"));
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                                   QStringLiteral("PZTEST-UNPLUGGED-1")));
 
         const PhosphorEngine::UnfloatResult r = engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"));
         QVERIFY2(r.found, "a record naming a missing screen must still restore via the fallback screen");
@@ -648,9 +652,7 @@ private Q_SLOTS:
     // tests above cover only in isolation.
     void testToggleUnfloat_noCaptureNoRecord_snapsToFallbackZone()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString firstZone = layout->zones().first()->id().toString();
@@ -668,9 +670,7 @@ private Q_SLOTS:
 
     void testResolveUnfloat_noLiveCapture_noRecord_staysNotFound()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(2);
         engine.snapState()->setFloatingOnScreen(QStringLiteral("app|norec"), QStringLiteral("DP-1"), 0);
@@ -687,17 +687,15 @@ private Q_SLOTS:
     // unfloat target — the caller keeps the window floating where it is.
     void testResolveUnfloat_confined_recordOnOtherMonitor_staysNotFound()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().first()->id().toString();
         const QString w = QStringLiteral("app|suspended");
 
         engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
-        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
-                           QStringLiteral("HDMI-1"));
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                                   QStringLiteral("HDMI-1")));
 
         const PhosphorEngine::UnfloatResult r =
             engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
@@ -718,17 +716,15 @@ private Q_SLOTS:
     // screen would be refused.
     void testResolveUnfloat_confined_virtualIdFormSameMonitor_restores()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().first()->id().toString();
         const QString w = QStringLiteral("app|vsform");
 
         engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
-        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
-                           QStringLiteral("DP-1/vs:0"));
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                                   QStringLiteral("DP-1/vs:0")));
 
         const PhosphorEngine::UnfloatResult r =
             engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
@@ -741,16 +737,15 @@ private Q_SLOTS:
     // degrades it to the caller's live screen, a same-monitor restore.
     void testResolveUnfloat_confined_emptyRecordScreen_restoresOnLiveScreen()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().first()->id().toString();
         const QString w = QStringLiteral("app|noscreen");
 
         engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
-        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone}, QString());
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                                   QString()));
 
         const PhosphorEngine::UnfloatResult r =
             engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
@@ -760,17 +755,15 @@ private Q_SLOTS:
 
     void testResolveUnfloat_confined_recordScreenGone_refuses()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().first()->id().toString();
         const QString w = QStringLiteral("app|goneconfined");
 
         engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
-        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
-                           QStringLiteral("PZTEST-UNPLUGGED-1"));
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                                   QStringLiteral("PZTEST-UNPLUGGED-1")));
 
         // Deliberate divergence from the UNCONFINED twin
         // (testResolveUnfloat_recordScreenGone_degradesToFallbackScreen): a
@@ -788,9 +781,7 @@ private Q_SLOTS:
     // minimized recovery the record fallback exists for.
     void testResolveUnfloat_confined_recordSameMonitor_restores()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().last()->id().toString();
@@ -800,8 +791,8 @@ private Q_SLOTS:
         // Screen passed explicitly (not left to the helper's default) so the
         // "same monitor" premise of this test is visible in the test body,
         // symmetrical with the cross-monitor twin above.
-        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
-                           QStringLiteral("DP-1"));
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                                   QStringLiteral("DP-1")));
 
         const PhosphorEngine::UnfloatResult r =
             engine.resolveUnfloatGeometry(w, QStringLiteral("DP-1"), /*confineToFallbackScreen=*/true);
@@ -818,17 +809,15 @@ private Q_SLOTS:
     // zone and unfloat-snap it there (cross-window zone bleed).
     void testResolveUnfloat_noLiveCaptureNoOwnRecord_ignoresAppIdSibling()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString siblingZone = layout->zones().first()->id().toString();
 
         // The sibling instance persisted a snapped record; the window under
         // test is floating with NO record of its own and no live capture.
-        seedSnapSlotRecord(engine, QStringLiteral("app|sibling"),
-                           QString(PhosphorEngine::WindowPlacement::stateSnapped()), {siblingZone});
+        QVERIFY(seedSnapSlotRecord(engine, QStringLiteral("app|sibling"),
+                                   QString(PhosphorEngine::WindowPlacement::stateSnapped()), {siblingZone}));
         engine.snapState()->setFloatingOnScreen(QStringLiteral("app|recordless"), QStringLiteral("DP-1"), 0);
 
         const PhosphorEngine::UnfloatResult r =
@@ -853,9 +842,7 @@ private Q_SLOTS:
     // setting on), so a suspension unfloat that took either one would snap.
     void testSetWindowFloat_suspension_takesNeitherRuleNorFallbackTier()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(3);
         engine.setPlacementZonesResolver([](const QString&, const QString&) {
@@ -891,17 +878,15 @@ private Q_SLOTS:
     // needed to repair nothing.
     void testSetWindowFloat_suspension_crossMonitorHomeRefused_userToggleStillRestores()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().first()->id().toString();
         const QString w = QStringLiteral("app|crossmon");
 
         engine.snapState()->setFloatingOnScreen(w, QStringLiteral("DP-1"), 0);
-        seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
-                           QStringLiteral("HDMI-1"));
+        QVERIFY(seedSnapSlotRecord(engine, w, QString(PhosphorEngine::WindowPlacement::stateSnapped()), {homeZone},
+                                   QStringLiteral("HDMI-1")));
         m_wts->markSuspensionFloat(w);
 
         engine.setWindowFloat(w, false, QStringLiteral("DP-1"));
@@ -923,9 +908,7 @@ private Q_SLOTS:
 
     void testToggleWindowFloat_reportsNotManagedForAnUntrackedWindow()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(2);
         QSignalSpy spy(&engine, &PhosphorEngine::PlacementEngineBase::navigationFeedback);
@@ -942,9 +925,7 @@ private Q_SLOTS:
 
     void testToggleWindowFloat_reportsNoPreFloatZoneWhenNothingToRestore()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         installLayout(2);
         // Fallback tier off, no pre-float capture and no record → every unfloat
@@ -969,9 +950,7 @@ private Q_SLOTS:
     // that normally clear it).
     void testToggleWindowFloat_roundTrip_reportsBothWaysAndClearsSuspension()
     {
-        SnapEngine engine(m_layoutManager, m_wts, nullptr, nullptr, nullptr);
-        engine.setEngineSettings(m_settings);
-        m_wts->setSnapState(engine.snapState());
+        SnapEngine& engine = *m_engine;
 
         auto* layout = installLayout(2);
         const QString homeZone = layout->zones().first()->id().toString();

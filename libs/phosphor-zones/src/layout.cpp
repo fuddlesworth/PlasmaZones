@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutUtils.h>
 #include "zoneslogging.h"
-#include <QJsonArray>
 #include <QStandardPaths>
 #include <algorithm>
 #include <limits>

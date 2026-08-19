@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Built-in action descriptor table, engine/window-management/animation/overlay
-// half. Split from ruleaction.cpp for file-size; registerBuiltins() calls this
-// then registerBuiltinsAppearance() in that order. Shared param validators and
-// slot helpers live in ruleaction_builtins_p.h.
+// half. Split from ruleaction.cpp for file-size; registerBuiltins() calls this,
+// then registerBuiltinsAppearance(), then registerBuiltinsIndicators(), in that
+// order. Shared param validators and slot helpers live in
+// ruleaction_builtins_p.h.
 
 #include <PhosphorRules/RuleAction.h>
 
@@ -357,8 +358,12 @@ void ActionRegistry::registerBuiltinsEngine()
                         if (!e.isString()) {
                             return false;
                         }
-                        const QString name = e.toString();
-                        if (name.trimmed().isEmpty() || name.size() > MaxZoneNameLength) {
+                        // Trim before measuring: the daemon's placement reader
+                        // trims before it applies the same bound, so the two
+                        // must measure the same string or a padded name could
+                        // pass one and fail the other.
+                        const QString name = e.toString().trimmed();
+                        if (name.isEmpty() || name.size() > MaxZoneNameLength) {
                             return false;
                         }
                     }
@@ -369,8 +374,16 @@ void ActionRegistry::registerBuiltinsEngine()
         .terminal = false,
         .allowedKeys = {QString(ActionParam::Zones), QString(ActionParam::ZoneNames)},
         .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Zones), .kind = QStringLiteral("zoneOrdinals")},
-                   P{.key = QString(ActionParam::ZoneNames), .kind = QStringLiteral("zoneNames")}},
+        // Both picker-aware kinds carry an advisory `max` so the settings editor
+        // reads the bound from the schema instead of re-typing the constant:
+        // the ordinal cap for `zoneOrdinals`, the per-entry character cap for
+        // `zoneNames`.
+        .params = {P{.key = QString(ActionParam::Zones),
+                     .kind = QStringLiteral("zoneOrdinals"),
+                     .max = static_cast<double>(MaxZoneOrdinal)},
+                   P{.key = QString(ActionParam::ZoneNames),
+                     .kind = QStringLiteral("zoneNames"),
+                     .max = static_cast<double>(MaxZoneNameLength)}},
         // No tags: SnapToZone is daemon-placement only (consumed by the SnapEngine
         // open path), not an Effect / Border / Animation / Overlay action.
         .category = QStringLiteral("windowManagement"),

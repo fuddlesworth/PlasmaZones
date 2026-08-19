@@ -217,7 +217,7 @@ SettingsCard {
                                 // index instead; here the ComboBox has already
                                 // moved currentIndex by the time this fires, so
                                 // the two read the same row by different means.
-                                var entry = model[currentIndex];
+                                const entry = model[currentIndex];
                                 root.setSlot(slotDelegate.slotNumber, entry ? (entry.value || "") : "");
                             }
                         }

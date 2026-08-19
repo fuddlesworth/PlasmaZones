@@ -4,7 +4,7 @@
             "version": "3.4.0",
             "date": "2026-08-17",
             "highlights": [
-                "New: the Snap to zone rule action can target zones by name as well as by number. A zone name is looked up in whichever layout is active when the window opens, so a rule that sends an editor to the zone called Editor keeps working when you switch to a layout that numbers its zones differently. Type names in the new Zone names field, or pick them from the names your layouts already use, and mix them with numbers if you like (#924)",
+                "New: the Snap to zone rule action can target zones by name as well as by number. A zone name is looked up in whichever layout is active on the screen the window is placed on, so a rule that sends an editor to the zone called Editor keeps working when you switch to a layout that numbers its zones differently. Type names in the new Zone names field, or pick them from the names your layouts already use, and mix them with numbers if you like (#924)",
                 "New: Scrolling mode, a third placement mode modeled on the niri compositor. Windows form columns on an endless strip and the screen scrolls along it, so opening a window never resizes the ones you have. Assign it to a screen from the Monitors page (#852)",
                 "New: scrolling columns cycle through width presets, maximize, or grow into the empty space on screen, and the windows in a column share it between them or show one at a time as tabs. Consume and expel shortcuts move windows between columns, all on the Meta+Alt family (#852)",
                 "New: hold Meta and scroll the mouse wheel on a scrolling screen to move through columns, the same way niri binds Mod+wheel (#852)",
@@ -60,8 +60,8 @@
             ]
         },
         {
-            "version": "3.3.5",
-            "date": "2026-08-04",
+            "version": "3.3.6",
+            "date": "2026-08-08",
             "highlights": [
                 "Fixed: every window PlasmaZones draws a border on stayed blurry on a display scaled to exactly 150%, and 125% was affected at some window positions (#884)",
                 "Fixed: the default geometry animation drew a window's content squeezed into the rectangle it was travelling through, so text and icons were distorted while the window snapped or tiled (#884)",

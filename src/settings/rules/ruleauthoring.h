@@ -6,6 +6,7 @@
 #include <PhosphorRules/MatchTypes.h>
 
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -104,5 +105,18 @@ QString templateDisplayLabel(const QString& templateName);
 /// `actions` list. See `RuleController::defaultPayloadFor` for the
 /// seeding contract (the controller delegates here).
 QVariantMap defaultPayloadFor(const QString& typeWire);
+
+/// The SnapToZone "Zone names" free-text contract. parseZoneNameList splits
+/// @p text on `,` and `;` outside straight double quotes (a quoted token may
+/// contain separators; a doubled quote inside it stands for one literal
+/// quote), trims every entry, drops blank entries and entries longer than
+/// PhosphorRules::MaxZoneNameLength, and deduplicates case-insensitively,
+/// keeping the first spelling and order. formatZoneNameList is its inverse:
+/// it joins with ", " and quotes any name the parser could not otherwise read
+/// back verbatim, so `parseZoneNameList(formatZoneNameList(x)) == x` for every
+/// list the parser can produce. See `RuleController::parseZoneNameList` (the
+/// controller delegates here).
+QStringList parseZoneNameList(const QString& text);
+QString formatZoneNameList(const QStringList& names);
 
 } // namespace PlasmaZones::RuleAuthoring

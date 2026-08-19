@@ -253,6 +253,20 @@ private Q_SLOTS:
         QVERIFY(layout.zoneByName(QStringLiteral("Browser")) == nullptr);
         QVERIFY(layout.zoneByName(QString()) == nullptr);
         QVERIFY(layout.zoneByName(QStringLiteral("   ")) == nullptr);
+        // A zone whose stored name is blank never matches, not even a blank
+        // query (both trim to empty and the empty query returns early).
+        auto* d = new PhosphorZones::Zone();
+        d->setName(QStringLiteral("   "));
+        d->setZoneNumber(4);
+        layout.addZone(d);
+        QVERIFY(layout.zoneByName(QStringLiteral("   ")) == nullptr);
+        // Equal zone numbers tie on the "lowest number" rule; the tie keeps
+        // the first zone encountered in container order, deterministically.
+        auto* e = new PhosphorZones::Zone();
+        e->setName(QStringLiteral("editor"));
+        e->setZoneNumber(1);
+        layout.addZone(e);
+        QCOMPARE(layout.zoneByName(QStringLiteral("Editor")), b);
     }
 
     void testLayout_clone_newId()
@@ -379,14 +393,13 @@ private Q_SLOTS:
         QCOMPARE(json[QStringLiteral("minAspectRatio")].toDouble(), 1.9);
         QCOMPARE(json[QStringLiteral("maxAspectRatio")].toDouble(), 2.8);
 
-        auto* restored = PhosphorZones::Layout::fromJson(json);
+        const std::unique_ptr<PhosphorZones::Layout> restored(PhosphorZones::Layout::fromJson(json));
+        QVERIFY(restored);
         QCOMPARE(restored->aspectRatioClass(), AspectRatioClass::Ultrawide);
         QCOMPARE(restored->minAspectRatio(), 1.9);
         QCOMPARE(restored->maxAspectRatio(), 2.8);
         QVERIFY(restored->matchesAspectRatio(2.33)); // ultrawide
         QVERIFY(!restored->matchesAspectRatio(1.78)); // standard
-
-        delete restored;
     }
 
     void testLayout_aspectRatio_omittedInJson_meansAny()
@@ -397,13 +410,12 @@ private Q_SLOTS:
         json[QStringLiteral("showZoneNumbers")] = true;
         json[QStringLiteral("zones")] = QJsonArray();
 
-        auto* layout = PhosphorZones::Layout::fromJson(json);
+        const std::unique_ptr<PhosphorZones::Layout> layout(PhosphorZones::Layout::fromJson(json));
+        QVERIFY(layout);
         QCOMPARE(layout->aspectRatioClass(), AspectRatioClass::Any);
         QCOMPARE(layout->minAspectRatio(), 0.0);
         QCOMPARE(layout->maxAspectRatio(), 0.0);
         QVERIFY(layout->matchesAspectRatio(2.33)); // matches everything
-
-        delete layout;
     }
 
     void testScreenClassification_boundaryValues()
@@ -455,12 +467,17 @@ private Q_SLOTS:
         QVERIFY(!layout.matchesAspectRatio(1.78)); // above max
     }
 
-    void testLayout_matchesAspectRatio_epsilonBoundaries()
+    // The explicit bounds are inclusive and carry NO tolerance: a value a
+    // hair outside either bound is outside. (matchesAspectRatio compares with
+    // plain `<` / `>`; this pins that no epsilon is applied.)
+    void testLayout_matchesAspectRatio_justOutsideExplicitBounds()
     {
         PhosphorZones::Layout layout;
         layout.setMinAspectRatio(2.0);
         layout.setMaxAspectRatio(3.0);
 
+        QVERIFY(layout.matchesAspectRatio(2.0)); // at min: inclusive
+        QVERIFY(layout.matchesAspectRatio(3.0)); // at max: inclusive
         QVERIFY(!layout.matchesAspectRatio(1.999)); // just below min
         QVERIFY(!layout.matchesAspectRatio(3.001)); // just above max
     }
@@ -540,46 +557,6 @@ private Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
     // LayoutSettingsStore: per-layout settings split out of the layout file
     // ═══════════════════════════════════════════════════════════════════════════
-
-    // Build a full layout JSON (as Layout::toJson would) carrying both structural
-    // data and per-layout settings, including one zone with a custom appearance.
-    QJsonObject makeFullLayoutWithSettings() const
-    {
-        QJsonObject relGeo{{QStringLiteral("x"), 0.0},
-                           {QStringLiteral("y"), 0.0},
-                           {QStringLiteral("width"), 1.0},
-                           {QStringLiteral("height"), 1.0}};
-        QJsonObject appearance{{QStringLiteral("useCustomColors"), true},
-                               {QStringLiteral("highlightColor"), QStringLiteral("#ff112233")},
-                               {QStringLiteral("borderWidth"), 5}};
-        QJsonObject zone{{QStringLiteral("id"), QStringLiteral("{11111111-0000-0000-0000-000000000001}")},
-                         {QStringLiteral("name"), QStringLiteral("Z1")},
-                         {QStringLiteral("zoneNumber"), 1},
-                         {QStringLiteral("relativeGeometry"), relGeo},
-                         {QStringLiteral("appearance"), appearance}};
-        // shaderParams is the only object-valued setting — the highest-risk one
-        // for a strip/merge bug — so it's covered here alongside the sentinel
-        // (overlayDisplayMode) and per-side gap keys.
-        const QJsonObject shaderParams{{QStringLiteral("intensity"), 0.75}, {QStringLiteral("seed"), 42}};
-        return QJsonObject{
-            {QStringLiteral("id"), QStringLiteral("{abcd0000-0000-0000-0000-000000000000}")},
-            {QStringLiteral("name"), QStringLiteral("Settings Layout")},
-            {QStringLiteral("showZoneNumbers"), false},
-            {QStringLiteral("zonePadding"), 8},
-            {QStringLiteral("outerGap"), 12},
-            {QStringLiteral("usePerSideOuterGap"), true},
-            {QStringLiteral("outerGapTop"), 1},
-            {QStringLiteral("outerGapBottom"), 2},
-            {QStringLiteral("outerGapLeft"), 3},
-            {QStringLiteral("outerGapRight"), 4},
-            {QStringLiteral("overlayDisplayMode"), 1},
-            {QStringLiteral("autoAssign"), true},
-            {QStringLiteral("useFullScreenGeometry"), true},
-            {QStringLiteral("shaderId"), QStringLiteral("dissolve")},
-            {QStringLiteral("shaderParams"), shaderParams},
-            {QStringLiteral("zones"), QJsonArray{zone}},
-        };
-    }
 
     void testLayoutSettings_splitProducesStructuralAndSettings()
     {
@@ -741,6 +718,47 @@ private Q_SLOTS:
         LayoutSettingsStore store;
         QVERIFY(!store.loadFromFile(path));
         QVERIFY(store.isEmpty());
+    }
+
+private:
+    // Build a full layout JSON (as Layout::toJson would) carrying both structural
+    // data and per-layout settings, including one zone with a custom appearance.
+    QJsonObject makeFullLayoutWithSettings() const
+    {
+        QJsonObject relGeo{{QStringLiteral("x"), 0.0},
+                           {QStringLiteral("y"), 0.0},
+                           {QStringLiteral("width"), 1.0},
+                           {QStringLiteral("height"), 1.0}};
+        QJsonObject appearance{{QStringLiteral("useCustomColors"), true},
+                               {QStringLiteral("highlightColor"), QStringLiteral("#ff112233")},
+                               {QStringLiteral("borderWidth"), 5}};
+        QJsonObject zone{{QStringLiteral("id"), QStringLiteral("{11111111-0000-0000-0000-000000000001}")},
+                         {QStringLiteral("name"), QStringLiteral("Z1")},
+                         {QStringLiteral("zoneNumber"), 1},
+                         {QStringLiteral("relativeGeometry"), relGeo},
+                         {QStringLiteral("appearance"), appearance}};
+        // shaderParams is the only object-valued setting — the highest-risk one
+        // for a strip/merge bug — so it's covered here alongside the sentinel
+        // (overlayDisplayMode) and per-side gap keys.
+        const QJsonObject shaderParams{{QStringLiteral("intensity"), 0.75}, {QStringLiteral("seed"), 42}};
+        return QJsonObject{
+            {QStringLiteral("id"), QStringLiteral("{abcd0000-0000-0000-0000-000000000000}")},
+            {QStringLiteral("name"), QStringLiteral("Settings Layout")},
+            {QStringLiteral("showZoneNumbers"), false},
+            {QStringLiteral("zonePadding"), 8},
+            {QStringLiteral("outerGap"), 12},
+            {QStringLiteral("usePerSideOuterGap"), true},
+            {QStringLiteral("outerGapTop"), 1},
+            {QStringLiteral("outerGapBottom"), 2},
+            {QStringLiteral("outerGapLeft"), 3},
+            {QStringLiteral("outerGapRight"), 4},
+            {QStringLiteral("overlayDisplayMode"), 1},
+            {QStringLiteral("autoAssign"), true},
+            {QStringLiteral("useFullScreenGeometry"), true},
+            {QStringLiteral("shaderId"), QStringLiteral("dissolve")},
+            {QStringLiteral("shaderParams"), shaderParams},
+            {QStringLiteral("zones"), QJsonArray{zone}},
+        };
     }
 };
 

@@ -1590,14 +1590,17 @@ add_test(NAME test_profilestore COMMAND test_profilestore)
 # derives SectionRole / summaries from a rule's shape; RuleController
 # stages CRUD by UUID and builds the monitor overview. Compiles the model /
 # controller sources directly (they live in the plasmazones-settings
-# executable, not plasmazones_core).
-add_executable(test_rule_model
-    settings/rules/test_rule_model.cpp
+# executable, not plasmazones_core). The two source lists are declared ONCE
+# here and shared by every rules-page test target below, so a TU added to the
+# controller's multi-file class definition cannot be forgotten in one copy.
+set(PZ_RULE_MODEL_SOURCES
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
-    # Label tables + summaries, split from rulemodel.cpp for file-size.
+    # Label tables + summaries, split from rulemodel.cpp for file-size; the
+    # match-side labels split again into rulemodel_matchlabels.cpp.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_matchlabels.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_fieldtables.cpp
-    # rulemodel's action summary now shares its boolean polarity phrasing with
+    # rulemodel's action summary shares its boolean polarity phrasing with
     # the editor via RuleAuthoring::boolActionStateLabel.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
@@ -1605,6 +1608,23 @@ add_executable(test_rule_model
     # ruleauthoring_actions.cpp for file-size.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actionparams.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
+)
+set(PZ_RULE_CONTROLLER_SOURCES
+    ${PZ_RULE_MODEL_SOURCES}
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
+    # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
+    # author surfaces, validation). The controller's class definition spans
+    # this TU and rulecontroller.cpp.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
+    # Label-lookup setters + wiring-completion gate. The controller's class
+    # definition spans this TU and rulecontroller.cpp.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
+)
+add_executable(test_rule_model
+    settings/rules/test_rule_model.cpp
+    ${PZ_RULE_MODEL_SOURCES}
 )
 target_link_libraries(test_rule_model
     PRIVATE
@@ -1617,26 +1637,7 @@ add_test(NAME test_rule_model COMMAND test_rule_model)
 
 add_executable(test_rule_controller
     settings/rules/test_rule_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
-    # Label tables + summaries, split from rulemodel.cpp for file-size.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_fieldtables.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
-    # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
-    # author surfaces, validation). The controller's class definition spans
-    # this TU and rulecontroller.cpp.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
-    # Label-lookup setters + wiring-completion gate. The controller's class
-    # definition spans this TU and rulecontroller.cpp.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
-    # Per-param labels, hints, schema, and defaultPayloadFor, split from
-    # ruleauthoring_actions.cpp for file-size.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actionparams.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
+    ${PZ_RULE_CONTROLLER_SOURCES}
 )
 target_link_libraries(test_rule_controller
     PRIVATE
@@ -1649,26 +1650,12 @@ target_link_libraries(test_rule_controller
 )
 add_test(NAME test_rule_controller COMMAND test_rule_controller)
 
-# Overview/vocabulary half of the controller suite (monitorOverview projections,
-# vocabulary tokens, templates, action metadata). Same source set as
-# test_rule_controller; the controller's class definition spans several TUs.
+# Overview half of the controller suite (monitorOverview projections and the
+# curve-label resolver bridge). Same source set as test_rule_controller; the
+# controller's class definition spans several TUs.
 add_executable(test_rule_controller_overview
     settings/rules/test_rule_controller_overview.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
-    # Label tables + summaries, split from rulemodel.cpp for file-size.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_fieldtables.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
-    # Per-param labels, hints, schema, and defaultPayloadFor, split from
-    # ruleauthoring_actions.cpp for file-size.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actionparams.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
+    ${PZ_RULE_CONTROLLER_SOURCES}
 )
 target_link_libraries(test_rule_controller_overview
     PRIVATE
@@ -1680,6 +1667,24 @@ target_link_libraries(test_rule_controller_overview
         plasmazones_core
 )
 add_test(NAME test_rule_controller_overview COMMAND test_rule_controller_overview)
+
+# Vocabulary half of the controller suite (engine-mode picker tokens, input
+# hints, templates, action domains, default payload seeding), split from
+# test_rule_controller_overview for file-size.
+add_executable(test_rule_controller_vocabulary
+    settings/rules/test_rule_controller_vocabulary.cpp
+    ${PZ_RULE_CONTROLLER_SOURCES}
+)
+target_link_libraries(test_rule_controller_vocabulary
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorRules::PhosphorRules
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_rule_controller_vocabulary COMMAND test_rule_controller_vocabulary)
 
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,

@@ -94,15 +94,22 @@ inline constexpr QLatin1StringView Chain{"chain"};
 /// only reach 9); the cap exists purely to reject a grossly malformed hand-edited
 /// payload AND to keep the load-time validator's integrality check from narrowing
 /// an out-of-range double to int (which is UB). Shared by the descriptor validator
-/// (ruleaction_builtins_engine.cpp) and the v3→v4 migration so the two stay in
-/// lockstep.
+/// (ruleaction_builtins_engine.cpp), the daemon's placement reader
+/// (windowtrackingadaptor/rules_placement.cpp `placementTargetsOf`), the
+/// v3→v4 migration, and the settings editor (published to QML as the
+/// `zoneOrdinals` ParamSchema `max`) so all of them stay in lockstep.
 inline constexpr int MaxZoneOrdinal = 64;
 
 /// Upper bound on a `SnapToZone` zone-name entry (each `ActionParam::ZoneNames`
-/// string), in characters. The layout editor caps zone names at 40 but a
-/// hand-edited or legacy layout may carry a longer one, so this is only a
+/// string), in characters, measured on the TRIMMED name. This is deliberately
+/// permissive: the layout editor caps zone names at 40 (MaxLayoutNameLength in
+/// the app's constants.h, which this LGPL lib cannot include), but a hand-edited
+/// or legacy layout may carry a longer one, so the bound here is only a
 /// grossly-malformed-payload guard in the spirit of MaxZoneOrdinal, not the
-/// editor's limit.
+/// editor's limit. Consumers: the descriptor validator, the daemon's placement
+/// reader, and the settings authoring layer (parseZoneNameList and the
+/// rule-list summary apply it in C++; it is also published as the `zoneNames`
+/// ParamSchema `max` so the editor can read it from the schema).
 inline constexpr int MaxZoneNameLength = 128;
 
 /// Upper bounds for the per-window border appearance overrides

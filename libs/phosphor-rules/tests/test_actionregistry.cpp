@@ -5,6 +5,7 @@
 
 #include <QJsonObject>
 #include <QSet>
+#include <QStringList>
 #include <QTest>
 
 using namespace PhosphorRules;
@@ -38,9 +39,10 @@ private Q_SLOTS:
     void testBuiltinsRegistered()
     {
         const ActionRegistry& reg = ActionRegistry::instance();
-        // Assert each builtin individually — never an absolute
+        // Spot-check a representative set of builtins individually (the
+        // registrars register many more) — never an absolute
         // `registeredTypes().size()`, see the singleton-pollution note above.
-        // Note a same-type DOUBLE registration across the two builtin TUs is
+        // Note a same-type DOUBLE registration across the builtin TUs is
         // not detectable post-hoc (registerAction is register-or-replace and
         // the hash dedupes); a duplicate whose descriptor DIFFERS surfaces
         // through the per-type behaviour tests (slots, terminal flag, domain
@@ -55,6 +57,7 @@ private Q_SLOTS:
         QVERIFY(reg.isRegistered(QString(ActionType::ExcludeAnimations)));
         QVERIFY(reg.isRegistered(QString(ActionType::ExcludeDecorations)));
         QVERIFY(reg.isRegistered(QString(ActionType::Float)));
+        QVERIFY(reg.isRegistered(QString(ActionType::SnapToZone)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationShader)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationTiming)));
         QVERIFY(reg.isRegistered(QString(ActionType::OverrideAnimationCurve)));
@@ -111,11 +114,20 @@ private Q_SLOTS:
         const QSet<QString> terminalFamily = {QString(ActionType::Exclude), QString(ActionType::ExcludePlacement),
                                               QString(ActionType::ExcludeAnimations),
                                               QString(ActionType::ExcludeDecorations)};
+        // Accumulate rather than assert per row: registeredTypes() is
+        // hash-ordered, so an in-loop assert would name only the FIRST
+        // disagreeing type, and a different one on the next run.
+        QStringList mismatches;
         for (const QString& type : reg.registeredTypes()) {
             RuleAction probe;
             probe.type = type;
-            QCOMPARE(reg.isTerminal(probe), terminalFamily.contains(type));
+            if (reg.isTerminal(probe) != terminalFamily.contains(type)) {
+                mismatches.append(
+                    QStringLiteral("%1 (isTerminal=%2)")
+                        .arg(type, reg.isTerminal(probe) ? QStringLiteral("true") : QStringLiteral("false")));
+            }
         }
+        QVERIFY2(mismatches.isEmpty(), qPrintable(mismatches.join(QStringLiteral(", "))));
     }
 
     void testAnimationSlotsAreEventScoped()
@@ -153,6 +165,8 @@ private Q_SLOTS:
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetEngineMode)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetSnappingLayout)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::SetTilingAlgorithm)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::SetScrollingTemplate)));
+        QVERIFY(!reg.isTerminal(makeAction(ActionType::SnapToZone)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::DisableEngine)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationShader)));
         QVERIFY(!reg.isTerminal(makeAction(ActionType::OverrideAnimationTiming)));

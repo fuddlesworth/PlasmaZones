@@ -77,6 +77,67 @@ ColumnLayout {
         return e ? e.params : [];
     }
 
+    /// The advisory `max` a param descriptor publishes, or no cap when it
+    /// carries none (never a second copy of the constant). SnapToZone's two
+    /// params publish the ordinal cap and the per-name character cap this way,
+    /// and RouteToDesktop its desktop cap, so the read-only view filters on the
+    /// same bounds the validator and the C++ summary apply.
+    function _paramBound(param) {
+        return param && param.max !== undefined ? param.max : Number.POSITIVE_INFINITY;
+    }
+
+    /// The SnapToZone target entries of `action` under `param` that the
+    /// validator accepts — ordinals as integers in 1..max, names non-blank and
+    /// at most max characters after trimming — deduplicated (ordinals by value,
+    /// names case-insensitively, first spelling kept) so the pill never claims
+    /// a target the runtime discards nor counts one twice, the same bounds and
+    /// dedupe the C++ summary in rulemodel_labels.cpp applies. Empty for any
+    /// other kind.
+    function _validZoneTargets(param, action) {
+        var raw = action ? action[param.key] : undefined;
+        if (!Array.isArray(raw))
+            return [];
+        var out = [];
+        // A prototype-less object: a zone literally named "constructor" must
+        // not read as already seen.
+        var seen = Object.create(null);
+        var max = root._paramBound(param);
+        for (var i = 0; i < raw.length; ++i) {
+            if (param.kind === "zoneOrdinals") {
+                // A JSON number only: the C++ summary and the validator both
+                // refuse a string or bool ordinal rather than coercing it.
+                if (typeof raw[i] !== "number")
+                    continue;
+                var n = raw[i];
+                if (Number.isInteger(n) && n >= 1 && n <= max && !seen[n]) {
+                    seen[n] = true;
+                    out.push(n);
+                }
+            } else if (param.kind === "zoneNames") {
+                var name = typeof raw[i] === "string" ? raw[i].trim() : "";
+                var key = name.toLowerCase();
+                if (name.length > 0 && name.length <= max && !seen[key]) {
+                    seen[key] = true;
+                    out.push(name);
+                }
+            }
+        }
+        return out;
+    }
+
+    /// Whether a param row renders at all. SnapToZone carries two target
+    /// lists (numbers and names) and a rule usually fills only one; an empty
+    /// or all-invalid list would otherwise render as a labelled blank pill.
+    /// Other kinds keep their pill even when empty so an unset picker is
+    /// still visible as such. ONE predicate for both the row's `visible` and
+    /// the first-visible-index scan below; two copies would drift and a drift
+    /// here silently misaligns the THEN column against the WHEN tree.
+    function _paramVisible(param, action) {
+        if (param.kind !== "zoneOrdinals" && param.kind !== "zoneNames")
+            return true;
+        return root._validZoneTargets(param, action).length > 0;
+    }
+
     /// Resolve a single param value to the user-facing string the rule
     /// editor would show. The mapping per `kind` mirrors the editor's
     /// pickers — see `ActionRow.qml` for the source of truth.
@@ -94,6 +155,13 @@ ColumnLayout {
                     return opts[i].label;
             }
             return rawStr;
+        }
+        if (kind === "scrollingTemplate" && rawStr === "none") {
+            // The reserved "explicitly no template" token
+            // (PhosphorZones::NoScrollingTemplate) is the common case every
+            // Monitors-page None pick writes, not a layout id; the rules-list
+            // summary and the editor's picker both already show it as None.
+            return i18nc("@item scrolling template rule action, no template at all", "None");
         }
         if (kind === "snappingLayout" || kind === "tilingAlgorithm" || kind === "scrollingTemplate") {
             // Layouts are serialised via `toVariantMap(LayoutPreview)` which
@@ -166,8 +234,11 @@ ColumnLayout {
             // rules-list summary; turning decorations off entirely is
             // ExcludeDecorations' job.
             var chainIds = raw || [];
+            // A bare "None": the label column already says "Decoration packs",
+            // unlike the rules-list summary, which has no separate label and
+            // spells the whole phrase.
             if (!chainIds.length)
-                return i18n("Decoration packs: none");
+                return i18nc("@item no decoration packs in the chain", "None");
             var decoCtl = root.appSettings ? root.appSettings.decorationPage : null;
             var packs = decoCtl ? (decoCtl.availableShaderEffects() || []) : [];
             var names = [];
@@ -208,24 +279,33 @@ ColumnLayout {
             var f = parseFloat(raw);
             if (isFinite(f)) {
                 var scale = param.scale || 1;
+                var display = f / scale;
+                // The descriptor's display-unit bounds are what the validator
+                // enforces on the wire; a hand-edited value outside them is
+                // one the runtime discards, so say so rather than print
+                // "300%" as if it applied (the rules-list summary renders the
+                // same value as invalid).
+                if ((param.min !== undefined && display < param.min) || (param.max !== undefined && display > param.max))
+                    return i18nc("@item an action value the rule runtime rejects", "(invalid)");
                 // Through i18nc rather than a JS append: locales differ on
                 // where the sign sits and whether a space precedes it.
-                return i18nc("a whole-number percentage", "%1%", Math.round(f / scale));
+                return i18nc("a whole-number percentage", "%1%", Math.round(display));
             }
             return rawStr;
         }
         if (kind === "zoneOrdinals") {
-            // `raw` is a JS array of 1-based zone ordinals; render "1, 2".
+            // `raw` is a JS array of 1-based zone ordinals; render the valid
+            // ones as "1, 2" (the row hides when none survive).
             if (Array.isArray(raw))
-                return raw.join(", ");
+                return root._validZoneTargets(param, action).join(", ");
             return rawStr;
         }
         if (kind === "zoneNames") {
-            // `raw` is a JS array of zone-name strings; quote each so a name
-            // made of digits cannot read as an ordinal.
+            // `raw` is a JS array of zone-name strings; quote each valid one so
+            // a name made of digits cannot read as an ordinal.
             if (Array.isArray(raw))
-                return raw.map(function (n) {
-                    return i18nc("a quoted zone name", "“%1”", String(n));
+                return root._validZoneTargets(param, action).map(function (n) {
+                    return i18nc("a quoted zone name", "“%1”", n);
                 }).join(", ");
             return rawStr;
         }
@@ -245,12 +325,18 @@ ColumnLayout {
             // else just the number.
             var names = root.appSettings && root.appSettings.virtualDesktopNames ? root.appSettings.virtualDesktopNames : [];
             var num = parseInt(raw, 10);
-            if (num >= 1 && names.length >= num && names[num - 1])
+            // Bounded on both ends like the C++ summary: the descriptor
+            // publishes the ordinal cap as `max`, and a hand-edited ordinal
+            // outside 1..max is one the loader rejects, so it echoes raw rather
+            // than printing as a real target.
+            if (!(num >= 1) || num > root._paramBound(param))
+                return rawStr;
+            if (names.length >= num && names[num - 1])
                 // Same one-i18nc composition as the desktop pickers in
                 // MatchLeafEditor and ActionParamEditors, so the summary and
                 // the editors render a desktop identically.
                 return i18nc("virtual desktop number, then its name", "%1: %2", num, names[num - 1]);
-            return num > 0 ? String(num) : rawStr;
+            return String(num);
         }
         if (kind === "color") {
             // "accent" is the follow-the-system-accent sentinel; otherwise a
@@ -286,6 +372,17 @@ ColumnLayout {
             // free for the inner param Repeater's delegates.
             readonly property var _action: actionDelegate.modelData
             readonly property var _params: root._paramsFor(_action.type)
+            // Index of the first param row that renders, so the 8-gridUnit
+            // label floor (which keeps the first value pill in the WHEN value
+            // column) follows the first VISIBLE param rather than index 0 —
+            // a names-only SnapToZone hides index 0.
+            readonly property int _firstVisibleParamIndex: {
+                for (var i = 0; i < _params.length; ++i) {
+                    if (root._paramVisible(_params[i], _action))
+                        return i;
+                }
+                return -1;
+            }
             // True for the bottom-most action — its tree-line vertical
             // stops at row-mid instead of running to the row bottom,
             // matching the "last child" terminator in WHEN.
@@ -397,32 +494,24 @@ ColumnLayout {
                         required property int index
 
                         spacing: Kirigami.Units.largeSpacing
-                        // SnapToZone carries two target lists (numbers and
-                        // names) and a rule usually fills only one; an empty
-                        // list would otherwise render as a labelled blank pill.
-                        // Other kinds keep their pill even when empty so an
-                        // unset picker is still visible as such.
-                        visible: {
-                            var kind = paramRow.modelData.kind;
-                            if (kind !== "zoneOrdinals" && kind !== "zoneNames")
-                                return true;
-                            var raw = actionDelegate._action[paramRow.modelData.key];
-                            return Array.isArray(raw) && raw.length > 0;
-                        }
+                        // See root._paramVisible: SnapToZone hides a target
+                        // list with no valid entry, every other kind always
+                        // renders.
+                        visible: root._paramVisible(paramRow.modelData, actionDelegate._action)
 
                         Label {
                             Layout.alignment: Qt.AlignVCenter
-                            // First param keeps the 8-gridUnit floor so its
-                            // value pill lands in the same column as WHEN's
-                            // value pills (visual alignment with the operator
-                            // column above). Subsequent params shrink to
-                            // their text width — leaving the 8 gu floor on
+                            // The first VISIBLE param keeps the 8-gridUnit
+                            // floor so its value pill lands in the same column
+                            // as WHEN's value pills (visual alignment with the
+                            // operator column above). Subsequent params shrink
+                            // to their text width — leaving the 8 gu floor on
                             // every param turned the gap between a short
                             // label like "SHADER EFFECT" and its value pill
                             // into dead space because the label box itself
                             // padded out to 8 gu before the largeSpacing to
                             // the pill kicked in.
-                            Layout.minimumWidth: paramRow.index === 0 ? Kirigami.Units.gridUnit * 8 : 0
+                            Layout.minimumWidth: paramRow.index === actionDelegate._firstVisibleParamIndex ? Kirigami.Units.gridUnit * 8 : 0
                             // Cap and elide: the bool params carry the longest
                             // labels in the table ("Focus the window when it
                             // opens (off = keep the current focus)") and render

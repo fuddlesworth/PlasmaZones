@@ -14,8 +14,6 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorSnapEngine/ISnapSettings.h>
 #include "snapenginelogging.h"
-#include <QGuiApplication>
-#include <QScreen>
 #include <QUuid>
 
 namespace PhosphorSnapEngine {
@@ -104,12 +102,15 @@ SnapResult SnapEngine::calculateSnapToPlacementRule(const QString& windowId, con
         return SnapResult::noSnap();
     }
 
-    // Ordinals are layout-agnostic: resolve them against the layout active on the
-    // placement (screen, desktop). For a desktop route that is the DESTINATION
-    // desktop's layout; otherwise it is the screen's current-desktop layout.
-    PhosphorZones::Layout* layout = directive.targetDesktop >= 1
-        ? m_layoutManager->layoutForScreen(placementScreen, placementDesktop, currentActivity())
-        : m_layoutManager->resolveLayoutForScreen(placementScreen);
+    // Ordinals and names are layout-agnostic: resolve them against the layout
+    // active on the placement (screen, desktop). For a desktop route that is the
+    // DESTINATION desktop's layout; otherwise it is the screen's current-desktop
+    // layout. The lookup uses the SAME (screen, desktop, activity) triple the
+    // mode gate above just checked, so the two cannot disagree on which desktop
+    // "current" means (the engine's and the registry's desktop resolvers are
+    // wired to one authority in the daemon but not in every host).
+    PhosphorZones::Layout* layout =
+        m_layoutManager->layoutForScreen(placementScreen, placementDesktop, currentActivity());
     if (!layout) {
         qCDebug(PhosphorSnapEngine::lcSnapEngine)
             << "calculateSnapToPlacementRule: no layout for screen" << placementScreen << "desktop" << placementDesktop;

@@ -246,6 +246,12 @@ public:
     /// Resolver for `OverrideAnimationShader` action params (effect ids like
     /// "dissolve") so the summary renders "Dissolve" rather than the raw id.
     void setShaderEffectLabelLookup(LabelLookup fn);
+    /// Resolver for the `event` param the three per-event animation overrides
+    /// (OverrideAnimationShader / Timing / Curve) carry (profile paths like
+    /// "window.open"), so a rule overriding two events does not summarise as
+    /// two identical entries. Sourced from the animations page controller's
+    /// event taxonomy.
+    void setAnimationEventLabelLookup(LabelLookup fn);
     /// Resolver for `OverrideOverlayShader` action params (overlay shader ids)
     /// so the summary renders the friendly name rather than the raw id. Sourced
     /// from the overlay/snapping shader registry, NOT the animation one.
@@ -315,6 +321,7 @@ private:
     LabelLookup m_snappingLayoutLookup;
     LabelLookup m_tilingAlgorithmLookup;
     LabelLookup m_shaderEffectLookup;
+    LabelLookup m_animationEventLookup;
     LabelLookup m_overlayShaderLookup;
     LabelLookup m_curveLookup;
     LabelLookup m_decorationPackLookup;

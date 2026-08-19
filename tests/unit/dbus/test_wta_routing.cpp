@@ -11,6 +11,8 @@
 
 #include "wta_convenience_fixture.h"
 
+#include <QScopeGuard>
+
 class TestWtaRouting : public QObject, protected WtaConvenienceFixture
 {
     Q_OBJECT
@@ -467,6 +469,70 @@ private Q_SLOTS:
 
         wta->setRuleStore(nullptr);
         wta->setWindowRegistry(nullptr);
+    }
+
+    // The ownership verdict both channels share (hasValidPlacementTarget) is a
+    // PAYLOAD-SHAPE judgement over the SnapToZone targets, and the zone-NAME
+    // form (discussion #924) must count: a names-only rule owns the window's
+    // target on both channels even though no zone in the test layout carries
+    // that name (no engine is wired here; in the daemon the engine would then
+    // decline the snap and the remembered-placement fallback stays suppressed,
+    // as for an ordinal the layout lacks). The control is a window no rule
+    // matches, which both channels must report as unowned. (A payload with no
+    // valid target cannot be built through the store: Rule::isValid runs the
+    // descriptor validator, which needs at least one valid entry across the
+    // two lists.)
+    void testRoutingVerdicts_namesOnlyPlacement_ownsOnBothChannels()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        wta->setWindowMetadata(QStringLiteral("inst5"), QStringLiteral("namedapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, QVariantMap());
+        wta->setWindowMetadata(QStringLiteral("inst6"), QStringLiteral("otherapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule named;
+        named.id = QUuid::createUuid();
+        named.enabled = true;
+        named.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("namedapp"));
+        RuleAction snapByName;
+        snapByName.type = QString(ActionType::SnapToZone);
+        snapByName.params.insert(QString(ActionParam::ZoneNames), QJsonArray{QStringLiteral("Editor")});
+        named.actions = {snapByName};
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
+        QVERIFY(store.addRule(named));
+        wta->setRuleStore(&store);
+        // Detach on every exit: `store` is declared after `parent`, so on a
+        // mid-test QVERIFY abort it dies first while the WTA still holds it.
+        const auto teardown = qScopeGuard([wta] {
+            wta->setRuleStore(nullptr);
+            wta->setWindowRegistry(nullptr);
+        });
+
+        const QString w = QStringLiteral("namedapp|inst5");
+        wta->setFrameGeometry(w, 100, 100, 800, 600);
+        QVERIFY2(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")),
+                 "a names-only SnapToZone rule owns the window's target on the snap channel");
+        bool matched = false;
+        QVERIFY(wta->applyOpenRoutingForTiling(w, QStringLiteral("DP-1"), &matched).isEmpty());
+        QVERIFY2(matched, "…and on the tiling channel");
+
+        const QString other = QStringLiteral("otherapp|inst6");
+        wta->setFrameGeometry(other, 100, 100, 800, 600);
+        QVERIFY2(!wta->applyOpenScreenRouting(other, QStringLiteral("DP-1")), "no rule → no ownership");
+        bool otherMatched = true;
+        QVERIFY(wta->applyOpenRoutingForTiling(other, QStringLiteral("DP-1"), &otherMatched).isEmpty());
+        QVERIFY2(!otherMatched, "no rule → no ownership on the tiling channel either");
     }
 
     void testGuardedHandoff_refusalRehomesIntoSource()
