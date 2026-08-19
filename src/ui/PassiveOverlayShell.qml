@@ -50,12 +50,11 @@ Window {
     // Sibling tiers below: the modalSlots container (z=2, hosting the
     // snap-assist / layout-picker / cheatsheet slots in
     // PassiveOverlayModalSlots.qml), zoneSelectorSlot (z=1),
-    // scrollDropIndicatorSlot (z=0.6), mainOverlaySlot (z=0).
-    // The osdSlot's z is
-    // dynamic (3 normally, 1.5 while a modal slot is visible — see the
-    // binding on osdSlot). Each is a sibling Item with its own
-    // properties + Loader, animated independently via the
-    // SurfaceAnimator's per-(Surface, target) keying.
+    // scrollDropIndicatorSlot (z=0.6), mainOverlaySlot (z=0). The osdSlot's
+    // z is dynamic (3 normally, 1.5 while a modal slot is visible — see the
+    // binding on osdSlot). Each is a sibling Item with its own properties +
+    // Loader, animated independently via the SurfaceAnimator's
+    // per-(Surface, target) keying.
 
     id: root
 

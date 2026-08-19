@@ -1193,7 +1193,11 @@ add_test(NAME test_tiling_adaptor_active_layouts COMMAND test_tiling_adaptor_act
 # Tab-indicator transport on TilingAdaptor: the scrollTabStripsChanged relay
 # and its scrollTabStrips replay cache (including the "[]" retraction and the
 # shutdown clear), the all-windows scrollTabColorsChanged broadcast, and the
-# scrollTabColors pass-through to the WTA's rule resolution.
+# scrollTabColors pass-through to the WTA's rule resolution. Also the
+# paint-override half of the same transport (setScrollTabPaintOverrides, the
+# scrollTabPaintOverridesChanged relay and its scrollTabPaintOverrides replay
+# getter, and the clearScrollTabPaintOverridesWhere sweep), plus the
+# per-window colour relay (relayScrollTabColorsForWindow).
 add_executable(test_tiling_adaptor_scroll_tabs dbus/test_tiling_adaptor_scroll_tabs.cpp)
 target_link_libraries(test_tiling_adaptor_scroll_tabs PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
                       PhosphorRules::PhosphorRules PhosphorEngine::PhosphorEngine
@@ -1974,6 +1978,22 @@ add_test(NAME test_surface_decoration_orientation COMMAND test_surface_decoratio
 # which ctest reports as SKIPPED rather than Passed — honest status for the
 # GPU gate. In-test QSKIPs still exit 0 via qExec (green, Qt's contract).
 set_tests_properties(test_surface_decoration_orientation PROPERTIES SKIP_RETURN_CODE 77)
+
+# The tab-indicator layout and raster half is pure Qt (QRect arithmetic and a
+# QPainter pass), with no KWin type in either entry point, so the raster TU
+# compiles straight into the test the same way StripViewAnimator's does. The
+# include path is the effect tree so its own "compositor/..." include resolves.
+# It stays out of the Unity blob here for the same reason it does in
+# kwin-effect/CMakeLists.txt (its file-local helpers carry generic names);
+# source-file properties are directory-scoped, so the effect tree's exclusion
+# does not reach this consuming target.
+set_source_files_properties(${CMAKE_SOURCE_DIR}/kwin-effect/compositor/scrolltabindicatorpainter_raster.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+add_executable(test_scroll_tab_layout compositor-common/test_scroll_tab_layout.cpp
+               ${CMAKE_SOURCE_DIR}/kwin-effect/compositor/scrolltabindicatorpainter_raster.cpp)
+target_include_directories(test_scroll_tab_layout PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+target_link_libraries(test_scroll_tab_layout PRIVATE Qt6::Test Qt6::Gui)
+add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation

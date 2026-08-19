@@ -3896,12 +3896,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="77"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="79"/>
         <source>%1: %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="166"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="168"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionListView.qml.cpp" line="353"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/ActionParamEditors.qml.cpp" line="338"/>
         <location filename=".qml-stubs/src/settings/qml/pages/rules/MatchExpressionView.qml.cpp" line="117"/>
@@ -3911,7 +3911,7 @@
     </message>
     <message>
         <location filename="../src/config/settingsvaluelabels.cpp" line="445"/>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="166"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="168"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="117"/>
         <location filename=".qml-stubs/src/settings/qml/components/WindowFilterCard.qml.cpp" line="148"/>
         <location filename=".qml-stubs/src/settings/qml/pages/animations/AnimationsGeneralPage.qml.cpp" line="142"/>
@@ -4514,7 +4514,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="79"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="81"/>
         <source>%1 %2 %3</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4639,7 +4639,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="219"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="221"/>
         <source>%n condition</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -4647,7 +4647,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="221"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="223"/>
         <source>%n conditions</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5032,12 +5032,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="192"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="194"/>
         <source>Any window</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="206"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="208"/>
         <source>(condition group)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9217,7 +9217,7 @@
     <message>
         <location filename="../src/settings/controller/settingscontroller_layouts.cpp" line="887"/>
         <location filename="../src/settings/rules/rulecontroller_views.cpp" line="337"/>
-        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="123"/>
+        <location filename="../src/settings/rules/rulemodel_matchlabels.cpp" line="125"/>
         <source>Scrolling (no template)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -20444,7 +20444,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename=".qml-stubs/src/ui/ScrollTabStripContent.qml.cpp" line="64"/>
+        <location filename="../kwin-effect/tilinghandler/scrolltabs.cpp" line="583"/>
         <source>Untitled window</source>
         <translation type="unfinished"></translation>
     </message>
@@ -21228,7 +21228,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="272"/>
+        <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="276"/>
         <source>%n tab</source>
         <comment>@info:label tabbed column tab count</comment>
         <translation type="unfinished">
@@ -21237,7 +21237,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="272"/>
+        <location filename=".qml-stubs/src/ui/ZoneSelectorStripCard.qml.cpp" line="276"/>
         <source>%n window</source>
         <comment>@info:label column window count</comment>
         <translation type="unfinished">

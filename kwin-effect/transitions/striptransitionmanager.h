@@ -44,7 +44,8 @@ class PlasmaZonesEffect;
 /// at the anchor's slot, the desktop background beneath — is rendered into
 /// a per-output capture (windows stacked ABOVE the strip are excluded and
 /// composited sharp on top after the pass, so an OSD popped mid-scroll is
-/// never smeared; see stripPassPaintsAboveStrip), and one
+/// never smeared; see PlasmaZonesEffect::m_stripCaptureAboveStrip and the
+/// record-and-return in paintWindow that consumes it), and one
 /// full-screen quad runs the assigned strip pack (data/animations/<id>,
 /// appliesTo ["strip"], sampling uStrip via strip_transition.glsl) over it,
 /// driven by offset/velocity uniforms (iStripMotion). The pack DECORATES the

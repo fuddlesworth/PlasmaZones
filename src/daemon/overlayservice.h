@@ -2,21 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // FILE-SIZE EXCEPTION: this header is well past the 1150 hard ceiling (about
-// 1700 lines and still growing with each overlay surface). No exact figure is
-// quoted: it went stale within a release of being written, and the case below
-// is what the exception rests on, not a number.
-// The exception was granted in the same pull request that carried the file
-// past the ceiling (the scroll tab strip), so it is a live decision rather
-// than settled precedent, and it is recorded here for that reason.
+// 1580 lines and still growing with each overlay surface). Treat the figure as
+// indicative only: it goes stale within a release of being written, and the
+// case below is what the exception rests on, not a number.
 //
 // The case for it: OverlayService is the single façade every overlay surface
-// goes through — zone overlay, selector, snap assist, OSD, cheatsheet, the
-// scroll tab strip and the scrolling drop indicator — so its members are the
-// per-screen state and per-role
-// wiring those surfaces share. The implementation is already split by surface
-// across daemon/overlayservice/*.cpp; splitting the class DECLARATION would
-// scatter the per-screen ownership and teardown-order contract the member
-// ordering encodes, exactly as documented on daemon.h.
+// goes through — zone overlay, selector, snap assist, OSD, cheatsheet and the
+// scrolling drop indicator — so its members are the per-screen state and
+// per-role wiring those surfaces share. The implementation is already split by
+// surface across daemon/overlayservice/*.cpp; splitting the class DECLARATION
+// would scatter the per-screen ownership and teardown-order contract the
+// member ordering encodes, exactly as documented on daemon.h.
 
 #pragma once
 
@@ -596,9 +592,9 @@ public:
     /// the absolute-px slot the dragged window would land in, converted to
     /// shell coordinates here; an invalid or empty rect hides the indicator.
     ///
-    /// Purely display: unlike the tab strips this installs NO input region,
-    /// because it is painted underneath a cursor that is mid-drag and taking
-    /// input there would break the drag it exists to describe.
+    /// Purely display: it installs NO input region, because it is painted
+    /// underneath a cursor that is mid-drag and taking input there would break
+    /// the drag it exists to describe.
     ///
     /// Scrolling needs a drawn indicator where autotile needs none. Autotile's
     /// feedback IS its live restructure, but the scroll engine detaches once at
@@ -611,8 +607,8 @@ public:
     /// the QML property names the slot reads so the layering is one value()
     /// per property. An empty map clears the screen's overrides.
     ///
-    /// Unlike the tab-strip twin this does NOT replay: the indicator only
-    /// exists while a drag is in flight, and the next rect push during that
+    /// This does NOT replay: the indicator only exists while a drag is in
+    /// flight, and the next rect push during that
     /// drag re-reads the overrides. A rule change landing between drags is
     /// picked up by the drag that follows, which is the only time anyone can
     /// see it.
@@ -1231,10 +1227,9 @@ private:
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
     void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
-    /// Tear down BOTH of the screen's shells, tab shell first. Deletes each
+    /// Tear down the screen's passive shell: deletes its
     /// PhosphorLayer::Surface (and its QQuickWindow + every slot QQuickItem
-    /// owned by it). Despite the name this is the tab shell's ONLY teardown
-    /// path, which is why the two are paired here rather than at each caller.
+    /// owned by it).
     /// Called from `destroyAllWindowsForPhysicalScreen` on hot-plug cleanup and
     /// from the virtual-screen reconfiguration branches of
     /// `onVirtualScreensChanged`.
@@ -1265,14 +1260,14 @@ private:
     /// before the library schedules the shell surface for deletion.
     void unwirePassiveShellSlots(const QString& screenId);
 
-    /// Drop @p screenId's now-dead ShellState entry on BOTH hosts. Destroying a
-    /// shell only zeroes its fields; the entry survives, so hot-plug cycles
-    /// would accumulate dead keys without this.
+    /// Drop @p screenId's now-dead ShellState entry from the shell host.
+    /// Destroying a shell only zeroes its fields, the entry survives, so
+    /// hot-plug cycles would accumulate dead keys without this.
     void removeShellStates(const QString& screenId);
 
-    /// Clear sticky creation-failure sentinels on both hosts for every screen
-    /// id rooted on @p physicalScreenId (the bare id and its `/vs:N` children),
-    /// so a replug of the same monitor can create its shells again.
+    /// Clear the shell host's sticky creation-failure sentinels for every
+    /// screen id rooted on @p physicalScreenId (the bare id and its `/vs:N`
+    /// children), so a replug of the same monitor can create its shell again.
     void clearShellFailuresForPhysicalScreen(const QString& physicalScreenId);
 
     /// Slot-hide animation completion - flips the OSD slot Item's

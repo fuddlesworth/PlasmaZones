@@ -1127,6 +1127,24 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
         // Refresh the active border for the focused window (tiledWindows may have changed)
         m_effect->updateAllDecorations();
+
+        // The compositor-drawn tab pills need a strip member to anchor on,
+        // and this batch is what makes the screen's windows scroll-managed
+        // again after a daemon handover (the per-session drain cleared the
+        // membership; the strips were re-fetched before any column was
+        // re-tiled, so their rebuild damaged a band nothing could yet paint).
+        // Damage the pill bounds now that an anchor exists; a no-op on the
+        // ordinary relayout path, where the strips' own push damaged them.
+        if (KWin::effects) {
+            for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
+                if (KWin::LogicalOutput* out = m_effect->outputForScreenId(screenIt.key())) {
+                    const QRect bounds = m_effect->m_scrollTabPainter->boundsFor(out);
+                    if (bounds.isValid()) {
+                        KWin::effects->addRepaint(KWin::Rect(bounds));
+                    }
+                }
+            }
+        }
     };
 
     m_effect->applyStaggeredOrImmediate(

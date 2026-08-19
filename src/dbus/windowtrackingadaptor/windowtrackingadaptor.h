@@ -904,16 +904,18 @@ public:
 
     /// Per-window tab-colour rule slots — niri's `tab-indicator` WINDOW rule,
     /// which recolours only the matched window's own tab. Returned as a loose
-    /// map with the same key names the overlay reads, present only when the
-    /// slot matched: "activeColor", "inactiveColor", "urgentColor" (all
-    /// QString). These outrank the per-context colours, which outrank the
-    /// config, which falls back to the theme — niri's resolution order.
+    /// map with the key names the KWin effect reads
+    /// (PhosphorProtocol::Service::ScrollTabKey), present only when the slot
+    /// matched: "activeColor", "inactiveColor", "urgentColor" (all QString).
+    /// These outrank the per-context colours, which outrank the config, which
+    /// falls back to the theme — niri's resolution order.
     ///
     /// Resolves once per (window, rule revision, matchable window state)
     /// through a PRIVATE memo (see m_tabColorMemo) — not the shared evaluator
     /// cache, which cannot serve this query in either direction. Unlike
-    /// scrollOpenRuleParams this runs per tab per strip RELAYOUT and per title
-    /// change rather than once per window open, so it is deliberately kept to
+    /// scrollOpenRuleParams this runs per tab the effect queries
+    /// (TilingAdaptor::scrollTabColors) and per title change (the per-window
+    /// relay) rather than once per window open, so it is deliberately kept to
     /// a slot read with no screen or mode stamping.
     QVariantMap tabColorRuleParams(const QString& windowId);
 
@@ -922,7 +924,7 @@ public:
     /// the dragged window's rules — the only per-window slice of the drop
     /// indicator with a coherent referent, since exactly one window is dragged
     /// at a time. Unmemoised, unlike tabColorRuleParams: once per drag rather
-    /// than per tab per relayout.
+    /// than per tab per effect query.
     QVariantMap dropIndicatorRuleParams(const QString& windowId);
 
     /// Drop every per-window rule memo this adaptor holds, because the system
@@ -952,16 +954,17 @@ private:
     /// unstamped) and would break the stamper-first ordering invariant. Merely
     /// reading it is no good either: all six of its seeders run on the OPEN
     /// path, and a rules save bumps the revision, so the peek would miss
-    /// forever for every already-open window — and this runs per tab on every
-    /// window title change.
+    /// forever for every already-open window — and this runs once per tab
+    /// every time the effect queries the colours, plus once per window on
+    /// every title change.
     /// Caches the extracted COLOUR MAP rather than the ResolvedActions: the
     /// three slots are all this path ever reads, the map is what every caller
     /// wants back, and it keeps this header free of the rules-engine include.
     ///
     /// The key carries the rule revision plus title, captionNormal
     /// (title-derived), virtual desktop, activity and the colour-scheme token.
-    /// Title especially — the refresh that consumes this memo is DRIVEN by title
-    /// changes, so keying on the revision alone would leave a `Title contains …`
+    /// Title especially — the daemon re-drives this memo's consumer per window
+    /// on a title change, so keying on the revision alone would leave a `Title contains …`
     /// tab-colour rule stuck on its first verdict until the next rules save.
     ///
     /// ColorScheme is in the key because it is the one context field
@@ -979,9 +982,14 @@ private:
     /// flags). None is in this key, so a tab-colour rule conditioned on one
     /// resolves once and stays pinned until the title, desktop, activity,
     /// colour scheme or rule revision moves. Widening the key would NOT fix
-    /// such a rule: nothing re-drives the enrichment on those fields either
-    /// (scheduleScrollTabEnrichmentRefresh fires on isDemandingAttention and
-    /// title only), so the verdict would still be stale between refreshes.
+    /// such a rule: nothing re-drives the effect's query on those fields
+    /// either. The re-drive set is exactly three edges. The daemon broadcasts
+    /// scrollTabColorsChanged on a rules change and on a colour-scheme change,
+    /// which makes the effect re-query every tab, and it relays the signal for
+    /// a single window when that window's title changes or its first registry
+    /// record lands (TilingAdaptor::relayScrollTabColorsForWindow). None fires on
+    /// isMaximized or any other extended field, so the verdict would still be
+    /// stale between re-drives.
     /// ColorScheme is the exception that proves the shape of the argument, and
     /// that is why it IS keyed: it has a re-drive signal
     /// (ISettings::systemColorSchemeChanged, routed here through
@@ -995,8 +1003,8 @@ private:
     /// is the INSTANCE-derived shadow id, which survives such a rename, so an
     /// AppId-matched tab-colour rule would stay pinned across one. They are left
     /// out of the key for the same reason as the extended fields: nothing
-    /// re-drives the enrichment on an appId change either, so a wider key would
-    /// not make that verdict fresh.
+    /// re-drives the effect's query on an appId change either, so a wider key
+    /// would not make that verdict fresh.
     struct TabColorMemoEntry
     {
         quint64 revision = 0;
@@ -1168,7 +1176,8 @@ Q_SIGNALS:
      * @brief Qt signal emitted during pruneStaleWindows with the INSTANCE-id
      * view of the alive set, so sibling adaptors can sweep their own
      * per-window caches in the same key space (TilingAdaptor's
-     * float-broadcast dedup map is the current consumer). Same in-process,
+     * float-broadcast and tab-colour-relay dedup maps are the current
+     * consumers). Same in-process,
      * not-part-of-the-wire-contract stance as windowClosedNotification —
      * and like every adaptor signal it IS auto-relayed onto the bus, which
      * is why the payload is a marshallable QStringList rather than QSet.

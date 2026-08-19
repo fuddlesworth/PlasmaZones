@@ -349,9 +349,14 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
 {
     namespace PAL = PhosphorAnimationLayer;
 
-    // Three existing surface types do NOT have a per-role config registered
-    // and therefore fall back to the empty default (no shader effect, the
-    // library-default 150 ms OutCubic motion):
+    // phosphor_roles.h defines nine roles. PassiveShell is not counted here:
+    // it is the HOST surface, and its doc records that per-content motion is
+    // resolved through the role-override beginShow / beginHide overloads, so
+    // it never carries an animation config of its own. Of the eight per-content
+    // roles that remain, applyShaderProfilesToAnimator registers five (Osd,
+    // LayoutPicker, ZoneSelector, SnapAssist, Cheatsheet) and these three do
+    // NOT have a per-role config, so they fall back to the empty default (no
+    // shader effect, the library-default 150 ms OutCubic motion):
     //   - ZoneOverlay (zone overlay rendering): routes through the
     //     animator (overlay.cpp passes PhosphorRoles::ZoneOverlay to
     //     beginShow/beginHide on the passive-shell slot) but the default

@@ -503,6 +503,15 @@ private:
     /// preset lists), setActiveScreens (scrolling.cpp). Called from
     /// updateEngineScreens so both engines' sets flip atomically per
     /// context recompute.
+    ///
+    /// The same pass splits off the params the ENGINE has no use for and
+    /// pushes each to its own consumer, since only presentation depends on
+    /// them: the per-screen tab-indicator PAINT overrides (tabStyle, gaps,
+    /// corner radius and the three tab colours) to the Tiling adaptor, which
+    /// the KWin effect reads to paint the pills; the drop-indicator paint
+    /// overrides to the OverlayService; and the focus-follows-mouse,
+    /// crop-straddlers and vertical-axis screen lists to the Scrolling
+    /// adaptor as one behaviour map.
     void updateScrollingScreens(const QSet<QString>& scrollingScreens);
     /// Shared capture phase: store leaving-scrolling screens' column order
     /// into m_lastEngineOrders BEFORE either engine seeds (see
@@ -843,6 +852,23 @@ private:
     // member (stable address) so the bound RuleEvaluator's per-revision cache
     // stays valid across back-to-back resolves.
     PhosphorRules::RuleSet m_excludeRuleSet;
+    /// Coalescing latch for the all-windows tab-colour broadcast. A KCM batch
+    /// save emits rulesChanged once per committed rule, and every emission
+    /// would otherwise make the effect re-query scrollTabColors for every tab
+    /// it paints. Consumed by the 0 ms single shot armed in init_engines.cpp,
+    /// which fires the one broadcast for the whole batch.
+    bool m_scrollTabColorsBroadcastPending = false;
+    /// Last TabColor* slice of m_ruleStore (rules carrying at least one of the
+    /// three per-window tab-colour actions), the equality guard for that
+    /// broadcast. Rules changes outside that surface (a rename of a rule the
+    /// slice does not hold, a snapping rule edit) leave this equal and are
+    /// dropped instead of invalidating every tab's colours; any edit to a
+    /// held rule, including its name or priority, trips it. The slice also
+    /// holds the terminal Exclude / ExcludePlacement rules, since those cut
+    /// the evaluator's walk ahead of a TabColor rule. Only the rules LIST is
+    /// compared, the same semantics as the exclude refilter's guard just
+    /// above it.
+    QList<PhosphorRules::Rule> m_tabColorRuleSlice;
     /// Native scrolling-template store. Created in the Daemon constructor,
     /// deliberately before the layout-source bundle is built so the template
     /// provider has a store to register against. initServices then injects it

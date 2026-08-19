@@ -144,9 +144,14 @@ Item {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            // 0.14: the tab strip takes the same share of the preview height
-            // that the real tab indicator band takes of a column, eyeballed
-            // against the live strip so the miniature reads as the same UI.
+            // 0.14: a legibility figure eyeballed against the live strip so
+            // the miniature reads as the same UI, NOT the real band's
+            // proportion (the real thickness is
+            // ConfigDefaults::scrollingTabIndicatorWidth(), 4 px for the bar
+            // style, a sliver of a column). The card always draws the band
+            // across the top regardless of the configured Position and
+            // Style: it is a cue that the column is tabbed, not a mirror of
+            // the indicator.
             height: visible ? Math.round(parent.height * 0.14) : 0
             spacing: card.tilePadding
 

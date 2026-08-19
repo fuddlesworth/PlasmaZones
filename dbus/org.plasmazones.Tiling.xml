@@ -119,7 +119,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </method>
 
         <method name="scrollTabPaintOverrides">
-            <annotation name="org.gtk.GDBus.DocString" value="Every screen's current tab-indicator paint overrides resolved from context rules (a Set tab style / gaps / corner radius / colour rule scoped to a screen, desktop or activity), as a map of effective screen id to a map of paint key to value. Keys are tabStyle, gapsBetweenTabs, cornerRadius, activeColor, inactiveColor and urgentColor; only the keys a rule actually set are present, and each layers over the matching global Scrolling.TabIndicator setting for that screen alone. The replay half of scrollTabPaintOverridesChanged. Screens with no override are absent."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Every screen's current tab-indicator paint overrides resolved from context rules (a Set tab style / gaps / corner radius / colour rule scoped to a screen, desktop or activity), as a map of effective screen id to a map of paint key to value. Keys are tabStyle, gapsBetweenTabs, cornerRadius, activeColor, inactiveColor and urgentColor. Only the keys a rule actually set are present, and each layers over the matching global Scrolling.TabIndicator setting for that screen alone. The replay half of scrollTabPaintOverridesChanged. Screens with no override are absent."/>
             <arg name="overrides" type="a{sv}" direction="out">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
                 <annotation name="org.gtk.GDBus.DocString" value="Map of effective screen id to a paint-key map."/>
@@ -182,7 +182,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch)."/>
             <arg name="tileRequests" type="a(siiiissbbbssiiibs)">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PhosphorProtocol::TileRequestList"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating, windowedFullscreen, stacking, scrollEdge, viewDelta, visualX, visualY, hasVisualPos, tabFrom). zoneId is reserved and currently always empty on this signal. windowedFullscreen means the effect flips KWin fullscreen state on the client while committing the column rect (scrolling windowed fullscreen). scrollEdge is the side a parked scrolling column departs towards, one of {left, right, top, bottom}, and empty for any placement that is not a scrolling park. viewDelta is how far a scrolling strip's view slid since the last batch, in logical pixels, for this entry's screen; it is a signed scalar along THAT screen's own strip axis, so it reads as a horizontal slide on a horizontal strip and a vertical one on a vertical strip, and a consumer must take the axis from the screen rather than assuming x. Zero for every other placement and for a window the view does not carry. visualX/visualY, valid only when hasVisualPos is true, are where a PARKED scrolling column really sits on the strip: the committed rect stays the safe off-monitor park while this is the position to paint at, so the column is seen travelling with the rest of the strip. tabFrom, set only on a tab being activated in a tabbed column, names the tab it is replacing: the outgoing tab parks and this one takes the rect it vacated, and the pair is not recoverable from the rects alone, so the compositor cross-fades the two instead of hard-cutting between them."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating, windowedFullscreen, stacking, scrollEdge, viewDelta, visualX, visualY, hasVisualPos, tabFrom). zoneId is reserved and currently always empty on this signal. windowedFullscreen means the effect flips KWin fullscreen state on the client while committing the column rect (scrolling windowed fullscreen). scrollEdge is the side a parked scrolling column departs towards, one of {left, right, top, bottom}, and empty for any placement that is not a scrolling park. viewDelta is how far a scrolling strip's view slid since the last batch, in logical pixels, for this entry's screen. It is a signed scalar along THAT screen's own strip axis, so it reads as a horizontal slide on a horizontal strip and a vertical one on a vertical strip, and a consumer must take the axis from the screen rather than assuming x. Zero for every other placement and for a window the view does not carry. visualX/visualY, valid only when hasVisualPos is true, are where a PARKED scrolling column really sits on the strip: the committed rect stays the safe off-monitor park while this is the position to paint at, so the column is seen travelling with the rest of the strip. tabFrom, set only on a tab being activated in a tabbed column, names the tab it is replacing: the outgoing tab parks and this one takes the rect it vacated, and the pair is not recoverable from the rects alone, so the compositor cross-fades the two instead of hard-cutting between them."/>
             </arg>
         </signal>
 
@@ -214,7 +214,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </signal>
 
         <signal name="scrollTabStripsChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="A screen's tab-indicator model changed. stripsJson is a JSON array with one object per VISIBLE tabbed column: x, y, width and height give the column rect in absolute logical coordinates, position is where the indicator sits on that column (0 Left, 1 Right, 2 Top, 3 Bottom), activeIndex is the zero-based index of the tab currently showing, and tabs is the column's window IDs in strip order. The array is empty (the two characters []) when the screen has no tabbed column, which is how a screen's indicators are retracted. Emitted after every strip relayout that changes the model, so a receiver may treat each payload as the complete state for that screen."/>
+            <annotation name="org.gtk.GDBus.DocString" value="A screen's tab-indicator model changed. stripsJson is a JSON array with one object per VISIBLE tabbed column: x, y, width and height give the indicator bar's rect on that column in absolute logical coordinates (the rect the engine resolved for the pills, not the column rect), position is where the indicator sits on that column (0 Left, 1 Right, 2 Top, 3 Bottom), activeIndex is the zero-based index of the tab currently showing, and tabs is the column's window IDs in strip order. The array is empty (the two characters []) when the screen has no tabbed column, which is how a screen's indicators are retracted. Emitted after every strip relayout that changes the model, so a receiver may treat each payload as the complete state for that screen."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Effective screen id the model belongs to."/>
             </arg>
@@ -224,7 +224,7 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </signal>
 
         <signal name="scrollTabPaintOverridesChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="A screen's context-rule tab-indicator paint overrides changed. Same key set as scrollTabPaintOverrides; an empty map means the screen has no override and the global settings apply to it again."/>
+            <annotation name="org.gtk.GDBus.DocString" value="A screen's context-rule tab-indicator paint overrides changed. Same key set as scrollTabPaintOverrides. An empty map means the screen has no override and the global settings apply to it again."/>
             <arg name="screenId" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Effective screen id."/>
             </arg>
@@ -235,13 +235,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
         </signal>
 
         <signal name="scrollTabColorsChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Tab colours resolved from window rules may have changed. This is a BROADCAST: windowId is empty and colors is empty, and it means every cached scrollTabColors answer is stale and must be re-queried for the windows the receiver is painting. It carries no per-window payload because the triggers (a rules save, a colour-scheme flip) move the verdict for every window at once, and naming them individually would need the daemon to walk each strip. The per-window argument shape is kept so a future targeted invalidation can use the same signal."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Tab colours resolved from window rules changed. Two shapes. The BROADCAST has an empty windowId and an empty colors map and means every cached scrollTabColors answer is stale and must be re-queried for the windows the receiver is painting. It is sent when a rules save or a colour-scheme flip moves the verdict for every window at once. The TARGETED form names one window and carries its resolved colour map, and is sent when that window's title changes or its first metadata record lands while it is a tab. An unchanged map is not re-sent. The map may itself be empty, meaning the window has no tab-colour rule, so windowId alone tells the two shapes apart."/>
             <arg name="windowId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Window whose colours changed, empty for the all-windows broadcast."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Window whose colours changed. Empty for the all-windows broadcast."/>
             </arg>
             <arg name="colors" type="a{sv}">
                 <annotation name="org.qtproject.QtDBus.QtTypeName.Out1" value="QVariantMap"/>
-                <annotation name="org.gtk.GDBus.DocString" value="Resolved colours, empty for the all-windows broadcast."/>
+                <annotation name="org.gtk.GDBus.DocString" value="Resolved colours for the named window, keyed activeColor, inactiveColor and urgentColor. Empty for the broadcast, and empty when the named window has no tab-colour rule."/>
             </arg>
         </signal>
     </interface>

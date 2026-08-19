@@ -676,7 +676,6 @@ private Q_SLOTS:
         m_engine->windowOpened(QStringLiteral("app|a"), QStringLiteral("DP-1"), 0, 0);
         // Non-empty BEFORE the clear, so the emptiness asserted afterwards is
         // this call's doing rather than a fixture that never populated it.
-        // The sibling cleared-engine test pins its surfaces the same way.
         QVERIFY(!m_adaptor->scrollingScreens().isEmpty());
         m_adaptor->clearEngine();
 

@@ -15,6 +15,7 @@
 #include <PhosphorCompositor/DecorationManager.h>
 #include <PhosphorCompositor/ICompositorBridge.h>
 #include <PhosphorEngine/EngineTypes.h>
+#include <PhosphorProtocol/ClientHelpers.h>
 #include <PhosphorProtocol/DragMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 #include <PhosphorCompositor/TriggerParser.h>
@@ -60,6 +61,7 @@
 #include <QScopeGuard>
 #include <QVector>
 #include <QSet>
+#include <QVarLengthArray>
 #include <QTimer>
 #include <QHash>
 #include <QFont> // scrollTabIndicatorFont's return type
@@ -209,11 +211,16 @@ public:
     /// Pointer events delivered while this effect holds the mouse
     /// interception — which it does for exactly the span the pointer is over
     /// a compositor-drawn scrolling tab pill (the pointing-hand cursor is
-    /// only honoured under interception). Motion keeps the pill hover
+    /// only honoured under interception), plus the span of a left press that
+    /// started on a pill (held so the release pairs with the press for the
+    /// effect, never for the window underneath). Motion keeps the pill hover
     /// tracking and releases the interception the moment the pointer leaves
-    /// the pill; a left press activates the tab. Nothing else is routed:
-    /// with no pill under the pointer the interception is not held and
-    /// these are never called.
+    /// the pill; a left press activates the tab; the matching release ends
+    /// the press hold. KWin consumes EVERY pointer event for the effect
+    /// while the interception is held, so a wheel tick or a right/middle
+    /// press over a pill reaches nothing — accepted, there is no effect-side
+    /// way to forward them. With no pill under the pointer the interception
+    /// is not held and these are never called.
     void pointerMotion(KWin::PointerMotionEvent* event) override;
     void pointerButton(KWin::PointerButtonEvent* event) override;
 
@@ -945,19 +952,19 @@ private:
      * so the pills composite above every column but below whatever stacks
      * over the strip. Once per pass (m_scrollTabPainted).
      *
-     * @param deviceRegion The triggering paintWindow call's device region.
-     * The blit is clipped to it, never painted unclipped: paint order only
-     * yields stacking order when every window above repaints the same pixels
-     * afterwards, and KWin hands each of them only the damage region. An
-     * unclipped blit would put pill pixels OUTSIDE that region, where no
-     * occluder ever paints again — so the strip would surface on top of
-     * fullscreen windows, Spectacle's capture overlay, even the lock surface,
-     * persisting until the next full-damage frame. The trigger's region is
-     * also the CORRECT clip, not merely a safe one: for the anchor trigger it
-     * is damage minus the opaque regions stacked above the strip, exactly
-     * where content at the strip's slot may show; for the above-anchor
-     * trigger the occluder's own paint follows immediately and resolves its
-     * overlap the same way it would for a naturally-slotted window below it.
+     * @param deviceRegion The triggering call's device region, used only as
+     * the fallback clip when no scene walk is in scope. The blit is clipped
+     * to the WALK's damage region (m_scrollTabWalkRegion), never painted
+     * unclipped: paint order only yields stacking order when every window
+     * above repaints the same pixels afterwards, and KWin hands each of them
+     * only the damage region. An unclipped blit would put pill pixels
+     * OUTSIDE that region, where no occluder ever paints again — so the strip
+     * would surface on top of fullscreen windows, Spectacle's capture
+     * overlay, even the lock surface, persisting until the next full-damage
+     * frame. The walk region (not the trigger WINDOW's region, which KWin has
+     * already intersected with that window's bounds) is the right clip: it is
+     * exactly the set of pixels this pass recomposites, and everything
+     * stacked above the strip that intersects it paints after us.
      */
     void paintScrollTabIndicators(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                   const KWin::Region& deviceRegion);
@@ -2308,14 +2315,10 @@ private:
     /// cross), so the cache also bounds what that mode pays for a cull that
     /// cannot fire for it.
     ///
-    /// Deliberately NOT cleared in postPaintScreen beside the other per-pass
-    /// state, and that is safe for one reason only: the clear that matters is
-    /// prePaintScreen's, which runs BEFORE the pass's first read, and every
-    /// read is gated on being inside a pass. Entries can therefore outlive
-    /// their windows between passes — both key and value are raw pointers —
-    /// but a stale entry is never read, and keys are only hashed by pointer
-    /// value, never dereferenced. Anyone adding a read that is NOT behind the
-    /// in-pass gate must add the postPaintScreen clear first.
+    /// Cleared at BOTH ends of the bracket (prePaintScreen before the first
+    /// read, postPaintScreen after the last), so an entry — both key and
+    /// value are raw pointers — never outlives the pass whose windows it
+    /// names. Every read is additionally gated on being inside a pass.
     mutable QHash<KWin::EffectWindow*, KWin::LogicalOutput*> m_scrollManagedCache;
 
     /// Latched by StripTransitionManager around its capture's paintScreen:
@@ -2495,7 +2498,79 @@ private:
     /// blit exactly once per pass.
     KWin::EffectWindow* m_scrollTabPaintAnchor = nullptr;
     bool m_scrollTabPainted = false;
-    QSet<KWin::EffectWindow*> m_scrollTabAboveAnchor;
+    /// Whether the blit this pass actually reached the GPU. Distinct from
+    /// m_scrollTabPainted on purpose: the latter is the once-per-pass
+    /// re-entry latch and must latch even when the painter refuses (a
+    /// latched raster failure), while THIS is what notePassOutcome records,
+    /// so the input side never answers for pills that are not on screen.
+    bool m_scrollTabBlitIssued = false;
+    /// Small inline array rather than a QSet: it is cleared and refilled on
+    /// every pass (and again mid-walk each time a higher strip member
+    /// supersedes the anchor), and a hash-backed set freed and re-allocated
+    /// its buckets on each clear. Membership is one linear scan per painted
+    /// window over a handful of entries.
+    QVarLengthArray<KWin::EffectWindow*, 8> m_scrollTabAboveAnchor;
+    /// The DEVICE-space damage region of the scene walk in progress, which is
+    /// the clip for the pill blit wherever it fires (the anchor trigger, the
+    /// above-anchor trigger, paintScreen's post-walk fallback). Set by
+    /// paintScreen for the presented walk and by the nested capture walks
+    /// (desktop transition) for theirs, through ScrollTabWalkScope; valid
+    /// only inside that scope. A blit clipped to the TRIGGER WINDOW's region
+    /// instead cut away every pill outside the anchor column, because KWin
+    /// hands each paintWindow the damage intersected with that window's own
+    /// bounds.
+    KWin::Region m_scrollTabWalkRegion;
+    bool m_scrollTabWalkRegionValid = false;
+    /// Whether the previous postPaintScreen saw a strip view leg in flight;
+    /// the active→settled edge re-evaluates the pill hover at the live
+    /// pointer (the leg slid the pills under it with no motion event).
+    bool m_scrollTabLegWasActive = false;
+
+    /// RAII for m_scrollTabWalkRegion (and, for the nested DESKTOP capture
+    /// walks, the per-pass painted latch): set on entry, restored on exit.
+    /// The desktop transition's captures run a nested effects->paintScreen
+    /// inside the presented pass; a pill blit inside that capture must not
+    /// consume the presented walk's one-blit-per-pass latch, or the
+    /// fall-through paint after an ABANDONED capture paints no pills for a
+    /// frame. The strip pass does NOT reset the latch: its capture walk is
+    /// the presented frame, so one blit there is the one blit.
+    struct ScrollTabWalkScope
+    {
+        ScrollTabWalkScope(PlasmaZonesEffect& effect, const KWin::Region& region, bool resetPaintedLatch)
+            : m_effect(effect)
+            , m_savedRegion(effect.m_scrollTabWalkRegion)
+            , m_savedValid(effect.m_scrollTabWalkRegionValid)
+            , m_savedPainted(effect.m_scrollTabPainted)
+            , m_savedBlitIssued(effect.m_scrollTabBlitIssued)
+            , m_restorePainted(resetPaintedLatch)
+        {
+            effect.m_scrollTabWalkRegion = region;
+            effect.m_scrollTabWalkRegionValid = true;
+            if (resetPaintedLatch) {
+                effect.m_scrollTabPainted = false;
+                effect.m_scrollTabBlitIssued = false;
+            }
+        }
+        ~ScrollTabWalkScope()
+        {
+            m_effect.m_scrollTabWalkRegion = m_savedRegion;
+            m_effect.m_scrollTabWalkRegionValid = m_savedValid;
+            if (m_restorePainted) {
+                m_effect.m_scrollTabPainted = m_savedPainted;
+                m_effect.m_scrollTabBlitIssued = m_savedBlitIssued;
+            }
+        }
+        ScrollTabWalkScope(const ScrollTabWalkScope&) = delete;
+        ScrollTabWalkScope& operator=(const ScrollTabWalkScope&) = delete;
+
+    private:
+        PlasmaZonesEffect& m_effect;
+        KWin::Region m_savedRegion;
+        bool m_savedValid;
+        bool m_savedPainted;
+        bool m_savedBlitIssued;
+        bool m_restorePainted;
+    };
 
     // Phase 6: per-window shader transitions via OffscreenEffect.
     // Shader/texture cache, LRU eviction, warm-up pipeline, profile tree,
@@ -2780,7 +2855,16 @@ private:
      * Used by loadCachedSettings() to eliminate per-setting watcher boilerplate.
      */
     template<typename Fn>
-    void loadSettingAsync(const QString& name, Fn&& onValue);
+    void loadSettingAsync(const QString& name, Fn&& onValue)
+    {
+        // Defined inline so every settings TU (daemon_settings.cpp and
+        // daemon_settings_scrolltabs.cpp) instantiates the same delegate.
+        PhosphorProtocol::ClientHelpers::loadSettingAsync(this, name, std::forward<Fn>(onValue));
+    }
+    /// The compositor-drawn tab indicators' paint settings and the label
+    /// font keys they read; called from loadCachedSettings, defined in
+    /// daemon_settings_scrolltabs.cpp.
+    void loadScrollTabIndicatorSettings();
 
     /**
      * @brief Check if any activation trigger is currently held locally
@@ -3009,13 +3093,13 @@ private:
     // LengthProportion, Position, HideWhenSingleTab, PlaceWithinColumn) reaches
     // the engine through IScrollSettings and never lands here; these keys only
     // ever decide how the pills LOOK, which is why the effect can own them
-    // outright. Every default below is the matching
+    // outright. Every default below DUPLICATES, by hand, the matching
     // ConfigDefaults::scrollingTabIndicator*() accessor in
-    // src/config/configdefaults_scrolling.h, seeded from the constant rather
-    // than an inline literal's worth of guesswork so a pre-reply frame paints
-    // the shipped look and not a different one. All are re-fetched on every
-    // settingsChanged (loadCachedSettings runs whole), so a settings-page edit
-    // repaints without a relog.
+    // src/config/configdefaults_scrolling.h (the effect cannot include the
+    // daemon's config headers), so a pre-reply frame paints the shipped look
+    // and not a different one; a default change there is a change here too.
+    // All are re-fetched on every settingsChanged (loadCachedSettings runs
+    // whole), so a settings-page edit repaints without a relog.
     //
     // The font members mirror the six Appearance label-font keys the daemon
     // pushes onto the QML overlay through writeFontProperties
@@ -3051,15 +3135,18 @@ private:
     bool m_cachedLabelFontItalic = false;
     bool m_cachedLabelFontUnderline = false;
     bool m_cachedLabelFontStrikeout = false;
-    /// Bumped on every change so the painter can cheaply detect "style
-    /// changed" — the orchestrator reads this.
-    quint64 m_tabIndicatorStyleGeneration = 0;
+    /// Coalescing latch for onScrollTabIndicatorStyleChanged: a settings-page
+    /// apply lands several tab-key replies in one turn, and each would
+    /// otherwise rebuild every screen's model synchronously (JSON re-parse,
+    /// font and palette re-resolve per screen). One queued rebuild per burst.
+    bool m_tabIndicatorRebuildPending = false;
 
-    /// Invoked after any of the members above changes. Bumps the generation and
-    /// asks for a repaint so the new look lands on the next frame.
+    /// Invoked after any of the members above changes. Drops the handler's
+    /// cached theme/font (the label font is built from these members) and
+    /// queues ONE rebuild of every screen's model for the burst.
     void onScrollTabIndicatorStyleChanged();
     /// Builds the tab-label font from the cached label-font members. Defined in
-    /// daemon_settings.cpp.
+    /// daemon_settings_scrolltabs.cpp.
     QFont scrollTabIndicatorFont() const;
     // ── end scrolling tab indicator paint settings ──
 

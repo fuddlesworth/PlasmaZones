@@ -18,9 +18,6 @@
 #include <effect/effecthandler.h>
 
 #include <QColor>
-#include <QFont>
-#include <QFontDatabase>
-#include <QFontInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -50,13 +47,6 @@ void PlasmaZonesEffect::slotSettingsChanged()
     // full window re-notification (N D-Bus windowOpened calls + retile round)
     // on every algorithm/gap/setting change — the daemon already retiles and
     // emits windowsTiled directly for those changes.
-}
-
-// Template implementation for loadSettingAsync — delegates to shared helper.
-template<typename Fn>
-void PlasmaZonesEffect::loadSettingAsync(const QString& name, Fn&& onValue)
-{
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, name, std::forward<Fn>(onValue));
 }
 
 void PlasmaZonesEffect::loadCachedSettings()
@@ -926,174 +916,11 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_tilingHandler->setWheelFocusInverted(v.toBool());
     });
 
-    // ── Scrolling tab indicator PAINT settings ──
-    //
-    // The effect draws the tab pills itself, so it needs the paint half of
-    // Scrolling.TabIndicator that the daemon otherwise pushes onto the QML
-    // overlay. The geometry half never comes here: it reaches the engine
-    // through IScrollSettings and is already baked into the committed column
-    // rects the effect paints against.
-    //
-    // Defaults live on the members (see the header block) and are the
-    // ConfigDefaults::scrollingTabIndicator*() accessors in
-    // src/config/configdefaults_scrolling.h. Every loader type-guards, because
-    // an older daemon answering an unknown key replies VALID-but-empty: a
-    // bare toBool()/toInt() would silently turn the master switch off or
-    // collapse the style to chips for the duration of the skew. A guarded
-    // reply simply leaves the shipped default standing.
-    //
-    // Change-gated: only a real value change bumps the generation and repaints,
-    // since loadCachedSettings re-runs in full on EVERY settingsChanged and an
-    // ungated assignment would cost a full repaint per unrelated setting edit.
-    loadSettingAsync(QStringLiteral("scrollingTabIndicatorEnabled"), [this](const QVariant& v) {
-        if (v.typeId() != QMetaType::Bool) {
-            return;
-        }
-        const bool enabled = v.toBool();
-        if (m_cachedTabIndicatorEnabled != enabled) {
-            m_cachedTabIndicatorEnabled = enabled;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("scrollingTabIndicatorStyle"), [this](const QVariant& v) {
-        bool ok = false;
-        const int style = v.toInt(&ok);
-        // Closed set mirrored from ConfigDefaults::isValidScrollingTabIndicatorStyle:
-        // 0 = title chips, 1 = segment bar. Anything else is skew, not a style.
-        if (!ok || (style != 0 && style != 1)) {
-            return;
-        }
-        if (m_cachedTabIndicatorStyle != style) {
-            m_cachedTabIndicatorStyle = style;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
-
-    // Bounds mirror ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs{Min,Max}().
-    loadSettingAsync(QStringLiteral("scrollingTabIndicatorGapsBetweenTabs"), [this](const QVariant& v) {
-        bool ok = false;
-        const int gaps = v.toInt(&ok);
-        if (!ok || gaps < 0 || gaps > 64) {
-            return;
-        }
-        if (m_cachedTabIndicatorGapsBetweenTabs != gaps) {
-            m_cachedTabIndicatorGapsBetweenTabs = gaps;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
-
-    // Bounds mirror ConfigDefaults::scrollingTabIndicatorCornerRadius{Min,Max}().
-    // The floor is the -1 "fully rounded" sentinel
-    // (ConfigDefaults::scrollingTabIndicatorCornerRadiusPill), which the painter
-    // resolves against the tab's short extent, so it must survive the clamp.
-    loadSettingAsync(QStringLiteral("scrollingTabIndicatorCornerRadius"), [this](const QVariant& v) {
-        bool ok = false;
-        const int radius = v.toInt(&ok);
-        if (!ok || radius < -1 || radius > 64) {
-            return;
-        }
-        if (m_cachedTabIndicatorCornerRadius != radius) {
-            m_cachedTabIndicatorCornerRadius = radius;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
-
-    // Tab colours are theme-fallback keys: the daemon marshals them as the raw
-    // stored string, and EMPTY means "follow the theme". An empty reply must
-    // therefore land as an INVALID QColor (the painter's own sentinel), NOT be
-    // rejected like a malformed one — otherwise clearing a colour on the
-    // settings page would leave the old concrete colour painted until relog.
-    // A non-empty string that QColor cannot parse IS malformed and is dropped.
-    const auto loadTabColor = [this](const QString& key, QColor& slot) {
-        loadSettingAsync(key, [this, &slot](const QVariant& v) {
-            const QString s = v.toString();
-            const QColor c = s.isEmpty() ? QColor() : QColor(s);
-            if (!s.isEmpty() && !c.isValid()) {
-                return;
-            }
-            if (slot != c) {
-                slot = c;
-                onScrollTabIndicatorStyleChanged();
-            }
-        });
-    };
-    loadTabColor(QStringLiteral("scrollingTabIndicatorActiveColor"), m_cachedTabIndicatorActiveColor);
-    loadTabColor(QStringLiteral("scrollingTabIndicatorInactiveColor"), m_cachedTabIndicatorInactiveColor);
-    loadTabColor(QStringLiteral("scrollingTabIndicatorUrgentColor"), m_cachedTabIndicatorUrgentColor);
-
-    // Label font, the same six Appearance keys writeFontProperties
-    // (src/daemon/overlayservice/internal.h) pushes onto the QML overlay, so a
-    // compositor-drawn chip label matches every other PlasmaZones label.
-    // Bounds mirror ConfigDefaults::labelFontSizeScale{Min,Max}() and
-    // labelFontWeight{Min,Max}().
-    loadSettingAsync(QStringLiteral("labelFontFamily"), [this](const QVariant& v) {
-        if (v.typeId() != QMetaType::QString) {
-            return;
-        }
-        const QString family = v.toString();
-        if (m_cachedLabelFontFamily != family) {
-            m_cachedLabelFontFamily = family;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("labelFontSizeScale"), [this](const QVariant& v) {
-        bool ok = false;
-        const double scale = v.toDouble(&ok);
-        if (!ok || !qIsFinite(scale) || scale < 0.25 || scale > 3.0) {
-            return;
-        }
-        if (!qFuzzyCompare(m_cachedLabelFontSizeScale, scale)) {
-            m_cachedLabelFontSizeScale = scale;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("labelFontWeight"), [this](const QVariant& v) {
-        bool ok = false;
-        const int weight = v.toInt(&ok);
-        if (!ok || weight < 100 || weight > 900) {
-            return;
-        }
-        if (m_cachedLabelFontWeight != weight) {
-            m_cachedLabelFontWeight = weight;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("labelFontItalic"), [this](const QVariant& v) {
-        if (v.typeId() != QMetaType::Bool) {
-            return;
-        }
-        const bool italic = v.toBool();
-        if (m_cachedLabelFontItalic != italic) {
-            m_cachedLabelFontItalic = italic;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("labelFontUnderline"), [this](const QVariant& v) {
-        if (v.typeId() != QMetaType::Bool) {
-            return;
-        }
-        const bool underline = v.toBool();
-        if (m_cachedLabelFontUnderline != underline) {
-            m_cachedLabelFontUnderline = underline;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
-
-    loadSettingAsync(QStringLiteral("labelFontStrikeout"), [this](const QVariant& v) {
-        if (v.typeId() != QMetaType::Bool) {
-            return;
-        }
-        const bool strikeout = v.toBool();
-        if (m_cachedLabelFontStrikeout != strikeout) {
-            m_cachedLabelFontStrikeout = strikeout;
-            onScrollTabIndicatorStyleChanged();
-        }
-    });
+    // The compositor-drawn tab indicators' PAINT settings (style, gaps,
+    // radius, three colours) and the six label-font keys they share with the
+    // QML overlays live in daemon_settings_scrolltabs.cpp: one loader block
+    // behind one function, so this file stays under the size ceiling.
+    loadScrollTabIndicatorSettings();
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {
@@ -1154,45 +981,6 @@ void PlasmaZonesEffect::loadCachedSettings()
     }
 
     qCDebug(lcEffect) << "Loading cached settings asynchronously, using defaults until loaded";
-}
-
-void PlasmaZonesEffect::onScrollTabIndicatorStyleChanged()
-{
-    // One counter for the whole paint-settings block, bumped by whichever
-    // loader saw a real change. The painter compares it against the generation
-    // it last built its per-tab geometry for, so a style edit invalidates that
-    // cache with an integer compare instead of re-reading eleven members every
-    // frame. Wraps harmlessly: the painter only ever tests for inequality.
-    ++m_tabIndicatorStyleGeneration;
-    // The painter's model carries the style by value, so a change has to be
-    // pushed through a rebuild; the rebuild damages exactly the pill rects.
-    // m_tilingHandler is constructed before the first settings load can run
-    // (the handler is a constructor-time member), so no null guard is needed.
-    m_tilingHandler->rebuildAllScrollTabIndicators();
-}
-
-QFont PlasmaZonesEffect::scrollTabIndicatorFont() const
-{
-    // Kirigami.Theme.smallFont, exactly: Kirigami's desktop platform plugin
-    // hands out QFontDatabase's SmallestReadableFont system font (the "Small"
-    // font on Plasma's Fonts page), so reading the same database entry here
-    // gives the pills the size the QML rendering had, with no Kirigami link.
-    // The base pixel size is measured through QFontInfo because the system
-    // font is point-sized and the user's scale applies to the resolved pixel
-    // height, as the QML's `smallFont.pixelSize * fontSizeScale` did.
-    const QFont base = QFontDatabase::systemFont(QFontDatabase::SmallestReadableFont);
-    const int basePixelSize = qMax(1, QFontInfo(base).pixelSize());
-
-    QFont font = base;
-    if (!m_cachedLabelFontFamily.isEmpty()) {
-        font.setFamily(m_cachedLabelFontFamily);
-    }
-    font.setPixelSize(qMax(1, qRound(basePixelSize * m_cachedLabelFontSizeScale)));
-    font.setWeight(static_cast<QFont::Weight>(qBound(1, m_cachedLabelFontWeight, 1000)));
-    font.setItalic(m_cachedLabelFontItalic);
-    font.setUnderline(m_cachedLabelFontUnderline);
-    font.setStrikeOut(m_cachedLabelFontStrikeout);
-    return font;
 }
 
 } // namespace PlasmaZones

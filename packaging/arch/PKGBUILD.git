@@ -47,12 +47,15 @@ makedepends=(
     'qt6-tools'
     'kwin'
     'wayland'
+    'vulkan-headers'
+    'vulkan-icd-loader'
 )
 optdepends=(
     'plasma-activities: activity-based layouts'
+    'hwdata: readable GPU names in the rendering device picker'
 )
 provides=('plasmazones')
-conflicts=('plasmazones')
+conflicts=('plasmazones' 'plasmazones-bin')
 source=(
     "$pkgname::git+$url.git"
 )

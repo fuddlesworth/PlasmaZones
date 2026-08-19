@@ -3,6 +3,7 @@
 
 #include "desktoptransitionmanager.h"
 
+#include "compositor/scrolltabindicatorpainter.h"
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "plasmazoneseffect/shader_internal.h"
 #include "transitionpasshelpers.h"
@@ -23,6 +24,7 @@
 #include <QSize>
 
 #include <memory>
+#include <optional>
 
 // The capture part of DesktopTransitionManager: how a desktop BECOMES a texture.
 // desktoptransitionmanager.cpp keeps the drive part (resolve, begin, blend),
@@ -90,6 +92,13 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
         KWin::RenderTarget renderTarget(&fbo, outputTarget.colorDescription());
         KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        // Scope-guarded like the latches the direct-drive pipeline sets around
+        // this walk: a throw inside it must not leave KWin's framebuffer stack
+        // pushed for the rest of the session any more than it may leak those
+        // latches.
+        const auto popFbo = qScopeGuard([] {
+            KWin::GLFramebuffer::popFramebuffer();
+        });
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -97,18 +106,36 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
         // and app windows composite over it. isHiddenByShowDesktop: a capture
         // taken while a peek is active must not bake the hidden windows into
         // the transition texture — the scene isn't painting them, so the
-        // capture shouldn't either.
+        // capture shouldn't either. isHidden / isOnCurrentActivity: the same
+        // two paintability terms the strip capture and the pill anchor
+        // election apply; a window the live scene never draws (hidden but
+        // not minimized, or on another activity) must not be composited into
+        // the outgoing texture, where it would appear for the blend and
+        // vanish when it ends. isHidden is its own flag, orthogonal to the
+        // desktop switch: an XWayland window on another desktop is kept
+        // mapped (X11Window::updateVisibility → internalKeep), not hidden,
+        // so the outgoing desktop's X11 windows pass this term. isOnDesktop
+        // ignores activity on its own.
         // No isDeleted exclusion here, unlike the peek filter: a mid-close
         // window still visible on the outgoing desktop belongs in its capture
         // (matching KWin's close-animation semantics), while the peek filter
         // must never resurrect a deleted window off a lingering
         // hiddenByShowDesktop flag.
-        compositeWindowsInto(renderTarget, viewport, logicalGeometry, [desktop](KWin::EffectWindow* w) {
-            return !w->isMinimized() && !w->isHiddenByShowDesktop()
-                && (w->isOnDesktop(desktop) || w->isOnAllDesktops());
-        });
-
-        KWin::GLFramebuffer::popFramebuffer();
+        // The pills ride along (pillScreen): without them the OUTGOING texture
+        // had no tab indicators while the INCOMING capture (a real scene
+        // walk) did, so the pills popped out at the start of every blend and
+        // back in at its end. The model blitted is the painter's current one,
+        // which at this deferred capture is the outgoing desktop's unless the
+        // engine's relayout for the incoming desktop already landed — a
+        // one-frame race at worst, and the pills are over the columns they
+        // label either way.
+        compositeWindowsInto(
+            renderTarget, viewport, logicalGeometry,
+            [desktop](KWin::EffectWindow* w) {
+                return !w->isMinimized() && !w->isHidden() && !w->isHiddenByShowDesktop() && w->isOnCurrentActivity()
+                    && (w->isOnDesktop(desktop) || w->isOnAllDesktops());
+            },
+            screen);
     }
 
     return tex;
@@ -116,7 +143,8 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureDesktop(KWin::
 
 void DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& renderTarget,
                                                     const KWin::RenderViewport& viewport, const QRectF& logicalGeometry,
-                                                    const std::function<bool(KWin::EffectWindow*)>& includeWindow)
+                                                    const std::function<bool(KWin::EffectWindow*)>& includeWindow,
+                                                    KWin::LogicalOutput* pillScreen)
 {
     // Direct-drive mode for the loop below: paintWindow's tail must
     // terminate with a raw draw instead of continuing the paintWindow
@@ -132,6 +160,37 @@ void DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& re
     // Bottom-to-top: stackingOrder() is already bottom→top. Windows outside
     // this output are clipped by the viewport.
     const QList<KWin::EffectWindow*> stack = KWin::effects->stackingOrder();
+    // The pill anchor for THIS walk: the topmost window the loop will paint
+    // that is scroll-managed on pillScreen (the scene walk's election skips
+    // off-desktop columns, so it cannot be reused for an outgoing-desktop
+    // capture). Parked columns are skipped for the same reason the scene's
+    // election skips them: they are culled at paint.
+    KWin::EffectWindow* pillAnchor = nullptr;
+    // paintScrollTabIndicators blits for the PASS output (m_currentPassOutput);
+    // every caller reaches here from inside that output's pass, so the two
+    // agree, and the gate makes a caller that ever did not simply paint no
+    // pills rather than another output's model.
+    const bool wantPills = pillScreen && pillScreen == m_effect->m_currentPassOutput
+        && m_effect->m_scrollTabPainter->hasIndicators(pillScreen);
+    if (wantPills) {
+        for (KWin::EffectWindow* w : stack) {
+            if (!w || !includeWindow(w) || !w->expandedGeometry().intersects(logicalGeometry)) {
+                continue;
+            }
+            if (m_effect->scrollManagedOutputFor(w) == pillScreen
+                && !m_effect->scrollParkedOffscreen(w, m_effect->getWindowId(w))) {
+                pillAnchor = w; // topmost wins
+            }
+        }
+    }
+    // The capture's full region is the clip for the pill blit, and the
+    // effect's one-blit-per-pass latch is saved around this walk so the
+    // presented pass still blits its own (see ScrollTabWalkScope).
+    const KWin::Region captureRegion(KWin::Rect(QPoint(), viewport.deviceSize()));
+    std::optional<PlasmaZonesEffect::ScrollTabWalkScope> pillScope;
+    if (pillAnchor) {
+        pillScope.emplace(*m_effect, captureRegion, /*resetPaintedLatch=*/true);
+    }
     for (KWin::EffectWindow* w : stack) {
         if (!w || !includeWindow(w)) {
             continue;
@@ -168,6 +227,11 @@ void DesktopTransitionManager::compositeWindowsInto(const KWin::RenderTarget& re
         // construction: Spring::step is an exact exponential integrator, so
         // step(a) then step(b) lands bit-for-bit where step(a+b) does.
         m_effect->paintWindow(renderTarget, viewport, w, captureMask, KWin::Region::infinite(), captureData);
+        if (w == pillAnchor) {
+            // Above every column this capture paints, below whatever the
+            // stacking puts over the strip — the live walk's anchor slot.
+            m_effect->paintScrollTabIndicators(renderTarget, viewport, captureRegion);
+        }
     }
 }
 
@@ -197,11 +261,21 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
         KWin::RenderTarget renderTarget(&fbo, outputTarget.colorDescription());
         KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        const auto popFbo = qScopeGuard([] {
+            KWin::GLFramebuffer::popFramebuffer();
+        });
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         // Render the live scene (the now-current INCOMING desktop) into the FBO
         // via KWin's own composite. This is the downstream chain call (effects
         // below us + the scene), NOT a re-entry into our own paintScreen.
+        //
+        // The nested walk is scoped for the compositor-drawn tab pills: the
+        // blit inside it clips to THIS walk's (full-FBO) region, and the
+        // effect's one-blit-per-pass latch is saved and restored around it,
+        // so a capture that is later ABANDONED (a failed pair, an unusable
+        // cached peek texture) leaves the presented fall-through walk free to
+        // blit its own pills instead of skipping them for a frame.
         //
         // The region parameter is DEVICE space, and this FBO's device space starts
         // at (0, 0) because the viewport above is built with a QPoint() render
@@ -211,9 +285,11 @@ std::unique_ptr<KWin::GLTexture> DesktopTransitionManager::captureLiveScene(int 
         // our prePaintScreen sets PAINT_SCREEN_TRANSFORMED, which routes the scene
         // through the generic infinite-region path — the moment that mask bit
         // changes, the second monitor's incoming capture goes black.
-        KWin::effects->paintScreen(renderTarget, viewport, mask,
-                                   KWin::Region(KWin::Rect(QPoint(), viewport.deviceSize())), screen);
-        KWin::GLFramebuffer::popFramebuffer();
+        {
+            const KWin::Region walkRegion(KWin::Rect(QPoint(), viewport.deviceSize()));
+            const PlasmaZonesEffect::ScrollTabWalkScope walkScope(*m_effect, walkRegion, /*resetPaintedLatch=*/true);
+            KWin::effects->paintScreen(renderTarget, viewport, mask, walkRegion, screen);
+        }
     }
     return tex;
 }
@@ -266,6 +342,9 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
         KWin::RenderTarget renderTarget(&fbo, outputTarget.colorDescription());
         KWin::RenderViewport viewport(logicalGeometry, scale, renderTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(&fbo);
+        const auto popFbo = qScopeGuard([] {
+            KWin::GLFramebuffer::popFramebuffer();
+        });
 
         // Layer 1: the bare desktop. Prefer a straight framebuffer blit from
         // the caller's TO capture — a raster copy has no orientation or
@@ -294,17 +373,21 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
                 // blitFromFramebuffer reads from the CURRENT framebuffer and
                 // draws into the object it is called on.
                 KWin::GLFramebuffer::pushFramebuffer(&srcFbo);
+                const auto popSrc = qScopeGuard([] {
+                    KWin::GLFramebuffer::popFramebuffer();
+                });
                 fbo.blitFromFramebuffer(KWin::Rect(), KWin::Rect(), GL_NEAREST);
-                KWin::GLFramebuffer::popFramebuffer();
                 baseCopied = true;
             }
         }
         if (!baseCopied) {
             glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
             glClear(GL_COLOR_BUFFER_BIT);
-            // Same call and device-space region reasoning as captureLiveScene.
-            KWin::effects->paintScreen(renderTarget, viewport, mask,
-                                       KWin::Region(KWin::Rect(QPoint(), viewport.deviceSize())), screen);
+            // Same call, device-space region and pill walk scope reasoning as
+            // captureLiveScene.
+            const KWin::Region walkRegion(KWin::Rect(QPoint(), viewport.deviceSize()));
+            const PlasmaZonesEffect::ScrollTabWalkScope walkScope(*m_effect, walkRegion, /*resetPaintedLatch=*/true);
+            KWin::effects->paintScreen(renderTarget, viewport, mask, walkRegion, screen);
         }
 
         // Layer 2: the hidden windows, bottom-to-top in stacking order through
@@ -312,12 +395,22 @@ DesktopTransitionManager::capturePeekWindowsScene(KWin::GLTexture* bareDesktop, 
         // why the tail must terminate with a raw draw here). isOnCurrentDesktop
         // already covers on-all-desktops windows, but no such window can be
         // hiddenByShowDesktop anyway (the wallpaper and docks are exempt from
-        // show-desktop hiding).
-        compositeWindowsInto(renderTarget, viewport, logicalGeometry, [](KWin::EffectWindow* w) {
-            return w->isHiddenByShowDesktop() && !w->isDeleted() && !w->isMinimized() && w->isOnCurrentDesktop();
-        });
-
-        KWin::GLFramebuffer::popFramebuffer();
+        // show-desktop hiding). isHidden / isOnCurrentActivity for the same
+        // reason as the outgoing capture: a window the scene would not draw
+        // after the peek must not be painted into its FROM endpoint.
+        // pillScreen: the bare-desktop base (layer 1) carries NO pills, whether
+        // blitted from the TO capture or re-rendered live — both were taken
+        // with the strip columns hidden by show-desktop, so the scene's anchor
+        // election found no column to anchor on. The hidden columns are
+        // composited here, so the pills are blitted here too, at the topmost
+        // column this walk paints.
+        compositeWindowsInto(
+            renderTarget, viewport, logicalGeometry,
+            [](KWin::EffectWindow* w) {
+                return w->isHiddenByShowDesktop() && !w->isDeleted() && !w->isMinimized() && !w->isHidden()
+                    && w->isOnCurrentDesktop() && w->isOnCurrentActivity();
+            },
+            screen);
     }
     return tex;
 }

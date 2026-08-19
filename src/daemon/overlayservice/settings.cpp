@@ -465,13 +465,18 @@ void OverlayService::scheduleIdleQuiesce()
             // must veto the quiesce too. A vetoed one-shot is NOT re-armed
             // here: every path that shows or hides a decoration or overlay
             // routes through syncCavaState (or calls scheduleIdleQuiesce
-            // directly), so the next show or hide re-arms it. The five slot
-            // hide-completion handlers (OSD, zone selector, snap-assist,
-            // layout picker, cheatsheet) are the exception when their slot
-            // is undecorated: they call neither. Each is covered by the arm
-            // at its own next show, via applyDecoration's unconditional
-            // syncCavaState tail. New hide paths must keep that contract or
-            // parked towers strand until the next show/hide cycle.
+            // directly), so the next show or hide re-arms it. The five
+            // DECORATION-HOSTING slots' hide-completion handlers (OSD, zone
+            // selector, snap-assist, layout picker, cheatsheet — exactly the
+            // set visibleAudioDecorationSlots walks) are the exception when
+            // their slot is undecorated: they call neither. Each is covered by
+            // the arm at its own next show, via applyDecoration's
+            // unconditional syncCavaState tail. The drop indicator's hide
+            // completion (scrolldropindicator.cpp) is NOT a sixth case: that
+            // slot hosts no decoration and never feeds CAVA, so neither its
+            // show nor its hide touches this timer at all. New hide paths must
+            // keep that contract or parked towers strand until the next
+            // show/hide cycle.
             if (isOverlayDisplaying() || !visibleAudioDecorationSlots().isEmpty()) {
                 return;
             }

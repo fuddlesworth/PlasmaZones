@@ -24,9 +24,12 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusServiceWatcher>
 #include <QEvent>
+#include <QLocale>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QStandardPaths>
 #include <QTimer>
+#include <QTranslator>
 #include <QVarLengthArray>
 
 #include "input_filter.h"
@@ -77,6 +80,26 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 {
     PhosphorProtocol::registerWireTypes();
 
+    // The compositor-drawn tab pills carry one translated string (the
+    // untitled-tab placeholder) and this process is kwin_wayland, which
+    // installs no PlasmaZones catalog of its own. Load the daemon's catalog
+    // for the current locale from the shared data location; the translator
+    // is parented to the effect so an unload removes it again. Same contexts
+    // and lookup as the daemon's translation loader, minus the build-tree
+    // search dirs that only make sense next to our own binaries.
+    {
+        auto* translator = new QTranslator(this);
+        const QLocale locale;
+        const QStringList dataDirs = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+        for (const QString& dir : dataDirs) {
+            if (translator->load(locale, QStringLiteral("plasmazones"), QStringLiteral("_"),
+                                 dir + QStringLiteral("/plasmazones/translations"))) {
+                QCoreApplication::installTranslator(translator);
+                break;
+            }
+        }
+    }
+
     // Latch compositor shutdown so the destructor can tell a runtime unload
     // (KCM toggle — restore the suppressed stock effects) from session
     // teardown (do NOT call loadEffect into the list KWin is unloading).
@@ -122,10 +145,15 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     // and compiled shaders free under the same context discipline).
     m_stripTransition.reset();
     // And the tab indicators: the override cursor must be handed back before
-    // the effect goes (KWin would keep a pointing hand nothing owns), then the
-    // per-output GLTextures are freed under the same context discipline so
-    // nothing leaks past the effect.
+    // the effect goes (KWin would keep a pointing hand nothing owns). The
+    // handler's clear is GL-free — it RETIRES the per-output textures rather
+    // than deleting them — and releaseGl() right after is the GL-current
+    // point that actually frees them (plus anything retired earlier), so
+    // nothing leaks past the effect and nothing is deleted off-context.
+    // Made current HERE rather than inherited from the transition resets
+    // above, so reordering those cannot turn this into an off-context free.
     m_tilingHandler->clearScrollTabState();
+    ensureGlContextCurrent();
     m_scrollTabPainter->releaseGl();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,

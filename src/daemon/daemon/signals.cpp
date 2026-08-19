@@ -11,8 +11,9 @@
 #include "daemon/overlayservice.h"
 #include "dbus/layoutadaptor/layoutadaptor.h"
 #include "dbus/settingsadaptor/settingsadaptor.h"
-// Complete type needed to emit focusWindowRequested on the tab-click path —
-// daemon.h forward declares TilingAdaptor only.
+// Complete type needed for the windowClosedNotification / stalePruned PMF
+// connects below (TilingAdaptor::onTrackedWindowDestroyed /
+// pruneStaleFloatBroadcasts) — daemon.h forward declares TilingAdaptor only.
 #include "dbus/tilingadaptor/tilingadaptor.h"
 #include "dbus/windowdragadaptor/windowdragadaptor.h"
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"

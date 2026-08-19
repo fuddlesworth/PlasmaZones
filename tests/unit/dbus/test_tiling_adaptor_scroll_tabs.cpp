@@ -7,9 +7,10 @@
  * Pins the tab-indicator transport TilingAdaptor exposes to the KWin effect:
  * the relay that turns the scroll engine's per-screen model into
  * scrollTabStripsChanged plus the scrollTabStrips replay cache behind it, the
- * "[]" retraction that drops a screen from that cache, the all-windows
- * scrollTabColorsChanged broadcast, and the scrollTabColors pass-through to
- * the WindowTrackingAdaptor's rule resolution.
+ * "[]" retraction that drops a screen from that cache, the per-screen PAINT
+ * override map and its predicate-driven clear, the all-windows
+ * scrollTabColorsChanged broadcast, the targeted per-window re-drive, and the
+ * scrollTabColors pass-through to the WindowTrackingAdaptor's rule resolution.
  *
  * NOTE: the adaptor is parented to a plain QObject rather than a
  * D-Bus-registered object, same as the panel-gate and active-layouts tests —
@@ -17,15 +18,14 @@
  * vanilla QObject parent sidesteps the D-Bus registration assumptions.
  */
 
-#include <QCoreApplication>
 #include <QObject>
 #include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTest>
 #include <QUuid>
-#include <memory>
 
 #include <PhosphorEngine/WindowRegistry.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorRules/ActionTypes.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/MatchTypes.h>
@@ -97,6 +97,53 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 3);
         QCOMPARE(adaptor.scrollTabStrips().size(), 2);
         QCOMPARE(adaptor.scrollTabStrips().value(QStringLiteral("DP-1")).toString(), dp1Next);
+
+        // Relaying the SAME payload twice emits TWICE. Deliberate: the gate
+        // lives upstream in the scroll engine (m_lastTabStripPayload in
+        // engine_apply.cpp), which only emits on a real model change, so a
+        // second gate here could only ever duplicate that one.
+        adaptor.relayScrollTabStrips(QStringLiteral("DP-1"), dp1Next);
+        QCOMPARE(spy.count(), 4);
+        QCOMPARE(spy.at(3).at(1).toString(), dp1Next);
+    }
+
+    void testClearPaintOverridesWhereMatchesOnlyThePredicate()
+    {
+        QObject adaptorParent;
+        TilingAdaptor adaptor(nullptr, &adaptorParent);
+        namespace STK = PhosphorProtocol::Service::ScrollTabKey;
+
+        QVariantMap ov;
+        ov.insert(QString(STK::TabStyle), 1);
+        adaptor.setScrollTabPaintOverrides(QStringLiteral("DP-1"), ov);
+        adaptor.setScrollTabPaintOverrides(QStringLiteral("DP-1/vs:1"), ov);
+        adaptor.setScrollTabPaintOverrides(QStringLiteral("HDMI-1"), ov);
+        QCOMPARE(adaptor.scrollTabPaintOverrides().size(), 3);
+
+        QSignalSpy spy(&adaptor, &TilingAdaptor::scrollTabPaintOverridesChanged);
+        QVERIFY(spy.isValid());
+
+        // The hot-removal shape: everything rooted on one departed output,
+        // sub-screens included, and nothing else.
+        adaptor.clearScrollTabPaintOverridesWhere([](const QString& screenId) {
+            return screenId.startsWith(QStringLiteral("DP-1"));
+        });
+
+        // Each cleared screen gets its own empty-map signal, which is how the
+        // effect learns to fall back to the global look.
+        QCOMPARE(spy.count(), 2);
+        QVERIFY(spy.at(0).at(1).toMap().isEmpty());
+        QVERIFY(spy.at(1).at(1).toMap().isEmpty());
+
+        const QVariantMap left = adaptor.scrollTabPaintOverrides();
+        QCOMPARE(left.size(), 1);
+        QCOMPARE(left.value(QStringLiteral("HDMI-1")).toMap(), ov);
+
+        // Idempotent: a second sweep finds nothing to clear and stays silent.
+        adaptor.clearScrollTabPaintOverridesWhere([](const QString& screenId) {
+            return screenId.startsWith(QStringLiteral("DP-1"));
+        });
+        QCOMPARE(spy.count(), 2);
     }
 
     void testEmptyArrayRetractsTheScreen()
@@ -156,9 +203,13 @@ private Q_SLOTS:
         adaptor.setScrollTabPaintOverrides(QStringLiteral("DP-1"), {});
         QCOMPARE(spy.count(), 0);
 
+        // The shared key spellings, not local literals: the daemon produces
+        // and the effect reads these constants, so a rename must break here
+        // too rather than silently drop the override.
+        namespace STK = PhosphorProtocol::Service::ScrollTabKey;
         QVariantMap ov;
-        ov.insert(QStringLiteral("tabStyle"), 0);
-        ov.insert(QStringLiteral("activeColor"), QStringLiteral("#ff0000"));
+        ov.insert(QString(STK::TabStyle), 0);
+        ov.insert(QString(STK::ActiveColor), QStringLiteral("#ff0000"));
         adaptor.setScrollTabPaintOverrides(QStringLiteral("DP-1"), ov);
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("DP-1"));
@@ -174,7 +225,7 @@ private Q_SLOTS:
 
         // A second screen is independent of the first.
         QVariantMap other;
-        other.insert(QStringLiteral("cornerRadius"), -1);
+        other.insert(QString(STK::CornerRadius), -1);
         adaptor.setScrollTabPaintOverrides(QStringLiteral("HDMI-1"), other);
         QCOMPARE(spy.count(), 2);
         QCOMPARE(adaptor.scrollTabPaintOverrides().size(), 2);
@@ -212,11 +263,15 @@ private Q_SLOTS:
     {
         IsolatedConfigGuard guard;
 
-        QObject parent;
+        // Declared BEFORE `parent` so destruction runs in the safe order: the
+        // WTA is a child of `parent` and borrows the layout registry that
+        // the guard below deletes, so `parent` (and with it the WTA) must go
+        // first, and reverse declaration order is what guarantees that.
         auto* layoutManager = PlasmaZones::TestHelpers::makeLayoutRegistry(QStringLiteral("plasmazones/layouts"));
         const auto dropRegistry = qScopeGuard([layoutManager] {
             delete layoutManager;
         });
+        QObject parent;
         StubSettings settings(nullptr);
         StubZoneDetector zoneDetector(nullptr);
 
@@ -253,11 +308,12 @@ private Q_SLOTS:
 
         adaptor.setWindowTrackingAdaptor(wta);
         const QVariantMap colors = adaptor.scrollTabColors(windowId);
-        QCOMPARE(colors.value(QStringLiteral("activeColor")).toString(), QStringLiteral("#ff8800"));
+        namespace STK = PhosphorProtocol::Service::ScrollTabKey;
+        QCOMPARE(colors.value(QString(STK::ActiveColor)).toString(), QStringLiteral("#ff8800"));
         // Only the slots a rule actually set are present, so a painter reads
         // each key independently rather than assuming all three.
-        QVERIFY(!colors.contains(QStringLiteral("inactiveColor")));
-        QVERIFY(!colors.contains(QStringLiteral("urgentColor")));
+        QVERIFY(!colors.contains(QString(STK::InactiveColor)));
+        QVERIFY(!colors.contains(QString(STK::UrgentColor)));
 
         // Same resolution the WTA itself answers — the adaptor adds no
         // reshaping of its own.
@@ -267,7 +323,58 @@ private Q_SLOTS:
         // the resolver.
         QVERIFY(adaptor.scrollTabColors(QString()).isEmpty());
 
+        // The TARGETED re-drive. Gated on the strip cache naming the window:
+        // the effect only paints pills for tabs, so a window no strip names
+        // must not grow its per-window colour cache.
+        QSignalSpy colorSpy(&adaptor, &TilingAdaptor::scrollTabColorsChanged);
+        QVERIFY(colorSpy.isValid());
+        adaptor.relayScrollTabColorsForWindow(windowId);
+        QCOMPARE(colorSpy.count(), 0);
+
+        adaptor.relayScrollTabStrips(QStringLiteral("DP-1"), stripsJsonFor(windowId));
+        adaptor.relayScrollTabColorsForWindow(windowId);
+        QCOMPARE(colorSpy.count(), 1);
+        QCOMPARE(colorSpy.at(0).at(0).toString(), windowId);
+        QCOMPARE(colorSpy.at(0).at(1).toMap(), colors);
+
+        // The change gate: an unchanged map does not cross the bus again.
+        adaptor.relayScrollTabColorsForWindow(windowId);
+        QCOMPARE(colorSpy.count(), 1);
+        // The broadcast forgets the gate's memory (the effect re-queries
+        // behind it), so the next targeted relay crosses again.
+        adaptor.relayScrollTabColorsChanged();
+        QCOMPARE(colorSpy.count(), 2);
+        adaptor.relayScrollTabColorsForWindow(windowId);
+        QCOMPARE(colorSpy.count(), 3);
+        QCOMPARE(colorSpy.at(2).at(0).toString(), windowId);
+        adaptor.relayScrollTabColorsForWindow(windowId);
+        QCOMPARE(colorSpy.count(), 3);
+        // Closing the window evicts the memory: a reused id relays afresh.
+        adaptor.windowClosed(windowId);
+        adaptor.relayScrollTabColorsForWindow(windowId);
+        QCOMPARE(colorSpy.count(), 4);
+
+        // A window no cached strip names stays silent even while a strip is up.
+        adaptor.relayScrollTabColorsForWindow(QStringLiteral("firefox|inst9"));
+        QCOMPARE(colorSpy.count(), 4);
+
+        // Empty id is rejected at the boundary like the query above.
+        adaptor.relayScrollTabColorsForWindow(QString());
+        QCOMPARE(colorSpy.count(), 4);
+
+        // clearEngine drops the strip cache but NOT the WTA borrow: the
+        // pass-through still resolves afterwards (Daemon::stop's
+        // setWindowTrackingAdaptor(nullptr) is that borrow's canonical clear).
+        adaptor.clearEngine();
+        QCOMPARE(adaptor.scrollTabColors(windowId), colors);
+        // With the strip cache gone the targeted relay has nothing to gate on.
+        adaptor.relayScrollTabColorsForWindow(windowId);
+        QCOMPARE(colorSpy.count(), 4);
+
+        // Detaching the WTA makes the pass-through answer empty rather than
+        // dereference a dangling borrow.
         adaptor.setWindowTrackingAdaptor(nullptr);
+        QVERIFY(adaptor.scrollTabColors(windowId).isEmpty());
     }
 };
 

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
-#include "compositor/scrolltabindicatorpainter.h"
 #include "compositor/stripviewanimator.h"
 #include "input_filter.h"
 
@@ -276,9 +275,12 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // The tab-indicator model came from the daemon that just died, so
         // every pill it described belongs to a strip nothing owns now: drop
         // the handler's model, hover and cursor override with the painter's
-        // per-output state. The textures are left allocated (no GL context on
-        // this D-Bus dispatch); they are reused or freed under the
-        // paint/teardown context.
+        // per-output state. GL-free on this D-Bus dispatch: the painter
+        // RETIRES the per-output textures and deletes them at its next
+        // GL-current point (the next paint, or releaseGl at teardown). The
+        // bring-up fetches a dying daemon may still answer are voided first,
+        // so a late strips/overrides reply cannot re-seed what this clears.
+        m_tilingHandler->voidInFlightScrollTabFetches();
         m_tilingHandler->clearScrollTabState();
         // Guarded like repaintSnapRegions: this lambda runs on an arbitrary
         // later D-Bus dispatch (serviceUnregistered), which can land during

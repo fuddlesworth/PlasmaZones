@@ -1,6 +1,7 @@
 # Pacman hook to refresh KDE sycoca cache when KCM modules are installed
 # Ensures new System Settings modules are immediately visible
 #
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 [Trigger]

@@ -20,8 +20,6 @@
 
 #include <PhosphorOverlay/ShellHost.h>
 
-#include <PhosphorWayland/SurfaceIdentity.h>
-
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 
@@ -283,8 +281,8 @@ void OverlayService::unwirePassiveShellSlots(const QString& screenId)
     // and early-return, and the indicator would silently never show again.
     m_scrollDropIndicatorHidePending.remove(screenId);
     m_lastScrollDropIndicatorRect.remove(screenId);
-    // The paint overrides go too, matching the tab twin above. They belong to
-    // the torn-down shell's context, and nothing else drops them.
+    // The paint overrides go too: they belong to the torn-down shell's
+    // context, and nothing else drops them.
     m_scrollDropIndicatorOverrides.remove(screenId);
     QObject::disconnect(it->overlayGeomConnection);
     it->overlayGeomConnection = {};
@@ -314,14 +312,11 @@ void OverlayService::clearShellFailuresForPhysicalScreen(const QString& physical
         return;
     }
     const QString vsPrefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
-    const auto clearOn = [&](PhosphorOverlay::ShellHost& host) {
-        for (const QString& flagged : host.failureScreenIds()) {
-            if (flagged == physicalScreenId || flagged.startsWith(vsPrefix)) {
-                host.clearFailure(flagged);
-            }
+    for (const QString& flagged : m_shellHost->failureScreenIds()) {
+        if (flagged == physicalScreenId || flagged.startsWith(vsPrefix)) {
+            m_shellHost->clearFailure(flagged);
         }
-    };
-    clearOn(*m_shellHost);
+    }
 }
 
 void OverlayService::syncPassiveShellSurfaceState(const QString& effectiveId)

@@ -336,8 +336,8 @@ void ScrollingAdaptor::clearEngine()
     // contradicts every other slot it answers.
     m_lastBroadcastScreens.clear();
     // m_scrollEffectBehaviour is deliberately NOT cleared, and it is the one
-    // member that differs: the set above is engine-derived, so a detached
-    // adaptor holding it contradicts every other slot it answers. The
+    // member that differs: the set above is engine-derived, so leaving it
+    // populated would contradict every other slot this adaptor answers. The
     // behaviour map is daemon-built and its getter has no engine gate
     // (scrollEffectBehaviour documents why), so the last published value stays
     // the honest answer for as long as this object exists — clearing it would

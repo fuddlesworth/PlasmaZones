@@ -675,10 +675,11 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
     // Tab-strip teardown for every matching screen — the third step of the
     // sweepStatelessScreenBookkeeping helper this function open-codes, and
     // the one both sibling prunes get via that helper. Without it the dead
-    // screen never receives its "[]" tabStripsChanged, so the daemon's
-    // m_lastScrollTabStripsJson keeps the departed screen and every later
-    // enrichment tick re-pushes its strips into the overlay. Snapshot the
-    // matching ids first: clearTabStripsForScreen mutates the set.
+    // screen never receives its "[]" tabStripsChanged, so the departed screen
+    // stays in TilingAdaptor::m_lastScrollTabStrips — the replay cache the
+    // KWin effect reads on bring-up — and the effect would paint pills for an
+    // output that is gone. Snapshot the matching ids first:
+    // clearTabStripsForScreen mutates the set.
     const QSet<QString> tabStripScreens = m_screensWithTabStrips;
     for (const QString& stripScreen : tabStripScreens) {
         if (matches(stripScreen)) {

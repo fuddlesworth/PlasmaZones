@@ -25,7 +25,9 @@
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
 // WindowColorKeys — the one home for the five colour-override key spellings
-// this file produces and the overlay slots consume.
+// this file produces. The three tab colours are consumed by the KWin effect,
+// which paints the pills; the two indicator colours by the overlay's
+// drop-indicator slot.
 #include "dbus/windowtrackingadaptor/internal.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -332,7 +334,8 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // The tab indicator's GEOMETRY overrides. Only these seven reach the
         // engine: the six paint fields alongside them in ContextScrollingParams
         // cannot change a resolved rect, so they are collected separately below
-        // and handed to the overlay instead (see IScrollSettings for the split).
+        // and handed to the KWin effect through the Tiling adaptor instead
+        // (see IScrollSettings for the split).
         {
             namespace K = PhosphorScrollEngine::ScrollPerScreenKeys;
             if (params.tabIndicatorEnabled) {

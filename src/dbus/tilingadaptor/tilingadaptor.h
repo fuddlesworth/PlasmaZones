@@ -16,6 +16,7 @@
 #include <QVariant>
 #include <QVector>
 
+#include <functional>
 #include <optional>
 
 namespace PhosphorScreens {
@@ -117,24 +118,49 @@ public:
     /// A "[]" (or empty) payload retracts the screen: the cache entry is
     /// dropped rather than stored, so a replaying effect sees the screen
     /// absent instead of having to special-case an empty array. Ungated
-    /// otherwise — the engine already emits only on a real model change, and
-    /// a second gate here would swallow the re-push that follows an
-    /// enrichment refresh.
+    /// otherwise — the scroll engine already gates on its own last payload
+    /// (m_lastTabStripPayload in engine_apply.cpp) and emits only on a real
+    /// model change, so a second gate here could only duplicate that one.
     void relayScrollTabStrips(const QString& screenId, const QString& stripsJson);
     /// Per-screen tab-indicator PAINT overrides resolved from context rules
     /// (a Set tab style / colour rule scoped to a screen, desktop or
-    /// activity): style, gapsBetweenTabs, cornerRadius and the three colours,
+    /// activity): tabStyle, gapsBetweenTabs, cornerRadius and the three colours,
     /// keyed by WindowPaintKeys / WindowColorKeys spellings. Only the keys a
     /// rule actually set are present. An EMPTY map clears the screen (the
     /// cache entry is dropped, the signal carries the empty map so the effect
     /// falls back to the global settings). Change-gated: the daemon resolves
     /// these on every per-screen config pass, most of which change nothing.
     void setScrollTabPaintOverrides(const QString& screenId, const QVariantMap& overrides);
+    /// Clear the tab paint overrides of every screen @p pred accepts, by
+    /// pushing an empty map through setScrollTabPaintOverrides (so each
+    /// cleared screen gets its empty-map signal and the effect falls back to
+    /// the global look). The predicate lives with the caller for the same
+    /// reason as OverlayService::clearScrollDropIndicatorOverridesWhere: which
+    /// screen ids still exist is the daemon's knowledge, which ids this
+    /// adaptor holds state for is ours. Needed because the ordinary
+    /// departing-screen clear runs off the engine's active set, which a
+    /// hot-removed screen has already left.
+    void clearScrollTabPaintOverridesWhere(const std::function<bool(const QString&)>& pred);
     /// All-windows tab-colour invalidation broadcast (empty id, empty map).
     /// Fired from the daemon's rules-changed and colour-scheme triggers, both
     /// of which move every window's verdict at once. Nothing is resolved here:
     /// the receiver re-queries scrollTabColors for the windows it paints.
     void relayScrollTabColorsChanged();
+    /// Targeted tab-colour re-drive for ONE window, fired by the daemon when
+    /// that window's title changes (a `Title contains …` tab-colour rule can
+    /// flip on a retitle with no rules edit, so the revision-keyed memo alone
+    /// would never re-resolve it). Resolves through the WTA and carries the
+    /// map, so the effect does not have to round-trip a query.
+    ///
+    /// Gated on the strip cache naming the window: the effect only paints
+    /// pills for windows that are tabs, so relaying for anything else would
+    /// grow its per-window colour cache with entries it never draws, on every
+    /// retitle of every window in the session. The effect evicts a window's
+    /// cached verdict when it stops being a tab anywhere, so a window that
+    /// becomes a tab (again) is re-queried when its strip arrives and cannot
+    /// carry a verdict this relay skipped while it was not a tab. Change-gated
+    /// on the resolved map as well.
+    void relayScrollTabColorsForWindow(const QString& windowId);
     /// Enabled-state change on any pipeline engine: re-emits the combined
     /// any-engine-enabled state (deduped — multiple engines feed the one
     /// signal, same rationale as the float-broadcast gate).
@@ -410,12 +436,16 @@ Q_SIGNALS:
     /**
      * @brief Emitted when rule-resolved tab colours may have changed
      *
-     * Broadcast-only today: both arguments are empty and the receiver must
-     * re-query scrollTabColors for the windows it paints. The per-window
-     * argument shape is kept for a future targeted invalidation.
+     * Two shapes. The BROADCAST (relayScrollTabColorsChanged) carries two
+     * empty arguments and means "every window's verdict may have moved" — the
+     * receiver re-queries scrollTabColors for the windows it paints. The
+     * TARGETED form (relayScrollTabColorsForWindow) names one window and
+     * carries its resolved map, so no query is needed.
      *
      * @param windowId Window whose colours changed, empty for the broadcast
-     * @param colors Resolved colours, empty for the broadcast
+     * @param colors Resolved colours; empty on the broadcast, and also on a
+     * targeted relay for a window with no tab-colour rule (windowId alone is
+     * the discriminator)
      */
     void scrollTabColorsChanged(const QString& windowId, const QVariantMap& colors);
 
@@ -492,6 +522,12 @@ private:
     QVector<PhosphorEngine::IPlacementEngine*> m_lifecycleEngines;
     /// Last floating state broadcast per window (the dedup gate's memory).
     QHash<QString, bool> m_lastFloatBroadcast;
+    /// Last per-window tab-colour map relayed by relayScrollTabColorsForWindow
+    /// (its change gate's memory): a retitle that moves no verdict — the
+    /// common case, a window with no tab-colour rule retitling per command —
+    /// must not put a signal on the bus. Evicted beside m_lastFloatBroadcast
+    /// on close / destroy / prune, and dropped by clearEngine.
+    QHash<QString, QVariantMap> m_lastScrollTabColorsRelay;
     /// Announce generation: bumped by clearEngine so a queued coalesced
     /// announce from the previous session drops instead of pairing with a
     /// restart's fresh announce (a double emit for one logical change).
@@ -570,8 +606,9 @@ public:
      * The D-Bus windowClosed relay is gated effect-side on the close screen
      * still being engine-managed, so a window floated on a managed screen
      * whose screen later left the managed set never reaches windowClosed here
-     * and its m_lastFloatBroadcast entry (and any parked open) leaked for the
-     * process — suppressing the first genuine float broadcast of a reused id.
+     * and its m_lastFloatBroadcast and m_lastScrollTabColorsRelay entries
+     * (and any parked open) leaked for the process — suppressing the first
+     * genuine float broadcast or tab-colour relay of a reused id.
      * Plain method, NOT a slot: it must not become a D-Bus surface. It runs
      * AFTER the WTS teardown (the signal's contract), so it uses only the raw
      * id — shadowWindowId may no longer resolve a mutated-class canonical
@@ -580,10 +617,11 @@ public:
     void onTrackedWindowDestroyed(const QString& windowId);
 
     /**
-     * @brief Alive-set sweep of the float-broadcast dedup cache, called from
-     * WindowTrackingAdaptor::pruneStaleWindows via the daemon wiring.
+     * @brief Alive-set sweep of the float-broadcast and tab-colour-relay
+     * dedup caches, called from WindowTrackingAdaptor::pruneStaleWindows via
+     * the daemon wiring.
      *
-     * Swept in the INSTANCE-id key space: the map holds both raw and
+     * Swept in the INSTANCE-id key space: the maps hold both raw and
      * canonical composites (see windowClosed's dual removal), and only the
      * instance component survives a class rename. Plain method, not a slot.
      * List payload matching the stalePruned signal's marshallable shape.

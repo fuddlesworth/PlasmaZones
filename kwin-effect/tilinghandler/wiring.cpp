@@ -232,9 +232,13 @@ void TilingHandler::loadSettings()
     m_scrollingScreensFetchRetriesLeft = kBringUpFetchRetryMax;
     m_activeLayoutsFetchRetriesLeft = kBringUpFetchRetryMax;
     m_scrollEffectBehaviourFetchRetriesLeft = kBringUpFetchRetryMax;
+    m_scrollTabStripsFetchRetriesLeft = kBringUpFetchRetryMax;
+    m_scrollTabOverridesFetchRetriesLeft = kBringUpFetchRetryMax;
     fetchScrollingScreens();
     fetchActiveLayouts();
     fetchScrollEffectBehaviour();
+    // Overrides BEFORE strips: both replies travel the same connection in
+    // dispatch order, so the first rebuild already layers the overrides.
     fetchScrollTabPaintOverrides();
     fetchScrollTabStrips();
 }
@@ -430,34 +434,49 @@ void TilingHandler::fetchActiveLayouts()
             });
 }
 
-// Bring-up replay of the compositor-drawn tab indicators. The engine's
-// scrollTabStripsChanged is change-gated and the payloads it emitted before
-// this effect instance existed are gone, so a freshly loaded effect (login,
-// KCM toggle, crash recovery) pulls the daemon's per-screen cache once.
-// Routed through the ordinary slot so the two paths cannot diverge. A live
-// signal that lands while this is in flight simply wins: the slot is
-// last-writer per screen and the cache the method answers from is the same
-// one the signal updates, so the reply can only be equal or older per key —
-// and an older payload for one screen is overwritten by that screen's next
-// relayout, which every strip change produces. No generation guard, then,
-// for the same reason fetchScrollEffectBehaviour's twin needs one only
-// because ITS apply is not per-key.
 // Bring-up replay of the per-screen context-rule paint overrides. Fetched
 // BEFORE the strips so the first rebuild already layers them; the slot is
-// last-writer per screen, so a live signal landing mid-flight simply wins,
-// exactly as for fetchScrollTabStrips.
+// last-writer per screen, so a live signal landing mid-flight simply wins.
+//
+// Both tab fetches carry the same two guards as their three siblings above.
+// The per-dispatch GENERATION guard is not optional here even though the slot
+// is per-key: across a daemon restart two loadSettings runs put two Gets in
+// flight, and a late reply from the DEAD session would re-install a payload
+// for a screen the new daemon never names — and never clears, because the
+// engine's "[]" retraction is latched on its own membership set, which a fresh
+// session starts empty. Only the newest dispatch may apply. The bounded RETRY
+// covers the post-daemonReady Get failure that would otherwise leave every
+// pill blank until the next relayout (which, for a screen whose strip does
+// not change, never comes).
 void TilingHandler::fetchScrollTabPaintOverrides()
 {
+    const quint64 generation = ++m_scrollTabOverridesQueryGeneration;
     QDBusMessage msg = QDBusMessage::createMethodCall(
         PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
         PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabPaintOverrides"));
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        if (generation != m_scrollTabOverridesQueryGeneration) {
+            return; // superseded by a newer dispatch
+        }
         QDBusPendingReply<QVariantMap> reply = *w;
         if (!reply.isValid()) {
-            qCDebug(lcEffect) << "scrollTabPaintOverrides: query failed, daemon may not be running";
+            if (m_scrollTabOverridesFetchRetriesLeft > 0) {
+                --m_scrollTabOverridesFetchRetriesLeft;
+                // Bail if the generation moved while the retry was armed: a
+                // daemon loss voids in-flight fetches by bumping it, and a
+                // retry into the dead service would only re-bump and warn.
+                QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, generation] {
+                    if (generation == m_scrollTabOverridesQueryGeneration) {
+                        fetchScrollTabPaintOverrides();
+                    }
+                });
+                return;
+            }
+            qCWarning(lcEffect) << "scrollTabPaintOverrides: query failed, daemon may not be running:"
+                                << reply.error().message();
             return;
         }
         const QVariantMap byScreen = reply.value();
@@ -470,18 +489,44 @@ void TilingHandler::fetchScrollTabPaintOverrides()
     });
 }
 
+// Bring-up replay of the compositor-drawn tab indicators. The engine's
+// scrollTabStripsChanged is change-gated and the payloads it emitted before
+// this effect instance existed are gone, so a freshly loaded effect (login,
+// KCM toggle, crash recovery) pulls the daemon's per-screen cache once.
+// Routed through the ordinary slot so the two paths cannot diverge. A live
+// signal that lands while this is in flight simply wins: the slot is
+// last-writer per screen and the cache the method answers from is the same
+// one the signal updates, so the reply can only be equal or older per key —
+// and an older payload for one screen is overwritten by that screen's next
+// relayout. The generation guard and retry are explained on the overrides
+// fetch above; the strips need them for the same reasons.
 void TilingHandler::fetchScrollTabStrips()
 {
+    const quint64 generation = ++m_scrollTabStripsQueryGeneration;
     QDBusMessage msg =
         QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                                        PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabStrips"));
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        if (generation != m_scrollTabStripsQueryGeneration) {
+            return; // superseded by a newer dispatch
+        }
         QDBusPendingReply<QVariantMap> reply = *w;
         if (!reply.isValid()) {
-            qCDebug(lcEffect) << "scrollTabStrips: query failed, daemon may not be running";
+            if (m_scrollTabStripsFetchRetriesLeft > 0) {
+                --m_scrollTabStripsFetchRetriesLeft;
+                // Same generation bail as the overrides retry above.
+                QTimer::singleShot(kBringUpFetchRetryDelayMs, this, [this, generation] {
+                    if (generation == m_scrollTabStripsQueryGeneration) {
+                        fetchScrollTabStrips();
+                    }
+                });
+                return;
+            }
+            qCWarning(lcEffect) << "scrollTabStrips: query failed, daemon may not be running:"
+                                << reply.error().message();
             return;
         }
         const QVariantMap strips = reply.value();

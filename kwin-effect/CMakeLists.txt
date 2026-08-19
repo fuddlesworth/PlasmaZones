@@ -26,7 +26,9 @@ find_package(KWin 6.7 REQUIRED)
 # colour scheme, the way Kirigami's desktop platform plugin does — and that
 # plugin reads them through this very library. The effect has no QML engine
 # so Kirigami itself is unusable here; KColorScheme is the C++ source of
-# truth beneath it. The first KF6 dependency the effect carries.
+# truth beneath it. This is the first KF6 dependency the effect declares
+# explicitly; kcoreaddons_add_plugin already rides KF6CoreAddons in via
+# KWin's own find_dependency.
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS ColorScheme)
 
 # libepoxy: snap-assist thumbnail dma-buf export (Phase-0 spike) uses
@@ -77,6 +79,7 @@ set(plasmazones_effect_SRCS
     plasmazoneseffect/window_connections.cpp
     plasmazoneseffect/daemon_bringup.cpp
     plasmazoneseffect/daemon_settings.cpp
+    plasmazoneseffect/daemon_settings_scrolltabs.cpp
     plasmazoneseffect/daemon_apply.cpp
     plasmazoneseffect/rule_invalidation.cpp
     plasmazoneseffect/drag_snap.cpp
@@ -169,6 +172,11 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
 # KWin's GL headers) would break that ordering. Mirrors the daemon's identical
 # guard on dmabufglimport.cpp (src/CMakeLists.txt).
 set_source_files_properties(compositor/snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# Same ordering rule for the tab-indicator painter: it includes <epoxy/gl.h>
+# and calls gl* entry points directly, so epoxy must come before any other GL
+# header in its TU. Jumbo-grouping it with sources that pull in KWin's GL
+# headers would break that ordering.
+set_source_files_properties(compositor/scrolltabindicatorpainter.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 # The tab-indicator rasteriser carries a file-local helper set with generic
 # names (withAlpha, blend, cornerPath, the axis structs). Same prophylactic
 # rule as the transition TUs below: keep it out of the blob rather than

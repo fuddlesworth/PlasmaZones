@@ -92,8 +92,8 @@ bool ScrollOverhangInputFilter::pointerMotion(KWin::PointerMotionEvent* event)
     }
     // Hover for the compositor-drawn tab pills. Never consumes: motion must
     // keep flowing to whatever is under the cursor (the column, a dialog), the
-    // pill only lights up on the way past. The handler gates on "any output
-    // has indicators" so a desktop with no tabbed column pays one branch.
+    // pill only lights up on the way past. The handler gates on "some screen
+    // has a payload" so a desktop with no tabbed column pays one branch.
     if (TilingHandler* tiling = m_effect->tilingHandler()) {
         tiling->updateScrollTabHover(event->position);
     }
@@ -125,10 +125,13 @@ bool ScrollOverhangInputFilter::pointerButton(KWin::PointerButtonEvent* event)
     // A press on a compositor-drawn tab pill activates that tab. Tested
     // BEFORE the overhang: the pills sit over the column they label, and a
     // pill at a straddler's visible edge must win over retargeting the click
-    // to the column. Left button only — a right or middle press on a pill
-    // falls through to whatever is under it, which is what a pill drawn over
-    // a window would naturally do. The press is consumed (and its release
-    // paired below), so the column never sees a click it did not get.
+    // to the column. Reached only when the pill interception is NOT held
+    // (touch, or a press with no prior motion — see the header): a press
+    // over a HOVERED pill is consumed by KWin's Effects filter ahead of this
+    // one and lands on PlasmaZonesEffect::pointerButton instead. Left button
+    // only here; on this path a right or middle press does fall through to
+    // whatever is under it. The press is consumed (and its release paired
+    // below), so the column never sees a click it did not get.
     if (event->button == Qt::LeftButton) {
         if (TilingHandler* tiling = m_effect->tilingHandler(); tiling && tiling->activateScrollTabAt(event->position)) {
             m_consumedButtons |= event->button;
@@ -259,6 +262,18 @@ bool ScrollOverhangInputFilter::touchDown(KWin::TouchDownEvent* event)
                       << "at" << event->pos;
     focusVisibleWindowAt(event->pos, target);
     return true;
+}
+
+bool ScrollOverhangInputFilter::touchMotion(KWin::TouchMotionEvent* event)
+{
+    if (!event) {
+        return false;
+    }
+    // A sequence whose down this filter consumed never reached the seat, so
+    // its motion must not either: KWin's seat discards a motion for an id it
+    // has no down for, but warns on every such event, and the client below
+    // would otherwise see the rest of a gesture whose start it never got.
+    return m_consumedTouchIds.contains(event->id);
 }
 
 bool ScrollOverhangInputFilter::touchUp(KWin::TouchUpEvent* event)

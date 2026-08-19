@@ -27,7 +27,6 @@
 #include <QPoint>
 #include <QRectF>
 #include <QScopeGuard>
-#include <QSet>
 #include <QSize>
 #include <QVector2D>
 
@@ -269,6 +268,13 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         KWin::RenderTarget captureTarget(pass->captureFbo.get(), renderTarget.colorDescription());
         KWin::RenderViewport captureViewport(screen->geometryF(), screen->scale(), captureTarget, QPoint());
         KWin::GLFramebuffer::pushFramebuffer(pass->captureFbo.get());
+        // Scope-guarded for the same throw path the two latch guards below
+        // exist for: a throw inside the scene walk must not leave KWin's
+        // framebuffer stack pushed. Declared first, so it pops LAST, after
+        // those guards have cleared their state.
+        const auto popCaptureFbo = qScopeGuard([] {
+            KWin::GLFramebuffer::popFramebuffer();
+        });
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         // Exclude everything stacked ABOVE the strip from the capture (OSDs,
@@ -316,8 +322,13 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                 // current desktop's strip in the stacking order — the next
                 // scroll then smeared every above-strip window. isDeleted()
                 // first also keeps getWindowId off a corpse.
+                // Activity is the other half of "on the current workspace":
+                // scrollManagedOutputFor applies neither term, so an
+                // off-activity column stays scroll-managed exactly like an
+                // off-desktop one. Byte-identical to the pill anchor election
+                // in paint_pipeline.cpp, which shares this boundary.
                 if (sw->isDeleted() || sw->isMinimized() || sw->isHidden() || sw->isHiddenByShowDesktop()
-                    || !sw->isOnCurrentDesktop()) {
+                    || !sw->isOnCurrentDesktop() || !sw->isOnCurrentActivity()) {
                     continue;
                 }
                 if (m_effect->scrollManagedOutputFor(sw) != screen) {
@@ -381,9 +392,16 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         });
         // Device-space region rooted at (0, 0) — the FBO's own space, not the
         // output-positioned logical geometry; see captureLiveScene's note.
-        KWin::effects->paintScreen(captureTarget, captureViewport, mask,
-                                   KWin::Region(KWin::Rect(QPoint(), captureViewport.deviceSize())), screen);
-        KWin::GLFramebuffer::popFramebuffer();
+        // The pill blit inside this walk clips to the walk's own (full-FBO)
+        // region. The effect's painted latch is deliberately NOT reset here,
+        // unlike the desktop captures: this capture IS the presented frame
+        // (paintOutput returns true), so its one blit is the pass's one blit.
+        {
+            const KWin::Region walkRegion(KWin::Rect(QPoint(), captureViewport.deviceSize()));
+            const PlasmaZonesEffect::ScrollTabWalkScope walkScope(*m_effect, walkRegion,
+                                                                  /*resetPaintedLatch=*/false);
+            KWin::effects->paintScreen(captureTarget, captureViewport, mask, walkRegion, screen);
+        }
         skippedUnwindGuard.dismiss(); // normal exit: the composite tail consumes the list
     }
 
@@ -463,6 +481,11 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     if (targetFb) {
         KWin::GLFramebuffer::pushFramebuffer(targetFb);
     }
+    const auto popTargetFb = qScopeGuard([targetFb] {
+        if (targetFb) {
+            KWin::GLFramebuffer::popFramebuffer();
+        }
+    });
     // pushFramebuffer already set this viewport for the targetFb branch; the
     // explicit call is load-bearing only on the no-framebuffer fallback (no
     // push happened, the capture pass's viewport is still current). Kept
@@ -600,10 +623,6 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     }
     aboveStrip.clear();
     aboveStrip.swap(m_effect->m_stripCaptureSkippedWindows); // return the allocation for the next frame
-
-    if (targetFb) {
-        KWin::GLFramebuffer::popFramebuffer();
-    }
     return true;
 }
 

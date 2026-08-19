@@ -16,7 +16,9 @@
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorRules/MatchTypes.h>
 
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QJsonValue>
 #include <QStringList>
 

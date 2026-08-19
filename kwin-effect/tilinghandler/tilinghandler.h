@@ -15,19 +15,21 @@
 #pragma once
 
 #include "compositor/deferredwindowcommits.h"
+#include "compositor/scrolltabindicatorpainter.h"
 
 #include <PhosphorCompositor/TilingState.h>
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/ScrollAxisEnum.h>
 
 #include <QHash>
+#include <QJsonArray>
 #include <QObject>
 #include <QPair>
+#include <QPointF>
 #include <QPointer>
 #include <QRect>
 #include <QRectF>
 #include <QSet>
-#include <QPointF>
 #include <QString>
 #include <QStringList>
 #include <QVariant>
@@ -375,50 +377,81 @@ public:
     }
 
     // ── Compositor-drawn tab indicators (model half; the painter is the effect's) ──
-    /// Rebuild the painter's model for @p screenId from the cached payload
-    /// and the effect's current window state. Cheap when nothing changed (the
-    /// painter compares). Called on payload arrival, caption/urgency edges,
-    /// style-setting changes and colour broadcasts.
-    void rebuildScrollTabIndicators(const QString& screenId);
-    /// Every screen at once — style/colour changes are not per screen.
+    //
+    // The public surface is what the effect's other collaborators call: the
+    // paint-settings loaders (rebuildAll), the window hooks (noteScrollTab*),
+    // the input filter and the pointer hooks (hover / press / activate), the
+    // screen and daemon lifecycle (output removed / clear). The per-screen
+    // rebuild, the hit test and the interception latch are implementation
+    // detail of scrolltabs.cpp and live with the private members below.
+    /// Every screen at once: style, colour and theme changes are not per
+    /// screen. Cheap when nothing changed (the painter compares).
     void rebuildAllScrollTabIndicators();
-    /// A tab's caption or urgency changed: rebuild the screens whose payload
-    /// names it. No-op for a window that is not a tab anywhere, which is the
-    /// common case and one hash probe.
+    /// The pills' theme palette, units and label font are cached across
+    /// rebuilds; drop the cache when any of their sources moved (a palette
+    /// or font event, a label-font or paint-setting edge).
+    void invalidateScrollTabTheme();
+    /// A tab's urgency (or anything else both styles draw) changed: rebuild
+    /// the screens whose payload names it. No-op for a window that is not a
+    /// tab anywhere, which is the common case and one hash probe.
     void noteScrollTabWindowChanged(const QString& windowId);
+    /// A tab's CAPTION changed: like noteScrollTabWindowChanged, but skips
+    /// screens whose effective style is the segment bar, which never draws
+    /// the title — a chatty terminal title must not re-raster a bar that
+    /// cannot change.
+    void noteScrollTabTitleChanged(const QString& windowId);
+    /// The window is gone: forget its cached tab-colour verdict.
+    void dropScrollTabColorsForWindow(const QString& windowId);
     /// Pointer moved to @p pos (absolute logical): update hover on the
-    /// screen's pills. Returns true when the painted state changed.
-    bool updateScrollTabHover(const QPointF& pos);
+    /// screen's pills and hold or release the pointing-hand interception.
+    /// Damages the pills itself when the painted state changed.
+    void updateScrollTabHover(const QPointF& pos);
     /// A press at @p pos landed on a pill: activate that tab. Returns true
-    /// when a pill was hit (the caller consumes the press).
+    /// when a pill was hit AND the activation ran (the caller consumes the
+    /// press); false lets the press fall through to what is underneath.
     bool activateScrollTabAt(const QPointF& pos);
-    /// The pill under @p pos, or empty — shared by hover and press.
-    QString scrollTabPillAt(const QPointF& pos) const;
-    /// Hold (or release) the mouse interception that shows the pointing hand
-    /// over a pill. Idempotent: tracks the held state so enter and leave each
-    /// cost one call into KWin. Released whenever the pills go away under a
-    /// parked pointer (clear paths call it with false).
-    void setScrollTabHoverCursor(bool overPill);
+    /// A left press was consumed on a pill under the interception: keep the
+    /// interception until the matching release even if the pointer leaves
+    /// the pill, so the window underneath never sees an unpaired release.
+    void noteScrollTabPress();
+    /// The button came up at @p pos: end the press hold and let the hover
+    /// decide whether the interception stays.
+    void noteScrollTabRelease(const QPointF& pos);
     /// Whether the pill interception is currently held — the effect's
     /// pointer hooks consult this to know the events are theirs to route.
     bool scrollTabInterceptionHeld() const
     {
         return m_scrollTabCursorOverridden;
     }
-    /// Drop every screen's tab model, hover and cursor override, and the
-    /// painter's per-output state — for daemon loss (the strips no longer
-    /// exist) and effect teardown. Leaves the painter's GL to releaseGl().
+    /// Void the bring-up strips/overrides fetches still in flight, for the
+    /// daemon-loss edge only (a late reply from the dead session must not
+    /// re-seed the model after clearScrollTabState). Bring-up needs no call:
+    /// every fetch bumps its own generation at dispatch.
+    void voidInFlightScrollTabFetches();
+    /// Drop every screen's tab model, hover, press latch and cursor
+    /// override, and the painter's per-output state — for daemon loss (the
+    /// strips no longer exist), a daemon owner handover (onDaemonReady's
+    /// per-session drain) and effect teardown. GL-free: the painter retires
+    /// its textures and frees them at the next GL-current point.
     void clearScrollTabState();
 
     /// Application-level event filter, installed on qGuiApp at construction:
     /// a colour-scheme flip (ApplicationPaletteChange) or a system font
     /// change (ApplicationFontChange) re-resolves the pills' theme palette,
     /// units and font. Without it the pills kept the old scheme until the
-    /// next unrelated rebuild.
+    /// next unrelated rebuild. Gated on the application object as receiver.
     bool eventFilter(QObject* watched, QEvent* event) override;
-    /// @p output is going away: drop its painter state and, if its pills held
-    /// the hover, the hover and the override cursor.
-    void noteScrollTabOutputRemoved(KWin::LogicalOutput* output);
+    /// @p output is going away: drop its painter state, its payload and
+    /// overrides, and, if its pills held the hover, the hover and the
+    /// override cursor. @p removedScreenId is the id the caller resolved
+    /// BEFORE clearing the screen-id cache (re-resolving here would
+    /// re-populate the entry the caller just purged).
+    void noteScrollTabOutputRemoved(KWin::LogicalOutput* output, const QString& removedScreenId);
+    /// Delete the painter's retired textures under a made-current context;
+    /// called after every clearOutput() so a strip that went away does not
+    /// hold its texture until the next paint pass (which may never come once
+    /// the effect leaves the paint chain).
+    void drainRetiredScrollTabTextures();
 
     /// True when at least one scrolling screen resolves to cropping its
     /// straddlers. The direct-scanout gate needs a whole-session answer (the
@@ -742,9 +775,12 @@ public Q_SLOTS:
     /// structural input; titles, urgency and colours are resolved here from
     /// the effect's own window knowledge plus `scrollTabColors`.
     void slotScrollTabStripsChanged(const QString& screenId, const QString& stripsJson);
-    /// Per-window tab-colour rule verdicts moved (a rules save, a colour
-    /// scheme flip). An EMPTY windowId is the broadcast form: every cached
-    /// verdict is dropped and re-queried on the next rebuild.
+    /// Per-window tab-colour rule verdicts moved. An EMPTY windowId is the
+    /// broadcast form (a rules save, a colour-scheme flip): every cached
+    /// verdict is re-queried in place, with the stale colour kept painted
+    /// until its fresh reply lands. A non-empty windowId is the daemon's
+    /// targeted re-drive (a title change moved that one window's verdict)
+    /// and carries the resolved map itself.
     void slotScrollTabColorsChanged(const QString& windowId, const QVariantMap& colors);
     /// Per-screen tab-indicator PAINT overrides from context rules (style,
     /// gaps, corner radius, three colours), layered over the global settings
@@ -998,6 +1034,43 @@ private:
     void fetchScrollTabStrips();
     /// Bring-up replay of the per-screen tab paint overrides (see wiring.cpp).
     void fetchScrollTabPaintOverrides();
+
+    // ── Compositor-drawn tab indicators: implementation (scrolltabs.cpp) ──
+    /// Rebuild the painter's model for @p screenId from the cached payload
+    /// and the effect's current window state. Called on payload arrival,
+    /// caption/urgency edges, style-setting changes and colour replies.
+    /// Damages and re-evaluates the hover only when the painter reports a
+    /// real change.
+    void rebuildScrollTabIndicators(const QString& screenId);
+    /// Fill the theme / units / font fields of @p style from the cache.
+    void fillScrollTabTheme(ScrollTabIndicatorStyle& style);
+    /// Remove @p screenId from every window's reverse-index entry.
+    void unindexScrollTabScreen(const QString& screenId);
+    /// Evict the cached colour verdict of every window in @p indexedBefore
+    /// that the reverse index no longer names (it stopped being a tab), so a
+    /// later re-tab re-queries instead of painting a verdict the daemon's
+    /// strip-gated title relay could not have refreshed meanwhile.
+    void dropScrollTabColorsForUnindexed(const QList<QString>& indexedBefore);
+    /// The engine retracted @p screenId's strips ("[]"): drop the payload,
+    /// the index entries and the painter output, releasing a hover it held.
+    void dropScrollTabScreen(const QString& screenId);
+    /// Ask the daemon for @p windowId's tab-colour verdict (once per window
+    /// in flight; dropped if a broadcast supersedes it).
+    void queryScrollTabColors(const QString& windowId);
+    /// The pill under @p pos, or empty — shared by hover and press. Answers
+    /// only for an output whose pills were blitted last pass AND when the
+    /// pill is not covered by a window stacked over the strip.
+    QString scrollTabPillAt(const QPointF& pos) const;
+    /// Whether the topmost paintable window under @p pos on @p out is
+    /// something other than a strip column (a dialog, a floating window, a
+    /// panel): the pills are blitted below such windows, so a pill there is
+    /// overdrawn and must not answer input.
+    bool scrollTabPillOccludedAt(const QPointF& pos, KWin::LogicalOutput* out) const;
+    /// Hold (or release) the mouse interception that shows the pointing hand
+    /// over a pill. Idempotent: tracks the held state so enter and leave each
+    /// cost one call into KWin. Held through a pill press regardless of
+    /// @p overPill (see noteScrollTabPress).
+    void setScrollTabHoverCursor(bool overPill);
     /// Shared apply for the fetch reply and the live signal: replaces all
     /// three sets from the wire map. Repaints when the CROP set moved (it is
     /// painted state the compositor will not otherwise revisit) and,
@@ -1086,6 +1159,16 @@ private:
     int m_scrollEffectBehaviourFetchRetriesLeft = 0;
     /// Per-dispatch guard for the scroll-effect-behaviour fetch.
     quint64 m_scrollEffectBehaviourQueryGeneration = 0;
+    /// The two tab-indicator bring-up fetches carry the same bounded retry
+    /// and per-dispatch generation guard as their three siblings. The guard
+    /// matters across a daemon restart: two loadSettings runs put two Gets in
+    /// flight, and a late reply from the DEAD session would otherwise
+    /// re-install a payload for a screen the new daemon never names and
+    /// never clears (its "[]" is latched on its own membership set).
+    int m_scrollTabStripsFetchRetriesLeft = 0;
+    int m_scrollTabOverridesFetchRetriesLeft = 0;
+    quint64 m_scrollTabStripsQueryGeneration = 0;
+    quint64 m_scrollTabOverridesQueryGeneration = 0;
     /// Write-generation twin of m_scrollingScreensGeneration for the
     /// scroll-effect-behaviour sets. The daemon IS the only origin of the
     /// data, but its live signal writes locally through
@@ -1284,30 +1367,57 @@ private:
     /// the slot are what protect the tiling state, not this counter.
     int m_suppressFullScreenChanged = 0;
     // ── Compositor-drawn tab indicators: model state ──
-    /// Raw engine payload per screen, kept so a caption/urgency/colour edge
-    /// can rebuild without a new push from the daemon.
-    QHash<QString, QString> m_scrollTabPayloadByScreen;
+    /// Parsed engine payload per screen, kept so a caption/urgency/colour
+    /// edge can rebuild without a new push from the daemon. Parsed ONCE at
+    /// arrival (with a parse-error check); the rebuild reads it as is.
+    QHash<QString, QJsonArray> m_scrollTabPayloadByScreen;
     /// windowId -> screens whose payload names it. Reverse index for
-    /// noteScrollTabWindowChanged; rebuilt from the payload on every push.
+    /// noteScrollTab{Window,Title}Changed; rebuilt from the payload on every
+    /// push, keyed by the wire id only (an exact reverse-index hit's live id
+    /// IS the wire id; see the rebuild's comment in scrolltabs.cpp).
     QHash<QString, QSet<QString>> m_scrollTabScreensByWindow;
     /// Per-window tab colour rule verdicts, as answered by the daemon's
-    /// `scrollTabColors`. An ENTRY WITH AN EMPTY MAP means "asked, no rule" —
-    /// distinct from absent (never asked), so the common no-rule case is one
-    /// probe rather than a D-Bus round trip per rebuild.
+    /// `scrollTabColors`. An ENTRY WITH AN EMPTY MAP means "asked, no rule"
+    /// — distinct from absent (never asked, or the last ask failed), so the
+    /// common no-rule case is one probe rather than a D-Bus round trip per
+    /// rebuild. Evicted per window on close; re-queried in place on the
+    /// broadcast.
     QHash<QString, QVariantMap> m_scrollTabColorCache;
+    /// Windows with a `scrollTabColors` query in flight, keyed to the serial
+    /// of the dispatch that owns the slot: a second rebuild during the round
+    /// trip does not dispatch a duplicate, and only the reply carrying the
+    /// current serial may land (an evict-then-requery replaces the serial,
+    /// so the older reply is dropped rather than latching a stale verdict).
+    QHash<QString, quint64> m_scrollTabColorsInFlight;
+    /// Source of the per-dispatch serials above.
+    quint64 m_scrollTabColorsSerial = 0;
+    /// Bumped by every broadcast and by the per-session clear; a reply whose
+    /// dispatch generation is older is dropped, so a verdict from before a
+    /// broadcast cannot land after the re-query's and latch. Every bump site
+    /// also clears m_scrollTabColorsInFlight: the generation check runs
+    /// before the in-flight check, so an unpaired bump would strand a token
+    /// and the window would never be re-asked.
+    quint64 m_scrollTabColorGeneration = 0;
     /// Per-screen context-rule paint overrides, keyed by effective screen id;
-    /// values are WindowPaintKeys / WindowColorKeys spellings → value. Absent
-    /// screen = global settings apply unmodified.
+    /// values are PhosphorProtocol::Service::ScrollTabKey spellings → value.
+    /// Absent screen = global settings apply unmodified.
     QHash<QString, QVariantMap> m_scrollTabPaintOverrides;
-    /// Generation stamp of the style the painter last saw, compared against
-    /// the effect's m_tabIndicatorStyleGeneration so a settings edit rebuilds.
-    quint64 m_scrollTabStyleGenerationSeen = 0;
+    /// Cached theme palette, units and label font for the pills (the
+    /// themeXxx / smallSpacing / largeSpacing / font fields are the ones
+    /// read); filled lazily by fillScrollTabTheme, dropped by
+    /// invalidateScrollTabTheme.
+    ScrollTabIndicatorStyle m_scrollTabTheme;
+    bool m_scrollTabThemeCached = false;
     /// Screen whose pills currently carry the hover, empty when none. Needed
     /// so a pointer leaving one output's pills for another's clears the first.
     QString m_scrollTabHoverScreen;
     /// Whether the mouse interception (pointing hand) is currently held for a
-    /// hovered pill. A latch so the KWin call happens on the edges only.
+    /// hovered pill (or a held press). A latch so the KWin call happens on
+    /// the edges only.
     bool m_scrollTabCursorOverridden = false;
+    /// A left press was consumed on a pill and its release has not arrived:
+    /// the interception is held through it regardless of hover.
+    bool m_scrollTabPressHeld = false;
 
     // ── Focus follows mouse ──
     // Per-mode pair of GLOBAL SETTING mirrors: m_focusFollowsMouse is the

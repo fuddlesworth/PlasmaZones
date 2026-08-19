@@ -230,16 +230,21 @@ void Daemon::connectScreenSignals()
                         ? m_lastTiledCountByScreen.erase(it)
                         : std::next(it);
                 }
-                // The OverlayService's drop-indicator paint-override map for
-                // the removed output (virtual sub-screens included): the
-                // departing-screen loop keys on the engine's set, which the
-                // prune above already shrank, so nothing else ever sweeps
+                // The two per-screen tab paint-override maps for the removed
+                // output (virtual sub-screens included): the OverlayService's
+                // drop-indicator map and the TilingAdaptor's tab map that the
+                // KWin effect replays. The departing-screen loop that
+                // ordinarily clears both is keyed on the engine's set, which
+                // the prune above already shrank, so nothing else ever sweeps
                 // them and a same-id replug would replay stale overrides.
+                const auto removedPhysical = [&removedScreenId](const QString& screenId) {
+                    return PhosphorIdentity::VirtualScreenId::samePhysical(screenId, removedScreenId);
+                };
                 if (m_overlayService) {
-                    m_overlayService->clearScrollDropIndicatorOverridesWhere(
-                        [&removedScreenId](const QString& screenId) {
-                            return PhosphorIdentity::VirtualScreenId::samePhysical(screenId, removedScreenId);
-                        });
+                    m_overlayService->clearScrollDropIndicatorOverridesWhere(removedPhysical);
+                }
+                if (m_tilingAdaptor) {
+                    m_tilingAdaptor->clearScrollTabPaintOverridesWhere(removedPhysical);
                 }
 
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
@@ -821,15 +826,21 @@ void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
         }
     }
 
-    // The OverlayService's per-screen drop-indicator paint-override map sits
-    // on the same boundary: the departing-screen loop cannot sweep a screen
-    // the engine no longer names, so without this a dropped vs:N id keeps its
-    // overrides (and would replay stale paint on a same-id return).
+    // The two per-screen tab paint-override maps sit on the same boundary,
+    // the OverlayService's drop-indicator one and the TilingAdaptor's tab one
+    // the KWin effect replays: the departing-screen loop that ordinarily
+    // clears them cannot sweep a screen the engine no longer names, so
+    // without this a dropped vs:N id keeps its overrides (and would replay
+    // stale paint on a same-id return).
+    const auto droppedSubScreen = [&](const QString& screenId) {
+        return PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId) == physicalScreenId
+            && !keepIds.contains(screenId);
+    };
     if (m_overlayService) {
-        m_overlayService->clearScrollDropIndicatorOverridesWhere([&](const QString& screenId) {
-            return PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId) == physicalScreenId
-                && !keepIds.contains(screenId);
-        });
+        m_overlayService->clearScrollDropIndicatorOverridesWhere(droppedSubScreen);
+    }
+    if (m_tilingAdaptor) {
+        m_tilingAdaptor->clearScrollTabPaintOverridesWhere(droppedSubScreen);
     }
 }
 

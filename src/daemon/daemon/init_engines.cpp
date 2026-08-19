@@ -30,6 +30,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QTimer>
+#include <algorithm>
 #include <array>
 
 #include <PhosphorServiceIdle/IdleService.h>
@@ -79,6 +80,7 @@
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
+#include <PhosphorRules/ActionTypes.h>
 #include <PhosphorRules/ExclusionRules.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/Rule.h>
@@ -117,6 +119,49 @@
 #include <QJsonObject>
 
 namespace PlasmaZones {
+
+namespace {
+
+/// The ENABLED rules of @p source that can move a per-window tab-colour
+/// verdict, in store order: every rule carrying one of the three TabColor*
+/// actions, plus every rule carrying a TERMINAL action (Exclude,
+/// ExcludePlacement). The terminals matter because tabColorRuleParams resolves
+/// through the full-store evaluator, whose walk stops at the first in-scope
+/// terminal rule in priority order — so adding, removing or re-prioritising a
+/// blanket Exclude above a TabColor rule changes the matched windows' colours
+/// while the TabColor rules themselves are byte-identical. Per-slot decoding
+/// means no other rule can reach a tab-colour slot.
+///
+/// Local rather than a PhosphorRules slicer because nothing binds this slice
+/// to an evaluator — it exists only as the equality memory of the tab-colour
+/// broadcast guard, so a QList<Rule> is the whole contract. Disabled rules are
+/// skipped for the same reason the exclusion slicers skip them: a disabled
+/// rule resolves to nothing, so toggling one off must still count as a change
+/// (it leaves the slice, which the compare sees) while its later edits must
+/// not.
+QList<PhosphorRules::Rule> tabColorRuleSliceOf(const PhosphorRules::RuleSet& source)
+{
+    QList<PhosphorRules::Rule> kept;
+    for (const PhosphorRules::Rule& rule : source.rules()) {
+        if (!rule.enabled) {
+            continue;
+        }
+        const bool canMoveTabColors =
+            std::any_of(rule.actions.cbegin(), rule.actions.cend(), [](const PhosphorRules::RuleAction& action) {
+                return action.type == PhosphorRules::ActionType::TabColorActive
+                    || action.type == PhosphorRules::ActionType::TabColorInactive
+                    || action.type == PhosphorRules::ActionType::TabColorUrgent
+                    || action.type == PhosphorRules::ActionType::Exclude
+                    || action.type == PhosphorRules::ActionType::ExcludePlacement;
+            });
+        if (canMoveTabColors) {
+            kept.append(rule);
+        }
+    }
+    return kept;
+}
+
+} // namespace
 
 void Daemon::initEnginesAndWiring()
 {
@@ -1221,10 +1266,11 @@ void Daemon::initEnginesAndWiring()
             });
 
     // Tab-strip indicators for tabbed scrolling columns, relayed to the KWin
-    // effect. The engine emits the structural model (column rects + window
-    // ids) after every strip relayout; the effect paints the pills itself and
-    // resolves titles and colours through its own queries, so it takes the
-    // engine's payload verbatim.
+    // effect. The engine emits the structural model (the indicator rect it
+    // resolved for each tabbed column, plus that column's window ids and
+    // which of them is active) after every strip relayout; the effect paints
+    // the pills itself and resolves titles and colours through its own
+    // queries, so it takes the engine's payload verbatim.
     connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::tabStripsChanged, m_tilingAdaptor,
             [adaptor = m_tilingAdaptor](const QString& screenId, const QString& stripsJson) {
                 adaptor->relayScrollTabStrips(screenId, stripsJson);
@@ -1243,15 +1289,90 @@ void Daemon::initEnginesAndWiring()
     // every rulesChanged connect including this. Unguarded for the same reason
     // as the three rulesChanged connects above: m_ruleStore is ctor-owned and
     // non-null for the daemon's lifetime.
+    //
+    // The slice is primed here so the first edit after init compares against
+    // the store as it actually is rather than against an empty list.
+    m_tabColorRuleSlice = tabColorRuleSliceOf(m_ruleStore->ruleSet());
     connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this]() {
-        // The effect caches its own scrollTabColors answers, and a rules save
-        // moves every window's verdict at once, so it gets the all-windows
-        // broadcast rather than a per-window payload the daemon would have to
-        // walk each strip to build.
-        if (m_tilingAdaptor) {
-            m_tilingAdaptor->relayScrollTabColorsChanged();
+        if (!m_ruleStore) {
+            return;
         }
+        // Equality-guard on the TabColor* slice, the same shape as the
+        // exclude refilter above: every rulesChanged emission runs this
+        // lambda, but only an edit that moves a tab-colour rule can move a
+        // tab-colour verdict. Rule::operator== compares actions and match, so
+        // an edit to the payload of a kept rule still trips it.
+        QList<PhosphorRules::Rule> newSlice = tabColorRuleSliceOf(m_ruleStore->ruleSet());
+        if (newSlice == m_tabColorRuleSlice) {
+            return;
+        }
+        m_tabColorRuleSlice = std::move(newSlice);
+        // Coalesced onto a 0 ms single shot. A KCM batch save commits its
+        // rules one at a time and emits rulesChanged for each, and the
+        // broadcast makes the effect re-query scrollTabColors for every tab
+        // it paints — so an unbatched save costs one full re-query round per
+        // committed rule. The latch collapses the whole synchronous batch
+        // into the single broadcast that follows it.
+        if (m_scrollTabColorsBroadcastPending) {
+            return;
+        }
+        m_scrollTabColorsBroadcastPending = true;
+        QTimer::singleShot(0, this, [this]() {
+            m_scrollTabColorsBroadcastPending = false;
+            // Same shutdown gate as the sibling latches in this file: an edit
+            // that lands in the same turn as stop() must not emit from a
+            // stopped daemon.
+            if (m_shuttingDown || !m_tilingAdaptor) {
+                return;
+            }
+            // The effect caches its own scrollTabColors answers, and a rules
+            // save moves every window's verdict at once, so it gets the
+            // all-windows broadcast rather than a per-window payload the
+            // daemon would have to walk each strip to build.
+            m_tilingAdaptor->relayScrollTabColorsChanged();
+        });
     });
+
+    // Per-window tab-colour re-drive. A `Title contains …` tab-colour rule
+    // changes verdict on a retitle with no rules edit at all, and the
+    // adaptor's memo is keyed on the title precisely so this relay can move
+    // it. Two edges are wired. metadataChanged's title arm is the one that
+    // carries the work: it fires on every later rename. windowAppeared is the
+    // window's FIRST record, and it is the belt for an id whose strip is
+    // already cached when the record lands (a reopen into a column the effect
+    // is still painting); in the ordinary open it finds no strip naming the
+    // id yet and the relay drops it, which is correct because the effect
+    // queries the colours itself when the strip for that column arrives.
+    // The relay drops any window no cached strip names, so this stays cheap
+    // for the many windows that are not tabs.
+    //
+    // canonicalizeForLookup, NOT canonicalizeWindowId: the latter FREEZES the
+    // canonical id for the window, and this read path must not have that side
+    // effect on a window the engines may not have adopted yet.
+    //
+    // m_tilingAdaptor is the receiver context, so the connection dies with it.
+    // No disconnect-first is needed: initCoreAdaptors deletes and nulls
+    // m_tilingAdaptor on every init() (init_adaptors.cpp) and this function
+    // constructs the new one above, so a stop() → init() cycle cannot leave a
+    // duplicate behind.
+    if (m_windowRegistry && m_tilingAdaptor) {
+        const auto relayTabColors = [this](const QString& instanceId) {
+            if (!m_windowRegistry || !m_tilingAdaptor) {
+                return;
+            }
+            m_tilingAdaptor->relayScrollTabColorsForWindow(m_windowRegistry->canonicalizeForLookup(instanceId));
+        };
+        connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowAppeared, m_tilingAdaptor,
+                relayTabColors);
+        connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, m_tilingAdaptor,
+                [relayTabColors](const QString& instanceId, const PhosphorEngine::WindowMetadata& oldMeta,
+                                 const PhosphorEngine::WindowMetadata& newMeta) {
+                    if (oldMeta.title == newMeta.title) {
+                        return;
+                    }
+                    relayTabColors(instanceId);
+                });
+    }
 
     // Control adaptor - high-level convenience API for third-party integrations.
     // Held as a member so stop() can detach() it before the unique_ptr members

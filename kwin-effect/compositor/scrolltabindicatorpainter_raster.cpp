@@ -33,9 +33,14 @@ QColor withAlpha(QColor color, qreal alpha)
     return color;
 }
 
-/// Straight-alpha linear blend, @p t of the way from @p from to @p to.
-/// Used only for the hover tint, where both operands come from the theme and
-/// the result is handed to QPainter (which premultiplies on its own).
+/// Alpha-weighted linear blend, @p t of the way from @p from to @p to: the
+/// result is what compositing @p to over @p from at opacity @p t looks like.
+/// Used only for the hover tint. A plain per-channel mix is wrong here
+/// because the inactive chip colour is FULLY TRANSPARENT (#00000000): mixing
+/// its black RGB into the highlight gave a tint that was one fifth of the
+/// highlight's alpha AND one fifth of its colour, i.e. five times too dark
+/// once QPainter premultiplied it. Weighting each operand's RGB by its own
+/// alpha makes a transparent `from` contribute nothing but transparency.
 QColor blend(const QColor& from, const QColor& to, qreal t)
 {
     if (!from.isValid()) {
@@ -44,12 +49,15 @@ QColor blend(const QColor& from, const QColor& to, qreal t)
     if (!to.isValid()) {
         return from;
     }
-    const auto mix = [t](qreal a, qreal b) {
-        return a + (b - a) * t;
-    };
+    const qreal wa = from.alphaF() * (1.0 - t);
+    const qreal wb = to.alphaF() * t;
+    const qreal alpha = wa + wb;
+    if (alpha <= 0.0) {
+        return QColor(Qt::transparent);
+    }
     QColor out;
-    out.setRgbF(mix(from.redF(), to.redF()), mix(from.greenF(), to.greenF()), mix(from.blueF(), to.blueF()),
-                mix(from.alphaF(), to.alphaF()));
+    out.setRgbF((from.redF() * wa + to.redF() * wb) / alpha, (from.greenF() * wa + to.greenF() * wb) / alpha,
+                (from.blueF() * wa + to.blueF() * wb) / alpha, alpha);
     return out;
 }
 
@@ -65,13 +73,18 @@ qreal tabRadius(const ScrollTabIndicatorStyle& style, qreal thickness)
     return std::min(qreal(style.cornerRadius), half);
 }
 
-/// Colour for @p pill, resolving the same tiers the QML does: the window
+/// Colour for @p pill, resolving the same tiers the QML did: the window
 /// rule's own colour, then the config/context colour, then the theme.
 /// Urgency outranks the active highlight (a tab already in view needs no
 /// highlight, whereas an urgent one the user cannot see is the whole point).
 /// @p forBar picks the style-specific inactive fallback: a bar segment needs a
 /// visible resting colour because the run IS the widget, while an inactive
 /// chip is transparent and reads against the pill behind it.
+///
+/// The four THEME fallbacks (active = highlight, urgent = negativeText,
+/// inactive bar = text at 0.35, inactive chip = transparent) are mirrored
+/// by hand in src/shared/ZoneColorDefaults.qml, which the settings page's
+/// swatch previews read. Change one, change both.
 QColor resolveTabColor(const ScrollTabPill& pill, const ScrollTabIndicatorStyle& style, bool forBar, bool hovered)
 {
     if (pill.urgent) {
@@ -149,9 +162,13 @@ struct IndicatorAxes
     int longExtent = 0;
     int shortExtent = 0;
     int tabCount = 0;
+    /// Inter-tab gap, floored at 0: a negative value can only arrive through
+    /// a garbled per-screen override (the setting's own floor is 0), and
+    /// below zero the segment offsets would walk backwards over each other.
+    int gaps = 0;
 };
 
-IndicatorAxes axesOf(const ScrollTabIndicator& indicator)
+IndicatorAxes axesOf(const ScrollTabIndicator& indicator, const ScrollTabIndicatorStyle& style)
 {
     IndicatorAxes axes;
     axes.vertical = indicator.position == 0 || indicator.position == 1;
@@ -159,6 +176,7 @@ IndicatorAxes axesOf(const ScrollTabIndicator& indicator)
     axes.longExtent = axes.vertical ? indicator.rect.height() : indicator.rect.width();
     axes.shortExtent = axes.vertical ? indicator.rect.width() : indicator.rect.height();
     axes.tabCount = int(indicator.tabs.size());
+    axes.gaps = std::max(0, style.gapsBetweenTabs);
     return axes;
 }
 
@@ -184,11 +202,11 @@ ChipMetrics chipMetricsOf(const IndicatorAxes& axes, const ScrollTabIndicatorSty
     // title readable would let the run overflow the pill once there were
     // enough tabs, and an overflowing run is clipped — those tabs would be
     // undrawn AND unclickable, which is worse than thin.
-    metrics.longBudget = std::max(1, (inner - style.gapsBetweenTabs * neighbours) / std::max(1, axes.tabCount));
+    metrics.longBudget = std::max(1, (inner - axes.gaps * neighbours) / std::max(1, axes.tabCount));
     // The last chip absorbs the division remainder so the run ends flush with
     // the pill's inner edge instead of leaving up to tabCount-1 px that
     // belongs to no tab.
-    metrics.trailingBudget = std::max(1, inner - (metrics.longBudget + style.gapsBetweenTabs) * neighbours);
+    metrics.trailingBudget = std::max(1, inner - (metrics.longBudget + axes.gaps) * neighbours);
     return metrics;
 }
 
@@ -210,6 +228,36 @@ QRect axisRect(const ScrollTabIndicator& indicator, const IndicatorAxes& axes, i
     return QRect(indicator.rect.x() + alongOffset, indicator.rect.y() + acrossOffset, alongExtent, acrossExtent);
 }
 
+/// The UNCLIPPED tab rects, in draw order. layoutPills clips these to the
+/// indicator for the hit rects; rasterise draws them under a clip to the
+/// same rect, so both derive from the one list.
+QVector<QRect> tabRects(const ScrollTabIndicator& indicator, const IndicatorAxes& axes,
+                        const ScrollTabIndicatorStyle& style)
+{
+    QVector<QRect> out;
+    out.reserve(axes.tabCount);
+    if (style.style == 1) {
+        // Segment bar: each segment takes an equal share of the long axis
+        // after the inter-tab gaps are removed, floored at 1 so a bar too
+        // short for its tab count still carries every segment rather than
+        // silently dropping the tail to zero.
+        const int baseLength = std::max(1, (axes.longExtent - axes.gaps * (axes.tabCount - 1)) / axes.tabCount);
+        for (int i = 0; i < axes.tabCount; ++i) {
+            const int offset = tabOffset(i, baseLength, axes.gaps);
+            const int length = i == axes.tabCount - 1 ? std::max(1, axes.longExtent - offset) : baseLength;
+            out.append(axisRect(indicator, axes, offset, length, 0, axes.shortExtent));
+        }
+        return out;
+    }
+    const ChipMetrics metrics = chipMetricsOf(axes, style);
+    for (int i = 0; i < axes.tabCount; ++i) {
+        const int along = i == axes.tabCount - 1 ? metrics.trailingBudget : metrics.longBudget;
+        const int offset = metrics.inset + tabOffset(i, metrics.longBudget, axes.gaps);
+        out.append(axisRect(indicator, axes, offset, along, metrics.inset, metrics.thickness));
+    }
+    return out;
+}
+
 } // namespace
 
 namespace ScrollTabRaster {
@@ -217,38 +265,18 @@ namespace ScrollTabRaster {
 QVector<ScrollTabHitRect> layoutPills(const ScrollTabIndicator& indicator, const ScrollTabIndicatorStyle& style)
 {
     QVector<ScrollTabHitRect> out;
-    const IndicatorAxes axes = axesOf(indicator);
+    const IndicatorAxes axes = axesOf(indicator, style);
     if (axes.tabCount <= 0 || indicator.rect.isEmpty()) {
         return out;
     }
-    out.reserve(axes.tabCount);
-
-    if (style.style == 1) {
-        // Segment bar: each segment takes an equal share of the long axis
-        // after the inter-tab gaps are removed, floored at 1 so a bar too
-        // short for its tab count still carries every segment rather than
-        // silently dropping the tail to zero.
-        const int baseLength =
-            std::max(1, (axes.longExtent - style.gapsBetweenTabs * (axes.tabCount - 1)) / axes.tabCount);
-        for (int i = 0; i < axes.tabCount; ++i) {
-            const int offset = tabOffset(i, baseLength, style.gapsBetweenTabs);
-            const int length = i == axes.tabCount - 1 ? std::max(1, axes.longExtent - offset) : baseLength;
-            const QRect rect = axisRect(indicator, axes, offset, length, 0, axes.shortExtent);
-            // The QML indicator clips, and the daemon's input region was
-            // exactly the indicator rect, so a run that overflowed was
-            // neither drawn nor clickable past the edge. Intersecting keeps
-            // the hit rects honest about that.
-            out.append({rect.intersected(indicator.rect), indicator.tabs.at(i).windowId});
-        }
-        return out;
-    }
-
-    const ChipMetrics metrics = chipMetricsOf(axes, style);
-    for (int i = 0; i < axes.tabCount; ++i) {
-        const int along = i == axes.tabCount - 1 ? metrics.trailingBudget : metrics.longBudget;
-        const int offset = metrics.inset + tabOffset(i, metrics.longBudget, style.gapsBetweenTabs);
-        const QRect rect = axisRect(indicator, axes, offset, along, metrics.inset, metrics.thickness);
-        out.append({rect.intersected(indicator.rect), indicator.tabs.at(i).windowId});
+    const QVector<QRect> rects = tabRects(indicator, axes, style);
+    out.reserve(rects.size());
+    for (int i = 0; i < rects.size(); ++i) {
+        // The QML indicator clips, and the daemon's input region was exactly
+        // the indicator rect, so a run that overflowed was neither drawn nor
+        // clickable past the edge. Intersecting keeps the hit rects honest
+        // about that.
+        out.append({rects.at(i).intersected(indicator.rect), indicator.tabs.at(i).windowId});
     }
     return out;
 }
@@ -273,6 +301,9 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
     // matching premultiplied blend func, so the format is load-bearing at
     // both ends.
     QImage image(deviceSize, QImage::Format_ARGB32_Premultiplied);
+    if (image.isNull()) {
+        return {};
+    }
     image.setDevicePixelRatio(dpr);
     image.fill(Qt::transparent);
 
@@ -282,13 +313,22 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
     // Draw in ABSOLUTE logical coordinates throughout; the image simply is
     // the window onto them at `bounds`.
     painter.translate(-bounds.topLeft());
+    painter.setFont(style.font);
+    // Metrics from the SAME paint device the text is drawn on, so the elide
+    // width and the rendered width resolve against one font engine.
+    const QFontMetricsF metrics(style.font, &image);
 
-    const QFontMetricsF metrics(style.font);
     for (const ScrollTabIndicator& indicator : indicators) {
-        const IndicatorAxes axes = axesOf(indicator);
+        const IndicatorAxes axes = axesOf(indicator, style);
         if (axes.tabCount <= 0 || indicator.rect.isEmpty()) {
             continue;
         }
+        // Sub-rect rasters (the hover patch) hand in a `bounds` that covers
+        // one indicator; anything outside it is wasted QPainter work.
+        if (!indicator.rect.intersects(bounds)) {
+            continue;
+        }
+        const QVector<QRect> rects = tabRects(indicator, axes, style);
         painter.save();
         // Both styles fill the resolved rect exactly, and a rect too short
         // for its tab count produces a run LONGER than the rect (every share
@@ -299,24 +339,20 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
 
         if (style.style == 1) {
             const qreal radius = tabRadius(style, axes.shortExtent);
-            const int baseLength =
-                std::max(1, (axes.longExtent - style.gapsBetweenTabs * (axes.tabCount - 1)) / axes.tabCount);
             for (int i = 0; i < axes.tabCount; ++i) {
                 const ScrollTabPill& pill = indicator.tabs.at(i);
-                const int offset = tabOffset(i, baseLength, style.gapsBetweenTabs);
-                const int length = i == axes.tabCount - 1 ? std::max(1, axes.longExtent - offset) : baseLength;
-                const QRectF rect = axisRect(indicator, axes, offset, length, 0, axes.shortExtent);
+                const QRectF rect = rects.at(i);
                 // With no gap the run reads as one continuous bar, so only
                 // its two ends are rounded. Top-left is the leading corner
                 // and bottom-right the trailing one in BOTH orientations, so
                 // those two need no branch; only the other diagonal swaps.
-                const bool squareLeading = style.gapsBetweenTabs == 0 && i > 0;
-                const bool squareTrailing = style.gapsBetweenTabs == 0 && i < axes.tabCount - 1;
+                const bool squareLeading = axes.gaps == 0 && i > 0;
+                const bool squareTrailing = axes.gaps == 0 && i < axes.tabCount - 1;
                 const qreal tl = squareLeading ? 0.0 : radius;
                 const qreal tr = (axes.vertical ? squareLeading : squareTrailing) ? 0.0 : radius;
                 const qreal bl = (axes.vertical ? squareTrailing : squareLeading) ? 0.0 : radius;
                 const qreal br = squareTrailing ? 0.0 : radius;
-                const bool hovered = pill.hovered || (!hoveredWindowId.isEmpty() && pill.windowId == hoveredWindowId);
+                const bool hovered = !hoveredWindowId.isEmpty() && pill.windowId == hoveredWindowId;
                 painter.fillPath(cornerPath(rect, tl, tr, br, bl), resolveTabColor(pill, style, true, hovered));
             }
             painter.restore();
@@ -339,13 +375,11 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
         painter.setPen(Qt::NoPen);
 
         const qreal chipRadius = tabRadius(style, chip.thickness);
-        painter.setFont(style.font);
         for (int i = 0; i < axes.tabCount; ++i) {
             const ScrollTabPill& pill = indicator.tabs.at(i);
-            const int along = i == axes.tabCount - 1 ? chip.trailingBudget : chip.longBudget;
-            const int offset = chip.inset + tabOffset(i, chip.longBudget, style.gapsBetweenTabs);
-            const QRectF rect = axisRect(indicator, axes, offset, along, chip.inset, chip.thickness);
-            const bool hovered = pill.hovered || (!hoveredWindowId.isEmpty() && pill.windowId == hoveredWindowId);
+            const QRectF rect = rects.at(i);
+            const int along = axes.vertical ? rects.at(i).height() : rects.at(i).width();
+            const bool hovered = !hoveredWindowId.isEmpty() && pill.windowId == hoveredWindowId;
             painter.fillPath(cornerPath(rect, chipRadius, chipRadius, chipRadius, chipRadius),
                              resolveTabColor(pill, style, false, hovered));
 
@@ -375,7 +409,6 @@ QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabI
             painter.setPen(QPen(pill.active || pill.urgent ? style.themeHighlightedText : style.themeText));
             painter.drawText(QRectF(-width / 2.0, -height / 2.0, width, height), Qt::AlignCenter, text);
             painter.restore();
-            painter.setPen(Qt::NoPen);
         }
         painter.restore();
     }

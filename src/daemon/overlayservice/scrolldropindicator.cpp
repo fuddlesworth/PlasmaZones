@@ -12,9 +12,9 @@
 // restructuring live slid the strip out from under a stationary cursor. That
 // leaves the drop target invisible, so it has to be painted.
 //
-// Display-only: unlike the tab strips next door this installs NO input region.
-// It is drawn underneath a cursor that is mid-drag, and taking input there
-// would break the very drag it describes.
+// Display-only: it installs NO input region. It is drawn underneath a cursor
+// that is mid-drag, and taking input there would break the very drag it
+// describes.
 
 #include "internal.h"
 // Full path, because this directory has its own "internal.h" — this is the
@@ -45,8 +45,8 @@ void OverlayService::setScrollDropIndicatorOverrides(const QString& screenId, co
     if (screenId.isEmpty()) {
         return;
     }
-    // Change-gated like the tab-strip twin: this runs on every rule/context
-    // re-resolve and the common answer is the map it already holds.
+    // Change-gated: this runs on every rule/context re-resolve and the common
+    // answer is the map it already holds.
     if (m_scrollDropIndicatorOverrides.value(screenId) == overrides) {
         return;
     }
@@ -55,11 +55,10 @@ void OverlayService::setScrollDropIndicatorOverrides(const QString& screenId, co
     } else {
         m_scrollDropIndicatorOverrides.insert(screenId, overrides);
     }
-    // Deliberately NO replay. The tab strip replays because it is on screen
-    // continuously and a paint-rule change must repaint it; the drop indicator
-    // exists only during a drag, and every rect push within that drag re-reads
-    // these. A change landing between drags shows up on the next drag, which
-    // is the first moment anyone could see it.
+    // Deliberately NO replay. The drop indicator exists only during a drag,
+    // and every rect push within that drag re-reads these. A change landing
+    // between drags shows up on the next drag, which is the first moment
+    // anyone could see it.
 }
 
 void OverlayService::clearAllScrollDropIndicatorOverrides()
@@ -93,9 +92,9 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     }
 
     // The enable toggle folds into the same "no indicator" answer as an empty
-    // rect, so one branch below serves both. No cached-rect replay like the
-    // tab strips: this rect only exists for the duration of a drag, and
-    // toggling the setting mid-drag to see it appear is not a real workflow.
+    // rect, so one branch below serves both. There is no cached-rect replay:
+    // this rect only exists for the duration of a drag, and toggling the
+    // setting mid-drag to see it appear is not a real workflow.
     // The enable gate layers too, and only over the CONTEXT map: the window
     // family is colours only, so there is no per-drag enable to consult.
     // Deliberate — a rule that silences the indicator is a property of where
@@ -142,8 +141,8 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
         if (m_scrollDropIndicatorHidePending.contains(screenId)) {
             return;
         }
-        // Generation-guard the animated hide, same contract as the tab strips:
-        // with animations DISABLED, SurfaceAnimator salvages a superseded
+        // Generation-guard the animated hide: with animations DISABLED,
+        // SurfaceAnimator salvages a superseded
         // onComplete and fires it synchronously from inside a later beginShow,
         // i.e. after that path has already written loaded=true and
         // setVisible(true), which this callback would otherwise clobber.
@@ -179,8 +178,8 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     }
 
     // The rect arrives in absolute compositor coordinates; the shell window
-    // sits at the screen origin, so shift into window space here (single
-    // conversion point, matching the tab strips).
+    // sits at the screen origin, so shift into window space here (the single
+    // conversion point).
     const QRect local = rect.translated(-screenGeom.x(), -screenGeom.y());
 
     // Change-gate on the SHELL-LOCAL rect, which is what actually gets painted.
@@ -282,11 +281,14 @@ void OverlayService::updateScrollDropIndicator(const QString& screenId, const QR
     if (slot->isVisible() && !hideWasInFlight) {
         // Live rect update — no show choreography needed, but the sync is NOT
         // optional. ensurePassiveShellFor above unconditionally re-asserts
-        // Qt::WindowTransparentForInput on the SHELL window, which is shared
-        // with every other slot on this screen; skipping the sync would leave a
-        // live tab-strip input region dropped until its next strip update. The
-        // earlier "no input to sync" reasoning was about THIS slot's own
-        // (absent) region and missed that the flag it clobbers is the shell's.
+        // Qt::WindowTransparentForInput on the SHELL window
+        // (shellhost_bridge.cpp), which is shared with every other slot on
+        // this screen. A modal slot up on the same screen (snap assist, the
+        // layout picker, the cheatsheet) holds its input grab through that
+        // flag, so skipping the sync would drop that grab for the rest of the
+        // drag. The earlier "no input to sync" reasoning was about THIS slot's
+        // own (absent) region and missed that the flag it clobbers is the
+        // shell's.
         syncPassiveShellSurfaceStateForSurface(shellSurface);
         return;
     }

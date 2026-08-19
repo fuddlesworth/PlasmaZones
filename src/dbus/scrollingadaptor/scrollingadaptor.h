@@ -81,10 +81,9 @@ public:
 
     /// Replace the published behaviour map and broadcast on a real change.
     /// Driven by the daemon's per-screen scrolling pass, which resolves all
-    /// three while it is already walking the scrolling screens. Emit-on-change
-    /// (unlike setScrollTabSurface's non-zero path): the compositor's copy is
-    /// a plain cache it can re-query, so a redundant broadcast would only cost
-    /// a rule-cache invalidation on the other side.
+    /// three while it is already walking the scrolling screens. Emit-on-change:
+    /// the compositor's copy is a plain cache it can re-query, so a redundant
+    /// broadcast would only cost a rule-cache invalidation on the other side.
     ///
     /// All three lists are SORTED and de-duplicated here rather than taken on
     /// trust. The published contract says sorted, and the change gate is a
