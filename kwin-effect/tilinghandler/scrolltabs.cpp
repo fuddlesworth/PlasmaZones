@@ -32,8 +32,6 @@
 #include <core/rect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
-#include <input.h>
-#include <pointer_input.h>
 #include <window.h>
 
 #include <QDBusConnection>
@@ -456,20 +454,24 @@ void TilingHandler::noteScrollTabOutputRemoved(KWin::LogicalOutput* output)
 
 void TilingHandler::setScrollTabHoverCursor(bool overPill)
 {
-    if (overPill == m_scrollTabCursorOverridden) {
+    if (overPill == m_scrollTabCursorOverridden || !KWin::effects) {
         return;
     }
-    // KWin::input() is the compositor's input redirection; null only in the
-    // test harness and during teardown, where there is no cursor to shape.
-    KWin::InputRedirection* input = KWin::input();
-    KWin::PointerInputRedirection* pointer = input ? input->pointer() : nullptr;
-    if (!pointer) {
-        return;
-    }
+    // Mouse INTERCEPTION, not the bare effects override cursor: KWin's cursor
+    // image only consults the effects cursor while an effect holds the
+    // interception (CursorImage::reevaluteSource orders it by that flag), so
+    // the override alone is silently outranked by the focused surface's own
+    // shape — the resize arrow at the column edge, the client's cursor
+    // elsewhere. While the pointer is over a pill the interception is held
+    // with the pointing hand; every pointer event then lands on
+    // PlasmaZonesEffect::pointerMotion / pointerButton, which route back here
+    // (hover keeps tracking, a left press activates the tab) and the
+    // interception ends the moment the pointer leaves the pill. Held for the
+    // pill's span only, so no column ever loses input it should have had.
     if (overPill) {
-        pointer->setEffectsOverrideCursor(Qt::PointingHandCursor);
+        KWin::effects->startMouseInterception(m_effect, Qt::PointingHandCursor);
     } else {
-        pointer->removeEffectsOverrideCursor();
+        KWin::effects->stopMouseInterception(m_effect);
     }
     m_scrollTabCursorOverridden = overPill;
 }

@@ -14,6 +14,9 @@
 #include "handlers/snaphandler.h"
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
+#include "tilinghandler/tilinghandler.h"
+
+#include <input_event.h>
 
 namespace PlasmaZones {
 
@@ -157,6 +160,27 @@ bool PlasmaZonesEffect::isActive() const
     return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_shaderManager.empty()
         || !m_windowDecorations.isEmpty() || m_desktopTransition.isRunning()
         || m_stripViewAnimator->hasActiveAnimations() || m_stripTransition.isRunning();
+}
+
+void PlasmaZonesEffect::pointerMotion(KWin::PointerMotionEvent* event)
+{
+    // Only ever reached under the pill interception (see the header). Hover
+    // tracking decides whether the pointer is still over a pill and releases
+    // the interception when it is not, which is what hands the pointer back
+    // to the window underneath without a dead zone.
+    if (event && m_tilingHandler->scrollTabInterceptionHeld()) {
+        m_tilingHandler->updateScrollTabHover(event->position);
+    }
+}
+
+void PlasmaZonesEffect::pointerButton(KWin::PointerButtonEvent* event)
+{
+    if (!event || !m_tilingHandler->scrollTabInterceptionHeld()) {
+        return;
+    }
+    if (event->state == KWin::PointerButtonState::Pressed && event->button == Qt::LeftButton) {
+        m_tilingHandler->activateScrollTabAt(event->position);
+    }
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)

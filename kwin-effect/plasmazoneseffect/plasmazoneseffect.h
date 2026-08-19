@@ -78,6 +78,8 @@
 namespace KWin {
 class SurfaceItem;
 class LogicalOutput;
+struct PointerMotionEvent;
+struct PointerButtonEvent;
 }
 
 namespace PhosphorAnimation {
@@ -204,6 +206,16 @@ public:
     void drawWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, KWin::EffectWindow* w,
                     int mask, const KWin::Region& deviceRegion, KWin::WindowPaintData& data) override;
     void grabbedKeyboardEvent(QKeyEvent* e) override;
+    /// Pointer events delivered while this effect holds the mouse
+    /// interception — which it does for exactly the span the pointer is over
+    /// a compositor-drawn scrolling tab pill (the pointing-hand cursor is
+    /// only honoured under interception). Motion keeps the pill hover
+    /// tracking and releases the interception the moment the pointer leaves
+    /// the pill; a left press activates the tab. Nothing else is routed:
+    /// with no pill under the pointer the interception is not held and
+    /// these are never called.
+    void pointerMotion(KWin::PointerMotionEvent* event) override;
+    void pointerButton(KWin::PointerButtonEvent* event) override;
 
 protected:
     // OffscreenEffect hook: deform the redirected window's quad list.

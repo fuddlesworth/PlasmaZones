@@ -394,11 +394,17 @@ public:
     bool activateScrollTabAt(const QPointF& pos);
     /// The pill under @p pos, or empty — shared by hover and press.
     QString scrollTabPillAt(const QPointF& pos) const;
-    /// Hold (or release) the pointing-hand override cursor for the pills.
-    /// Idempotent: tracks the held state so enter and leave each cost one
-    /// call into KWin. Released whenever the pills go away under a parked
-    /// pointer (clear paths call it with false).
+    /// Hold (or release) the mouse interception that shows the pointing hand
+    /// over a pill. Idempotent: tracks the held state so enter and leave each
+    /// cost one call into KWin. Released whenever the pills go away under a
+    /// parked pointer (clear paths call it with false).
     void setScrollTabHoverCursor(bool overPill);
+    /// Whether the pill interception is currently held — the effect's
+    /// pointer hooks consult this to know the events are theirs to route.
+    bool scrollTabInterceptionHeld() const
+    {
+        return m_scrollTabCursorOverridden;
+    }
     /// Drop every screen's tab model, hover and cursor override, and the
     /// painter's per-output state — for daemon loss (the strips no longer
     /// exist) and effect teardown. Leaves the painter's GL to releaseGl().
@@ -1292,8 +1298,8 @@ private:
     /// Screen whose pills currently carry the hover, empty when none. Needed
     /// so a pointer leaving one output's pills for another's clears the first.
     QString m_scrollTabHoverScreen;
-    /// Whether the effects override cursor (pointing hand) is currently held
-    /// for a hovered pill. A latch so the KWin call happens on the edges only.
+    /// Whether the mouse interception (pointing hand) is currently held for a
+    /// hovered pill. A latch so the KWin call happens on the edges only.
     bool m_scrollTabCursorOverridden = false;
 
     // ── Focus follows mouse ──
