@@ -121,10 +121,10 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 /// and sorts on it, the daemon's UnifiedLayoutController carries it through
 /// its apply and current-selection answers, the picker's apply path compares
 /// against it, the daemon's scrolling signal path and the rules label
-/// renderer each translate it for display, and three QML files
-/// (LayoutPickerContent, MonitorStatePage and ActionParamEditors, the last for
-/// the rule action's own None row) hardcode the literal against this
-/// declaration.
+/// renderer each translate it for display, and four QML files
+/// (LayoutPickerContent, MonitorStatePage, ActionParamEditors for the rule
+/// action's own None row, and ActionListView for that action's read-only
+/// pill) hardcode the literal against this declaration.
 ///
 /// Only that last group is at RISK from a respelling. Every C++ site above
 /// reaches the token through this constant, so they follow a change here for

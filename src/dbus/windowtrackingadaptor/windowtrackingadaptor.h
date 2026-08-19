@@ -1031,8 +1031,9 @@ public:
     void stampScreenContext(PhosphorRules::WindowQuery& query, const QString& screenId) const;
 
     /// Resolve the open-placement directive for a window from its matched window
-    /// rules: the 1-based `SnapToZone` ordinals to snap into (empty when no
-    /// SnapToZone rule matches; multiple ordinals request a zone span) plus the
+    /// rules: the 1-based `SnapToZone` ordinals and/or zone names to snap into
+    /// (both lists empty when no SnapToZone rule matches; multiple targets across
+    /// the two lists request a zone span) plus the
     /// `RouteToScreen` target monitor (empty when unrouted) plus the
     /// `RouteToDesktop` target desktop (unset when unrouted, and only ever a
     /// 1-based desktop). The desktop slot steers where the zones RESOLVE, so a
@@ -1664,9 +1665,9 @@ private:
     // resolver: the cacheable ones share its resolveCached memo, while the
     // rest stamp per-call context or need a per-query filter and go through
     // resolve()/resolveFiltered() on the same instance, which neither reads
-    // nor seeds that memo — see rules.cpp for which resolver takes which
-    // path (the enumeration lives with the code, not here, so it cannot go
-    // stale). The evaluator self-invalidates
+    // nor seeds that memo — see rules.cpp and rules_placement.cpp for which
+    // resolver takes which path (the enumeration lives with the code, not
+    // here, so it cannot go stale). The evaluator self-invalidates
     // on in-place rule edits via the set revision, so it is built once on first
     // use. Reset in setRuleStore only when the store pointer actually
     // changes (a same-store rebind keeps the evaluator).

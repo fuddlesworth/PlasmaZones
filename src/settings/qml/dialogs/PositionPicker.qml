@@ -1,6 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Bound for the same reason as QuickLayoutSlotsCard: the nine-cell Repeater's
+// delegate reads `root.` (labels, position, enabled) and the picker is hosted on
+// pages that incubate asynchronously, where an unbound integer-model delegate's
+// interposed accessor context can swallow those lookups before setInitialState
+// clears it. The delegate takes its index through a required property, which
+// is all Bound permits.
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts

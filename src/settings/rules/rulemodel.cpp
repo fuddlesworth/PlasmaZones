@@ -480,6 +480,11 @@ void RuleModel::setShaderEffectLabelLookup(LabelLookup fn)
     m_shaderEffectLookup = std::move(fn);
 }
 
+void RuleModel::setAnimationEventLabelLookup(LabelLookup fn)
+{
+    m_animationEventLookup = std::move(fn);
+}
+
 void RuleModel::setDecorationPackLabelLookup(LabelLookup fn)
 {
     m_decorationPackLookup = std::move(fn);

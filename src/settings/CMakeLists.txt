@@ -36,6 +36,7 @@ set(plasmazones_settings_SRCS
     controller/settingscontroller_pageregistration.cpp
     controller/settingscontroller_pagetopology.cpp
     controller/settingscontroller_layouts.cpp
+    controller/settingscontroller_rulelookups.cpp
     controller/settingscontroller_session.cpp
     # Whole-config export/import + KZones import (split from _session).
     controller/settingscontroller_transfer.cpp
@@ -171,6 +172,7 @@ set(plasmazones_settings_SRCS
     rules/rulemodel.cpp
     # Label composition + summaries, split from rulemodel.cpp for file-size.
     rules/rulemodel_labels.cpp
+    rules/rulemodel_matchlabels.cpp
     # The static section / match-field name tables, split from
     # rulemodel_labels.cpp when that file in turn reached the size ceiling.
     rules/rulemodel_fieldtables.cpp

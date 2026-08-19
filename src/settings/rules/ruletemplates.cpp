@@ -245,9 +245,11 @@ QVariantMap newRuleFromTemplate(const QString& templateId)
         rule.name = PhosphorI18n::tr("Open an app in a zone");
         rule.priority = kApplicationBandBase;
         rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QString());
-        // Seed zone ordinal 1 (the validator requires a non-empty list); the
-        // user picks the real zone in the editor. Ordinals are layout-agnostic,
-        // matching the snapToZone1..9 shortcuts.
+        // Seed zone ordinal 1 so the action has a target (the validator needs
+        // one entry across the ordinal and name lists); the user picks the real
+        // zone, by number or by name, in the editor. The template deliberately
+        // seeds an ordinal rather than a name: ordinals are layout-agnostic,
+        // matching the snapToZone1..9 shortcuts, and need no layout to exist.
         RuleAction action;
         action.type = QString::fromLatin1(ActionType::SnapToZone);
         action.params.insert(ActionParam::Zones, QJsonArray{1});

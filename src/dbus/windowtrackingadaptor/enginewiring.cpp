@@ -251,8 +251,9 @@ void WindowTrackingAdaptor::setEngines(PhosphorEngine::PlacementEngineBase* snap
         });
 
         // Open-placement resolver (snap). A matched "Snap this app to zone(s)"
-        // rule snaps the opening window into the resolved zone ordinals (the
-        // highest-priority restore-chain level), superseding the retired
+        // rule snaps the opening window into the resolved zones, addressed by
+        // ordinal and/or by name (the highest-priority restore-chain level),
+        // superseding the retired
         // per-layout Layout::appRules. Snap-only — autotile owns placement on
         // its screens, so no resolver is wired into the autotile engine.
         snap->setPlacementZonesResolver(
