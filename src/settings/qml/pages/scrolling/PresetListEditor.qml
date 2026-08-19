@@ -68,11 +68,43 @@ ColumnLayout {
         commit(list.join(","));
     }
 
+    /// The first percentage on the spin's own step grid that no card already
+    /// shows, searched outward from the midpoint so the seed stays somewhere
+    /// sensible rather than at an edge. Falls back to the midpoint when the
+    /// list somehow occupies every step, which the entry cap makes
+    /// unreachable but which must still answer a number.
+    ///
+    /// The downward arm stops at the spin's own floor. Walking to 50 - 50
+    /// would answer 0, which is below `from` and so a value the control
+    /// cannot hold; the spin would silently clamp it and the seed would no
+    /// longer be the free percentage this function promised.
+    function _firstFreePercent() {
+        for (var delta = 0; delta <= 50; delta += 5) {
+            if (editor._shownPercents.indexOf(50 + delta) < 0)
+                return 50 + delta;
+            if (delta > 0 && 50 - delta >= addSpin.from && editor._shownPercents.indexOf(50 - delta) < 0)
+                return 50 - delta;
+        }
+        return 50;
+    }
+
     Kirigami.InlineMessage {
         Layout.fillWidth: true
         type: Kirigami.MessageType.Information
-        visible: editor._atCap || editor._wouldCollide
-        text: editor._atCap ? i18n("This list is full at %1 presets. Remove one to add another.", editor._maxEntries) : i18n("There is already a preset at this percentage.")
+        // Exactly one, not one-or-fewer: at zero entries there is no card on
+        // screen for the floor message to be about, and it claimed a preset
+        // could not be removed while none was shown.
+        visible: editor._atCap || editor._wouldCollide || editor._values.length === 1
+        text: {
+            if (editor._atCap)
+                return i18n("This list is full at %1 presets. Remove one to add another.", editor._maxEntries);
+            if (editor._wouldCollide)
+                return i18n("There is already a preset at this percentage.");
+            // The floor the Remove buttons are greyed at. Explained here
+            // because a disabled button receives no hover and so can carry no
+            // tooltip of its own.
+            return i18n("A list needs at least one preset, so this one cannot be removed.");
+        }
     }
 
     GridLayout {
@@ -163,7 +195,12 @@ ColumnLayout {
                             next.splice(presetCard.index, 1);
                             editor._commitList(next);
                         }
-                        ToolTip.text: enabled ? i18n("Remove this preset") : i18n("A list needs at least one preset")
+                        // Only the enabled text: a disabled QQC2 control gets
+                        // no hover events, so the disabled variant could
+                        // never be shown. The floor is explained by the
+                        // InlineMessage above instead, which is visible
+                        // exactly when the button is greyed.
+                        ToolTip.text: i18n("Remove this preset")
                         ToolTip.visible: hovered
                     }
                 }
@@ -174,7 +211,7 @@ ColumnLayout {
         // short list would stretch two or three cards across the full width
         // and break the uniform card size. Spacers hold the missing cells.
         Repeater {
-            model: Math.max(0, 4 - editor._values.length % 4) % 4
+            model: (4 - editor._values.length % 4) % 4
 
             delegate: Item {
                 Layout.fillWidth: true
@@ -200,7 +237,13 @@ ColumnLayout {
             // An imperative seed, not a `value:` binding: SettingsSpinBox
             // writes its own `value` back on every edit, which would sever a
             // binding here on the first keystroke.
-            Component.onCompleted: addSpin.value = 50
+            //
+            // Seeded to the first percentage the list does not already hold,
+            // walking the step grid from the midpoint. A flat 50 collided
+            // with the shipped 0.5 default in BOTH lists, so the card opened
+            // with a collision warning showing and Add greyed out before the
+            // user had touched anything.
+            Component.onCompleted: addSpin.value = editor._firstFreePercent()
         }
 
         Button {
@@ -219,6 +262,21 @@ ColumnLayout {
                 // fighting the canonicalizer's number formatting.
                 next.push((addSpin.value / 100).toFixed(3));
                 editor._commitList(next);
+                // Step the spin off the percentage just added. The new card
+                // carries that percentage, so leaving the box on it brings
+                // the collision warning and a greyed Add straight back — the
+                // same dead end the initial seed exists to avoid, one
+                // interaction later, and on every add after it.
+                //
+                // Deferred because `commit` round-trips through the store's
+                // canonicalizer, so `_shownPercents` has not settled inside
+                // this handler yet. Driven from the click and not from
+                // `presets` changing, because that would also fire on Remove
+                // and on writes from elsewhere, moving the box under a user
+                // who has typed a value and not yet added it.
+                Qt.callLater(function () {
+                    addSpin.value = editor._firstFreePercent();
+                });
             }
         }
     }

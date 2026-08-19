@@ -508,10 +508,10 @@ bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& pr
             assignedId = QString(PhosphorZones::NoScrollingTemplate);
         } else {
             // Store validation stays at this site because assignScrollingTemplate
-            // DOWNGRADES an unknown id to "no template" rather than refusing, and
-            // a mis-routed press must read as "nothing happened" instead of
-            // clearing the context's template. Same refusal
-            // applyScrollingTemplateToScreen performs for its own callers.
+            // DOWNGRADES an unknown id to the explicit no-template word rather
+            // than refusing, and a mis-routed press must read as "nothing
+            // happened" instead of pinning the context to an opt-out. Same
+            // refusal applyScrollingTemplateToScreen performs for its own callers.
             const auto templateUuid = Utils::parseUuid(preview.id);
             PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
             if (!templateUuid || (store && !store->contains(*templateUuid))) {

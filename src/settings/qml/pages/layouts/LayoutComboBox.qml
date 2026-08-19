@@ -332,6 +332,22 @@ ComboBox {
     model: []
     onResolvedDefaultIdChanged: rebuildModel()
     onNoneTextChanged: rebuildModel()
+    // Every property _buildItems() reads needs a rebuild trigger, or a
+    // consumer that changes one after construction is left with a stale
+    // model — and, for the two leading rows, a stale updateSelection /
+    // clearSelection invariant, since both branch on which rows exist. The
+    // current consumers all set these once declaratively, so this is closing
+    // an asymmetric surface rather than a live bug.
+    onShowNoneOptionChanged: rebuildModel()
+    onShowExplicitNoneOptionChanged: rebuildModel()
+    onExplicitNoneTextChanged: rebuildModel()
+    onExplicitNoneValueChanged: rebuildModel()
+    // Not read by _buildItems but by _modelMatchesItems, which only compares
+    // zone geometry while the previews are on. With them off a geometry-only
+    // edit counts as "no visible change" and no rebuild happens, so turning
+    // them on afterwards would render the layout objects captured by the
+    // older model. Same asymmetry as the four above.
+    onShowPreviewChanged: rebuildModel()
     // Filter change (e.g., viewMode switch) completely replaces model content.
     // Rebuild the model synchronously, but do NOT call updateSelection() here.
     // Both layoutFilter and currentLayoutId depend on the same root property
@@ -401,7 +417,6 @@ ComboBox {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                propagateComposedEvents: true
                 onPressed: function (mouse) {
                     const rootPos = root.mapToItem(catcher, 0, 0);
                     const onCombo = mouse.x >= rootPos.x && mouse.y >= rootPos.y && mouse.x < rootPos.x + root.width && mouse.y < rootPos.y + root.height;

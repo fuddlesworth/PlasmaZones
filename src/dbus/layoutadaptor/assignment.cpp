@@ -529,8 +529,11 @@ QString LayoutAdaptor::getScreenStates()
         obj[QLatin1String("scrollingTemplateId")] = entry.scrollingTemplateLayout;
         if (!entry.scrollingTemplateLayout.isEmpty()) {
             // Name from the native template STORE (templates are no longer
-            // layouts); a deleted template answers an empty name and the
-            // page shows the raw id.
+            // layouts). A deleted template answers an empty name, which is
+            // what tells the Monitors page it is looking at a context pinned
+            // to a template the store no longer holds: a non-empty id beside
+            // an empty name is that state and nothing else, and the page says
+            // so in prose rather than printing the raw id.
             const PhosphorZones::ScrollingTemplateStore* store = m_layoutManager->scrollingTemplateStore();
             obj[QLatin1String("scrollingTemplateName")] =
                 store ? store->templateById(QUuid::fromString(entry.scrollingTemplateLayout)).name : QString();
@@ -1052,9 +1055,9 @@ void LayoutAdaptor::setScrollingTemplateLayout(const QString& screenId, int virt
         // A non-empty id must name an existing native ScrollingTemplate:
         // unlike the mode-only assignment setters there is no sentinel form
         // to accept, and an unknown UUID passed through to the registry
-        // would be stored as "no template" (the store-validated clear),
-        // silently dropping the context's existing choice. Refusing HERE
-        // keeps the prior template.
+        // would be stored as the explicit no-template word, silently
+        // replacing the context's existing choice with an opt-out the caller
+        // never asked for. Refusing HERE keeps the prior template.
         //
         // The existence half is store-gated, matching the registry's own
         // check: with no store wired (unit fixtures, embedders) only the

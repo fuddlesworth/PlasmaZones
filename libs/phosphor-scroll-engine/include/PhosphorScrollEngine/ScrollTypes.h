@@ -401,6 +401,13 @@ struct TabIndicatorParams
         const int thickness = qMax(1, width);
         const bool vertical = isVerticalTabIndicator(position);
         const int axisExtent = vertical ? columnRect.height() : columnRect.width();
+        // Empty-first, the same guard contentRectFor and the preset resolvers
+        // take: qBound asserts on an inverted range, and a zero-extent column
+        // gives min 1 against max 0. There is nothing to draw an indicator on
+        // in that case anyway.
+        if (axisExtent <= 0) {
+            return QRect();
+        }
         // Floor at 1: a proportion small enough to round to nothing would make
         // the indicator vanish while every setting still says it is on.
         const int length = qBound(1, qRound(axisExtent * lengthProportion), axisExtent);
@@ -432,6 +439,9 @@ struct TabIndicatorParams
         case TabIndicatorPosition::Top:
             return QRect(columnRect.x() + longOffset, columnRect.y() - outward, length, thickness);
         case TabIndicatorPosition::Bottom:
+            // Falls out to the shared return below. No default label, so a
+            // new enumerator is a compiler warning here rather than silently
+            // inheriting Bottom's geometry.
             break;
         }
         return QRect(columnRect.x() + longOffset, columnRect.y() + columnRect.height() - thickness + outward, length,

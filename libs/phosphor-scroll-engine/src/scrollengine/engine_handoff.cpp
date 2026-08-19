@@ -12,6 +12,7 @@
 #include <PhosphorEngine/IWindowTrackingService.h>
 #include <PhosphorEngine/WindowPlacementStore.h>
 
+#include "enginelimits.h"
 #include "scrollenginelogging.h"
 
 namespace PhosphorScrollEngine {
@@ -216,7 +217,11 @@ void ScrollEngine::handoffReceive(const HandoffContext& ctx)
         // decode it by the TARGET strip's role: the value being minted is an
         // intent for the strip receiving the window. Reading .width() feeds a
         // cross extent into a main-axis intent on a vertical target.
-        width = ColumnWidth::makeFixed(params.axis.mainSize(ctx.sourceGeometry.size()));
+        // Bounded like every other Fixed intent this engine mints: the source
+        // geometry is a compositor-reported frame, so a degenerate or absurd
+        // extent would otherwise become the column's standing width intent.
+        const int sourceMain = params.axis.mainSize(ctx.sourceGeometry.size());
+        width = ColumnWidth::makeFixed(qBound(1, sourceMain, static_cast<int>(kMaxFixedExtentPx)));
     }
     // Entry position comes from the CALLER: the cross-mode dispatcher
     // derives insertIndex from the crossing direction (0 when entering from

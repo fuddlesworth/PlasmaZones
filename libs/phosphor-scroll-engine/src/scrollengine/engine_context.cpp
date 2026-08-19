@@ -65,7 +65,12 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     QSet<QString> affectedScreens;
     // Per-screen params cache: layoutParamsForScreen costs a ScreenManager
     // query plus a context-gap provider invocation, and a batch prune of N
-    // dead windows on one screen needs it once, not N times.
+    // dead windows on one screen needs it once, not N times. The params are
+    // content-dependent (the smart-gaps arm reads the live column count), so a
+    // batch that empties a screen down to one column resolves its later
+    // removals against the pre-batch gap verdict; the scheduled retile below
+    // re-resolves and re-anchors before anything paints, which is the same
+    // borrow layoutParamsForScreen already documents for a background context.
     QHash<QString, ScrollLayoutParams> paramsByScreen;
     for (const QString& windowId : dead) {
         // Before any state mutation, mirroring windowClosed (and autotile's
@@ -166,6 +171,15 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
     // gradually instead. See StashedTile::stagedFromPersistence.
     if (!aliveWindowIds.isEmpty()) {
         for (auto stashIt = m_stripStash.begin(); stashIt != m_stripStash.end();) {
+            // Captured before the sweep below can empty the entry, because the
+            // zero-tile reap needs to tell two look-alike shapes apart: an
+            // entry BORN cursor-only (stashStripStructure's all-floated arm,
+            // which never had columns) is a live carrier and must survive to
+            // the arrival that consumes it, while an entry that DECAYED to
+            // zero tiles here is one whose windows are demonstrably gone —
+            // that context comes back to an empty strip and is supposed to
+            // restart its blueprint, so retaining its cursor would be the bug.
+            const bool bornCursorOnly = stashIt->columns.isEmpty();
             // Dead tiles are erased outright, consumed ones included. Retaining
             // a consumed-then-closed tile to protect restoreFromStripStash's
             // positional math is NOT necessary: both of its counters test LIVE
@@ -212,8 +226,16 @@ int ScrollEngine::pruneStaleWindows(const QSet<QString>& aliveWindowIds)
                 });
             }
             const int remaining = stashIt->tileCount();
-            if (remaining == 0
-                || (stashConsumedIt != m_stripStashConsumed.end() && stashConsumedIt->size() >= remaining)) {
+            // A cursor-only carrier has no tiles by construction, so the
+            // zero-tile arm would reap it on the bring-up prune the effect
+            // fires before any window has announced — retiring the entry
+            // before the arrival it exists for. Scoped to entries that were
+            // ALREADY column-less on entry AND actually carry a cursor;
+            // everything else reaps exactly as before.
+            const bool cursorOnlyCarrier = bornCursorOnly && stashIt->blueprintCursor > 0;
+            if (!cursorOnlyCarrier
+                && (remaining == 0
+                    || (stashConsumedIt != m_stripStashConsumed.end() && stashConsumedIt->size() >= remaining))) {
                 m_stripStashConsumed.remove(stashIt.key());
                 stashIt = m_stripStash.erase(stashIt);
             } else {
@@ -355,8 +377,14 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                     // re-adoption, and clobbering it would lose those
                     // pending restores — in that case the old-key entry
                     // stays for the prunes, exactly the pre-fix behaviour.
-                    if (m_stripStash.contains(oldKey) && !m_stripStash.contains(newKey)) {
-                        m_stripStash.insert(newKey, m_stripStash.take(oldKey));
+                    // "Vacant" means no STRUCTURE: a cursor-only carrier at
+                    // the new key (an all-floating exit's stash) holds no
+                    // windows to lose, so a structural stash moves over it and
+                    // absorbs its cursor with qMax rather than dropping it.
+                    if (m_stripStash.contains(oldKey) && m_stripStash.value(newKey).isEmpty()) {
+                        StashedStrip moved = m_stripStash.take(oldKey);
+                        moved.blueprintCursor = qMax(moved.blueprintCursor, m_stripStash.value(newKey).blueprintCursor);
+                        m_stripStash.insert(newKey, moved);
                         if (m_stripStashConsumed.contains(oldKey)) {
                             m_stripStashConsumed.insert(newKey, m_stripStashConsumed.take(oldKey));
                         }
@@ -368,6 +396,22 @@ void ScrollEngine::updateStickyScreenPins(const std::function<bool(const QString
                     // as the stash.
                     if (m_burstPendingApplies.contains(oldKey) && !m_burstPendingApplies.contains(newKey)) {
                         m_burstPendingApplies.insert(newKey, m_burstPendingApplies.take(oldKey));
+                    }
+                    // The per-context rule/template overrides move with the
+                    // state for the same reason: left at the old key the
+                    // migrated strip resolves no template, no preset
+                    // vocabulary and no axis override until the daemon's next
+                    // per-pass push re-seeds them, and its blueprint identity
+                    // compare meets an empty blueprint in the meantime. Same
+                    // move-only-if-vacant rule as the stash above — a map
+                    // already sitting at the new key was resolved FOR that
+                    // context and outranks the one being migrated into it.
+                    // An EMPTY map counts as vacant: the daemon pushes {} for
+                    // every scrolling context that resolves nothing, so
+                    // presence alone no longer says the context was resolved
+                    // to anything worth outranking the migrated map.
+                    if (m_perScreenOverrides.contains(oldKey) && m_perScreenOverrides.value(newKey).isEmpty()) {
+                        m_perScreenOverrides.insert(newKey, m_perScreenOverrides.take(oldKey));
                     }
                     qCInfo(lcScrollEngine) << "Migrated screen" << screenId << "strip from desktop" << pinnedDesktop
                                            << "to" << newKey.desktop;
@@ -462,8 +506,11 @@ void ScrollEngine::sweepStatelessScreenBookkeeping(const QSet<QString>& screenId
     // prune only while ANOTHER context still exists for the screen. Once
     // the last state is gone, a stale seed or tab-strip latch would replay
     // against whatever state is built there next. m_perScreenOverrides
-    // deliberately survives (per-screen rule config re-applies on
-    // re-entry); only a physical removal purges it.
+    // deliberately survives (the rule/template config re-applies on re-entry,
+    // and it is keyed per CONTEXT rather than per screen, so it outlives any
+    // one context's state by design). Its purgers are clearPerScreenConfig
+    // for a screen leaving scrolling, the context prunes for a destroyed
+    // desktop or activity, and pruneStatesForRemovedScreen for a dead output.
     const auto& states = m_states.states();
     for (const QString& screenId : screenIds) {
         bool hasState = false;
@@ -509,6 +556,14 @@ void ScrollEngine::pruneStatesForDesktop(int removedDesktop)
     sweepStripStash([removedDesktop](const PhosphorEngine::PlacementStateKey& key) {
         return key.desktop == removedDesktop;
     });
+    // The override map is keyed per CONTEXT, so a destroyed desktop leaves
+    // entries no live context can ever resolve. They are not merely dead
+    // weight: KWin renumbers desktops on removal, so the index is handed out
+    // again, and the next desktop to take it would resolve the template of the
+    // one the user deleted. Same predicate as the state prune above.
+    for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
+        it = it.key().desktop == removedDesktop ? m_perScreenOverrides.erase(it) : std::next(it);
+    }
 }
 
 void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
@@ -539,6 +594,12 @@ void ScrollEngine::pruneStatesForActivities(const QStringList& validActivities)
     sweepStripStash([&stale](const PhosphorEngine::PlacementStateKey& key) {
         return stale(key.activity);
     });
+    // Per-context override entries for a deleted activity, on the same terms
+    // as the desktop prune's sweep: no live context resolves them again, and
+    // an activity id can be reused by a restore from backup.
+    for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
+        it = stale(it.key().activity) ? m_perScreenOverrides.erase(it) : std::next(it);
+    }
 }
 
 void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
@@ -567,10 +628,12 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         },
         [this, &releasedWindows, &releasedScreens](const PhosphorEngine::PlacementStateKey&, ScrollState* state) {
             releasedScreens.insert(state->screenId());
-            // Removed screen: the per-screen rule overrides go with the state
+            // Removed screen: the per-context rule overrides go with the state
             // too — this prune is their documented purger, and releaseScreenState
-            // does not touch them because a mode exit must keep them.
-            m_perScreenOverrides.remove(state->screenId());
+            // does not touch them because a mode exit must keep them. The
+            // removal itself is the standalone sweep further down, which walks
+            // every key on the dying output rather than only the contexts that
+            // happened to have built a state.
             // Through the FULL release, not a bare bookkeeping drop. The windows
             // are alive (only their output is gone), so the daemon's
             // windowsReleased handler below still reads each one's float marker
@@ -603,7 +666,7 @@ void ScrollEngine::pruneStatesForRemovedScreen(const QString& physicalScreenId)
         }
     }
     for (auto it = m_perScreenOverrides.begin(); it != m_perScreenOverrides.end();) {
-        if (matches(it.key())) {
+        if (matches(it.key().screenId)) {
             it = m_perScreenOverrides.erase(it);
         } else {
             ++it;

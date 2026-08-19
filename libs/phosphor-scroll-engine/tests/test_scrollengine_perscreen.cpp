@@ -1,10 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): past the 1150 hard ceiling. No exact
-// figure is quoted here on purpose — it goes stale on the next slot added.
+// FILE-SIZE NOTE: over the 1000-line target, inside the 15% grace, and no
+// longer past the hard ceiling — splitting the template channel's blueprint
+// and cursor cases out to test_scrollengine_template.cpp is what brought it
+// back under. No exact figure is quoted here on purpose, since it goes stale
+// on the next slot added.
 //
-// The case for it: this file's concern is a single resolution cascade —
+// The case for keeping the rest together: this file's concern is a single
+// resolution cascade —
 // rule > per-screen settings trio > cached global, plus the template channel
 // that replaces the preset LISTS those kinds index into. The channels are not
 // independent of each other; every test here is a PRECEDENCE claim between two
@@ -30,9 +34,10 @@
 // the global's matching slot. The TEMPLATE channel is a fourth of a
 // different shape. It is not a default at all: it replaces the preset LISTS
 // the Preset kinds index into (presetColumnWidths / presetWindowHeights)
-// wholesale, and it also carries the seed blueprint for the first columns.
-// Its tests come in two groups, the preset-list ones straight after the
-// default-channel tests and the blueprint ones closing the file.
+// wholesale. The preset-list cases live here, straight after the
+// default-channel tests. The channel's other half — the seed blueprint for
+// the first columns, and the consumption cursor that tracks it — has its own
+// suite in test_scrollengine_template.cpp.
 //
 // None of that is directly observable: the two resolvers are private. What IS
 // observable is the width a freshly-opened column takes and the height intent
@@ -107,19 +112,7 @@ private Q_SLOTS:
     void tabIndicatorOverridesArePerProperty();
     void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
-    void templateBlueprintSeedsFirstColumns();
-    void openRuleOutranksTemplateBlueprint();
-    void openMaximizedRuleOutranksWidthRuleAndBlueprint();
-    void openFocusedRuleOverridesFocusNewWindows();
-    void openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival();
-    void openFocusedFalseSurvivesTheCompositorsOwnFocusReport();
-    void openMaximizedFalseLeavesTheDefaultWidth();
-    void openMaximizedIsDroppedByAConsumeOpen();
-    void templateBlueprintNeverResizesExistingColumns();
-    void templateBlueprintEntryWithoutDisplayKeepsTheDefault();
-    void closingAColumnDoesNotHandItsBlueprintEntryBack();
-    void emptyingTheStripRestartsTheBlueprintSeed();
-    void anewBlueprintRestartsTheSeedInsteadOfResumingTheOldCount();
+    void tabIndicatorRectIsNullForAZeroExtentColumn();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -646,6 +639,7 @@ void TestScrollEnginePerScreen::fixedKindWithAProportionValueFallsThroughToTheGl
     huge.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 1.0e18);
     engine->applyPerScreenConfig(kS1, huge);
     engine->windowOpened(QStringLiteral("app|d"), kS1, 0, 0);
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d")));
     const ColumnWidth capped = openedWidth(engine, kS1, QStringLiteral("app|d"));
     QCOMPARE(capped.kind, ColumnWidth::Fixed);
     QCOMPARE(capped.fixedPx, 65535); // kMaxFixedExtentPx (enginelimits.h)
@@ -1094,489 +1088,59 @@ void TestScrollEnginePerScreen::tabIndicatorRejectsAGarbagePositionOverride()
     QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).position, TabIndicatorPosition::Right);
 }
 
-void TestScrollEnginePerScreen::templateBlueprintSeedsFirstColumns()
+void TestScrollEnginePerScreen::tabIndicatorRectIsNullForAZeroExtentColumn()
 {
-    // The template's blueprint shapes the first N materializing columns
-    // (width AND display), and the column beyond it takes the pushed
-    // beyond-blueprint default.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
+    // indicatorRectFor's empty-first guard. This one is not a wrong-rect bug
+    // if it regresses: the qBound below it takes min 1 against a max of 0 on
+    // a zero-extent column, and qBound ASSERTS on an inverted range, so
+    // removing the guard turns a degenerate column into an abort.
+    //
+    // No engine here — the params struct is public and pure, and driving it
+    // directly is the only way to hand it a degenerate rect the layout would
+    // never produce on its own.
+    //
+    // Which extent matters depends on the position, because the indicator's
+    // LONG axis is the column's height for a left/right indicator and its
+    // width for a top/bottom one. So each position is paired with the rect
+    // that zeroes ITS OWN axis; pairing them the other way round would leave
+    // the guard unreached and every assertion passing on the ordinary path.
+    TabIndicatorParams params;
+    params.enabled = true;
+    params.hideWhenSingleTab = false;
+    params.lengthProportion = 0.5;
+    params.width = 4;
 
-    QVariantMap templ;
-    QVariantList blueprint;
-    QVariantMap first;
-    first.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
-    blueprint.append(first);
-    QVariantMap second;
-    second.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.4);
-    second.insert(ScrollPerScreenKeys::templateColumnDisplay(), 1);
-    blueprint.append(second);
-    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
-    templ.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::Proportion));
-    templ.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.3);
-    engine->applyPerScreenConfig(kS1, templ);
+    // Two tiles, so resolvesFor() is satisfied and the guard under test is
+    // actually the thing answering. A single tile would return early on the
+    // hide rule in some configurations and prove nothing.
+    constexpr int kTiles = 2;
 
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
+    const QRect zeroHeight(0, 0, 100, 0);
+    const QRect zeroWidth(0, 0, 0, 100);
 
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
-    QVERIFY(state);
-    QCOMPARE(state->strip().columns().size(), 3);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).kind, ColumnWidth::Proportion);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.6);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.4);
-    // The second blueprint column opened tabbed; the strip stores display
-    // per column, so find app|b's column. The found flag keeps the assertion
-    // honest: without it a missing app|b column would satisfy the loop
-    // vacuously, which is the same discipline columnExists enforces for the
-    // width reads above.
-    bool foundB = false;
-    for (const Column& col : state->strip().columns()) {
-        if (col.indexOfWindow(QStringLiteral("app|b")) >= 0) {
-            foundB = true;
-            QCOMPARE(col.display, ColumnDisplay::Tabbed);
-        }
+    for (const TabIndicatorPosition position : {TabIndicatorPosition::Left, TabIndicatorPosition::Right}) {
+        params.position = position;
+        QVERIFY2(params.indicatorRectFor(zeroHeight, kTiles).isNull(),
+                 "a vertical indicator on a zero-HEIGHT column has no long axis to run along");
+        // Control: the same position on a column with a real long axis still
+        // resolves, so the null above is the guard and not a params set that
+        // never resolves anything.
+        QVERIFY(!params.indicatorRectFor(QRect(0, 0, 100, 100), kTiles).isNull());
     }
-    QVERIFY(foundB);
-    // Beyond the blueprint: the template's declared default.
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|c")).proportion, 0.3);
-}
 
-void TestScrollEnginePerScreen::openRuleOutranksTemplateBlueprint()
-{
-    // A per-window open rule pins the width; the blueprint entry the column
-    // would have taken must not override it.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    QVariantMap templ;
-    QVariantList blueprint;
-    QVariantMap first;
-    first.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
-    blueprint.append(first);
-    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
-    engine->applyPerScreenConfig(kS1, templ);
-
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.widthFraction = 0.25;
-        return params;
-    });
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).kind, ColumnWidth::Proportion);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.25);
-}
-
-void TestScrollEnginePerScreen::openMaximizedRuleOutranksWidthRuleAndBlueprint()
-{
-    // openMaximized is the stronger width verdict: it wins over a width rule
-    // on the same window AND over the blueprint entry the column would have
-    // taken.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    QVariantMap templ;
-    QVariantList blueprint;
-    QVariantMap first;
-    first.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
-    blueprint.append(first);
-    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
-    engine->applyPerScreenConfig(kS1, templ);
-
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.widthFraction = 0.25;
-        params.maximized = true;
-        return params;
-    });
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).kind, ColumnWidth::Proportion);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 1.0);
-}
-
-void TestScrollEnginePerScreen::openFocusedRuleOverridesFocusNewWindows()
-{
-    // Both polarities layer over the global setting: focused=false withholds
-    // strip adoption under a focus-new-windows ON global, focused=true forces
-    // it under an OFF one.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
-    QVERIFY(state);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
-
-    // Global ON, rule false: the strip keeps the prior active column.
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.focused = false;
-        return params;
-    });
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
-
-    // Global OFF, rule true: the arrival is adopted as the active column.
-    // No refreshConfigFromSettings after this write, DELIBERATELY:
-    // effectiveFocusNewWindows reads the settings object live per call
-    // (engine_overrides.cpp — unlike the cached stripAxis, which the global
-    // suite must refresh). If this assignment ever stops taking effect, the
-    // engine started caching the read and this test is what catches it.
-    settings->focusNewWindows = false;
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.focused = true;
-        return params;
-    });
-    engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
-
-    // Global OFF, no rule: the setting stays authoritative.
-    engine->setOpenParamsResolver({});
-    engine->windowOpened(QStringLiteral("app|d"), kS1, 0, 0);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
-}
-
-void TestScrollEnginePerScreen::openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival()
-{
-    // The rewind arm needs a prior active column to rewind TO. On an empty
-    // strip there is none, so the first window becomes the active column
-    // whatever the rule says — a strip whose only column were not active
-    // would leave every later direction verb navigating from nowhere. The
-    // rule still governs the SECOND arrival, which is what makes this a
-    // guard on the empty case rather than the rule being inert.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.focused = false;
-        return params;
-    });
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
-    QVERIFY(state);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
-
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
-}
-
-void TestScrollEnginePerScreen::openFocusedFalseSurvivesTheCompositorsOwnFocusReport()
-{
-    // The regression this pins was observed live, not theorised: declining
-    // focus rewound the STRIP, but the compositor had already focused the
-    // arriving window on its own and reported that focus back independently.
-    // The report adopted the arrival and undid the rewind, so the rule read as
-    // a no-op to the user. Driving windowOpened alone cannot catch that — the
-    // report has to be delivered, which is what this test adds over its
-    // sibling above.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
-    QVERIFY(state);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
-
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.focused = false;
-        return params;
-    });
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
-
-    // The compositor's own report for the declined arrival. Consumed once, so
-    // the rewind stands.
-    engine->windowFocused(QStringLiteral("app|b"), kS1);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
-
-    // Consumed ONCE and no more: a later report for the same window is a real
-    // user click and must adopt normally. A standing veto would make the
-    // window unfocusable, which is why the mark is one-shot.
-    engine->windowFocused(QStringLiteral("app|b"), kS1);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|b"));
-}
-
-void TestScrollEnginePerScreen::openMaximizedFalseLeavesTheDefaultWidth()
-{
-    // An EXPLICIT false must read exactly like an unset optional: the rule
-    // says "do not maximize", not "maximize to the default". Without this
-    // leg a resolver that treated the field's mere presence as a verdict
-    // would pass the whole suite.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
-    settings->widthValue = 0.25;
-    ScrollEngine* engine = makeEngine(&owner, settings);
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.maximized = false;
-        return params;
-    });
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
-    const ColumnWidth width = openedWidth(engine, kS1, QStringLiteral("app|a"));
-    QCOMPARE(width.kind, ColumnWidth::Proportion);
-    QCOMPARE(width.proportion, 0.25);
-}
-
-void TestScrollEnginePerScreen::openMaximizedIsDroppedByAConsumeOpen()
-{
-    // A consume open joins an existing column, and a joining tile carries NO
-    // width verdict — resizing the host would resize every sibling in the
-    // stack. So openMaximized (like openColumnWidth) reaches only a column
-    // the open CREATES. The header documents that on ScrollOpenParams; this
-    // pins it, because the drop is silent.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
-    settings->widthValue = 0.25;
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.25);
-
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.consume = true;
-        params.maximized = true;
-        return params;
-    });
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
-    QVERIFY(state);
-    // One column holding both windows, still at the host's width.
-    QCOMPARE(state->strip().columns().size(), 1);
-    QVERIFY(state->strip().columns().first().indexOfWindow(QStringLiteral("app|b")) >= 0);
-    QCOMPARE(state->strip().columns().first().width.kind, ColumnWidth::Proportion);
-    QCOMPARE(state->strip().columns().first().width.proportion, 0.25);
-}
-
-void TestScrollEnginePerScreen::templateBlueprintNeverResizesExistingColumns()
-{
-    // Applying a template reshapes nothing that already exists: existing
-    // columns keep their widths, and only columns created AFTER the apply
-    // consume blueprint entries (from the current column count onward).
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    settings->widthKind = static_cast<int>(DefaultWidthKind::Proportion);
-    settings->widthValue = 0.5;
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.5);
-
-    QVariantMap templ;
-    QVariantList blueprint;
-    for (qreal width : {0.7, 0.2}) {
-        QVariantMap entry;
-        entry.insert(ScrollPerScreenKeys::templateColumnWidth(), width);
-        blueprint.append(entry);
+    for (const TabIndicatorPosition position : {TabIndicatorPosition::Top, TabIndicatorPosition::Bottom}) {
+        params.position = position;
+        QVERIFY2(params.indicatorRectFor(zeroWidth, kTiles).isNull(),
+                 "a horizontal indicator on a zero-WIDTH column has no long axis to run along");
+        QVERIFY(!params.indicatorRectFor(QRect(0, 0, 100, 100), kTiles).isNull());
     }
-    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
-    engine->applyPerScreenConfig(kS1, templ);
-    // Drain the retile the apply scheduled: without it this leg would assert
-    // against a strip the relayout has not touched yet, so a regression that
-    // reshaped existing columns AT RELAYOUT would still read green here.
-    QCoreApplication::processEvents();
 
-    // The existing column is untouched.
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.5);
-    // The next column materializes at index 1 and takes blueprint[1].
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.2);
-}
-
-void TestScrollEnginePerScreen::templateBlueprintEntryWithoutDisplayKeepsTheDefault()
-{
-    // A blueprint entry may carry a width only. Its column must then keep the
-    // EFFECTIVE default display rather than falling to Normal: reading the
-    // absent key as 0 silently overrode a Tabbed default for exactly the
-    // first N columns, which is the stretch a template is most likely to
-    // shape. The in-tree daemon always writes both keys on every entry, so
-    // this covers the public-API belt for embedder-supplied maps rather than
-    // a shipped bug.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    QVariantMap templ;
-    templ.insert(ScrollPerScreenKeys::defaultColumnDisplay(), static_cast<int>(ColumnDisplay::Tabbed));
-    QVariantList blueprint;
-    QVariantMap widthOnly;
-    widthOnly.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
-    blueprint.append(widthOnly);
-    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
-    engine->applyPerScreenConfig(kS1, templ);
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
-    QVERIFY(state);
-    QCOMPARE(state->strip().columns().size(), 1);
-    // The entry's width still lands, so the blueprint really was consumed.
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.6);
-    QCOMPARE(state->strip().columns().first().display, ColumnDisplay::Tabbed);
-
-    // An entry that DOES carry a display still wins over the same default.
-    QVariantMap explicitNormal;
-    explicitNormal.insert(ScrollPerScreenKeys::defaultColumnDisplay(), static_cast<int>(ColumnDisplay::Tabbed));
-    QVariantList twoEntries;
-    twoEntries.append(widthOnly);
-    QVariantMap normalEntry;
-    normalEntry.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.4);
-    normalEntry.insert(ScrollPerScreenKeys::templateColumnDisplay(), static_cast<int>(ColumnDisplay::Normal));
-    twoEntries.append(normalEntry);
-    explicitNormal.insert(ScrollPerScreenKeys::templateColumns(), twoEntries);
-    engine->applyPerScreenConfig(kS2, explicitNormal);
-
-    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
-    engine->windowOpened(QStringLiteral("app|c"), kS2, 0, 0);
-
-    auto* other = static_cast<ScrollState*>(engine->stateForScreen(kS2));
-    QVERIFY(other);
-    QCOMPARE(other->strip().columns().size(), 2);
-    QCOMPARE(other->strip().columns().at(0).display, ColumnDisplay::Tabbed);
-    QCOMPARE(other->strip().columns().at(1).display, ColumnDisplay::Normal);
-}
-
-void TestScrollEnginePerScreen::closingAColumnDoesNotHandItsBlueprintEntryBack()
-{
-    // The blueprint is a SEED, not a standing rule: an entry a column already
-    // took is spent, so closing that column must not prescribe the next open.
-    // Deriving the entry from the live column count did exactly that — it
-    // refilled any gap, so a column the user had toggled to Normal came back
-    // Tabbed and the toggle read as broken.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    QVariantMap templ;
-    QVariantList blueprint;
-    for (qreal width : {0.6, 0.4}) {
-        QVariantMap entry;
-        entry.insert(ScrollPerScreenKeys::templateColumnWidth(), width);
-        entry.insert(ScrollPerScreenKeys::templateColumnDisplay(), static_cast<int>(ColumnDisplay::Tabbed));
-        blueprint.append(entry);
+    // A fully collapsed column is null on every position.
+    for (const TabIndicatorPosition position : {TabIndicatorPosition::Left, TabIndicatorPosition::Right,
+                                                TabIndicatorPosition::Top, TabIndicatorPosition::Bottom}) {
+        params.position = position;
+        QVERIFY(params.indicatorRectFor(QRect(0, 0, 0, 0), kTiles).isNull());
     }
-    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
-    templ.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::Proportion));
-    templ.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.3);
-    templ.insert(ScrollPerScreenKeys::defaultColumnDisplay(), static_cast<int>(ColumnDisplay::Normal));
-    engine->applyPerScreenConfig(kS1, templ);
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.4);
-
-    // Close the second column. The strip is back to one column, but both
-    // entries are spent.
-    engine->windowClosed(QStringLiteral("app|b"));
-    QCoreApplication::processEvents();
-
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
-    QVERIFY(state);
-    QCOMPARE(state->strip().columns().size(), 1);
-
-    // The replacement takes the BEYOND-blueprint defaults, not entry 1 again.
-    engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|c")).proportion, 0.3);
-    bool foundC = false;
-    for (const Column& col : state->strip().columns()) {
-        if (col.indexOfWindow(QStringLiteral("app|c")) >= 0) {
-            foundC = true;
-            QCOMPARE(col.display, ColumnDisplay::Normal);
-        }
-    }
-    QVERIFY(foundC);
-}
-
-void TestScrollEnginePerScreen::emptyingTheStripRestartsTheBlueprintSeed()
-{
-    // The other half of the spent-entry contract: a screen cleared out has no
-    // column standing for any entry, so the next window opens from the top of
-    // the blueprint again. This is what makes the template describe the
-    // STARTING shape of a screen rather than a one-time event in its history.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    QVariantMap templ;
-    QVariantList blueprint;
-    QVariantMap first;
-    first.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
-    blueprint.append(first);
-    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
-    templ.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::Proportion));
-    templ.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.3);
-    engine->applyPerScreenConfig(kS1, templ);
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.6);
-
-    engine->windowClosed(QStringLiteral("app|a"));
-    // Drained: the reset rides applyLayout's empty branch, which the close
-    // only SCHEDULES. Without this the next open would still see the spent
-    // cursor and the assertion below would pass for the wrong reason.
-    QCoreApplication::processEvents();
-
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.6);
-}
-
-void TestScrollEnginePerScreen::anewBlueprintRestartsTheSeedInsteadOfResumingTheOldCount()
-{
-    // Assigning a different template is an explicit act, so its blueprint
-    // seeds from its own first entry rather than resuming a cursor that
-    // counted the previous one's. The live column count still floors the
-    // result — the new blueprint shapes what comes NEXT and never reaches
-    // back to reshape the column already on screen.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-
-    QVariantMap oldTempl;
-    QVariantList oldBlueprint;
-    for (qreal width : {0.6, 0.4}) {
-        QVariantMap entry;
-        entry.insert(ScrollPerScreenKeys::templateColumnWidth(), width);
-        oldBlueprint.append(entry);
-    }
-    oldTempl.insert(ScrollPerScreenKeys::templateColumns(), oldBlueprint);
-    engine->applyPerScreenConfig(kS1, oldTempl);
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    engine->windowClosed(QStringLiteral("app|b"));
-    QCoreApplication::processEvents();
-    // One column left, both of the old blueprint's entries spent.
-
-    QVariantMap newTempl;
-    QVariantList newBlueprint;
-    for (qreal width : {0.9, 0.8, 0.7}) {
-        QVariantMap entry;
-        entry.insert(ScrollPerScreenKeys::templateColumnWidth(), width);
-        newBlueprint.append(entry);
-    }
-    newTempl.insert(ScrollPerScreenKeys::templateColumns(), newBlueprint);
-    engine->applyPerScreenConfig(kS1, newTempl);
-    QCoreApplication::processEvents();
-
-    // Entry 1 of the NEW blueprint: the seed restarted (a resumed cursor
-    // would have reached entry 2) and the one existing column floors it.
-    engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
-    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|c")).proportion, 0.8);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePerScreen)

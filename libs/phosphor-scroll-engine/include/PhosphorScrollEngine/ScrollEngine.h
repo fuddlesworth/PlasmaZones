@@ -743,8 +743,10 @@ public:
         m_contextGapProvider = std::move(provider);
     }
 
-    // Per-screen overrides layered over the config defaults, one map per
-    // screen with three producer channels the daemon merges (rules win): the
+    // Per-CONTEXT overrides layered over the config defaults, one map per
+    // (screen, desktop, activity) — see the member for why the key is the
+    // context rather than the screen. Three producer channels the daemon
+    // merges (rules win): the
     // RULE channel (SetScrollDefaultColumnWidth / SetCenterFocusedColumn /
     // SetScrollDefaultColumnDisplay / SetScrollInsertPosition /
     // SetScrollDefaultWindowHeight / SetScrollStripAxis), the SETTINGS
@@ -762,7 +764,7 @@ public:
     void clearPerScreenConfig(const QString& screenId) override;
     QVariantMap perScreenOverrides(const QString& screenId) const override
     {
-        return m_perScreenOverrides.value(screenId);
+        return overridesForScreen(screenId);
     }
 
 Q_SIGNALS:
@@ -801,6 +803,17 @@ private:
     {
         return m_context.currentKeyForScreen(screenId);
     }
+    /// The override map entry for @p screenId's CURRENT context.
+    ///
+    /// Every screenId-taking effective* reader goes through here, so the
+    /// map's per-context keying stays an implementation detail of this class
+    /// rather than something each reader has to know. A screen with no entry
+    /// for its current context answers an empty map, which is what every
+    /// reader already treats as "no override, use the configured value".
+    QVariantMap overridesForScreen(const QString& screenId) const
+    {
+        return m_perScreenOverrides.value(currentKeyForScreen(screenId));
+    }
     ScrollState* stateForKey(const PhosphorEngine::PlacementStateKey& key, bool createIfMissing);
     ScrollState* stateForWindow(const QString& canonicalId, PhosphorEngine::PlacementStateKey* outKey = nullptr) const;
     /// The screen the engine should operate on for a screen-hinted verb:
@@ -830,11 +843,6 @@ private:
     /// Latch-guarded tab-strip clear: emits the "[]" payload once for a
     /// screen that had a strip showing, no-op otherwise.
     void clearTabStripsForScreen(const QString& screenId);
-    /// Restart the template seed on every state of @p screenId, for the
-    /// blueprint-changed arm of applyPerScreenConfig / clearPerScreenConfig.
-    /// See ScrollState::blueprintCursor for what the cursor means and why a
-    /// new blueprint must not resume the old one's count.
-    void resetBlueprintCursorsForScreen(const QString& screenId);
     // engine_context.cpp
     /// Shared per-window side-map sweep for the SILENT prune paths (desktop
     /// and activity teardown), which emit no windowsReleased and so have no
@@ -865,6 +873,14 @@ private:
     /// left instead of one default-width column per window — the scroll
     /// twin of AutotileEngine's script-state stash. Keyed per context;
     /// overwritten on every teardown of the same key.
+    ///
+    /// @p preResolvedFallbackAxis is a PRECONDITION, not an optimization, for
+    /// one class of caller: anything running inside a walk over m_states MUST
+    /// pass it. The nullopt path resolves the axis live through
+    /// stripAxisForScreen, which invokes the daemon-injected geometry and gap
+    /// providers — running those mid-iteration is what the pre-resolve at
+    /// setActiveScreens exists to avoid. Callers outside such a walk may omit
+    /// it.
     void stashStripStructure(const PhosphorEngine::PlacementStateKey& key, const ScrollState* state,
                              std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis = std::nullopt);
     /// insertOpenedWindow's stash restore: place @p windowId per the
@@ -873,6 +889,10 @@ private:
     /// position with its width/display), re-applying its height intent.
     /// Returns false when the stash has no verdict (no entry, id absent,
     /// or already consumed) — the caller falls through to the seed path.
+    /// NOT side-effect free on that false: an entry that exists for @p key
+    /// hands its blueprint cursor and identity to @p state before any tile
+    /// is matched, because the claim can fail for an arrival the entry does
+    /// not name while the spent-ness is owed to the state regardless.
     /// @p params is the caller's already-resolved layout params (the only
     /// caller holds them; re-deriving would pay a second ScreenManager
     /// query plus context-gap-provider call).
@@ -1165,8 +1185,17 @@ private:
     /// Kept beside, not inside, the list so consuming an id cannot shift the
     /// recorded positions of the ids still pending.
     QHash<QString, QSet<QString>> m_consumedInitialOrder;
-    /// Snapshot @p state's strip as a stash entry (columns + focus + view
-    /// anchor). Empty columns list when the state is null or empty.
+    /// Snapshot @p state's strip as a stash entry: columns, focus, view
+    /// anchor, captured axis, and the blueprint cursor with the blueprint
+    /// identity it counts against. Empty columns list when the state is null
+    /// or its strip is empty — but a strip that is merely EMPTY still reports
+    /// its cursor, which is the whole content of the entry
+    /// stashStripStructure stores for an all-floated screen.
+    ///
+    /// @p preResolvedFallbackAxis carries the same PRECONDITION documented on
+    /// stashStripStructure above: mandatory for a caller inside an m_states
+    /// walk, because the nullopt path resolves the axis live and invokes the
+    /// injected providers.
     StashedStrip
     buildStashFromState(const ScrollState* state,
                         std::optional<PhosphorProtocol::ScrollAxis> preResolvedFallbackAxis = std::nullopt) const;
@@ -1283,7 +1312,28 @@ private:
     QList<qreal> effectivePresetColumnWidths(const QVariantMap& overrides) const;
     QList<qreal> effectivePresetWindowHeights(const QVariantMap& overrides) const;
 
-    QHash<QString, QVariantMap> m_perScreenOverrides;
+    /// Keyed per CONTEXT, not per screen, because that is how the producer
+    /// resolves them: the daemon asks scrollingTemplateForContext(screen,
+    /// desktop, activity) and pushes the answer for the context that is
+    /// current at the time. Keying by screen alone meant two desktops on one
+    /// monitor could not hold different templates at all — the last resolve
+    /// won for both, and switching between them reset each other's blueprint
+    /// cursor. Readers go through overridesForScreen(), which resolves the
+    /// screen's CURRENT context, so the public screenId-taking accessors are
+    /// unchanged.
+    ///
+    /// ONE EXCEPTION to "the context the producer resolved for": a screen
+    /// under a sticky-desktop pin. currentKeyForScreen answers with the PINNED
+    /// desktop (the pin outranks the per-output desktop), while the daemon
+    /// resolves its template against the LIVE one and knows nothing about the
+    /// pin — it is engine-internal state with no accessor. So a pinned
+    /// screen's entry is filed under the pinned desktop while describing the
+    /// live desktop's template. Reads stay self-consistent, because they
+    /// resolve the same pinned key, and the pin exists precisely because the
+    /// desktop dimension is meaningless for an all-sticky screen. Documented
+    /// rather than re-keyed: re-keying would have to teach the daemon about
+    /// the pin, which is a wider change than the defect justifies.
+    QHash<PhosphorEngine::PlacementStateKey, QVariantMap> m_perScreenOverrides;
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
     FloatPredicate m_floatPredicate;
