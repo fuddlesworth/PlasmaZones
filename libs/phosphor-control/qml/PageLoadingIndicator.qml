@@ -31,7 +31,7 @@ Item {
     property bool _pastGrace: false
 
     visible: root.loading && root._pastGrace
-    opacity: visible ? 1 : 0
+    opacity: root.visible ? 1 : 0
 
     onLoadingChanged: {
         if (root.loading) {
