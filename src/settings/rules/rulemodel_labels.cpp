@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The label half of RuleModel: the per-leaf and per-action human labels and
-// the two summaries built from them, plus the static field / section /
-// fallback label tables. Split out of rulemodel.cpp for file-size; the model
-// mechanics (rows, ordering, lookups) stay there. Everything here is either a
-// RuleModel member or file-local, so there is no shared private header.
+// The label half of RuleModel: the per-leaf and per-action human labels, the
+// two summaries built from them, and the unknown-action-type fallback. Split
+// out of rulemodel.cpp for file-size; the model mechanics (rows, ordering,
+// lookups) stay there, and the static section / match-field tables moved on to
+// rulemodel_fieldtables.cpp when this file in turn reached the ceiling.
+// Everything here is either a RuleModel member or file-local, so there is no
+// shared private header.
 
 #include "rulemodel.h"
 
@@ -61,7 +63,8 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         // unknown desktop falls back to the bare number via resolveOne below. Only
         // for Equals — under GreaterThan/LessThan the value is a numeric threshold,
         // where a name ("greater than Work") would read as nonsense, so those keep
-        // the bare number.
+        // the bare number and take the operator word from compose() instead,
+        // which is what makes "Desktop greater than 3" legible without it.
         lookup = &virtualDesktopLookup;
     }
     const auto resolveOne = [lookup](const QString& raw) {
@@ -72,33 +75,45 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
         return label.isEmpty() ? raw : label;
     };
 
+    // Every return below composes through here so the OPERATOR survives into
+    // the summary. Rendering a bare "field: value" made seven of the eight
+    // operators invisible — "Title contains Firefox" and "Title is Firefox"
+    // read identically, and "Width: 1000" could be a greater-than or a
+    // less-than. Equals keeps the tight colon form (it is the common case, and
+    // sparing it leaves most existing translations untouched). The word comes
+    // from RuleAuthoring so this and the editor dropdown cannot drift.
+    const auto compose = [&predicate](const QString& field, const QString& value) {
+        if (predicate.op == Operator::Equals) {
+            return PhosphorI18n::tr("%1: %2").arg(field, value);
+        }
+        return PhosphorI18n::tr("%1 %2 %3").arg(field, RuleAuthoring::operatorLabel(predicate.op), value);
+    };
+
     // Mode is a closed wire-token vocabulary — render the friendly label
     // ("Mode: Snapping") via the same single-source table the editor dropdown uses,
     // rather than a second hardcoded copy. An unknown token round-trips verbatim.
     if (predicate.field == Field::Mode) {
-        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
-                                              RuleAuthoring::modeLabel(predicate.value.toString()));
+        return compose(RuleModel::fieldLabel(predicate.field), RuleAuthoring::modeLabel(predicate.value.toString()));
     }
 
     // Screen orientation is a closed wire-token vocabulary too — resolve via the
     // shared orientationLabel() table like Mode above.
     if (predicate.field == Field::ScreenOrientation) {
-        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
-                                              RuleAuthoring::orientationLabel(predicate.value.toString()));
+        return compose(RuleModel::fieldLabel(predicate.field),
+                       RuleAuthoring::orientationLabel(predicate.value.toString()));
     }
 
     // Colour scheme: same closed-vocabulary treatment via the shared table.
     if (predicate.field == Field::ColorScheme) {
-        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
-                                              RuleAuthoring::colorSchemeLabel(predicate.value.toString()));
+        return compose(RuleModel::fieldLabel(predicate.field),
+                       RuleAuthoring::colorSchemeLabel(predicate.value.toString()));
     }
 
     // Window type is the int underlying the WindowType enum — resolve it to the
     // friendly label ("Window type: Dialog") via the same single-source table the
     // editor dropdown uses, rather than showing the bare int.
     if (predicate.field == Field::WindowType) {
-        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
-                                              RuleAuthoring::windowTypeLabel(predicate.value.toInt()));
+        return compose(RuleModel::fieldLabel(predicate.field), RuleAuthoring::windowTypeLabel(predicate.value.toInt()));
     }
 
     // Active layout: a snap layout id resolves via the SetSnappingLayout lookup;
@@ -149,7 +164,7 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
                 label = resolved;
             }
         }
-        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), label);
+        return compose(RuleModel::fieldLabel(predicate.field), label);
     }
 
     // Boolean fields (Maximized, Keep above, Skip taskbar, …) render their
@@ -157,9 +172,8 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
     // toString() fallback would emit, matching the editor toggle and the
     // expanded match tree (MatchExpressionView).
     if (PhosphorRules::fieldIsBool(predicate.field)) {
-        return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field),
-                                              predicate.value.toBool() ? PhosphorI18n::tr("On")
-                                                                       : PhosphorI18n::tr("Off"));
+        return compose(RuleModel::fieldLabel(predicate.field),
+                       predicate.value.toBool() ? PhosphorI18n::tr("On") : PhosphorI18n::tr("Off"));
     }
 
     // A JSON array or object value converts to an EMPTY QString, which would
@@ -177,7 +191,7 @@ QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::
             shown = QString::fromUtf8(QJsonDocument(json.toObject()).toJson(QJsonDocument::Compact));
         }
     }
-    return PhosphorI18n::tr("%1: %2").arg(RuleModel::fieldLabel(predicate.field), shown);
+    return compose(RuleModel::fieldLabel(predicate.field), shown);
 }
 
 /// Localise a single engine-mode wire token. Returns an empty QString
@@ -209,15 +223,18 @@ QString engineModeDisplayLabel(const QString& wire)
     return wire;
 }
 
-/// The scrolling fraction params as a whole percent, or -1 when the payload
-/// is not a usable [0, 1] fraction. The editor can hold a staged action whose
-/// validator has not run yet, so a bool, a string, or an out-of-range number
-/// is reachable here; the same reject paths SetOpacity and SetTintStrength
-/// mirror, so a summary never claims a size the runtime will not apply.
+/// A fraction param as a whole percent, or -1 when the payload is not a usable
+/// fraction inside [@p floor, @p ceiling]. The editor can hold a staged action
+/// whose validator has not run yet, so a bool, a string or an out-of-range
+/// number is reachable here, mirroring the SetOpacity / SetTintStrength reject
+/// paths so a summary never claims a size the runtime will not apply.
 ///
-/// Only for params whose descriptor floors at 0.05. A fraction param that
-/// admits 0 belongs to zeroFlooredFractionPercent below.
-int scrollFractionPercent(const QJsonValue& raw)
+/// The bounds are PARAMETERS, not the single constant this used to hard-code:
+/// the callers do not share a descriptor (four scrolling params, the tab
+/// indicator's own ratio, and the drop-indicator opacity which really does
+/// admit 0). The first two constants hold the same value today, so passing the
+/// wrong one was invisible and would have stayed invisible until one moved.
+int fractionPercent(const QJsonValue& raw, double floor, double ceiling)
 {
     if (raw.isNull() || raw.isUndefined()) {
         return -1;
@@ -228,31 +245,7 @@ int scrollFractionPercent(const QJsonValue& raw)
         return -1;
     }
     const double v = raw.toDouble();
-    // Floor at the validators' shared minimum, not 0: all five callers'
-    // descriptors reject fractions below MinColumnWidthRatio (the
-    // tab-indicator length shares the same 0.05 floor via
-    // MinTabIndicatorLengthRatio), so a summary confidently printing "3%"
-    // would claim a size the runtime refuses.
-    if (v < PhosphorRules::MinColumnWidthRatio || v > 1.0) {
-        return -1;
-    }
-    return qRound(v * 100.0);
-}
-
-/// The zero-floored twin of scrollFractionPercent, for a fraction param whose
-/// descriptor really does admit 0. The drop indicator's fill opacity is the
-/// only one: 0 there is an outline with no fill, a legal value the shared
-/// 0.05 floor would render "(invalid)".
-int zeroFlooredFractionPercent(const QJsonValue& raw)
-{
-    if (raw.isNull() || raw.isUndefined()) {
-        return -1;
-    }
-    if (!raw.isDouble()) {
-        return -1;
-    }
-    const double v = raw.toDouble();
-    if (v < PhosphorRules::MinDropIndicatorOpacity || v > PhosphorRules::MaxDropIndicatorOpacity) {
+    if (v < floor || v > ceiling) {
         return -1;
     }
     return qRound(v * 100.0);
@@ -282,18 +275,20 @@ bool isHexColorShape(const QString& value)
     return true;
 }
 
-/// The descriptor schema for an action's single `value` param, or nullopt when
-/// the type is unregistered or declares no such param. The descriptor is the
-/// same source the editor's SpinBox range comes from, so a summary guarded
-/// through it can never claim a value the editor would refuse to author.
-std::optional<PhosphorRules::ParamSchema> valueParamSchema(const QString& type)
+/// The descriptor schema for @p type's @p key param, or nullopt when the type is
+/// unregistered or declares no such param. The descriptor is the same source the
+/// editor's SpinBox range comes from, so a summary guarded through it can never
+/// claim a value the editor would refuse to author. Keyed rather than hard-wired
+/// to `value`: OverrideAnimationTiming carries its number under `durationMs`,
+/// and was the one unguarded integer renderer precisely because of that.
+std::optional<PhosphorRules::ParamSchema> paramSchema(const QString& type, QLatin1StringView key)
 {
     const auto descriptor = PhosphorRules::ActionRegistry::instance().descriptor(type);
     if (!descriptor.has_value()) {
         return std::nullopt;
     }
     for (const PhosphorRules::ParamSchema& schema : descriptor->params) {
-        if (schema.key == PhosphorRules::ActionParam::Value) {
+        if (schema.key == key) {
             return schema;
         }
     }
@@ -301,13 +296,13 @@ std::optional<PhosphorRules::ParamSchema> valueParamSchema(const QString& type)
 }
 
 /// True when @p wire (a payload already in WIRE units) falls inside the declared
-/// bounds of @p type's single `value` param. Descriptor bounds are declared in
-/// DISPLAY units (`stored = display * scale`), so they scale up before the
-/// comparison. A type with no descriptor, or a param with no declared bound on
-/// that side, admits anything.
-bool valueParamInRange(const QString& type, double wire)
+/// bounds of @p type's @p key param. Descriptor bounds are declared in DISPLAY
+/// units (`stored = display * scale`), so they scale up before the comparison.
+/// A type with no descriptor, or a param with no declared bound on that side,
+/// admits anything.
+bool paramInRange(const QString& type, QLatin1StringView key, double wire)
 {
-    const auto schema = valueParamSchema(type);
+    const auto schema = paramSchema(type, key);
     if (!schema.has_value()) {
         return true;
     }
@@ -321,22 +316,34 @@ bool valueParamInRange(const QString& type, double wire)
     return true;
 }
 
-/// The integer `value` payload of an action of type @p type, or nullopt when the
-/// staged payload is not a JSON number inside the descriptor's declared range.
-/// The editor can hold an action whose validator has not run yet, so a bool, a
+/// The single-`value` shorthand, which is what most callers here want.
+bool valueParamInRange(const QString& type, double wire)
+{
+    return paramInRange(type, PhosphorRules::ActionParam::Value, wire);
+}
+
+/// The integer payload of @p type's @p key param, or nullopt when the staged
+/// payload is not a JSON number inside the descriptor's declared range. The
+/// editor can hold an action whose validator has not run yet, so a bool, a
 /// string, or an out-of-range number is reachable here; the fraction, colour and
 /// enum families all reject those already, and this is the integer twin of that
 /// discipline, so a pixel summary never claims a size the runtime discards.
-std::optional<int> intValueParam(const QString& type, const QJsonValue& raw)
+std::optional<int> intParam(const QString& type, QLatin1StringView key, const QJsonValue& raw)
 {
     if (!raw.isDouble()) {
         return std::nullopt;
     }
     const double v = raw.toDouble();
-    if (!valueParamInRange(type, v)) {
+    if (!paramInRange(type, key, v)) {
         return std::nullopt;
     }
     return qRound(v);
+}
+
+/// The single-`value` shorthand, which is what most integer renderers want.
+std::optional<int> intValueParam(const QString& type, const QJsonValue& raw)
+{
+    return intParam(type, PhosphorRules::ActionParam::Value, raw);
 }
 
 /// True when a closed-vocabulary token failed to resolve to a label.
@@ -394,9 +401,10 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // resolve, and the fallback renders an unresolvable value verbatim —
         // which showed the user a template apparently named "none". Every
         // Monitors-page and picker None pick writes exactly this action, so
-        // it is the common case rather than a malformed one.
+        // it is the common case rather than a malformed one. The payload
+        // echoes the row the user chose (the pickers all label it "None").
         if (layoutId == PhosphorZones::NoScrollingTemplate) {
-            return PhosphorI18n::tr("Scrolling template: none");
+            return PhosphorI18n::tr("Scrolling template: None");
         }
         return PhosphorI18n::tr("Scrolling template: %1").arg(resolveWith(layoutId, snappingLayoutLookup));
     }
@@ -448,8 +456,17 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         QStringList nums;
         nums.reserve(zones.size());
         for (const QJsonValue& z : zones) {
+            // Zone numbers are 1-based and toInt() answers 0 for a string, bool
+            // or object, so an unfiltered render gave "Snap to zone 0" — a zone
+            // that cannot exist. Reachable from a hand-edited rule only.
+            if (!z.isDouble() || z.toInt() < 1) {
+                continue;
+            }
             nums.append(QString::number(z.toInt()));
         }
+        // Empty array, or nothing survived the filter. Either way fall back to
+        // the bare label rather than a dangling "Snap to zones ", the shape
+        // OverrideDecorationChain uses for its all-empty-ids case.
         if (nums.isEmpty()) {
             return PhosphorI18n::tr("Snap to zone");
         }
@@ -535,8 +552,19 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         return PhosphorI18n::tr("Decoration: %1").arg(names.join(QStringLiteral(", ")));
     }
     if (action.type == ActionType::OverrideAnimationTiming) {
-        const int ms = action.params.value(PhosphorRules::ActionParam::DurationMs).toInt();
-        return ms > 0 ? PhosphorI18n::tr("Duration: %1 ms").arg(ms) : PhosphorI18n::tr("Animation duration");
+        // Descriptor-guarded like every sibling integer, replacing a bare
+        // toInt() with a `> 0` test: the declared range is 0..60000 ms, so a
+        // hand-edited 999999 printed a duration the runtime discards and a
+        // legal 0 read as unset. Keyed on DurationMs, not `value`.
+        const QJsonValue ms = action.params.value(PhosphorRules::ActionParam::DurationMs);
+        const auto duration = intParam(action.type, PhosphorRules::ActionParam::DurationMs, ms);
+        if (!duration) {
+            // Absent is the editor's normal pre-configuration state and keeps
+            // the bare label; present but unusable says so.
+            return ms.isUndefined() ? PhosphorI18n::tr("Animation duration")
+                                    : PhosphorI18n::tr("Animation duration (invalid)");
+        }
+        return PhosphorI18n::tr("Duration: %1 ms").arg(*duration);
     }
     if (action.type == ActionType::OverrideAnimationCurve) {
         const QString curve = action.params.value(PhosphorRules::ActionParam::Curve).toString();
@@ -591,7 +619,10 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             }
         } else if (!RuleAuthoring::boolActionStateLabel(action.type, true).isEmpty()) {
             // A bool action whose staged payload is present but not a bool.
-            return PhosphorI18n::tr("Invalid value");
+            // Named rather than a bare "Invalid value", because every sibling
+            // reject here says WHICH setting is wrong and an unqualified row is
+            // the one the user cannot place in a mixed list.
+            return PhosphorI18n::tr("%1 (invalid)").arg(RuleAuthoring::actionTypeLabel(action.type));
         }
         if (action.type == ActionType::SetBorderWidth) {
             const auto px = intValueParam(action.type, raw);
@@ -602,11 +633,15 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return px ? PhosphorI18n::tr("Corner radius: %1 px").arg(*px) : PhosphorI18n::tr("Corner radius (invalid)");
         }
         if (action.type == ActionType::SetBorderColorActive || action.type == ActionType::SetBorderColorInactive) {
-            // Each action carries a single colour in `value`. The accent sentinel
-            // shows as a word, hex as upper-case.
+            // Accent shows as a word, hex upper-cased, anything else
+            // "(invalid)": this family validates with hasHexColorOrAccent, so
+            // those are the only two payloads the runtime honours. Upper-casing
+            // whatever was staged made it the one colour renderer that echoed a
+            // value the runtime drops.
             const QString value = raw.toString();
-            const QString shown =
-                value == PhosphorRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent") : value.toUpper();
+            const QString shown = value == PhosphorRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent")
+                : isHexColorShape(value)                                           ? value.toUpper()
+                                                                                   : PhosphorI18n::tr("(invalid)");
             if (action.type == ActionType::SetBorderColorActive) {
                 return PhosphorI18n::tr("Focused border: %1").arg(shown);
             }
@@ -632,9 +667,12 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             return PhosphorI18n::tr("Tint strength: %1%").arg(qRound(v * 100.0));
         }
         if (action.type == ActionType::SetTintColor) {
+            // Same accent-or-hex vocabulary as the two border colours above,
+            // and the same hasHexColorOrAccent validator behind it.
             const QString value = raw.toString();
-            const QString shown =
-                value == PhosphorRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent") : value.toUpper();
+            const QString shown = value == PhosphorRules::BorderColorToken::Accent ? PhosphorI18n::tr("Accent")
+                : isHexColorShape(value)                                           ? value.toUpper()
+                                                                                   : PhosphorI18n::tr("(invalid)");
             return PhosphorI18n::tr("Tint color: %1").arg(shown);
         }
         // ── autotile parameter overrides ──
@@ -677,28 +715,32 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         }
         // ── scrolling-engine overrides ──
         // Widths and heights are work-area fractions on the wire, shown as a
-        // percent like SetSplitRatio and guarded through scrollFractionPercent.
+        // percent like SetSplitRatio and guarded through fractionPercent.
         // The enum actions delegate token→label to the shared enumOptionLabel,
         // like SetInsertPosition above, and report an unresolved token rather
         // than echoing it. OpenTabbed is a bool action and already returned by
         // boolActionStateLabel.
         if (action.type == ActionType::SetScrollDefaultColumnWidth) {
-            const int pct = scrollFractionPercent(raw);
+            const int pct =
+                fractionPercent(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio);
             return pct < 0 ? PhosphorI18n::tr("Column width (invalid)")
                            : PhosphorI18n::tr("Column width: %1%").arg(pct);
         }
         if (action.type == ActionType::OpenColumnWidth) {
-            const int pct = scrollFractionPercent(raw);
+            const int pct =
+                fractionPercent(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio);
             return pct < 0 ? PhosphorI18n::tr("Open at width (invalid)")
                            : PhosphorI18n::tr("Open at width: %1%").arg(pct);
         }
         if (action.type == ActionType::SetScrollDefaultWindowHeight) {
-            const int pct = scrollFractionPercent(raw);
+            const int pct =
+                fractionPercent(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio);
             return pct < 0 ? PhosphorI18n::tr("Window height (invalid)")
                            : PhosphorI18n::tr("Window height: %1%").arg(pct);
         }
         if (action.type == ActionType::OpenWindowHeight) {
-            const int pct = scrollFractionPercent(raw);
+            const int pct =
+                fractionPercent(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio);
             return pct < 0 ? PhosphorI18n::tr("Open at height (invalid)")
                            : PhosphorI18n::tr("Open at height: %1%").arg(pct);
         }
@@ -768,7 +810,8 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                       : PhosphorI18n::tr("Tab indicator thickness (invalid)");
         }
         if (action.type == ActionType::SetTabIndicatorLength) {
-            const int pct = scrollFractionPercent(raw);
+            const int pct = fractionPercent(raw, PhosphorRules::MinTabIndicatorLengthRatio,
+                                            PhosphorRules::MaxTabIndicatorLengthRatio);
             return pct < 0 ? PhosphorI18n::tr("Tab indicator length (invalid)")
                            : PhosphorI18n::tr("Tab indicator length: %1%").arg(pct);
         }
@@ -823,7 +866,8 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // upper-case a valid hex and read "(invalid)" otherwise so the summary
         // never claims a colour the runtime discards.
         if (action.type == ActionType::SetDropIndicatorOpacity) {
-            const int pct = zeroFlooredFractionPercent(raw);
+            const int pct =
+                fractionPercent(raw, PhosphorRules::MinDropIndicatorOpacity, PhosphorRules::MaxDropIndicatorOpacity);
             return pct < 0 ? PhosphorI18n::tr("Drop indicator fill opacity (invalid)")
                            : PhosphorI18n::tr("Drop indicator fill opacity: %1%").arg(pct);
         }
@@ -888,7 +932,7 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             // and every other fraction family in this file already shows a
             // percent. An "0.75x" summary beside a "75" editor would be the
             // only place the two disagree on units. Whole percents match what
-            // the editor can author, the same rounding scrollFractionPercent
+            // the editor can author, the same rounding fractionPercent
             // applies.
             return PhosphorI18n::tr("Scroll speed: %1%").arg(qRound(factor * 100.0));
         }
@@ -970,114 +1014,6 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
 }
 
 } // namespace
-
-QString RuleModel::sectionLabel(Section section)
-{
-    switch (section) {
-    case Section::Monitor:
-        return PhosphorI18n::tr("Monitor & Layout");
-    case Section::Application:
-        return PhosphorI18n::tr("Applications");
-    case Section::Activity:
-        return PhosphorI18n::tr("Activities");
-    case Section::Animation:
-        return PhosphorI18n::tr("Animations");
-    case Section::Advanced:
-        return PhosphorI18n::tr("Advanced / Custom");
-    case Section::System:
-        return PhosphorI18n::tr("System");
-    }
-    return QString();
-}
-
-QString RuleModel::fieldLabel(Field field)
-{
-    switch (field) {
-    case Field::AppId:
-        return PhosphorI18n::tr("Application");
-    case Field::WindowClass:
-        return PhosphorI18n::tr("Window class");
-    case Field::DesktopFile:
-        return PhosphorI18n::tr("Desktop file");
-    case Field::WindowRole:
-        return PhosphorI18n::tr("Window role");
-    case Field::Pid:
-        return PhosphorI18n::tr("Process ID");
-    case Field::Title:
-        return PhosphorI18n::tr("Title");
-    case Field::WindowType:
-        return PhosphorI18n::tr("Window type");
-    case Field::IsSticky:
-        return PhosphorI18n::tr("Sticky");
-    case Field::IsFullscreen:
-        return PhosphorI18n::tr("Fullscreen");
-    case Field::IsMaximized:
-        return PhosphorI18n::tr("Maximized");
-    case Field::IsMinimized:
-        return PhosphorI18n::tr("Minimized");
-    case Field::IsFocused:
-        return PhosphorI18n::tr("Focused");
-    case Field::ScreenId:
-        return PhosphorI18n::tr("Monitor");
-    case Field::VirtualDesktop:
-        return PhosphorI18n::tr("Desktop");
-    case Field::Activity:
-        return PhosphorI18n::tr("Activity");
-    case Field::IsTransient:
-        return PhosphorI18n::tr("Transient");
-    case Field::IsNotification:
-        return PhosphorI18n::tr("Notification");
-    case Field::Width:
-        return PhosphorI18n::tr("Width");
-    case Field::Height:
-        return PhosphorI18n::tr("Height");
-    case Field::KeepAbove:
-        return PhosphorI18n::tr("Keep above");
-    case Field::KeepBelow:
-        return PhosphorI18n::tr("Keep below");
-    case Field::SkipTaskbar:
-        return PhosphorI18n::tr("Skip taskbar");
-    case Field::SkipPager:
-        return PhosphorI18n::tr("Skip pager");
-    case Field::SkipSwitcher:
-        return PhosphorI18n::tr("Skip switcher");
-    case Field::IsModal:
-        return PhosphorI18n::tr("Modal");
-    case Field::HasDecoration:
-        return PhosphorI18n::tr("Decorated");
-    case Field::IsResizable:
-        return PhosphorI18n::tr("Resizable");
-    case Field::IsMovable:
-        return PhosphorI18n::tr("Movable");
-    case Field::IsMaximizable:
-        return PhosphorI18n::tr("Maximizable");
-    case Field::PositionX:
-        return PhosphorI18n::tr("Position X");
-    case Field::PositionY:
-        return PhosphorI18n::tr("Position Y");
-    case Field::CaptionNormal:
-        return PhosphorI18n::tr("Title (no suffix)");
-    case Field::IsFloating:
-        return PhosphorI18n::tr("Floating");
-    case Field::IsSnapped:
-        return PhosphorI18n::tr("Snapped");
-    case Field::IsTiled:
-        return PhosphorI18n::tr("Tiled");
-    case Field::Zone:
-        return PhosphorI18n::tr("Zone");
-    case Field::Mode:
-        return PhosphorI18n::tr("Mode");
-    case Field::TiledWindowCount:
-        return PhosphorI18n::tr("Tiled window count");
-    case Field::ScreenOrientation:
-        return PhosphorI18n::tr("Screen orientation");
-    case Field::ActiveLayout:
-        return PhosphorI18n::tr("Active layout");
-    case Field::ColorScheme:
-        return PhosphorI18n::tr("Color scheme");
-    }
-    return QString();
-}
 
 QString RuleModel::matchSummary(const MatchExpression& match) const
 {

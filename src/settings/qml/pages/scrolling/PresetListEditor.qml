@@ -73,11 +73,16 @@ ColumnLayout {
     /// sensible rather than at an edge. Falls back to the midpoint when the
     /// list somehow occupies every step, which the entry cap makes
     /// unreachable but which must still answer a number.
+    ///
+    /// The downward arm stops at the spin's own floor. Walking to 50 - 50
+    /// would answer 0, which is below `from` and so a value the control
+    /// cannot hold; the spin would silently clamp it and the seed would no
+    /// longer be the free percentage this function promised.
     function _firstFreePercent() {
         for (var delta = 0; delta <= 50; delta += 5) {
             if (editor._shownPercents.indexOf(50 + delta) < 0)
                 return 50 + delta;
-            if (delta > 0 && editor._shownPercents.indexOf(50 - delta) < 0)
+            if (delta > 0 && 50 - delta >= addSpin.from && editor._shownPercents.indexOf(50 - delta) < 0)
                 return 50 - delta;
         }
         return 50;
@@ -86,7 +91,10 @@ ColumnLayout {
     Kirigami.InlineMessage {
         Layout.fillWidth: true
         type: Kirigami.MessageType.Information
-        visible: editor._atCap || editor._wouldCollide || editor._values.length <= 1
+        // Exactly one, not one-or-fewer: at zero entries there is no card on
+        // screen for the floor message to be about, and it claimed a preset
+        // could not be removed while none was shown.
+        visible: editor._atCap || editor._wouldCollide || editor._values.length === 1
         text: {
             if (editor._atCap)
                 return i18n("This list is full at %1 presets. Remove one to add another.", editor._maxEntries);
@@ -203,7 +211,7 @@ ColumnLayout {
         // short list would stretch two or three cards across the full width
         // and break the uniform card size. Spacers hold the missing cells.
         Repeater {
-            model: Math.max(0, 4 - editor._values.length % 4) % 4
+            model: (4 - editor._values.length % 4) % 4
 
             delegate: Item {
                 Layout.fillWidth: true
@@ -254,6 +262,21 @@ ColumnLayout {
                 // fighting the canonicalizer's number formatting.
                 next.push((addSpin.value / 100).toFixed(3));
                 editor._commitList(next);
+                // Step the spin off the percentage just added. The new card
+                // carries that percentage, so leaving the box on it brings
+                // the collision warning and a greyed Add straight back — the
+                // same dead end the initial seed exists to avoid, one
+                // interaction later, and on every add after it.
+                //
+                // Deferred because `commit` round-trips through the store's
+                // canonicalizer, so `_shownPercents` has not settled inside
+                // this handler yet. Driven from the click and not from
+                // `presets` changing, because that would also fire on Remove
+                // and on writes from elsewhere, moving the box under a user
+                // who has typed a value and not yet added it.
+                Qt.callLater(function () {
+                    addSpin.value = editor._firstFreePercent();
+                });
             }
         }
     }

@@ -356,11 +356,16 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
                 overrides.insert(K::tabIndicatorPosition(), *params.tabIndicatorPosition);
             }
         }
-        if (overrides.isEmpty()) {
-            m_scrollEngine->clearPerScreenConfig(screenId);
-        } else {
-            m_scrollEngine->applyPerScreenConfig(screenId, overrides);
-        }
+        // Pushed even when EMPTY, rather than routed to clearPerScreenConfig.
+        // The engine keys these per context, and its clear is the
+        // whole-SCREEN door — it drops every context's entry, which is right
+        // for the departing-screen loop further down and wrong here: this arm
+        // fires when THIS context resolved no overrides, and taking the
+        // screen-wide door let a template-less desktop wipe the template its
+        // sibling desktop is holding. An empty map stored for this context
+        // reads identically to an absent one at every effective* reader, so
+        // the fallback behaviour is unchanged.
+        m_scrollEngine->applyPerScreenConfig(screenId, overrides);
         // The tab indicator's PAINT overrides, keyed by the QML property names
         // the overlay reads so the layering there is one value() per property.
         // Handed straight to the overlay: the engine has no use for them and

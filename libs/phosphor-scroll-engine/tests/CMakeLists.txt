@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: LGPL-2.1-or-later
 
-# PhosphorScrollEngine unit tests, thirteen targets. Headless throughout: two
+# PhosphorScrollEngine unit tests, fourteen targets. Headless throughout: two
 # files drive the axis-free primitives directly (StripAxis and the park
 # decision, which take their axis as an argument and so need no fixture), two
-# exercise the pure strip model against the shared screen fixture, and nine
+# exercise the pure strip model against the shared screen fixture, and ten
 # drive the engine through null (or stubbed) daemon dependencies and the
 # geometry-provider seam. None needs a QPA platform, so
 # by convention the strip tests run APPLESS and the engine tests GUILESS
@@ -12,7 +12,7 @@
 # deleteLater) — the convention lives in each file's *_MAIN macro; nothing
 # here enforces it.
 #
-# The eleven fixture-driven suites register TWICE, once per axis, via
+# The twelve fixture-driven suites register TWICE, once per axis, via
 # pse_add_test. The two axis-free ones use pse_add_axis_free_test and register
 # once: the shared fixture HEADER still rides their target (the function adds
 # it to every target, and automoc produces nothing for it), but they never

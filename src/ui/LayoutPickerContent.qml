@@ -131,7 +131,9 @@ Item {
     readonly property var gridLayouts: hasNoneRow ? layouts.slice(0, layoutCount - 1) : layouts
     // Sized off the GRID's own count, not the full list: counting the
     // separate card here would widen the grid for a card that is not in it.
-    readonly property int gridColumns: Math.min(gridCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(gridCount * 1.5)))))
+    // Floored at one column because a Templates screen with an empty store
+    // has no grid cards at all, and Grid expects a positive column count.
+    readonly property int gridColumns: Math.max(1, Math.min(gridCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(gridCount * 1.5))))))
     readonly property int gridRows: gridColumns > 0 ? Math.ceil(gridCount / gridColumns) : 0
     // Card dimensions
     readonly property int previewWidth: metrics.previewWidth
@@ -199,8 +201,13 @@ Item {
         col = (col + dx + root.gridColumns) % root.gridColumns;
         row = (row + dy + totalRows) % totalRows;
         if (row === root.gridRows) {
-            // The extra row: only the None card lives there.
+            // The extra row: only the None card lives there. Scrolled from
+            // HERE as well as at the tail below, not once after the branch:
+            // this arm returns, and it is the arm that most needs the scroll,
+            // because the None card is last in the model and so is the first
+            // thing to fall below the fold.
             selectedIndex = noneIndex;
+            root._ensureSelectionVisible();
             return;
         }
         let newIndex = row * root.gridColumns + col;
@@ -210,6 +217,7 @@ Item {
             newIndex = row * root.gridColumns + Math.min(col, lastColInRow);
         }
         selectedIndex = Math.max(0, Math.min(root.gridCount - 1, newIndex));
+        root._ensureSelectionVisible();
     }
 
     /// Scroll the keyboard selection into view.
@@ -223,6 +231,16 @@ Item {
     /// A no-op while everything fits, which is the ordinary case.
     function _ensureSelectionVisible() {
         if (cardScroll.contentHeight <= cardScroll.height)
+            return;
+
+        // indexOfLayoutId answers -1 for an id the model does not carry, and
+        // the card delegates write it straight into selectedIndex, so the
+        // value this reads can legitimately be -1 even though the delegates
+        // themselves no longer route here (only the keyboard path and the
+        // open-time deferred call do). Without this the grid arm below floors
+        // to a negative row and parks contentY above the top, which a
+        // programmatic write is not bounds-corrected out of.
+        if (root.selectedIndex < 0)
             return;
 
         let itemY = 0;
@@ -239,12 +257,19 @@ Item {
             cardScroll.contentY = itemY + itemHeight - cardScroll.height;
     }
 
-    onSelectedIndexChanged: root._ensureSelectionVisible()
-    // The initial selection is a binding that resolves before the cards have
-    // been laid out, so the handler above runs against a contentHeight of
-    // zero and does nothing. Deferred to the next tick, this is what opens
-    // the picker already scrolled to the active card when it is past the
-    // fold — the whole point of highlighting it.
+    // Scrolling is driven from moveSelection's two assignment sites, NOT from
+    // a blanket onSelectedIndexChanged. The card delegates write selectedIndex
+    // on plain hover too, and scrolling there moved the cards out from under a
+    // stationary pointer; hover also already implies the card is on screen, so
+    // it has nothing to reveal.
+    //
+    // This deferral is a separate mechanism and has to stay. The initial
+    // selection comes from the binding above, which never passes through
+    // moveSelection, and it resolves before the cards are laid out, so an
+    // immediate call would run against a contentHeight of zero and do
+    // nothing. On the next tick it is what opens the picker already scrolled
+    // to the active card when that card is past the fold — the whole point of
+    // highlighting it.
     Component.onCompleted: Qt.callLater(root._ensureSelectionVisible)
 
     /// A layout's position in the FULL model, by id. The cards are drawn from
@@ -373,6 +398,12 @@ Item {
             clip: contentHeight > height
             interactive: contentHeight > height
             boundsBehavior: Flickable.StopAtBounds
+            // The only affordance saying there is more below. AsNeeded keeps
+            // it off the ordinary case where everything fits, matching the
+            // clip and interactive gates above.
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+            }
 
             // One content item rather than a positioner, so the grid and the
             // None row keep the exact relationship they had when they were
@@ -437,13 +468,37 @@ Item {
             readonly property int modelIndex: root.indexOfLayoutId(layoutData.id)
             property bool isSelected: modelIndex === root.selectedIndex
             property bool isActive: layoutData.id === root.activeLayoutId
-            property bool isHovered: cardMouse.containsMouse
+            // Suppressed while locked: every input path bails on `locked`
+            // (moveSelection, confirmSelection, the click below), so a card
+            // that lights up under the pointer would be advertising an
+            // interaction the picker will not perform. Pairs with the cursor
+            // on cardMouse.
+            property bool isHovered: cardMouse.containsMouse && !root.locked
 
             width: root.cardWidth
             height: root.cardHeight
             Accessible.role: Accessible.Button
             Accessible.name: layoutData.displayName || ""
+            // Why this card is inert, carried on the card itself rather than
+            // on the lock overlay below. The overlay used to claim a Button
+            // role of its own, so a locked card announced as two nested
+            // buttons whose inner one had no action behind it. Gated on the
+            // lock alone, like the press action and cursor: the ACTIVE card
+            // has no overlay but is just as inert while locked.
+            Accessible.description: root.locked ? i18nc("@info:whatsthis layout picker lock overlay", "Layout is locked. Unlock the current layout before switching to another one.") : ""
             Accessible.focusable: true
+            Accessible.selected: layoutCard.isSelected
+            // The cards are this surface's primary control and assistive tech
+            // had no way to activate one: the pointer goes through cardMouse
+            // and the keyboard arrives from C++, neither of which an AT client
+            // can drive. Mirrors cardMouse's click body, lock guard included.
+            Accessible.onPressAction: {
+                if (root.locked)
+                    return;
+
+                root.selectedIndex = layoutCard.modelIndex;
+                root.confirmSelection();
+            }
 
             QFZCommon.LayoutCard {
                 anchors.fill: parent
@@ -507,8 +562,12 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.ForbiddenCursor
-                    Accessible.role: Accessible.Button
-                    Accessible.name: i18nc("@info:whatsthis layout picker lock overlay", "Layout is locked. Unlock the current layout before switching to another one.")
+                    // A pure absorber, kept out of the a11y tree like the
+                    // container absorber near the top of this file. The lock
+                    // explanation lives on the card's Accessible.description
+                    // instead, so a locked card is one announced node rather
+                    // than a button nested inside a button.
+                    Accessible.ignored: true
                     onClicked: function (mouse) {
                         mouse.accepted = true;
                     }
@@ -524,7 +583,11 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 enabled: !(root.locked && !layoutCard.isActive)
-                cursorShape: root.locked && !layoutCard.isActive ? Qt.ForbiddenCursor : Qt.PointingHandCursor
+                // Forbidden for every card while locked, the ACTIVE one
+                // included. Its click and Return both bail on `locked`, so a
+                // pointing hand over it promised an action that never ran,
+                // and it is the one card the lock overlay does not cover.
+                cursorShape: root.locked ? Qt.ForbiddenCursor : Qt.PointingHandCursor
                 onClicked: {
                     if (root.locked)
                         return;

@@ -13,6 +13,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 namespace PhosphorScrollEngine {
 
@@ -48,6 +49,14 @@ public:
     void addFloating(const QString& windowId)
     {
         m_floating.insert(windowId);
+    }
+    /// Whether anything floats out of this strip, without building the sorted
+    /// list floatingWindows() returns — the emptiness question has a caller on
+    /// the relayout path (applyLayout's empty-strip arm), where allocating and
+    /// sorting a QStringList to ask it is pure waste.
+    bool hasFloating() const
+    {
+        return !m_floating.isEmpty();
     }
     bool removeFloating(const QString& windowId)
     {
@@ -225,13 +234,15 @@ public:
     ///     STRIP, not the resolve: an all-minimized or mid-drag strip
     ///     resolves to no columns while still standing for its entries, and
     ///     resetting there handed them straight back out again.
-    ///   - the blueprint itself CHANGES, noticed by comparing
-    ///     blueprintIdentity at the consumption site. Picking a new template
-    ///     is an explicit act, and a cursor describing the old template's
-    ///     entries would swallow the new one's opening columns. Comparing the
-    ///     VALUE rather than reacting to override-map writes is deliberate:
-    ///     the map is dropped and rebuilt on ordinary context changes that
-    ///     leave the template untouched.
+    ///   - the blueprint itself CHANGES, noticed at the consumption site by
+    ///     comparing blueprintIdentity when one has been ESTABLISHED (see
+    ///     hasBlueprintIdentity). Picking a new template is an explicit act,
+    ///     and a cursor describing the old template's entries would swallow
+    ///     the new one's opening columns. Comparing the VALUE rather than
+    ///     reacting to override-map writes is deliberate: the map is dropped
+    ///     and rebuilt on ordinary context changes that leave the template
+    ///     untouched. A state that has no identity yet is NOT a change — it
+    ///     stamps and keeps whatever cursor it was restored with.
     int blueprintCursor() const
     {
         return m_blueprintCursor;
@@ -261,9 +272,25 @@ public:
     {
         return m_blueprintIdentity;
     }
+    /// Stamps the value AND marks it established — there is deliberately no
+    /// way to store one without establishing it.
     void setBlueprintIdentity(const QVariant& blueprint)
     {
         m_blueprintIdentity = blueprint;
+        m_hasBlueprintIdentity = true;
+    }
+    /// Whether an identity has been ESTABLISHED, which is a different question
+    /// from whether the stored value is null. A null identity is the perfectly
+    /// ordinary "this context has no template", so it cannot double as the
+    /// unset marker: a state rebuilt by a mode round trip or a login restore
+    /// starts with a null value AND a real cursor carried in beside it, and
+    /// reading that null as "the blueprint changed" reset the very cursor the
+    /// carry exists to preserve. Not established means the consumption site
+    /// STAMPS and leaves the cursor alone; established-and-different is the
+    /// only genuine swap.
+    bool hasBlueprintIdentity() const
+    {
+        return m_hasBlueprintIdentity;
     }
 
     // ── IPlacementState ─────────────────────────────────────────────────────
@@ -336,6 +363,7 @@ private:
     bool m_hasLastAppliedViewOffset = false;
     int m_blueprintCursor = 0;
     QVariant m_blueprintIdentity;
+    bool m_hasBlueprintIdentity = false;
 };
 
 } // namespace PhosphorScrollEngine

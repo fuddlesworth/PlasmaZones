@@ -1,10 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// FILE-SIZE EXCEPTION (sanctioned): past the 1150 hard ceiling. No exact
-// figure is quoted here on purpose — it goes stale on the next slot added.
+// FILE-SIZE NOTE: over the 1000-line target, inside the 15% grace, and no
+// longer past the hard ceiling — splitting the template channel's blueprint
+// and cursor cases out to test_scrollengine_template.cpp is what brought it
+// back under. No exact figure is quoted here on purpose, since it goes stale
+// on the next slot added.
 //
-// The case for it: this file's concern is a single resolution cascade —
+// The case for keeping the rest together: this file's concern is a single
+// resolution cascade —
 // rule > per-screen settings trio > cached global, plus the template channel
 // that replaces the preset LISTS those kinds index into. The channels are not
 // independent of each other; every test here is a PRECEDENCE claim between two
@@ -108,6 +112,7 @@ private Q_SLOTS:
     void tabIndicatorOverridesArePerProperty();
     void tabIndicatorRejectsGarbageNumericOverrides();
     void tabIndicatorRejectsAGarbagePositionOverride();
+    void tabIndicatorRectIsNullForAZeroExtentColumn();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -634,6 +639,7 @@ void TestScrollEnginePerScreen::fixedKindWithAProportionValueFallsThroughToTheGl
     huge.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 1.0e18);
     engine->applyPerScreenConfig(kS1, huge);
     engine->windowOpened(QStringLiteral("app|d"), kS1, 0, 0);
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|d")));
     const ColumnWidth capped = openedWidth(engine, kS1, QStringLiteral("app|d"));
     QCOMPARE(capped.kind, ColumnWidth::Fixed);
     QCOMPARE(capped.fixedPx, 65535); // kMaxFixedExtentPx (enginelimits.h)
@@ -1080,6 +1086,61 @@ void TestScrollEnginePerScreen::tabIndicatorRejectsAGarbagePositionOverride()
     valid.insert(ScrollPerScreenKeys::tabIndicatorPosition(), static_cast<int>(TabIndicatorPosition::Right));
     engine->applyPerScreenConfig(kS2, valid);
     QCOMPARE(engine->tabIndicatorParamsForScreen(kS2).position, TabIndicatorPosition::Right);
+}
+
+void TestScrollEnginePerScreen::tabIndicatorRectIsNullForAZeroExtentColumn()
+{
+    // indicatorRectFor's empty-first guard. This one is not a wrong-rect bug
+    // if it regresses: the qBound below it takes min 1 against a max of 0 on
+    // a zero-extent column, and qBound ASSERTS on an inverted range, so
+    // removing the guard turns a degenerate column into an abort.
+    //
+    // No engine here — the params struct is public and pure, and driving it
+    // directly is the only way to hand it a degenerate rect the layout would
+    // never produce on its own.
+    //
+    // Which extent matters depends on the position, because the indicator's
+    // LONG axis is the column's height for a left/right indicator and its
+    // width for a top/bottom one. So each position is paired with the rect
+    // that zeroes ITS OWN axis; pairing them the other way round would leave
+    // the guard unreached and every assertion passing on the ordinary path.
+    TabIndicatorParams params;
+    params.enabled = true;
+    params.hideWhenSingleTab = false;
+    params.lengthProportion = 0.5;
+    params.width = 4;
+
+    // Two tiles, so resolvesFor() is satisfied and the guard under test is
+    // actually the thing answering. A single tile would return early on the
+    // hide rule in some configurations and prove nothing.
+    constexpr int kTiles = 2;
+
+    const QRect zeroHeight(0, 0, 100, 0);
+    const QRect zeroWidth(0, 0, 0, 100);
+
+    for (const TabIndicatorPosition position : {TabIndicatorPosition::Left, TabIndicatorPosition::Right}) {
+        params.position = position;
+        QVERIFY2(params.indicatorRectFor(zeroHeight, kTiles).isNull(),
+                 "a vertical indicator on a zero-HEIGHT column has no long axis to run along");
+        // Control: the same position on a column with a real long axis still
+        // resolves, so the null above is the guard and not a params set that
+        // never resolves anything.
+        QVERIFY(!params.indicatorRectFor(QRect(0, 0, 100, 100), kTiles).isNull());
+    }
+
+    for (const TabIndicatorPosition position : {TabIndicatorPosition::Top, TabIndicatorPosition::Bottom}) {
+        params.position = position;
+        QVERIFY2(params.indicatorRectFor(zeroWidth, kTiles).isNull(),
+                 "a horizontal indicator on a zero-WIDTH column has no long axis to run along");
+        QVERIFY(!params.indicatorRectFor(QRect(0, 0, 100, 100), kTiles).isNull());
+    }
+
+    // A fully collapsed column is null on every position.
+    for (const TabIndicatorPosition position : {TabIndicatorPosition::Left, TabIndicatorPosition::Right,
+                                                TabIndicatorPosition::Top, TabIndicatorPosition::Bottom}) {
+        params.position = position;
+        QVERIFY(params.indicatorRectFor(QRect(0, 0, 0, 0), kTiles).isNull());
+    }
 }
 
 QTEST_GUILESS_MAIN(TestScrollEnginePerScreen)

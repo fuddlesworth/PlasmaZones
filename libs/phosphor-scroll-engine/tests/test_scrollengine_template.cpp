@@ -1,14 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-// The TEMPLATE channel's seed blueprint, and the consumption cursor that
-// tracks it.
+// The TEMPLATE channel's seed blueprint, the consumption cursor that tracks
+// it, and the per-window OPEN RULES that outrank both.
 //
 // Split out of the per-screen suite, which had grown past the file-size
 // ceiling once the cursor arrived. The two groups ask different questions:
 // the per-screen suite asks which of the four channels wins a default, while
 // this one asks which blueprint ENTRY a materializing column takes and when
 // that entry stops being available.
+//
+// Two groups live here. The BLUEPRINT group is the file's subject. The
+// OPEN-RULE group beside it (the openMaximized / openFocused / consume slots)
+// covers the ScrollOpenParams verdicts a rule resolves per window; they sit
+// here because the two that name a width are precedence claims AGAINST the
+// blueprint, and splitting the family would leave the ranking stated in one
+// file and contradicted in neither.
 //
 // The blueprint is a SEED, not a standing rule. Entry `i` describes the i-th
 // column a strip grows, and once a column has taken it the entry is spent —
@@ -19,9 +26,16 @@
 // Spent-ness is therefore state, and the cases below are mostly about
 // keeping it across events that are NOT "the user cleared this screen out":
 // a desktop switch, a template re-push, a mode round trip, and a strip that
-// only transiently resolves to nothing (all columns minimized, the last
-// window floated, the last window picked up by a drag). Each of those used
-// to zero the cursor and hand spent entries out a second time.
+// only transiently resolves to nothing (the last window floated, the last
+// window picked up by a drag). Each of those used to zero the cursor and hand
+// spent entries out a second time.
+//
+// The gate's first conjunct covers a third transient case on its own: a
+// strip whose every column is minimized away still HAS those columns, so
+// strip().isEmpty() is false and the reset never fires. That case needs no
+// conjunct of its own and gets no case here. If it is ever worth pinning,
+// ScrollStrip::setWindowMinimized drives it directly and no tracking stub
+// is involved.
 
 #include <PhosphorScrollEngine/IScrollSettings.h>
 #include <PhosphorScrollEngine/ScrollEngine.h>
@@ -32,6 +46,7 @@
 #include "scrollstriptestutils.h"
 #include "scrollstubsettings.h"
 
+#include <QJsonObject>
 #include <QVariantMap>
 #include <QtTest>
 
@@ -75,6 +90,20 @@ class TestScrollEngineTemplate : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    /// Proves the vertical arm really is transposed, so a lost ENVIRONMENT
+    /// property cannot leave it silently re-running the horizontal suite.
+    ///
+    /// Every suite registered through pse_add_test carries this, and the
+    /// ctest side of the guard (FAIL_REGULAR_EXPRESSION on the printed axis
+    /// word) is inert without it. This suite's assertions are all on width
+    /// intents and column counts, which read the same on either axis, so
+    /// nothing here would have failed to announce a lost transpose on its
+    /// own.
+    void initTestCase()
+    {
+        AX_GUARD_SUITE();
+    }
+
     void templateBlueprintSeedsFirstColumns();
     void openRuleOutranksTemplateBlueprint();
     void openMaximizedRuleOutranksWidthRuleAndBlueprint();
@@ -85,13 +114,20 @@ private Q_SLOTS:
     void openMaximizedIsDroppedByAConsumeOpen();
     void templateBlueprintNeverResizesExistingColumns();
     void templateBlueprintEntryWithoutDisplayKeepsTheDefault();
+    void templateBlueprintEntryWithAGarbageDisplayKeepsTheDefault();
     void closingAColumnDoesNotHandItsBlueprintEntryBack();
     void emptyingTheStripRestartsTheBlueprintSeed();
     void anewBlueprintRestartsTheSeedInsteadOfResumingTheOldCount();
     void reApplyingTheSameTemplateKeepsSpentEntriesSpent();
     void aScreenLeavingScrollingKeepsItsSpentEntriesSpent();
+    void aModeRoundTripKeepsItsSpentEntriesSpent();
     void siblingContextsDoNotResetEachOthersCursor();
+    void clearingAScreenDropsEveryContextsOverrides();
+    void anUnpinMigrationMovesOverridesOverAnEmptyMap();
     void floatingTheLastWindowDoesNotRestartTheSeed();
+    void aDragHoldingTheLastWindowDoesNotRestartTheSeed();
+    void blueprintProgressIsGatedOnTheEngineOwningTheScreen();
+    void blueprintCursorSurvivesASerializationRoundTrip();
 
 private:
     /// A headless engine active on the three screens, with @p settings
@@ -286,6 +322,32 @@ void TestScrollEngineTemplate::openFocusedRuleOverridesFocusNewWindows()
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|c"));
 }
 
+void TestScrollEngineTemplate::openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival()
+{
+    // The rewind arm needs a prior active column to rewind TO. On an empty
+    // strip there is none, so the first window becomes the active column
+    // whatever the rule says — a strip whose only column were not active
+    // would leave every later direction verb navigating from nowhere. The
+    // rule still governs the SECOND arrival, which is what makes this a
+    // guard on the empty case rather than the rule being inert.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+    engine->setOpenParamsResolver([](const QString&, const QString&) {
+        ScrollOpenParams params;
+        params.focused = false;
+        return params;
+    });
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
+}
+
 void TestScrollEngineTemplate::openFocusedFalseSurvivesTheCompositorsOwnFocusReport()
 {
     // The regression this pins was observed live, not theorised: declining
@@ -293,8 +355,8 @@ void TestScrollEngineTemplate::openFocusedFalseSurvivesTheCompositorsOwnFocusRep
     // arriving window on its own and reported that focus back independently.
     // The report adopted the arrival and undid the rewind, so the rule read as
     // a no-op to the user. Driving windowOpened alone cannot catch that — the
-    // report has to be delivered, which is what this test adds over its
-    // sibling above.
+    // report has to be delivered, which is what this test adds over
+    // openFocusedRuleOverridesFocusNewWindows.
     QObject owner;
     auto* settings = new StubScrollSettings(&owner);
     ScrollEngine* engine = makeEngine(&owner, settings);
@@ -322,32 +384,6 @@ void TestScrollEngineTemplate::openFocusedFalseSurvivesTheCompositorsOwnFocusRep
     // window unfocusable, which is why the mark is one-shot.
     engine->windowFocused(QStringLiteral("app|b"), kS1);
     QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|b"));
-}
-
-void TestScrollEngineTemplate::openFocusedFalseOnAnEmptyStripStillAdoptsTheArrival()
-{
-    // The rewind arm needs a prior active column to rewind TO. On an empty
-    // strip there is none, so the first window becomes the active column
-    // whatever the rule says — a strip whose only column were not active
-    // would leave every later direction verb navigating from nowhere. The
-    // rule still governs the SECOND arrival, which is what makes this a
-    // guard on the empty case rather than the rule being inert.
-    QObject owner;
-    auto* settings = new StubScrollSettings(&owner);
-    ScrollEngine* engine = makeEngine(&owner, settings);
-    engine->setOpenParamsResolver([](const QString&, const QString&) {
-        ScrollOpenParams params;
-        params.focused = false;
-        return params;
-    });
-
-    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
-    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
-    QVERIFY(state);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
-
-    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
-    QCOMPARE(state->strip().activeWindowId(), QStringLiteral("app|a"));
 }
 
 void TestScrollEngineTemplate::openMaximizedFalseLeavesTheDefaultWidth()
@@ -419,6 +455,12 @@ void TestScrollEngineTemplate::templateBlueprintNeverResizesExistingColumns()
     ScrollEngine* engine = makeEngine(&owner, settings);
 
     engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    // Guarded, and not merely for form: the configured 0.5 below is bit for
+    // bit the default-constructed ColumnWidth that openedWidth hands back for
+    // a column it cannot find, so without this the compare is satisfied by a
+    // MISSING column. That makes it the one expectation in this file where
+    // the helper's fallback and the expected value coincide.
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.5);
 
     QVariantMap templ;
@@ -435,7 +477,11 @@ void TestScrollEngineTemplate::templateBlueprintNeverResizesExistingColumns()
     // reshaped existing columns AT RELAYOUT would still read green here.
     QCoreApplication::processEvents();
 
-    // The existing column is untouched.
+    // The existing column is untouched. Guarded for the same reason as the
+    // read above, and it matters more here: this is the assertion the test
+    // exists to make, so a relayout that DROPPED or re-keyed the column
+    // rather than resizing it would otherwise read as "untouched".
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.5);
     // The next column materializes at index 1 and takes blueprint[1].
     engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
@@ -493,6 +539,74 @@ void TestScrollEngineTemplate::templateBlueprintEntryWithoutDisplayKeepsTheDefau
     QCOMPARE(other->strip().columns().size(), 2);
     QCOMPARE(other->strip().columns().at(0).display, ColumnDisplay::Tabbed);
     QCOMPARE(other->strip().columns().at(1).display, ColumnDisplay::Normal);
+}
+
+void TestScrollEngineTemplate::templateBlueprintEntryWithAGarbageDisplayKeepsTheDefault()
+{
+    // The sibling above covers an entry with NO display key. This covers one
+    // that HAS the key carrying something unusable, which is a different
+    // branch: QVariant::toInt() answers 0 for anything unconvertible, and 0
+    // is a legal ColumnDisplay (Normal), so reading "not 1" as Normal let a
+    // garbage override — or a display kind a future build knows and this one
+    // does not — silently replace a Tabbed default for exactly the first N
+    // columns. Presence alone is not a verdict; the VALUE has to convert and
+    // land inside the enum.
+    //
+    // Each leg asserts the entry's WIDTH as well, which is what stops the
+    // test passing for the wrong reason: if a malformed entry were skipped
+    // wholesale the column would take the Tabbed default anyway and the
+    // display compare would be satisfied by an entry that was never read at
+    // all. The width proves the entry WAS consumed and only its display fell
+    // through.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // Separate screens rather than two pushes at one: applyPerScreenConfig
+    // early-returns on an unchanged map, and these two differ only in the
+    // garbage they carry.
+    const auto templateWithDisplay = [](const QVariant& display) {
+        QVariantMap templ;
+        templ.insert(ScrollPerScreenKeys::defaultColumnDisplay(), static_cast<int>(ColumnDisplay::Tabbed));
+        QVariantMap entry;
+        entry.insert(ScrollPerScreenKeys::templateColumnWidth(), 0.6);
+        entry.insert(ScrollPerScreenKeys::templateColumnDisplay(), display);
+        QVariantList blueprint;
+        blueprint.append(entry);
+        templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
+        return templ;
+    };
+
+    // Unconvertible: toInt() reports failure.
+    engine->applyPerScreenConfig(kS1, templateWithDisplay(QStringLiteral("tabbed")));
+    // Convertible but outside the enum: toInt() succeeds and the range test
+    // is the only thing standing between it and a cast.
+    engine->applyPerScreenConfig(kS2, templateWithDisplay(7));
+
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS2, 0, 0);
+
+    auto* unconvertible = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(unconvertible);
+    QCOMPARE(unconvertible->strip().columns().size(), 1);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.6);
+    QCOMPARE(unconvertible->strip().columns().first().display, ColumnDisplay::Tabbed);
+
+    auto* outOfRange = static_cast<ScrollState*>(engine->stateForScreen(kS2));
+    QVERIFY(outOfRange);
+    QCOMPARE(outOfRange->strip().columns().size(), 1);
+    QCOMPARE(openedWidth(engine, kS2, QStringLiteral("app|b")).proportion, 0.6);
+    QCOMPARE(outOfRange->strip().columns().first().display, ColumnDisplay::Tabbed);
+
+    // Control: a VALID display on the same shape still wins over the same
+    // default, so the two legs above are a rejection rather than the display
+    // arm being dead.
+    engine->applyPerScreenConfig(kS3, templateWithDisplay(static_cast<int>(ColumnDisplay::Normal)));
+    engine->windowOpened(QStringLiteral("app|c"), kS3, 0, 0);
+    auto* valid = static_cast<ScrollState*>(engine->stateForScreen(kS3));
+    QVERIFY(valid);
+    QCOMPARE(valid->strip().columns().size(), 1);
+    QCOMPARE(valid->strip().columns().first().display, ColumnDisplay::Normal);
 }
 
 void TestScrollEngineTemplate::closingAColumnDoesNotHandItsBlueprintEntryBack()
@@ -686,6 +800,70 @@ void TestScrollEngineTemplate::aScreenLeavingScrollingKeepsItsSpentEntriesSpent(
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|c")).proportion, 0.3);
 }
 
+void TestScrollEngineTemplate::aModeRoundTripKeepsItsSpentEntriesSpent()
+{
+    // The sibling above drops and re-pushes the OVERRIDES while the state
+    // survives. This is the harder round trip: the screen leaves the
+    // scrolling set entirely, so its state is torn down and its strip is
+    // stashed, and everything the far side knows has to have travelled in the
+    // stash. Spent-ness is part of that — the qMax(cursor, columnCount) floor
+    // recovers only as many entries as there are LIVE columns, so a strip
+    // that lost columns before travelling comes back under-counted and hands
+    // the difference out again.
+    //
+    // Four entries opened and two closed is the shape that separates the two:
+    // the floor alone recovers 2, the carried cursor recovers 4, and entry 2
+    // has a width that is neither of the survivors' nor the default's.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    QVariantMap templ;
+    QVariantList blueprint;
+    for (qreal width : {0.6, 0.4, 0.55, 0.45}) {
+        QVariantMap entry;
+        entry.insert(ScrollPerScreenKeys::templateColumnWidth(), width);
+        blueprint.append(entry);
+    }
+    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
+    templ.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::Proportion));
+    templ.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.3);
+    engine->applyPerScreenConfig(kS1, templ);
+
+    for (const QString& id :
+         {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c"), QStringLiteral("app|d")}) {
+        engine->windowOpened(id, kS1, 0, 0);
+    }
+    // All four entries spent, in order.
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|c")).proportion, 0.55);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|d")).proportion, 0.45);
+
+    engine->windowClosed(QStringLiteral("app|c"));
+    engine->windowClosed(QStringLiteral("app|d"));
+    QCoreApplication::processEvents();
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+    QCOMPARE(state->strip().columns().size(), 2);
+
+    // Out of the scrolling set and back: the state is released and the strip
+    // stashed on the way out, and rebuilt from the stash as its windows
+    // re-arrive.
+    engine->setActiveScreens({kS2, kS3});
+    QVERIFY(!engine->isActiveOnScreen(kS1));
+    engine->setActiveScreens({kS1, kS2, kS3});
+    engine->applyPerScreenConfig(kS1, templ);
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCoreApplication::processEvents();
+
+    // The fresh arrival takes the beyond-blueprint default. Entry 2 (0.55) is
+    // what a cursor rebuilt from the two live columns would hand back, and it
+    // is the value this test exists to NOT see.
+    engine->windowOpened(QStringLiteral("app|e"), kS1, 0, 0);
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|e")));
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|e")).proportion, 0.3);
+}
+
 void TestScrollEngineTemplate::siblingContextsDoNotResetEachOthersCursor()
 {
     // Blueprints resolve per (screen, desktop, activity) but used to be
@@ -730,6 +908,102 @@ void TestScrollEngineTemplate::siblingContextsDoNotResetEachOthersCursor()
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|c")).proportion, 0.3);
 }
 
+void TestScrollEngineTemplate::clearingAScreenDropsEveryContextsOverrides()
+{
+    // The other half of the per-context keying. Storing the overrides per
+    // context means the clear can no longer be one map removal: the caller is
+    // saying this SCREEN has left scrolling, so every context on it has to go,
+    // not merely whichever one happens to be current at the time. A clear that
+    // dropped only the current context would leave the other desktop's
+    // template standing and re-apply it the moment the user switched back to
+    // a screen that is no longer scrolling at all.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // Two desktops on ONE screen, each with its own template.
+    engine->setCurrentDesktop(1);
+    engine->applyPerScreenConfig(kS1, twoEntryTemplate());
+    QVariantMap other = twoEntryTemplate();
+    other.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.15);
+    engine->setCurrentDesktop(2);
+    engine->applyPerScreenConfig(kS1, other);
+
+    // Control: each context really does hold its own map before the clear, so
+    // the emptiness below is the clear's doing and not a fixture that never
+    // stored anything.
+    QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
+    engine->setCurrentDesktop(1);
+    QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
+
+    engine->clearPerScreenConfig(kS1);
+
+    // Gone from the context the clear was issued on...
+    QVERIFY(engine->perScreenOverrides(kS1).isEmpty());
+    // ...and from the sibling, which is the half a current-context-only
+    // removal would have left behind.
+    engine->setCurrentDesktop(2);
+    QVERIFY(engine->perScreenOverrides(kS1).isEmpty());
+
+    // A different SCREEN's overrides are untouched by the sweep: it walks the
+    // map by screen id, and a walk that dropped everything would satisfy the
+    // two assertions above just as well.
+    engine->applyPerScreenConfig(kS2, twoEntryTemplate());
+    engine->clearPerScreenConfig(kS1);
+    QVERIFY(!engine->perScreenOverrides(kS2).isEmpty());
+}
+
+void TestScrollEngineTemplate::anUnpinMigrationMovesOverridesOverAnEmptyMap()
+{
+    // The daemon pushes an EMPTY override map for every scrolling context that
+    // resolves nothing, so "a map is present at the destination key" no longer
+    // means "that context was resolved to something worth keeping". The unpin
+    // migration's move-only-if-vacant rule has to read an empty map as vacant,
+    // or the pinned strip's real overrides stay stranded at the dead key and
+    // the migrated context resolves against nothing until the next push.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // Desktop 2 first: a real map, then the daemon's "nothing to say" push
+    // that replaces it with an EMPTY one. (An empty push onto a key that
+    // holds nothing is a no-op, so this replace is the only way an empty map
+    // ever comes to sit at a key.)
+    engine->setCurrentDesktop(2);
+    QVariantMap other = twoEntryTemplate();
+    other.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.15);
+    engine->applyPerScreenConfig(kS1, other);
+    engine->applyPerScreenConfig(kS1, QVariantMap());
+    QVERIFY(engine->perScreenOverrides(kS1).isEmpty());
+    // Desktop 1 holds the real template and a sticky-only strip, which pins
+    // the screen to desktop 1.
+    engine->setCurrentDesktop(1);
+    engine->applyPerScreenConfig(kS1, twoEntryTemplate());
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    QCoreApplication::processEvents();
+    engine->updateStickyScreenPins([](const QString&) {
+        return true;
+    });
+
+    // Switch to desktop 2 (the pin keeps the strip resolving desktop 1) and
+    // then unpin: the strip migrates to desktop 2, and its overrides must
+    // come with it over the empty map that was already sitting there.
+    engine->setCurrentDesktop(2);
+    engine->updateStickyScreenPins([](const QString&) {
+        return false;
+    });
+    QCoreApplication::processEvents();
+
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|a")));
+    QVERIFY(!engine->perScreenOverrides(kS1).isEmpty());
+    // The migrated context resolves ITS template's beyond-blueprint default,
+    // which only holds if the map moved rather than the empty one staying.
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCoreApplication::processEvents();
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|b")));
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.4);
+}
+
 void TestScrollEngineTemplate::floatingTheLastWindowDoesNotRestartTheSeed()
 {
     // A strip can resolve to no columns while still standing for its
@@ -762,6 +1036,126 @@ void TestScrollEngineTemplate::floatingTheLastWindowDoesNotRestartTheSeed()
     // nothing tiled at this instant.
     engine->windowOpened(QStringLiteral("app|c"), kS1, 0, 0);
     QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|c")).proportion, 0.3);
+}
+
+void TestScrollEngineTemplate::aDragHoldingTheLastWindowDoesNotRestartTheSeed()
+{
+    // The drag arm of the same reset gate. Picking the strip's only window up
+    // into a drag-insert preview detaches it, so the strip resolves empty
+    // while the screen still very much holds a window — it is coming back the
+    // moment the pointer lands, through a path that consumes no blueprint
+    // entry. The gate's third conjunct is what keeps the cursor standing
+    // across that, and without it every drag of a lone window handed its
+    // entry straight back.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    engine->applyPerScreenConfig(kS1, twoEntryTemplate());
+    engine->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|a")).proportion, 0.6);
+
+    auto* state = static_cast<ScrollState*>(engine->stateForScreen(kS1));
+    QVERIFY(state);
+
+    // The drag detaches the only window. Both assertions are load-bearing: if
+    // the preview refused, or if it left the column in place, the strip is
+    // not empty and the reset gate is never reached, so the expectation below
+    // would hold for a reason that has nothing to do with the drag conjunct.
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("app|a"), kS1));
+    QVERIFY(engine->hasDragInsertPreview());
+    QCOMPARE(engine->dragInsertPreviewScreenId(), kS1);
+    QCoreApplication::processEvents();
+    QVERIFY(state->strip().isEmpty());
+
+    // Entry 0 stays spent, so the arrival takes entry 1 rather than 0.
+    engine->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QVERIFY(columnExists(engine, kS1, QStringLiteral("app|b")));
+    QCOMPARE(openedWidth(engine, kS1, QStringLiteral("app|b")).proportion, 0.4);
+}
+
+void TestScrollEngineTemplate::blueprintProgressIsGatedOnTheEngineOwningTheScreen()
+{
+    // blueprintProgressForScreen is exported library surface, so its
+    // documented "a screen this engine does not own reports {0, 0}" has to
+    // hold for a direct caller and not only for the in-tree D-Bus path, which
+    // is gated a layer up in ScrollingAdaptor.
+    //
+    // The positive control at the end is the whole test: {0, 0} is ALSO the
+    // honest answer for a screen with no blueprint, so an unowned screen
+    // answering zeroes proves nothing on its own. Owning the same screen with
+    // the same overrides already pushed is what separates the gate from an
+    // engine that simply had nothing to say.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine = makeEngine(&owner, settings);
+
+    // A screen outside the active set makeProviderEngine installed. The
+    // fixture's geometry providers ignore the screen id, so an unowned screen
+    // still resolves geometry and the gate is the only thing answering.
+    const QString unowned = QStringLiteral("S4");
+    engine->applyPerScreenConfig(unowned, twoEntryTemplate());
+    QCOMPARE(engine->blueprintProgressForScreen(unowned), ScrollBlueprintProgress{});
+
+    // An empty id answers the same way, through the sibling conjunct.
+    QCOMPARE(engine->blueprintProgressForScreen(QString()), ScrollBlueprintProgress{});
+
+    // Control: the same overrides on an OWNED screen describe the blueprint.
+    engine->setActiveScreens({kS1, kS2, kS3, unowned});
+    const ScrollBlueprintProgress owned = engine->blueprintProgressForScreen(unowned);
+    QCOMPARE(owned.total, 2);
+    QCOMPARE(owned.used, 0);
+}
+
+void TestScrollEngineTemplate::blueprintCursorSurvivesASerializationRoundTrip()
+{
+    // Spent-ness across a DAEMON RESTART, which is the round trip the stash
+    // travels as JSON rather than in memory. The mode round trip above proves
+    // the cursor rides the stash structure; this proves the stash's own
+    // serializer carries it, which is a separate write and a separate read.
+    //
+    // Same four-open / two-close shape as the mode round trip, for the same
+    // reason: the qMax floor recovers the two live columns on its own, so
+    // only entry 2 tells a carried cursor from a rebuilt one.
+    QObject owner;
+    auto* settings = new StubScrollSettings(&owner);
+    ScrollEngine* engine1 = makeEngine(&owner, settings);
+
+    QVariantMap templ;
+    QVariantList blueprint;
+    for (qreal width : {0.6, 0.4, 0.55, 0.45}) {
+        QVariantMap entry;
+        entry.insert(ScrollPerScreenKeys::templateColumnWidth(), width);
+        blueprint.append(entry);
+    }
+    templ.insert(ScrollPerScreenKeys::templateColumns(), blueprint);
+    templ.insert(ScrollPerScreenKeys::defaultColumnWidthKind(), static_cast<int>(DefaultWidthKind::Proportion));
+    templ.insert(ScrollPerScreenKeys::defaultColumnWidthValue(), 0.3);
+    engine1->applyPerScreenConfig(kS1, templ);
+
+    for (const QString& id :
+         {QStringLiteral("app|a"), QStringLiteral("app|b"), QStringLiteral("app|c"), QStringLiteral("app|d")}) {
+        engine1->windowOpened(id, kS1, 0, 0);
+    }
+    engine1->windowClosed(QStringLiteral("app|c"));
+    engine1->windowClosed(QStringLiteral("app|d"));
+    QCoreApplication::processEvents();
+
+    const QJsonObject blob = engine1->serializeStripState();
+
+    // A second engine, as the next daemon start would build it: same
+    // template, nothing else in common.
+    auto* settings2 = new StubScrollSettings(&owner);
+    ScrollEngine* engine2 = makeEngine(&owner, settings2);
+    engine2->applyPerScreenConfig(kS1, templ);
+    engine2->restoreStripState(blob);
+    engine2->windowOpened(QStringLiteral("app|a"), kS1, 0, 0);
+    engine2->windowOpened(QStringLiteral("app|b"), kS1, 0, 0);
+    QCoreApplication::processEvents();
+
+    engine2->windowOpened(QStringLiteral("app|e"), kS1, 0, 0);
+    QVERIFY(columnExists(engine2, kS1, QStringLiteral("app|e")));
+    QCOMPARE(openedWidth(engine2, kS1, QStringLiteral("app|e")).proportion, 0.3);
 }
 
 QTEST_GUILESS_MAIN(TestScrollEngineTemplate)

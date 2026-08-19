@@ -164,6 +164,35 @@ QString SettingsController::urlToLocalFile(const QUrl& url) const
 // Quick layout slots (D-Bus to daemon)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+namespace {
+
+/// Shared tail for the three quick-slot getters: read the slot id out of @p
+/// reply, warning when the reply carried nothing usable.
+///
+/// Warned rather than silent because an unreachable daemon and an unassigned
+/// slot are indistinguishable in the return value — both are an empty string.
+/// Left silent, a daemon-down launch rendered every slot as unassigned and a
+/// later Save could write those clears over real assignments. Note the normal
+/// unassigned case does NOT warn: a successful reply for an empty slot still
+/// carries one (empty) argument, so it returns through the first branch.
+///
+/// Anonymous namespace keeps this TU-local, the same convention
+/// parseRunningWindowsJson below follows so unity-build batching cannot
+/// produce a duplicate-symbol surprise.
+QString quickSlotFromReply(const QDBusMessage& reply, const char* what, int slotNumber)
+{
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        return reply.arguments().first().toString();
+    }
+    qCWarning(lcCore) << what << "slot" << slotNumber
+                      << (reply.type() == QDBusMessage::ErrorMessage
+                              ? QStringLiteral("D-Bus call failed: %1").arg(reply.errorMessage())
+                              : QStringLiteral("reply carried no arguments"));
+    return {};
+}
+
+} // namespace
+
 QString SettingsController::getQuickLayoutSlot(int slotNumber) const
 {
     if (slotNumber < 1 || slotNumber > QUICK_LAYOUT_SLOT_COUNT)
@@ -171,23 +200,10 @@ QString SettingsController::getQuickLayoutSlot(int slotNumber) const
     QString staged;
     if (m_staging.stagedSnappingQuickSlot(slotNumber, staged))
         return staged;
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeSnapping, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        return reply.arguments().first().toString();
-    }
-    // Warned, not silent: an unassigned slot and a daemon that could not be
-    // reached both answer empty here, and every other reader in this file was
-    // deliberately given this distinction (see replyJsonArray's doc, and the
-    // explicit branches in refreshVirtualDesktops / refreshActivities). Left
-    // silent, a daemon-down launch rendered all slots as unassigned and a
-    // later Save could write those clears over real assignments.
-    qCWarning(lcCore) << "getQuickLayoutSlot: slot" << slotNumber
-                      << (reply.type() == QDBusMessage::ErrorMessage
-                              ? QStringLiteral("D-Bus call failed: %1").arg(reply.errorMessage())
-                              : QStringLiteral("reply carried no arguments"));
-    return {};
+    return quickSlotFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getQuickLayoutSlot"),
+                                                     {QuickSlotModeSnapping, slotNumber}),
+                              "getQuickLayoutSlot:", slotNumber);
 }
 
 void SettingsController::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
@@ -227,23 +243,10 @@ QString SettingsController::getTilingQuickLayoutSlot(int slotNumber) const
         return staged;
     // Tiling quick slots are daemon-backed (mode-keyed LayoutRegistry), same as
     // snapping slots.
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeTiling, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        return reply.arguments().first().toString();
-    }
-    // Warned, not silent: an unassigned slot and a daemon that could not be
-    // reached both answer empty here, and every other reader in this file was
-    // deliberately given this distinction (see replyJsonArray's doc, and the
-    // explicit branches in refreshVirtualDesktops / refreshActivities). Left
-    // silent, a daemon-down launch rendered all slots as unassigned and a
-    // later Save could write those clears over real assignments.
-    qCWarning(lcCore) << "getTilingQuickLayoutSlot: slot" << slotNumber
-                      << (reply.type() == QDBusMessage::ErrorMessage
-                              ? QStringLiteral("D-Bus call failed: %1").arg(reply.errorMessage())
-                              : QStringLiteral("reply carried no arguments"));
-    return {};
+    return quickSlotFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getQuickLayoutSlot"),
+                                                     {QuickSlotModeTiling, slotNumber}),
+                              "getTilingQuickLayoutSlot:", slotNumber);
 }
 
 void SettingsController::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
@@ -266,23 +269,10 @@ QString SettingsController::getScrollingQuickLayoutSlot(int slotNumber) const
     if (m_staging.stagedScrollingQuickSlot(slotNumber, staged))
         return staged;
     // Scrolling quick slots hold native template ids.
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                               QStringLiteral("getQuickLayoutSlot"), {QuickSlotModeScrolling, slotNumber});
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        return reply.arguments().first().toString();
-    }
-    // Warned, not silent: an unassigned slot and a daemon that could not be
-    // reached both answer empty here, and every other reader in this file was
-    // deliberately given this distinction (see replyJsonArray's doc, and the
-    // explicit branches in refreshVirtualDesktops / refreshActivities). Left
-    // silent, a daemon-down launch rendered all slots as unassigned and a
-    // later Save could write those clears over real assignments.
-    qCWarning(lcCore) << "getScrollingQuickLayoutSlot: slot" << slotNumber
-                      << (reply.type() == QDBusMessage::ErrorMessage
-                              ? QStringLiteral("D-Bus call failed: %1").arg(reply.errorMessage())
-                              : QStringLiteral("reply carried no arguments"));
-    return {};
+    return quickSlotFromReply(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                                     QStringLiteral("getQuickLayoutSlot"),
+                                                     {QuickSlotModeScrolling, slotNumber}),
+                              "getScrollingQuickLayoutSlot:", slotNumber);
 }
 
 void SettingsController::setScrollingQuickLayoutSlot(int slotNumber, const QString& templateId)
@@ -778,18 +768,20 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
     // the next page visit.
     if (s->scrollingTemplateId.has_value())
         map[QStringLiteral("scrollingTemplateId")] = *s->scrollingTemplateId;
-    // Explicit mode takes priority (stageAssignmentEntry path)
+    // Only two writers reach the staging map and they decide this between
+    // them: stageAssignmentEntry always sets the mode, and stageScrollingTemplate
+    // touches nothing but the template slot. So an entry with no staged mode
+    // is a template-only stage, and the map it produces deliberately carries
+    // no "mode" key — there is nothing to report, and inventing one would
+    // claim an engine switch the user never made.
+    //
+    // A mode-inference fallback used to stand here for the per-field stagers
+    // (stageSnapping / stageTiling / stageTilingClear). Those were retired
+    // with the per-family assignment pages, which left the branch unreachable:
+    // with no staged mode, both the snapping and tiling slots are necessarily
+    // unset, so every arm of the inference tested false anyway.
     if (s->stagedMode.has_value()) {
         map[QStringLiteral("mode")] = *s->stagedMode;
-    } else {
-        // Infer mode from which fields are staged (per-field path). This only
-        // ever answers Snapping or Autotile: the per-field stagers exist for a
-        // layout id and an algorithm id, and Scrolling has neither, so a
-        // Scrolling pick arrives only through the explicit mode above.
-        if (s->tilingAlgorithmId.has_value() && !s->tilingAlgorithmId->isEmpty())
-            map[QStringLiteral("mode")] = static_cast<int>(PhosphorZones::AssignmentEntry::Autotile);
-        else if (s->snappingLayoutId.has_value() && !s->snappingLayoutId->isEmpty())
-            map[QStringLiteral("mode")] = static_cast<int>(PhosphorZones::AssignmentEntry::Snapping);
     }
     return map;
 }

@@ -1596,6 +1596,7 @@ add_executable(test_rule_model
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
     # Label tables + summaries, split from rulemodel.cpp for file-size.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_fieldtables.cpp
     # rulemodel's action summary now shares its boolean polarity phrasing with
     # the editor via RuleAuthoring::boolActionStateLabel.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
@@ -1619,6 +1620,7 @@ add_executable(test_rule_controller
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
     # Label tables + summaries, split from rulemodel.cpp for file-size.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_fieldtables.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
     # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
     # author surfaces, validation). The controller's class definition spans
@@ -1655,6 +1657,7 @@ add_executable(test_rule_controller_overview
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
     # Label tables + summaries, split from rulemodel.cpp for file-size.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_fieldtables.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp

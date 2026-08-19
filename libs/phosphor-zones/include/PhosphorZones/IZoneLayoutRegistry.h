@@ -145,17 +145,10 @@ public:
         return {};
     }
 
-    /// True when the context has EXPLICITLY opted out of templates, as
-    /// opposed to merely resolving none (not scrolling, an unknown id, or no
-    /// default to inherit). The resolver above answers invalid for all of
-    /// those alike, so this is the only way to tell the deliberate choice from
-    /// the incidental absence — which the picker needs, because one of them
-    /// highlights its None card and the rest highlight nothing. Default false
-    /// so lightweight stubs need not implement it.
-    /// (Declared at the END of the virtuals, below — this class is exported
-    /// from a library that ships an soname, so a new virtual inserted here
-    /// would shift the vtable slot of every virtual after it.)
-    ///
+    // scrollingTemplateExplicitlyNone, the other half of the pair the next
+    // function reads, is declared at the END of the virtuals (see its own doc
+    // there for both what it answers and why it sits last).
+
     /// The id the layout PICKER highlights for a scrolling context: the
     /// resolved template's bare UUID, the reserved no-template word when the
     /// context opted out explicitly, or the "scrolling:" sentinel (matches no
@@ -339,6 +332,12 @@ public:
     /// added mid-class would renumber the vtable slot of every virtual below
     /// it and break any consumer built against the previous headers. New
     /// virtuals append here.
+    ///
+    /// This one was MOVED here from mid-class, which is itself that renumber:
+    /// every virtual it used to precede shifted a slot. Deliberate and safe
+    /// only because the mid-class placement had not been released — an
+    /// in-place move like it is an ABI break, not a cleanup, once consumers
+    /// exist. The rule above is the one to follow instead.
     virtual bool scrollingTemplateExplicitlyNone(const QString& screenId, int virtualDesktop,
                                                  const QString& activity) const
     {

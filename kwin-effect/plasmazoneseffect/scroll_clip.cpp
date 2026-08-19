@@ -10,6 +10,9 @@
 #include "plasmazoneseffect.h"
 
 #include "compositor/stripviewanimator.h"
+// plasmazoneseffect.h only forward-declares WindowAnimator; currentValue() below
+// needs the complete type, and unity batching must not be what supplies it.
+#include "compositor/windowanimator.h"
 #include "handlers/navigationhandler.h"
 #include "tilinghandler/tilinghandler.h"
 

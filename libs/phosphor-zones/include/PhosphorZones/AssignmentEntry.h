@@ -115,12 +115,21 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 /// when the spelling changes rather than as a claim that nothing else knows
 /// it: the D-Bus setter skips its UUID validation for it (a refusal, not a
 /// rewrite), the purge writes it when a Scrolling context's template is
-/// deleted, scrollingTemplateExplicitlyNone and scrollingDisplayIdForContext
+/// deleted, assignScrollingTemplate writes it for an id that does not resolve,
+/// scrollingTemplateExplicitlyNone and scrollingDisplayIdForContext
 /// test it, the unified layout list builds the picker's None row around it
 /// and sorts on it, the daemon's UnifiedLayoutController carries it through
 /// its apply and current-selection answers, the picker's apply path compares
-/// against it, and two QML files (LayoutPickerContent and MonitorStatePage)
-/// hardcode the literal against this declaration.
+/// against it, the daemon's scrolling signal path and the rules label
+/// renderer each translate it for display, and three QML files
+/// (LayoutPickerContent, MonitorStatePage and ActionParamEditors, the last for
+/// the rule action's own None row) hardcode the literal against this
+/// declaration.
+///
+/// Only that last group is at RISK from a respelling. Every C++ site above
+/// reaches the token through this constant, so they follow a change here for
+/// free; they are listed because the doc is a map of who reasons about the
+/// third state, not only of who would break.
 inline constexpr QLatin1String NoScrollingTemplate{"none"};
 
 /**

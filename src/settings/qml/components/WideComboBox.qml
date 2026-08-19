@@ -115,7 +115,6 @@ ComboBox {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                propagateComposedEvents: true
                 onPressed: function (mouse) {
                     // Map the ComboBox button rect into catcher-local coords
                     // (catcher fills Overlay.overlay, so these match the mouse

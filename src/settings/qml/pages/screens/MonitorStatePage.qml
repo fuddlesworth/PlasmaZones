@@ -577,9 +577,15 @@ SettingsFlickable {
                     }
                 ];
                 const vertical = stateView.stripVertical;
+                // Scoped to the screen, 1-based, the way StripZones::
+                // sketchZoneMaps namespaces its own ids. Every monitor's
+                // sketch drew the same three ids otherwise, which is only
+                // harmless as long as nothing downstream keys on zone id.
+                const state = stateView.screenState;
+                const screenId = state ? (state.screenId || "") : "";
                 return spans.map(function (span, index) {
                     return {
-                        "id": "strip:fallback:" + (index + 1),
+                        "id": "strip:" + screenId + ":fallback:" + (index + 1),
                         "name": "",
                         "useCustomColors": false,
                         "relativeGeometry": {
@@ -1019,9 +1025,18 @@ SettingsFlickable {
                         template = i18n("This screen is set to use no template, so its columns follow the built-in width and height steps even if a default template is set.");
                     else if (stateView.scrollingTemplateName.length > 0)
                         template = i18n("This screen uses the %1 template, which sets the columns it starts with and the width and height presets the cycling shortcuts step through.", stateView.scrollingTemplateName);
-                    else if (stateView.scrollingTemplateId.length > 0)
-                        template = i18n("This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps. Pick another template to replace it.");
-                    else
+                    else if (stateView.scrollingTemplateId.length > 0) {
+                        template = i18n("This screen is pinned to a template that is no longer in your list, so its columns follow the built-in width and height steps.");
+                        // The description above is chosen off the DAEMON's
+                        // value and so stands until Save. The instruction
+                        // below must not: the dropdown writes the LOCAL slot,
+                        // so an ungated nudge went on telling the user to pick
+                        // a replacement after they had just picked one. Every
+                        // other arm here is descriptive, which is why only
+                        // this one needs the gate.
+                        if (!stateView.localTemplateTouched)
+                            template += " " + i18n("Pick another template to replace it.");
+                    } else
                         template = i18n("This screen has no template of its own, so it follows the default template from Scrolling → Templates.");
                     if (stateView.blueprintTotal <= 0)
                         return strip + " " + template;
@@ -1035,7 +1050,11 @@ SettingsFlickable {
                     // starting columns are in use" both broke at one, and
                     // i18np cannot help here because the varying number is
                     // not the only substitution.
-                    const seed = stateView.blueprintUsed >= stateView.blueprintTotal ? i18n("Every starting column is in use, so further columns open at the template's own width and display.") : i18n("It has used %1 of its %2 starting columns, and the rest shape the next columns you open.", stateView.blueprintUsed, stateView.blueprintTotal);
+                    // Named subject, not "It": this sentence is appended to
+                    // whichever template arm ran, and every one of those ends
+                    // on the template, so a bare pronoun read as the template
+                    // having used the columns rather than the screen.
+                    const seed = stateView.blueprintUsed >= stateView.blueprintTotal ? i18n("Every starting column is in use, so further columns open at the template's own width and display.") : i18n("This screen has used %1 of its %2 starting columns, and the rest shape the next columns you open.", stateView.blueprintUsed, stateView.blueprintTotal);
                     return strip + " " + template + " " + seed;
                 }
                 visible: stateView.isScrolling

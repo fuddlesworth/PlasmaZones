@@ -29,8 +29,10 @@ namespace PlasmaZones {
 namespace {
 
 /// Emit a D-Bus setVirtualScreenConfig for @p physicalScreenId carrying @p screens.
-/// Empty list ≡ remove the config. Returns false when the daemon answered with
-/// an error, so the caller can retain the staged config for the next Save.
+/// An empty @p screens list ≡ remove the config. Returns false when the daemon
+/// answered with an error, or when the caller asked for screens and not one of
+/// them survived validation, so the caller can retain the staged config for the
+/// next Save.
 bool pushVirtualScreenConfigToDaemon(const QString& physicalScreenId, const QVariantList& screens)
 {
     QJsonObject root;
@@ -53,6 +55,17 @@ bool pushVirtualScreenConfigToDaemon(const QString& physicalScreenId, const QVar
                                                          {::PhosphorZones::ZoneJsonKeys::Width, def.region.width()},
                                                          {::PhosphorZones::ZoneJsonKeys::Height, def.region.height()}};
         screensArr.append(screenObj);
+    }
+    // An empty array is the daemon's REMOVAL sentinel, which is the right
+    // message only when the caller staged an empty list. Reaching empty
+    // because every def failed validation means the opposite — the user asked
+    // for a split and authored a bad one — and sending it anyway would delete
+    // the split they already had. Refuse instead, so the verdict is false, the
+    // staged config is retained and the badge stays lit.
+    if (!screens.isEmpty() && screensArr.isEmpty()) {
+        qCWarning(lcConfig) << "flushVirtualScreensToDaemon: every virtual screen def for" << physicalScreenId
+                            << "failed validation, refusing the push rather than sending a removal";
+        return false;
     }
     root[QLatin1String("screens")] = screensArr;
 
@@ -131,10 +144,11 @@ void StagingService::stageAssignmentEntry(const QString& screen, int desktop, co
 void StagingService::stageScrollingTemplate(const QString& screen, int desktop, const QString& activity,
                                             const QString& templateId)
 {
-    // Deliberately touches ONLY its own slot: the template is orthogonal to
-    // the mutually-exclusive snapping/tiling pair (a scrolling context can
-    // carry a preserved snapping layout AND a template), so the clearing
-    // that stageSnapping / stageTiling do to each other has no analogue here.
+    // Deliberately touches ONLY its own slot, leaving any staged mode and
+    // layouts alone. The template is orthogonal to the snapping/tiling pair
+    // that stageAssignmentEntry writes together: a scrolling context can carry
+    // a preserved snapping layout AND a template, so there is nothing here to
+    // clear for consistency's sake.
     assignmentEntry(screen, desktop, activity).scrollingTemplateId = templateId;
 }
 
@@ -144,7 +158,8 @@ const StagingService::StagedAssignment* StagingService::stagedAssignmentFor(cons
     return assignmentEntryConst(screen, desktop, activity);
 }
 
-bool StagingService::flushAssignmentsToDaemon(const std::function<bool(const QString&)>& templateExists)
+bool StagingService::flushAssignmentsToDaemon(const std::function<bool(const QString&)>& templateExists,
+                                              QStringList* refusedTemplateIds)
 {
     qCDebug(lcCore) << "flushStagedAssignments: count=" << m_assignments.size();
     bool ok = true;
@@ -156,8 +171,11 @@ bool StagingService::flushAssignmentsToDaemon(const std::function<bool(const QSt
             ok = false;
         }
     };
-    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
-        const auto& s = it.value();
+    // A MUTATING walk: a refused template id is erased from its entry below so
+    // the retained map cannot re-refuse it forever. Only entry VALUES are
+    // touched, never the key set, so the iterator stays valid throughout.
+    for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
+        auto& s = it.value();
         qCDebug(lcCore) << "  flush: screen=" << s.screenId << "mode="
                         << (s.stagedMode.has_value() ? QString::number(*s.stagedMode) : QStringLiteral("(none)"))
                         << "snapping="
@@ -183,6 +201,43 @@ bool StagingService::flushAssignmentsToDaemon(const std::function<bool(const QSt
             const int mode = *s.stagedMode;
             const QString snapping = s.snappingLayoutId.value_or(QString());
             const QString tiling = s.tilingAlgorithmId.has_value() ? normTile(*s.tilingAlgorithmId) : QString();
+
+            // The template existence pre-check runs BEFORE the entry write, so
+            // a refusal leaves the daemon untouched for the slot it refuses
+            // rather than half-applying. It is needed at all because the
+            // daemon's refusal is invisible on the wire: setScrollingTemplateLayout
+            // is a void slot that warns and returns for an id naming no live
+            // template, which replies successfully. Only a UUID form is
+            // checked — the empty string and the reserved "explicitly none"
+            // word are both legal values the daemon always accepts.
+            //
+            // Gated on the staged mode being Scrolling for the same reason the
+            // write below is: setScrollingTemplateLayout stamps Scrolling on
+            // the entry it upserts (its own contract), so a template staged
+            // against a context the user then switched AWAY from scrolling is
+            // never sent, and must not be refused either.
+            if (s.scrollingTemplateId.has_value()
+                && mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
+                const QString& templateId = *s.scrollingTemplateId;
+                const bool needsExistenceCheck =
+                    templateExists && !templateId.isEmpty() && templateId != PhosphorZones::NoScrollingTemplate;
+                if (needsExistenceCheck && !templateExists(templateId)) {
+                    qCWarning(lcCore) << "flushAssignmentsToDaemon: staged scrolling template" << templateId
+                                      << "for screen" << s.screenId << "no longer exists, dropping the template pick";
+                    if (refusedTemplateIds) {
+                        refusedTemplateIds->append(templateId);
+                    }
+                    // Erased, not retained. The verdict below still goes false
+                    // so the badge stays lit and the caller can tell the user,
+                    // but a deleted template never comes back: keeping the id
+                    // would make every future Save refuse the same entry
+                    // forever with no way out but Discard. The mode and layout
+                    // slots survive and re-flush normally.
+                    s.scrollingTemplateId.reset();
+                    ok = false;
+                }
+            }
+
             check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
                                          QStringLiteral("setAssignmentEntry"),
                                          {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling}),
@@ -190,47 +245,28 @@ bool StagingService::flushAssignmentsToDaemon(const std::function<bool(const QSt
             // The template rides its own setter AFTER the entry write, because
             // setAssignmentEntry carries no template argument. Order matters:
             // the entry write stamps the mode and both preserved siblings, and
-            // this second call touches only the template slot.
-            //
-            // Gated on the staged mode being Scrolling, not merely on the slot
-            // being staged: setScrollingTemplateLayout stamps Scrolling on the
-            // entry it upserts (its own contract), so issuing it for a context
-            // the user just switched AWAY from scrolling would silently undo
-            // that switch.
+            // this second call touches only the template slot. A slot the
+            // pre-check just erased reads as unstaged here and is skipped.
             if (s.scrollingTemplateId.has_value()
                 && mode == static_cast<int>(PhosphorZones::AssignmentEntry::Scrolling)) {
-                // Pre-checked, because the daemon's refusal is invisible on
-                // the wire: setScrollingTemplateLayout is a void slot that
-                // warns and returns for an id naming no live template, which
-                // replies successfully. Without this the pick was dropped and
-                // the app reported a clean save. Only a UUID form is checked —
-                // the empty string and the reserved "explicitly none" word are
-                // both legal values the daemon always accepts.
-                const QString& templateId = *s.scrollingTemplateId;
-                const bool needsExistenceCheck =
-                    templateExists && !templateId.isEmpty() && templateId != PhosphorZones::NoScrollingTemplate;
-                if (needsExistenceCheck && !templateExists(templateId)) {
-                    qCWarning(lcCore) << "flushAssignmentsToDaemon: staged scrolling template" << templateId
-                                      << "for screen" << s.screenId
-                                      << "no longer exists — refusing the write and keeping the staged state";
-                    ok = false;
-                } else {
-                    check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
-                                                 QStringLiteral("setScrollingTemplateLayout"),
-                                                 {s.screenId, s.virtualDesktop, s.activityId, templateId}),
-                          "setScrollingTemplateLayout", s.screenId);
-                }
+                check(DaemonDBus::callDaemon(QString(PhosphorProtocol::Service::Interface::LayoutRegistry),
+                                             QStringLiteral("setScrollingTemplateLayout"),
+                                             {s.screenId, s.virtualDesktop, s.activityId, *s.scrollingTemplateId}),
+                      "setScrollingTemplateLayout", s.screenId);
             }
             continue;
         }
 
-        // Every live entry takes the explicit-mode branch above:
-        // stageAssignmentEntry always sets stagedMode, and stageScrollingTemplate
-        // touches only the template slot. The per-field snapping / tiling
-        // branches that used to stand here were reachable only from
-        // stageSnapping / stageTiling / stageTilingClear, which no page has
-        // called since the Rule refactor retired the per-family assignment
-        // pages. They went with those mutators rather than being kept as
+        // Nothing to do for an entry with no staged mode. Only two writers
+        // reach this map: stageAssignmentEntry always sets the mode and so
+        // takes the branch above, and stageScrollingTemplate sets only the
+        // template slot, which the daemon writes through setAssignmentEntry's
+        // companion setter and never on its own. So a template staged against
+        // a context whose mode was never staged is deliberately not sent.
+        //
+        // Per-field snapping / tiling branches used to stand here for the
+        // retired stageSnapping / stageTiling / stageTilingClear mutators.
+        // They were deleted with those mutators rather than kept as
         // scaffolding for a caller that does not exist.
     }
     // Retain the whole map on failure. Partial retention would need per-entry
@@ -265,8 +301,9 @@ QVariantList StagingService::stagedVirtualScreenConfig(const QString& physicalSc
     return m_virtualScreenConfigs.value(physicalScreenId);
 }
 
-void StagingService::flushVirtualScreensToSettings(Settings& settings)
+bool StagingService::flushVirtualScreensToSettings(Settings& settings)
 {
+    bool ok = true;
     for (auto it = m_virtualScreenConfigs.constBegin(); it != m_virtualScreenConfigs.constEnd(); ++it) {
         PhosphorScreens::VirtualScreenConfig vsConfig;
         vsConfig.physicalScreenId = it.key();
@@ -281,9 +318,21 @@ void StagingService::flushVirtualScreensToSettings(Settings& settings)
                 }
                 vsConfig.screens.append(def);
             }
+            // The persistence twin of the guard in pushVirtualScreenConfigToDaemon:
+            // an empty screen list means "no split" on disk too, so writing one
+            // built from a non-empty input whose defs all failed validation
+            // would persist the deletion of a split the user still has. Skip
+            // the write and report, leaving the previous config on disk.
+            if (vsConfig.screens.isEmpty()) {
+                qCWarning(lcConfig) << "flushVirtualScreensToSettings: every virtual screen def for" << it.key()
+                                    << "failed validation, leaving the saved config untouched";
+                ok = false;
+                continue;
+            }
         }
         settings.setVirtualScreenConfig(it.key(), vsConfig);
     }
+    return ok;
 }
 
 bool StagingService::flushVirtualScreensToDaemon()

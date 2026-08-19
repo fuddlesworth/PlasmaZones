@@ -5,6 +5,7 @@
 
 #include <QHash>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 
 #include <functional>
@@ -18,9 +19,9 @@ class Settings;
 /// accumulates between `load()` and `save()`.
 ///
 /// Covers three staging categories:
-///   1. **Assignments** — per-(screen × desktop × activity) snapping /
-///      tiling layout assignments, plus per-slot clears and the atomic
-///      mode+layout staging used by the Overview page.
+///   1. **Assignments** — per-(screen × desktop × activity) engine mode with
+///      its snapping / tiling layouts, staged atomically by the Overview page,
+///      plus the scrolling template slot which stages on its own.
 ///   2. **Virtual-screen configurations** — staged virtual screen layouts
 ///      per physical screen, flushed to Settings (for persistence) BEFORE
 ///      `Settings::save()` and to the daemon (via D-Bus) AFTER.
@@ -38,9 +39,11 @@ class Settings;
 class StagingService
 {
 public:
-    /// A single entry in the assignment staging map. `stagedMode` (Overview
-    /// page's atomic write) takes precedence over the per-field snapping
-    /// / tiling fields.
+    /// A single entry in the assignment staging map. `stagedMode` is set by
+    /// stageAssignmentEntry (the Overview page's atomic write) and the
+    /// snapping / tiling fields are its payload rather than an alternative
+    /// route — an entry with no staged mode was created by
+    /// stageScrollingTemplate and carries the template slot only.
     struct StagedAssignment
     {
         QString screenId;
@@ -118,7 +121,25 @@ public:
     /// Layouts page while a Monitors-page pick is still staged. Left unset
     /// (fixtures, embedders) the pre-check is skipped and the old behaviour
     /// stands.
-    [[nodiscard]] bool flushAssignmentsToDaemon(const std::function<bool(const QString&)>& templateExists = {});
+    ///
+    /// What a refusal does, precisely, because two earlier readings of this
+    /// doc got it wrong. The pre-check runs BEFORE the entry write, and only
+    /// the template call is skipped: the `setAssignmentEntry` carrying the
+    /// user's mode and layout switch still goes out, because dropping that too
+    /// would silently discard an edit the daemon can perfectly well accept.
+    /// The verdict goes false so the badge stays lit, and the refused id is
+    /// ERASED from the retained entry so the next Save is not doomed to refuse
+    /// forever — a deleted template never comes back, so retrying it is not a
+    /// retry, it is a deadlock. The staged mode and layouts survive that erase
+    /// and re-flush normally.
+    ///
+    /// @param refusedTemplateIds Optional sink for the ids the pre-check
+    /// refused. StagingService is not a QObject and cannot raise a signal, so
+    /// the caller owns telling the user; SettingsController::save() turns a
+    /// non-empty list into `layoutOperationFailed`. Untouched when nothing was
+    /// refused.
+    [[nodiscard]] bool flushAssignmentsToDaemon(const std::function<bool(const QString&)>& templateExists = {},
+                                                QStringList* refusedTemplateIds = nullptr);
 
     // ── Virtual screen staging ────────────────────────────────────────
 
@@ -144,7 +165,14 @@ public:
     /// Persist staged VS configs to Settings (KConfig) for on-disk
     /// durability. Runs BEFORE `Settings::save()` — the subsequent save
     /// writes everything out in one go.
-    void flushVirtualScreensToSettings(Settings& settings);
+    ///
+    /// Returns false when a staged config named screens but not one of them
+    /// survived validation. That config is skipped rather than written,
+    /// because an empty screen list reads as "no split" and would persist the
+    /// removal of a split the user still has. The staging map is untouched
+    /// either way (only the daemon flush clears it), so the retry has the
+    /// edit; the verdict is there for the caller's commit gate.
+    [[nodiscard]] bool flushVirtualScreensToSettings(Settings& settings);
 
     /// Push staged VS configs to the daemon via D-Bus. Runs AFTER
     /// `Settings::save()` but BEFORE `notifyReload` so virtual screen IDs

@@ -478,11 +478,18 @@ private Q_SLOTS:
         };
         // Foreign-screen refusal + the same bound pins as the width twin: a
         // `<` flipped to `<=` at either height bound was invisible before.
+        // Full-value compare, like the width arm and the proportion arm
+        // below: the starting kind happens to differ from the kind a clamp
+        // would write, so a kind-only check passes here today, but it stops
+        // discriminating the moment this block is reordered after one of the
+        // legs that leaves the height Fixed.
+        const WindowHeight beforePxRefusals = activeHeight();
         m_adaptor->setWindowHeightPixels(QStringLiteral("HDMI-2"), 300);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 50);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 99);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 10001);
         m_adaptor->setWindowHeightPixels(QString(), 300);
+        QCOMPARE(activeHeight(), beforePxRefusals);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Auto);
         m_adaptor->setWindowHeightPixels(QStringLiteral("DP-1"), 100);
         QCOMPARE(activeHeight().kind, WindowHeight::Kind::Fixed);

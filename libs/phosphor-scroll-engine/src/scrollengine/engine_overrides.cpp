@@ -37,6 +37,15 @@ constexpr int kMinTabIndicatorGap = -64;
 constexpr int kMaxTabIndicatorGap = 64;
 constexpr int kMinTabIndicatorWidth = 1;
 constexpr int kMaxTabIndicatorWidth = 64;
+/// The length proportion's pair, named for the same reason its four siblings
+/// above are rather than living as bare literals at the read: the floor is a
+/// real decision (a proportion small enough to resolve to a sliver reads as a
+/// broken indicator while every setting still reports it on), and hiding it in
+/// a `> 0.0` test made it look like a null check. Mirrors the rules layer's
+/// Min/MaxTabIndicatorLengthRatio by value, hand-copied on the same terms as
+/// the bounds above.
+constexpr qreal kMinTabIndicatorLengthProportion = 0.05;
+constexpr qreal kMaxTabIndicatorLengthProportion = 1.0;
 
 /// Validated int read out of an override map, and the reason every int
 /// resolver in this file goes through it: QVariant::toInt() answers 0 for a
@@ -593,7 +602,7 @@ TabIndicatorParams ScrollEngine::effectiveTabIndicator(const QVariantMap& overri
     // indicator to a sliver while every setting reports it on.
     qreal length = 0.0;
     if (overrideDouble(overrides, K::tabIndicatorLengthProportion(), length) && length > 0.0) {
-        params.lengthProportion = qMin(length, qreal(1.0));
+        params.lengthProportion = qBound(kMinTabIndicatorLengthProportion, length, kMaxTabIndicatorLengthProportion);
     }
     // Validate-then-fall-back, the terms effectiveDefaultColumnDisplay uses:
     // a garbage override must leave the configured position alone rather than

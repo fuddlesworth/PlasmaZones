@@ -81,17 +81,6 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
     return preview;
 }
 
-/// The synthetic "no template" row, carrying the reserved
-/// PhosphorZones::NoScrollingTemplate id. Opt-in per call site: it belongs in
-/// the lists that PICK a context's template, and not in the management and
-/// D-Bus lists, where a row standing for the absence of a template would read
-/// as a template you could rename or delete.
-///
-/// Deliberately zone-less. A template's preview draws its starting columns as
-/// bands, and "no template" has none to draw — a single full-width band would
-/// read as one maximized column, which is a shape the engine does not adopt.
-/// zoneCount 0 is the UnlimitedZoneCount sentinel, so the row passes
-/// LayoutPreview::isValid with an empty zone list.
 /// Stamp the scrolling-template section triple onto @p preview.
 ///
 /// One home for the three fields, called from both row builders below. They
@@ -105,6 +94,17 @@ void stampScrollingTemplateSection(LayoutPreview& preview)
     preview.sectionOrder = 10;
 }
 
+/// The synthetic "no template" row, carrying the reserved
+/// PhosphorZones::NoScrollingTemplate id. Opt-in per call site: it belongs in
+/// the lists that PICK a context's template, and not in the management and
+/// D-Bus lists, where a row standing for the absence of a template would read
+/// as a template you could rename or delete.
+///
+/// Deliberately zone-less. A template's preview draws its starting columns as
+/// bands, and "no template" has none to draw — a single full-width band would
+/// read as one maximized column, which is a shape the engine does not adopt.
+/// zoneCount 0 is the UnlimitedZoneCount sentinel, so the row passes
+/// LayoutPreview::isValid with an empty zone list.
 LayoutPreview noScrollingTemplatePreview()
 {
     LayoutPreview preview;
@@ -358,6 +358,16 @@ QVector<LayoutPreview> buildUnifiedLayoutList(
 {
     QVector<LayoutPreview> list;
 
+    // HARD PRECONDITION, unlike the three include* flags: a null registry
+    // yields an empty list outright, template rows and the None row included,
+    // even though neither needs the registry. Both other families do — the
+    // manual walk enumerates its layouts and the autotile hidden-filter reads
+    // the context's algorithm and the per-algorithm overrides off it — so a
+    // registry-less build would answer with the template section alone, which
+    // is a silently partial picker rather than a useful degrade. Every call
+    // site is a picker or OSD that owns a registry; the flat management
+    // overload above is the one that legitimately has no context, and it takes
+    // no registry-dependent filter.
     if (!layoutManager) {
         return list;
     }

@@ -325,6 +325,63 @@ private Q_SLOTS:
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
         QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // The picker-highlight id: three states out of one query
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testScrollingDisplayId_answersTheThreeHighlightStates()
+    {
+        // scrollingDisplayIdForContext is the shared authority behind every
+        // picker-highlight site, and it answers one of three shapes: a
+        // template's own id, the reserved no-template word, or the bare
+        // "scrolling:" sentinel that matches no card at all. Each drives a
+        // different thing on screen — a highlighted template card, a
+        // highlighted None card, and nothing highlighted — so collapsing any
+        // two of them is a visible bug rather than an internal detail.
+        //
+        // Driven through a real LayoutRegistry on purpose. The function is a
+        // non-virtual convenience over scrollingTemplateForContext and the
+        // virtual scrollingTemplateExplicitlyNone, and that second virtual
+        // has a `return false` default on the interface — a lightweight stub
+        // would inherit it, making the None arm unreachable and this test
+        // green while proving nothing about it.
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+        auto* store = attachTemplateStore(mgr.get());
+        const QUuid templId = createTestTemplate(store, QStringLiteral("Picked"));
+
+        const QString screen = QStringLiteral("DP-1");
+        mgr->assignLayoutById(screen, 0, QString(), QString(PhosphorLayout::LayoutId::ScrollingId));
+
+        // 1. No template of its own and no default to inherit: the sentinel,
+        // which matches no card, so the picker highlights nothing.
+        QCOMPARE(mgr->scrollingDisplayIdForContext(screen, 0, QString()),
+                 QString(PhosphorLayout::LayoutId::ScrollingId));
+
+        // 2. A template assigned: its own id, which is the card to highlight.
+        mgr->assignScrollingTemplate(screen, 0, QString(), templId.toString());
+        QCOMPARE(mgr->scrollingDisplayIdForContext(screen, 0, QString()), templId.toString());
+
+        // 3. Explicitly opted out: the reserved word, so the None card is the
+        // one highlighted.
+        mgr->assignScrollingTemplate(screen, 0, QString(), QString(PhosphorZones::NoScrollingTemplate));
+        QCOMPARE(mgr->scrollingDisplayIdForContext(screen, 0, QString()), QString(PhosphorZones::NoScrollingTemplate));
+
+        // The state the reserved word exists to be distinguishable FROM: an
+        // empty slot with a default configured inherits that default and
+        // highlights its card, where the opt-out above highlights None. Both
+        // resolve "no template of this screen's own", and before the reserved
+        // word they shared the empty spelling and could not be told apart.
+        const QUuid defaultId = createTestTemplate(store, QStringLiteral("Inherited"));
+        mgr->setDefaultScrollingTemplateProvider([defaultId] {
+            return defaultId.toString();
+        });
+        // The opt-out still wins over the freshly configured default.
+        QCOMPARE(mgr->scrollingDisplayIdForContext(screen, 0, QString()), QString(PhosphorZones::NoScrollingTemplate));
+
+        mgr->assignScrollingTemplate(screen, 0, QString(), QString());
+        QCOMPARE(mgr->scrollingDisplayIdForContext(screen, 0, QString()), defaultId.toString());
+    }
 };
 
 QTEST_MAIN(TestLayoutManagerAssignmentEntry)

@@ -15,6 +15,8 @@
 #include "rulecontroller.h"
 #include "ruleauthoring.h"
 
+#include "phosphor_i18n.h"
+
 #include <PhosphorRules/ContextRuleBridge.h>
 #include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/RuleAction.h>
@@ -316,11 +318,30 @@ QVariantList RuleController::monitorOverview(const QVariantList& screens) const
                 layoutLabel = summary.tilingAlgorithm;
                 labelLookup = &m_tilingAlgorithmLookup;
             } else if (mode == PhosphorZones::AssignmentEntry::Scrolling) {
-                // The snapping lookup reads the shared layouts model, which
-                // carries the native template rows keyed by their raw UUID, so
-                // it resolves a template id to its display name too.
-                layoutLabel = summary.scrollingTemplate;
-                labelLookup = &m_snappingLayoutLookup;
+                // The reserved "explicitly none" word is not an id any lookup
+                // can resolve, and the resolve below renders an unresolvable
+                // value verbatim, which showed this tile a template apparently
+                // named "none". Every Monitors-page and picker None pick writes
+                // that word, so it is the common case rather than a malformed
+                // one. Deliberately leaves labelLookup null: the substituted
+                // prose is already a label and must not be fed to a lookup.
+                //
+                // The bare-name wording, not the rule-list summary's
+                // "Scrolling template: None" — this slot holds a layout NAME
+                // that MonitorOverviewTile composes into "%1 · %2" with the
+                // rule count, where the summary's "Label: payload" form would
+                // read as a caption with a colon in the middle. Reuses the
+                // string leafLabel already shows for a scrolling match with no
+                // template, so the concept keeps one translation.
+                if (summary.scrollingTemplate == PhosphorZones::NoScrollingTemplate) {
+                    layoutLabel = PhosphorI18n::tr("Scrolling (no template)");
+                } else {
+                    // The snapping lookup reads the shared layouts model, which
+                    // carries the native template rows keyed by their raw UUID,
+                    // so it resolves a template id to its display name too.
+                    layoutLabel = summary.scrollingTemplate;
+                    labelLookup = &m_snappingLayoutLookup;
+                }
             }
         }
         // The token is the raw layoutId / algorithm name from the rule's

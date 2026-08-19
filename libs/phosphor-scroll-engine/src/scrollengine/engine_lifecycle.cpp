@@ -9,6 +9,8 @@
 #include "enginelimits.h"
 #include "scrollenginelogging.h"
 
+#include <QVariant>
+
 #include <algorithm>
 #include <utility>
 
@@ -209,7 +211,16 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
             // would, on a vertical strip, feed the client's cross extent into
             // the column's MAIN intent and open every client-sized window at
             // the wrong length along the strip.
-            width = ColumnWidth::makeFixed(params.axis.mainSize(geo->size()));
+            //
+            // Bounded like every other Fixed intent this engine mints (the
+            // settings and override arms both qBound before the round). The
+            // rect comes from IWindowTrackingService, which an embedder
+            // implements, and validatedUnmanagedGeometry validates only that a
+            // geometry EXISTS for the window on that screen — its extents are
+            // whatever the compositor reported, so a degenerate or absurd one
+            // would become the column's standing width intent.
+            const int clientMain = params.axis.mainSize(geo->size());
+            width = ColumnWidth::makeFixed(qBound(1, clientMain, static_cast<int>(kMaxFixedExtentPx)));
         }
     }
 
@@ -336,8 +347,20 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         // reacting to the write restarted the seed for events the user never
         // made. Comparing the VALUE the cursor is counting against restarts
         // it exactly when the template really changed.
+        //
+        // The reset needs an ESTABLISHED identity to compare against, not
+        // merely a stored one. A state rebuilt by a mode round trip or staged
+        // from the persisted blob arrives holding a real cursor and no
+        // identity at all, and treating that absence as a mismatch reset the
+        // cursor the carry had just restored — the refill all over again, one
+        // arrival later. Not established means STAMP and keep the cursor;
+        // only an established value that differs is a genuine swap. Null is
+        // no help as the unset marker: it is the ordinary identity of a
+        // context with no template. See ScrollState::hasBlueprintIdentity.
         const QVariant blueprintNow = blueprintIt != screenOverrides.constEnd() ? *blueprintIt : QVariant();
-        if (state->blueprintIdentity() != blueprintNow) {
+        if (!state->hasBlueprintIdentity()) {
+            state->setBlueprintIdentity(blueprintNow);
+        } else if (state->blueprintIdentity() != blueprintNow) {
             state->setBlueprintIdentity(blueprintNow);
             state->resetBlueprintCursor();
         }
@@ -395,8 +418,17 @@ bool ScrollEngine::insertOpenedWindow(ScrollState* state, const QString& windowI
         }
         const ScrollInsertPosition insertPos = effectiveInsertPosition(screenOverrides);
         if (insertPos == ScrollInsertPosition::IntoActiveColumn && !state->strip().isEmpty()) {
-            inserted =
-                state->strip().insertWindowIntoActiveColumn(windowId, width, std::nullopt, params, minWidth, minHeight);
+            // The same ENGAGED-ONLY optional the openColumnPlacement=consume
+            // arm above builds, not a bare nullopt. The two arms are the rule
+            // and config spellings of one intent, and this one silently
+            // dropped an openWindowTabbed rule's verdict on the host column
+            // while its twin applied it. Engaged only when the rule actually
+            // spoke: nullopt leaves the host column's own display alone, which
+            // is what an arriving TILE should do by default.
+            const std::optional<ColumnDisplay> displayOverride =
+                openParams.tabbed ? std::optional<ColumnDisplay>(display) : std::nullopt;
+            inserted = state->strip().insertWindowIntoActiveColumn(windowId, width, displayOverride, params, minWidth,
+                                                                   minHeight);
         }
         if (!inserted) {
             inserted = state->strip().insertWindow(

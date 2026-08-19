@@ -17,6 +17,7 @@
 #include <QJsonObject>
 
 #include <algorithm>
+#include <utility> // std::as_const
 
 namespace PhosphorScrollEngine {
 
@@ -52,6 +53,29 @@ inline QLatin1String kViewAnchor()
 {
     return QLatin1String("viewAnchor");
 }
+/// How far the strip had worked through its template blueprint. ADDITIVE on
+/// the same terms as kAxis above, and absent reads 0 — which is exactly what a
+/// blob written before the key existed means, since the reader's floor at the
+/// live column count then recovers the same lower bound it always did.
+///
+/// The blueprint IDENTITY the cursor counts against is deliberately NOT
+/// written beside it: a state staged from this blob has no established
+/// identity, so the consumption site stamps whatever blueprint is in force and
+/// keeps the cursor. Persisting the value would buy the same answer and add a
+/// staleness class (a template edited between sessions) for nothing. See
+/// StashedStrip::blueprintIdentity.
+inline QLatin1String kBlueprintCursor()
+{
+    return QLatin1String("blueprintCursor");
+}
+/// Sanity ceiling for the restored cursor, the same shape and purpose as the
+/// viewAnchor bound below: wide enough for any real session, narrow enough
+/// that a hand-edited INT_MAX cannot overflow the arithmetic it feeds. NOT
+/// kMaxTemplateEntries — the cursor counts every column the strip has ever
+/// opened, not just the ones a blueprint described, so it legitimately runs
+/// past the blueprint's length and the consumption site bounds the INDEX
+/// separately.
+constexpr int kMaxRestoredBlueprintCursor = 100000;
 inline QLatin1String kUnclaimedSessions()
 {
     return QLatin1String("unclaimedSessions");
@@ -271,6 +295,7 @@ QJsonObject ScrollEngine::serializeStripState() const
         obj.insert(kFocused(), stash.focusedWindowId);
         obj.insert(kViewAnchor(), stash.viewAnchor);
         obj.insert(kAxis(), static_cast<int>(stash.axis));
+        obj.insert(kBlueprintCursor(), stash.blueprintCursor);
         return obj;
     };
     // Every window id that is LIVE on some strip right now. Writing the stash
@@ -285,6 +310,27 @@ QJsonObject ScrollEngine::serializeStripState() const
     // One buildStashFromState walk per state: the snapshots feed both the
     // live-id sweep below and the output loop at the end.
     const auto& states = m_states.states();
+    // The fallback axis for every screen with a state, resolved BEFORE the
+    // walk below and handed in — the precondition buildStashFromState
+    // documents. Its nullopt path resolves live through stripAxisForScreen,
+    // which invokes the daemon-injected geometry and gap providers, and this
+    // walk iterates the state map those providers must not be re-entered
+    // during. setActiveScreens pre-resolves for exactly this reason.
+    //
+    // Two passes rather than one: the id collection touches nothing but the
+    // keys, and only then does the resolve run, so no provider is called while
+    // the map is being iterated. The resolve itself only LOOKS UP states (the
+    // smart-gaps arm), which is safe. Per screen, not per state — the axis is
+    // a screen-level verdict and several contexts share one.
+    QSet<QString> screensWithState;
+    for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        screensWithState.insert(it.key().screenId);
+    }
+    QHash<QString, PhosphorProtocol::ScrollAxis> fallbackAxisByScreen;
+    fallbackAxisByScreen.reserve(screensWithState.size());
+    for (const QString& screenId : std::as_const(screensWithState)) {
+        fallbackAxisByScreen.insert(screenId, stripAxisForScreen(screenId).axis());
+    }
     QHash<PhosphorEngine::PlacementStateKey, StashedStrip> liveStrips;
     liveStrips.reserve(states.size());
     QSet<QString> liveWindowIds;
@@ -293,7 +339,12 @@ QJsonObject ScrollEngine::serializeStripState() const
         // reference straight off insert(...).value(): the returned iterator
         // is a temporary, and while the value it names lives in the hash (so
         // the reference is sound), the compiler cannot prove that and warns.
-        const auto inserted = liveStrips.insert(it.key(), buildStashFromState(it.value()));
+        // Every screen holding a state was resolved above, so the lookup
+        // always hits; the default is unreachable and named only because
+        // QHash::value demands one.
+        const PhosphorProtocol::ScrollAxis fallbackAxis =
+            fallbackAxisByScreen.value(it.key().screenId, PhosphorProtocol::ScrollAxis::Horizontal);
+        const auto inserted = liveStrips.insert(it.key(), buildStashFromState(it.value(), fallbackAxis));
         const StashedStrip& live = inserted.value();
         for (const StashedColumn& col : live.columns) {
             for (const StashedTile& tile : col.tiles) {
@@ -383,10 +434,23 @@ QJsonObject ScrollEngine::serializeStripState() const
     for (auto it = liveStrips.cbegin(); it != liveStrips.cend(); ++it) {
         StashedStrip merged = it.value();
         // Live columns first: they are the strip as it stands, and the stash
-        // holds only windows that have not come back to it. focusedWindowId
-        // and viewAnchor stay the LIVE ones for the same reason.
+        // holds only windows that have not come back to it. focusedWindowId,
+        // viewAnchor and the captured axis stay the LIVE ones for the same
+        // reason.
         const StashedStrip stash = prunedStashes.take(it.key());
         merged.columns += stash.columns;
+        // The blueprint cursor is the one field where the STASH can outrank
+        // the live strip: it counts entries this context spent, and the stash
+        // side holds the windows that have not come back yet, so its count can
+        // be the higher of the two. Raised, never replaced — the same qMax the
+        // arrival-time restore applies, for the same reason.
+        merged.blueprintCursor = qMax(merged.blueprintCursor, stash.blueprintCursor);
+        // Structure-less entries are not written. A context whose windows are
+        // all floated has a cursor and no columns, and the reader drops a
+        // column-less entry anyway; carrying one through the blob would add a
+        // row per such context for a value the in-session stash already
+        // preserves across the round trip that actually loses it (mode exit).
+        // So a cursor survives a RESTART only alongside structure.
         if (!merged.isEmpty()) {
             out.insert(keyToString(it.key()), stashToJson(merged));
         }
@@ -460,6 +524,10 @@ void ScrollEngine::restoreStripState(const QJsonObject& state)
         // wide enough for any real strip — it stops a hand-edited INT_MIN/MAX
         // from overflowing the viewOffset arithmetic it later feeds.
         stash.viewAnchor = qBound(-1000000, obj.value(kViewAnchor()).toInt(0), 1000000);
+        // Absent reads 0, which is what every pre-key blob means. Bounded for
+        // the same boundary-hardening reason as the anchor: the cursor feeds
+        // qMax against the live column count and then indexes a blueprint.
+        stash.blueprintCursor = qBound(0, obj.value(kBlueprintCursor()).toInt(0), kMaxRestoredBlueprintCursor);
         // Absent reads Horizontal, and an out-of-range int degrades the same
         // way rather than inventing an axis.
         stash.axis = PhosphorProtocol::scrollAxisFromInt(obj.value(kAxis()).toInt(0));

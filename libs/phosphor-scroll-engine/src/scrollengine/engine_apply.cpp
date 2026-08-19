@@ -494,8 +494,20 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // members and a live detached drag window both count as "the screen
         // still holds something", because both return to the strip through
         // paths that consume no blueprint entry.
-        const bool dragHoldsWindowHere = m_dragInsertPreview && m_dragInsertPreview->targetScreenId == screenId;
-        if (state->strip().isEmpty() && state->floatingWindows().isEmpty() && !dragHoldsWindowHere) {
+        // screensMatch, not ==, for the reason the preview guard at the top of
+        // this function states: a virtual-screen id spelling difference must
+        // not fail the test OPEN and reset a cursor the drag is still holding
+        // a window out of. The CONTEXT is compared too, because the preview
+        // captured one at begin: a preview detached on another desktop of this
+        // same screen says nothing about whether THIS context's strip is
+        // genuinely finished, and treating it as a hold left that context's
+        // cursor standing forever.
+        const PhosphorEngine::PlacementStateKey currentKey = currentKeyForScreen(screenId);
+        const bool dragHoldsWindowHere = m_dragInsertPreview
+            && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetKey.screenId, screenId)
+            && m_dragInsertPreview->targetKey.desktop == currentKey.desktop
+            && m_dragInsertPreview->targetKey.activity == currentKey.activity;
+        if (state->strip().isEmpty() && !state->hasFloating() && !dragHoldsWindowHere) {
             state->resetBlueprintCursor();
         }
         clearTabStripsForScreen(screenId);

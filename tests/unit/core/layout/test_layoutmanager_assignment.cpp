@@ -10,6 +10,24 @@
  * the sibling test_layoutmanager_assignment_entry.cpp, split off at the P6
  * banner when this file passed the 1150-line ceiling. Both share
  * LayoutManagerAssignmentFixture.
+ *
+ * FILE-SIZE EXCEPTION (sanctioned): this file is past the 1150 hard ceiling
+ * again, and a second split was considered and rejected. What remains after
+ * the entry-shape half moved out is one subject — how a CONTEXT resolves to
+ * an assignment — and every test here is a claim about that resolution: the
+ * fallback cascade, the batch writers that rebuild the same rules, the
+ * quick-slot and cycle verbs that write through them, and the global
+ * autotile disable/restore that walks every context at once. They share the
+ * cascade's vocabulary and, more to the point, they constrain each other:
+ * the batch and restore tests exist precisely to pin that a write through
+ * one path does not disturb what another path resolves, so separating them
+ * would put both halves of that claim in different files and leave neither
+ * able to state it. The natural seam would be per-API rather than
+ * per-concern, which is the split that duplicates the fixture and states
+ * nothing.
+ *
+ * A new test belongs here only if it is another claim about context
+ * resolution. Anything about the ENTRY's own shape goes to the sibling.
  */
 
 #include <QTest>
@@ -661,6 +679,68 @@ private Q_SLOTS:
         QCOMPARE(entry.scrollingTemplateLayout, QString(PhosphorZones::NoScrollingTemplate));
         // Degrade check, and the point of the fixture's default provider: the
         // screen resolves to no template rather than adopting Fallback.
+        QVERIFY(!mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()).isValid());
+    }
+
+    void testAssignmentEntry_scrollingTemplate_deleteScrubsOnAMixedRule()
+    {
+        // The purge's Scrolling arm on a rule the user has also edited in the
+        // Rules editor. Writing the reserved word rather than clearing the
+        // slot changes what the purge leaves behind, and the drop test that
+        // runs after it asks whether anything worth keeping remains — so a
+        // rule carrying a non-assignment action has to survive the scrub with
+        // that action intact, and the scrub still has to happen.
+        //
+        // Distinct from the pure-rule sibling above: there the rule's only
+        // content was the assignment, so nothing tests the interaction
+        // between the sentinel write and the survives-or-drops decision.
+        namespace PWR = PhosphorRules;
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        auto* store = attachTemplateStore(mgr.get());
+        const QUuid parsed = createTestTemplate(store, QStringLiteral("Template"));
+        mgr->assignScrollingTemplate(QStringLiteral("DP-1"), 0, QString(), parsed.toString());
+
+        auto* ruleStore = mgr->findChild<PWR::RuleStore*>();
+        QVERIFY(ruleStore != nullptr);
+        const QUuid ruleId = PWR::ContextRuleBridge::assignmentRuleIdFor(QStringLiteral("DP-1"), 0, QString());
+        std::optional<PWR::Rule> seeded = ruleStore->ruleSet().ruleById(ruleId);
+        QVERIFY(seeded.has_value());
+        PWR::RuleAction opacity;
+        opacity.type = QString(PWR::ActionType::SetOpacity);
+        opacity.params.insert(QString(PWR::ActionParam::Value), 0.9);
+        seeded->actions.append(opacity);
+        seeded->name = QStringLiteral("Recording monitor");
+        QVERIFY(ruleStore->updateRule(*seeded));
+
+        // A default is configured, so an empty slot would resolve to it and
+        // the sentinel is the only thing that can keep this screen bare.
+        const QUuid fallback = createTestTemplate(store, QStringLiteral("Fallback"));
+        mgr->setDefaultScrollingTemplateProvider([fallback] {
+            return fallback.toString();
+        });
+
+        QVERIFY(store->removeTemplate(parsed));
+        QVERIFY(mgr->purgeLayoutIdFromAssignments(parsed.toString()));
+
+        // The rule survives, because it still carries the user's opacity.
+        const std::optional<PWR::Rule> after = ruleStore->ruleSet().ruleById(ruleId);
+        QVERIFY2(after.has_value(), "a purged rule carrying a non-assignment action must not be dropped");
+        QCOMPARE(after->name, QStringLiteral("Recording monitor"));
+        bool hasOpacity = false;
+        for (const PWR::RuleAction& action : after->actions) {
+            if (action.type == QLatin1String(PWR::ActionType::SetOpacity)) {
+                hasOpacity = true;
+            }
+        }
+        QVERIFY2(hasOpacity, "the purge must carry the user's own action across");
+
+        // ...and the scrub still happened, to the reserved word rather than
+        // to empty, so the screen keeps no template instead of inheriting
+        // Fallback.
+        const auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Scrolling);
+        QCOMPARE(entry.scrollingTemplateLayout, QString(PhosphorZones::NoScrollingTemplate));
         QVERIFY(!mgr->scrollingTemplateForContext(QStringLiteral("DP-1"), 0, QString()).isValid());
     }
 
