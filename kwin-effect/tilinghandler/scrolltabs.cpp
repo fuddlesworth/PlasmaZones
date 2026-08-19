@@ -35,16 +35,21 @@
 #include <window.h>
 
 #include <QDBusConnection>
+#include <QEvent>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QFontDatabase>
+#include <QFontMetrics>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPalette>
+#include <QSettings>
+#include <QStandardPaths>
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
@@ -86,11 +91,60 @@ QColor colorFromMap(const QVariantMap& map, QLatin1String key)
     return text.isEmpty() ? QColor() : QColor(text);
 }
 
-/// Theme palette for the pills. Approximates the five Kirigami.Theme colours
-/// the daemon's QML read, from the compositor's own palette, which tracks the
-/// active colour scheme. Kirigami has no presence in the effect; QPalette
-/// roles are the closest the compositor has and are what the decoration pass
-/// already reads for its theme colours (decorations.cpp).
+/// Kirigami.Theme.negativeTextColor, resolved the way Kirigami's desktop
+/// platform plugin resolves it — from the active KDE colour scheme — without
+/// linking KColorScheme (the effect is Qt-only so the portable build keeps
+/// working). KColorScheme reads the scheme from kdeglobals, [Colors:View]
+/// ForegroundNegative; kdeglobals is a KConfig INI file that QSettings reads
+/// in IniFormat from the same generic-config location KConfig uses. A user
+/// scheme always writes that key, so a miss means the stock Breeze scheme,
+/// whose negative red is the fallback. Re-read on every rebuild rather than
+/// cached: it is one small file parse on a path that runs a handful of times
+/// a session, and caching it would need its own invalidation on scheme
+/// change, which is exactly the edge the palette hook exists to catch.
+QColor kirigamiNegativeTextColor()
+{
+    const QString path = QStandardPaths::locate(QStandardPaths::GenericConfigLocation, QStringLiteral("kdeglobals"));
+    if (!path.isEmpty()) {
+        QSettings globals(path, QSettings::IniFormat);
+        const QString text = globals.value(QStringLiteral("Colors:View/ForegroundNegative")).toString();
+        // KConfig writes colours as "r,g,b" (or "r,g,b,a"), QColor wants a
+        // name: split and rebuild. A "#rrggbb" spelling is accepted as-is.
+        if (!text.isEmpty()) {
+            if (text.startsWith(QLatin1Char('#'))) {
+                const QColor c(text);
+                if (c.isValid()) {
+                    return c;
+                }
+            } else {
+                const QStringList parts = text.split(QLatin1Char(','));
+                if (parts.size() >= 3) {
+                    bool okR = false;
+                    bool okG = false;
+                    bool okB = false;
+                    const int r = parts.at(0).trimmed().toInt(&okR);
+                    const int g = parts.at(1).trimmed().toInt(&okG);
+                    const int b = parts.at(2).trimmed().toInt(&okB);
+                    if (okR && okG && okB) {
+                        return QColor(qBound(0, r, 255), qBound(0, g, 255), qBound(0, b, 255));
+                    }
+                }
+            }
+        }
+    }
+    // Breeze's ForegroundNegative.
+    return QColor(0xda, 0x44, 0x53);
+}
+
+/// Theme palette and units for the pills, resolved to match what the QML
+/// rendering saw through Kirigami — without Kirigami, which the effect
+/// cannot link. The four palette colours are QPalette roles (Kirigami's
+/// desktop plugin fills Theme.highlight / highlightedText / text / background
+/// from the same KColorScheme-backed application palette KWin carries); the
+/// negative colour comes from the scheme file directly (above); and the
+/// spacing units are derived exactly as Kirigami::Platform::Units does for
+/// the desktop style: gridUnit is the general font's line height,
+/// smallSpacing = max(2, gridUnit / 4), largeSpacing = smallSpacing * 3.
 void fillThemePalette(ScrollTabIndicatorStyle& style)
 {
     const QPalette pal = QGuiApplication::palette();
@@ -98,11 +152,10 @@ void fillThemePalette(ScrollTabIndicatorStyle& style)
     style.themeHighlightedText = pal.color(QPalette::Active, QPalette::HighlightedText);
     style.themeText = pal.color(QPalette::Active, QPalette::WindowText);
     style.themeBackground = pal.color(QPalette::Active, QPalette::Window);
-    // Kirigami's negativeTextColor is a scheme entry QPalette does not carry.
-    // KDE's Breeze negative red is the shipped default for every scheme that
-    // does not override it, so it is the honest fallback rather than a
-    // guessed blend of palette roles.
-    style.themeNegativeText = QColor(0xda, 0x44, 0x53);
+    style.themeNegativeText = kirigamiNegativeTextColor();
+    const int gridUnit = qMax(1, QFontMetrics(QFontDatabase::systemFont(QFontDatabase::GeneralFont)).height());
+    style.smallSpacing = qMax(2, gridUnit / 4);
+    style.largeSpacing = style.smallSpacing * 3;
 }
 
 } // namespace
@@ -427,6 +480,18 @@ bool TilingHandler::updateScrollTabHover(const QPointF& pos)
     // window's shape while held and restores it the moment it is released.
     setScrollTabHoverCursor(overPill);
     return changed;
+}
+
+bool TilingHandler::eventFilter(QObject* watched, QEvent* event)
+{
+    // Palette and font changes arrive as application events on qGuiApp; the
+    // two are what the pills' theme and units derive from. Rebuilding all
+    // screens is a no-op compare in the painter when nothing visible moved.
+    if (event
+        && (event->type() == QEvent::ApplicationPaletteChange || event->type() == QEvent::ApplicationFontChange)) {
+        rebuildAllScrollTabIndicators();
+    }
+    return QObject::eventFilter(watched, event);
 }
 
 void TilingHandler::clearScrollTabState()

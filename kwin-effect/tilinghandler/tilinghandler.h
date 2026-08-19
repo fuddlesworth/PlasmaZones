@@ -409,6 +409,13 @@ public:
     /// painter's per-output state — for daemon loss (the strips no longer
     /// exist) and effect teardown. Leaves the painter's GL to releaseGl().
     void clearScrollTabState();
+
+    /// Application-level event filter, installed on qGuiApp at construction:
+    /// a colour-scheme flip (ApplicationPaletteChange) or a system font
+    /// change (ApplicationFontChange) re-resolves the pills' theme palette,
+    /// units and font. Without it the pills kept the old scheme until the
+    /// next unrelated rebuild.
+    bool eventFilter(QObject* watched, QEvent* event) override;
     /// @p output is going away: drop its painter state and, if its pills held
     /// the hover, the hover and the override cursor.
     void noteScrollTabOutputRemoved(KWin::LogicalOutput* output);

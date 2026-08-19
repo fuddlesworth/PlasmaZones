@@ -14,6 +14,8 @@
 #include <PhosphorProtocol/AutotileMarshalling.h>
 #include <PhosphorProtocol/WindowMarshalling.h>
 
+#include <QGuiApplication>
+
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
@@ -37,6 +39,13 @@ TilingHandler::TilingHandler(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
     , m_effect(effect)
 {
+    // Colour-scheme and system-font changes re-resolve the compositor-drawn
+    // tab pills' theme (see eventFilter). qGuiApp outlives this handler, and
+    // Qt drops the filter when the filtering object is destroyed, so no
+    // explicit removal is needed.
+    if (qGuiApp) {
+        qGuiApp->installEventFilter(this);
+    }
 }
 
 QSize TilingHandler::declaredMinSize(KWin::EffectWindow* w)

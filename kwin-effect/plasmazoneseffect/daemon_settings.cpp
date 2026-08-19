@@ -1173,22 +1173,14 @@ void PlasmaZonesEffect::onScrollTabIndicatorStyleChanged()
 
 QFont PlasmaZonesEffect::scrollTabIndicatorFont() const
 {
-    // The QML overlay sized tab labels from Kirigami.Theme.smallFont.pixelSize
-    // (falling back to gridUnit * 0.6) times labelFontSizeScale. The effect has
-    // no Kirigami, so smallFont is APPROXIMATED as the system general font one
-    // point smaller, which is how Kirigami's own Platform theme derives it.
-    // The approximation can differ from Kirigami by a pixel on some font
-    // configurations; it cannot drift far, because both start from the same
-    // system font.
-    QFont base = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    if (base.pointSizeF() > 0.0) {
-        base.setPointSizeF(qMax(1.0, base.pointSizeF() - 1.0));
-    } else if (base.pixelSize() > 0) {
-        base.setPixelSize(qMax(1, base.pixelSize() - 1));
-    }
-    // QFontInfo resolves whichever of the two size channels the platform font
-    // actually carries into concrete pixels, so the scale below always applies
-    // to a real pixel size rather than a -1 "unset" sentinel.
+    // Kirigami.Theme.smallFont, exactly: Kirigami's desktop platform plugin
+    // hands out QFontDatabase's SmallestReadableFont system font (the "Small"
+    // font on Plasma's Fonts page), so reading the same database entry here
+    // gives the pills the size the QML rendering had, with no Kirigami link.
+    // The base pixel size is measured through QFontInfo because the system
+    // font is point-sized and the user's scale applies to the resolved pixel
+    // height, as the QML's `smallFont.pixelSize * fontSizeScale` did.
+    const QFont base = QFontDatabase::systemFont(QFontDatabase::SmallestReadableFont);
     const int basePixelSize = qMax(1, QFontInfo(base).pixelSize());
 
     QFont font = base;
