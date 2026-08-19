@@ -34,6 +34,7 @@
 
 #include "plasmazoneseffect/plasmazoneseffect.h"
 #include "compositor/scrolltabindicatorpainter.h"
+#include "handlers/dragtracker.h"
 #include "compositor/stripviewanimator.h"
 
 #include <PhosphorIdentity/VirtualScreenId.h>
@@ -739,6 +740,22 @@ void TilingHandler::updateScrollTabHover(const QPointF& pos)
         setScrollTabHoverCursor(false);
         return;
     }
+    // A live window drag holds the pills inert, structurally. The occlusion
+    // probe below protects only the drag-insert case, where the detached
+    // window rides under the cursor and reads as an ordinary occluder — a
+    // PLAIN drag of a still-managed strip window reads as "strip depth
+    // reached" instead, so a pill under the grab point could light. Lighting
+    // it latches startMouseInterception, which KWin orders AHEAD of its own
+    // move/resize filter: the interactive move stops receiving motion and
+    // its release lands here, stranding the drag mid-air. The press latch is
+    // exempt for the pairing invariant (its release must land where the
+    // press did), and a pill press cannot start a window drag anyway — the
+    // interception consumes it.
+    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging() && !m_scrollTabPressHeld) {
+        m_scrollTabHoverScreen.clear();
+        setScrollTabHoverCursor(false);
+        return;
+    }
     ScrollTabIndicatorPainter* painter = m_effect->m_scrollTabPainter.get();
     KWin::LogicalOutput* out = KWin::effects->screenAt(pos.toPoint());
     const QString screenId = out ? m_effect->outputScreenId(out) : QString();
@@ -957,6 +974,13 @@ bool TilingHandler::activateScrollTabAt(const QPointF& pos)
     // being swallowed — and the fuzzy same-app fallback the focus slot's own
     // lookup carries must not activate a sibling window.
     if (PlasmaZonesEffect::isShowingDesktop() || !m_effect->findWindowByIdExact(windowId)) {
+        return false;
+    }
+    // Mid-drag, a press over a pill belongs to the drag (a second button
+    // during an interactive move), not to tab activation: activating swaps
+    // the column's visible tab and restructures the strip under the very
+    // preview the drag is aiming, so fall through to the drop machinery.
+    if (m_effect->m_dragTracker && m_effect->m_dragTracker->isDragging()) {
         return false;
     }
     // The same activation the daemon performed for a pill click: focus the

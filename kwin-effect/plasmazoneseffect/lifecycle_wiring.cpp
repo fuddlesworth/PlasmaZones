@@ -729,6 +729,15 @@ void PlasmaZonesEffect::connectDragTracker()
                 m_dragBypassedForEngine = false;
                 m_dragBypassScreenId.clear();
                 m_dragActivation.detected = false;
+
+                // The pill hover guard held the tab indicators inert for the
+                // whole drag (updateScrollTabHover's isDragging branch), and
+                // hover is otherwise motion-driven: a drop that lands the
+                // pointer over a pill with no further motion would leave it
+                // unlit and uninterceptable until the next twitch. DragTracker
+                // clears its drag state before emitting, so the guard is
+                // already open here.
+                m_tilingHandler->updateScrollTabHover(KWin::effects->cursorPos());
             });
 }
 
