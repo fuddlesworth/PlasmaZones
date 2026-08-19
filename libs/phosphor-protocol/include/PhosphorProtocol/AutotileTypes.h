@@ -13,7 +13,7 @@
 namespace PhosphorProtocol {
 
 /// D-Bus struct for the shared tiling-family tile requests (autotile +
-/// scrolling ride the same windowsTileRequested pipeline): (siiiissbbbssiiibs)
+/// scrolling ride the same windowsTileRequested pipeline): (siiiissbbbssiiibsb)
 struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
 {
     QString windowId;
@@ -103,6 +103,18 @@ struct PHOSPHORPROTOCOLTYPES_EXPORT TileRequestEntry
     /// Named on the ARRIVING entry: that is the window still on screen when
     /// the animation runs, and the one the transition is installed on.
     QString tabFrom;
+    /// Scrolling mode: this batch's view travel is USER-DRIVEN continuous
+    /// motion (the drag edge auto-scroll heartbeat, ~60 Hz), not a discrete
+    /// scroll verb. The effect must apply `viewDeltaX` directly — no view
+    /// animation leg, no strip shader pass — because the per-tick commits ARE
+    /// the motion. Animating on top retargets a leg every 16 ms, which on a
+    /// stateless (duration) curve resets its clock and zeroes its velocity
+    /// each tick, so the painted strip stalls behind the committed geometry
+    /// and then glides once when the ticks stop. Meaningless without a
+    /// non-zero `viewDeltaX`; false for every discrete scroll. Trailing, like
+    /// every widening since v10, so aggregate-initialized fixtures stay
+    /// aligned.
+    bool viewImmediate = false;
 
     QRect toRect() const
     {

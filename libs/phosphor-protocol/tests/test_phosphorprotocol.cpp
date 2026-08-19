@@ -222,13 +222,13 @@ private Q_SLOTS:
     {
         QCOMPARE(Service::Name, QLatin1String("org.plasmazones"));
         QCOMPARE(Service::ObjectPath, QLatin1String("/PlasmaZones"));
-        // Bumped to 11 alongside the TileRequestEntry tabFrom widening
-        // (a(siiiissbbbssiiib) → a(siiiissbbbssiiibs)), for the same reason
-        // v6 through v10 were bumped: Qt matches signal-hook signatures
-        // before demarshalling, so a v10 effect's tiling slot would silently
+        // Bumped to 12 alongside the TileRequestEntry viewImmediate widening
+        // (a(siiiissbbbssiiibs) → a(siiiissbbbssiiibsb)), for the same reason
+        // v6 through v11 were bumped: Qt matches signal-hook signatures
+        // before demarshalling, so a v11 effect's tiling slot would silently
         // never fire — both sides must move together.
-        QCOMPARE(Service::ApiVersion, 11);
-        QCOMPARE(Service::MinPeerApiVersion, 11);
+        QCOMPARE(Service::ApiVersion, 12);
+        QCOMPARE(Service::MinPeerApiVersion, 12);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.

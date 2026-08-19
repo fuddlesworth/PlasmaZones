@@ -320,6 +320,12 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // difference cannot fail the guard open.
     const bool dragPreviewSteersView = m_dragInsertPreview
         && PhosphorScreens::ScreenIdentity::screensMatch(m_dragInsertPreview->targetScreenId, screenId);
+    // This apply belongs to the edge auto-scroll heartbeat: the view motion is
+    // user-driven and continuous, so the batch is stamped viewImmediate and
+    // the effect applies the delta outright instead of animating it. Latched
+    // here, beside dragPreviewSteersView, so no later consumer re-reads
+    // m_dragInsertPreview across the prune paths this function can reach.
+    const bool viewImmediateApply = dragPreviewSteersView && m_dragInsertPreview->autoScrollOwnsTarget;
 
     // Re-apply the centering policy before resolving: a work-area change
     // (resolution, panels, outer gaps) or a centering-settings flip leaves
@@ -915,6 +921,20 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
             // honest description of a window the layout is holding still.
             if (!parkedNow && viewDelta != 0 && !clampPinnedX) {
                 obj[QLatin1String("viewDeltaX")] = viewDelta;
+                // The edge auto-scroll heartbeat owns this batch's view
+                // motion: it commits a fresh delta every ~16 ms, so the
+                // per-tick commits ARE the animation and the effect must
+                // apply them outright. Animating on top retargets the view
+                // leg every tick, which on a stateless (duration) curve
+                // resets its clock and zeroes its velocity each time — the
+                // painted strip stalls behind the committed geometry, then
+                // glides once when the ticks stop, while the drop indicator
+                // and tab strips (computed from committed rects) run ahead.
+                // Same doctrine as the daemon's un-animated indicator pushes
+                // during the scroll.
+                if (viewImmediateApply) {
+                    obj[QLatin1String("viewImmediate")] = true;
+                }
             }
             // A parked column keeps its strip position as a PAINT hint. The
             // commit above stays the park, which is the only rect that cannot
@@ -1099,6 +1119,17 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // the columns, applied in the same paint pass.
         strips.append(strip);
     }
+    // Deliberately NOT frozen during an owned auto-scroll. A freeze-and-slide
+    // scheme (skip the emit, let the compositor translate the stale content)
+    // was tried and reverted: the frozen payload holds only the columns
+    // visible at freeze time, so a sustained scroll empties the bar (revealed
+    // columns were never rendered, departed pills slide off-screen), and no
+    // compositor-side re-baseline can tell a fresh-payload commit from an
+    // enrichment replay of the stale one. Per-tick pushes are the same
+    // mechanism every ordinary scroll uses; the pills trail the columns by
+    // the daemon's render latency (a frame or two — the same class of
+    // residual as the accepted leg-start flash), which is the honest floor
+    // until the indicators are drawn compositor-side.
     if (!strips.isEmpty()) {
         const QString payload = QString::fromUtf8(QJsonDocument(strips).toJson(QJsonDocument::Compact));
         if (m_lastTabStripPayload.value(screenId) != payload) {

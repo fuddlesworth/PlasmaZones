@@ -220,12 +220,12 @@ private Q_SLOTS:
         // coverage lives in the bus round-trip's two payloads instead. Do
         // not copy this fixture into a validator test.
         //
-        // Verify D-Bus signature: (siiiissbbbssiiibs) = string + 4 ints + 2
+        // Verify D-Bus signature: (siiiissbbbssiiibsb) = string + 4 ints + 2
         // strings + 3 bools (monocle, floating, windowedFullscreen) +
         // stacking + scrollEdge + viewDeltaX + the visual position pair and
-        // its validity flag + tabFrom
+        // its validity flag + tabFrom + viewImmediate
         const QString sig = dbusSignature(entry);
-        QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiibs)"));
+        QCOMPARE(sig, QStringLiteral("(siiiissbbbssiiibsb)"));
 
         // Verify metatype registration
         const int typeId = qMetaTypeId<PhosphorProtocol::TileRequestEntry>();

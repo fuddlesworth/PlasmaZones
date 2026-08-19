@@ -199,6 +199,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString stacking; ///< overlap z-order policy ("firstOnTop"/"lastOnTop"), empty for non-overlap layouts
         QString scrollEdge; ///< scrolling strip: screen edge to animate from ("left"/"right"), else empty
         int viewDeltaX = 0; ///< scrolling strip: how far the view slid, 0 when this window is not carried by it
+        bool viewImmediate = false; ///< scrolling strip: user-driven continuous view motion — apply the delta outright
         /// scrolling strip: where a PARKED column really sits. Converted to a
         /// translation from this batch's rect at apply time and ADDED to the
         /// window's committed frame by the paint path — not substituted for
@@ -313,6 +314,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // for both consumers makes the animator's own clamp idempotent.
         entry.viewDeltaX =
             qBound(-StripViewAnimator::kMaxViewDeltaPx, req.viewDeltaX, StripViewAnimator::kMaxViewDeltaPx);
+        entry.viewImmediate = req.viewImmediate;
         entry.visualPos = req.hasVisualPos ? QPoint(req.visualX, req.visualY) : QPoint();
         entry.hasVisualPos = req.hasVisualPos;
         entry.tabFrom = req.tabFrom;
@@ -417,6 +419,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         QString stacking;
         QString scrollEdge;
         int viewDeltaX = 0;
+        bool viewImmediate = false;
         /// Carried verbatim from Entry::visualPos — see its doc for how the
         /// paint path consumes it (a delta ADDED to the commit).
         QPoint visualPos;
@@ -468,8 +471,8 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
         // and TileRequestEntry::validationError() rejects an empty screenId
         // before it ever reaches `entries`, so it is always present here.
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, e.screenId, e.isMonocle,
-                        e.isWindowedFullscreen, e.stacking, e.scrollEdge, e.viewDeltaX, e.visualPos, e.hasVisualPos,
-                        e.tabFrom});
+                        e.isWindowedFullscreen, e.stacking, e.scrollEdge, e.viewDeltaX, e.viewImmediate, e.visualPos,
+                        e.hasVisualPos, e.tabFrom});
     }
 
     // Start this batch's view legs, ONCE per output. The delta is a property
@@ -502,6 +505,16 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // cascade against a 150 ms leg, columns from the fourth on would sit
     // still for the whole leg and then teleport in sequence.
     QSet<QString> startedViewScreens;
+    // Screens whose view travel this batch is USER-DRIVEN continuous motion
+    // (the drag edge auto-scroll heartbeat, ~60 Hz). Their delta is folded
+    // into the accumulator with NO leg and NO strip shader pass — a leg
+    // retargeted every 16 ms never progresses on a stateless curve, so the
+    // painted strip would stall behind the committed geometry and then glide
+    // once when the ticks stop, with the drop indicator and tab strips
+    // (computed from committed rects) running ahead of it. The per-tick
+    // commits are the motion. Entries on these screens take degenerate legs
+    // (applied outright) below.
+    QSet<QString> immediateViewScreens;
     {
         // Both resolves are LAZY: an ordinary autotile batch with no view
         // travel never pays the two tree walks. Once needed they resolve
@@ -542,12 +555,24 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 // (and startedViewScreens below) so ITS entries take the
                 // residual-origin path against the one shared spring.
                 if (seededOutputs.contains(out)) {
-                    if (m_effect->m_stripViewAnimator->isAnimatingOn(out)) {
+                    if (s.viewImmediate) {
+                        immediateViewScreens.insert(s.screenId);
+                    } else if (m_effect->m_stripViewAnimator->isAnimatingOn(out)) {
                         startedViewScreens.insert(s.screenId);
                     }
                     continue;
                 }
                 seededOutputs.insert(out);
+                if (s.viewImmediate) {
+                    // Heartbeat-driven view motion: disarm any strip shader
+                    // pass (there is no leg for it to decorate) and fold the
+                    // delta straight into the accumulator. No profile resolve
+                    // — nothing animates.
+                    m_effect->m_stripTransition.notifyLeg(out, QString(), QVariantMap(), 0);
+                    m_effect->m_stripViewAnimator->applyImmediateDelta(out, s.viewDeltaX);
+                    immediateViewScreens.insert(s.screenId);
+                    continue;
+                }
                 if (!resolved) {
                     resolved = true;
                     viewProfile = m_effect->resolveEventMotionProfile(PhosphorAnimation::ProfilePaths::ScrollingView,
@@ -611,9 +636,12 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
     // there is no cascade left to order. A scroll batch that moved no columns
     // in or out of view (a park with no view travel) still cascades and still
     // wants the direction sort, which is why the two predicates differ.
-    const bool isScrollBatch = !startedViewLegs && std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
-        return !s.scrollEdge.isEmpty();
-    });
+    // Immediate-view batches skip it too — they force one-pass application
+    // below, so sorting them would be pure cost on a ~60 Hz path.
+    const bool isScrollBatch = !startedViewLegs && immediateViewScreens.isEmpty()
+        && std::any_of(toApply.cbegin(), toApply.cend(), [](const TileSnap& s) {
+               return !s.scrollEdge.isEmpty();
+           });
     if (isScrollBatch) {
         QHash<QString, QRect> screenRectCache;
         // BY VALUE, not by const reference into the hash: the same lambda
@@ -1092,7 +1120,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
 
     m_effect->applyStaggeredOrImmediate(
         toApply.size(),
-        [this, toApply, gen, genByScreen, startedViewScreens, wireToLive](int i) {
+        [this, toApply, gen, genByScreen, startedViewScreens, immediateViewScreens, wireToLive](int i) {
             // Local copy (not const ref) so a stale window pointer can be
             // re-resolved below; the rest of the body reads snap.window.
             TileSnap snap = toApply[i];
@@ -1552,6 +1580,15 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                         // deliberately degenerate — the edge-anchored slide-out
                         // below would fight the view offset for the same pixels.
                         originOverride = QRectF(committedGeo);
+                    } else if (snap.viewDeltaX != 0 && immediateViewScreens.contains(snap.screenId)) {
+                        // Heartbeat-driven view motion (drag edge
+                        // auto-scroll): no view leg ran, the paint offset is
+                        // zero, and the ~60 Hz commits are the motion — so
+                        // every carried window is placed outright. This
+                        // covers arriving-from-park entries too: they simply
+                        // appear at the edge and the next ticks carry them
+                        // in, which is the niri behaviour.
+                        originOverride = QRectF(committedGeo);
                     } else if (snap.viewDeltaX != 0 && startedViewScreens.contains(snap.screenId)) {
                         // Carried by the view: the strip's own spring moves
                         // this window, so the per-window animation must cover
@@ -1950,7 +1987,7 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
                 m_effect->m_scrollCommandedRects.remove(snap.windowId);
             }
         },
-        onComplete, startedViewLegs || anyTabSwap);
+        onComplete, startedViewLegs || anyTabSwap || !immediateViewScreens.isEmpty());
 }
 
 void TilingHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)

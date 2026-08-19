@@ -69,6 +69,8 @@ private Q_SLOTS:
     void edgeAutoScrollStaysInertWhenTheStripFits();
     void edgeAutoScrollHonoursTheStartDelay();
     void edgeAutoScrollKeepsTheTargetAtTheEdge();
+    void edgeAutoScrollStampsItsBatchesImmediate();
+    void edgeAutoScrollKeepsTheTabStripPayloadLive();
     void edgeAutoScrollAccumulatesSubPixelSpeed();
     void edgeAutoScrollClampsAtTheStripEnd();
     void edgeAutoScrollDisarmsOutsideTheBand();
@@ -1285,6 +1287,91 @@ void TestScrollEngineDragInsert::edgeAutoScrollKeepsTheTargetAtTheEdge()
         QCOMPARE(rect.left(), wa.left() - rect.width() / 2);
     }
     QVERIFY(sawMotion);
+
+    engine->cancelDragInsertPreview();
+}
+
+void TestScrollEngineDragInsert::edgeAutoScrollStampsItsBatchesImmediate()
+{
+    // A batch the auto-scroll heartbeat produces is user-driven continuous
+    // motion: the effect must apply its view delta outright rather than
+    // animate it (a leg retargeted every 16 ms never progresses on a
+    // stateless curve). The engine says so per entry, beside viewDeltaX, and
+    // ONLY while the scroll owns the target — an ordinary verb's batch after
+    // the drag must not carry the flag, or every discrete scroll loses its
+    // animation.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"), {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")});
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
+
+    QSignalSpy tiled(engine, &ScrollEngine::windowsTiled);
+    armBand(engine, 2);
+    QVERIFY(engine->dragAutoScrollActive());
+    tiled.clear();
+    tick(engine, 2);
+    QVERIFY2(!tiled.isEmpty(), "an owned tick that moved the view must emit a batch");
+
+    int carried = 0;
+    const QJsonArray scrolled = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    for (const QJsonValue& v : scrolled) {
+        const QJsonObject o = v.toObject();
+        if (!o.contains(QLatin1String("viewDeltaX"))) {
+            QVERIFY2(!o.contains(QLatin1String("viewImmediate")),
+                     "viewImmediate is meaningless without a view delta to apply");
+            continue;
+        }
+        QVERIFY2(o.value(QLatin1String("viewImmediate")).toBool(false),
+                 "a heartbeat batch's carried entries must be marked immediate");
+        ++carried;
+    }
+    QVERIFY2(carried > 0, "expected at least one carried entry in the scrolled batch");
+
+    // Ownership released: an ordinary verb's view travel animates again.
+    engine->cancelDragInsertPreview();
+    tiled.clear();
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    QVERIFY(!tiled.isEmpty());
+    const QJsonArray verb = QJsonDocument::fromJson(tiled.last().at(0).toString().toUtf8()).array();
+    for (const QJsonValue& v : verb) {
+        QVERIFY2(!v.toObject().contains(QLatin1String("viewImmediate")),
+                 "a discrete scroll's batch must not be marked immediate");
+    }
+}
+
+void TestScrollEngineDragInsert::edgeAutoScrollKeepsTheTabStripPayloadLive()
+{
+    // The owned scroll's tab-strip payload keeps flowing per tick, exactly
+    // like every ordinary scroll's: the pills re-derive from the moved
+    // columns each apply. A freeze-and-slide scheme (skip the emit, let the
+    // compositor translate stale content) was tried and reverted — the
+    // frozen payload holds only the columns visible at freeze time, so a
+    // sustained scroll empties the bar, and no compositor-side re-baseline
+    // can tell a fresh-payload commit from an enrichment replay of the
+    // stale one. This test pins the revert.
+    QObject owner;
+    ScrollEngine* engine = makeProviderEngine(&owner, {QStringLiteral("S1")});
+    openWindows(engine, QStringLiteral("S1"),
+                {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c"), QStringLiteral("d")});
+    // Tab the first column so the screen owns an indicator at all.
+    engine->focusColumnFirst(QStringLiteral("S1"));
+    engine->consumeWindowIntoColumn(QStringLiteral("S1"));
+    engine->toggleColumnTabbed(QStringLiteral("S1"));
+
+    QSignalSpy strips(engine, &ScrollEngine::tabStripsChanged);
+    QVERIFY(engine->beginDragInsertPreview(QStringLiteral("d|fresh"), QStringLiteral("S1")));
+    // The focus sits on the first column, so the view is pinned at the strip's
+    // start — the RIGHT band is the one with travel left in it.
+    armBand(engine, rightBandX());
+    QVERIFY(engine->dragAutoScrollActive());
+    strips.clear();
+
+    const int before = viewX(engine, QStringLiteral("S1"));
+    for (int i = 0; i < 10; ++i) {
+        tick(engine, rightBandX());
+    }
+    QVERIFY2(qAbs(viewX(engine, QStringLiteral("S1")) - before) > 0, "precondition: the owned ticks moved the view");
+    QVERIFY2(!strips.isEmpty(), "an owned scroll must keep re-pushing the tab-strip payload as the view moves");
 
     engine->cancelDragInsertPreview();
 }

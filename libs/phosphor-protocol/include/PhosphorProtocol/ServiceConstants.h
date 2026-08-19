@@ -210,8 +210,16 @@ inline constexpr QLatin1String Interface("org.plasmazones.EditorController");
 //       different windows in one rect. The pair is not recoverable from the
 //       rects, which is why it has to ride the wire. Same signature-matched
 //       failure mode as v6 through v10.
-inline constexpr int ApiVersion = 11;
-inline constexpr int MinPeerApiVersion = 11;
+//   v12: TileRequestEntry gained a trailing viewImmediate bool, widening
+//       windowsTileRequested from a(siiiissbbbssiiibs) to a(siiiissbbbssiiibsb).
+//       It marks a batch whose view travel is user-driven continuous motion
+//       (the drag edge auto-scroll heartbeat): the effect applies the delta
+//       outright instead of animating it, because a view leg retargeted every
+//       16 ms never progresses on a stateless curve — the painted strip
+//       stalls behind the committed geometry and glides once when the ticks
+//       stop. Same signature-matched failure mode as v6 through v11.
+inline constexpr int ApiVersion = 12;
+inline constexpr int MinPeerApiVersion = 12;
 
 // Hard cap on blocking synchronous D-Bus calls from the editor/settings
 // apps to the daemon. Qt's default is 25 seconds, long enough to freeze

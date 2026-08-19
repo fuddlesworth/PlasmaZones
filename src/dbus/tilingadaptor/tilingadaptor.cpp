@@ -146,6 +146,9 @@ void TilingAdaptor::relayTileRequestsJson(const QString& tileRequestsJson)
         // for a window the view does not carry — both mean zero, which is what
         // the default gives.
         entry.viewDeltaX = obj.value(QLatin1String("viewDeltaX")).toInt(0);
+        // Set only by the scroll engine's drag edge auto-scroll batches;
+        // absent everywhere else, which is what the default gives.
+        entry.viewImmediate = obj.value(QLatin1String("viewImmediate")).toBool(false);
         // Present only for a parked scrolling column; absent means the
         // committed rect IS the paint position.
         //

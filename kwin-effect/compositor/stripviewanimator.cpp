@@ -107,6 +107,27 @@ bool StripViewAnimator::applyBatchDelta(KWin::LogicalOutput* output, int deltaX,
     return true;
 }
 
+void StripViewAnimator::applyImmediateDelta(KWin::LogicalOutput* output, int deltaX)
+{
+    if (!output || deltaX == 0) {
+        return;
+    }
+    ViewMotion& motion = m_motions[output];
+    // Same clamp as applyBatchDelta: the two entry points feed one
+    // accumulator, and an unbounded delta here would poison the origin of
+    // the next discrete leg just the same.
+    motion.committed += qBound(-kMaxViewDeltaPx, deltaX, kMaxViewDeltaPx);
+    if (motion.animation.isAnimating()) {
+        // A discrete leg was mid-flight when the heartbeat took over. Its
+        // offset vanishes with the cancel and nothing else repaints it away
+        // — same reasoning as the no-clock bail in applyBatchDelta.
+        if (m_repaintRequest) {
+            m_repaintRequest(output);
+        }
+        motion.animation.cancel();
+    }
+}
+
 qreal StripViewAnimator::offsetFor(KWin::LogicalOutput* output) const
 {
     if (!output) {

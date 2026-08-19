@@ -105,6 +105,16 @@ public:
     /// pops backwards and slides double.
     bool applyBatchDelta(KWin::LogicalOutput* output, int deltaX, const PhosphorAnimation::Profile& profile);
 
+    /// Fold one batch's view delta into @p output's accumulator WITHOUT a leg
+    /// — for user-driven continuous view motion (the drag edge auto-scroll
+    /// heartbeat), where the ~60 Hz commits are the motion and a leg
+    /// retargeted every tick never progresses on a stateless curve. Any leg
+    /// in flight is cancelled (with a repaint, since its offset vanishes and
+    /// nothing else repaints it away), so the strip lands exactly on the
+    /// committed geometry. The accumulator still moves so a later discrete
+    /// scroll's leg starts from the true committed view.
+    void applyImmediateDelta(KWin::LogicalOutput* output, int deltaX);
+
     /// Paint translation for a window carried by @p output's view, in logical
     /// pixels. Zero when nothing is in flight, which is the resting state and
     /// the common case.
