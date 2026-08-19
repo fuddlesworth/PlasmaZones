@@ -1101,10 +1101,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // columns were never rendered, departed pills slide off-screen), and no
     // compositor-side re-baseline can tell a fresh-payload commit from an
     // enrichment replay of the stale one. Per-tick pushes are the same
-    // mechanism every ordinary scroll uses; the pills trail the columns by
-    // the daemon's render latency (a frame or two — the same class of
-    // residual as the accepted leg-start flash), which is the honest floor
-    // until the indicators are drawn compositor-side.
+    // mechanism every ordinary scroll uses, and since the indicators became
+    // compositor-drawn they cost no render hop: this payload and the tile
+    // batch leave the same applyLayout on one D-Bus connection, so the
+    // effect repaints pills and columns from the same tick's state on the
+    // same frame.
     if (!strips.isEmpty()) {
         const QString payload = QString::fromUtf8(QJsonDocument(strips).toJson(QJsonDocument::Compact));
         if (m_lastTabStripPayload.value(screenId) != payload) {
