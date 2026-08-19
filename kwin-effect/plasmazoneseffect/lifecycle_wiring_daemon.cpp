@@ -274,10 +274,12 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         m_stripTransition.reset();
         m_stripViewAnimator->reset();
         // The tab-indicator model came from the daemon that just died, so
-        // every pill it described belongs to a strip nothing owns now. The
-        // textures are left allocated (no GL context on this D-Bus dispatch);
-        // they are reused or freed under the paint/teardown context.
-        m_scrollTabPainter->clearAll();
+        // every pill it described belongs to a strip nothing owns now: drop
+        // the handler's model, hover and cursor override with the painter's
+        // per-output state. The textures are left allocated (no GL context on
+        // this D-Bus dispatch); they are reused or freed under the
+        // paint/teardown context.
+        m_tilingHandler->clearScrollTabState();
         // Guarded like repaintSnapRegions: this lambda runs on an arbitrary
         // later D-Bus dispatch (serviceUnregistered), which can land during
         // compositor teardown when KWin::effects has been torn down —

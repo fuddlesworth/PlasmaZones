@@ -678,7 +678,11 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // Runs before the motion-clock early-return so it fires even for an output
     // that never had an animation clock, same as the two clears above.
     m_stripViewAnimator->forgetOutput(output);
-    m_scrollTabPainter->clearOutput(output);
+    // A pill on the dying output may hold the hover and the override cursor;
+    // the handler's clear releases both with the painter's state. The model
+    // payload for the screen stays (the daemon may re-announce the output),
+    // but nothing paints it until it does.
+    m_tilingHandler->noteScrollTabOutputRemoved(output);
 
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the

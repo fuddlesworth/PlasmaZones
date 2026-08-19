@@ -121,8 +121,11 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     // Same for the strip pass (no claim to release, but its capture textures
     // and compiled shaders free under the same context discipline).
     m_stripTransition.reset();
-    // And the tab-indicator textures: one GLTexture per output, freed under
-    // the same context discipline so nothing leaks past the effect.
+    // And the tab indicators: the override cursor must be handed back before
+    // the effect goes (KWin would keep a pointing hand nothing owns), then the
+    // per-output GLTextures are freed under the same context discipline so
+    // nothing leaks past the effect.
+    m_tilingHandler->clearScrollTabState();
     m_scrollTabPainter->releaseGl();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,

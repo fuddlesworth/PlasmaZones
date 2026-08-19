@@ -32,6 +32,8 @@
 #include <core/rect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <input.h>
+#include <pointer_input.h>
 #include <window.h>
 
 #include <QDBusConnection>
@@ -135,6 +137,9 @@ void TilingHandler::slotScrollTabStripsChanged(const QString& screenId, const QS
         }
         if (m_scrollTabHoverScreen == screenId) {
             m_scrollTabHoverScreen.clear();
+            // The pill under the parked pointer just vanished; the override
+            // must not outlive it.
+            setScrollTabHoverCursor(false);
         }
         return;
     }
@@ -383,7 +388,13 @@ QString TilingHandler::scrollTabPillAt(const QPointF& pos) const
 
 bool TilingHandler::updateScrollTabHover(const QPointF& pos)
 {
-    if (!KWin::effects || m_scrollTabPayloadByScreen.isEmpty()) {
+    if (!KWin::effects) {
+        return false;
+    }
+    if (m_scrollTabPayloadByScreen.isEmpty()) {
+        // No pills anywhere. The override can still be held from a strip
+        // that just vanished under a parked cursor; give it back.
+        setScrollTabHoverCursor(false);
         return false;
     }
     ScrollTabIndicatorPainter* painter = m_effect->m_scrollTabPainter.get();
@@ -401,16 +412,66 @@ bool TilingHandler::updateScrollTabHover(const QPointF& pos)
         }
         m_scrollTabHoverScreen.clear();
     }
-    if (!out || !painter->hasIndicators(out)) {
-        return changed;
+    bool overPill = false;
+    if (out && painter->hasIndicators(out)) {
+        const QPointF viewOffset = m_effect->m_stripViewAnimator->offsetFor(out);
+        if (painter->setHover(out, pos, viewOffset)) {
+            KWin::effects->addRepaint(KWin::Rect(painter->boundsFor(out)));
+            changed = true;
+        }
+        overPill = !painter->pillAt(out, pos, viewOffset).isEmpty();
     }
-    if (painter->setHover(out, pos, m_effect->m_stripViewAnimator->offsetFor(out))) {
-        KWin::effects->addRepaint(KWin::Rect(painter->boundsFor(out)));
-        changed = true;
-    }
-    m_scrollTabHoverScreen =
-        painter->pillAt(out, pos, m_effect->m_stripViewAnimator->offsetFor(out)).isEmpty() ? QString() : screenId;
+    m_scrollTabHoverScreen = overPill ? screenId : QString();
+    // The pills are painted over the column's own edge, so KWin would show
+    // whatever THAT surface asks for there — a resize arrow at the column
+    // border, the client's cursor elsewhere. Hold the effects override cursor
+    // for exactly the span the pointer is over a pill: it outranks the
+    // window's shape while held and restores it the moment it is released.
+    setScrollTabHoverCursor(overPill);
     return changed;
+}
+
+void TilingHandler::clearScrollTabState()
+{
+    setScrollTabHoverCursor(false);
+    m_scrollTabHoverScreen.clear();
+    m_scrollTabPayloadByScreen.clear();
+    m_scrollTabScreensByWindow.clear();
+    m_scrollTabColorCache.clear();
+    m_scrollTabPaintOverrides.clear();
+    m_effect->m_scrollTabPainter->clearAll();
+}
+
+void TilingHandler::noteScrollTabOutputRemoved(KWin::LogicalOutput* output)
+{
+    if (!output) {
+        return;
+    }
+    if (!m_scrollTabHoverScreen.isEmpty() && m_effect->outputForScreenId(m_scrollTabHoverScreen) == output) {
+        m_scrollTabHoverScreen.clear();
+        setScrollTabHoverCursor(false);
+    }
+    m_effect->m_scrollTabPainter->clearOutput(output);
+}
+
+void TilingHandler::setScrollTabHoverCursor(bool overPill)
+{
+    if (overPill == m_scrollTabCursorOverridden) {
+        return;
+    }
+    // KWin::input() is the compositor's input redirection; null only in the
+    // test harness and during teardown, where there is no cursor to shape.
+    KWin::InputRedirection* input = KWin::input();
+    KWin::PointerInputRedirection* pointer = input ? input->pointer() : nullptr;
+    if (!pointer) {
+        return;
+    }
+    if (overPill) {
+        pointer->setEffectsOverrideCursor(Qt::PointingHandCursor);
+    } else {
+        pointer->removeEffectsOverrideCursor();
+    }
+    m_scrollTabCursorOverridden = overPill;
 }
 
 bool TilingHandler::activateScrollTabAt(const QPointF& pos)

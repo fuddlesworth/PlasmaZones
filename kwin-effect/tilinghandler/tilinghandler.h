@@ -39,6 +39,7 @@ class QAction;
 class QTimer;
 
 namespace KWin {
+class LogicalOutput;
 class EffectWindow;
 class Window;
 }
@@ -393,6 +394,18 @@ public:
     bool activateScrollTabAt(const QPointF& pos);
     /// The pill under @p pos, or empty — shared by hover and press.
     QString scrollTabPillAt(const QPointF& pos) const;
+    /// Hold (or release) the pointing-hand override cursor for the pills.
+    /// Idempotent: tracks the held state so enter and leave each cost one
+    /// call into KWin. Released whenever the pills go away under a parked
+    /// pointer (clear paths call it with false).
+    void setScrollTabHoverCursor(bool overPill);
+    /// Drop every screen's tab model, hover and cursor override, and the
+    /// painter's per-output state — for daemon loss (the strips no longer
+    /// exist) and effect teardown. Leaves the painter's GL to releaseGl().
+    void clearScrollTabState();
+    /// @p output is going away: drop its painter state and, if its pills held
+    /// the hover, the hover and the override cursor.
+    void noteScrollTabOutputRemoved(KWin::LogicalOutput* output);
 
     /// True when at least one scrolling screen resolves to cropping its
     /// straddlers. The direct-scanout gate needs a whole-session answer (the
@@ -1279,6 +1292,9 @@ private:
     /// Screen whose pills currently carry the hover, empty when none. Needed
     /// so a pointer leaving one output's pills for another's clears the first.
     QString m_scrollTabHoverScreen;
+    /// Whether the effects override cursor (pointing hand) is currently held
+    /// for a hovered pill. A latch so the KWin call happens on the edges only.
+    bool m_scrollTabCursorOverridden = false;
 
     // ── Focus follows mouse ──
     // Per-mode pair of GLOBAL SETTING mirrors: m_focusFollowsMouse is the
