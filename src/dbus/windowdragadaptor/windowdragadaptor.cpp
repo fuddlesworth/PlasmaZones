@@ -7,6 +7,7 @@
 #include <QScreen>
 #include <QTimer>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
 #include "phosphor_i18n.h"
@@ -262,6 +263,27 @@ PhosphorEngine::IPlacementEngine* WindowDragAdaptor::dragInsertPreviewEngine() c
     return nullptr;
 }
 
+QSize WindowDragAdaptor::dragInsertAdoptedMinSize(const QString& windowId) const
+{
+    if (windowId.isEmpty()) {
+        return {};
+    }
+    const std::array<PhosphorEngine::IPlacementEngine*, 3> engines = {
+        m_scrollEngine, m_autotileEngine, m_windowTracking ? m_windowTracking->snapEngine() : nullptr};
+    for (PhosphorEngine::IPlacementEngine* engine : engines) {
+        if (!engine) {
+            continue;
+        }
+        // A one-axis minimum (e.g. 0x400) is still a minimum: test each
+        // axis, not QSize::isEmpty(), which reads any zero axis as empty.
+        const QSize min = engine->windowMinimumSize(windowId);
+        if (min.width() > 0 || min.height() > 0) {
+            return min;
+        }
+    }
+    return {};
+}
+
 bool WindowDragAdaptor::effectiveDragReorderModeFor(const QString& screenId) const
 {
     if (screenId.isEmpty()) {
@@ -322,7 +344,7 @@ void WindowDragAdaptor::stopDragScrollTimer()
 void WindowDragAdaptor::advanceDragScroll()
 {
     PhosphorEngine::IPlacementEngine* engine = dragInsertPreviewEngine();
-    // Self-terminating: five engine-side paths cancel a preview without
+    // Self-terminating: several engine-side paths cancel a preview without
     // telling the adaptor, and the drag itself can end between ticks. Rather
     // than trust every caller to have stopped us, notice here.
     if (!engine || m_draggedWindowId.isEmpty() || m_draggedWindowId != m_dragScrollWindowId) {
@@ -393,7 +415,11 @@ void WindowDragAdaptor::cancelDragInsertIfActive()
     // land between the decision to end the preview and the teardown below.
     // Neither call here spins the event loop today, so the order is currently
     // unobservable, but the two sites encoding opposite orders is how that
-    // stops being true without anyone noticing.
+    // stops being true without anyone noticing. The third stop site,
+    // cancelDragInsertPreviewsForScreen, is deliberately inverted (stop
+    // LAST): its `!dragInsertPreviewEngine()` condition can only be
+    // evaluated after its per-screen cancels have run, so do not
+    // "harmonise" it to stop-first.
     stopDragScrollTimer();
     // At most one engine holds a preview, but sweep both — a stale second
     // preview would otherwise be unreachable by every cleanup path.
@@ -487,8 +513,14 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
     // between the last heartbeat and the release cannot promote here.
     // Ownership is exactly the precondition the repair needs anyway — with
     // nothing owned there is no edge slot to undo.
+    // The RELEASE screen's id, not the preview's: the engine's own
+    // foreign-screen guard exists to refuse hit-testing a cursor against the
+    // wrong work area, and passing the preview's id would satisfy it by
+    // construction. With the release id, a cross-screen release takes the
+    // engine's bare disarm (ownership back, no bogus re-aim) and the
+    // screen-mismatch cancel below still tears the preview down.
     if (engine && engine->dragAutoScrollActive()) {
-        engine->dragAutoScrollTick(engine->dragInsertPreviewScreenId(), QPoint(cursorX, cursorY), 0.0);
+        engine->dragAutoScrollTick(releaseScreenId, QPoint(cursorX, cursorY), 0.0);
     }
     // The drag is over: every arm below either commits, cancels or finds
     // nothing, and none of them wants a scroll tick landing between the
@@ -543,8 +575,15 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
         // free, not to veto an aimed drop.
         if (popupOwns && !windowId.isEmpty() && scrollSelectorScreen(releaseScreenId)
             && m_scrollEngine->beginDragInsertPreview(windowId, releaseScreenId)) {
+            // Captured BEFORE the commit: a cross-engine adoption releases
+            // the source engine's tracking as a commit side effect, and the
+            // minimum has to be read while the source still remembers it.
+            const QSize adoptedMin = dragInsertAdoptedMinSize(windowId);
             m_scrollEngine->updateDragInsertPreview(popupTarget);
             m_scrollEngine->commitDragInsertPreview();
+            if (adoptedMin.width() > 0 || adoptedMin.height() > 0) {
+                m_scrollEngine->windowMinSizeUpdated(windowId, adoptedMin.width(), adoptedMin.height());
+            }
             m_overlayService->clearSelectedZone();
             clearScrollDropIndicator();
             return true;
@@ -573,7 +612,15 @@ bool WindowDragAdaptor::settleDragInsertPreviewAt(int cursorX, int cursorY, cons
     if (popupOwns && engine->providesDragInsertSelector() && !engine->dragAutoScrollActive()) {
         engine->updateDragInsertPreview(popupTarget);
     }
+    // Captured BEFORE the commit, same reason as the popup-only arm: a fresh
+    // adoption's commit evicts the source engine's tracking, taking the only
+    // record of the client's minimum with it, and the preview itself carries
+    // no minimum for a window the scroll engine never tracked.
+    const QSize adoptedMin = dragInsertAdoptedMinSize(windowId);
     engine->commitDragInsertPreview(); // commit, not cancel — the drop finalizes the reorder
+    if (adoptedMin.width() > 0 || adoptedMin.height() > 0) {
+        engine->windowMinSizeUpdated(windowId, adoptedMin.width(), adoptedMin.height());
+    }
     if (m_overlayService) {
         m_overlayService->clearSelectedZone();
     }

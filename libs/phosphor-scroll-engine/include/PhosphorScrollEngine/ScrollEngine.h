@@ -546,7 +546,6 @@ public:
     /// resolves against the preview's captured context key, not the
     /// screen's current one.
     DragInsertTarget computeDragInsertTargetAtPoint(const QString& screenId, const QPoint& cursorPos) const override;
-    void cancelDragAutoScroll() override;
     void updateDragInsertPreview(const DragInsertTarget& target) override;
     /// Edge auto-scroll (drag_autoscroll.cpp). Moves the VIEW only, which
     /// is compatible with DETACH-ONCE: the invariant is that structure and
@@ -555,6 +554,12 @@ public:
     /// scrolls — see dragAutoScrollActive.
     bool dragAutoScrollTick(const QString& screenId, const QPoint& cursorPos, qreal dtSeconds) override;
     bool dragAutoScrollActive() const override;
+    /// The ONE disarm: hands the drop target back to the ordinary hit-test
+    /// and restarts the start delay. Every caller must either re-aim
+    /// (repairDragAutoScrollTarget) or clear lastTarget itself — a bare
+    /// cancel leaves the auto-scroll's last edge slot standing for a
+    /// release to commit.
+    void cancelDragAutoScroll() override;
     /// The rect the dragged window would occupy if it were dropped at the
     /// currently remembered target — the drop indicator the daemon paints.
     /// Absolute screen pixels, the same basis as visibleTiles.
@@ -830,13 +835,13 @@ private:
     /// hit-test already produces at the view's extremes. Called on every
     /// auto-scroll tick INSTEAD of the hit-test, so the target cannot churn
     /// as columns slide under a stationary cursor (drag_autoscroll.cpp).
-    /// Returns true when the stored target actually changed.
+    /// Returns true when the stored target actually changed. @p cursorPos
+    /// feeds the defensive empty-viewport arm's re-aim only.
     ///
-    /// PRECONDITION: m_dragInsertPreview must be live. The body writes it
-    /// unguarded, which the parameter list does not hint at — @p state and
-    /// @p params are passed in, so the signature reads as if it were
-    /// preview-independent.
-    bool writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction);
+    /// PRECONDITION: m_dragInsertPreview must be live (asserted, with a
+    /// release-build refusal, since the signature reads preview-independent).
+    bool writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction,
+                                   const QPoint& cursorPos);
     /// Re-aim the live preview's drop target at @p cursorPos with the
     /// ordinary hit-test, undoing an edge slot the auto-scroll wrote. Called
     /// wherever ownership ends with a usable cursor on the preview's own
@@ -1118,11 +1123,6 @@ private:
     /// overhang. When false (default) the emit loop clamps the rect at the
     /// screen edge instead, which no present path can bypass.
     bool m_cropStraddlers = false;
-    /// Drag-insert edge auto-scroll (IScrollSettings' DragScroll block, and
-    /// niri's dnd-edge-view-scroll defaults). Speed ramps linearly from
-    /// zero at the band's inner edge to m_dragScrollMaxSpeed px/s at the
-    /// work area's edge, after the cursor has held inside the band for
-    /// m_dragScrollDelayMs.
     /// Edge auto-scroll cache (refreshConfigFromSettings). Seeded from the
     /// IScrollSettings defaults rather than from repeated literals: those
     /// bodies are already pinned to ConfigDefaults by static_asserts in

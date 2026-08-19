@@ -146,16 +146,19 @@ QString TileRequestEntry::validationError() const
     if (windowedFullscreen && monocle) {
         return QStringLiteral("TileRequestEntry: windowedFullscreen on a monocle entry (windowId=%1)").arg(windowId);
     }
-    // viewDelta, visualX, visualY and hasVisualPos are deliberately NOT
-    // validated here, unlike their neighbours. All four are PAINT hints rather
-    // than placement inputs: the committed rect stands on its own whatever they
-    // say, so an absurd value costs one wild slide or one column drawn in the
-    // wrong place for a leg, and rejecting the entry would instead drop a
-    // perfectly good placement over a cosmetic field. Each consumer defends
-    // itself where the damage would be — the effect clamps the delta before it
-    // reaches either the spring or the per-window origin, and the JSON hop
-    // requires the visual pair to be present, numeric and paired with a tiled
-    // placement before it sets the flag.
+    // viewDelta, visualX, visualY, hasVisualPos and viewImmediate are
+    // deliberately NOT validated here, unlike their neighbours. All five are
+    // PAINT hints rather than placement inputs: the committed rect stands on
+    // its own whatever they say, so an absurd value costs one wild slide or
+    // one column drawn in the wrong place for a leg, and rejecting the entry
+    // would instead drop a perfectly good placement over a cosmetic field.
+    // Each consumer defends itself where the damage would be — the effect
+    // clamps the delta before it reaches either the spring or the per-window
+    // origin, the JSON hop requires the visual pair to be present, numeric
+    // and paired with a tiled placement before it sets the flag, and
+    // viewImmediate is inert without a non-zero viewDelta (the effect's seed
+    // loop skips delta-less entries) and is dropped on a floating entry at
+    // the same hop.
     return {};
 }
 

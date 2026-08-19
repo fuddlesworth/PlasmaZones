@@ -507,6 +507,16 @@ private:
     /// across both engines by construction), or nullptr.
     PhosphorEngine::IPlacementEngine* dragInsertPreviewEngine() const;
 
+    /// The window's client-reported minimum size as known by ANY engine
+    /// (snap, autotile or scroll), or 0x0 when none tracks it. Queried
+    /// BEFORE a drag-insert commit: a cross-engine adoption releases the
+    /// source's tracking (windowFloatingStateSynced -> handoffRelease), so
+    /// the value must be read while the source still holds it, then pushed
+    /// into the committing engine via windowMinSizeUpdated. Without that
+    /// push a fresh adoption seats the tile with min 0x0 and every
+    /// respect-minimum-size clamp is inert for it.
+    QSize dragInsertAdoptedMinSize(const QString& windowId) const;
+
     /// Reorder-mode resolve for whichever engine owns @p screenId: autotile
     /// keeps the SetDragBehavior-rule/global-setting cascade; scrolling has
     /// no DragBehavior enum, so "always re-insert" IS the AlwaysActive
@@ -753,16 +763,17 @@ private:
     // only supplies a heartbeat, the last known cursor and the real elapsed
     // time between ticks.
 
-    /// ~60 Hz while ANY drag-insert preview is live, including on an engine
-    /// that cannot auto-scroll — the arm does not test the engine, because
-    /// the tick's own interface default answers "not me" for free. The one
-    /// exception is the strip selector popup: while it is up on the preview's
-    /// screen it owns aiming, so the arm is skipped and the engine disarmed.
-    /// Created
-    /// lazily. Most preview-end paths stop it explicitly; the per-output
-    /// cancel stops it only once no preview is left anywhere, since it must
-    /// not disturb a scroll running on another monitor. The tick itself is
-    /// the backstop and stops when it finds no preview.
+    /// ~60 Hz while a drag-insert preview is live on the CURSOR's own engine
+    /// screen (the arm site sits inside dragMoved's same-screen branch), on
+    /// any engine including one that cannot auto-scroll — the arm does not
+    /// test the engine, because the tick's own interface default answers
+    /// "not me" for free. The one exception is the strip selector popup:
+    /// while it is up on the preview's screen it owns aiming, so the arm is
+    /// skipped and the engine disarmed. Created lazily. Most preview-end
+    /// paths stop it explicitly; the per-output cancel stops it only once no
+    /// preview is left anywhere, since it must not disturb a scroll running
+    /// on another monitor. The tick itself is the backstop and stops when it
+    /// finds no preview.
     QTimer* m_dragScrollTimer = nullptr;
     /// Wall time since the previous tick, so the engine's speed ramp is
     /// frame-rate independent and a late timer cannot lurch the strip.
@@ -819,7 +830,7 @@ private:
     /// A stranded indicator sits on the desktop with no drag left to dismiss
     /// it, so every preview-end path calls this. The list is longer than it
     /// looks, because an engine can drop its own preview WITHOUT telling the
-    /// adaptor — five engine-side self-cancel sites do exactly that — so the
+    /// adaptor — several engine-side self-cancel sites do exactly that — so the
     /// daemon cannot rely on being notified and repairs wherever it notices:
     ///   - settleDragInsertPreviewAt, on all three arms including the one
     ///     that finds no engine at all (a drag is still ending there);

@@ -34,6 +34,8 @@
 
 #include <PhosphorScreens/ScreenIdentity.h>
 
+#include "scrollenginelogging.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -85,7 +87,13 @@ bool ScrollEngine::repairDragAutoScrollTarget(const QPoint& cursorPos)
     // indicator and the thing a release commits — a drop at the far end of
     // the strip instead of where the user pointed.
     //
-    // PRECONDITION: m_dragInsertPreview must be live.
+    // PRECONDITION (asserted, with a release-build refusal): every in-tree
+    // caller holds a live preview, but a null deref here is a session-killing
+    // compositor crash, and the pair is a natural target for a future caller.
+    Q_ASSERT(m_dragInsertPreview);
+    if (!m_dragInsertPreview) {
+        return false;
+    }
     const DragInsertTarget repaired = computeDragInsertTargetAtPoint(m_dragInsertPreview->targetScreenId, cursorPos);
     if (!repaired.isValid() || m_dragInsertPreview->lastTarget == repaired) {
         return false;
@@ -129,8 +137,11 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
     //
     // Disarms rather than returning bare: dragAutoScrollActive() carries no
     // screen, so a mismatched tick that kept ownership would block the
-    // hit-test on every screen. Today's sole caller passes the preview's own
-    // id and cannot trip this, but it is a public IPlacementEngine virtual.
+    // hit-test on every screen. The heartbeat caller passes the preview's own
+    // id and cannot trip this; the settle caller passes the RELEASE screen's
+    // id precisely so a cross-screen release lands here and takes the bare
+    // disarm instead of re-aiming a foreign cursor. It is also a public
+    // IPlacementEngine virtual, so an arbitrary caller must fail closed.
     //
     // FIRST, ahead of every exit that re-aims: cursorPos belongs to the
     // caller's screen, so hit-testing it against the preview's work area
@@ -150,25 +161,22 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
     if (!state || state->strip().isEmpty()) {
         return disarm();
     }
+    if (currentKeyForScreen(preview.targetScreenId) != preview.targetKey) {
+        // Same contract as commitDragInsertPreview's guard: the daemon's
+        // context-change handlers all cancel a live preview before touching
+        // desktop/activity state, so a mismatch here means one of them
+        // failed. Scrolling the captured (now background) strip while the
+        // batch and persist mark describe the foreground one would be
+        // silent; say so and give the target back instead. Disarm, not
+        // re-aim — the hit-test would answer from the wrong context too.
+        qCWarning(lcScrollEngine) << "dragAutoScrollTick: context moved under the preview for" << preview.windowId
+                                  << "on" << preview.targetScreenId
+                                  << "— a context-change handler failed to cancel first; disarming";
+        return disarm();
+    }
     const ScrollLayoutParams params = layoutParamsForScreen(preview.targetScreenId);
     if (!params.workArea.isValid()) {
         return disarm();
-    }
-    if (state->strip().stripFitsViewport(params)) {
-        // The whole strip already fits — there is nothing off screen to
-        // reveal, so the bands stay inert and the ordinary hit-test keeps
-        // the target. Disarming (rather than returning false while armed)
-        // matters: otherwise a strip that shrank to fit mid-drag would hold
-        // the target locked to an edge slot with no motion to justify it.
-        //
-        // Asked as a predicate rather than off a relayout: this runs every
-        // frame of every drag-insert hold, including the ones nowhere near a
-        // band, and relayout() allocates per column.
-        //
-        // Re-aims as well as disarming: a strip that shrank to fit (a panel
-        // auto-hiding, a gap change on a settings save) leaves the same stale
-        // edge slot behind as leaving the band does.
-        return disarmAndReaim();
     }
 
     // Linear ramp, niri's: zero at the band's inner edge, full speed at the
@@ -195,12 +203,39 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
         depth = qreal(cursorMain - trailInner) / qreal(triggerWidth);
     } else {
         // Out of both bands: ordinary per-column targeting resumes, aimed at
-        // the columns the scroll brought into view.
+        // the columns the scroll brought into view. Tested BEFORE the
+        // settled-strip walk below: this is the overwhelmingly common tick
+        // (the whole hold, minus the moments actually spent in a band), and
+        // the four disarm cells the two tests share resolve identically in
+        // either order, so the strip walk is paid only in-band.
         return disarmAndReaim();
     }
     // Past the work area's edge (a cursor over an adjacent output, or over
     // a panel) is still full speed rather than more than full speed.
     depth = std::clamp(depth, 0.0, 1.0);
+
+    if (state->strip().stripSettledInViewport(params)) {
+        // Nothing to reveal: the strip fits AND the view is settled inside
+        // its range, so the bands stay inert and the ordinary hit-test keeps
+        // the target. Disarming (rather than returning false while armed)
+        // matters: otherwise a strip that shrank to fit mid-drag would hold
+        // the target locked to an edge slot with no motion to justify it.
+        //
+        // SETTLED, not merely FITS: the centering mutators deliberately park
+        // out-of-range anchors (a fitting strip can still have a column
+        // hanging off one edge), and the clamped-delta scroll is the one
+        // motion that walks such a view back — a fits-only disarm refused
+        // exactly that motion.
+        //
+        // Asked as a predicate rather than off a relayout, and only on
+        // in-band ticks (the band test above returns first): relayout()
+        // allocates per column, and this runs every frame of a band hold.
+        //
+        // Re-aims as well as disarming: a strip that shrank to fit (a panel
+        // auto-hiding, a gap change on a settings save) leaves the same stale
+        // edge slot behind as leaving the band does.
+        return disarmAndReaim();
+    }
 
     if (preview.autoScrollDirection != direction) {
         // Entering a band, or crossing straight from one to the other on a
@@ -232,7 +267,13 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
     // because the view anchor is integer pixels — without it any speed under
     // one pixel per tick (the inner half of the band, at 60 Hz) would round
     // to zero on every tick and the band's shallow end would be dead.
-    const qreal dt = std::clamp(dtSeconds, 0.0, kMaxTickSeconds);
+    // isfinite first: std::clamp passes NaN through (both comparisons are
+    // false), and a NaN residue never recovers — floor/ceil of it is UB and
+    // `residue -= step` keeps it NaN, silently deadening the scroll for the
+    // rest of the drag. Unreachable from the in-tree callers (both compute
+    // dt from a monotonic clock or pass 0.0), but this is the same public
+    // IPlacementEngine virtual the ceiling above already defends.
+    const qreal dt = std::isfinite(dtSeconds) ? std::clamp(dtSeconds, 0.0, kMaxTickSeconds) : 0.0;
     preview.autoScrollResidue += qreal(direction) * depth * qreal(m_dragScrollMaxSpeed) * dt;
     const int step = int(preview.autoScrollResidue > 0.0 ? std::floor(preview.autoScrollResidue)
                                                          : std::ceil(preview.autoScrollResidue));
@@ -253,7 +294,7 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
     // The target is rewritten even on a tick that did not move — at a strip
     // end the view is pinned but the cursor is still asking to insert past
     // that edge, and that is exactly the append/leading slot.
-    const bool targetChanged = writeDragAutoScrollTarget(*state, params, direction);
+    const bool targetChanged = writeDragAutoScrollTarget(*state, params, direction, cursorPos);
 
     if (!moved) {
         return targetChanged;
@@ -270,8 +311,13 @@ bool ScrollEngine::dragAutoScrollTick(const QString& screenId, const QPoint& cur
     return true;
 }
 
-bool ScrollEngine::writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction)
+bool ScrollEngine::writeDragAutoScrollTarget(const ScrollState& state, const ScrollLayoutParams& params, int direction,
+                                             const QPoint& cursorPos)
 {
+    Q_ASSERT(m_dragInsertPreview);
+    if (!m_dragInsertPreview) {
+        return false;
+    }
     // Resolved again rather than handed down from the tick: the caller's copy
     // predates this tick's scroll, and which column is first or last VISIBLE
     // is exactly what the scroll just changed.
@@ -281,11 +327,14 @@ bool ScrollEngine::writeDragAutoScrollTarget(const ScrollState& state, const Scr
     const QVector<const ResolvedColumn*> visible = visibleColumnsOf(resolved, params.workArea);
     if (visible.isEmpty()) {
         // Nothing on screen to anchor a promise to. Give the target back
-        // rather than keeping a slot computed against a view showing no
-        // column — a release here would commit it. The strip-fits disarm
-        // makes this unreachable today; it is a latch that must not exist.
+        // AND re-aim like every other ownership-ending exit — a bare cancel
+        // would leave the stale edge slot standing for a release to commit,
+        // and it would clear ownership before this tick's own applyLayout,
+        // which latches viewImmediateApply off the flag. The settled-strip
+        // disarm makes this unreachable today; it is a latch that must not
+        // exist, and if it ever fires it must behave like the others.
         cancelDragAutoScroll();
-        return false;
+        return repairDragAutoScrollTarget(cursorPos);
     }
     const ResolvedColumn* firstVisible = visible.constFirst();
     const ResolvedColumn* lastVisible = visible.constLast();

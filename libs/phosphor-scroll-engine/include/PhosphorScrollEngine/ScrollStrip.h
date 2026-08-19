@@ -373,10 +373,21 @@ public:
     /// fitting, so a caller cannot scroll a screen that is going away.
     ///
     /// Exists so a per-frame caller can ask the question without paying for a
-    /// full relayout: the edge auto-scroll tick needs only this predicate
-    /// before its band test, and relayout() allocates a ResolvedColumn (with a
-    /// nested tile vector) per column.
+    /// full relayout: relayout() allocates a ResolvedColumn (with a nested
+    /// tile vector) per column, and the edge auto-scroll's disarm gate needs
+    /// only a predicate.
     bool stripFitsViewport(const ScrollLayoutParams& params) const;
+
+    /// stripFitsViewport AND the derived view offset is settled inside
+    /// [0, stripExtent - viewport] — i.e. genuinely nothing to reveal. The
+    /// distinction matters because the centering mutators deliberately store
+    /// an anchor whose derived viewOffset is out of range (their comments say
+    /// so), which can leave a column hanging off one edge even though the
+    /// strip FITS; the edge auto-scroll's clamped-delta walk is the one
+    /// motion that brings it back, so its disarm gate must ask this, not the
+    /// fits-only question. Degenerate work areas and empty strips answer
+    /// true, same fail-closed reading as stripFitsViewport.
+    bool stripSettledInViewport(const ScrollLayoutParams& params) const;
 
     // ── Pixel resolution helpers (shared with the engine/tests) ─────────────
     /// The pixel MAIN extent @p width resolves to under @p params (gap-aware

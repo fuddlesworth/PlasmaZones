@@ -113,7 +113,10 @@ public:
     }
     /// Width of the band inside each work-area edge that arms the scroll,
     /// in logical pixels. Speed ramps linearly from zero at the band's
-    /// inner edge to the maximum at the work area's edge.
+    /// inner edge to the maximum at the work area's edge. The engine
+    /// additionally clamps the value to a third of the work area's MAIN
+    /// extent, so the two bands always leave a neutral zone to aim from —
+    /// a configured width past that is silently narrowed.
     virtual int scrollingDragScrollTriggerWidth() const
     {
         return kDragScrollTriggerWidthDefault;

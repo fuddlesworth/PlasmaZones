@@ -421,10 +421,23 @@ bool ScrollStrip::stripFitsViewport(const ScrollLayoutParams& params) const
     return stripExtentPx(params) <= mainExtent(params);
 }
 
+bool ScrollStrip::stripSettledInViewport(const ScrollLayoutParams& params) const
+{
+    if (!stripFitsViewport(params)) {
+        return false;
+    }
+    // Degenerate area or empty strip: nothing a scroll could reveal, and
+    // viewOffsetFor needs a live active column to derive from.
+    if (mainExtent(params) <= 0 || m_activeColumnIdx < 0) {
+        return true;
+    }
+    const int viewOffset = viewOffsetFor(params);
+    return viewOffset >= 0 && viewOffset <= qMax(0, stripExtentPx(params) - mainExtent(params));
+}
+
 ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
 {
     ResolvedStrip out;
-    out.stripExtent = stripExtentPx(params);
     out.viewOffset = viewOffsetFor(params);
 
     const QRect area = params.workArea;
@@ -433,7 +446,8 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
     // Walks ALONG the strip. The view offset only ever slides on this axis,
     // which is what makes one spring per output enough to carry the whole
     // strip rigidly.
-    int mainCursor = axis.mainLow(area) - out.viewOffset;
+    const int stripStart = axis.mainLow(area) - out.viewOffset;
+    int mainCursor = stripStart;
 
     for (int ci = 0; ci < m_columns.size(); ++ci) {
         const Column& col = m_columns.at(ci);
@@ -631,6 +645,12 @@ ResolvedStrip ScrollStrip::relayout(const ScrollLayoutParams& params) const
         out.columns.append(rc);
         mainCursor += colW + gap;
     }
+    // Derived from this walk's own accumulation rather than a second
+    // stripExtentPx pass: the cursor advanced colW + gap per contributing
+    // column, so dropping the trailing gap reproduces stripExtentPx exactly
+    // — this runs per tick on the auto-scroll and indicator paths, and the
+    // duplicate O(columns x tiles) walk was pure cost.
+    out.stripExtent = (mainCursor > stripStart) ? mainCursor - stripStart - gap : 0;
     return out;
 }
 

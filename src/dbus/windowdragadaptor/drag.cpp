@@ -453,6 +453,11 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
             }
 
             m_currentZoneId = zonesToSnap.first()->id().toString();
+            // The screen the geometry below is absolute on. This is the
+            // co-key of handleMultiZoneModifier's change gate: leaving it
+            // stale lets a later same-zone-id tick on another screen skip
+            // the refresh and keep this screen's absolute rect.
+            m_currentZoneScreenId = screenId;
             m_currentAdjacentZoneIds = zoneIds;
             m_isMultiZoneMode = (zonesToSnap.size() > 1);
             m_currentMultiZoneGeometry = GeometryUtils::snapToRect(combinedGeom);
@@ -689,8 +694,16 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             // Cursor crossed between two engine-owned screens (same engine
             // or autotile↔scrolling) while the trigger is held: cancel the
             // old preview before starting a fresh one on the new screen.
+            // screensMatch, not raw !=: an id spelling change (connector name
+            // vs EDID form) for the SAME screen must not read as a crossing —
+            // it would cancel the preview and reset the auto-scroll's
+            // start-delay clock every tick. Distinct virtual screens still
+            // compare unequal through screensMatch, so a genuine VS crossing
+            // cancels as before.
             if (previewEngine
-                && (previewEngine != insertEngine || previewEngine->dragInsertPreviewScreenId() != insertScreenId)) {
+                && (previewEngine != insertEngine
+                    || !PhosphorScreens::ScreenIdentity::screensMatch(previewEngine->dragInsertPreviewScreenId(),
+                                                                      insertScreenId))) {
                 previewEngine->cancelDragInsertPreview();
                 // The departed screen's indicator goes with the preview it
                 // described. pushScrollDropIndicator would clear it anyway on
@@ -729,7 +742,9 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                     m_overlayService->refreshStripSelector(insertScreenId);
                 }
             }
-            if (insertEngine->hasDragInsertPreview() && insertEngine->dragInsertPreviewScreenId() == insertScreenId) {
+            if (insertEngine->hasDragInsertPreview()
+                && PhosphorScreens::ScreenIdentity::screensMatch(insertEngine->dragInsertPreviewScreenId(),
+                                                                 insertScreenId)) {
                 // Strip popup keep-alive: the early return below starves the
                 // per-tick selector check for the whole preview, which is
                 // fine on autotile screens (no popup there) but would freeze

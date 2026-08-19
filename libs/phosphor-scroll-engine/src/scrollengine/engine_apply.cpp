@@ -675,6 +675,13 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
 
     QJsonArray arr;
     bool anyEntryChanged = false;
+    // Whether the emit loop produced at least one entry whose committed rect
+    // is a real placement rather than a park. Gates the suppressed-batch
+    // baseline advance below: a park's rect is constant regardless of the
+    // view, so an all-parked batch can have unchanged rects while the view
+    // genuinely moved, and advancing the baseline there would eat the slide
+    // the next arrival batch owes the effect.
+    bool anyEmittedUnparked = false;
     // Per columnIndex: did EVERY tile this loop emitted for that column end up
     // parked? A column with no emitted tiles at all gets no entry, so the
     // tab-strip loop's lookup default leaves it alone — and a column whose
@@ -812,6 +819,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
                 Detail::resolveTilePlacement(parkIn, m_parkedScrollEdge.value(tile.windowId));
             rect = parkOut.rect;
             const bool parkedNow = parkOut.parked;
+            anyEmittedUnparked = anyEmittedUnparked || !parkedNow;
             QString scrollEdge = parkOut.emittedEdge;
             // The helper is pure, so applying its verdict to the edge memory is
             // the caller's job. nullopt erases, a value stores — every path
@@ -982,12 +990,24 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // rect already applied (focus move under Never-centering, redundant
     // scheduled retile) must not re-feed the compositor's apply path.
     if (anyEntryChanged) {
-        // The view baseline advances with the EMIT, not with the relayout: a
-        // batch suppressed just above leaves the compositor showing the
-        // previous positions, and a baseline that moved anyway would make the
-        // next batch's delta describe a slide that never happened.
         state->setLastAppliedViewOffset(resolved.viewOffset, params.workArea, params.axis);
         Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+    } else if (anyEmittedUnparked) {
+        // The baseline advances on a SUPPRESSED batch too, as long as at
+        // least one emitted tile is a real (unparked) placement: unchanged
+        // committed rects then mean the compositor is showing exactly the
+        // positions this resolve produced, so resolved.viewOffset IS their
+        // baseline. The case this closes is a structural change that shifts
+        // strip coordinates and the view coordinate by the same amount
+        // (closing the sole column LEFT of the view keeps every survivor's
+        // rect byte-identical while viewOffset drops by the removed extent)
+        // — without the advance, the stale baseline survives every further
+        // suppressed batch and the first EMITTING batch ships a delta off by
+        // exactly that shift. The one shape that must NOT advance here is an
+        // all-parked batch: a park's rect is view-independent, so unchanged
+        // rects there do not prove the view held still — anyEmittedUnparked
+        // gates it out.
+        state->setLastAppliedViewOffset(resolved.viewOffset, params.workArea, params.axis);
     }
 
     // Tab-strip indicator model: one entry per VISIBLE tabbed column.

@@ -245,8 +245,10 @@ struct DragInsertPreview
     /// made it through.
     FloatRestore carried;
     // ── edge auto-scroll ──
-    /// Which edge band the cursor is in: -1 left, +1 right, 0 neither.
-    /// Also the "armed" flag — 0 means the whole mechanism is idle.
+    /// Which edge band the cursor is in: -1 towards the strip's start
+    /// (left on a horizontal strip, top on a vertical one), +1 towards its
+    /// end (right / bottom), 0 neither. Also the "armed" flag — 0 means the
+    /// whole mechanism is idle.
     int autoScrollDirection = 0;
     /// Elapsed timer since the cursor entered the band, used for the
     /// configured start delay. Only meaningful while autoScrollDirection
@@ -283,6 +285,15 @@ struct DragInsertPreview
     bool hadFloatRestoreEntry = false;
     FloatRestore floatRestoreEntry;
     bool wasScrollFloated = false;
+    /// Whether the floating window held the state's float-focus memory pair
+    /// (lastFloatingFocus + floatingHasFocus) at begin time. Captured BEFORE
+    /// begin's removeFloating, which clears both halves when this window
+    /// holds them; the cancel float-restore arms re-seed the pair from it,
+    /// mirroring unfloatWindowInternal's insert-refused arm. Without the
+    /// capture, cancelling a floating preview permanently deadens the
+    /// float/tiling focus-switch verbs — the window keeps compositor focus
+    /// across begin/cancel, so no focus report ever re-learns the pair.
+    bool priorFloatHadFocus = false;
 };
 
 } // namespace PhosphorScrollEngine

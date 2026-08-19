@@ -162,6 +162,9 @@ bool ScrollEngine::beginDragInsertPreview(const QString& rawWindowId, const QStr
             preview.hadFloatRestoreEntry = m_floatRestore.contains(windowId);
             preview.floatRestoreEntry = m_floatRestore.take(windowId);
             preview.wasScrollFloated = m_scrollFloatedWindows.remove(windowId);
+            // Before removeFloating, which clears the pair when this window
+            // holds it — same capture-then-clear as unfloatWindowInternal.
+            preview.priorFloatHadFocus = priorState->floatingHasFocus() && priorState->lastFloatingFocus() == windowId;
             priorState->removeFloating(windowId);
             preview.carried = preview.floatRestoreEntry;
             if (!preview.hadFloatRestoreEntry) {
@@ -421,6 +424,12 @@ void ScrollEngine::cancelDragInsertPreview()
                     m_lastAppliedRect.remove(p.windowId);
                     m_parkedScrollEdge.remove(p.windowId);
                     applyLayout(p.targetScreenId, false);
+                    // The restore mutates persisted strip structure like
+                    // every other restore arm, and applyLayout's own emits
+                    // are anchor-conditional — the slot typically resolves
+                    // back to its pre-drag rect, so without this the save
+                    // scheduler and the strip-selector cards never hear it.
+                    Q_EMIT placementChanged(p.targetScreenId);
                 }
             }
         }
@@ -450,6 +459,13 @@ void ScrollEngine::cancelDragInsertPreview()
             }
             if (targetState) {
                 targetState->addFloating(p.windowId);
+                // begin's removeFloating cleared the focus-memory pair when
+                // this window held it; the window is a float again, so put
+                // both halves back (unfloatWindowInternal's restore idiom).
+                if (p.priorFloatHadFocus) {
+                    targetState->setLastFloatingFocus(p.windowId);
+                    targetState->setFloatingHasFocus(true);
+                }
             }
         } else if (targetState) {
             dragPreviewRestoreSlot(targetState, p.windowId, p.priorSlot, params, p.targetScreenId);
@@ -512,6 +528,11 @@ void ScrollEngine::cancelDragInsertPreview()
         }
         if (p.wasScrollFloated) {
             m_scrollFloatedWindows.insert(p.windowId);
+        }
+        // Same pair restore as the priorSameKey floating arm above.
+        if (p.priorFloatHadFocus) {
+            priorState->setLastFloatingFocus(p.windowId);
+            priorState->setFloatingHasFocus(true);
         }
     } else {
         dragPreviewRestoreSlot(priorState, p.windowId, p.priorSlot, layoutParamsForScreen(p.priorKey.screenId),
@@ -702,9 +723,12 @@ QRect ScrollEngine::dragInsertIndicatorRect(const QString& screenId) const
     //
     // The copy is per call and the strip is a plain value type. That is not
     // free, and the ledger already tracks the per-tick relayout cost of this
-    // whole path — but a cheap wrong rect is worth less than an accurate one,
-    // and the change-gate in the daemon means a stationary cursor never
-    // reaches here at all.
+    // whole path — but a cheap wrong rect is worth less than an accurate one.
+    // The edge auto-scroll heartbeat DOES reach here with a stationary
+    // cursor, on every tick the view moved (~60 Hz for the length of an edge
+    // hold): the view motion is what moves the rect, so those calls are the
+    // accurate-rect work, not waste the old daemon change-gate would have
+    // skipped.
     ScrollStrip probe = state->strip();
 
     // Params resolved against the POST-drop column count. Smart gaps zero the
@@ -858,12 +882,15 @@ void ScrollEngine::dropClosedWindowFromDragPreview(const QString& windowId)
     // landing at a shifted index, and the next cursor motion re-resolves a
     // fresh target.
     //
-    // With the cursor held still no tick fires at all, so the indicator
-    // stays dark until the user moves
-    // again. That is deliberate: after a neighbour vanishes there is no
-    // honest target to paint, and painting the OLD rect would promise a slot
-    // that no longer exists. A dark indicator says "aim again", which is what
-    // the fallback at commit will otherwise decide for the user.
+    // The heartbeat still ticks with the cursor held still, but it cannot
+    // relight the cleared target: the cancel below drops ownership, so the
+    // next tick's disarmAndReaim short-circuits on `owned == false` and
+    // leaves lastTarget alone, and only genuine cursor motion re-resolves.
+    // The indicator therefore stays dark until the user moves again — which
+    // is deliberate: after a neighbour vanishes there is no honest target to
+    // paint, and painting the OLD rect would promise a slot that no longer
+    // exists. A dark indicator says "aim again", which is what the fallback
+    // at commit will otherwise decide for the user.
     const auto it = m_states.windowKeys().constFind(windowId);
     if (it != m_states.windowKeys().constEnd() && it.value() == m_dragInsertPreview->targetKey) {
         m_dragInsertPreview->lastTarget = DragInsertTarget{};

@@ -1234,8 +1234,22 @@ void Daemon::initEnginesAndWiring()
             &TilingAdaptor::relayTileRequestsJson);
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,
             &TilingAdaptor::focusWindowRequested);
-    connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, m_tilingAdaptor,
-            &TilingAdaptor::tilingChanged);
+    // Gated, not a direct signal->signal forward: the edge auto-scroll emits
+    // placementChanged on every moving tick (~60 Hz for the length of an edge
+    // hold), and tilingChanged is an ungated session-bus broadcast with no
+    // in-tree subscriber to damp it. Same screen-matched skip as the
+    // strip-selector refresh above; the drop is lossless for external
+    // listeners because the commit or cancel that ends the hold emits a
+    // final placementChanged with the auto-scroll no longer owning.
+    connect(
+        scrollEngine, &PhosphorEngine::PlacementEngineBase::placementChanged, m_tilingAdaptor,
+        [this, scrollEngine](const QString& screenId) {
+            if (scrollEngine->dragAutoScrollActive()
+                && PhosphorScreens::ScreenIdentity::screensMatch(scrollEngine->dragInsertPreviewScreenId(), screenId)) {
+                return;
+            }
+            Q_EMIT m_tilingAdaptor->tilingChanged(screenId);
+        });
     connect(scrollEngine, &PhosphorEngine::PlacementEngineBase::windowFloatingChanged, m_tilingAdaptor,
             &TilingAdaptor::relayWindowFloatingChanged);
     // The scroll engine manages its float STATE itself, but only the daemon can
