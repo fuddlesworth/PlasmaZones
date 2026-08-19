@@ -30,6 +30,7 @@
 
 #include "tilinghandler/tilinghandler.h"
 #include "compositor/compositorclock.h"
+#include "compositor/scrolltabindicatorpainter.h"
 #include "compositor/stripviewanimator.h"
 #include "compositor/windowanimator.h"
 
@@ -677,6 +678,7 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // Runs before the motion-clock early-return so it fires even for an output
     // that never had an animation clock, same as the two clears above.
     m_stripViewAnimator->forgetOutput(output);
+    m_scrollTabPainter->clearOutput(output);
 
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the

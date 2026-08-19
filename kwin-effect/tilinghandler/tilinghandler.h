@@ -373,6 +373,27 @@ public:
         return !m_scrollingScreens.isEmpty();
     }
 
+    // ── Compositor-drawn tab indicators (model half; the painter is the effect's) ──
+    /// Rebuild the painter's model for @p screenId from the cached payload
+    /// and the effect's current window state. Cheap when nothing changed (the
+    /// painter compares). Called on payload arrival, caption/urgency edges,
+    /// style-setting changes and colour broadcasts.
+    void rebuildScrollTabIndicators(const QString& screenId);
+    /// Every screen at once — style/colour changes are not per screen.
+    void rebuildAllScrollTabIndicators();
+    /// A tab's caption or urgency changed: rebuild the screens whose payload
+    /// names it. No-op for a window that is not a tab anywhere, which is the
+    /// common case and one hash probe.
+    void noteScrollTabWindowChanged(const QString& windowId);
+    /// Pointer moved to @p pos (absolute logical): update hover on the
+    /// screen's pills. Returns true when the painted state changed.
+    bool updateScrollTabHover(const QPointF& pos);
+    /// A press at @p pos landed on a pill: activate that tab. Returns true
+    /// when a pill was hit (the caller consumes the press).
+    bool activateScrollTabAt(const QPointF& pos);
+    /// The pill under @p pos, or empty — shared by hover and press.
+    QString scrollTabPillAt(const QPointF& pos) const;
+
     /// True when at least one scrolling screen resolves to cropping its
     /// straddlers. The direct-scanout gate needs a whole-session answer (the
     /// hazard is any un-cropped overhang reaching a hardware plane), so it
@@ -688,6 +709,21 @@ public Q_SLOTS:
     void slotScrollingScreensChanged(const QStringList& screenIds);
     void slotScrollEffectBehaviourChanged(const QVariantMap& behaviour);
     void slotActiveLayoutsChanged(const QVariantMap& activeLayouts);
+    /// The scroll engine's tab-indicator payload for one screen (the JSON
+    /// `ScrollEngine::tabStripsChanged` emits, relayed by the daemon's Tiling
+    /// adaptor as `scrollTabStripsChanged`). "[]" clears the screen. The
+    /// effect paints these pills itself, so this slot is the model's single
+    /// structural input; titles, urgency and colours are resolved here from
+    /// the effect's own window knowledge plus `scrollTabColors`.
+    void slotScrollTabStripsChanged(const QString& screenId, const QString& stripsJson);
+    /// Per-window tab-colour rule verdicts moved (a rules save, a colour
+    /// scheme flip). An EMPTY windowId is the broadcast form: every cached
+    /// verdict is dropped and re-queried on the next rebuild.
+    void slotScrollTabColorsChanged(const QString& windowId, const QVariantMap& colors);
+    /// Per-screen tab-indicator PAINT overrides from context rules (style,
+    /// gaps, corner radius, three colours), layered over the global settings
+    /// for that screen alone. An empty map clears the screen.
+    void slotScrollTabPaintOverridesChanged(const QString& screenId, const QVariantMap& overrides);
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
 
     // Window state change handlers (connected per-window in setupWindowConnections)
@@ -932,6 +968,10 @@ private:
     /// compositor owns (focus-follows-mouse, straddler crop, strip axis).
     /// Bounded retry, the fetchScrollingScreens pattern.
     void fetchScrollEffectBehaviour();
+    /// Bring-up replay of the tab-indicator payload per screen (see wiring.cpp).
+    void fetchScrollTabStrips();
+    /// Bring-up replay of the per-screen tab paint overrides (see wiring.cpp).
+    void fetchScrollTabPaintOverrides();
     /// Shared apply for the fetch reply and the live signal: replaces all
     /// three sets from the wire map. Repaints when the CROP set moved (it is
     /// painted state the compositor will not otherwise revisit) and,
@@ -1217,6 +1257,29 @@ private:
     /// with this counter back at 0 — there the hash-membership branches in
     /// the slot are what protect the tiling state, not this counter.
     int m_suppressFullScreenChanged = 0;
+    // ── Compositor-drawn tab indicators: model state ──
+    /// Raw engine payload per screen, kept so a caption/urgency/colour edge
+    /// can rebuild without a new push from the daemon.
+    QHash<QString, QString> m_scrollTabPayloadByScreen;
+    /// windowId -> screens whose payload names it. Reverse index for
+    /// noteScrollTabWindowChanged; rebuilt from the payload on every push.
+    QHash<QString, QSet<QString>> m_scrollTabScreensByWindow;
+    /// Per-window tab colour rule verdicts, as answered by the daemon's
+    /// `scrollTabColors`. An ENTRY WITH AN EMPTY MAP means "asked, no rule" —
+    /// distinct from absent (never asked), so the common no-rule case is one
+    /// probe rather than a D-Bus round trip per rebuild.
+    QHash<QString, QVariantMap> m_scrollTabColorCache;
+    /// Per-screen context-rule paint overrides, keyed by effective screen id;
+    /// values are WindowPaintKeys / WindowColorKeys spellings → value. Absent
+    /// screen = global settings apply unmodified.
+    QHash<QString, QVariantMap> m_scrollTabPaintOverrides;
+    /// Generation stamp of the style the painter last saw, compared against
+    /// the effect's m_tabIndicatorStyleGeneration so a settings edit rebuilds.
+    quint64 m_scrollTabStyleGenerationSeen = 0;
+    /// Screen whose pills currently carry the hover, empty when none. Needed
+    /// so a pointer leaving one output's pills for another's clears the first.
+    QString m_scrollTabHoverScreen;
+
     // ── Focus follows mouse ──
     // Per-mode pair of GLOBAL SETTING mirrors: m_focusFollowsMouse is the
     // autotile flag (autotileFocusFollowsMouse), m_scrollingFocusFollowsMouse

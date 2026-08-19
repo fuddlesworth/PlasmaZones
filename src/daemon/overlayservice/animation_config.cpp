@@ -349,7 +349,7 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
 {
     namespace PAL = PhosphorAnimationLayer;
 
-    // Four existing surface types do NOT have a per-role config registered
+    // Three existing surface types do NOT have a per-role config registered
     // and therefore fall back to the empty default (no shader effect, the
     // library-default 150 ms OutCubic motion):
     //   - ZoneOverlay (zone overlay rendering): routes through the
@@ -359,13 +359,10 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     //   - ShaderPreview (editor preview window): shown via direct
     //     window->show() in showShaderPreview because the editor controls
     //     visibility imperatively and re-creates on every open.
-    //   - ScrollTabs (tabbed-column indicators): the animation-profile
-    //     taxonomy defines no popup.scrollTabs domain, so the library
-    //     default is the intended motion for both legs; registering a
-    //     config would need new profile paths first (see the role doc).
-    //   - ScrollDropIndicator (drag re-insert drop target): same reasoning as
-    //     ScrollTabs — no domain in the taxonomy, library default is the
-    //     intended motion, and the role doc points back at this list.
+    //   - ScrollDropIndicator (drag re-insert drop target): the
+    //     animation-profile taxonomy defines no domain for it, so the library
+    //     default is the intended motion for both legs, and the role doc
+    //     points back at this list.
     m_surfaceAnimator = std::make_unique<PAL::SurfaceAnimator>(profileRegistry, buildDefaultConfig());
     if (m_animShaderRegistry) {
         m_surfaceAnimator->setAnimationShaderRegistry(m_animShaderRegistry);
@@ -383,17 +380,13 @@ void OverlayService::setupSurfaceAnimator(PhosphorAnimation::PhosphorProfileRegi
     // here previously caused a systemd-respawn loop in production
     // because applyShaderProfilesToAnimator's chain led straight into
     // m_shellHost->registerConfigForRole before the host was up.
-    if (!m_shellHost || !m_tabShellHost) {
+    if (!m_shellHost) {
         qFatal(
-            "OverlayService::setupSurfaceAnimator: both shell hosts must be constructed first "
+            "OverlayService::setupSurfaceAnimator: the shell host must be constructed first "
             "(applyShaderProfilesToAnimator dereferences m_shellHost on every call, and a host "
             "without an animator cannot run hideSlot)");
     }
     m_shellHost->setSurfaceAnimator(m_surfaceAnimator.get());
-    // The tab-indicator host needs it too: hideSlot drives the slot's hide leg
-    // through the animator, and a host without one would leave the indicators
-    // visible forever the first time a screen's strips emptied.
-    m_tabShellHost->setSurfaceAnimator(m_surfaceAnimator.get());
     // Lifecycle invariant: `setupSurfaceAnimator` runs from the ctor
     // before `setSettings` is ever called, so `m_settings` is null here
     // and the animator stays at its default-enabled state until

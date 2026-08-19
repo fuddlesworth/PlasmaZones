@@ -614,6 +614,14 @@ void Daemon::initEnginesAndWiring()
             if (m_windowTrackingAdaptor) {
                 m_windowTrackingAdaptor->invalidateRuleMemosForColorSchemeChange();
             }
+            // The effect's tab-colour cache is the same staleness with a
+            // different owner: a scheme flip moves ColorScheme-conditioned
+            // verdicts with no revision bump, so it must re-query too. Emitted
+            // right after the memo clear, so the re-queries this triggers
+            // resolve against the new token.
+            if (m_tilingAdaptor) {
+                m_tilingAdaptor->relayScrollTabColorsChanged();
+            }
             // The overlay refreshes are DEFERRED, unlike the inline shape this
             // block inherited from the rulesChanged twin. They are not the cheap,
             // self-bounding reads that shape assumed: refreshOverlayPropertiesIfShown
@@ -1122,29 +1130,6 @@ void Daemon::initEnginesAndWiring()
     m_tilingAdaptor->setLifecycleEngines({autotileEngine, scrollEngine});
     m_autotileAdaptor = new AutotileAdaptor(autotileEngine, m_algorithmRegistry.get(), this);
     m_scrollingAdaptor = new ScrollingAdaptor(scrollEngine, this);
-    // The overlay's tab-indicator surface, relayed to the compositor so it can
-    // slide that surface with the strip. It bypasses the engine entirely: the
-    // strip's model has no notion of which wl_surface happens to be drawing its
-    // indicators.
-    // Unguarded, like every other m_overlayService deref in this function: it
-    // is ctor-owned and non-null for the daemon's whole lifetime, which this
-    // file states once at the top rather than re-asserting per call site.
-    connect(m_overlayService.get(), &IOverlayService::scrollTabSurfaceChanged, m_scrollingAdaptor,
-            [adaptor = m_scrollingAdaptor](const QString& screenId, quint32 surfaceId) {
-                adaptor->setScrollTabSurface(screenId, surfaceId);
-            });
-    // Seed the fresh adaptor with what was announced before it existed. This
-    // is a re-cycle path, not a first start: init_adaptors deletes and re-news
-    // the whole adaptor set on every init(), while OverlayService is
-    // ctor-owned and survives with its surfaces still mapped. The announcement
-    // is change-gated on the service side, so without this seed the new
-    // adaptor would answer an empty map forever and the effect's bring-up pull
-    // would get nothing, leaving the indicators off the strip until some
-    // screen's tab shell happened to be rebuilt.
-    const QHash<QString, quint32> liveSurfaces = m_overlayService->liveScrollTabSurfaces();
-    for (auto it = liveSurfaces.constBegin(); it != liveSurfaces.constEnd(); ++it) {
-        m_scrollingAdaptor->setScrollTabSurface(it.key(), it.value());
-    }
     connect(autotileEngine, &PhosphorTileEngine::AutotileEngine::windowsTiled, m_tilingAdaptor,
             &TilingAdaptor::relayTileRequestsJson);
     connect(autotileEngine, &PhosphorEngine::PlacementEngineBase::activateWindowRequested, m_tilingAdaptor,
@@ -1235,77 +1220,37 @@ void Daemon::initEnginesAndWiring()
                 adaptor->notifyEngineScreensChanged(isDesktopSwitch);
             });
 
-    // Tab-strip indicators for tabbed scrolling columns. The engine emits
-    // the structural model (column rects + window ids) after every strip
-    // relayout; the daemon enriches the ids with live titles from the
-    // window registry and drives the per-screen overlay slot.
-    connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::tabStripsChanged, this,
-            [this](const QString& screenId, const QString& stripsJson) {
-                applyScrollTabStrips(screenId, stripsJson);
+    // Tab-strip indicators for tabbed scrolling columns, relayed to the KWin
+    // effect. The engine emits the structural model (column rects + window
+    // ids) after every strip relayout; the effect paints the pills itself and
+    // resolves titles and colours through its own queries, so it takes the
+    // engine's payload verbatim.
+    connect(scrollEngine, &PhosphorScrollEngine::ScrollEngine::tabStripsChanged, m_tilingAdaptor,
+            [adaptor = m_tilingAdaptor](const QString& screenId, const QString& stripsJson) {
+                adaptor->relayScrollTabStrips(screenId, stripsJson);
             });
 
-    // Enrichment is resolved from the window registry, so a change there must
-    // re-drive it: the engine has no reason to relayout when a window merely
-    // starts demanding attention or retitles, and its emit is change-gated on
-    // the structural payload, so without this the tab would keep the urgency
-    // and title it had at the last STRUCTURAL change. That is the stale-state
-    // failure the effect-side urgency connection exists to avoid.
+    // A rules save changes what the per-window TabColor* actions resolve to.
     //
-    // Disconnect-then-connect, NOT Qt::UniqueConnection: m_windowRegistry is
-    // built once in the Daemon ctor and never reset, so a stop() -> init()
-    // cycle would otherwise stack a second copy. UniqueConnection cannot do
-    // that job here — qobject.h's functor branch asserts on the flag
-    // ("Unique connection requires the slot to be a pointer to a member
-    // function") and de-duplicates nothing, so it would abort a debug build
-    // and be silently inert in release. Mirrors the rule-store pattern above.
-    // Safe to sweep by receiver: the only other metadataChanged subscriber is
-    // WindowTrackingAdaptor, a different receiver.
-    if (m_windowRegistry) {
-        disconnect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, this, nullptr);
-        connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::metadataChanged, this,
-                [this](const QString&, const PhosphorEngine::WindowMetadata& oldMeta,
-                       const PhosphorEngine::WindowMetadata& newMeta) {
-                    // Only the two enriched fields. Every other metadata edit
-                    // (geometry, focus, desktop) reaches the strip through the
-                    // engine's own relayout, and re-enriching on those would
-                    // re-push every indicator on every window move.
-                    if (oldMeta.isDemandingAttention == newMeta.isDemandingAttention
-                        && oldMeta.title == newMeta.title) {
-                        return;
-                    }
-                    scheduleScrollTabEnrichmentRefresh();
-                });
-        // metadataChanged is not enough on its own: WindowRegistry::upsert
-        // emits windowAppeared, NOT metadataChanged, for an instance's FIRST
-        // record. If that record lands after the engine already emitted a
-        // strip naming the window, its tab would show the appId fallback until
-        // something else moved. Coalesced, so the extra edge is nearly free.
-        disconnect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowAppeared, this, nullptr);
-        connect(m_windowRegistry.get(), &PhosphorEngine::WindowRegistry::windowAppeared, this, [this]() {
-            scheduleScrollTabEnrichmentRefresh();
-        });
-    }
-
-    // A rules save changes what the per-window TabColor* actions resolve to,
-    // but nothing else re-drives the enrichment: the engine has no reason to
-    // relayout, and the context-override replay re-pushes the CACHED enriched
-    // model, so an edited window rule would not reach a live tab until the
-    // window moved or retitled. The refresh coalesces, so this costs one pass
-    // per save.
-    //
-    // NO disconnect-first here, unlike the metadataChanged pair above. The
-    // rulesChanged family is swept ONCE, at the top of the block that
-    // establishes it (see the sever above the refilter subscription), because
-    // a blanket disconnect names the (sender, signal, receiver) triple and
-    // cannot single out one subscription. Sweeping again HERE would run after
-    // the refilter, overlay-refresh and assignment-reconcile subscriptions
-    // were established and would silently sever all three. The stop() → init()
-    // duplicate this connect needs protecting from is already handled by that
-    // one sweep, since it precedes every rulesChanged connect including this.
-    // Unguarded for the same reason as the three rulesChanged connects above:
-    // m_ruleStore is ctor-owned and non-null for the daemon's lifetime.
+    // NO disconnect-first here. The rulesChanged family is swept ONCE, at the
+    // top of the block that establishes it (see the sever above the refilter
+    // subscription), because a blanket disconnect names the (sender, signal,
+    // receiver) triple and cannot single out one subscription. Sweeping again
+    // HERE would run after the refilter, overlay-refresh and
+    // assignment-reconcile subscriptions were established and would silently
+    // sever all three. The stop() → init() duplicate this connect needs
+    // protecting from is already handled by that one sweep, since it precedes
+    // every rulesChanged connect including this. Unguarded for the same reason
+    // as the three rulesChanged connects above: m_ruleStore is ctor-owned and
+    // non-null for the daemon's lifetime.
     connect(m_ruleStore.get(), &PhosphorRules::RuleStore::rulesChanged, this, [this]() {
-        scheduleScrollTabEnrichmentRefresh();
+        // The effect caches its own scrollTabColors answers, and a rules save
+        // moves every window's verdict at once, so it gets the all-windows
+        // broadcast rather than a per-window payload the daemon would have to
+        // walk each strip to build.
+        if (m_tilingAdaptor) {
+            m_tilingAdaptor->relayScrollTabColorsChanged();
+        }
     });
 
     // Control adaptor - high-level convenience API for third-party integrations.
@@ -1328,10 +1273,5 @@ void Daemon::initEnginesAndWiring()
     // adaptor that carries no connections to sweep.
     connect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, &Daemon::handleAssignmentChangesApplied);
 }
-
-// applyScrollTabStrips / scheduleScrollTabEnrichmentRefresh /
-// refreshScrollTabEnrichment live in scroll_tabs.cpp (split for the
-// file-size ceiling); their wiring stays above with the rest of the engine
-// wiring.
 
 } // namespace PlasmaZones

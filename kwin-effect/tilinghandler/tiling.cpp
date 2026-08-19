@@ -1122,18 +1122,6 @@ void TilingHandler::slotWindowsTileRequested(const PhosphorProtocol::TileRequest
             m_pendingReactivateWindow = nullptr;
         }
 
-        // Put the tab-indicator surfaces back at the bottom of their layer.
-        // For non-scroll batches this repairs the saved-stack replay above
-        // (an unfiltered snapshot replayed after the lower would restore the
-        // pre-lower order and leave the indicators painting across the
-        // layout picker and the cheatsheet). Scroll-only batches skip that
-        // replay now, but keep this call: the daemon announces indicator
-        // surfaces for the same strip change this batch applies, and the
-        // re-lower is what puts a freshly announced surface under its
-        // stack. Free when no indicator exists: the function returns on an
-        // empty id set.
-        m_effect->restackScrollTabSurfaces();
-
         // Wayland centering is handled reactively by slotWindowFrameGeometryChanged
         // as soon as the client commits its constrained size — no deferred timer needed.
 

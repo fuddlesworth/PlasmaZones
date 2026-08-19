@@ -366,21 +366,6 @@ void Daemon::connectOverlaySignals()
     // shortcuts (NextLayout / QuickLayoutN) and the explicit Layout Picker
     // (Meta+Alt+Space by default) for that.
 
-    // A clicked tab is a focus request, nothing more. Asking the compositor to
-    // activate the window (the same channel the engine's own
-    // activateWindowRequested uses) rather than poking the strip directly
-    // keeps ONE owner of "which tab is showing": the strip learns about it
-    // through windowFocused, exactly as it does for a keyboard focus walk or
-    // an alt-tab. Reaching into the strip here would make the click a second
-    // writer that could disagree with the compositor about what is focused.
-    m_restartScopedConnections << connect(m_overlayService.get(), &IOverlayService::scrollTabActivated, this,
-                                          [this](const QString& windowId) {
-                                              if (!m_tilingAdaptor || windowId.isEmpty()) {
-                                                  return;
-                                              }
-                                              Q_EMIT m_tilingAdaptor->focusWindowRequested(windowId);
-                                          });
-
     // Connect Snap Assist selection: fetch authoritative zone geometry from service (same as
     // keyboard navigation) to avoid overlay coordinate drift/overlap bugs, then forward to effect
     // Same restart-duplication guard as connectLayoutSignals (see there).

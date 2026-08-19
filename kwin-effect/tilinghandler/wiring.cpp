@@ -68,6 +68,15 @@ void TilingHandler::connectSignals()
     bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                    PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
                    SLOT(slotActiveLayoutsChanged(QVariantMap)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabStripsChanged"), this,
+                   SLOT(slotScrollTabStripsChanged(QString, QString)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabColorsChanged"), this,
+                   SLOT(slotScrollTabColorsChanged(QString, QVariantMap)));
+    bus.disconnect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                   PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabPaintOverridesChanged"), this,
+                   SLOT(slotScrollTabPaintOverridesChanged(QString, QVariantMap)));
 
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("windowsTileRequested"), this,
@@ -100,6 +109,18 @@ void TilingHandler::connectSignals()
     bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
                 PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("activeLayoutsChanged"), this,
                 SLOT(slotActiveLayoutsChanged(QVariantMap)));
+
+    // Compositor-drawn tab indicators: the engine's structural payload and
+    // the per-window colour verdict broadcast.
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabStripsChanged"), this,
+                SLOT(slotScrollTabStripsChanged(QString, QString)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabColorsChanged"), this,
+                SLOT(slotScrollTabColorsChanged(QString, QVariantMap)));
+    bus.connect(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabPaintOverridesChanged"), this,
+                SLOT(slotScrollTabPaintOverridesChanged(QString, QVariantMap)));
 
     qCInfo(lcEffect) << "Connected to tiling D-Bus signals";
 }
@@ -214,6 +235,8 @@ void TilingHandler::loadSettings()
     fetchScrollingScreens();
     fetchActiveLayouts();
     fetchScrollEffectBehaviour();
+    fetchScrollTabPaintOverrides();
+    fetchScrollTabStrips();
 }
 
 // Scrolling screen subset — the Mode-stamp discriminator only, no
@@ -405,6 +428,67 @@ void TilingHandler::fetchActiveLayouts()
                     }
                 }
             });
+}
+
+// Bring-up replay of the compositor-drawn tab indicators. The engine's
+// scrollTabStripsChanged is change-gated and the payloads it emitted before
+// this effect instance existed are gone, so a freshly loaded effect (login,
+// KCM toggle, crash recovery) pulls the daemon's per-screen cache once.
+// Routed through the ordinary slot so the two paths cannot diverge. A live
+// signal that lands while this is in flight simply wins: the slot is
+// last-writer per screen and the cache the method answers from is the same
+// one the signal updates, so the reply can only be equal or older per key —
+// and an older payload for one screen is overwritten by that screen's next
+// relayout, which every strip change produces. No generation guard, then,
+// for the same reason fetchScrollEffectBehaviour's twin needs one only
+// because ITS apply is not per-key.
+// Bring-up replay of the per-screen context-rule paint overrides. Fetched
+// BEFORE the strips so the first rebuild already layers them; the slot is
+// last-writer per screen, so a live signal landing mid-flight simply wins,
+// exactly as for fetchScrollTabStrips.
+void TilingHandler::fetchScrollTabPaintOverrides()
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+        PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabPaintOverrides"));
+    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariantMap> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcEffect) << "scrollTabPaintOverrides: query failed, daemon may not be running";
+            return;
+        }
+        const QVariantMap byScreen = reply.value();
+        for (auto it = byScreen.constBegin(); it != byScreen.constEnd(); ++it) {
+            // A nested a{sv} arrives QDBusArgument-wrapped; toMap() on it is
+            // empty, so demarshal explicitly (same trap fetchScrollEffectBehaviour
+            // documents).
+            slotScrollTabPaintOverridesChanged(it.key(), qdbus_cast<QVariantMap>(it.value()));
+        }
+    });
+}
+
+void TilingHandler::fetchScrollTabStrips()
+{
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
+                                       PhosphorProtocol::Service::Interface::Tiling, QStringLiteral("scrollTabStrips"));
+    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg, PhosphorProtocol::Service::SyncCallTimeoutMs);
+    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariantMap> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcEffect) << "scrollTabStrips: query failed, daemon may not be running";
+            return;
+        }
+        const QVariantMap strips = reply.value();
+        for (auto it = strips.constBegin(); it != strips.constEnd(); ++it) {
+            slotScrollTabStripsChanged(it.key(), it.value().toString());
+        }
+    });
 }
 
 } // namespace PlasmaZones

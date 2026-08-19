@@ -259,9 +259,8 @@ Item {
         opacity: 0.8
         font.family: card.fontFamily.length > 0 ? card.fontFamily : Kirigami.Theme.defaultFont.family
         // pixelSize, not pointSize: pointSize is -1 for pixel-defined theme
-        // fonts (the guarded form ScrollTabStripContent uses), and a
-        // negative product would be rejected, silently ignoring the user's
-        // font-size scale.
+        // fonts, and a negative product would be rejected, silently ignoring
+        // the user's font-size scale.
         font.pixelSize: Math.max(1, Math.round((Kirigami.Theme.defaultFont.pixelSize > 0 ? Kirigami.Theme.defaultFont.pixelSize : Kirigami.Units.gridUnit * 0.6) * 0.85 * card.fontSizeScale))
         font.weight: card.fontWeight
         font.italic: card.fontItalic

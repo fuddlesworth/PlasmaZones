@@ -34,6 +34,9 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
+#include <QStringList>
+
+#include <functional>
 
 namespace PlasmaZones {
 
@@ -57,6 +60,25 @@ void OverlayService::setScrollDropIndicatorOverrides(const QString& screenId, co
     // exists only during a drag, and every rect push within that drag re-reads
     // these. A change landing between drags shows up on the next drag, which
     // is the first moment anyone could see it.
+}
+
+void OverlayService::clearAllScrollDropIndicatorOverrides()
+{
+    clearScrollDropIndicatorOverridesWhere([](const QString&) {
+        return true;
+    });
+}
+
+void OverlayService::clearScrollDropIndicatorOverridesWhere(const std::function<bool(const QString&)>& screenMatches)
+{
+    // Load-bearing copy of the keys: setScrollDropIndicatorOverrides mutates
+    // the map being walked (remove on an empty map).
+    const QStringList screens = m_scrollDropIndicatorOverrides.keys();
+    for (const QString& screenId : screens) {
+        if (screenMatches(screenId)) {
+            setScrollDropIndicatorOverrides(screenId, {});
+        }
+    }
 }
 
 void OverlayService::setScrollDropIndicatorWindowOverrides(const QVariantMap& overrides)

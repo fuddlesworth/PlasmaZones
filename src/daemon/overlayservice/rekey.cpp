@@ -97,54 +97,9 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     // (lib only touches m_states).
     if (existing != m_screenStates.end()) {
         existing->shell = nullptr;
-        existing->tabShell = nullptr;
         m_screenStates.erase(existing);
     }
 
-    // The tab-indicator shell follows the same key. It is best-effort on
-    // purpose: it exists only for a screen that has shown a tabbed column, so
-    // "no live shell under oldKey" is the ordinary answer, not a fault. When
-    // one IS live and the host refuses the move (a live shell already under
-    // newKey), destroy it rather than leave the donor's surface stranded under
-    // a key nothing will ever address again — the next strip update recreates
-    // it, at the cost of one surface rebuild.
-    //
-    // The four per-screen tab maps are captured FIRST, because destroyShell
-    // fires the PreDestroy hook and unwireScrollTabShellSlots clears every one
-    // of them for oldKey — so the migration block below would find nothing
-    // left to move. The strip model and input region self-heal on the next
-    // engine push, but the context-rule paint overrides do not: their only
-    // writer is a rules re-resolve, so the screen would silently fall back to
-    // config colours until one happened. Carrying them across means the
-    // rebuilt shell comes up already correct.
-    const auto savedStrips = m_lastScrollTabStrips.constFind(oldKey) != m_lastScrollTabStrips.constEnd()
-        ? std::optional(m_lastScrollTabStrips.value(oldKey))
-        : std::nullopt;
-    const auto savedRegion = m_scrollTabInputRegions.constFind(oldKey) != m_scrollTabInputRegions.constEnd()
-        ? std::optional(m_scrollTabInputRegions.value(oldKey))
-        : std::nullopt;
-    const auto savedOverrides =
-        m_scrollTabIndicatorOverrides.constFind(oldKey) != m_scrollTabIndicatorOverrides.constEnd()
-        ? std::optional(m_scrollTabIndicatorOverrides.value(oldKey))
-        : std::nullopt;
-    if (m_tabShellHost->stateFor(oldKey) != nullptr && !m_tabShellHost->rekey(oldKey, newKey)) {
-        qCInfo(lcOverlay) << "rekeyOverlayState: tab shell rekey refused" << oldKey << "->" << newKey
-                          << "; destroying it, the next strip update rebuilds it";
-        m_tabShellHost->destroyShell(oldKey);
-        m_tabShellHost->removeState(oldKey);
-        donor->tabShell = nullptr;
-        // Put back what the PreDestroy hook just cleared, so the migration
-        // below has something to move.
-        if (savedStrips) {
-            m_lastScrollTabStrips.insert(oldKey, *savedStrips);
-        }
-        if (savedRegion) {
-            m_scrollTabInputRegions.insert(oldKey, *savedRegion);
-        }
-        if (savedOverrides) {
-            m_scrollTabIndicatorOverrides.insert(oldKey, *savedOverrides);
-        }
-    }
     PerScreenOverlayState state = std::move(donor.value());
     m_screenStates.erase(donor);
     auto inserted = m_screenStates.insert(newKey, std::move(state));
@@ -153,27 +108,6 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     // needs something different from the move. Deliberately not a count: the
     // enumeration below drifted from one twice already, and what matters is
     // that a map is named here at all.
-    //  - m_lastScrollTabStrips MUST follow. It is the cached model the
-    //    enable toggle replays, so left under the dead key, re-enabling the
-    //    indicator would replay nothing until the next structural strip
-    //    change.
-    //  - m_scrollTabsHidePending is NOT an inert bit. The rekey preserves the
-    //    slot and the animator track, so a hide in flight still completes;
-    //    dropping the bit alone strands the slot. It is cleared together with
-    //    the teardown it owns, below.
-    //  - m_scrollTabsHideGuard is deliberately abandoned for the NEW key: it
-    //    is monotonic per key, and the new key's counter (absent or already
-    //    higher) can only make an old in-flight completion stale-return, which
-    //    is the safe direction. The OLD key's counter is bumped when a hide
-    //    was pending, so the completion this rekey pre-empts stale-returns
-    //    rather than running the teardown twice.
-    //  - m_scrollTabInputRegions MUST follow. The rekey preserves the live
-    //    surface, so the slot can still be visible; left under the dead key,
-    //    syncScrollTabShellSurfaceState(newKey) would read an empty region and
-    //    the indicator would be UNCLICKABLE until the next strip update.
-    //  - m_scrollTabIndicatorOverrides MUST follow. Otherwise the screen's
-    //    context-rule paint overrides silently fall back to the config values
-    //    until the next updateScrollingScreens pass re-pushes them.
     //  - m_lastScrollDropIndicatorRect MUST follow, for a reason sharper than
     //    the others. It is the drop indicator's CHANGE GATE, and the rekey
     //    preserves the live slot — so an indicator visible under oldKey stays
@@ -183,9 +117,12 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     //    (the next push hides the old id first), but a rekey with no further
     //    push before the drop leaves the rectangle painted with no drag left
     //    to dismiss it.
-    //  - m_scrollDropIndicatorHidePending is handled like its tab twin: the
+    //  - m_scrollDropIndicatorHidePending is NOT an inert bit. The rekey
+    //    preserves the slot and the animator track, so a hide in flight still
+    //    completes and dropping the bit alone would strand the slot. The
     //    pending teardown is finished here rather than dropped, and
-    //    m_scrollDropIndicatorHideGuard follows the same bump-the-old-key rule.
+    //    m_scrollDropIndicatorHideGuard is bumped for the OLD key so the
+    //    in-flight completion stale-returns instead of running twice.
     //  - m_stripCardFractionsCache is DROPPED for both keys rather than moved:
     //    it is a memo the next trigger-edge probe rebuilds in one call, and
     //    a stale entry under either key would mis-size the keep-visible band.
@@ -198,29 +135,15 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     // key never reaches unwirePassiveShellSlots, and the by-key clears in
     // updateScrollingScreens name the LIVE screen), so failing to move these
     // leaks an entry per rekey rather than merely misbehaving once.
-    if (const auto stripsIt = m_lastScrollTabStrips.constFind(oldKey); stripsIt != m_lastScrollTabStrips.constEnd()) {
-        m_lastScrollTabStrips.insert(newKey, stripsIt.value());
-        m_lastScrollTabStrips.remove(oldKey);
-    }
-    if (const auto regionIt = m_scrollTabInputRegions.constFind(oldKey);
-        regionIt != m_scrollTabInputRegions.constEnd()) {
-        m_scrollTabInputRegions.insert(newKey, regionIt.value());
-        m_scrollTabInputRegions.remove(oldKey);
-    }
-    if (const auto overrideIt = m_scrollTabIndicatorOverrides.constFind(oldKey);
-        overrideIt != m_scrollTabIndicatorOverrides.constEnd()) {
-        m_scrollTabIndicatorOverrides.insert(newKey, overrideIt.value());
-        m_scrollTabIndicatorOverrides.remove(oldKey);
-    }
     if (const auto dropRectIt = m_lastScrollDropIndicatorRect.constFind(oldKey);
         dropRectIt != m_lastScrollDropIndicatorRect.constEnd()) {
         m_lastScrollDropIndicatorRect.insert(newKey, dropRectIt.value());
         m_lastScrollDropIndicatorRect.remove(oldKey);
     }
-    // The drop indicator's paint overrides follow for the same reason its tab
-    // twin does: their only writer is a context re-resolve, so an entry left
-    // under the dead key means the rekeyed screen silently falls back to config
-    // colours until one happens, and the stranded entry never goes away.
+    // The drop indicator's paint overrides follow too: their only writer is a
+    // context re-resolve, so an entry left under the dead key means the
+    // rekeyed screen silently falls back to config colours until one happens,
+    // and the stranded entry never goes away.
     if (const auto dropOverrideIt = m_scrollDropIndicatorOverrides.constFind(oldKey);
         dropOverrideIt != m_scrollDropIndicatorOverrides.constEnd()) {
         m_scrollDropIndicatorOverrides.insert(newKey, dropOverrideIt.value());
@@ -238,20 +161,14 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     // guard the rekey abandons UNCHANGED. It therefore passes its own guard
     // check, then fails the m_screenStates lookup (the state now lives under
     // newKey) and returns early, never running the teardown it owns. That
-    // leaves the slot visible at opacity 0: the drop indicator stops painting
-    // until the drag ends, and the tab strips stay INVISIBLE BUT CLICKABLE,
-    // because syncScrollTabShellSurfaceState keys the input region on
-    // slot->isVisible(). Neither self-heals through the normal update path,
-    // which early-returns on a slot that is already visible.
+    // leaves the slot visible at opacity 0, so the drop indicator stops
+    // painting until the drag ends. That does not self-heal through the normal
+    // update path, which early-returns on a slot that is already visible.
     // So finish the teardown here, against the migrated state, and bump the
     // old key's guard so the in-flight completion stale-returns instead of
     // running twice. Deferred to after the surface re-announce below, which
     // needs the pre-teardown state.
-    const bool tabsHideWasPending = m_scrollTabsHidePending.remove(oldKey);
     const bool dropHideWasPending = m_scrollDropIndicatorHidePending.remove(oldKey);
-    if (tabsHideWasPending) {
-        ++m_scrollTabsHideGuard[oldKey];
-    }
     if (dropHideWasPending) {
         ++m_scrollDropIndicatorHideGuard[oldKey];
     }
@@ -305,9 +222,6 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
             }
         };
         reanchor(rekeyed.shell);
-        reanchor(rekeyed.tabShell);
-        // Tracked for the passive shell only — overlayGeometry is the zone
-        // overlay's hit-testing reference, and the tab indicators have none.
         if (isVS && targetVsGeom.isValid() && rekeyed.shell && rekeyed.shell->shellSurface()) {
             rekeyed.overlayGeometry = targetVsGeom;
             // The zone-selector popup converts global cursor coords through
@@ -323,34 +237,9 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         rekeyed.overlayGeomConnection = installOverlayGeometryWatcher(physScreen, newKey, isVS);
     }
 
-    // Re-publish the tab surface under the new key. ShellHost::rekey moves the
-    // ShellState between keys without firing PreDestroy, so the wl_surface
-    // survives — but the compositor was told about it under oldKey, and the
-    // effect's map is keyed by screen with the announcement as its only writer.
-    // Left alone, nothing would ever name the surface under newKey, and the
-    // eventual teardown would retract newKey, leaving the effect holding an
-    // oldKey entry that points at a destroyed object. Wayland reuses ids, so
-    // that is the mismatch the announce/retract pairing exists to prevent, not
-    // merely a lost indicator. Retract first: the two keys are different, so
-    // the change gate cannot collapse the pair.
-    announceScrollTabSurface(oldKey, nullptr);
-    if (rekeyed.tabShell) {
-        announceScrollTabSurface(newKey, rekeyed.tabShell->shellWindow());
-    }
-
-    // Finish the hides the rekey inherited (see the pending-bit block above).
-    // Same teardown the abandoned completions would have run, addressed to the
-    // migrated key. The tab retraction comes after the re-announce on purpose:
-    // the announce is unconditional on tabShell, so retracting first would let
-    // it re-publish a surface for a slot that is about to go invisible.
-    if (tabsHideWasPending) {
-        if (QQuickItem* slot = rekeyed.scrollTabsSlot()) {
-            slot->setVisible(false);
-            writeQmlProperty(slot, QStringLiteral("loaded"), false);
-            announceScrollTabSurface(newKey, nullptr);
-        }
-        syncScrollTabShellSurfaceState(newKey);
-    }
+    // Finish the hide the rekey inherited (see the pending-bit block above).
+    // Same teardown the abandoned completion would have run, addressed to the
+    // migrated key.
     if (dropHideWasPending) {
         if (QQuickItem* slot = rekeyed.scrollDropIndicatorSlot()) {
             slot->setVisible(false);
@@ -387,23 +276,12 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
         // miss is separately named getOrCreateStateFor precisely so a
         // debug-only check like this one cannot reach it by accident.
         //
-        // Both borrowed pointers are checked. The tab shell is a second
-        // pointer into a second host with the same desync sources — a refused
-        // rekey, or a PostCreate that tears itself down.
         if (it.value().shell) {
             const PhosphorOverlay::ShellState* libState = m_shellHost->stateFor(it.key());
             if (libState != it.value().shell) {
                 qCWarning(lcOverlay) << "validateScreenStateInvariant: daemon/lib ShellState pointer desync for"
                                      << it.key() << "daemon=" << it.value().shell << "lib=" << libState;
                 Q_ASSERT_X(false, "OverlayService", "daemon/lib ShellState pointer desync");
-            }
-        }
-        if (it.value().tabShell) {
-            const PhosphorOverlay::ShellState* libTabState = m_tabShellHost->stateFor(it.key());
-            if (libTabState != it.value().tabShell) {
-                qCWarning(lcOverlay) << "validateScreenStateInvariant: daemon/lib tab ShellState pointer desync for"
-                                     << it.key() << "daemon=" << it.value().tabShell << "lib=" << libTabState;
-                Q_ASSERT_X(false, "OverlayService", "daemon/lib tab ShellState pointer desync");
             }
         }
         if (!it.value().overlayPhysScreen) {
@@ -496,7 +374,6 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
                         }
                     };
                     reanchor(stAfter.shell);
-                    reanchor(stAfter.tabShell);
                     stAfter.overlayGeometry = vsGeom;
                     updateOverlayWindow(sid, screenPtr);
                     return;

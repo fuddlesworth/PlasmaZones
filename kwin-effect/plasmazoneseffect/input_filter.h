@@ -42,10 +42,19 @@ class PlasmaZonesEffect;
  * effect already accepts for Window / Workspace / scene items. Deleting the
  * filter uninstalls it (InputEventFilter dtor contract).
  *
- * DOCUMENTED GAPS. Two input classes still reach the invisible surface:
- *  - Pointer HOVER (enter/leave, focus-follows-mouse). KWin recomputes pointer
+ * This filter ALSO owns pointer input for the compositor-drawn scrolling
+ * TAB INDICATORS (ScrollTabIndicatorPainter): pointerMotion hovers the pill
+ * under the cursor and pointerButton / touchDown activate it. The pills are
+ * not windows, so no window-level input path sees them; a filter at this
+ * weight is the one place the press can be claimed before click-to-focus
+ * hands it to the column underneath. Pill hit-testing runs only when some
+ * output has indicators at all (TilingHandler::scrollTabPillAt's gate).
+ *
+ * DOCUMENTED GAPS. Two input classes still reach the invisible overhang:
+ *  - Pointer FOCUS (enter/leave, focus-follows-mouse). KWin recomputes pointer
  *    focus inside the device handler before filters run, so no filter can
- *    intercept it. Cosmetic: no button, wheel or touch lands there.
+ *    retarget it. Cosmetic: no button, wheel or touch lands there. (Pointer
+ *    MOTION itself is observable — pointerMotion is how the pills hover.)
  *  - TABLET tool tip/axis events. The tablet hooks are deliberately not
  *    overridden; a stylus is a pointing device the strip has no story for yet,
  *    and guessing one here would be worse than the honest gap. Named so the
@@ -63,6 +72,7 @@ public:
     explicit ScrollOverhangInputFilter(PlasmaZonesEffect* effect);
     ~ScrollOverhangInputFilter() override = default;
 
+    bool pointerMotion(KWin::PointerMotionEvent* event) override;
     bool pointerButton(KWin::PointerButtonEvent* event) override;
     bool pointerAxis(KWin::PointerAxisEvent* event) override;
     bool touchDown(KWin::TouchDownEvent* event) override;

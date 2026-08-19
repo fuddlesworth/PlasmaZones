@@ -85,6 +85,21 @@ void ScrollOverhangInputFilter::focusVisibleWindowAt(const QPointF& pos, KWin::W
     }
 }
 
+bool ScrollOverhangInputFilter::pointerMotion(KWin::PointerMotionEvent* event)
+{
+    if (!event) {
+        return false;
+    }
+    // Hover for the compositor-drawn tab pills. Never consumes: motion must
+    // keep flowing to whatever is under the cursor (the column, a dialog), the
+    // pill only lights up on the way past. The handler gates on "any output
+    // has indicators" so a desktop with no tabbed column pays one branch.
+    if (TilingHandler* tiling = m_effect->tilingHandler()) {
+        tiling->updateScrollTabHover(event->position);
+    }
+    return false;
+}
+
 bool ScrollOverhangInputFilter::pointerButton(KWin::PointerButtonEvent* event)
 {
     if (!event) {
@@ -107,6 +122,20 @@ bool ScrollOverhangInputFilter::pointerButton(KWin::PointerButtonEvent* event)
     // and the next unrelated release of that button was swallowed, leaving a
     // client with a press it never saw released.
     m_consumedButtons &= ~event->button;
+    // A press on a compositor-drawn tab pill activates that tab. Tested
+    // BEFORE the overhang: the pills sit over the column they label, and a
+    // pill at a straddler's visible edge must win over retargeting the click
+    // to the column. Left button only — a right or middle press on a pill
+    // falls through to whatever is under it, which is what a pill drawn over
+    // a window would naturally do. The press is consumed (and its release
+    // paired below), so the column never sees a click it did not get.
+    if (event->button == Qt::LeftButton) {
+        if (TilingHandler* tiling = m_effect->tilingHandler(); tiling && tiling->activateScrollTabAt(event->position)) {
+            m_consumedButtons |= event->button;
+            qCDebug(lcEffect) << "Overhang input filter: consumed press on tab pill at" << event->position;
+            return true;
+        }
+    }
     KWin::Window* target = overhangTargetAt(event->position);
     if (!target) {
         return false;
@@ -209,6 +238,13 @@ bool ScrollOverhangInputFilter::touchDown(KWin::TouchDownEvent* event)
 {
     if (!event) {
         return false;
+    }
+    // Same pill-first rule as pointerButton: a tap on a tab pill activates
+    // it and the sequence is consumed through touchUp.
+    if (TilingHandler* tiling = m_effect->tilingHandler(); tiling && tiling->activateScrollTabAt(event->pos)) {
+        m_consumedTouchIds.insert(event->id);
+        qCDebug(lcEffect) << "Overhang input filter: consumed touch on tab pill at" << event->pos;
+        return true;
     }
     KWin::Window* target = overhangTargetAt(event->pos);
     if (!target) {

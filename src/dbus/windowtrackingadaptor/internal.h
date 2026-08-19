@@ -324,8 +324,9 @@ inline QString focused()
 } // namespace ScrollOpenKeys
 
 /// Keys of the per-window colour-override maps: tabColorRuleParams (consumed by
-/// the daemon's scroll tab-strip enrichment) and dropIndicatorRuleParams
-/// (consumed by the overlay service's drop-indicator slot). Same rationale as
+/// the KWin effect, which draws the scroll tab pills, through
+/// TilingAdaptor::scrollTabColors) and dropIndicatorRuleParams (consumed by
+/// the overlay service's drop-indicator slot). Same rationale as
 /// ScrollOpenKeys above — the seam was five hand-repeated literals across four
 /// files, where a typo silently drops an override instead of failing to build.
 ///
@@ -358,14 +359,17 @@ inline QString indicatorBorderColor()
 /// The NON-colour overlay paint keys, WindowColorKeys' sibling for the same
 /// reason: each spelling is at once the rule-override map key the daemon
 /// produces, the key the overlay's layering step reads, and the QML property
-/// name the slot exposes — seven literals that were hand-repeated across
-/// producer and consumer, where a rename silently drops the rule override
-/// instead of failing to build.
+/// name the slot exposes — literals that were hand-repeated across producer
+/// and consumer, where a rename silently drops the rule override instead of
+/// failing to build.
 namespace WindowPaintKeys {
+/// The three tab-indicator paint keys the KWin effect reads off the per-screen
+/// context override map (TilingAdaptor::setScrollTabPaintOverrides). The
+/// effect draws the pills, so these name the fields of ITS style model rather
+/// than a QML property — but the spelling contract is the same: one home,
+/// producer and consumer both read it from here.
 inline QString tabStyle()
 {
-    // "tabStyle", not "style": the name addresses the SLOT's declared
-    // property (see the push block in overlayservice/scrolltabs.cpp).
     return QStringLiteral("tabStyle");
 }
 inline QString gapsBetweenTabs()

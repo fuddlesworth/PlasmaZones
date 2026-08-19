@@ -95,9 +95,9 @@ QtObject {
 
     // Scroll tab-indicator theme fallbacks — what an EMPTY tab colour key
     // resolves to. Single-sourced here for the same drift reason as the zone
-    // trio above: the renderer (ScrollTabStripContent) and the settings
-    // page's swatch previews (ScrollingTabsPage) must show one truth. The
-    // inactive fallback differs per style ON PURPOSE: a chip carries its
+    // trio above, so the settings page's swatch previews (ScrollingTabsPage)
+    // and the compositor-drawn pills agree on one truth. The inactive
+    // fallback differs per style ON PURPOSE: a chip carries its
     // title, so its resting state is no fill at all; a bar segment has
     // nothing but its fill, so an unfilled one would under-report the tab
     // count.

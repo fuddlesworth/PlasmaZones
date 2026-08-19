@@ -337,6 +337,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
             last = caption;
             pushWindowMetadata(safeW, /*includeExtended=*/false);
+            // A compositor-drawn tab pill shows this caption; rebuild the
+            // strips that name the window. One hash probe when it is not a
+            // tab anywhere, which is the common case.
+            m_tilingHandler->noteScrollTabWindowChanged(getWindowId(safeW.data()));
         };
         // Class / desktop-file mutations invalidate the animation rule
         // evaluator's per-window match cache. The cache is keyed on the
@@ -1003,6 +1007,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                         return;
                     }
                     pushWindowMetadata(safeW.data());
+                    // Urgency lights a compositor-drawn tab pill; same rebuild
+                    // as the caption hook above.
+                    m_tilingHandler->noteScrollTabWindowChanged(getWindowId(safeW.data()));
                 });
     }
 }

@@ -39,6 +39,7 @@
 #include "handlers/snapassisthandler.h"
 #include "handlers/snaphandler.h"
 #include "compositor/stripviewanimator.h"
+#include "compositor/scrolltabindicatorpainter.h"
 #include "compositor/windowanimator.h"
 
 namespace PlasmaZones {
@@ -66,6 +67,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_stripViewAnimator(std::make_unique<StripViewAnimator>())
+    , m_scrollTabPainter(std::make_unique<ScrollTabIndicatorPainter>())
     , m_shaderManager(this)
     , m_desktopTransition(this)
     , m_stripTransition(this)
@@ -119,6 +121,9 @@ void PlasmaZonesEffect::clearDaemonCompositorState()
     // Same for the strip pass (no claim to release, but its capture textures
     // and compiled shaders free under the same context discipline).
     m_stripTransition.reset();
+    // And the tab-indicator textures: one GLTexture per output, freed under
+    // the same context discipline so nothing leaks past the effect.
+    m_scrollTabPainter->releaseGl();
 
     PhosphorProtocol::ClientHelpers::sendOneWay(PhosphorProtocol::Service::Interface::WindowDrag,
                                                 QStringLiteral("clearForCompositorReconnect"));

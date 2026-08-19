@@ -77,42 +77,6 @@ void OverlayService::setSettings(ISettings* settings)
 
             connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, &OverlayService::syncCavaState);
 
-            // Tab-indicator enable toggle. Hiding must RUN, not just skip
-            // future updates, or a live indicator stays painted after the
-            // switch flips.
-            connect(m_settings, &ISettings::scrollingTabIndicatorEnabledChanged, this,
-                    &OverlayService::replayScrollTabStrips);
-            // The indicator's PAINT settings. They change nothing structural,
-            // so the engine never re-emits for them and the replay is the only
-            // thing that repaints a live indicator. The GEOMETRY settings are
-            // deliberately absent: those change resolved rects, so the engine
-            // retiles and its own tabStripsChanged carries the new rects
-            // through — replaying here as well would just push a stale model
-            // ahead of the real one.
-            connect(m_settings, &ISettings::scrollingTabIndicatorStyleChanged, this,
-                    &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::scrollingTabIndicatorGapsBetweenTabsChanged, this,
-                    &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::scrollingTabIndicatorCornerRadiusChanged, this,
-                    &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::scrollingTabIndicatorActiveColorChanged, this,
-                    &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::scrollingTabIndicatorInactiveColorChanged, this,
-                    &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::scrollingTabIndicatorUrgentColorChanged, this,
-                    &OverlayService::replayScrollTabStrips);
-            // The overlay FONT, for the same reason. The five sibling slots are
-            // transient and pick a font change up the next time they are shown;
-            // a tab indicator stays up for as long as its column is tabbed, so
-            // without this the pills keep the old family until something hides
-            // and re-shows the strip. All six, because writeFontProperties
-            // reads all six.
-            connect(m_settings, &ISettings::labelFontFamilyChanged, this, &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::labelFontSizeScaleChanged, this, &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::labelFontWeightChanged, this, &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::labelFontItalicChanged, this, &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::labelFontUnderlineChanged, this, &OverlayService::replayScrollTabStrips);
-            connect(m_settings, &ISettings::labelFontStrikeoutChanged, this, &OverlayService::replayScrollTabStrips);
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, &OverlayService::syncCavaState);
             // Frame rate drives BOTH the CAVA capture rate and the shader
             // render loop's interval. syncCavaState covers the first; the

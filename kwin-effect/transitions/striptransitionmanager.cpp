@@ -259,9 +259,9 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
     // Render the live scene into the capture. This is the downstream chain
     // call (effects below us + the scene), NOT a re-entry into our own
     // paintScreen — but it DOES re-enter our paintWindow, which is the point:
-    // the strip translation, the parked-column relocation and the
-    // tab-indicator offset all apply inside the capture, so the pack
-    // decorates exactly the frame the user would otherwise have seen. The
+    // the strip translation, the parked-column relocation and the tab-pill
+    // blit all apply inside the capture, so the pack decorates exactly the
+    // frame the user would otherwise have seen. The
     // pass bracket's m_currentPassOutput is still this output, so the
     // foreign-output cull behaves identically to the on-screen path.
     {
@@ -276,15 +276,10 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         // pack must not smear surfaces that are not scrolling. "Above" is a
         // STACKING fact, not a role: the boundary is the topmost strip
         // COLUMN managed by this output in KWin's stacking order, and only
-        // windows above that boundary are excluded. The tab-indicator
-        // surface is deliberately NOT a boundary candidate: it rides
-        // layer-shell, which stacks above every ordinary toplevel, so a
-        // boundary elected on it sat above ALL toplevels and every non-strip
-        // window — OSDs, dialogs, floating windows — fell inside the capture
-        // and smeared with the strip. The indicator itself belongs INSIDE
-        // the capture (paintWindow's anchor injection draws it there, offset
-        // with the strip), which is why the insertion loop below skips it
-        // rather than compositing it sharp a second time on top.
+        // windows above that boundary are excluded. The tab pills need no
+        // clause of their own: they are a blit at the anchor's slot rather
+        // than a window in the stacking order, so they land inside the
+        // capture and ride the strip with the columns they label.
         // A floating window stacked BELOW a raised
         // column stays in the capture and is smeared with it, which is what
         // its stacking says should happen; a closing or dragged column that
@@ -362,14 +357,6 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
                     if (!sw || !QRectF(sw->expandedGeometry()).intersects(outputGeoF)) {
                         continue;
                     }
-                    // Never exclude a tab-indicator surface. It always sits
-                    // above the boundary (layer-shell), but the anchor
-                    // injection draws it INSIDE the capture, offset with the
-                    // strip — excluding it here would composite it sharp a
-                    // second time on top of the pack's copy.
-                    if (m_effect->isScrollTabIndicatorSurface(sw)) {
-                        continue;
-                    }
                     m_effect->m_stripCaptureAboveStrip.insert(sw);
                 }
             }
@@ -391,19 +378,6 @@ bool StripTransitionManager::paintOutput(const KWin::RenderTarget& renderTarget,
         });
         auto skippedUnwindGuard = qScopeGuard([this] {
             m_effect->m_stripCaptureSkippedWindows.clear();
-        });
-        // The tab-indicator drawn set gets the same per-WALK scoping the
-        // skipped list has, and for the same reason: it records what has
-        // already been painted in ONE scene walk (the natural layer slot is
-        // skipped once the anchor injection drew the indicator), and this
-        // capture is a second walk nested inside the bracket prePaintScreen
-        // opened. Sharing it across walks let one walk's marks silence the
-        // other's, so an indicator could end up drawn zero times. Swap out an
-        // empty set for the capture and hand the outer walk's back after it.
-        QSet<KWin::EffectWindow*> outerTabDrawn;
-        outerTabDrawn.swap(m_effect->m_scrollTabDrawn);
-        const auto tabDrawnGuard = qScopeGuard([this, &outerTabDrawn] {
-            m_effect->m_scrollTabDrawn.swap(outerTabDrawn);
         });
         // Device-space region rooted at (0, 0) — the FBO's own space, not the
         // output-positioned logical geometry; see captureLiveScene's note.

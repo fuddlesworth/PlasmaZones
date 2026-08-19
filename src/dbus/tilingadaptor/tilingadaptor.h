@@ -112,6 +112,29 @@ public:
     /// (restore-then-retile churn). One deferred emission carries the final
     /// state of the whole pass.
     void notifyEngineScreensChanged(bool isDesktopSwitch);
+    /// Per-screen tab-indicator model from the scroll engine, cached for the
+    /// scrollTabStrips replay query and re-emitted as scrollTabStripsChanged.
+    /// A "[]" (or empty) payload retracts the screen: the cache entry is
+    /// dropped rather than stored, so a replaying effect sees the screen
+    /// absent instead of having to special-case an empty array. Ungated
+    /// otherwise — the engine already emits only on a real model change, and
+    /// a second gate here would swallow the re-push that follows an
+    /// enrichment refresh.
+    void relayScrollTabStrips(const QString& screenId, const QString& stripsJson);
+    /// Per-screen tab-indicator PAINT overrides resolved from context rules
+    /// (a Set tab style / colour rule scoped to a screen, desktop or
+    /// activity): style, gapsBetweenTabs, cornerRadius and the three colours,
+    /// keyed by WindowPaintKeys / WindowColorKeys spellings. Only the keys a
+    /// rule actually set are present. An EMPTY map clears the screen (the
+    /// cache entry is dropped, the signal carries the empty map so the effect
+    /// falls back to the global settings). Change-gated: the daemon resolves
+    /// these on every per-screen config pass, most of which change nothing.
+    void setScrollTabPaintOverrides(const QString& screenId, const QVariantMap& overrides);
+    /// All-windows tab-colour invalidation broadcast (empty id, empty map).
+    /// Fired from the daemon's rules-changed and colour-scheme triggers, both
+    /// of which move every window's verdict at once. Nothing is resolved here:
+    /// the receiver re-queries scrollTabColors for the windows it paints.
+    void relayScrollTabColorsChanged();
     /// Enabled-state change on any pipeline engine: re-emits the combined
     /// any-engine-enabled state (deduped — multiple engines feed the one
     /// signal, same rationale as the float-broadcast gate).
@@ -247,6 +270,40 @@ public Q_SLOTS:
      */
     void notifyWindowFocused(const QString& windowId, const QString& screenId);
 
+    /**
+     * @brief Every screen's current tab-indicator model
+     *
+     * Replay half of scrollTabStripsChanged, for an effect that loads after
+     * the strips were last laid out. Screens with no tabbed column are
+     * absent from the map.
+     *
+     * @return screenId → tab-strip JSON string
+     */
+    QVariantMap scrollTabStrips() const;
+
+    /**
+     * @brief Every screen's current tab-indicator paint overrides
+     *
+     * Replay half of scrollTabPaintOverridesChanged, for an effect that loads
+     * after the overrides were last resolved. Screens with no override are
+     * absent from the map.
+     *
+     * @return screenId → QVariantMap of paint/colour key to value
+     */
+    QVariantMap scrollTabPaintOverrides() const;
+
+    /**
+     * @brief Per-window tab colours resolved from the window rules
+     *
+     * Delegates to WindowTrackingAdaptor::tabColorRuleParams (which owns the
+     * resolve and its memo). Empty map when no WTA is wired or no rule sets a
+     * tab colour for the window.
+     *
+     * @param windowId Window ID to resolve colours for
+     * @return activeColor / inactiveColor / urgentColor → colour string
+     */
+    QVariantMap scrollTabColors(const QString& windowId);
+
     // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
     // all float operations are now routed through the unified methods —
     // org.plasmazones.Snap.toggleFloatForWindow (SnapAdaptor) for toggle,
@@ -331,6 +388,38 @@ Q_SIGNALS:
     void windowsReleasedFromTiling(const QStringList& windowIds);
 
     /**
+     * @brief Emitted when a screen's tab-indicator model changes
+     *
+     * The KWin effect listens to this to paint tab pills on tabbed scrolling
+     * columns. See the XML DocString for the JSON shape; "[]" retracts the
+     * screen's indicators.
+     *
+     * @param screenId Effective screen id the model belongs to
+     * @param stripsJson JSON array of tabbed-column entries
+     */
+    void scrollTabStripsChanged(const QString& screenId, const QString& stripsJson);
+
+    /**
+     * @brief A screen's context-rule tab-indicator paint overrides changed
+     *
+     * @param screenId Effective screen id
+     * @param overrides Paint/colour key to value; empty clears the screen
+     */
+    void scrollTabPaintOverridesChanged(const QString& screenId, const QVariantMap& overrides);
+
+    /**
+     * @brief Emitted when rule-resolved tab colours may have changed
+     *
+     * Broadcast-only today: both arguments are empty and the receiver must
+     * re-query scrollTabColors for the windows it paints. The per-window
+     * argument shape is kept for a future targeted invalidation.
+     *
+     * @param windowId Window whose colours changed, empty for the broadcast
+     * @param colors Resolved colours, empty for the broadcast
+     */
+    void scrollTabColorsChanged(const QString& windowId, const QVariantMap& colors);
+
+    /**
      * @brief Emitted when a window's floating state changes in an engine
      *
      * The KWin effect listens to this signal to restore pre-tile geometry
@@ -412,6 +501,12 @@ private:
     bool m_pendingIsDesktopSwitch = false;
     /// Last enabled value broadcast (unset until the first emission).
     std::optional<bool> m_lastEnabledBroadcast;
+    /// Last tab-strip payload per screen, the scrollTabStrips replay cache.
+    /// Retracted screens are removed, never stored as an empty array.
+    QHash<QString, QString> m_lastScrollTabStrips;
+    /// Last context-rule tab paint overrides per screen, the
+    /// scrollTabPaintOverrides replay cache. Cleared screens are removed.
+    QHash<QString, QVariantMap> m_scrollTabPaintOverrides;
     /// Per-screen rules-visible active layout map (see setActiveLayouts).
     QVariantMap m_activeLayouts;
     PhosphorScreens::ScreenManager* m_screenManager = nullptr;

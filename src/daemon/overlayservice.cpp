@@ -114,13 +114,6 @@ QQuickItem* OverlayService::PerScreenOverlayState::cheatsheetSlot() const
     return slotItemOrNull(*this, PhosphorSlotKeys::Cheatsheet());
 }
 
-QQuickItem* OverlayService::PerScreenOverlayState::scrollTabsSlot() const
-{
-    // The one slot that resolves through `tabShell` rather than `shell`: the
-    // indicators live on their own wl_surface so the compositor can slide it.
-    return slotItemOrNull(tabShell, PhosphorSlotKeys::ScrollTabs());
-}
-
 QQuickItem* OverlayService::PerScreenOverlayState::scrollDropIndicatorSlot() const
 {
     return slotItemOrNull(*this, PhosphorSlotKeys::ScrollDropIndicator());
@@ -160,11 +153,6 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
     // (see animation_config.cpp) so the host has its animator ready
     // by the time applyShaderProfilesToAnimator runs.
     m_shellHost = std::make_unique<PhosphorOverlay::ShellHost>(this);
-    // Twin host for the scrolling tab indicators' own per-screen surface.
-    // Same key space (effective screen id) and the same lifecycle, driven from
-    // the same call sites; only the surface it builds differs. Constructed
-    // beside m_shellHost for the same setupSurfaceAnimator ordering reason.
-    m_tabShellHost = std::make_unique<PhosphorOverlay::ShellHost>(this);
 
     // Phase-5 SurfaceAnimator. One instance drives every overlay's
     // show/hide via Profile-resolved curves; per-Role configs install
@@ -320,31 +308,6 @@ OverlayService::OverlayService(PhosphorScreens::ScreenManager* screenManager, Sh
         unwirePassiveShellSlots(screenId);
     });
 
-    // The tab-indicator shell's own three hooks. Deliberately NOT warmed by
-    // warmUpNotifications and not created on hot-plug: unlike the passive
-    // shell it has exactly one consumer, and updateScrollTabStrips creates it
-    // on the first strip a screen shows. A desktop with no tabbed scrolling
-    // column never pays for it at all.
-    m_tabShellHost->setSurfaceFactory([this](const QString& screenId, QScreen* physScreen) -> PhosphorLayer::Surface* {
-        const auto role = PhosphorRoles::makePerInstanceRole(PhosphorRoles::ScrollTabShell, screenId,
-                                                             m_surfaceManager->nextScopeGeneration());
-        auto* surface = createWarmedOsdSurface(role, QUrl(QStringLiteral("qrc:/ui/ScrollTabShell.qml")), physScreen,
-                                               "scroll tab shell", screenId);
-        if (!surface) {
-            qCWarning(lcOverlay) << "Failed to create scroll tab shell for screen=" << screenId
-                                 << ": suppressing further attempts until screen is replugged";
-        }
-        return surface;
-    });
-
-    m_tabShellHost->setPostCreateCallback([this](const QString& screenId, PhosphorOverlay::ShellState& shellState) {
-        wireScrollTabShellSlots(screenId, shellState);
-    });
-
-    m_tabShellHost->setPreDestroyCallback([this](const QString& screenId) {
-        unwireScrollTabShellSlots(screenId);
-    });
-
     // Connect to screen changes. Fail LOUD on a missing application object,
     // matching the profileRegistry pair above: a log-only skip here was a
     // guard that didn't guard — it permanently lost hot-plug tracking for
@@ -444,7 +407,6 @@ OverlayService::~OverlayService()
     const QStringList screenKeysAtShutdown = m_screenStates.keys();
     for (const QString& screenId : screenKeysAtShutdown) {
         m_shellHost->destroyShell(screenId);
-        m_tabShellHost->destroyShell(screenId);
     }
 
     // Explicit lib teardown BEFORE m_screenStates.clear() so the
@@ -455,7 +417,6 @@ OverlayService::~OverlayService()
     // re-fire is a no-op in the steady state - but ordering matters if
     // a future code path leaves a live shell behind.
     m_shellHost.reset();
-    m_tabShellHost.reset();
     m_screenStates.clear();
 
     // Singleton surfaces (layout picker, shader preview) are QObject
@@ -666,12 +627,6 @@ void OverlayService::updateSettings(ISettings* settings)
     // the signals never fire.  Syncing here ensures CAVA always reflects
     // the current configuration.
     syncCavaState();
-
-    // Same missed-emit case for the tab-strip toggle, which otherwise rides
-    // only on scrollingTabIndicatorEnabledChanged: a batch save leaves a live
-    // strip painted after the switch was turned off (or an enabled one
-    // blank) until the next structural strip change.
-    replayScrollTabStrips();
 
     // Hide overlay and zone selector on disabled screens/desktops/activities,
     // then refresh remaining (non-disabled) windows with the new settings.

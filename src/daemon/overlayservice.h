@@ -573,13 +573,6 @@ public:
     void hideCheatsheet() override;
     bool isCheatsheetVisible() const override;
 
-    /// Replay source for a consumer created after the announcements it missed.
-    /// Returns m_scrollTabSurfaceIds, which is the same record the change gate
-    /// reads, so the two can never disagree about what the compositor believes.
-    QHash<QString, quint32> liveScrollTabSurfaces() const override
-    {
-        return m_scrollTabSurfaceIds;
-    }
     /// Re-push model/mode into an already-visible cheatsheet (live refilter
     /// on mode switch or rebind). No-op when hidden — the next show
     /// re-resolves everything anyway.
@@ -598,22 +591,6 @@ public:
         return m_layoutPickerScreenId;
     }
 
-    /// Tab indicators for tabbed scrolling columns on @p screenId (per
-    /// screen, NOT a singleton). @p strips is a list of maps with x / y /
-    /// width / height (absolute px, converted to shell coordinates here),
-    /// position, and tabs ({windowId, title, active, urgent, colors?} list);
-    /// empty hides the screen's indicators. `windowId` is load-bearing — it is
-    /// what a tab click relays back to focus that window.
-    ///
-    /// Each tab is a click target; the surface stays click-through outside the
-    /// indicator rects via the per-screen input region built here.
-    ///
-    /// The rects are always the POST-scroll ones and are written plainly, with
-    /// no motion state alongside them. The indicators have a wl_surface to
-    /// themselves and the compositor slides it by the scrolling strip's view
-    /// offset, so they ride a scroll the same way the columns do.
-    void updateScrollTabStrips(const QString& screenId, const QVariantList& strips);
-
     /// Drop-target indicator for a scrolling drag re-insert on @p screenId
     /// (per screen, NOT a singleton — a drag can cross screens). @p rect is
     /// the absolute-px slot the dragged window would land in, converted to
@@ -630,24 +607,6 @@ public:
     /// to be painted rather than enacted.
     void updateScrollDropIndicator(const QString& screenId, const QRect& rect, bool animate) override;
 
-    /// Per-context PAINT overrides for @p screenId's tab indicator, resolved
-    /// from the SetTabIndicator* context rules and layered over the config
-    /// values when the indicator is drawn. Keyed by the overlay SLOT's own
-    /// property names (tabStyle, gapsBetweenTabs, cornerRadius, activeColor,
-    /// inactiveColor, urgentColor); an absent key falls through to config.
-    /// Those names must match ScrollTabShell's scrollTabsSlot exactly —
-    /// setProperty on an undeclared name silently creates a dead dynamic
-    /// property instead of failing.
-    ///
-    /// Only the paint half arrives here. The indicator's GEOMETRY overrides go
-    /// to the scrolling engine instead, because they change resolved rects and
-    /// the engine has to size the column around them.
-    ///
-    /// An empty map clears the screen's overrides. Replays the cached strips
-    /// so a rule change repaints a live indicator immediately, for the same
-    /// reason the paint-settings hooks do.
-    void setScrollTabIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
-
     /// Per-screen drop-indicator PAINT overrides from context rules, keyed by
     /// the QML property names the slot reads so the layering is one value()
     /// per property. An empty map clears the screen's overrides.
@@ -659,30 +618,6 @@ public:
     /// see it.
     void setScrollDropIndicatorOverrides(const QString& screenId, const QVariantMap& overrides);
 
-    /// Tear down every screen's scroll tab-strip model and both per-screen
-    /// override maps, for the daemon's stop(). The per-screen surfaces live on
-    /// this service, which OUTLIVES stop(), and the ordinary departing-screen
-    /// clear (Daemon::updateScrollingScreens' difference loop) can never run
-    /// again once the engine's active set is empty — so without this a
-    /// stop()/start() cycle or an init() re-run comes up with tab-indicator
-    /// surfaces mapped over strips that no longer exist. Order per screen is
-    /// the one the departing loop documents: the MODEL first, then the
-    /// overrides, because an override drop replays the cached model through
-    /// updateScrollTabStrips's full show choreography.
-    void clearAllScrollTabState();
-
-    /// The per-screen form of the teardown above, for the two hot-removal
-    /// boundaries (physical unplug, virtual-screen reconfigure): clears the
-    /// strip model and both override maps for every screen id
-    /// @p screenMatches accepts, in the same model-first order. The predicate
-    /// lives with the caller because the survivor set does (which virtual
-    /// sub-screens still exist is the daemon's knowledge, which ids this
-    /// service holds state for is ours). Without this the override maps were
-    /// only swept by the departing-screen loop, which a removed screen never
-    /// reaches — a bounded leak that also replayed stale paint overrides on a
-    /// same-id replug.
-    void clearScrollTabStateWhere(const std::function<bool(const QString&)>& screenMatches);
-
     /// Per-DRAG drop-indicator colour overrides, resolved from the dragged
     /// window's rules at drag start. Outranks the per-context map above, which
     /// outranks the settings, which fall back to the theme. Cleared with an
@@ -690,17 +625,23 @@ public:
     /// one window is dragged at a time.
     void setScrollDropIndicatorWindowOverrides(const QVariantMap& overrides) override;
 
-    /// Re-push every screen's cached strip model through
-    /// updateScrollTabStrips, whose own enabled check turns the replay into a
-    /// show (toggle on) or an animated hide (toggle off). Needed because the
-    /// engine's tabStripsChanged is change-latched and stays silent until the
-    /// next structural change, so nothing else would repaint after the toggle
-    /// moves. Called from the tab-indicator enable and paint-key hooks and
-    /// the overlay font-key hooks (the thirteen connects in
-    /// overlayservice/settings.cpp, each with its own rationale in place) and
-    /// from updateSettings, which covers the batch-setSettings case where the
-    /// per-key signals never fire.
-    void replayScrollTabStrips();
+    /// Drop every screen's drop-indicator paint overrides, for the daemon's
+    /// stop(). This service OUTLIVES stop(), and the ordinary
+    /// departing-screen clear (Daemon::updateScrollingScreens' difference
+    /// loop) can never run again once the engine's active set is empty — so
+    /// without this a stop()/start() cycle comes up holding a dead session's
+    /// rule-resolved colours.
+    void clearAllScrollDropIndicatorOverrides();
+
+    /// The per-screen form of the teardown above, for the two hot-removal
+    /// boundaries (physical unplug, virtual-screen reconfigure): clears the
+    /// overrides for every screen id @p screenMatches accepts. The predicate
+    /// lives with the caller because the survivor set does (which virtual
+    /// sub-screens still exist is the daemon's knowledge, which ids this
+    /// service holds state for is ours). Without it the map is only swept by
+    /// the departing-screen loop, which a removed screen never reaches — a
+    /// bounded leak that also replays stale paint on a same-id replug.
+    void clearScrollDropIndicatorOverridesWhere(const std::function<bool(const QString&)>& screenMatches);
 
     /// Forwarders to the active picker slot's QML moveSelection /
     /// confirmSelection functions. Used by global-accel callbacks
@@ -751,11 +692,6 @@ public Q_SLOTS:
 
 private Q_SLOTS:
     void onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId, const QString& geometryJson);
-    /// A tab of the scrolling indicator was clicked. Relays the canonical
-    /// window id up as scrollTabActivated; the daemon focuses that window, so
-    /// the tab it belongs to becomes the shown one through the ordinary focus
-    /// path rather than by reaching into the strip from here.
-    void onScrollTabActivated(const QString& windowId);
     void onLayoutPickerSelected(const QString& layoutId);
     /// Receiver for the unified passive shell's `osdDismissRequested`
     /// QML signal. Resolves the emitting shell window via `sender()`,
@@ -1018,34 +954,9 @@ private:
     // safe even if a future change removes the explicit reset.
     QHash<QString, PerScreenOverlayState> m_screenStates;
     std::unique_ptr<PhosphorOverlay::ShellHost> m_shellHost;
-    /// Twin host for the scrolling tab indicators' own per-screen surface,
-    /// keyed the same way and torn down at the same call sites. They are not
-    /// slots on the passive shell because the compositor SLIDES their surface
-    /// with the strip, and a surface translates as a whole — see
-    /// PhosphorRoles::ScrollTabShell. Declared next to m_shellHost so the
-    /// destruction-order rationale above covers both.
-    std::unique_ptr<PhosphorOverlay::ShellHost> m_tabShellHost;
-
-    // Scroll tab-strip bookkeeping. Below m_shellHost deliberately: these
-    // are plain per-screen maps with no teardown dependency on either
-    // neighbour, so they must not sit between m_screenStates and m_shellHost
-    // and break up the declaration-order rationale above.
-    /// Per-screen generation guard for the scroll tab-strip animated hide:
-    /// bumped per updateScrollTabStrips call so a hide completion that lost
-    /// the race to a newer non-empty update no-ops instead of tearing down
-    /// a repopulated slot. Retained after teardown (monotonic).
-    QHash<QString, quint64> m_scrollTabsHideGuard;
-    /// Screens with a hide in flight; the show path treats these as not
-    /// visible so a mid-hide repopulation re-runs beginShow.
-    QSet<QString> m_scrollTabsHidePending;
-    /// Last non-empty strip model per screen, cached regardless of the
-    /// enable toggle so re-enabling the indicator can replay it (the
-    /// engine's tabStripsChanged is change-latched and stays silent).
-    QHash<QString, QVariantList> m_lastScrollTabStrips;
     /// Per-screen drop-indicator paint overrides (see
     /// setScrollDropIndicatorOverrides). An empty map clears the screen's
-    /// overrides. Lifecycle note shared with m_scrollTabIndicatorOverrides:
-    /// shell TEARDOWN erases the screen's entry (unwirePassiveShellSlots),
+    /// overrides. Shell TEARDOWN erases the screen's entry (unwirePassiveShellSlots),
     /// while a shell REKEY deliberately carries it across (rekey.cpp) — the
     /// writer is Daemon's context-rule resolve pass, so a destroy+recreate
     /// under the same key runs without the rule-resolved colours until that
@@ -1055,27 +966,10 @@ private:
     /// rules (see setScrollDropIndicatorWindowOverrides). Not per screen: one
     /// window is dragged at a time, and the entry lives only for that drag.
     QVariantMap m_scrollDropIndicatorWindowOverrides;
-    /// Per-screen tab-indicator paint overrides (see
-    /// setScrollTabIndicatorOverrides). Screens with no context rule carry no
-    /// entry, so the common case costs one empty-hash lookup. Same
-    /// teardown-erases / rekey-carries lifecycle note as
-    /// m_scrollDropIndicatorOverrides above.
-    QHash<QString, QVariantMap> m_scrollTabIndicatorOverrides;
-    /// Window-local rects of the live tab indicators per screen, handed to the
-    /// tab shell as its input region so clicks land on a tab but fall through
-    /// everywhere else. Rebuilt from each strip update; cleared with the
-    /// screen's strips.
-    QHash<QString, QRegion> m_scrollTabInputRegions;
-    /// Last announced wl_surface object id per screen's tab-indicator surface.
-    /// The change gate for scrollTabSurfaceChanged, and the record of what the
-    /// compositor currently believes, so teardown knows whether it owes a
-    /// retraction.
-    QHash<QString, quint32> m_scrollTabSurfaceIds;
 
-    /// Per-screen generation guard for the drop indicator's animated hide,
-    /// same contract as m_scrollTabsHideGuard: a hide completion that lost the
-    /// race to a newer rect must no-op rather than tear down a repopulated
-    /// slot. A drag pushes rects at pointer rate, so this race is the common
+    /// Per-screen generation guard for the drop indicator's animated hide: a
+    /// hide completion that lost the race to a newer rect must no-op rather
+    /// than tear down a repopulated slot. A drag pushes rects at pointer rate, so this race is the common
     /// case here, not the exotic one. Retained after teardown (monotonic) —
     /// must never restart, which is why unwirePassiveShellSlots erases the two
     /// maps below but deliberately not this one.
@@ -1370,33 +1264,6 @@ private:
     /// half-destroyed scene graph. Runs from inside ShellHost::destroyShell
     /// before the library schedules the shell surface for deletion.
     void unwirePassiveShellSlots(const QString& screenId);
-
-    /// Lazily create the per-screen ScrollTabShell + return the state entry
-    /// (or nullptr if creation failed). The twin of @ref ensurePassiveShellFor
-    /// for the tab indicators' exclusive surface; called only from the strip
-    /// update path, so a screen that never shows a tabbed column never
-    /// materialises one.
-    PerScreenOverlayState* ensureScrollTabShellFor(const QString& effectiveId, QScreen* physScreen);
-
-    /// PostCreate / PreDestroy hooks registered with @c m_tabShellHost, the
-    /// twins of @ref wirePassiveShellSlots and @ref unwirePassiveShellSlots.
-    /// The tab shell hosts exactly one slot and forwards exactly one signal,
-    /// so both are correspondingly short.
-    void wireScrollTabShellSlots(const QString& screenId, PhosphorOverlay::ShellState& shellState);
-    void unwireScrollTabShellSlots(const QString& screenId);
-
-    /// Reconcile the tab shell's mapped state and input region for @p
-    /// effectiveId. Simpler than its passive-shell counterpart because the
-    /// surface hosts one display-only slot: it is mapped exactly while that
-    /// slot is visible, never grabs input wholesale, and takes clicks only on
-    /// the indicator rects.
-    void syncScrollTabShellSurfaceState(const QString& effectiveId);
-
-    /// Publish (or retract, with @p window null) the wl_surface object id of
-    /// @p screenId's tab-indicator surface. Change-gated, so the re-assert on
-    /// every SHOW costs one hash compare. Not on every strip update: an
-    /// already-visible indicator returns before reaching the announce.
-    void announceScrollTabSurface(const QString& screenId, QQuickWindow* window);
 
     /// Drop @p screenId's now-dead ShellState entry on BOTH hosts. Destroying a
     /// shell only zeroes its fields; the entry survives, so hot-plug cycles

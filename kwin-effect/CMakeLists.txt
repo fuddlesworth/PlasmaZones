@@ -118,6 +118,7 @@ set(plasmazones_effect_SRCS
     tilinghandler/floatcleanup.cpp
     tilinghandler/tiling.cpp
     tilinghandler/wiring.cpp
+    tilinghandler/scrolltabs.cpp
     handlers/snaphandler.cpp
     handlers/snaphandler.h
     handlers/navigationhandler.cpp
@@ -134,6 +135,9 @@ set(plasmazones_effect_SRCS
     compositor/windowanimator.h
     compositor/stripviewanimator.cpp
     compositor/stripviewanimator.h
+    compositor/scrolltabindicatorpainter.cpp
+    compositor/scrolltabindicatorpainter_raster.cpp
+    compositor/scrolltabindicatorpainter.h
     compositor/compositorclock.cpp
     compositor/compositorclock.h
     compositor/deferredwindowcommits.h
@@ -157,6 +161,11 @@ kcoreaddons_add_plugin(kwin_effect_plasmazones
 # KWin's GL headers) would break that ordering. Mirrors the daemon's identical
 # guard on dmabufglimport.cpp (src/CMakeLists.txt).
 set_source_files_properties(compositor/snapassistthumbnailcapture.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+# The tab-indicator rasteriser carries a file-local helper set with generic
+# names (withAlpha, blend, cornerPath, the axis structs). Same prophylactic
+# rule as the transition TUs below: keep it out of the blob rather than
+# auditing those names against every other blob member for all time.
+set_source_files_properties(compositor/scrolltabindicatorpainter_raster.cpp PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 # All four TUs of DesktopTransitionManager stay out of the Unity blob.
 #
 # None of them fixes a PRESENT collision. The helpers that used to be

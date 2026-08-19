@@ -1,0 +1,388 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "scrolltabindicatorpainter.h"
+
+#include <QFontMetricsF>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPen>
+#include <QRectF>
+
+#include <algorithm>
+#include <cmath>
+
+// Layout + rasterisation of the scrolling strip's tab indicators.
+//
+// This is the visual spec for the pills. It was ported line by line from the
+// daemon's QML rendering (ScrollTabStripContent.qml, deleted with the move to
+// compositor-side drawing), so every choice below is the shipped look rather
+// than a redesign: both styles fill the resolved rect exactly, the last tab
+// absorbs the division remainder, interior joints square at zero gap, and
+// the chip style carries a translucent backdrop with a hairline border. Also
+// documented here are the raster-specific choices a QML reader never met:
+// pen placement, premultiplied alpha and clipping.
+namespace PlasmaZones {
+
+namespace {
+
+/// Qt Quick's Qt.alpha(): SETS the alpha, it does not scale the existing one.
+QColor withAlpha(QColor color, qreal alpha)
+{
+    color.setAlphaF(alpha);
+    return color;
+}
+
+/// Straight-alpha linear blend, @p t of the way from @p from to @p to.
+/// Used only for the hover tint, where both operands come from the theme and
+/// the result is handed to QPainter (which premultiplies on its own).
+QColor blend(const QColor& from, const QColor& to, qreal t)
+{
+    if (!from.isValid()) {
+        return to;
+    }
+    if (!to.isValid()) {
+        return from;
+    }
+    const auto mix = [t](qreal a, qreal b) {
+        return a + (b - a) * t;
+    };
+    QColor out;
+    out.setRgbF(mix(from.redF(), to.redF()), mix(from.greenF(), to.greenF()), mix(from.blueF(), to.blueF()),
+                mix(from.alphaF(), to.alphaF()));
+    return out;
+}
+
+/// Radius for a tab whose short extent is @p thickness, resolving the pill
+/// sentinel (negative = fully rounded) and clamping so an oversized radius
+/// cannot exceed a half extent and render as a lozenge with inverted corners.
+qreal tabRadius(const ScrollTabIndicatorStyle& style, qreal thickness)
+{
+    const qreal half = thickness / 2.0;
+    if (style.cornerRadius < 0) {
+        return half;
+    }
+    return std::min(qreal(style.cornerRadius), half);
+}
+
+/// Colour for @p pill, resolving the same tiers the QML does: the window
+/// rule's own colour, then the config/context colour, then the theme.
+/// Urgency outranks the active highlight (a tab already in view needs no
+/// highlight, whereas an urgent one the user cannot see is the whole point).
+/// @p forBar picks the style-specific inactive fallback: a bar segment needs a
+/// visible resting colour because the run IS the widget, while an inactive
+/// chip is transparent and reads against the pill behind it.
+QColor resolveTabColor(const ScrollTabPill& pill, const ScrollTabIndicatorStyle& style, bool forBar, bool hovered)
+{
+    if (pill.urgent) {
+        if (pill.urgentColor.isValid()) {
+            return pill.urgentColor;
+        }
+        return style.urgentColor.isValid() ? style.urgentColor : style.themeNegativeText;
+    }
+    if (pill.active) {
+        if (pill.activeColor.isValid()) {
+            return pill.activeColor;
+        }
+        return style.activeColor.isValid() ? style.activeColor : style.themeHighlight;
+    }
+    QColor inactive;
+    if (pill.inactiveColor.isValid()) {
+        inactive = pill.inactiveColor;
+    } else if (style.inactiveColor.isValid()) {
+        inactive = style.inactiveColor;
+    } else {
+        inactive = forBar ? withAlpha(style.themeText, 0.35) : QColor(Qt::transparent);
+    }
+    if (!hovered) {
+        return inactive;
+    }
+    // Hover is the ONE addition over the QML, which had no pointer feedback
+    // because the layer-shell surface only carried click targets. Kept
+    // deliberately subtle — a fifth of the way to the highlight — so a
+    // hovered inactive tab reads as "reachable" without being mistaken for
+    // the active one. Active and urgent tabs are left alone: they already
+    // carry the strongest colours in the widget, and tinting them toward the
+    // highlight would either do nothing or weaken the urgent signal.
+    return blend(inactive, style.themeHighlight, 0.2);
+}
+
+/// Rounded-rect path with INDEPENDENT corner radii, which QPainter has no
+/// primitive for (drawRoundedRect is uniform) and the segment bar needs: at
+/// zero gap the run reads as one continuous bar, so only its two ends are
+/// rounded and the interior joints stay square.
+QPainterPath cornerPath(const QRectF& rect, qreal topLeft, qreal topRight, qreal bottomRight, qreal bottomLeft)
+{
+    const qreal limit = std::min(rect.width(), rect.height()) / 2.0;
+    const qreal tl = std::clamp(topLeft, 0.0, limit);
+    const qreal tr = std::clamp(topRight, 0.0, limit);
+    const qreal br = std::clamp(bottomRight, 0.0, limit);
+    const qreal bl = std::clamp(bottomLeft, 0.0, limit);
+
+    QPainterPath path;
+    path.moveTo(rect.left() + tl, rect.top());
+    path.lineTo(rect.right() - tr, rect.top());
+    if (tr > 0.0) {
+        path.arcTo(QRectF(rect.right() - 2 * tr, rect.top(), 2 * tr, 2 * tr), 90.0, -90.0);
+    }
+    path.lineTo(rect.right(), rect.bottom() - br);
+    if (br > 0.0) {
+        path.arcTo(QRectF(rect.right() - 2 * br, rect.bottom() - 2 * br, 2 * br, 2 * br), 0.0, -90.0);
+    }
+    path.lineTo(rect.left() + bl, rect.bottom());
+    if (bl > 0.0) {
+        path.arcTo(QRectF(rect.left(), rect.bottom() - 2 * bl, 2 * bl, 2 * bl), 270.0, -90.0);
+    }
+    path.lineTo(rect.left(), rect.top() + tl);
+    if (tl > 0.0) {
+        path.arcTo(QRectF(rect.left(), rect.top(), 2 * tl, 2 * tl), 180.0, -90.0);
+    }
+    path.closeSubpath();
+    return path;
+}
+
+/// Geometry shared by both styles, derived once per indicator.
+struct IndicatorAxes
+{
+    bool vertical = false;
+    bool leftEdge = false;
+    int longExtent = 0;
+    int shortExtent = 0;
+    int tabCount = 0;
+};
+
+IndicatorAxes axesOf(const ScrollTabIndicator& indicator)
+{
+    IndicatorAxes axes;
+    axes.vertical = indicator.position == 0 || indicator.position == 1;
+    axes.leftEdge = indicator.position == 0;
+    axes.longExtent = axes.vertical ? indicator.rect.height() : indicator.rect.width();
+    axes.shortExtent = axes.vertical ? indicator.rect.width() : indicator.rect.height();
+    axes.tabCount = int(indicator.tabs.size());
+    return axes;
+}
+
+/// Chip-style geometry (the pill's insets and each chip's share of the long
+/// axis). Mirrors the pill's chipInset / chipThickness / chipLongBudget /
+/// chipTrailingBudget properties.
+struct ChipMetrics
+{
+    int inset = 1;
+    int thickness = 1;
+    int longBudget = 1;
+    int trailingBudget = 1;
+};
+
+ChipMetrics chipMetricsOf(const IndicatorAxes& axes, const ScrollTabIndicatorStyle& style)
+{
+    ChipMetrics metrics;
+    metrics.inset = std::max(1, int(std::lround(style.smallSpacing / 2.0)));
+    metrics.thickness = std::max(1, axes.shortExtent - metrics.inset * 2);
+    const int neighbours = std::max(0, axes.tabCount - 1);
+    const int inner = axes.longExtent - metrics.inset * 2;
+    // Floored at 1, NOT at some legible minimum: a floor big enough to keep a
+    // title readable would let the run overflow the pill once there were
+    // enough tabs, and an overflowing run is clipped — those tabs would be
+    // undrawn AND unclickable, which is worse than thin.
+    metrics.longBudget = std::max(1, (inner - style.gapsBetweenTabs * neighbours) / std::max(1, axes.tabCount));
+    // The last chip absorbs the division remainder so the run ends flush with
+    // the pill's inner edge instead of leaving up to tabCount-1 px that
+    // belongs to no tab.
+    metrics.trailingBudget = std::max(1, inner - (metrics.longBudget + style.gapsBetweenTabs) * neighbours);
+    return metrics;
+}
+
+/// Offset along the long axis of tab @p index, in indicator-local px.
+int tabOffset(int index, int perTab, int gaps)
+{
+    return index * (perTab + gaps);
+}
+
+/// Turn an (offset, extent) pair along the indicator's long axis into a rect
+/// in absolute logical coordinates. @p acrossOffset / @p acrossExtent are the
+/// short-axis pair.
+QRect axisRect(const ScrollTabIndicator& indicator, const IndicatorAxes& axes, int alongOffset, int alongExtent,
+               int acrossOffset, int acrossExtent)
+{
+    if (axes.vertical) {
+        return QRect(indicator.rect.x() + acrossOffset, indicator.rect.y() + alongOffset, acrossExtent, alongExtent);
+    }
+    return QRect(indicator.rect.x() + alongOffset, indicator.rect.y() + acrossOffset, alongExtent, acrossExtent);
+}
+
+} // namespace
+
+namespace ScrollTabRaster {
+
+QVector<ScrollTabHitRect> layoutPills(const ScrollTabIndicator& indicator, const ScrollTabIndicatorStyle& style)
+{
+    QVector<ScrollTabHitRect> out;
+    const IndicatorAxes axes = axesOf(indicator);
+    if (axes.tabCount <= 0 || indicator.rect.isEmpty()) {
+        return out;
+    }
+    out.reserve(axes.tabCount);
+
+    if (style.style == 1) {
+        // Segment bar: each segment takes an equal share of the long axis
+        // after the inter-tab gaps are removed, floored at 1 so a bar too
+        // short for its tab count still carries every segment rather than
+        // silently dropping the tail to zero.
+        const int baseLength =
+            std::max(1, (axes.longExtent - style.gapsBetweenTabs * (axes.tabCount - 1)) / axes.tabCount);
+        for (int i = 0; i < axes.tabCount; ++i) {
+            const int offset = tabOffset(i, baseLength, style.gapsBetweenTabs);
+            const int length = i == axes.tabCount - 1 ? std::max(1, axes.longExtent - offset) : baseLength;
+            const QRect rect = axisRect(indicator, axes, offset, length, 0, axes.shortExtent);
+            // The QML indicator clips, and the daemon's input region was
+            // exactly the indicator rect, so a run that overflowed was
+            // neither drawn nor clickable past the edge. Intersecting keeps
+            // the hit rects honest about that.
+            out.append({rect.intersected(indicator.rect), indicator.tabs.at(i).windowId});
+        }
+        return out;
+    }
+
+    const ChipMetrics metrics = chipMetricsOf(axes, style);
+    for (int i = 0; i < axes.tabCount; ++i) {
+        const int along = i == axes.tabCount - 1 ? metrics.trailingBudget : metrics.longBudget;
+        const int offset = metrics.inset + tabOffset(i, metrics.longBudget, style.gapsBetweenTabs);
+        const QRect rect = axisRect(indicator, axes, offset, along, metrics.inset, metrics.thickness);
+        out.append({rect.intersected(indicator.rect), indicator.tabs.at(i).windowId});
+    }
+    return out;
+}
+
+QImage rasterise(const QVector<ScrollTabIndicator>& indicators, const ScrollTabIndicatorStyle& style,
+                 const QRect& bounds, qreal devicePixelRatio, const QString& hoveredWindowId)
+{
+    if (bounds.isEmpty() || indicators.isEmpty()) {
+        return {};
+    }
+    const qreal dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+    const QSize deviceSize(int(std::ceil(bounds.width() * dpr)), int(std::ceil(bounds.height() * dpr)));
+    if (deviceSize.isEmpty()) {
+        return {};
+    }
+    // ARGB32_Premultiplied is not a preference: QPainter's source-over
+    // compositing is DEFINED for premultiplied targets, and every colour here
+    // is potentially translucent (the pill background at 0.85, the hairline
+    // border at 0.2, an inactive bar segment at 0.35, a fully transparent
+    // inactive chip). Rasterising straight-alpha would produce wrong colours
+    // at every partially-covered antialiased edge. The blit then uses the
+    // matching premultiplied blend func, so the format is load-bearing at
+    // both ends.
+    QImage image(deviceSize, QImage::Format_ARGB32_Premultiplied);
+    image.setDevicePixelRatio(dpr);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::TextAntialiasing, true);
+    // Draw in ABSOLUTE logical coordinates throughout; the image simply is
+    // the window onto them at `bounds`.
+    painter.translate(-bounds.topLeft());
+
+    const QFontMetricsF metrics(style.font);
+    for (const ScrollTabIndicator& indicator : indicators) {
+        const IndicatorAxes axes = axesOf(indicator);
+        if (axes.tabCount <= 0 || indicator.rect.isEmpty()) {
+            continue;
+        }
+        painter.save();
+        // Both styles fill the resolved rect exactly, and a rect too short
+        // for its tab count produces a run LONGER than the rect (every share
+        // floors at 1px). Clipping is what keeps that overflow off the
+        // neighbouring window, exactly as the QML delegate's clip did.
+        painter.setClipRect(indicator.rect);
+        painter.setPen(Qt::NoPen);
+
+        if (style.style == 1) {
+            const qreal radius = tabRadius(style, axes.shortExtent);
+            const int baseLength =
+                std::max(1, (axes.longExtent - style.gapsBetweenTabs * (axes.tabCount - 1)) / axes.tabCount);
+            for (int i = 0; i < axes.tabCount; ++i) {
+                const ScrollTabPill& pill = indicator.tabs.at(i);
+                const int offset = tabOffset(i, baseLength, style.gapsBetweenTabs);
+                const int length = i == axes.tabCount - 1 ? std::max(1, axes.longExtent - offset) : baseLength;
+                const QRectF rect = axisRect(indicator, axes, offset, length, 0, axes.shortExtent);
+                // With no gap the run reads as one continuous bar, so only
+                // its two ends are rounded. Top-left is the leading corner
+                // and bottom-right the trailing one in BOTH orientations, so
+                // those two need no branch; only the other diagonal swaps.
+                const bool squareLeading = style.gapsBetweenTabs == 0 && i > 0;
+                const bool squareTrailing = style.gapsBetweenTabs == 0 && i < axes.tabCount - 1;
+                const qreal tl = squareLeading ? 0.0 : radius;
+                const qreal tr = (axes.vertical ? squareLeading : squareTrailing) ? 0.0 : radius;
+                const qreal bl = (axes.vertical ? squareTrailing : squareLeading) ? 0.0 : radius;
+                const qreal br = squareTrailing ? 0.0 : radius;
+                const bool hovered = pill.hovered || (!hoveredWindowId.isEmpty() && pill.windowId == hoveredWindowId);
+                painter.fillPath(cornerPath(rect, tl, tr, br, bl), resolveTabColor(pill, style, true, hovered));
+            }
+            painter.restore();
+            continue;
+        }
+
+        // ── Title-chip pill ──────────────────────────────────────────────
+        const ChipMetrics chip = chipMetricsOf(axes, style);
+        const qreal pillRadius = tabRadius(style, axes.shortExtent);
+        // The 1px border is a deliberate hairline. Qt Quick draws a
+        // Rectangle's border fully INSIDE its bounds, while QPainter centres
+        // a pen on the path, so the path is inset by half the pen width to
+        // land in the same pixels.
+        const QRectF pillRect = QRectF(indicator.rect).adjusted(0.5, 0.5, -0.5, -0.5);
+        const QPainterPath pillPath =
+            cornerPath(pillRect, pillRadius - 0.5, pillRadius - 0.5, pillRadius - 0.5, pillRadius - 0.5);
+        painter.fillPath(pillPath, withAlpha(style.themeBackground, 0.85));
+        painter.setPen(QPen(withAlpha(style.themeText, 0.2), 1.0));
+        painter.drawPath(pillPath);
+        painter.setPen(Qt::NoPen);
+
+        const qreal chipRadius = tabRadius(style, chip.thickness);
+        painter.setFont(style.font);
+        for (int i = 0; i < axes.tabCount; ++i) {
+            const ScrollTabPill& pill = indicator.tabs.at(i);
+            const int along = i == axes.tabCount - 1 ? chip.trailingBudget : chip.longBudget;
+            const int offset = chip.inset + tabOffset(i, chip.longBudget, style.gapsBetweenTabs);
+            const QRectF rect = axisRect(indicator, axes, offset, along, chip.inset, chip.thickness);
+            const bool hovered = pill.hovered || (!hoveredWindowId.isEmpty() && pill.windowId == hoveredWindowId);
+            painter.fillPath(cornerPath(rect, chipRadius, chipRadius, chipRadius, chipRadius),
+                             resolveTabColor(pill, style, false, hovered));
+
+            if (pill.title.isEmpty()) {
+                continue;
+            }
+            // The label elides against the chip's SHARE of the indicator, not
+            // a fixed cap, so lengthening the indicator shows more of the
+            // titles instead of just adding empty space.
+            const qreal cap = std::max(1.0, qreal(along - style.largeSpacing));
+            const qreal natural = metrics.horizontalAdvance(pill.title);
+            const qreal width = std::min(natural, cap);
+            const QString text = metrics.elidedText(pill.title, Qt::ElideRight, width);
+            const qreal height = metrics.height();
+            // Rotated on a side edge so the title reads down the column
+            // instead of being clipped to the indicator's thickness. The
+            // direction follows Qt's own vertical-tab convention:
+            // bottom-to-top on a left edge, top-to-bottom on a right one, so
+            // the text always leans away from the window it labels. Rotation
+            // is about the label's centre, which is the chip's centre.
+            const qreal angle = !axes.vertical ? 0.0 : (axes.leftEdge ? -90.0 : 90.0);
+            painter.save();
+            painter.translate(rect.center());
+            if (angle != 0.0) {
+                painter.rotate(angle);
+            }
+            painter.setPen(QPen(pill.active || pill.urgent ? style.themeHighlightedText : style.themeText));
+            painter.drawText(QRectF(-width / 2.0, -height / 2.0, width, height), Qt::AlignCenter, text);
+            painter.restore();
+            painter.setPen(Qt::NoPen);
+        }
+        painter.restore();
+    }
+    painter.end();
+    return image;
+}
+
+} // namespace ScrollTabRaster
+
+} // namespace PlasmaZones

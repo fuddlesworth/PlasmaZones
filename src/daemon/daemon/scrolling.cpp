@@ -14,12 +14,13 @@
 #include "daemon/daemon.h"
 #include "config/settings.h"
 #include "core/platform/logging.h"
-// Complete type needed for setScrollTabIndicatorOverrides — daemon.h forward
+// Complete type needed for setScrollDropIndicatorOverrides — daemon.h forward
 // declares OverlayService only.
 #include "daemon/overlayservice.h"
 // Complete type needed for setScrollEffectBehaviour — daemon.h forward
 // declares ScrollingAdaptor only.
 #include "dbus/scrollingadaptor/scrollingadaptor.h"
+#include "dbus/tilingadaptor/tilingadaptor.h"
 #include "seedorderfilter.h"
 
 #include "dbus/windowtrackingadaptor/windowtrackingadaptor.h"
@@ -366,12 +367,16 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // reads identically to an absent one at every effective* reader, so
         // the fallback behaviour is unchanged.
         m_scrollEngine->applyPerScreenConfig(screenId, overrides);
-        // The tab indicator's PAINT overrides, keyed by the QML property names
-        // the overlay reads so the layering there is one value() per property.
-        // Handed straight to the overlay: the engine has no use for them and
-        // routing them through its override map would put presentation state
-        // in a library that deliberately knows nothing about presentation.
-        if (m_overlayService) {
+        // The tab indicator's PAINT params (style, gaps, corner radius and the
+        // three colours) go to the KWin effect, which draws the pills: it
+        // layers them over its global Scrolling.TabIndicator settings for this
+        // screen alone. Keyed by the same WindowPaintKeys / WindowColorKeys
+        // spellings the effect reads, so producer and consumer share one home
+        // for the names. Handed straight to the Tiling adaptor: the engine has
+        // no use for presentation state. Pushed even when EMPTY, like the
+        // engine map above — empty is how a screen whose rules stopped
+        // overriding falls back to the global look.
+        if (m_tilingAdaptor) {
             QVariantMap paint;
             if (params.tabIndicatorStyle) {
                 paint.insert(WindowPaintKeys::tabStyle(), *params.tabIndicatorStyle);
@@ -382,10 +387,6 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             if (params.tabIndicatorCornerRadius) {
                 paint.insert(WindowPaintKeys::cornerRadius(), *params.tabIndicatorCornerRadius);
             }
-            // The three colour slots go through WindowColorKeys: the same
-            // spellings are the map keys the tab-strip enrichment layers on and
-            // the QML property names the slot exposes, so producer, layering
-            // step and property write all read them from one place.
             if (params.tabIndicatorActiveColor) {
                 paint.insert(WindowColorKeys::activeColor(), *params.tabIndicatorActiveColor);
             }
@@ -395,12 +396,13 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
             if (params.tabIndicatorUrgentColor) {
                 paint.insert(WindowColorKeys::urgentColor(), *params.tabIndicatorUrgentColor);
             }
-            m_overlayService->setScrollTabIndicatorOverrides(screenId, paint);
-
-            // The drop indicator's overrides, same shape and same reason: keyed
-            // by the QML property names its slot reads, handed to the overlay
-            // rather than the engine. ALL of them are paint — the indicator's
-            // rect is the engine's own layout answer and no rule can move it.
+            m_tilingAdaptor->setScrollTabPaintOverrides(screenId, paint);
+        }
+        // The drop indicator's overrides are keyed by the QML property names
+        // its slot reads and handed to the overlay rather than the engine. ALL
+        // of them are paint — the indicator's rect is the engine's own layout
+        // answer and no rule can move it.
+        if (m_overlayService) {
             QVariantMap drop;
             if (params.dropIndicatorEnabled) {
                 drop.insert(WindowPaintKeys::indicatorEnabled(), *params.dropIndicatorEnabled);
@@ -490,23 +492,16 @@ void Daemon::updateScrollingScreens(const QSet<QString>& scrollingScreens)
         // screen that left scrolling would otherwise keep them until it
         // re-entered and something re-resolved.
         if (m_overlayService) {
-            // Tear the indicator down BEFORE dropping the overrides. The
-            // engine's own clear for a departing screen is DEFERRED (the
-            // direct path finds the latch already released by
-            // removeStatesIf), so at this point the overlay still holds the
-            // screen's live strip model. setScrollTabIndicatorOverrides
-            // replays that cached model through updateScrollTabStrips, which
-            // would run the full show choreography for a screen that just left
-            // scrolling and then animate it away again when the queued "[]"
-            // lands. Clearing the model first makes both the override drop and
-            // the queued clear no-ops.
-            m_overlayService->updateScrollTabStrips(screenId, {});
-            m_overlayService->setScrollTabIndicatorOverrides(screenId, {});
-            // No model to clear first for the drop indicator: it holds no
-            // cached strip and does not replay, so dropping the map is enough.
+            // The drop indicator holds no cached strip and does not replay, so
+            // dropping the map is enough.
             m_overlayService->setScrollDropIndicatorOverrides(screenId, {});
         }
-        m_lastScrollTabStripsJson.remove(screenId);
+        // And the effect's tab paint overrides for the departed screen: the
+        // pills it painted there are gone with the strip, and a stale map
+        // would colour the next strip this screen hosts.
+        if (m_tilingAdaptor) {
+            m_tilingAdaptor->setScrollTabPaintOverrides(screenId, {});
+        }
     }
 
     // setActiveScreens retiles only ADDED screens on a changed set (the

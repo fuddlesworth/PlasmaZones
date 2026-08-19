@@ -221,33 +221,25 @@ void Daemon::connectScreenSignals()
                 // armed one would fire a card for an output that is gone.
                 reapScrollingOsdSettleTimers(removedScreenId);
 
-                // The removed output's cached tab-strip payloads and tiled
-                // counts, every virtual sub-screen included. The engine-side
-                // prune now emits "[]" per strip screen, which also removes
-                // these; the direct erase covers payloads cached for screens
-                // whose engine state never materialised, and the tiled-count
-                // erase keeps a same-id replug from swallowing its first
-                // placementChanged re-resolve (both maps are otherwise only
-                // pruned on VS reconfigure and in stop()).
-                for (auto it = m_lastScrollTabStripsJson.begin(); it != m_lastScrollTabStripsJson.end();) {
-                    it = PhosphorIdentity::VirtualScreenId::samePhysical(it.key(), removedScreenId)
-                        ? m_lastScrollTabStripsJson.erase(it)
-                        : std::next(it);
-                }
+                // The removed output's cached tiled counts, every virtual
+                // sub-screen included. The erase keeps a same-id replug from
+                // swallowing its first placementChanged re-resolve (the map is
+                // otherwise only pruned on VS reconfigure and in stop()).
                 for (auto it = m_lastTiledCountByScreen.begin(); it != m_lastTiledCountByScreen.end();) {
                     it = PhosphorIdentity::VirtualScreenId::samePhysical(it.key(), removedScreenId)
                         ? m_lastTiledCountByScreen.erase(it)
                         : std::next(it);
                 }
-                // The OverlayService's strip model and paint-override maps for
+                // The OverlayService's drop-indicator paint-override map for
                 // the removed output (virtual sub-screens included): the
                 // departing-screen loop keys on the engine's set, which the
                 // prune above already shrank, so nothing else ever sweeps
                 // them and a same-id replug would replay stale overrides.
                 if (m_overlayService) {
-                    m_overlayService->clearScrollTabStateWhere([&removedScreenId](const QString& screenId) {
-                        return PhosphorIdentity::VirtualScreenId::samePhysical(screenId, removedScreenId);
-                    });
+                    m_overlayService->clearScrollDropIndicatorOverridesWhere(
+                        [&removedScreenId](const QString& screenId) {
+                            return PhosphorIdentity::VirtualScreenId::samePhysical(screenId, removedScreenId);
+                        });
                 }
 
                 // Invalidate cached EDID serial so a different monitor on this connector is detected
@@ -815,18 +807,6 @@ void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
         }
     }
 
-    // Same boundary, same reason, for the raw tab-strip payload cache: a dead
-    // entry there is not merely a leak, it makes refreshScrollTabEnrichment
-    // re-parse and re-push a departed screen on every title tick.
-    for (auto it = m_lastScrollTabStripsJson.begin(); it != m_lastScrollTabStripsJson.end();) {
-        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physicalScreenId
-            && !keepIds.contains(it.key())) {
-            it = m_lastScrollTabStripsJson.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
     // And the template-announce ledger, on the same boundary. Un-subdividing an
     // output is reachable with no unplug at all, so without this its vs:N
     // verdicts outlive the screens they were recorded for, and a later
@@ -841,12 +821,12 @@ void Daemon::pruneEngineOrdersForRemovedScreens(const QString& physicalScreenId)
         }
     }
 
-    // The OverlayService's per-screen strip model and paint-override maps sit
+    // The OverlayService's per-screen drop-indicator paint-override map sits
     // on the same boundary: the departing-screen loop cannot sweep a screen
     // the engine no longer names, so without this a dropped vs:N id keeps its
     // overrides (and would replay stale paint on a same-id return).
     if (m_overlayService) {
-        m_overlayService->clearScrollTabStateWhere([&](const QString& screenId) {
+        m_overlayService->clearScrollDropIndicatorOverridesWhere([&](const QString& screenId) {
             return PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId) == physicalScreenId
                 && !keepIds.contains(screenId);
         });

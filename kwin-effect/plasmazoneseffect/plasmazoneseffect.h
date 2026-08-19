@@ -62,6 +62,7 @@
 #include <QSet>
 #include <QTimer>
 #include <QHash>
+#include <QFont> // scrollTabIndicatorFont's return type
 #include <QPointer>
 #include <QRect>
 
@@ -137,6 +138,7 @@ class SnapAssistHandler;
 class CompositorClock;
 class WindowAnimator;
 class StripViewAnimator;
+class ScrollTabIndicatorPainter;
 class DragTracker;
 
 /**
@@ -596,43 +598,6 @@ private:
     static bool isOwnOverlayClass(const QString& windowClass);
 
     /**
-     * @brief Recognise the daemon's dedicated scrolling tab-indicator layer
-     *        surface, the one overlay that rides the strip's view offset.
-     *
-     * The indicators get a surface of their own so the paint path can translate
-     * them with the columns they label without dragging the OSD (which fires on
-     * the very action that scrolls) sideways with them.
-     *
-     * Matched by the wl_surface's protocol object id, which the daemon
-     * announces over D-Bus. Nothing KWin exposes per window can tell the
-     * daemon's overlays apart: they share a window class, carry no caption,
-     * role or desktop file, sit on the same layer and cover the same rect, and
-     * the layer-shell scope that WOULD name them is not reachable from an
-     * exported API. The object id is the only thing the two sides can both
-     * name for one surface.
-     *
-     * The id alone is NOT a handle, and the predicate is the id match AND the
-     * owning client. A Wayland object id is unique only among ONE client's live
-     * objects, and ids start low and grow, so an ordinary application's surface
-     * collides with a daemon id routinely rather than exotically. The match is
-     * therefore qualified by isOwnPassthroughOverlayClass, which is what names
-     * the announcing client. See the implementation for what a false positive
-     * would cost a real window (the strip's view offset every frame, forfeited
-     * occlusion culling, and a permanent lower to the bottom of its layer).
-     */
-    bool isScrollTabIndicatorSurface(KWin::EffectWindow* w) const;
-
-    /**
-     * @brief Lower every known tab-indicator surface to the bottom of its layer.
-     *
-     * wlr-layer-shell cannot order two surfaces within one layer, so the
-     * lazily-created indicator surface stacks above the daemon's passive
-     * overlay shell and would paint across the modal cards that shell hosts.
-     * A client has no say in this; the compositor does, and we are it.
-     */
-    void restackScrollTabSurfaces();
-
-    /**
      * @brief Recognise only the daemon's non-interactive passthrough overlay
      *        surface ("plasmazonesd") by window class.
      *
@@ -950,31 +915,30 @@ private:
     bool scrollParkedOffscreen(KWin::EffectWindow* w, const QString& windowId) const;
 
     /**
-     * @brief Draw this pass's deferred tab-indicator surfaces into the scene
-     *        walk, at the stacking position the layer-shell protocol denies
-     *        them.
+     * @brief Blit this pass's compositor-drawn tab indicators at the stacking
+     *        position the scene walk has reached.
      *
-     * The indicators live on a wlr-layer-shell surface, and a layer surface is
-     * above every ordinary toplevel by protocol — restackScrollTabSurfaces can
-     * order them within their layer but cannot push them below a window. So a
-     * floating window raised over the strip had the indicator of the column
-     * behind it painted across its content.
+     * The pills are WINDOW state, so they are painted here, beside the
+     * windows they label, in the same paint pass and under the same view
+     * offset — which is what keeps them on the frame the columns move. The
+     * daemon used to draw them into a layer surface and a layer surface is
+     * above every ordinary toplevel by protocol, so a floating window raised
+     * over the strip had the indicator painted across it, and its content
+     * always trailed window motion by the daemon's render.
      *
-     * The remedy is compositor-side re-slotting: prePaintScreen picks the
-     * topmost scroll-managed window on the pass output as the paint anchor,
-     * paintWindow calls this right after that anchor's draw completes, and the
-     * indicator's own natural (layer-slot) paint is skipped once drawn here.
-     * Paint order is stacking order, so the indicators composite above every
-     * column but below whatever stacks over the strip — behaving like members
-     * of the window layer even though the protocol has no such placement for
-     * them.
+     * prePaintScreen picks the topmost scroll-managed window on the pass
+     * output as the paint anchor; paintWindow calls this right after that
+     * anchor's draw completes (or just before the first window stacked above
+     * it paints, when the anchor was culled). Paint order is stacking order,
+     * so the pills composite above every column but below whatever stacks
+     * over the strip. Once per pass (m_scrollTabPainted).
      *
-     * @param deviceRegion The triggering paintWindow call's device region. The
-     * injected draw is clipped to it, never painted unclipped: paint order
-     * only yields stacking order when every window above repaints the same
-     * pixels afterwards, and KWin hands each of them only the damage region.
-     * An unclipped injection put indicator pixels OUTSIDE that region, where
-     * no occluder ever painted again — so the strip surfaced on top of
+     * @param deviceRegion The triggering paintWindow call's device region.
+     * The blit is clipped to it, never painted unclipped: paint order only
+     * yields stacking order when every window above repaints the same pixels
+     * afterwards, and KWin hands each of them only the damage region. An
+     * unclipped blit would put pill pixels OUTSIDE that region, where no
+     * occluder ever paints again — so the strip would surface on top of
      * fullscreen windows, Spectacle's capture overlay, even the lock surface,
      * persisting until the next full-damage frame. The trigger's region is
      * also the CORRECT clip, not merely a safe one: for the anchor trigger it
@@ -983,8 +947,8 @@ private:
      * trigger the occluder's own paint follows immediately and resolves its
      * overlap the same way it would for a naturally-slotted window below it.
      */
-    void injectScrollTabIndicators(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                                   const KWin::Region& deviceRegion);
+    void paintScrollTabIndicators(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                  const KWin::Region& deviceRegion);
 
     TilingHandler* tilingHandler() const
     {
@@ -2352,8 +2316,8 @@ private:
     /// as something compared against.
     KWin::LogicalOutput* m_stripCaptureExclusionOutput = nullptr;
     /// Which windows the current capture excludes: everything ABOVE the
-    /// topmost strip member (a column managed by the capture output, or its
-    /// tab-indicator surface) in KWin's stacking order that also intersects
+    /// topmost strip member (a column managed by the capture output) in
+    /// KWin's stacking order that also intersects
     /// the capture output. Prebuilt by StripTransitionManager::paintOutput
     /// right before its capture and cleared by the same scope guard as the
     /// latch — a stacking FACT, where the old role-based predicate promoted
@@ -2386,6 +2350,16 @@ private:
     /// profile of its own — the caller resolves the scrolling.view motion node
     /// per batch and hands it in.
     std::unique_ptr<StripViewAnimator> m_stripViewAnimator;
+    /// Compositor-drawn scrolling tab indicators, one texture per output.
+    /// The pills are WINDOW state (which tabs a column holds, which is
+    /// shown), so they are painted here beside the windows they label, in
+    /// the same paint pass and under the same view offset — which is what
+    /// makes them ride the strip on exactly the frame the columns move. The
+    /// daemon used to draw them into a layer surface the effect then slid,
+    /// and that always trailed window motion by the daemon's render latency.
+    /// Model lives in TilingHandler (it owns the scroll screens and the
+    /// payload slot); this is the paint + hit-test half.
+    std::unique_ptr<ScrollTabIndicatorPainter> m_scrollTabPainter;
     /// How far a PARKED scrolling column's drawing must be translated from
     /// its committed rect to sit at its strip position, by window id. Stored
     /// as the strip-minus-park DELTA of the batch's rects rather than the
@@ -2495,52 +2469,20 @@ private:
     /// drag-time frame), and cleared wholesale on daemon loss and at
     /// onDaemonReady.
     QHash<QString, ScrollCommandedRect> m_scrollCommandedRects;
-    /// wl_surface object ids of the daemon's scrolling tab-indicator surfaces,
-    /// announced over D-Bus. The paint path slides these with the strip so the
-    /// indicators travel with the columns they label.
-    ///
-    /// Held as a flat set because the paint path only asks "is this window one
-    /// of them" and resolves the output from the window itself. The per-screen
-    /// map beside it exists solely so an announcement can retract the id it
-    /// replaces — the signal names a screen, not the id going away.
-    ///
-    /// Ids are dropped when the daemon retracts them and cleared wholesale at
-    /// bringup: Wayland reuses object ids, so a registration outliving its
-    /// surface would come to name an unrelated one.
-    QSet<quint32> m_scrollTabSurfaceIds;
-    QHash<QString, quint32> m_scrollTabSurfaceIdsByScreen;
 
-    /// Per-output-pass state for the tab-indicator paint re-slotting (see
-    /// injectScrollTabIndicators). Recomputed by prePaintScreen at the top of
+    /// Per-output-pass state for the compositor-drawn tab indicators (see
+    /// paintScrollTabIndicators). Recomputed by prePaintScreen at the top of
     /// every pass, valid only inside its bracket — the same scope contract as
     /// m_scrollManagedCache, and for the same reason: one pass guarantees the
     /// stacking order cannot change under the answer.
     ///
     /// The anchor is the topmost scroll-managed window on the pass output that
-    /// the scene will actually draw this frame; the deferred set holds that
-    /// output's indicator surfaces, which paintWindow skips at their natural
-    /// layer slot once drawn; the drawn set records the injection so the skip
-    /// and the fallback (anchor never painted — paint at the natural slot
-    /// after all) cannot disagree.
-    ///
-    /// The above-anchor set holds every OTHER window stacked over the anchor
-    /// that is on the pass output or intersects it (a straddler assigned to
-    /// the neighbouring output paints — and occludes — in this pass all the
-    /// same) — dialogs raised over the strip, the passive
-    /// overlay shell carrying an OSD. It exists because the anchor's own
-    /// paint is not a reliable injection trigger: the scene culls a fully
-    /// occluded anchor, and a culled anchor used to mean no injection at all,
-    /// leaving the indicators to paint at their natural layer slot ON TOP of
-    /// the very windows covering the strip. Whether the anchor was culled
-    /// depends on what covered it that frame, so the indicators FLICKERED
-    /// between correctly-stacked and over-everything as occlusion came and
-    /// went. paintWindow now also injects just before the first above-anchor
-    /// window paints, so the indicators land under it whether or not the
-    /// anchor survived culling — an occluded anchor implies a painting
-    /// occluder above it, so one of the two triggers always fires.
+    /// the scene will actually draw this frame; the above-anchor set holds the
+    /// windows stacked over it (the second trigger for a culled anchor); the
+    /// painted latch makes the two triggers mutually exclusive so the pills
+    /// blit exactly once per pass.
     KWin::EffectWindow* m_scrollTabPaintAnchor = nullptr;
-    QSet<KWin::EffectWindow*> m_scrollTabDeferred;
-    QSet<KWin::EffectWindow*> m_scrollTabDrawn;
+    bool m_scrollTabPainted = false;
     QSet<KWin::EffectWindow*> m_scrollTabAboveAnchor;
 
     // Phase 6: per-window shader transitions via OffscreenEffect.
@@ -2735,15 +2677,12 @@ private:
     bool m_vertexSnappingDisabled = false;
 
     /// True while a direct-drive caller runs paintWindow OUTSIDE KWin's chain
-    /// walk. THREE setters: DesktopTransitionManager::compositeWindowsInto —
+    /// walk. TWO setters: DesktopTransitionManager::compositeWindowsInto —
     /// the shared tail of both desktop captures, captureDesktop (the switch
-    /// legs) and capturePeekWindowsScene (the peek's windows layer) —
+    /// legs) and capturePeekWindowsScene (the peek's windows layer) — and
     /// StripTransitionManager's top-composite, which draws the above-strip
     /// windows onto the SCREEN target after its quad (not a capture, and
-    /// per-frame for the whole leg), and injectScrollTabIndicators, which
-    /// draws the tab-indicator surfaces at the anchor's stacking slot rather
-    /// than at their own (also not a capture, and on every frame a strip
-    /// carries a tabbed column). paintWindow's tail then terminates
+    /// per-frame for the whole leg). paintWindow's tail then terminates
     /// with effects->drawWindow instead of continuing the paintWindow chain:
     /// the chain iterator sits at begin() in that context, so chaining would
     /// re-enter our own paintWindow (double fold, animator transform applied
@@ -3052,6 +2991,66 @@ private:
     /// resolved).
     bool m_cachedScrollCropStraddlers = false;
 
+    // ── Scrolling tab indicator paint settings (compositor-drawn pills) ──
+    //
+    // The PAINT half of Scrolling.TabIndicator. The geometry half (Gap, Width,
+    // LengthProportion, Position, HideWhenSingleTab, PlaceWithinColumn) reaches
+    // the engine through IScrollSettings and never lands here; these keys only
+    // ever decide how the pills LOOK, which is why the effect can own them
+    // outright. Every default below is the matching
+    // ConfigDefaults::scrollingTabIndicator*() accessor in
+    // src/config/configdefaults_scrolling.h, seeded from the constant rather
+    // than an inline literal's worth of guesswork so a pre-reply frame paints
+    // the shipped look and not a different one. All are re-fetched on every
+    // settingsChanged (loadCachedSettings runs whole), so a settings-page edit
+    // repaints without a relog.
+    //
+    // The font members mirror the six Appearance label-font keys the daemon
+    // pushes onto the QML overlay through writeFontProperties
+    // (src/daemon/overlayservice/internal.h). Defaults come from
+    // ConfigDefaults::labelFont*() in configdefaults_appearance.h.
+
+    /// ConfigDefaults::scrollingTabIndicatorEnabled(). Master switch: false
+    /// means the effect paints no pills at all.
+    bool m_cachedTabIndicatorEnabled = true;
+    /// ConfigDefaults::scrollingTabIndicatorStyle(), whose shipped value is
+    /// scrollingTabIndicatorStyleBar() == 1 (0 = title chips).
+    int m_cachedTabIndicatorStyle = 1;
+    /// ConfigDefaults::scrollingTabIndicatorGapsBetweenTabs(), logical px.
+    int m_cachedTabIndicatorGapsBetweenTabs = 0;
+    /// ConfigDefaults::scrollingTabIndicatorCornerRadius(), logical px, with
+    /// scrollingTabIndicatorCornerRadiusPill() == -1 as the "fully rounded"
+    /// sentinel the renderer resolves against the tab's short extent.
+    int m_cachedTabIndicatorCornerRadius = 0;
+    /// ConfigDefaults::scrollingTabIndicator{Active,Inactive,Urgent}Color(),
+    /// all empty by default. An EMPTY setting stores an INVALID QColor here,
+    /// which is the follow-the-theme sentinel: the painter picks its own
+    /// fallback rather than a wrong concrete colour.
+    QColor m_cachedTabIndicatorActiveColor;
+    QColor m_cachedTabIndicatorInactiveColor;
+    QColor m_cachedTabIndicatorUrgentColor;
+    /// ConfigDefaults::labelFontFamily(): empty means the system font family.
+    QString m_cachedLabelFontFamily;
+    /// ConfigDefaults::labelFontSizeScale().
+    double m_cachedLabelFontSizeScale = 1.0;
+    /// ConfigDefaults::labelFontWeight(), a CSS-style 100..900 weight.
+    int m_cachedLabelFontWeight = 700;
+    /// ConfigDefaults::labelFont{Italic,Underline,Strikeout}().
+    bool m_cachedLabelFontItalic = false;
+    bool m_cachedLabelFontUnderline = false;
+    bool m_cachedLabelFontStrikeout = false;
+    /// Bumped on every change so the painter can cheaply detect "style
+    /// changed" — the orchestrator reads this.
+    quint64 m_tabIndicatorStyleGeneration = 0;
+
+    /// Invoked after any of the members above changes. Bumps the generation and
+    /// asks for a repaint so the new look lands on the next frame.
+    void onScrollTabIndicatorStyleChanged();
+    /// Builds the tab-label font from the cached label-font members. Defined in
+    /// daemon_settings.cpp.
+    QFont scrollTabIndicatorFont() const;
+    // ── end scrolling tab indicator paint settings ──
+
     // Per-drag activation / float tracking. Fields + rationale in effect_state.h
     // (DragActivationState).
     DragActivationState m_dragActivation;
@@ -3212,10 +3211,6 @@ private:
 private Q_SLOTS:
     /// Handle daemon signal when virtual screen definitions change
     void onVirtualScreensChanged(const QString& physicalScreenId);
-
-    /// Handle the daemon naming the wl_surface that draws @p screenId's
-    /// scrolling tab indicators. A @p surfaceId of 0 retracts the registration.
-    void onScrollTabSurfaceChanged(const QString& screenId, uint surfaceId);
 
     /// Handle daemon signal when the per-event motion-profile tree
     /// changes (a per-event animation duration was edited). Re-fetches

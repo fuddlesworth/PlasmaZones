@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
+#include "compositor/scrolltabindicatorpainter.h"
 #include "compositor/stripviewanimator.h"
 #include "input_filter.h"
 
@@ -51,19 +52,6 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         qCInfo(lcEffect) << "Connected to daemon settingsChanged D-Bus signal";
     } else {
         qCWarning(lcEffect) << "Failed to connect to daemon settingsChanged D-Bus signal";
-    }
-
-    // Which wl_surface carries each screen's scrolling tab indicators. The
-    // paint path slides that surface with the strip, and the object id is the
-    // only handle it can match on: every daemon overlay reports the same window
-    // class, and a layer surface's scope is not exposed per window.
-    const bool tabSurfaceConnected = QDBusConnection::sessionBus().connect(
-        PhosphorProtocol::Service::Name, PhosphorProtocol::Service::ObjectPath,
-        PhosphorProtocol::Service::Interface::Scrolling, QStringLiteral("scrollTabSurfaceChanged"), this,
-        SLOT(onScrollTabSurfaceChanged(QString, uint)));
-    if (!tabSurfaceConnected) {
-        qCWarning(lcEffect) << "Failed to connect to daemon scrollTabSurfaceChanged D-Bus signal"
-                            << "— scrolling tab indicators will not ride the strip";
     }
 
     // Connect to virtual screen changes — daemon emits this when a physical screen's
@@ -285,6 +273,11 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         // have damaged them is gone).
         m_stripTransition.reset();
         m_stripViewAnimator->reset();
+        // The tab-indicator model came from the daemon that just died, so
+        // every pill it described belongs to a strip nothing owns now. The
+        // textures are left allocated (no GL context on this D-Bus dispatch);
+        // they are reused or freed under the paint/teardown context.
+        m_scrollTabPainter->clearAll();
         // Guarded like repaintSnapRegions: this lambda runs on an arbitrary
         // later D-Bus dispatch (serviceUnregistered), which can land during
         // compositor teardown when KWin::effects has been torn down —
@@ -292,16 +285,6 @@ void PlasmaZonesEffect::connectDaemonSubscriptions()
         if (KWin::effects) {
             KWin::effects->addRepaintFull();
         }
-        // The tab-indicator surface ids name objects that died with the daemon,
-        // and a retraction only ever arrives from a daemon healthy enough to
-        // send one — a crash sends nothing. Wayland reuses object ids, so a
-        // retained set is not merely stale, it is a live mismatch waiting for
-        // the next client to be handed one of those numbers. Clearing also puts
-        // isScrollTabIndicatorSurface back on its empty-set fast path. The
-        // bring-up clear stays where it is: it covers the other order, an
-        // effect reload against a daemon whose surfaces outlived it.
-        m_scrollTabSurfaceIds.clear();
-        m_scrollTabSurfaceIdsByScreen.clear();
         // Parked columns' paint hints likewise. Their committed rect is the
         // park, below the union of every output, so the relocation is the only
         // thing drawing them anywhere visible; with the scrolling set cleared

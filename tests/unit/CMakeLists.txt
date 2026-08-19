@@ -1190,6 +1190,16 @@ target_link_libraries(test_tiling_adaptor_active_layouts PRIVATE Qt6::Test Qt6::
                                                                  plasmazones_core)
 add_test(NAME test_tiling_adaptor_active_layouts COMMAND test_tiling_adaptor_active_layouts)
 
+# Tab-indicator transport on TilingAdaptor: the scrollTabStripsChanged relay
+# and its scrollTabStrips replay cache (including the "[]" retraction and the
+# shutdown clear), the all-windows scrollTabColorsChanged broadcast, and the
+# scrollTabColors pass-through to the WTA's rule resolution.
+add_executable(test_tiling_adaptor_scroll_tabs dbus/test_tiling_adaptor_scroll_tabs.cpp)
+target_link_libraries(test_tiling_adaptor_scroll_tabs PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorRules::PhosphorRules PhosphorEngine::PhosphorEngine
+                      PhosphorZones::PhosphorZones)
+add_test(NAME test_tiling_adaptor_scroll_tabs COMMAND test_tiling_adaptor_scroll_tabs)
+
 # Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the
 # (snap, autotile, context) matrix so the daemon's drag routing decision
 # can't drift relative to the compositor plugin's deleted local caches.

@@ -40,8 +40,8 @@ class PlasmaZonesEffect;
 /// view spring with PreserveVelocity on every batch (StripViewAnimator), so
 /// there are no discrete legs for a crossfade to play. Instead, every frame
 /// while the spring is live, the strip layer — columns already translated
-/// by the spring's offset, parked columns relocated, the tab-indicator
-/// surface riding along, the desktop background beneath — is rendered into
+/// by the spring's offset, parked columns relocated, the tab pills blitted
+/// at the anchor's slot, the desktop background beneath — is rendered into
 /// a per-output capture (windows stacked ABOVE the strip are excluded and
 /// composited sharp on top after the pass, so an OSD popped mid-scroll is
 /// never smeared; see stripPassPaintsAboveStrip), and one
