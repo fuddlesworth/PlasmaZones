@@ -66,7 +66,8 @@ inline constexpr QLatin1StringView Manage{"manage"};
 inline constexpr QLatin1StringView Float{"float"};
 /// Window-scoped open-placement slot — filled by `ActionType::SnapToZone`. A
 /// single slot (first-matching-rule-wins), carrying the zone-ordinal list
-/// (`ActionParam::Zones`) the daemon snaps the opening window into. Mutually
+/// (`ActionParam::Zones`) and/or the zone-name list (`ActionParam::ZoneNames`)
+/// the daemon snaps the opening window into. Mutually
 /// resolved against `Float` on the open path (a float rule opts out of snapping).
 inline constexpr QLatin1StringView Placement{"placement"};
 /// Window-scoped open-routing slots — filled by `ActionType::RouteToScreen` /

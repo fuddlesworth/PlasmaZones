@@ -213,6 +213,12 @@ ColumnLayout {
     // keys once here keeps the two halves from drifting onto different literals.
     readonly property string _decorationChainKey: "chain"
     readonly property string _decorationParamsKey: "params"
+    // The SnapToZone action payload has two target lists, ordinals under
+    // "zones" and names under "zoneNames" (PhosphorRules::ActionParam). Each
+    // editor's empty guard has to read the OTHER list to know whether clearing
+    // its own still leaves a target, so both keys are named once here.
+    readonly property string _zoneOrdinalsKey: "zones"
+    readonly property string _zoneNamesKey: "zoneNames"
     // Param-editor Components — one per param `kind`, keyed off `parent.modelData`
     // (the hosting Loader's descriptor). They live in ActionParamEditors.qml
     // (instantiated below as `paramEditors`) so this file stays under the
@@ -486,6 +492,9 @@ ColumnLayout {
 
                     if (modelData.kind === "zoneOrdinals")
                         return paramEditors._zoneOrdinalsEditor;
+
+                    if (modelData.kind === "zoneNames")
+                        return paramEditors._zoneNamesEditor;
 
                     if (modelData.kind === "screenId")
                         return paramEditors._screenIdEditor;

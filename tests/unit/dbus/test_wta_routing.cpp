@@ -11,6 +11,8 @@
 
 #include "wta_convenience_fixture.h"
 
+#include <QScopeGuard>
+
 class TestWtaRouting : public QObject, protected WtaConvenienceFixture
 {
     Q_OBJECT
@@ -77,6 +79,12 @@ private Q_SLOTS:
         RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
         QVERIFY(store.addRule(rule));
         m_wta->setRuleStore(&store);
+        // Detach on every exit, including a mid-test QVERIFY abort: the stack
+        // store is destroyed before the adaptor that borrows it.
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+            m_wta->setWindowRegistry(nullptr);
+        });
 
         QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
@@ -91,9 +99,6 @@ private Q_SLOTS:
         QCOMPARE(outputSpy.at(0).at(1).toString(), QStringLiteral("DP-2"));
         QCOMPARE(desktopSpy.count(), 1);
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 2);
-
-        m_wta->setRuleStore(nullptr);
-        m_wta->setWindowRegistry(nullptr);
     }
 
     void testRestorePolicy_scopedExclusionDoesNotCancelLowerPriorityRule()
@@ -136,13 +141,16 @@ private Q_SLOTS:
         QVERIFY(store.addRule(decoRule));
         QVERIFY(store.addRule(restoreRule));
         m_wta->setRuleStore(&store);
+        // Detach on every exit, including a mid-test QVERIFY abort: the stack
+        // store is destroyed before the adaptor that borrows it.
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+            m_wta->setWindowRegistry(nullptr);
+            m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
+        });
 
         QVERIFY(m_wta->shouldRestoreFloatedPosition(QStringLiteral("deskflow|inst9"),
                                                     PhosphorZones::AssignmentEntry::Mode::Snapping));
-
-        m_wta->setRuleStore(nullptr);
-        m_wta->setWindowRegistry(nullptr);
-        m_settings->setSnappingRestoreFloatedWindowsOnLogin(true);
     }
 
     void testApplyOpenRoutingForTiling_acceptsScrollingTarget()
@@ -172,6 +180,12 @@ private Q_SLOTS:
         RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
         QVERIFY(store.addRule(rule));
         m_wta->setRuleStore(&store);
+        // Detach on every exit, including a mid-test QVERIFY abort: the stack
+        // store is destroyed before the adaptor that borrows it.
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+            m_wta->setWindowRegistry(nullptr);
+        });
 
         QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
 
@@ -181,9 +195,6 @@ private Q_SLOTS:
         QCOMPARE(routed, QStringLiteral("DP-2"));
         QCOMPARE(outputSpy.count(), 1);
         QCOMPARE(outputSpy.at(0).at(1).toString(), QStringLiteral("DP-2"));
-
-        m_wta->setRuleStore(nullptr);
-        m_wta->setWindowRegistry(nullptr);
     }
 
     void testApplyOpenRoutingForTiling_declinesSnapModeTarget()
@@ -212,6 +223,12 @@ private Q_SLOTS:
         RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
         QVERIFY(store.addRule(rule));
         m_wta->setRuleStore(&store);
+        // Detach on every exit, including a mid-test QVERIFY abort: the stack
+        // store is destroyed before the adaptor that borrows it.
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+            m_wta->setWindowRegistry(nullptr);
+        });
 
         QSignalSpy outputSpy(m_wta, &WindowTrackingAdaptor::windowOutputMoveExpected);
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
@@ -223,9 +240,6 @@ private Q_SLOTS:
         QCOMPARE(outputSpy.count(), 0);
         QCOMPARE(desktopSpy.count(), 1); // desktop routing is engine-neutral
         QCOMPARE(desktopSpy.at(0).at(1).toInt(), 3);
-
-        m_wta->setRuleStore(nullptr);
-        m_wta->setWindowRegistry(nullptr);
     }
 
     // The snap open path's RouteToDesktop emit (applyOpenDesktopRouting, called from
@@ -251,6 +265,12 @@ private Q_SLOTS:
         RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
         QVERIFY(store.addRule(rule));
         m_wta->setRuleStore(&store);
+        // Detach on every exit, including a mid-test QVERIFY abort: the stack
+        // store is destroyed before the adaptor that borrows it.
+        const auto teardown = qScopeGuard([this] {
+            m_wta->setRuleStore(nullptr);
+            m_wta->setWindowRegistry(nullptr);
+        });
 
         QSignalSpy desktopSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
         m_wta->applyOpenDesktopRouting(QStringLiteral("deskapp|inst3"), QStringLiteral("DP-1"));
@@ -263,9 +283,6 @@ private Q_SLOTS:
         QSignalSpy quietSpy(m_wta, &WindowTrackingAdaptor::windowDesktopMoveRequested);
         m_wta->applyOpenDesktopRouting(QStringLiteral("nomatch|inst4"), QStringLiteral("DP-1"));
         QCOMPARE(quietSpy.count(), 0);
-
-        m_wta->setRuleStore(nullptr);
-        m_wta->setWindowRegistry(nullptr);
     }
 
     // A BARE RouteToScreen rule (no SnapToZone) must move the opening window to the
@@ -308,6 +325,15 @@ private Q_SLOTS:
         RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
         QVERIFY(store.addRule(rule));
         wta->setRuleStore(&store);
+        // Detach on every exit, including a mid-test QVERIFY abort: the stack
+        // store is destroyed before the adaptor that borrows it.
+        const auto teardown = qScopeGuard([wta, snap] {
+            wta->setRuleStore(nullptr);
+            wta->setWindowRegistry(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            wta->service()->setSnapState(nullptr);
+            delete snap;
+        });
 
         // Window opened on DP-1 at a known frame.
         const QString w = QStringLiteral("routeapp|inst1");
@@ -330,12 +356,6 @@ private Q_SLOTS:
         QCOMPARE(args.at(6).toString(), QStringLiteral("DP-2"));
         const int x = args.at(1).toInt();
         QVERIFY2(x >= 1920 && x < 3840, "the window must land within DP-2's geometry");
-
-        wta->setRuleStore(nullptr);
-        wta->setWindowRegistry(nullptr);
-        wta->service()->setSnapEngine(nullptr);
-        wta->service()->setSnapState(nullptr);
-        delete snap;
     }
 
     // A rule carrying BOTH SnapToZone and RouteToScreen is still moved by
@@ -382,6 +402,15 @@ private Q_SLOTS:
         RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
         QVERIFY(store.addRule(rule));
         wta->setRuleStore(&store);
+        // Detach on every exit, including a mid-test QVERIFY abort: the stack
+        // store is destroyed before the adaptor that borrows it.
+        const auto teardown = qScopeGuard([wta, snap] {
+            wta->setRuleStore(nullptr);
+            wta->setWindowRegistry(nullptr);
+            wta->service()->setSnapEngine(nullptr);
+            wta->service()->setSnapState(nullptr);
+            delete snap;
+        });
 
         const QString w = QStringLiteral("snaproute|inst2");
         wta->setFrameGeometry(w, 100, 100, 800, 600);
@@ -398,12 +427,6 @@ private Q_SLOTS:
         QCOMPARE(outputSpy.at(0).at(1).toString(), QStringLiteral("DP-2"));
         QCOMPARE(geomSpy.count(), 1);
         QCOMPARE(geomSpy.at(0).at(6).toString(), QStringLiteral("DP-2"));
-
-        wta->setRuleStore(nullptr);
-        wta->setWindowRegistry(nullptr);
-        wta->service()->setSnapEngine(nullptr);
-        wta->service()->setSnapState(nullptr);
-        delete snap;
     }
 
     // The bool verdict of applyOpenScreenRouting and the directiveMatched
@@ -440,6 +463,12 @@ private Q_SLOTS:
         RuleStore store(ConfigDefaults::rulesFilePath(), &parent);
         QVERIFY(store.addRule(rule));
         wta->setRuleStore(&store);
+        // Detach on every exit, including a mid-test QVERIFY abort: the stack
+        // store is destroyed before the adaptor that borrows it.
+        const auto teardown = qScopeGuard([wta] {
+            wta->setRuleStore(nullptr);
+            wta->setWindowRegistry(nullptr);
+        });
 
         const QString w = QStringLiteral("pinapp|inst3");
         wta->setFrameGeometry(w, 100, 100, 800, 600);
@@ -464,9 +493,70 @@ private Q_SLOTS:
         bool otherMatched = true;
         QVERIFY(wta->applyOpenRoutingForTiling(other, QStringLiteral("DP-1"), &otherMatched).isEmpty());
         QVERIFY2(!otherMatched, "no rule → no directive on the tiling channel either");
+    }
 
-        wta->setRuleStore(nullptr);
-        wta->setWindowRegistry(nullptr);
+    // The ownership verdict both channels share (hasValidPlacementTarget) is a
+    // PAYLOAD-SHAPE judgement over the SnapToZone targets, and the zone-NAME
+    // form (discussion #924) must count: a names-only rule owns the window's
+    // target on both channels even though no zone in the test layout carries
+    // that name (no engine is wired here; in the daemon the engine would then
+    // decline the snap and the remembered-placement fallback stays suppressed,
+    // as for an ordinal the layout lacks). The control is a window no rule
+    // matches, which both channels must report as unowned. (A payload with no
+    // valid target cannot be built through the store: Rule::isValid runs the
+    // descriptor validator, which needs at least one valid entry across the
+    // two lists.)
+    void testRoutingVerdicts_namesOnlyPlacement_ownsOnBothChannels()
+    {
+        PhosphorScreens::FakeScreenProvider fake;
+        fake.addScreen(QStringLiteral("DP-1"), QRect(0, 0, 1920, 1080), QStringLiteral("DP-1"));
+        PhosphorScreens::ScreenManager screenMgr(
+            PhosphorScreens::ScreenManagerConfig{.screenProvider = &fake, .useGeometrySensors = false});
+        screenMgr.start();
+
+        QObject parent;
+        auto* wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, &screenMgr, m_settings, nullptr, nullptr,
+                                              &parent);
+        auto* registry = new PhosphorEngine::WindowRegistry(&parent);
+        wta->setWindowRegistry(registry);
+        wta->setWindowMetadata(QStringLiteral("inst5"), QStringLiteral("namedapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, QVariantMap());
+        wta->setWindowMetadata(QStringLiteral("inst6"), QStringLiteral("otherapp"), QString(), QString(), QString(), 0,
+                               0, QString(), 0, QVariantMap());
+
+        using namespace PhosphorRules;
+        Rule named;
+        named.id = QUuid::createUuid();
+        named.enabled = true;
+        named.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("namedapp"));
+        RuleAction snapByName;
+        snapByName.type = QString(ActionType::SnapToZone);
+        snapByName.params.insert(QString(ActionParam::ZoneNames), QJsonArray{QStringLiteral("Editor")});
+        named.actions = {snapByName};
+        RuleStore store(ConfigDefaults::rulesFilePath(), nullptr); // stack object: no QObject parent
+        QVERIFY(store.addRule(named));
+        wta->setRuleStore(&store);
+        // Detach on every exit: `store` is declared after `parent`, so on a
+        // mid-test QVERIFY abort it dies first while the WTA still holds it.
+        const auto teardown = qScopeGuard([wta] {
+            wta->setRuleStore(nullptr);
+            wta->setWindowRegistry(nullptr);
+        });
+
+        const QString w = QStringLiteral("namedapp|inst5");
+        wta->setFrameGeometry(w, 100, 100, 800, 600);
+        QVERIFY2(wta->applyOpenScreenRouting(w, QStringLiteral("DP-1")),
+                 "a names-only SnapToZone rule owns the window's target on the snap channel");
+        bool matched = false;
+        QVERIFY(wta->applyOpenRoutingForTiling(w, QStringLiteral("DP-1"), &matched).isEmpty());
+        QVERIFY2(matched, "…and on the tiling channel");
+
+        const QString other = QStringLiteral("otherapp|inst6");
+        wta->setFrameGeometry(other, 100, 100, 800, 600);
+        QVERIFY2(!wta->applyOpenScreenRouting(other, QStringLiteral("DP-1")), "no rule → no ownership");
+        bool otherMatched = true;
+        QVERIFY(wta->applyOpenRoutingForTiling(other, QStringLiteral("DP-1"), &otherMatched).isEmpty());
+        QVERIFY2(!otherMatched, "no rule → no ownership on the tiling channel either");
     }
 
     void testGuardedHandoff_refusalRehomesIntoSource()

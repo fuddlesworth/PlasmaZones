@@ -33,6 +33,11 @@ ComboBox {
     property string noneText: i18n("Default")
     property string currentLayoutId: ""
     property bool showPreview: false
+    // Thumbnail frame widths shared by the layout and the no-layout preview
+    // tiles (the QQC2 hairline idiom: one unit at rest, two when highlighted),
+    // named once so the two tiles cannot drift.
+    readonly property int _previewBorderWidth: 1
+    readonly property int _previewBorderHighlighted: 2
     // Whether to show the "Default"/"None" entry at the top of the list
     property bool showNoneOption: true
     // An optional SECOND leading entry, directly under the Default one, whose
@@ -359,9 +364,14 @@ ComboBox {
     onLayoutFilterChanged: {
         _rebuildScheduled = false;
         let items = _buildItems();
-        if (_modelMatchesItems(items))
+        // Same ordering as _doRebuild: when the model did not change visually,
+        // currentLayoutId may still have moved while this filter change was
+        // coalesced, so re-sync the selection (popup open or not) and return;
+        // only a real model change defers behind an open popup.
+        if (_modelMatchesItems(items)) {
+            Qt.callLater(updateSelection);
             return;
-
+        }
         if (popup && popup.visible) {
             _rebuildPending = true;
             return;
@@ -466,7 +476,9 @@ ComboBox {
             }
         }
         width: Math.max(root.width, Kirigami.Units.gridUnit * 18)
-        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (root.Window.window ? root.Window.window.height : 600) - topMargin - bottomMargin)
+        // Before the combo is in a window there is no real height to fit; a
+        // Units-derived fallback keeps the popup bounded without a raw pixel.
+        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (root.Window.window ? root.Window.window.height : Kirigami.Units.gridUnit * 30) - topMargin - bottomMargin)
         topMargin: Kirigami.Units.smallSpacing
         bottomMargin: Kirigami.Units.smallSpacing
         padding: 1
@@ -574,7 +586,7 @@ ComboBox {
                 radius: Kirigami.Units.smallSpacing / 2
                 color: Kirigami.Theme.alternateBackgroundColor
                 border.color: highlighted ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                border.width: highlighted ? 2 : 1
+                border.width: highlighted ? root._previewBorderHighlighted : root._previewBorderWidth
                 visible: root.showPreview && hasLayout
 
                 PZCommon.ZonePreview {
@@ -600,7 +612,7 @@ ComboBox {
                 radius: Kirigami.Units.smallSpacing / 2
                 color: Kirigami.Theme.alternateBackgroundColor
                 border.color: highlighted ? Kirigami.Theme.highlightColor : Kirigami.ColorUtils.linearInterpolation(Kirigami.Theme.backgroundColor, Kirigami.Theme.textColor, Kirigami.Theme.frameContrast)
-                border.width: highlighted ? 2 : 1
+                border.width: highlighted ? root._previewBorderHighlighted : root._previewBorderWidth
                 visible: root.showPreview && !hasLayout
 
                 Kirigami.Icon {
@@ -633,8 +645,11 @@ ComboBox {
                     PZCommon.CategoryBadge {
                         visible: hasLayout && modelData.category >= 0
                         category: modelData.category
-                        autoAssign: modelData.layout && modelData.layout.autoAssign === true
-                        globalAutoAssign: root.appSettings && root.appSettings.autoAssignAllLayouts === true
+                        // Ternary, not `a && b`: on the None entry `layout` is
+                        // undefined and `undefined && x` is undefined, which
+                        // cannot be assigned to a bool.
+                        autoAssign: modelData.layout ? modelData.layout.autoAssign === true : false
+                        globalAutoAssign: root.appSettings ? root.appSettings.autoAssignAllLayouts === true : false
                     }
 
                     // Autotile capability badges (memory / reflow / script-state)

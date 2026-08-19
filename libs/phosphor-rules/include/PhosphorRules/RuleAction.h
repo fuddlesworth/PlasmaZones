@@ -96,8 +96,8 @@ struct PHOSPHORRULES_EXPORT RuleAction
  * `string`, `number`, `percent`, `enum`, `bool`, `color`, plus the
  * picker-aware kinds `snappingLayout`, `tilingAlgorithm`,
  * `scrollingTemplate`, `animationEvent`, `shaderEffect`, `overlayShader`,
- * `zoneOrdinals`, `curveEditor`, `screenId`, `virtualDesktop`,
- * `decorationChain`); QML loaders dispatch on it. Labels stay in the GPL
+ * `zoneOrdinals`, `zoneNames`, `curveEditor`, `screenId`,
+ * `virtualDesktop`, `decorationChain`); QML loaders dispatch on it. Labels stay in the GPL
  * settings layer because they need translation through PhosphorI18n::tr —
  * the lib only owns the structural part of the schema.
  *

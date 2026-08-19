@@ -50,6 +50,7 @@
 // std::make_unique<RuleStore> in the ctor needs the complete
 // type. The header forward-declares it to avoid pulling the
 // dependency graph into every consumer of SettingsController.
+#include <PhosphorRules/ActionParams.h>
 #include <PhosphorRules/RuleStore.h>
 #include <PhosphorRules/RuleStoreWatcher.h>
 
@@ -88,6 +89,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QScreen>
+#include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
@@ -281,6 +283,9 @@ SettingsController::~SettingsController()
         m_rulesPage->setScreenLookup({});
         m_rulesPage->setActivityLookup({});
         m_rulesPage->setZoneLookup({});
+        // The zone-name provider captures `this` and walks m_localLayoutManager;
+        // clear it for the same reason (the controller keeps its last list).
+        m_rulesPage->setZoneNamesProvider({});
         m_rulesPage->setVirtualDesktopLookup({});
         m_rulesPage->setSnappingLayoutLookup({});
         m_rulesPage->setTilingAlgorithmLookup({});
@@ -289,6 +294,9 @@ SettingsController::~SettingsController()
         // installs (the curve resolver is QML-installed and captures only
         // RuleController-owned state, so it is deliberately left alone).
         m_rulesPage->setShaderEffectLookup({});
+        // The event resolver reaches m_animationsPage (a QObject child); clear
+        // it for the same reason.
+        m_rulesPage->setAnimationEventLookup({});
         // The overlay-shader resolver reaches m_overlayShaderRegistry — clear it
         // too for the same symmetry.
         m_rulesPage->setOverlayShaderLookup({});
@@ -372,6 +380,15 @@ SettingsController::SettingsController(QObject* parent)
     // at m_layouts.
     connect(m_localLayoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
         recalcLocalLayouts();
+        // The SnapToZone picker's zone-name list comes from the registry's Zone
+        // objects, not from the LayoutPreview projection below (which carries
+        // geometry and numbers only), so a rename that changes no preview still
+        // has to reach it. Refresh BEFORE the withhold / equality gates below:
+        // both key off the preview list, and the controller compares the name
+        // list itself so this is a no-op emit-wise when nothing changed.
+        if (m_rulesPage) {
+            m_rulesPage->refreshZoneNames();
+        }
         QVariantList localLayouts = localLayoutPreviews();
         // An empty disk view is published like any other: when the user deletes
         // every layout we want m_layouts to reflect the empty state. This path
@@ -789,179 +806,10 @@ SettingsController::SettingsController(QObject* parent)
     // apply / discard participate in the framework's Save/Discard.
     m_profilesPage = new ProfilePageController(m_settings, *m_rulesPage, this);
 
-    // Wire screen / activity / layout label resolvers so the rule model and
-    // monitor-overview render friendly names instead of raw connector strings,
-    // activity UUIDs and layout UUIDs.
-    //
-    // The closures capture `this` and read live snapshot state on every call,
-    // so they need to be installed exactly ONCE — re-installing on every
-    // upstream change was wasteful (three model-wide `dataChanged` emits per
-    // signal × three signals = nine emits). Upstream changes are now routed
-    // to `RuleModel::refreshLabels()` which emits a single dataChanged
-    // covering every label-derived role.
-    m_rulesPage->setScreenLookup([this](const QString& screenId) -> QString {
-        const QVariantList all = screens();
-        for (const QVariant& sv : all) {
-            const QVariantMap m = sv.toMap();
-            // Match against `name` (the connector / virtual-screen id) or
-            // `screenId` (the daemon-stable screen identifier). The screen
-            // payload built by `screenInfoListToVariantList` never emits an
-            // `id` key — comparing against `"id"` would be dead code.
-            if (m.value(QStringLiteral("name")).toString() == screenId
-                || m.value(QStringLiteral("screenId")).toString() == screenId) {
-                const QString label = m.value(QStringLiteral("displayLabel")).toString();
-                return label.isEmpty() ? screenId : label;
-            }
-        }
-        return screenId;
-    });
-    m_rulesPage->setActivityLookup([this](const QString& activityId) -> QString {
-        for (const QVariant& av : std::as_const(m_activities)) {
-            const QVariantMap m = av.toMap();
-            if (m.value(QStringLiteral("id")).toString() == activityId) {
-                const QString name = m.value(QStringLiteral("name")).toString();
-                return name.isEmpty() ? activityId : name;
-            }
-        }
-        return activityId;
-    });
-    m_rulesPage->setVirtualDesktopLookup([this](const QString& desktopNumber) -> QString {
-        // Desktop numbers are 1-based; the names list is 0-indexed. Return the name
-        // for a valid in-range number; an out-of-range / unnamed / unparseable value
-        // returns empty so the summary falls back to the bare number.
-        bool ok = false;
-        const int num = desktopNumber.toInt(&ok);
-        if (ok && num >= 1 && num <= m_virtualDesktopNames.size()) {
-            return m_virtualDesktopNames.at(num - 1);
-        }
-        return QString();
-    });
-    // Zone (snap-zone UUID) → friendly "<layout> — <zone>" label, walking the
-    // local manual layouts for the zone whose id matches. Resolved live so a
-    // later layout/zone rename surfaces on the next refreshLabels(). The zone-name
-    // data is not in the LayoutPreview list (it carries geometry + numbers, not
-    // UUIDs), so this reads the registry's actual Zone objects directly. Unknown
-    // ids (deleted layout, hand-edited rule) round-trip verbatim.
-    m_rulesPage->setZoneLookup([this](const QString& zoneId) -> QString {
-        if (zoneId.isEmpty() || !m_localLayoutManager) {
-            return zoneId;
-        }
-        for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
-            if (!layout) {
-                continue;
-            }
-            for (PhosphorZones::Zone* zone : layout->zones()) {
-                if (!zone || zone->id().toString() != zoneId) {
-                    continue;
-                }
-                const QString zoneName =
-                    zone->name().isEmpty() ? PhosphorI18n::tr("Zone %1").arg(zone->zoneNumber()) : zone->name();
-                const QString layoutName = layout->name();
-                return layoutName.isEmpty() ? zoneName : PhosphorI18n::tr("%1 — %2").arg(layoutName, zoneName);
-            }
-        }
-        return zoneId;
-    });
-    // SettingsController::layouts() is the union of three id families:
-    // snapping layouts (UUID-keyed), autotile entries (algorithm-token-keyed
-    // via the "autotile:<token>" or bare-token shape PhosphorTiles ships), and
-    // native scrolling templates (UUID-keyed in their own namespace, flagged
-    // isScrollingTemplate). All three are looked up by the same raw id key, so
-    // one resolver lambda is sufficient — the rules side strips the
-    // "scrolling:" prefix before calling in. The typed setters below are about
-    // CONTRACT clarity at the RuleController API surface so a
-    // future caller can wire a more restrictive snapping-only lookup
-    // without also constraining the tiling resolver.
-    auto resolveByLayoutsLookup = [this](const QString& tokenOrId) -> QString {
-        for (const QVariant& lv : std::as_const(m_layouts)) {
-            const QVariantMap m = lv.toMap();
-            if (m.value(QStringLiteral("id")).toString() == tokenOrId) {
-                // Layouts are serialised via `toVariantMap(LayoutPreview)`
-                // which stamps the friendly label under `displayName`, not
-                // `name`. Reading `name` here would always return an empty
-                // string and the tile caption would show the raw UUID.
-                const QString name = m.value(QStringLiteral("displayName")).toString();
-                return name.isEmpty() ? tokenOrId : name;
-            }
-        }
-        return tokenOrId;
-    };
-    // Snapping layouts are stored by UUID, which matches the layouts-list id
-    // directly. Tiling-algorithm actions, however, store the BARE algorithm
-    // token ("bsp"), while the layouts list keys autotile entries by the
-    // "autotile:<token>" form — so the bare token must be prefixed before the
-    // lookup, or the list shows the raw id instead of the friendly name. Try
-    // the prefixed form first, then fall back to the bare token (covering the
-    // bare-keyed shape PhosphorTiles can also ship, and already-prefixed data).
-    auto resolveTilingAlgorithmLookup = [resolveByLayoutsLookup](const QString& algorithmToken) -> QString {
-        const QString prefixed = PhosphorLayout::LayoutId::makeAutotileId(algorithmToken);
-        const QString label = resolveByLayoutsLookup(prefixed);
-        return label == prefixed ? resolveByLayoutsLookup(algorithmToken) : label;
-    };
-    m_rulesPage->setSnappingLayoutLookup(resolveByLayoutsLookup);
-    m_rulesPage->setTilingAlgorithmLookup(resolveTilingAlgorithmLookup);
-    // OverrideAnimationShader actions store an effect id ("dissolve"); resolve
-    // it to the friendly name via the same animation shader registry the rule
-    // editor's shader picker reads (availableShaderEffects), so the list shows
-    // "Shader: Dissolve" rather than the raw id. Unknown ids round-trip
-    // verbatim (registry miss → raw id), matching the editor's fallback.
-    auto resolveShaderEffectLookup = [this](const QString& effectId) -> QString {
-        if (effectId.isEmpty() || !m_animationShaderRegistry || !m_animationShaderRegistry->hasEffect(effectId)) {
-            return effectId;
-        }
-        const QString name = m_animationShaderRegistry->effect(effectId).name;
-        return name.isEmpty() ? effectId : name;
-    };
-    m_rulesPage->setShaderEffectLookup(resolveShaderEffectLookup);
-    // OverrideOverlayShader stores an overlay/snapping shader id; resolve it to
-    // the friendly name via the overlay shader registry (the same source the
-    // rule editor's overlay-shader picker reads), so the list shows
-    // "Overlay shader: <name>" rather than the raw id. Unknown ids round-trip
-    // verbatim (registry miss → empty name → raw id). m_overlayShaderRegistry is
-    // constructed later in this ctor; the `!m_overlayShaderRegistry` guard below
-    // covers that window — the lambda captures `this` and is invoked only lazily
-    // (on the model's first label render, after construction completes).
-    auto resolveOverlayShaderLookup = [this](const QString& effectId) -> QString {
-        if (effectId.isEmpty() || !m_overlayShaderRegistry) {
-            return effectId;
-        }
-        const QString name = m_overlayShaderRegistry->shader(effectId).name;
-        return name.isEmpty() ? effectId : name;
-    };
-    m_rulesPage->setOverlayShaderLookup(resolveOverlayShaderLookup);
-    // OverrideDecorationChain stores surface-pack ids ("frosted-glass");
-    // resolve them to friendly names via the surface shader registry (the
-    // same source the decoration pages' pack picker reads), so the list
-    // shows "Decoration: Frosted Glass, Glow" rather than raw ids. Unknown
-    // ids round-trip verbatim, matching the other lookups' fallbacks.
-    auto resolveDecorationPackLookup = [this](const QString& packId) -> QString {
-        if (packId.isEmpty() || !m_surfaceShaderRegistry || !m_surfaceShaderRegistry->hasEffect(packId)) {
-            return packId;
-        }
-        const QString name = m_surfaceShaderRegistry->effect(packId).name;
-        return name.isEmpty() ? packId : name;
-    };
-    m_rulesPage->setDecorationPackLookup(resolveDecorationPackLookup);
-    auto refreshRuleLabels = [this]() {
-        if (m_rulesPage && m_rulesPage->model()) {
-            m_rulesPage->model()->refreshLabels();
-        }
-    };
-    connect(this, &SettingsController::screensChanged, this, refreshRuleLabels);
-    connect(this, &SettingsController::activitiesChanged, this, refreshRuleLabels);
-    connect(this, &SettingsController::layoutsChanged, this, refreshRuleLabels);
-    // The virtual-desktop resolver reads m_virtualDesktopNames live — refresh
-    // on renames too, like its screen/activity/layout siblings, or a rule's
-    // "Desktop: Work" label stays stale until an unrelated refresh fires.
-    connect(this, &SettingsController::virtualDesktopsChanged, this, refreshRuleLabels);
-    // A shader-pack rescan (user drops in a new effect, or one is removed)
-    // can change an id→name mapping; refresh so resolved Shader labels track it.
-    connect(m_animationShaderRegistry, &PhosphorAnimationShaders::AnimationShaderRegistry::effectsChanged, this,
-            refreshRuleLabels);
-    // Same refresh for surface-pack rescans so resolved Decoration labels
-    // track pack installs/removals.
-    connect(m_surfaceShaderRegistry, &PhosphorSurfaceShaders::SurfaceShaderRegistry::effectsChanged, this,
-            refreshRuleLabels);
+    // The rule-list label lookups (screen / activity / desktop / zone / layout
+    // / algorithm / shader / event / decoration) and the refreshes that keep
+    // them live. Installed exactly once; see settingscontroller_rulelookups.cpp.
+    installRuleLabelLookups();
 
     // Overlay shader registry — settings-side mirror of the daemon's. The
     // PlasmaZones::ShaderRegistry subclass auto-wires the standard system
@@ -978,9 +826,10 @@ SettingsController::SettingsController(QObject* parent)
     m_overlayShaderRegistry = new PlasmaZones::ShaderRegistry(this);
     // Overlay-pack rescans change id→name mappings the OverrideOverlayShader
     // rule labels resolve live — refresh them like the animation and surface
-    // registries above (connected here because the registry is built after
-    // that block; the refreshRuleLabels lambda is still in scope).
-    connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this, refreshRuleLabels);
+    // registries (connected here rather than in installRuleLabelLookups because
+    // the registry is built after that call).
+    connect(m_overlayShaderRegistry, &PhosphorShaders::ShaderRegistry::shadersChanged, this,
+            &SettingsController::refreshRuleLabels);
 
     // Shared live-preview feed (T3.1): backed by the local overlay registry +
     // settings (audio-visualizer config). Owned here (unique_ptr, no QObject

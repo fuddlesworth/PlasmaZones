@@ -2,42 +2,43 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// WindowTrackingAdaptor — rule-driven open/restore resolvers
+// WindowTrackingAdaptor — rule-driven restore predicates and per-window params
 //
-// Per-window rule resolution for the open and restore paths: floated-position,
-// zone, and size restore predicates, the open-float gate, placement-zone
-// resolution, and screen/desktop open-routing.
+// Per-window rule resolution for the restore and appearance paths: the
+// evaluator constructor, the mode-neutral screen resolver, the contextual
+// query builder, the floated-position / zone / size restore predicates, the
+// unfloat-fallback predicate, the screen and mode context stampers, the
+// open-float gate, the tab-colour / drop-indicator / scrolling-open param
+// builders, and the colour-scheme memo invalidator. The placement-zone
+// resolution and screen/desktop open-routing half lives in
+// rules_placement.cpp; the admission tests both halves share are in
+// rules_admission.h.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 #include "windowtrackingadaptor.h"
 #include "internal.h"
+#include "rules_admission.h"
 
-#include "dbus/zonedetectionadaptor.h"
 #include "core/interfaces/isettings.h"
-#include "core/platform/logging.h"
 #include <PhosphorEngine/IPlacementEngine.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
-#include <PhosphorScreens/Manager.h>
 #include <PhosphorSnapEngine/SnapEngine.h>
 #include <PhosphorSnapEngine/SnapState.h>
 #include <PhosphorTileEngine/AutotileEngine.h>
 #include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorZones/LayoutRegistry.h>
-#include <PhosphorRules/MatchExpression.h>
 #include <PhosphorRules/Rule.h>
 #include <PhosphorRules/RuleAction.h>
 #include <PhosphorRules/RuleEvaluator.h>
 #include <PhosphorRules/WindowQuery.h>
 #include <PhosphorRules/RuleStore.h>
 
-#include <QJsonArray>
-#include <QSet>
-
-#include <algorithm>
 #include <functional>
 
 namespace PlasmaZones {
+
+using namespace RuleAdmission;
 
 namespace {
 
@@ -60,145 +61,6 @@ bool isHexColorString(const QString& s)
         }
     }
     return true;
-}
-
-/// Structural admission tests for the open-path resolvers, one per stamping
-/// shape. Every one of them is the same guard the zones-layer context resolvers
-/// apply (layoutregistry_contextresolve.cpp), for the same reason.
-///
-/// An UNSTAMPED context field is not merely inert. WindowQuery::valueForField
-/// returns an ENGAGED empty string for the string-valued context fields, so a
-/// POSITIVE leaf (`Mode Equals scrolling`) correctly never matches — but a
-/// NEGATED one (`None{Mode Equals scrolling}`) matches precisely BECAUSE the
-/// inner leaf failed, and the rule then fires for EVERY window. Excluding rules
-/// that reference an unstamped field closes both polarities instead of relying
-/// on the empty value to coincide with a non-match.
-///
-/// TiledWindowCount is stamped by NO resolver on this path (it is a
-/// context-cascade field), so it is excluded everywhere here. ActiveLayout and
-/// ScreenOrientation used to sit beside it, but stampScreenContext now stamps
-/// both whenever a screen is stamped, so they are excluded only where the
-/// screen itself is unstamped (see screenDerivedContextFields /
-/// admitNothingStamped).
-const QSet<PhosphorRules::Field>& neverStampedFields()
-{
-    static const QSet<PhosphorRules::Field> fields = {
-        PhosphorRules::Field::TiledWindowCount,
-    };
-    return fields;
-}
-
-/// The context fields stampScreenContext derives FROM the screen: engaged and
-/// meaningful exactly when a screen was stamped, unanswerable otherwise. A
-/// resolver that stamped no screen must exclude rules referencing any of them
-/// (both polarities — the negated-leaf inversion documented above).
-const QSet<PhosphorRules::Field>& screenDerivedContextFields()
-{
-    static const QSet<PhosphorRules::Field> fields = {
-        PhosphorRules::Field::ScreenId,
-        PhosphorRules::Field::ActiveLayout,
-        PhosphorRules::Field::ScreenOrientation,
-    };
-    return fields;
-}
-
-/// The WINDOW-sourced fields buildRuleQueryForWindow cannot answer, so a
-/// negated leaf on one of them would invert and fire for every window.
-///
-/// Deliberately NOT PhosphorRules::windowSourcedFields(): unlike the windowless
-/// context resolvers, this query DOES engage most window fields (appId, title,
-/// role, type, pid, the state / geometry / accessory flags, captionNormal), and
-/// excluding a rule that merely negates one of those would drop legitimate
-/// user rules. Only these five are unanswerable here — WindowClass is not
-/// tracked daemon-side at all (the compositor reports appId), and the four
-/// placement fields describe a placement that does not exist yet on the open
-/// path, which is exactly what the buildRuleQueryForWindow doc calls "inert".
-/// Inert holds for a POSITIVE leaf only; this closes the negated half.
-const QSet<PhosphorRules::Field>& unanswerableWindowFields()
-{
-    static const QSet<PhosphorRules::Field> fields = {
-        PhosphorRules::Field::WindowClass, PhosphorRules::Field::IsFloating, PhosphorRules::Field::IsSnapped,
-        PhosphorRules::Field::Zone,        PhosphorRules::Field::IsTiled,
-    };
-    return fields;
-}
-
-/// Admission test for a resolver that stamps ScreenId but NOT Mode — the shape
-/// every resolveCached caller on this path shares. Passed identically by all
-/// six so the memo they share stays coherent (see resolveCachedFiltered's
-/// precondition).
-bool admitScreenStamped(const PhosphorRules::Rule& rule)
-{
-    return !rule.match.referencesAnyField(neverStampedFields())
-        && !rule.match.referencesAnyField({PhosphorRules::Field::Mode})
-        && !rule.match.negatesAnyField(unanswerableWindowFields());
-}
-
-/// Admission test for a resolver that stamps BOTH ScreenId and Mode
-/// (shouldFloatByRule, scrollOpenRuleParams, shouldRestoreSizeOnUnsnap). Mode
-/// stays admitted; only the never-stamped context fields are excluded, plus
-/// the negated-only guard on the window fields this query cannot answer.
-bool admitScreenAndModeStamped(const PhosphorRules::Rule& rule)
-{
-    return !rule.match.referencesAnyField(neverStampedFields())
-        && !rule.match.negatesAnyField(unanswerableWindowFields());
-}
-
-/// Admission test for a query that stamps NO context field at all (the
-/// tab-colour and drop-indicator paths, and any stamper whose inputs came
-/// up empty): the screen-derived trio (ScreenId, ActiveLayout,
-/// ScreenOrientation) joins the exclusions, because valueForField answers
-/// an ENGAGED empty for each and a `None{ScreenId Equals …}` group would then
-/// match for every window — the same inversion documented above. The
-/// unanswerable-window-field negation guard rides in from admitScreenStamped.
-///
-/// The name is about the CONTEXT stamps only: the window fields
-/// buildRuleQueryForWindow does engage (appId, title, type, the state flags)
-/// are answerable on all of these paths and stay admitted. VirtualDesktop,
-/// Activity and ColorScheme are stamped by the builder itself, so they are
-/// admitted here too — the fields this test additionally excludes over
-/// admitScreenStamped are the screen-derived trio and (via that test) Mode.
-bool admitNothingStamped(const PhosphorRules::Rule& rule)
-{
-    return admitScreenStamped(rule) && !rule.match.referencesAnyField(screenDerivedContextFields());
-}
-
-/// The admission test matching what stampScreenAndMode actually LEFT on
-/// @p query, rather than what the caller intended to stamp: an empty screen
-/// id returns without stamping anything, and a missing layout registry
-/// leaves Mode unstamped — and admitting rules that reference an unstamped
-/// field re-opens the negated-leaf inversion for that field.
-auto admissionForStamped(const PhosphorRules::WindowQuery& query)
-{
-    if (query.screenId.isEmpty()) {
-        return &admitNothingStamped;
-    }
-    return query.mode.isEmpty() ? &admitScreenStamped : &admitScreenAndModeStamped;
-}
-
-/// Bind @p base to the ColorScheme guard @p query needs.
-///
-/// buildRuleQueryForWindow stamps the colour-scheme token from the injected
-/// settings, but the token comes up EMPTY in a process with no GUI application (or off
-/// the GUI thread, which the accessor refuses). An engaged empty makes the leaf
-/// fail, so `None{ColorScheme Equals dark}` would invert and fire for every
-/// window — the same defect the field sets above close, except that here the
-/// answer depends on the process rather than the field, so it cannot live in a
-/// static set.
-///
-/// The emptiness is a property of the PROCESS (does it have a GUI application),
-/// not of the individual resolver, so every one of the six shared-memo callers
-/// computes the same value and resolveCachedFiltered's equivalent-admit
-/// precondition still holds.
-std::function<bool(const PhosphorRules::Rule&)> admitWith(bool (*base)(const PhosphorRules::Rule&),
-                                                          const PhosphorRules::WindowQuery& query)
-{
-    if (!query.colorScheme.isEmpty()) {
-        return base;
-    }
-    return [base](const PhosphorRules::Rule& rule) {
-        return base(rule) && !rule.match.negatesAnyField({PhosphorRules::Field::ColorScheme});
-    };
 }
 
 /// The Field::Mode MATCH vocabulary for a placement mode — NOT the SetEngineMode
@@ -387,8 +249,8 @@ bool WindowTrackingAdaptor::shouldRestoreFloatedPosition(const QString& windowId
     if (!useCache) {
         PhosphorRules::WindowQuery hinted = *query;
         stampScreenContext(hinted, screenIdHint.isEmpty() ? resolveScreenForWindow(windowId) : screenIdHint);
-        const PhosphorRules::ResolvedActions freshResolved = m_ruleEvaluator->resolveFiltered(
-            hinted, admitWith(hinted.screenId.isEmpty() ? &admitNothingStamped : &admitScreenStamped, hinted));
+        const PhosphorRules::ResolvedActions freshResolved =
+            m_ruleEvaluator->resolveFiltered(hinted, admitWith(admissionForStamped(hinted), hinted));
         if (const std::optional<PhosphorRules::RuleAction> action =
                 freshResolved.slot(QString(PhosphorRules::ActionSlot::RestorePosition))) {
             return action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool();
@@ -820,386 +682,6 @@ QVariantMap WindowTrackingAdaptor::scrollOpenRuleParams(const QString& windowId,
                    action->params.value(QString(PhosphorRules::ActionParam::Value)).toBool());
     }
     return out;
-}
-
-PhosphorSnapEngine::PlacementDirective WindowTrackingAdaptor::placementZonesByRule(const QString& windowId,
-                                                                                   const QString& screenId)
-{
-    // Placement is purely rule-driven: absent a matching SnapToZone / RouteToScreen
-    // rule there is nothing to snap or route, so the answer is empty.
-    if (!m_ruleStore) {
-        return {};
-    }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
-    if (!query) {
-        return {};
-    }
-    // Pin the query to the window's opening screen so a user-authored SnapToZone
-    // rule carrying a `ScreenId` match (the settings screen-picker stores the
-    // canonical id form the runtime reports) resolves against the screen the
-    // window is actually opening on. buildRuleQueryForWindow leaves screenId empty
-    // (the sibling Float / RestorePosition resolvers do not have the screen), so
-    // the placement path is the one consumer that pins it.
-    //
-    // The shared evaluator cache is keyed on windowId only, so the FIRST resolver
-    // to touch a window seeds the verdict the others reuse. On the open path that
-    // is this placement resolve: SnapEngine::resolveWindowRestore calls
-    // calculateSnapToPlacementRule up front, before it consults the float /
-    // restore predicates — so the screen-pinned query populates the cache first
-    // and a screen-constrained rule resolves correctly.
-    stampScreenContext(*query, screenId);
-
-    ensureRuleEvaluator();
-    // Shares m_ruleEvaluator with shouldFloatByRule / shouldRestoreFloatedPosition;
-    // resolveCached is keyed on (windowId, ruleSet revision) and returns every matched
-    // slot, so reading the Placement slot off the same verdict is free. Same open-path
-    // lifetime guarantee (resolved once per window lifetime) as the sibling predicates.
-    const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
-
-    PhosphorSnapEngine::PlacementDirective directive;
-
-    // RouteToScreen target (optional, independent of SnapToZone): pin the placement
-    // to a specific monitor. A non-empty target moves the window there and resolves
-    // its zone on that screen. The id is the canonical screen-id form the picker and
-    // the runtime both use; the snap engine declines the route if the target is not
-    // currently a snapping-mode screen, so an absent / autotile / disabled target is
-    // safe here.
-    if (const auto route = resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen))) {
-        directive.targetScreenId = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
-    }
-
-    // RouteToDesktop target (optional): when set, the zones resolve on this
-    // desktop's layout and the snap commits in this desktop's context, so a
-    // combined SnapToZone + RouteToDesktop rule lands the window in the right zone
-    // of the destination desktop. The desktop MOVE itself is emitted separately by
-    // applyOpenDesktopRouting (engine-neutral); this only steers the snap placement.
-    if (const auto route = resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop))) {
-        const int desktop = route->params.value(QString(PhosphorRules::ActionParam::TargetDesktop)).toInt(0);
-        if (desktop >= 1) {
-            directive.targetDesktop = desktop;
-        }
-    }
-
-    const std::optional<PhosphorRules::RuleAction> action =
-        resolved.slot(QString(PhosphorRules::ActionSlot::Placement));
-    if (!action) {
-        // No SnapToZone: return the (possibly route-only) directive. With no ordinals
-        // the snap engine treats it as "nothing to snap", so a RouteToScreen WITHOUT
-        // an accompanying SnapToZone produces no snap here. The bare "move to monitor
-        // X" is performed by applyOpenScreenRouting on the snap open-path facade (it
-        // runs only when nothing snapped the window), not in this directive builder.
-        return directive;
-    }
-    // The descriptor validator already guaranteed a non-empty array of in-range
-    // 1-based ordinals at load; re-validate defensively against the SAME bound
-    // (1..MaxZoneOrdinal) so a future loader change can never feed a bad ordinal
-    // into zone resolution.
-    const QJsonArray arr = action->params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
-    directive.zoneOrdinals.reserve(arr.size());
-    for (const QJsonValue& v : arr) {
-        const int n = v.toInt(0);
-        if (n >= 1 && n <= PhosphorRules::MaxZoneOrdinal) {
-            directive.zoneOrdinals.append(n);
-        }
-    }
-    return directive;
-}
-
-void WindowTrackingAdaptor::emitRouteToDesktopIfMatched(const PhosphorRules::ResolvedActions& resolved,
-                                                        const QString& windowId)
-{
-    const std::optional<PhosphorRules::RuleAction> route =
-        resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop));
-    if (!route) {
-        return;
-    }
-    // The descriptor validator already guaranteed a 1-based desktop in range; the
-    // effect-side slot re-guards (rejects < 1, out-of-range, and sticky windows),
-    // so moving to the desktop the window already occupies is a harmless no-op.
-    const int desktop = route->params.value(QString(PhosphorRules::ActionParam::TargetDesktop)).toInt(0);
-    if (desktop >= 1) {
-        qCInfo(lcDbusWindow) << "open-routing: routing" << windowId << "to virtual desktop" << desktop;
-        Q_EMIT windowDesktopMoveRequested(windowId, desktop);
-    }
-}
-
-void WindowTrackingAdaptor::applyOpenDesktopRouting(const QString& windowId, const QString& screenId)
-{
-    // Engine-neutral RouteToDesktop: when a matched rule pins the opening window
-    // to a virtual desktop, ask the compositor to move it there. Independent of
-    // snapping/tiling — the desktop move composes with the window's placement.
-    // Called from the snap open-path facade (the autotile path uses
-    // applyOpenRoutingForTiling, which also handles the screen redirect).
-    if (!m_ruleStore) {
-        return;
-    }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
-    if (!query) {
-        return;
-    }
-    // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
-    // resolveCached is keyed on windowId (+ rule-set revision), so on the snap open path
-    // this reuses the verdict placementZonesByRule already seeded — no second evaluation.
-    stampScreenContext(*query, screenId);
-    ensureRuleEvaluator();
-    emitRouteToDesktopIfMatched(
-        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query)), windowId);
-}
-
-bool WindowTrackingAdaptor::applyOpenScreenRouting(const QString& windowId, const QString& screenId)
-{
-    if (!m_ruleStore) {
-        return false;
-    }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
-    if (!query) {
-        return false;
-    }
-    // Pin the screen so a ScreenId-scoped rule resolves, mirroring placementZonesByRule.
-    stampScreenContext(*query, screenId);
-    ensureRuleEvaluator();
-    const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
-
-    // A SnapToZone action in the verdict does NOT disqualify the move, and used to.
-    // The old guard returned whenever the Placement slot carried a valid ordinal,
-    // reasoning that calculateSnapToPlacementRule resolves the zones ON the target
-    // screen and snaps there, so this branch was unreachable for a route+snap rule
-    // and moving here would double-place the window.
-    //
-    // Both halves of that were wrong. This function's caller
-    // (SnapAdaptor::resolveWindowRestore) reaches it only when no snap happened,
-    // and calculateSnapToPlacementRule is pure calculation whose every decline
-    // returns before any commit — it declines when the routed (screen, desktop)
-    // target is not in Snapping mode (the common case: a tiling-mode target), and
-    // when that target resolves no layout, no surviving ordinal, or a degenerate
-    // union geometry. A window opening with a RouteToScreen onto a tiling monitor
-    // then reached neither path: it did not snap and it did not move, while the
-    // same rule minus its SnapToZone action moved it fine. So the route below is
-    // honoured whether or not a Placement slot rode along; a Placement slot with
-    // no route still claims ownership (see the tail of this function).
-    const std::optional<PhosphorRules::RuleAction> route =
-        resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
-    if (!route) {
-        // No route. A placement directive with at least one valid ordinal still
-        // means the rule system owns this window's target, whether or not the
-        // engine committed a snap — return true so the remembered-placement
-        // fallback does not relocate it. Gate on a VALID ordinal, not the slot's
-        // mere presence: placementZonesByRule drops out-of-range ordinals, and an
-        // all-rejected SnapToZone payload owns nothing.
-        if (const auto placement = resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
-            const QJsonArray ordinals = placement->params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
-            const bool anyValid = std::any_of(ordinals.cbegin(), ordinals.cend(), [](const QJsonValue& v) {
-                const int n = v.toInt(0);
-                return n >= 1 && n <= PhosphorRules::MaxZoneOrdinal;
-            });
-            if (anyValid) {
-                return true;
-            }
-        }
-        return false;
-    }
-    const QString target = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
-    if (target.isEmpty()) {
-        return false;
-    }
-    // screensMatch, not a raw compare: connector-name and EDID-id spellings can
-    // name the SAME monitor, and a raw compare would treat that as a real move —
-    // arming windowOutputMoveExpected and re-placing a window that is already
-    // where the rule wants it. Still `true`: the rule matched and the window
-    // sits where it demands, so no remembered-placement fallback may move it.
-    if (PhosphorScreens::ScreenIdentity::screensMatch(target, screenId)) {
-        return true;
-    }
-    // m_service is non-null post-construction (class invariant); screenManager()
-    // itself may still be null (e.g. an unconfigured test fixture), so guard that.
-    PhosphorScreens::ScreenManager* screens = m_service->screenManager();
-    if (!screens) {
-        return true;
-    }
-    const QRect dstAvail = screens->screenAvailableGeometry(target);
-    if (!dstAvail.isValid()) {
-        // Target monitor is not currently connected — leave the window on its spawn
-        // screen (the rule fires again when that monitor returns). `true` even
-        // though nothing moved: the rule owns the window's monitor, and a
-        // remembered-placement fallback relocating it now would fight the
-        // re-route when the monitor comes back.
-        qCDebug(lcDbusWindow) << "applyOpenScreenRouting: route target" << target
-                              << "is not currently connected — not moving" << windowId;
-        return true;
-    }
-    // The daemon's frame-geometry shadow is written only by the effect's DEBOUNCED
-    // flush, while this runs inside the synchronous window-open round trip — so
-    // for a genuinely new window the shadow is usually still empty here, and
-    // returning on that would make a bare RouteToScreen rule silently no-op for
-    // exactly the case it exists to handle. The registry metadata carries the
-    // frame rect and is pushed by the setWindowMetadata call that precedes the
-    // restore, so fall back to it before declining.
-    QRect cur = frameGeometry(windowId);
-    if (!cur.isValid() && !m_windowRegistry.isNull()) {
-        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
-        if (const std::optional<PhosphorEngine::WindowMetadata> meta = m_windowRegistry->metadata(instanceId)) {
-            if (meta->positionX && meta->positionY && meta->width && meta->height && *meta->width > 0
-                && *meta->height > 0) {
-                cur = QRect(*meta->positionX, *meta->positionY, *meta->width, *meta->height);
-            }
-        }
-    }
-    if (!cur.isValid()) {
-        // Neither the shadow nor the metadata knows where the window is — nothing
-        // to translate onto the target screen. Still `true`: the rule owns the
-        // window's monitor.
-        qCDebug(lcDbusWindow) << "applyOpenScreenRouting: no frame geometry for" << windowId << "— not moving";
-        return true;
-    }
-
-    // Map the window's position relative to its current screen's available area onto
-    // the target screen's, then clamp so the whole frame fits. Preserves "the same
-    // spot on the other monitor" across differing resolutions; an unknown /
-    // degenerate source area falls back to the target's top-left. The SIZE is
-    // carried over unchanged unless the target work area is smaller in that axis,
-    // in which case it shrinks to fit rather than overflowing the monitor.
-    const QRect srcAvail = screens->screenAvailableGeometry(screenId);
-    const int w = qMin(cur.width(), dstAvail.width());
-    const int h = qMin(cur.height(), dstAvail.height());
-    int x = dstAvail.x();
-    int y = dstAvail.y();
-    if (srcAvail.isValid() && srcAvail.width() > 0 && srcAvail.height() > 0) {
-        const double relX = static_cast<double>(cur.x() - srcAvail.x()) / srcAvail.width();
-        const double relY = static_cast<double>(cur.y() - srcAvail.y()) / srcAvail.height();
-        x = dstAvail.x() + qRound(relX * dstAvail.width());
-        y = dstAvail.y() + qRound(relY * dstAvail.height());
-    }
-    // Clamp the frame fully inside the target available area.
-    x = qBound(dstAvail.left(), x, dstAvail.right() - w + 1);
-    y = qBound(dstAvail.top(), y, dstAvail.bottom() - h + 1);
-
-    qCInfo(lcDbusWindow) << "applyOpenScreenRouting: routing" << windowId << "to monitor" << target << "at"
-                         << QRect(x, y, w, h);
-    // Emit the marker first so the effect treats the resulting outputChanged as an
-    // expected daemon-driven move (bookkeeping + decoration only, no reopen), then
-    // the free placement (empty zone id ⇒ no snap chrome).
-    Q_EMIT windowOutputMoveExpected(windowId, target, screenId);
-    Q_EMIT applyGeometryRequested(windowId, x, y, w, h, QString(), target, false);
-    return true;
-}
-
-QString WindowTrackingAdaptor::applyOpenRoutingForTiling(const QString& windowId, const QString& screenId,
-                                                         bool* directiveMatched)
-{
-    // Owned by this function, not the caller: a set-only out-param leaves a
-    // caller's pre-set value standing on every no-match path, which reads as
-    // "a rule matched" and silently vetoes the reclaim.
-    if (directiveMatched) {
-        *directiveMatched = false;
-    }
-    if (!m_ruleStore) {
-        return QString();
-    }
-    std::optional<PhosphorRules::WindowQuery> query = buildRuleQueryForWindow(m_windowRegistry, windowId, m_settings);
-    if (!query) {
-        return QString();
-    }
-    stampScreenContext(*query, screenId);
-    ensureRuleEvaluator();
-    const PhosphorRules::ResolvedActions resolved =
-        m_ruleEvaluator->resolveCachedFiltered(windowId, *query, admitWith(&admitScreenStamped, *query));
-
-    // RouteToDesktop is engine-neutral — emit it for autotile windows too.
-    emitRouteToDesktopIfMatched(resolved, windowId);
-
-    const auto markMatched = [&] {
-        if (directiveMatched) {
-            *directiveMatched = true;
-        }
-    };
-
-    // A valid SnapToZone placement directive owns the window's placement even
-    // on this channel (the snap facade acts on it) — signal the match so the
-    // caller's reclaim veto sees it, mirroring the snap twin's ordinal check.
-    // The routed-screen RETURN stays empty: placement is not a tiling
-    // redirect.
-    if (const auto placement = resolved.slot(QString(PhosphorRules::ActionSlot::Placement))) {
-        const QJsonArray ordinals = placement->params.value(QString(PhosphorRules::ActionParam::Zones)).toArray();
-        const bool anyValid = std::any_of(ordinals.cbegin(), ordinals.cend(), [](const QJsonValue& v) {
-            const int n = v.toInt(0);
-            return n >= 1 && n <= PhosphorRules::MaxZoneOrdinal;
-        });
-        if (anyValid) {
-            markMatched();
-        }
-    }
-
-    // RouteToScreen: redirect the window onto a different ENGINE-OWNED monitor
-    // (autotile or scrolling). The snap open path handles snap-mode targets
-    // itself (the placement directive), so here we only honour a target whose
-    // mode an engine claims — a snap or disabled target is left to the
-    // window's spawn screen (cross-engine routing is out of scope). Returning the target tells the caller to insert
-    // the window into that screen's tiling state; the output-move marker stops the
-    // effect from re-processing the resulting outputChanged as a fresh open.
-    //
-    // The RETURN and the MATCH signal are deliberately separate answers: the
-    // return names a redirect target (empty = "insert on the spawn screen"),
-    // while @p directiveMatched reports that a rule OWNS this window's
-    // monitor — true on every matched-route exit below, including
-    // already-on-target and target-not-connected. The snap twin
-    // (applyOpenScreenRouting) folds both into one bool; overloading THIS
-    // function's empty return the same way is what let the two channels
-    // apply opposite reclaim precedence.
-    const std::optional<PhosphorRules::RuleAction> route =
-        resolved.slot(QString(PhosphorRules::ActionSlot::RouteScreen));
-    if (!route) {
-        return QString();
-    }
-    const QString target = route->params.value(QString(PhosphorRules::ActionParam::TargetScreenId)).toString();
-    if (target.isEmpty()) {
-        return QString();
-    }
-    markMatched();
-    // screensMatch for the same reason the snap twin uses it: a differently
-    // spelled id for the SAME monitor must read as "already there". A raw
-    // compare would return the target as a distinct screen and the caller would
-    // key tiling state under a second name for one output.
-    if (!m_layoutManager || PhosphorScreens::ScreenIdentity::screensMatch(target, screenId)) {
-        return QString();
-    }
-    // When the same rule also pins a target desktop (RouteToDesktop), the window
-    // lands on THAT desktop of the target screen, so gate the autotile-mode check
-    // against the destination desktop — not the target's current desktop. Mirrors
-    // the snap path (calculateSnapToPlacementRule), which gates modeForScreen on the
-    // routed desktop. Absent / 0 ⇒ the target screen's current desktop.
-    int destDesktop = currentDesktopForScreen(target);
-    if (const auto desktopRoute = resolved.slot(QString(PhosphorRules::ActionSlot::RouteDesktop))) {
-        const int d = desktopRoute->params.value(QString(PhosphorRules::ActionParam::TargetDesktop)).toInt(0);
-        if (d >= 1) {
-            destDesktop = d;
-        }
-    }
-    const auto targetMode = m_layoutManager->modeForScreen(target, destDesktop, m_layoutManager->currentActivity());
-    if (targetMode != PhosphorZones::AssignmentEntry::Mode::Autotile
-        && targetMode != PhosphorZones::AssignmentEntry::Mode::Scrolling) {
-        qCDebug(lcDbusWindow) << "applyOpenRoutingForTiling: RouteToScreen target" << target
-                              << "is not in a tiling-family mode — not redirecting" << windowId;
-        return QString();
-    }
-    // Connectivity guard, mirroring the snap twin (applyOpenScreenRouting):
-    // the mode answers from the STORED assignment, so a disconnected
-    // monitor still passes it — and a routed open no engine can claim gets
-    // DROPPED instead of tiling on the spawn screen.
-    //
-    // m_service is non-null post-construction (class invariant), so it is
-    // dereferenced directly here as it is in the snap twin; screenManager()
-    // itself may still be null (an unconfigured test fixture), so that is the
-    // one thing checked.
-    if (m_service->screenManager() && !m_service->screenManager()->screenAvailableGeometry(target).isValid()) {
-        qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: RouteToScreen target" << target
-                             << "is not connected — window opens on its spawn screen";
-        return QString();
-    }
-    qCInfo(lcDbusWindow) << "applyOpenRoutingForTiling: routing" << windowId << "to engine-managed screen" << target;
-    Q_EMIT windowOutputMoveExpected(windowId, target, screenId);
-    return target;
 }
 
 } // namespace PlasmaZones

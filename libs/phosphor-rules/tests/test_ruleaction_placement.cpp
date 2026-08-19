@@ -1,0 +1,211 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+// The open-placement half of the RuleAction wire tests: the RouteToScreen /
+// RouteToDesktop slot mapping and the SnapToZone target payload (ordinals and
+// zone names). Split from test_ruleaction.cpp for file-size, the way
+// test_ruleaction_contextbools.cpp and test_ruleaction_tilingparams.cpp were.
+
+#include <PhosphorRules/RuleAction.h>
+
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonValue>
+#include <QTest>
+
+using namespace PhosphorRules;
+
+class TestRuleActionPlacement : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+
+    void testJson_routeToScreen()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QString(ActionType::RouteToScreen));
+        // Missing / empty target screen id is rejected.
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QString(ActionParam::TargetScreenId), QString());
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // A non-empty canonical screen id is accepted (not validated against
+        // live screen state — a route to a currently-absent monitor is legal).
+        o.insert(QString(ActionParam::TargetScreenId), QStringLiteral("LG Electronics:38GN950:688325"));
+        const auto loaded = RuleAction::fromJson(o);
+        QVERIFY(loaded.has_value());
+        QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteScreen));
+        // Unknown param key is rejected by the strict loader.
+        o.insert(QStringLiteral("bogus"), 1);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+    }
+
+    void testJson_routeToDesktop()
+    {
+        QJsonObject o;
+        o.insert(QStringLiteral("type"), QString(ActionType::RouteToDesktop));
+        // Missing desktop is rejected.
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // Desktops are 1-based: 0 and negatives are rejected.
+        o.insert(QString(ActionParam::TargetDesktop), 0);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        o.insert(QString(ActionParam::TargetDesktop), -1);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // Non-integral is rejected.
+        o.insert(QString(ActionParam::TargetDesktop), 2.5);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // Out-of-range (above the cap) is rejected.
+        o.insert(QString(ActionParam::TargetDesktop), MaxVirtualDesktopOrdinal + 1);
+        QVERIFY(!RuleAction::fromJson(o).has_value());
+        // A valid 1-based desktop loads and resolves to the route-desktop slot.
+        o.insert(QString(ActionParam::TargetDesktop), 3);
+        const auto loaded = RuleAction::fromJson(o);
+        QVERIFY(loaded.has_value());
+        QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteDesktop));
+    }
+
+    void testSnapToZone_fromJson()
+    {
+        // SnapToZone is a window-domain placement action whose `zones` param is a
+        // non-empty JSON array of 1-based integer ordinals. Pin the validator at
+        // the public fromJson boundary: it is the single line of defence against
+        // a hand-edited rules.json carrying a malformed ordinal list, and a
+        // widening regression in registerBuiltins would otherwise slip past.
+        const auto withZones = [](const QJsonValue& zones) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
+            o.insert(QString(ActionParam::Zones), zones);
+            return o;
+        };
+
+        // Missing / wrong-typed / empty → rejected.
+        QJsonObject missing;
+        missing.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
+        QVERIFY(!RuleAction::fromJson(missing).has_value());
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonValue(2))).has_value()); // not an array
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{})).has_value()); // empty
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{0})).has_value()); // 0 not 1-based
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{-1})).has_value()); // negative
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1.5})).has_value()); // non-integral
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{QStringLiteral("1")})).has_value()); // string
+        // Above the shared ordinal cap — named, so a future cap change moves
+        // this test with the validator (the RouteToDesktop sibling test uses
+        // MaxVirtualDesktopOrdinal the same way).
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{MaxZoneOrdinal + 1})).has_value());
+        // A double far beyond int range must be rejected by the bound BEFORE any
+        // narrowing cast (an out-of-range float-to-int cast is UB) — must not crash.
+        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1e18})).has_value());
+
+        // Single zone, span, and the inclusive cap boundary are all accepted.
+        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1})).has_value());
+        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1, 2})).has_value());
+        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{MaxZoneOrdinal})).has_value());
+
+        // A key outside allowedKeys ({zones, zoneNames}) is rejected.
+        QJsonObject stray = withZones(QJsonArray{1});
+        stray.insert(QStringLiteral("value"), 3);
+        QVERIFY(!RuleAction::fromJson(stray).has_value());
+    }
+
+    void testSnapToZone_zoneNames_fromJson()
+    {
+        // The name-keyed twin of `zones`: a JSON array of non-blank strings.
+        // Either array alone is a complete target, the two union, and a payload
+        // with neither (or with both present but empty) names nothing and is
+        // rejected. Each present key is still shape-checked on its own, so a
+        // malformed `zoneNames` cannot ride in on a valid `zones`.
+        const auto withNames = [](const QJsonValue& names) {
+            QJsonObject o;
+            o.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
+            o.insert(QString(ActionParam::ZoneNames), names);
+            return o;
+        };
+
+        QVERIFY(RuleAction::fromJson(withNames(QJsonArray{QStringLiteral("Editor")})).has_value());
+        QVERIFY(RuleAction::fromJson(withNames(QJsonArray{QStringLiteral("Editor"), QStringLiteral("Terminal")}))
+                    .has_value());
+        QVERIFY(RuleAction::fromJson(withNames(QJsonArray{QString(MaxZoneNameLength, QLatin1Char('a'))})).has_value());
+
+        QVERIFY(!RuleAction::fromJson(withNames(QStringLiteral("Editor"))).has_value()); // not an array
+        QVERIFY(!RuleAction::fromJson(withNames(QJsonArray{})).has_value()); // empty, no other target
+        QVERIFY(!RuleAction::fromJson(withNames(QJsonArray{QString()})).has_value()); // empty string
+        QVERIFY(!RuleAction::fromJson(withNames(QJsonArray{QStringLiteral("   ")})).has_value()); // blank
+        QVERIFY(!RuleAction::fromJson(withNames(QJsonArray{1})).has_value()); // number, not string
+        QVERIFY(
+            !RuleAction::fromJson(withNames(QJsonArray{QString(MaxZoneNameLength + 1, QLatin1Char('a'))})).has_value());
+
+        // Names and ordinals together: the union is accepted, and an empty
+        // ordinal array beside a real name list is fine (names are the target).
+        QJsonObject both = withNames(QJsonArray{QStringLiteral("Editor")});
+        both.insert(QString(ActionParam::Zones), QJsonArray{2});
+        QVERIFY(RuleAction::fromJson(both).has_value());
+        QJsonObject emptyOrdinals = withNames(QJsonArray{QStringLiteral("Editor")});
+        emptyOrdinals.insert(QString(ActionParam::Zones), QJsonArray{});
+        QVERIFY(RuleAction::fromJson(emptyOrdinals).has_value());
+        QJsonObject namesEmptyWithZones = withNames(QJsonArray{});
+        namesEmptyWithZones.insert(QString(ActionParam::Zones), QJsonArray{1});
+        QVERIFY(RuleAction::fromJson(namesEmptyWithZones).has_value());
+
+        // Both present, both empty: nothing to snap to.
+        QJsonObject bothEmpty = withNames(QJsonArray{});
+        bothEmpty.insert(QString(ActionParam::Zones), QJsonArray{});
+        QVERIFY(!RuleAction::fromJson(bothEmpty).has_value());
+
+        // A malformed ordinal list is still rejected even when names are valid.
+        QJsonObject badOrdinals = withNames(QJsonArray{QStringLiteral("Editor")});
+        badOrdinals.insert(QString(ActionParam::Zones), QJsonArray{0});
+        QVERIFY(!RuleAction::fromJson(badOrdinals).has_value());
+
+        // Round-trip keeps both arrays verbatim.
+        const auto parsed = RuleAction::fromJson(both);
+        QVERIFY(parsed.has_value());
+        const QJsonObject out = parsed->toJson();
+        QCOMPARE(out.value(QString(ActionParam::ZoneNames)).toArray(), QJsonArray{QStringLiteral("Editor")});
+        QCOMPARE(out.value(QString(ActionParam::Zones)).toArray(), QJsonArray{2});
+    }
+
+    void testSnapToZone_namesOnly_roundTripAndStrayKey()
+    {
+        // A names-only action (no `zones` key at all) is the payload the editor
+        // writes least often and the wire shape most at risk of a key being
+        // synthesised: toJson must echo the params verbatim, so no `zones`
+        // appears, and the strict loader must still refuse a stray key on this
+        // base just as it does on the ordinal base.
+        QJsonObject namesOnly;
+        namesOnly.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
+        namesOnly.insert(QString(ActionParam::ZoneNames), QJsonArray{QStringLiteral("Editor")});
+        const auto parsed = RuleAction::fromJson(namesOnly);
+        QVERIFY(parsed.has_value());
+        const QJsonObject out = parsed->toJson();
+        QVERIFY2(!out.contains(QString(ActionParam::Zones)), "toJson must not synthesise a zones key");
+        QCOMPARE(out.value(QString(ActionParam::ZoneNames)).toArray(), QJsonArray{QStringLiteral("Editor")});
+        QVERIFY(RuleAction::fromJson(out).has_value());
+
+        QJsonObject stray = namesOnly;
+        stray.insert(QStringLiteral("value"), 3);
+        QVERIFY2(!RuleAction::fromJson(stray).has_value(),
+                 "a key outside allowedKeys is rejected on the names-only base too");
+
+        // A whitespace-padded name is accepted (the validator measures the
+        // trimmed form) and stored VERBATIM: trimming is a read-side concern of
+        // the daemon's placement reader and the engine's lookup, not the loader's.
+        QJsonObject padded;
+        padded.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
+        padded.insert(QString(ActionParam::ZoneNames), QJsonArray{QStringLiteral("  Editor  ")});
+        const auto paddedParsed = RuleAction::fromJson(padded);
+        QVERIFY(paddedParsed.has_value());
+        QCOMPARE(paddedParsed->toJson().value(QString(ActionParam::ZoneNames)).toArray(),
+                 QJsonArray{QStringLiteral("  Editor  ")});
+        // ...and a name whose TRIMMED length is exactly the bound still passes
+        // even with padding that would push the raw string over it.
+        QJsonObject paddedMax;
+        paddedMax.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
+        const QString paddedMaxName =
+            QStringLiteral("  ") + QString(MaxZoneNameLength, QLatin1Char('a')) + QStringLiteral("  ");
+        paddedMax.insert(QString(ActionParam::ZoneNames), QJsonArray{paddedMaxName});
+        QVERIFY(RuleAction::fromJson(paddedMax).has_value());
+    }
+};
+
+QTEST_GUILESS_MAIN(TestRuleActionPlacement)
+#include "test_ruleaction_placement.moc"

@@ -7,8 +7,11 @@
 #include <QJSValue>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
+
+#include <functional>
 
 #include <PhosphorRules/Rule.h>
 
@@ -58,6 +61,14 @@ class RuleController : public PhosphorControl::PageController
     /// silently overwrite the daemon's newer rules — the user must review/revert
     /// or call `asyncCommit(true)` to force the overwrite.
     Q_PROPERTY(bool daemonChangedWhileDirty READ daemonChangedWhileDirty NOTIFY daemonChangedWhileDirtyChanged)
+    /// Distinct zone names across the layouts on disk, trimmed, deduplicated
+    /// case-insensitively (the key the engine's zoneByName matches on) and
+    /// sorted for display. The SnapToZone "Zone names" picker offers these; the
+    /// rule resolves against whichever layout is active on the placement screen
+    /// at open time, so this is a suggestion list, not a constraint. Filled by
+    /// the provider SettingsController installs (setZoneNamesProvider) and
+    /// re-read on refreshZoneNames(); empty until then.
+    Q_PROPERTY(QStringList zoneNames READ zoneNames NOTIFY zoneNamesChanged)
 
 public:
     explicit RuleController(QObject* parent = nullptr);
@@ -101,12 +112,35 @@ public:
     /// animation shader registry (the same source the rule editor's shader
     /// picker uses), so the list renders "Dissolve" rather than the raw id.
     void setShaderEffectLookup(RuleModel::LabelLookup fn);
+    /// Animation profile path ("window.open") → event display name resolver
+    /// for the per-event animation overrides (OverrideAnimationShader /
+    /// Timing / Curve), so a rule overriding two events summarises them
+    /// distinctly. SettingsController wires this from the animations page
+    /// controller's event taxonomy.
+    void setAnimationEventLookup(RuleModel::LabelLookup fn);
     void setDecorationPackLookup(RuleModel::LabelLookup fn);
     /// Overlay shader id → display name resolver for OverrideOverlayShader
     /// actions. SettingsController wires this from the overlay/snapping shader
     /// registry (the source the rule editor's overlay-shader picker uses), so
     /// the list renders the friendly name rather than the raw id.
     void setOverlayShaderLookup(RuleModel::LabelLookup fn);
+    /// Install the zone-name enumerator behind the `zoneNames` property. The
+    /// provider walks the caller's layout registry (the LayoutPreview list the
+    /// settings app publishes to QML carries geometry and numbers, not names)
+    /// and returns the distinct sorted names; the controller caches the result
+    /// and emits zoneNamesChanged only when it differs. Install-once, then
+    /// call refreshZoneNames() on every registry reload; pass `{}` to clear
+    /// before the captured registry is destroyed.
+    void setZoneNamesProvider(std::function<QStringList()> provider);
+    /// Re-read the provider and publish the result if it changed. Cheap when
+    /// nothing changed (one list compare), so the parent may call it on every
+    /// registry reload without an equality guard of its own.
+    void refreshZoneNames();
+    QStringList zoneNames() const
+    {
+        return m_zoneNames;
+    }
+
     /// Curve wire-string → display name resolver for OverrideAnimationCurve
     /// actions. Q_INVOKABLE and QJSValue-typed because the canonical curve
     /// naming (easing-preset matching + spring formatting + i18n labels) lives
@@ -331,15 +365,19 @@ public:
     /// Registered action types for the action-editor dropdown. Each entry:
     /// `{ value: QString (action type id), label, params: [ ... ],
     ///   domain: "context"|"window" }` where each param descriptor is
-    /// `{ key, kind, label }`. `kind` is one of the descriptor kinds the
-    /// ActionRow editor dispatches on (enum, number, percent, bool, color,
-    /// zoneOrdinals, screenId, virtualDesktop, snappingLayout, tilingAlgorithm,
-    /// animationEvent, shaderEffect, overlayShader, decorationChain,
-    /// curveEditor); for
-    /// `kind == "enum"` there is also an `options` list of
-    /// `{ value: QString (wire token), label }` maps, and for
-    /// `kind == "number"`/`"percent"`, `min`/`max`/`scale` (the value stored is
-    /// `display * scale`).
+    /// `{ key, kind, label, hint? }` (`hint` is the input hint shown under
+    /// free-text editors, absent when the kind needs none). `kind` is one of
+    /// the descriptor kinds the ActionRow editor dispatches on (enum, number,
+    /// percent, bool, color, zoneOrdinals, zoneNames, screenId, virtualDesktop,
+    /// snappingLayout, scrollingTemplate, tilingAlgorithm, animationEvent,
+    /// shaderEffect, overlayShader, decorationChain, curveEditor). Optional
+    /// fields are carried whenever the schema declares them: `options` (a list
+    /// of `{ value: QString (wire token), label }` maps, for `enum`),
+    /// `min`/`max`/`scale`/`defaultDisplay` (display-unit bounds and seed; the
+    /// value stored is `display * scale`; `zoneOrdinals` and `zoneNames` use
+    /// `max` as their advisory ordinal cap and per-name character cap),
+    /// `onLabel`/`offLabel` (for `bool`, when the polarity wording exists), and
+    /// `acceptsAccent` (for `color`).
     /// QML drives the per-type editor entirely from this descriptor; the
     /// `domain` field lets the picker disable types incompatible with the
     /// current match expression (a context-domain action against a
@@ -349,8 +387,9 @@ public:
     /// A complete, default-seeded action payload for @p typeWire — a JSON map
     /// of the form `{ type: <typeWire>, ...defaults }` ready to drop into a
     /// rule's `actions` list. Each parameter declared by the type's descriptor
-    /// gets a kind-appropriate starting value (first enum option, minimum
-    /// number, empty string for picker kinds with no implicit default). Used
+    /// gets a kind-appropriate starting value (first enum option, the
+    /// descriptor's declared `defaultDisplay` else its minimum for numbers,
+    /// empty string for picker kinds with no implicit default). Used
     /// by the QML action row when the user switches an existing row's type
     /// (so the new param set is pre-seeded and `canSave` doesn't immediately
     /// gate on missing values) and by the action-list editor when appending
@@ -358,6 +397,18 @@ public:
     /// `{ type: <typeWire> }`. Kept C++-side so the seeding rules live next
     /// to the descriptor that drives them (single source of truth).
     Q_INVOKABLE QVariantMap defaultPayloadFor(const QString& typeWire) const;
+
+    /// The SnapToZone "Zone names" free-text contract, kept C++-side so the
+    /// editor and the summary cannot drift on what a name list looks like.
+    /// parseZoneNameList splits @p text on `,` / `;` outside straight double
+    /// quotes (a quoted token may contain separators; `""` inside it is one
+    /// literal quote), trims, drops blank and over-long entries, and
+    /// deduplicates case-insensitively keeping the first spelling.
+    /// formatZoneNameList is its inverse: joins with ", ", quoting any name the
+    /// parser could not otherwise read back verbatim. Delegates to
+    /// RuleAuthoring.
+    Q_INVOKABLE QStringList parseZoneNameList(const QString& text) const;
+    Q_INVOKABLE QString formatZoneNameList(const QStringList& names) const;
 
     /// Semantic validation issues for the rule represented by @p ruleJson —
     /// the editor sheet's working copy. Same check `RuleSet::fromJson`
@@ -387,6 +438,7 @@ Q_SIGNALS:
     // dirtyChanged() inherited from StagingDomain.
     void daemonReachableChanged();
     void daemonChangedWhileDirtyChanged();
+    void zoneNamesChanged();
     /// Emitted on the async fetch reply path after the model has been
     /// repopulated with the daemon's authoritative rule set. Lets tests and
     /// QML observers know when the initial load (or a daemon-broadcast
@@ -522,6 +574,12 @@ private:
     /// Held so the model LabelLookup installed in setCurveLabelResolver can
     /// re-invoke it live on every summary rebuild.
     QJSValue m_curveResolver;
+    /// Zone-name enumerator (see setZoneNamesProvider) and the last list it
+    /// answered, cached so the QML picker rebinding reads a stored value rather
+    /// than re-walking every layout, and compared on refresh so the NOTIFY only
+    /// fires on a real change.
+    std::function<QStringList()> m_zoneNamesProvider;
+    QStringList m_zoneNames;
 };
 
 } // namespace PlasmaZones

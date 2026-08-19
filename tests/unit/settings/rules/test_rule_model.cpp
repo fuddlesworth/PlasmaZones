@@ -14,6 +14,7 @@
  *   - the no-op update contract (updating to an identical rule does not churn).
  */
 
+#include <QJsonArray>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -117,6 +118,8 @@ private Q_SLOTS:
     void shaderAndCurveLabelsResolveThroughLookups();
     void routeActionsRenderFriendlyLabels();
     void scrollingActionsRenderDistinctLabels();
+    void snapToZoneSummaryQuotesNamesAndFiltersTargets();
+    void animationOverridesSummariseWithTheirEvent();
     void actionLabelPrefixesAreUnique();
 };
 
@@ -861,6 +864,99 @@ void TestRuleModel::actionLabelPrefixesAreUnique()
         }
     }
     QVERIFY2(collisions.isEmpty(), qPrintable(collisions.join(QStringLiteral("; "))));
+}
+
+void TestRuleModel::snapToZoneSummaryQuotesNamesAndFiltersTargets()
+{
+    // The SnapToZone summary renders zone names in quotes so a name made of
+    // digits (discussion #924's disambiguation case) cannot be mistaken for an
+    // ordinal, and applies the validator's bounds plus a dedupe so it never
+    // claims a target the runtime discards or counts one twice.
+    const auto buildRule = [](const QJsonArray& zones, const QJsonArray& names) {
+        Rule rule;
+        rule.id = QUuid::createUuid();
+        rule.priority = 300;
+        rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("editor"));
+        RuleAction snap;
+        snap.type = QString(ActionType::SnapToZone);
+        if (!zones.isEmpty()) {
+            snap.params.insert(ActionParam::Zones, zones);
+        }
+        if (!names.isEmpty()) {
+            snap.params.insert(ActionParam::ZoneNames, names);
+        }
+        rule.actions = {snap};
+        return rule;
+    };
+    RuleModel model;
+    model.setRules({
+        // Ordinal 1 beside the NAME "2": the name must render quoted, distinct
+        // from a bare ordinal 2.
+        buildRule(QJsonArray{1}, QJsonArray{QStringLiteral("2")}),
+        // Names only, one of them padded: the quoted, trimmed name renders and
+        // the singular form is used.
+        buildRule(QJsonArray{}, QJsonArray{QStringLiteral("  Editor ")}),
+        // Duplicates and out-of-bound entries collapse / drop: ordinal 1 twice,
+        // an ordinal past MaxZoneOrdinal, the same name in two spellings, and a
+        // blank name, leave exactly two targets.
+        buildRule(QJsonArray{1, 1, MaxZoneOrdinal + 1},
+                  QJsonArray{QStringLiteral("Editor"), QStringLiteral("editor"), QStringLiteral("   ")}),
+    });
+    QCOMPARE(model.rowCount(), 3);
+    const QString s0 = model.data(model.index(0, 0), RuleModel::ActionSummaryRole).toString();
+    const QString s1 = model.data(model.index(1, 0), RuleModel::ActionSummaryRole).toString();
+    const QString s2 = model.data(model.index(2, 0), RuleModel::ActionSummaryRole).toString();
+    QVERIFY2(s0.contains(QStringLiteral("1, “2”")), qPrintable(s0));
+    QVERIFY2(s0.startsWith(QStringLiteral("Snap to zones")), qPrintable(s0));
+    QVERIFY2(s1 == QStringLiteral("Snap to zone “Editor”"), qPrintable(s1));
+    QVERIFY2(s2 == QStringLiteral("Snap to zones 1, “Editor”"), qPrintable(s2));
+}
+
+void TestRuleModel::animationOverridesSummariseWithTheirEvent()
+{
+    // The three per-event animation overrides key their slot on the event, so
+    // one rule legitimately carries two of each; without the event in the
+    // label the two summarise identically. The event resolver is the lookup
+    // SettingsController wires from the animations page; here it is a stub
+    // that maps the path to a fixed word so the prefix is observable.
+    Rule rule;
+    rule.id = QUuid::createUuid();
+    rule.priority = 300;
+    rule.match = MatchExpression::makeLeaf(Field::AppId, Operator::AppIdMatches, QStringLiteral("editor"));
+    RuleAction openShader;
+    openShader.type = QString(ActionType::OverrideAnimationShader);
+    openShader.params.insert(ActionParam::Event, QStringLiteral("window.open"));
+    openShader.params.insert(ActionParam::EffectId, QStringLiteral("dissolve"));
+    RuleAction closeShader = openShader;
+    closeShader.params.insert(ActionParam::Event, QStringLiteral("window.close"));
+    RuleAction timing;
+    timing.type = QString(ActionType::OverrideAnimationTiming);
+    timing.params.insert(ActionParam::Event, QStringLiteral("window.open"));
+    timing.params.insert(ActionParam::DurationMs, 250);
+    RuleAction curve;
+    curve.type = QString(ActionType::OverrideAnimationCurve);
+    curve.params.insert(ActionParam::Event, QStringLiteral("window.close"));
+    curve.params.insert(ActionParam::Curve, QStringLiteral("ease"));
+    rule.actions = {openShader, closeShader, timing, curve};
+
+    RuleModel model;
+    model.setAnimationEventLabelLookup([](const QString& path) {
+        return path == QStringLiteral("window.open") ? QStringLiteral("Open") : QStringLiteral("Close");
+    });
+    model.setRules({rule});
+    const QString summary = model.data(model.index(0, 0), RuleModel::ActionSummaryRole).toString();
+    QVERIFY2(summary.contains(QStringLiteral("Open shader: dissolve")), qPrintable(summary));
+    QVERIFY2(summary.contains(QStringLiteral("Close shader: dissolve")), qPrintable(summary));
+    QVERIFY2(summary.contains(QStringLiteral("Open duration: 250 ms")), qPrintable(summary));
+    QVERIFY2(summary.contains(QStringLiteral("Close curve: ease")), qPrintable(summary));
+
+    // Without the resolver the event path itself leads, so two events still
+    // never collapse into one wording.
+    RuleModel bare;
+    bare.setRules({rule});
+    const QString bareSummary = bare.data(bare.index(0, 0), RuleModel::ActionSummaryRole).toString();
+    QVERIFY2(bareSummary.contains(QStringLiteral("window.open shader: dissolve")), qPrintable(bareSummary));
+    QVERIFY2(bareSummary.contains(QStringLiteral("window.close shader: dissolve")), qPrintable(bareSummary));
 }
 
 QTEST_MAIN(TestRuleModel)
