@@ -150,11 +150,17 @@ public:
     /// `"overlays"`, and `cursor` into `"widget"`. Empty for an empty path.
     Q_INVOKABLE QString sectionForPath(const QString& path) const;
 
-    /// Title-cased label for @p path's last segment (e.g. `"editor.snapIn"`
-    /// → `"Snap In"`). Falls back to the segment itself if humanisation
-    /// fails. Translation hook lives in QML; this is the raw English
-    /// form.
+    /// Translated label for @p path's last segment (e.g. `"editor.snapIn"`
+    /// → `"Snap In"`), through @ref segmentLabel. Empty for an empty path.
     Q_INVOKABLE QString eventLabel(const QString& path) const;
+
+    /// Translated label for one taxonomy segment: every built-in profile-path
+    /// segment and the merged "overlays" section key have a `tr()` entry; an
+    /// unknown (plugin-added) segment falls back to its title-cased form. The
+    /// one label source for the animations page's drilldown, the rule
+    /// editor's event picker and the rule-list summary, so a path reads the
+    /// same everywhere.
+    static QString segmentLabel(const QString& segment);
 
     /// Inheritance chain from @p path up to (but excluding) the empty
     /// root. Useful for "snap → zone → global" breadcrumbs.

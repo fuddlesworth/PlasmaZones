@@ -21632,5 +21632,389 @@
         <comment>the words Match the screen shape, Side to side, and Top to bottom must match the option labels shown in the picker beside this text</comment>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="47"/>
+        <source>Accordion Collapse</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="50"/>
+        <source>Accordion Expand</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="53"/>
+        <source>Appearance</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Внешний вид</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="56"/>
+        <source>Badge Hide</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="59"/>
+        <source>Badge Pulse</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="62"/>
+        <source>Badge Show</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="65"/>
+        <source>Border</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Рамка</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="68"/>
+        <source>Cheatsheet</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="71"/>
+        <source>Click</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Щелчок</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="74"/>
+        <source>Close</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Закрыть</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="77"/>
+        <source>Cursor</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="80"/>
+        <source>Desktop</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Рабочий стол</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="83"/>
+        <source>Dim</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Затемнение</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="86"/>
+        <source>Editor</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Редактор</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="89"/>
+        <source>Fade</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="92"/>
+        <source>Fade In</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Появление</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="95"/>
+        <source>Fade Out</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Исчезание</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="98"/>
+        <source>Fast</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="101"/>
+        <source>Focus</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Фокус</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="104"/>
+        <source>Geometry</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Геометрия</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="107"/>
+        <source>Global</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Глобальные</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="110"/>
+        <source>Hide</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="113"/>
+        <source>Hover</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Наведение</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="116"/>
+        <source>Layout Picker</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Выбор раскладки</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="119"/>
+        <source>Layout Switch</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="122"/>
+        <source>Maximize</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="125"/>
+        <source>Minimize</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="128"/>
+        <source>Move</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="131"/>
+        <source>Movement</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="134"/>
+        <source>Open</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="137"/>
+        <source>OSD</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="140"/>
+        <source>Overlays</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Наложения</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="143"/>
+        <source>Panel</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="146"/>
+        <source>Peek</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="149"/>
+        <source>Pop</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="152"/>
+        <source>Popup</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Всплывающее окно</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="155"/>
+        <source>Press</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Нажатие</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="158"/>
+        <source>Progress</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Прогресс</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="161"/>
+        <source>Pulse</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="164"/>
+        <source>Reorder</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Переупорядочивание</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="167"/>
+        <source>Scrolling</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Прокрутка</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="170"/>
+        <source>Shader</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="173"/>
+        <source>Show</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="176"/>
+        <source>Slide In</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Вдвигание</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="179"/>
+        <source>Slide Out</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Выдвигание</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="182"/>
+        <source>Slow</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="185"/>
+        <source>Snap Assist</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Помощник прилипания</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="188"/>
+        <source>Snap In</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="191"/>
+        <source>Snap Out</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="194"/>
+        <source>Snap Resize</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="197"/>
+        <source>Strip</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="200"/>
+        <source>Switch</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="203"/>
+        <source>Tab</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="206"/>
+        <source>Tab Switch</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="209"/>
+        <source>Tint</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Оттенок</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="212"/>
+        <source>Toggle Off</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Отключение</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="215"/>
+        <source>Toggle On</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Включение</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="218"/>
+        <source>View</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="221"/>
+        <source>Widget</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="224"/>
+        <source>Window</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Окно</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="227"/>
+        <source>Window Morph</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="230"/>
+        <source>Zone Highlight</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Подсветка зоны</translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="233"/>
+        <source>Zone Overlay Flash</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/settings/pages/animationspagecontroller_paths.cpp" line="236"/>
+        <source>Zone Selector</source>
+        <comment>animation event or section</comment>
+        <translation type="unfinished">Выбор зоны</translation>
+    </message>
 </context>
 </TS>

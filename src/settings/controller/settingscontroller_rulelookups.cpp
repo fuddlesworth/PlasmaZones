@@ -209,9 +209,9 @@ void SettingsController::installRuleLabelLookups()
     // read-only row renders (ActionListView.qml walks eventSections() the same
     // way), so "Window · Open shader: Dissolve" and "Window · Close shader:
     // Dissolve" read as two rows and two sections' "Show" events cannot
-    // collapse into one label. Both halves come from the taxonomy's mechanical
-    // humanised segments (the animations page itself shows them untranslated),
-    // so the composed label is as translated as that page is. m_animationsPage
+    // collapse into one label. Both halves are the translated segment labels
+    // the animations page and the event picker show
+    // (AnimationsPageController::segmentLabel). m_animationsPage
     // already exists here (constructed earlier in this ctor); the null guard
     // only covers the lookup being exercised after teardown has cleared it.
     m_rulesPage->setAnimationEventLookup([this](const QString& path) -> QString {
