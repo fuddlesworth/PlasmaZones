@@ -132,58 +132,12 @@ inline const PhosphorLayer::Role LayoutPicker =
 inline const PhosphorLayer::Role Cheatsheet =
     PhosphorShellPatterns::Modal().withScopePrefix(QStringLiteral("plasmazones-cheatsheet"));
 
-/// Scroll tab-strip config-only role. The tab indicators for tabbed
-/// scrolling columns live as a per-screen Item slot (NOT a singleton —
-/// every scrolling screen can carry strips at once); this role exists
-/// purely as the SurfaceAnimator role lookup key.
-/// DELIBERATELY has no registered per-role config: the animation-profile
-/// taxonomy defines no popup.scrollTabs domain, so both legs use the
-/// library-default 150 ms motion and user motion/shader profiles do not
-/// apply (see setupSurfaceAnimator's no-config list). Display-only and
-/// click-through everywhere outside the indicator rects, which the tab
-/// shell's own input region gives it.
-inline const PhosphorLayer::Role ScrollTabs =
-    PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-scroll-tabs"));
-
-/// Scroll tab-indicator shell — the per-screen wl_surface the tab
-/// indicators get to themselves, hosting nothing but the ScrollTabs slot.
-/// Same FullscreenOverlay primitive and Top layer as @ref PassiveShell,
-/// and for the same reasons (see that role's note on the Overlay→Top
-/// downgrade); it differs only in being EXCLUSIVE to the indicators.
-///
-/// The exclusivity is the entire point, and it is not about size. The
-/// compositor slides this surface with the scrolling strip, applying the
-/// same view offset it applies to the columns, so the indicators travel
-/// with the windows they label instead of being hidden for the length of
-/// every scroll. A surface translates as a whole, so the indicators cannot
-/// share one with anything that must hold still — and the passive shell
-/// carries the navigation OSD, which fires on the very action that
-/// scrolls.
-///
-/// ONE surface per screen, not one per indicator: every column takes the
-/// same offset, so per-indicator surfaces would add a create, a destroy, a
-/// commit and an input region per column scrolling in or out, all applying
-/// an identical translation. Screen-sized for the same reason the passive
-/// shell is: indicators spread across the whole strip, and re-anchoring a
-/// bounding box on every relayout would be pure churn.
-///
-/// The prefix is the SurfaceAnimator's longest-prefix config lookup key and
-/// nothing else. The effect cannot read a layer-shell scope at all, so it
-/// tells this surface apart by the wl_surface object id the daemon announces
-/// over D-Bus (announceScrollTabSurface, matched in
-/// PlasmaZonesEffect::isScrollTabIndicatorSurface). The load-bearing contract
-/// is therefore the announce and retract pairing, not this string.
-inline const PhosphorLayer::Role ScrollTabShell = PhosphorShellPatterns::Hud()
-                                                      .withLayer(PhosphorLayer::Layer::Top)
-                                                      .withScopePrefix(QStringLiteral("plasmazones-scroll-tab-shell"));
-
 /// Scroll drag drop-indicator config-only role. Paints the slot a dragged
 /// window would land in while a scrolling drag re-insert is armed, so the
 /// drop target is visible the way autotile's live restructure makes it
-/// visible. Per-screen like ScrollTabs (a drag can cross screens and the
-/// indicator follows), and like ScrollTabs it registers no per-role config:
-/// the taxonomy defines no domain for it, so both legs use the library
-/// default motion. Display-only and click-through — it must never take
+/// visible. Per-screen (a drag can cross screens and the indicator follows),
+/// and it registers no per-role config: the taxonomy defines no domain for
+/// it, so both legs use the library default motion. Display-only and click-through — it must never take
 /// input, since it is painted underneath a cursor that is mid-drag.
 inline const PhosphorLayer::Role ScrollDropIndicator =
     PhosphorShellPatterns::Hud().withScopePrefix(QStringLiteral("plasmazones-scroll-drop-indicator"));

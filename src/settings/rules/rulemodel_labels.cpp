@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The label half of RuleModel: the per-leaf and per-action human labels, the
-// two summaries built from them, and the unknown-action-type fallback. Split
-// out of rulemodel.cpp for file-size; the model mechanics (rows, ordering,
-// lookups) stay there, and the static section / match-field tables moved on to
-// rulemodel_fieldtables.cpp when this file in turn reached the ceiling.
-// Everything here is either a RuleModel member or file-local, so there is no
-// shared private header.
+// The action-label half of RuleModel: the per-action human label, the action
+// summary built from it, and the unknown-action-type fallback. Split out of
+// rulemodel.cpp for file-size; the model mechanics (rows, ordering, lookups)
+// stay there, the static section / match-field tables moved on to
+// rulemodel_fieldtables.cpp when this file in turn reached the ceiling, and the
+// match side (the per-leaf label and matchSummary) moved to
+// rulemodel_matchlabels.cpp when it reached it again. Everything here is
+// either a RuleModel member or file-local, so there is no shared private
+// header.
 
 #include "rulemodel.h"
 
@@ -15,15 +17,13 @@
 
 #include "phosphor_i18n.h"
 
-#include <PhosphorLayoutApi/LayoutId.h>
-#include <PhosphorRules/MatchTypes.h>
 #include <PhosphorRules/RuleAction.h>
 
 #include <PhosphorZones/AssignmentEntry.h>
 
 #include <QJsonArray>
-#include <QJsonDocument>
 #include <QJsonValue>
+#include <QSet>
 #include <QStringList>
 
 #include <optional>
@@ -33,166 +33,7 @@ namespace PlasmaZones {
 namespace {
 
 namespace ActionType = PhosphorRules::ActionType;
-using PhosphorRules::Field;
-using PhosphorRules::MatchExpression;
-using PhosphorRules::Operator;
 using PhosphorRules::RuleAction;
-
-/// Human label for a single leaf predicate ("Monitor: LG Ultra HD").
-/// @p screenLookup and @p activityLookup resolve the opaque ScreenId /
-/// Activity UUID values to friendly names; an empty lookup is treated as
-/// "identity" so the function stays usable in code paths that have not yet
-/// wired the SettingsController-backed resolvers.
-QString leafLabel(const MatchExpression::Predicate& predicate, const RuleModel::LabelLookup& screenLookup,
-                  const RuleModel::LabelLookup& activityLookup, const RuleModel::LabelLookup& zoneLookup,
-                  const RuleModel::LabelLookup& layoutLookup, const RuleModel::LabelLookup& tilingAlgorithmLookup,
-                  const RuleModel::LabelLookup& virtualDesktopLookup)
-{
-    // Pick the lookup matching the leaf's field. An empty lookup degenerates
-    // to identity so this stays usable from code paths that have not yet
-    // wired the SettingsController-backed resolvers.
-    const RuleModel::LabelLookup* lookup = nullptr;
-    if (predicate.field == Field::ScreenId) {
-        lookup = &screenLookup;
-    } else if (predicate.field == Field::Activity) {
-        lookup = &activityLookup;
-    } else if (predicate.field == Field::Zone) {
-        lookup = &zoneLookup;
-    } else if (predicate.field == Field::VirtualDesktop && predicate.op == Operator::Equals) {
-        // Resolves the desktop number to its name ("2" → "Work"); an unnamed or
-        // unknown desktop falls back to the bare number via resolveOne below. Only
-        // for Equals — under GreaterThan/LessThan the value is a numeric threshold,
-        // where a name ("greater than Work") would read as nonsense, so those keep
-        // the bare number and take the operator word from compose() instead,
-        // which is what makes "Desktop greater than 3" legible without it.
-        lookup = &virtualDesktopLookup;
-    }
-    const auto resolveOne = [lookup](const QString& raw) {
-        if (!lookup || !*lookup) {
-            return raw;
-        }
-        const QString label = (*lookup)(raw);
-        return label.isEmpty() ? raw : label;
-    };
-
-    // Every return below composes through here so the OPERATOR survives into
-    // the summary. Rendering a bare "field: value" made seven of the eight
-    // operators invisible — "Title contains Firefox" and "Title is Firefox"
-    // read identically, and "Width: 1000" could be a greater-than or a
-    // less-than. Equals keeps the tight colon form (it is the common case, and
-    // sparing it leaves most existing translations untouched). The word comes
-    // from RuleAuthoring so this and the editor dropdown cannot drift.
-    const auto compose = [&predicate](const QString& field, const QString& value) {
-        if (predicate.op == Operator::Equals) {
-            return PhosphorI18n::tr("%1: %2").arg(field, value);
-        }
-        return PhosphorI18n::tr("%1 %2 %3").arg(field, RuleAuthoring::operatorLabel(predicate.op), value);
-    };
-
-    // Mode is a closed wire-token vocabulary — render the friendly label
-    // ("Mode: Snapping") via the same single-source table the editor dropdown uses,
-    // rather than a second hardcoded copy. An unknown token round-trips verbatim.
-    if (predicate.field == Field::Mode) {
-        return compose(RuleModel::fieldLabel(predicate.field), RuleAuthoring::modeLabel(predicate.value.toString()));
-    }
-
-    // Screen orientation is a closed wire-token vocabulary too — resolve via the
-    // shared orientationLabel() table like Mode above.
-    if (predicate.field == Field::ScreenOrientation) {
-        return compose(RuleModel::fieldLabel(predicate.field),
-                       RuleAuthoring::orientationLabel(predicate.value.toString()));
-    }
-
-    // Colour scheme: same closed-vocabulary treatment via the shared table.
-    if (predicate.field == Field::ColorScheme) {
-        return compose(RuleModel::fieldLabel(predicate.field),
-                       RuleAuthoring::colorSchemeLabel(predicate.value.toString()));
-    }
-
-    // Window type is the int underlying the WindowType enum — resolve it to the
-    // friendly label ("Window type: Dialog") via the same single-source table the
-    // editor dropdown uses, rather than showing the bare int.
-    if (predicate.field == Field::WindowType) {
-        return compose(RuleModel::fieldLabel(predicate.field), RuleAuthoring::windowTypeLabel(predicate.value.toInt()));
-    }
-
-    // Active layout: a snap layout id resolves via the SetSnappingLayout lookup;
-    // an autotile id ("autotile:<algo>") resolves its algorithm via the tiling
-    // lookup after stripping the prefix (LayoutId is the one owner of that
-    // prefix; the settings controller builds ids with the same helpers), so
-    // the collapsed summary matches the expanded tree — which resolves both id
-    // shapes through appSettings.layouts. Unknown ids round-trip verbatim.
-    if (predicate.field == Field::ActiveLayout) {
-        const QString value = predicate.value.toString();
-        QString label = value;
-        if (PhosphorLayout::LayoutId::isScrolling(value)) {
-            // The bare mode sentinel has no layout entity to look up. The
-            // wording matches the picker's sentinel entry
-            // (activeLayoutMatchOptions) so the collapsed summary and the
-            // editor agree.
-            label = PhosphorI18n::tr("Scrolling (no template)");
-        } else if (PhosphorLayout::LayoutId::isScrollingFamily(value)) {
-            // The prefixed "scrolling:<uuid>" template stamp: resolve the
-            // template's name through the shared layouts model, which carries
-            // native template rows keyed by their raw UUID. Raw-id fallback
-            // mirrors the deleted-layout behavior below.
-            //
-            // The bare resolved NAME, not templateDisplayLabel's "Template: …"
-            // form. This label is already wrapped in the field label below, so
-            // the composed variant read "Active layout: Template: Fibonacci".
-            // The "Template: …" prefix stays in the PICKER (activeLayoutMatchOptions
-            // and the value renderers), where entries sit unlabelled beside
-            // manual layouts and need the family marker. A lookup MISS still
-            // falls through to the verbatim "scrolling:<uuid>" in `label`.
-            if (layoutLookup) {
-                const QString templateId = PhosphorLayout::LayoutId::extractTemplateId(value);
-                const QString resolved = layoutLookup(templateId);
-                if (!resolved.isEmpty() && resolved != templateId) {
-                    label = resolved;
-                }
-            }
-        } else if (PhosphorLayout::LayoutId::isAutotile(value)) {
-            if (tilingAlgorithmLookup) {
-                const QString resolved = tilingAlgorithmLookup(PhosphorLayout::LayoutId::extractAlgorithmId(value));
-                if (!resolved.isEmpty()) {
-                    label = resolved;
-                }
-            }
-        } else if (layoutLookup) {
-            const QString resolved = layoutLookup(value);
-            if (!resolved.isEmpty()) {
-                label = resolved;
-            }
-        }
-        return compose(RuleModel::fieldLabel(predicate.field), label);
-    }
-
-    // Boolean fields (Maximized, Keep above, Skip taskbar, …) render their
-    // value as On / Off instead of the raw JSON "true" / "false" the generic
-    // toString() fallback would emit, matching the editor toggle and the
-    // expanded match tree (MatchExpressionView).
-    if (PhosphorRules::fieldIsBool(predicate.field)) {
-        return compose(RuleModel::fieldLabel(predicate.field),
-                       predicate.value.toBool() ? PhosphorI18n::tr("On") : PhosphorI18n::tr("Off"));
-    }
-
-    // A JSON array or object value converts to an EMPTY QString, which would
-    // render the leaf as a bare "Title: " with nothing after it — the one place
-    // a hand-edited rule's value vanishes instead of round-tripping verbatim
-    // the way every other unresolvable value in this file does. No field's
-    // editor authors a container, so this is reachable only from hand-edited
-    // JSON; echo its compact JSON form so the user can see what the rule holds.
-    QString shown = resolveOne(predicate.value.toString());
-    if (shown.isEmpty()) {
-        const QJsonValue json = QJsonValue::fromVariant(predicate.value);
-        if (json.isArray()) {
-            shown = QString::fromUtf8(QJsonDocument(json.toArray()).toJson(QJsonDocument::Compact));
-        } else if (json.isObject()) {
-            shown = QString::fromUtf8(QJsonDocument(json.toObject()).toJson(QJsonDocument::Compact));
-        }
-    }
-    return compose(RuleModel::fieldLabel(predicate.field), shown);
-}
 
 /// Localise a single engine-mode wire token. Returns an empty QString
 /// for an empty input so callers can branch on it; unknown tokens
@@ -249,6 +90,23 @@ int fractionPercent(const QJsonValue& raw, double floor, double ceiling)
         return -1;
     }
     return qRound(v * 100.0);
+}
+
+/// Summary for a fraction-valued action: the bare @p label when the value is
+/// ABSENT (the editor's normal pre-configuration state, the same contract the
+/// SetOpacity / SetTintStrength / SetSplitRatio branches apply), @p invalid
+/// when a value is present but not a usable fraction, else @p format with the
+/// whole percent substituted. The closed-vocabulary enum family deliberately
+/// differs: an absent token there renders "(invalid)", because its editor
+/// always seeds a token and an absent one is never a pre-configuration state.
+QString fractionSummary(const QJsonValue& raw, double floor, double ceiling, const QString& label,
+                        const QString& invalid, const QString& format)
+{
+    if (raw.isNull() || raw.isUndefined()) {
+        return label;
+    }
+    const int pct = fractionPercent(raw, floor, ceiling);
+    return pct < 0 ? invalid : format.arg(pct);
 }
 
 /// True when @p value has one of the hex colour shapes the descriptor
@@ -369,7 +227,8 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                     const RuleModel::LabelLookup& tilingAlgorithmLookup,
                     const RuleModel::LabelLookup& shaderEffectLookup, const RuleModel::LabelLookup& overlayShaderLookup,
                     const RuleModel::LabelLookup& curveLookup, const RuleModel::LabelLookup& screenLookup,
-                    const RuleModel::LabelLookup& decorationPackLookup)
+                    const RuleModel::LabelLookup& decorationPackLookup,
+                    const RuleModel::LabelLookup& animationEventLookup)
 {
     auto resolveWith = [](const QString& wire, const RuleModel::LabelLookup& lookup) {
         if (wire.isEmpty() || !lookup) {
@@ -414,6 +273,11 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // tilingAlgorithm lookup knows about autotile entries — the
         // RuleController wires it from settingsController.layouts,
         // which contains the displayName ("Binary Split") for each algorithm.
+        // An empty token (hand-edited rule; the validator refuses it) keeps the
+        // bare label rather than a dangling "Tiling: ", as SetSnappingLayout does.
+        if (algo.isEmpty()) {
+            return PhosphorI18n::tr("Tiling algorithm");
+        }
         return PhosphorI18n::tr("Tiling: %1").arg(resolveWith(algo, tilingAlgorithmLookup));
     }
     if (action.type == ActionType::DisableEngine) {
@@ -453,21 +317,54 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
     }
     if (action.type == ActionType::SnapToZone) {
         const QJsonArray zones = action.params.value(PhosphorRules::ActionParam::Zones).toArray();
-        QStringList nums;
-        nums.reserve(zones.size());
+        const QJsonArray names = action.params.value(PhosphorRules::ActionParam::ZoneNames).toArray();
+        // Ordinals first, then quoted names — the order the editor shows them.
+        // Both loops apply the validator's RANGE bounds (1..MaxZoneOrdinal;
+        // non-blank, at most MaxZoneNameLength after trimming), so the summary
+        // never claims a target the runtime discards, and both dedupe so a
+        // repeated target renders once the way the engine's zone-id union
+        // collapses it. (The validator additionally refuses non-integral
+        // ordinals and refuses the WHOLE action on one over-long name; a
+        // summary is per entry, so such a rule, which cannot load, merely
+        // renders its surviving entries while staged.)
+        QStringList targets;
+        targets.reserve(zones.size() + names.size());
+        QSet<int> seenOrdinals;
         for (const QJsonValue& z : zones) {
             // Zone numbers are 1-based and toInt() answers 0 for a string, bool
             // or object, so an unfiltered render gave "Snap to zone 0" — a zone
-            // that cannot exist. Reachable from a hand-edited rule only.
-            if (!z.isDouble() || z.toInt() < 1) {
+            // that cannot exist.
+            if (!z.isDouble()) {
                 continue;
             }
-            nums.append(QString::number(z.toInt()));
+            const int ordinal = z.toInt();
+            if (ordinal < 1 || ordinal > PhosphorRules::MaxZoneOrdinal || seenOrdinals.contains(ordinal)) {
+                continue;
+            }
+            seenOrdinals.insert(ordinal);
+            targets.append(QString::number(ordinal));
         }
-        // Empty array, or nothing survived the filter. Either way fall back to
+        // Zone names ride alongside the numbers: render each in quotes so a
+        // name that happens to be digits cannot be read as an ordinal. The
+        // dedupe key is the case-folded name, matching the engine's
+        // case-insensitive zoneByName lookup.
+        QSet<QString> seenNames;
+        for (const QJsonValue& n : names) {
+            const QString name = n.isString() ? n.toString().trimmed() : QString();
+            if (name.isEmpty() || name.size() > PhosphorRules::MaxZoneNameLength) {
+                continue;
+            }
+            const QString key = name.toCaseFolded();
+            if (seenNames.contains(key)) {
+                continue;
+            }
+            seenNames.insert(key);
+            targets.append(PhosphorI18n::tr("“%1”", "a quoted zone name").arg(name));
+        }
+        // Empty arrays, or nothing survived the filters. Either way fall back to
         // the bare label rather than a dangling "Snap to zones ", the shape
         // OverrideDecorationChain uses for its all-empty-ids case.
-        if (nums.isEmpty()) {
+        if (targets.isEmpty()) {
             return PhosphorI18n::tr("Snap to zone");
         }
         // Two source strings rather than one "zone(s)" spelling. Qt's plural
@@ -478,11 +375,11 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // with more than two plural forms can still select among them — the
         // n=21 case in Russian, which needs its singular form, resolves
         // through that call rather than through the size==1 branch.
-        if (nums.size() == 1) {
-            return PhosphorI18n::tr("Snap to zone %1").arg(nums.first());
+        if (targets.size() == 1) {
+            return PhosphorI18n::tr("Snap to zone %1").arg(targets.first());
         }
-        return PhosphorI18n::tr("Snap to zones %1", nullptr, static_cast<int>(nums.size()))
-            .arg(nums.join(QStringLiteral(", ")));
+        return PhosphorI18n::tr("Snap to zones %1", nullptr, static_cast<int>(targets.size()))
+            .arg(targets.join(QStringLiteral(", ")));
     }
     if (action.type == ActionType::RouteToScreen) {
         // Resolve the canonical target screen id to the same friendly monitor
@@ -522,10 +419,25 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         }
         return PhosphorI18n::tr("Opacity: %1%").arg(qRound(v * 100.0));
     }
+    // The three per-event animation overrides key their slot on the event, so
+    // one rule legitimately carries several of each; the event label leads so
+    // two of them never summarise identically. An empty event (only a staged,
+    // not-yet-saved editor row: the validators refuse it at load) falls back to
+    // the event-less wording.
+    const auto animationEvent = [&]() -> QString {
+        const QString event = action.params.value(PhosphorRules::ActionParam::Event).toString();
+        return event.isEmpty() ? QString() : resolveWith(event, animationEventLookup);
+    };
     if (action.type == ActionType::OverrideAnimationShader) {
         const QString id = action.params.value(PhosphorRules::ActionParam::EffectId).toString();
-        return id.isEmpty() ? PhosphorI18n::tr("Block animation shader")
-                            : PhosphorI18n::tr("Shader: %1").arg(resolveWith(id, shaderEffectLookup));
+        const QString event = animationEvent();
+        if (id.isEmpty()) {
+            return event.isEmpty() ? PhosphorI18n::tr("Block animation shader")
+                                   : PhosphorI18n::tr("Block %1 shader").arg(event);
+        }
+        const QString shader = resolveWith(id, shaderEffectLookup);
+        return event.isEmpty() ? PhosphorI18n::tr("Shader: %1").arg(shader)
+                               : PhosphorI18n::tr("%1 shader: %2").arg(event, shader);
     }
     if (action.type == ActionType::OverrideDecorationChain) {
         const QJsonArray chain = action.params.value(PhosphorRules::ActionParam::Chain).toArray();
@@ -558,18 +470,29 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // legal 0 read as unset. Keyed on DurationMs, not `value`.
         const QJsonValue ms = action.params.value(PhosphorRules::ActionParam::DurationMs);
         const auto duration = intParam(action.type, PhosphorRules::ActionParam::DurationMs, ms);
+        const QString event = animationEvent();
         if (!duration) {
             // Absent is the editor's normal pre-configuration state and keeps
             // the bare label; present but unusable says so.
-            return ms.isUndefined() ? PhosphorI18n::tr("Animation duration")
-                                    : PhosphorI18n::tr("Animation duration (invalid)");
+            if (ms.isUndefined()) {
+                return event.isEmpty() ? PhosphorI18n::tr("Animation duration")
+                                       : PhosphorI18n::tr("%1 duration").arg(event);
+            }
+            return event.isEmpty() ? PhosphorI18n::tr("Animation duration (invalid)")
+                                   : PhosphorI18n::tr("%1 duration (invalid)").arg(event);
         }
-        return PhosphorI18n::tr("Duration: %1 ms").arg(*duration);
+        return event.isEmpty() ? PhosphorI18n::tr("Duration: %1 ms").arg(*duration)
+                               : PhosphorI18n::tr("%1 duration: %2 ms").arg(event, QString::number(*duration));
     }
     if (action.type == ActionType::OverrideAnimationCurve) {
         const QString curve = action.params.value(PhosphorRules::ActionParam::Curve).toString();
-        return curve.isEmpty() ? PhosphorI18n::tr("Animation curve")
-                               : PhosphorI18n::tr("Curve: %1").arg(resolveWith(curve, curveLookup));
+        const QString event = animationEvent();
+        if (curve.isEmpty()) {
+            return event.isEmpty() ? PhosphorI18n::tr("Animation curve") : PhosphorI18n::tr("%1 curve").arg(event);
+        }
+        const QString curveLabel = resolveWith(curve, curveLookup);
+        return event.isEmpty() ? PhosphorI18n::tr("Curve: %1").arg(curveLabel)
+                               : PhosphorI18n::tr("%1 curve: %2").arg(event, curveLabel);
     }
     if (action.type == ActionType::OverrideOverlayShader) {
         const QString id = action.params.value(PhosphorRules::ActionParam::EffectId).toString();
@@ -583,9 +506,11 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         }
         // Delegate the token→label to the shared enumOptionLabel (the same source the
         // editor uses) instead of re-hardcoding the vocabulary here, like the sibling
-        // SetInsertPosition / SetOverflowBehavior / SetDragBehavior cases below.
-        return PhosphorI18n::tr("Overlay style: %1")
-            .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v));
+        // SetInsertPosition / SetOverflowBehavior / SetDragBehavior cases below, and
+        // report an unresolved token the way the scrolling enum family does.
+        const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, v);
+        return isUnresolvedEnumToken(v, shown) ? PhosphorI18n::tr("Overlay style (invalid)")
+                                               : PhosphorI18n::tr("Overlay style: %1").arg(shown);
     }
     if (action.type == ActionType::SetAlgorithmParam) {
         // Keyed on ActionParam::Algorithm (the target algorithm token), not Value;
@@ -701,17 +626,27 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
             }
             return PhosphorI18n::tr("Split ratio: %1%").arg(qRound(v * 100.0));
         }
+        // The three tiling enums delegate token→label to the shared
+        // enumOptionLabel and report an unresolved token (empty, or one the
+        // vocabulary does not know) rather than echoing it, the same contract
+        // the scrolling enum family below states.
         if (action.type == ActionType::SetInsertPosition) {
-            return PhosphorI18n::tr("Insert: %1")
-                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Insert (invalid)")
+                                                       : PhosphorI18n::tr("Insert: %1").arg(shown);
         }
         if (action.type == ActionType::SetOverflowBehavior) {
-            return PhosphorI18n::tr("Overflow: %1")
-                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Overflow (invalid)")
+                                                       : PhosphorI18n::tr("Overflow: %1").arg(shown);
         }
         if (action.type == ActionType::SetDragBehavior) {
-            return PhosphorI18n::tr("Drag: %1")
-                .arg(RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, raw.toString()));
+            const QString token = raw.toString();
+            const QString shown = RuleAuthoring::enumOptionLabel(action.type, PhosphorRules::ActionParam::Value, token);
+            return isUnresolvedEnumToken(token, shown) ? PhosphorI18n::tr("Drag (invalid)")
+                                                       : PhosphorI18n::tr("Drag: %1").arg(shown);
         }
         // ── scrolling-engine overrides ──
         // Widths and heights are work-area fractions on the wire, shown as a
@@ -721,28 +656,24 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // than echoing it. OpenTabbed is a bool action and already returned by
         // boolActionStateLabel.
         if (action.type == ActionType::SetScrollDefaultColumnWidth) {
-            const int pct =
-                fractionPercent(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio);
-            return pct < 0 ? PhosphorI18n::tr("Column width (invalid)")
-                           : PhosphorI18n::tr("Column width: %1%").arg(pct);
+            return fractionSummary(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio,
+                                   PhosphorI18n::tr("Column width"), PhosphorI18n::tr("Column width (invalid)"),
+                                   PhosphorI18n::tr("Column width: %1%"));
         }
         if (action.type == ActionType::OpenColumnWidth) {
-            const int pct =
-                fractionPercent(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio);
-            return pct < 0 ? PhosphorI18n::tr("Open at width (invalid)")
-                           : PhosphorI18n::tr("Open at width: %1%").arg(pct);
+            return fractionSummary(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio,
+                                   PhosphorI18n::tr("Open at width"), PhosphorI18n::tr("Open at width (invalid)"),
+                                   PhosphorI18n::tr("Open at width: %1%"));
         }
         if (action.type == ActionType::SetScrollDefaultWindowHeight) {
-            const int pct =
-                fractionPercent(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio);
-            return pct < 0 ? PhosphorI18n::tr("Window height (invalid)")
-                           : PhosphorI18n::tr("Window height: %1%").arg(pct);
+            return fractionSummary(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio,
+                                   PhosphorI18n::tr("Window height"), PhosphorI18n::tr("Window height (invalid)"),
+                                   PhosphorI18n::tr("Window height: %1%"));
         }
         if (action.type == ActionType::OpenWindowHeight) {
-            const int pct =
-                fractionPercent(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio);
-            return pct < 0 ? PhosphorI18n::tr("Open at height (invalid)")
-                           : PhosphorI18n::tr("Open at height: %1%").arg(pct);
+            return fractionSummary(raw, PhosphorRules::MinColumnWidthRatio, PhosphorRules::MaxColumnWidthRatio,
+                                   PhosphorI18n::tr("Open at height"), PhosphorI18n::tr("Open at height (invalid)"),
+                                   PhosphorI18n::tr("Open at height: %1%"));
         }
         if (action.type == ActionType::SetScrollInsertPosition) {
             const QString token = raw.toString();
@@ -810,10 +741,10 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
                       : PhosphorI18n::tr("Tab indicator thickness (invalid)");
         }
         if (action.type == ActionType::SetTabIndicatorLength) {
-            const int pct = fractionPercent(raw, PhosphorRules::MinTabIndicatorLengthRatio,
-                                            PhosphorRules::MaxTabIndicatorLengthRatio);
-            return pct < 0 ? PhosphorI18n::tr("Tab indicator length (invalid)")
-                           : PhosphorI18n::tr("Tab indicator length: %1%").arg(pct);
+            return fractionSummary(raw, PhosphorRules::MinTabIndicatorLengthRatio,
+                                   PhosphorRules::MaxTabIndicatorLengthRatio, PhosphorI18n::tr("Tab indicator length"),
+                                   PhosphorI18n::tr("Tab indicator length (invalid)"),
+                                   PhosphorI18n::tr("Tab indicator length: %1%"));
         }
         if (action.type == ActionType::SetTabIndicatorGapsBetweenTabs) {
             const auto px = intValueParam(action.type, raw);
@@ -866,10 +797,10 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
         // upper-case a valid hex and read "(invalid)" otherwise so the summary
         // never claims a colour the runtime discards.
         if (action.type == ActionType::SetDropIndicatorOpacity) {
-            const int pct =
-                fractionPercent(raw, PhosphorRules::MinDropIndicatorOpacity, PhosphorRules::MaxDropIndicatorOpacity);
-            return pct < 0 ? PhosphorI18n::tr("Drop indicator fill opacity (invalid)")
-                           : PhosphorI18n::tr("Drop indicator fill opacity: %1%").arg(pct);
+            return fractionSummary(raw, PhosphorRules::MinDropIndicatorOpacity, PhosphorRules::MaxDropIndicatorOpacity,
+                                   PhosphorI18n::tr("Drop indicator fill opacity"),
+                                   PhosphorI18n::tr("Drop indicator fill opacity (invalid)"),
+                                   PhosphorI18n::tr("Drop indicator fill opacity: %1%"));
         }
         if (action.type == ActionType::SetDropIndicatorBorderWidth) {
             const auto px = intValueParam(action.type, raw);
@@ -1015,40 +946,6 @@ QString actionLabel(const RuleAction& action, const RuleModel::LabelLookup& snap
 
 } // namespace
 
-QString RuleModel::matchSummary(const MatchExpression& match) const
-{
-    if (match.isCatchAll()) {
-        return PhosphorI18n::tr("Any window");
-    }
-    if (match.isLeaf()) {
-        return leafLabel(match.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup, m_snappingLayoutLookup,
-                         m_tilingAlgorithmLookup, m_virtualDesktopLookup);
-    }
-    // A simple AND renders its leaves joined by " · ".
-    if (match.kind() == MatchExpression::Kind::All) {
-        QStringList parts;
-        for (const MatchExpression& child : match.children()) {
-            if (child.isLeaf()) {
-                parts.append(leafLabel(child.predicate(), m_screenLookup, m_activityLookup, m_zoneLookup,
-                                       m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_virtualDesktopLookup));
-            } else {
-                parts.append(PhosphorI18n::tr("(condition group)"));
-            }
-        }
-        return parts.join(QStringLiteral(" · "));
-    }
-    // Any composite that is not a flat AND — count the leaves.
-    const int n = conditionCount(match);
-    // Split at one for the reason spelled out at the SnapToZone summary above:
-    // a single "%n condition(s)" source would render literally for every
-    // English user. Both arms keep %n so no numeral is hardcoded, and the n>1
-    // arm still carries the real count for locales with more than two forms.
-    if (n == 1) {
-        return PhosphorI18n::tr("%n condition", nullptr, n);
-    }
-    return PhosphorI18n::tr("%n conditions", nullptr, n);
-}
-
 QString RuleModel::actionSummary(const QList<RuleAction>& actions) const
 {
     if (actions.isEmpty()) {
@@ -1057,7 +954,8 @@ QString RuleModel::actionSummary(const QList<RuleAction>& actions) const
     QStringList parts;
     for (const RuleAction& a : actions) {
         parts.append(actionLabel(a, m_snappingLayoutLookup, m_tilingAlgorithmLookup, m_shaderEffectLookup,
-                                 m_overlayShaderLookup, m_curveLookup, m_screenLookup, m_decorationPackLookup));
+                                 m_overlayShaderLookup, m_curveLookup, m_screenLookup, m_decorationPackLookup,
+                                 m_animationEventLookup));
     }
     return parts.join(QStringLiteral(" · "));
 }

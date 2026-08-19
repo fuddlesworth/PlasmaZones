@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutUtils.h>
 #include "zoneslogging.h"
-#include <QJsonArray>
 #include <QStandardPaths>
 #include <algorithm>
 #include <limits>
@@ -385,6 +383,26 @@ Zone* Layout::zoneByNumber(int number) const
         return z->zoneNumber() == number;
     });
     return it != m_zones.end() ? *it : nullptr;
+}
+
+Zone* Layout::zoneByName(const QString& name) const
+{
+    const QString wanted = name.trimmed();
+    if (wanted.isEmpty()) {
+        return nullptr;
+    }
+    // m_zones is insertion-ordered, not number-ordered, so pick the lowest
+    // zone number among the matches rather than the first container hit.
+    Zone* best = nullptr;
+    for (Zone* z : m_zones) {
+        if (z->name().trimmed().compare(wanted, Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        if (!best || z->zoneNumber() < best->zoneNumber()) {
+            best = z;
+        }
+    }
+    return best;
 }
 
 void Layout::addZone(Zone* zone)

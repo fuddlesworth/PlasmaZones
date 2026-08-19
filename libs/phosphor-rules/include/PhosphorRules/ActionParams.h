@@ -65,9 +65,16 @@ inline constexpr QLatin1StringView Mode{"mode"};
 inline constexpr QLatin1StringView LayoutId{"layoutId"};
 // SetTilingAlgorithm algorithm-token key — wire is the algorithm registry id.
 inline constexpr QLatin1StringView Algorithm{"algorithm"};
-// SnapToZone target-zone key — wire is a non-empty JSON array of 1-based zone
-// ordinals (e.g. `[1]` or `[1, 2]`); multiple entries snap to their union.
+// SnapToZone target-zone key — wire is a JSON array of 1-based zone ordinals
+// (e.g. `[1]` or `[1, 2]`); multiple entries snap to their union. May be
+// empty or absent when `ZoneNames` carries at least one name.
 inline constexpr QLatin1StringView Zones{"zones"};
+// SnapToZone target-zone-name key — wire is a JSON array of zone-name strings
+// (e.g. `["Editor"]`). Names resolve against the zones of whatever layout is
+// active on the placement screen, so a name-keyed rule follows the zone across
+// layouts where an ordinal would not. Entries union with `Zones`; at least one
+// of the two arrays must carry a valid entry.
+inline constexpr QLatin1StringView ZoneNames{"zoneNames"};
 // RouteToScreen target-monitor key — wire is the canonical EDID screen id
 // (`Manuf:Model:Serial`, optionally `/CONNECTOR`-disambiguated, or a virtual
 // screen id), the same form the ScreenId match field and the settings
@@ -87,9 +94,23 @@ inline constexpr QLatin1StringView Chain{"chain"};
 /// only reach 9); the cap exists purely to reject a grossly malformed hand-edited
 /// payload AND to keep the load-time validator's integrality check from narrowing
 /// an out-of-range double to int (which is UB). Shared by the descriptor validator
-/// (ruleaction_builtins_engine.cpp) and the v3→v4 migration so the two stay in
-/// lockstep.
+/// (ruleaction_builtins_engine.cpp), the daemon's placement reader
+/// (windowtrackingadaptor/rules_placement.cpp `placementTargetsOf`), the
+/// v3→v4 migration, and the settings editor (published to QML as the
+/// `zoneOrdinals` ParamSchema `max`) so all of them stay in lockstep.
 inline constexpr int MaxZoneOrdinal = 64;
+
+/// Upper bound on a `SnapToZone` zone-name entry (each `ActionParam::ZoneNames`
+/// string), in characters, measured on the TRIMMED name. This is deliberately
+/// permissive: the layout editor caps zone names at 40 (MaxLayoutNameLength in
+/// the app's constants.h, which this LGPL lib cannot include), but a hand-edited
+/// or legacy layout may carry a longer one, so the bound here is only a
+/// grossly-malformed-payload guard in the spirit of MaxZoneOrdinal, not the
+/// editor's limit. Consumers: the descriptor validator, the daemon's placement
+/// reader, and the settings authoring layer (parseZoneNameList and the
+/// rule-list summary apply it in C++; it is also published as the `zoneNames`
+/// ParamSchema `max` so the editor can read it from the schema).
+inline constexpr int MaxZoneNameLength = 128;
 
 /// Upper bounds for the per-window border appearance overrides
 /// (`SetBorderWidth` / `SetBorderRadius`), in logical px. Shared so the

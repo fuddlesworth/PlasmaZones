@@ -326,15 +326,15 @@ public:
 
     /**
      * @brief Resolver yielding the open-placement directive — SnapToZone ordinals
-     *        plus an optional RouteToScreen target and an optional RouteToDesktop
-     *        target — for an opening window because a placement rule matched
+     *        and/or zone names, plus an optional RouteToScreen target and an
+     *        optional RouteToDesktop target — for an opening window because a placement rule matched
      *        it. Daemon-injected, keyed by the live windowId plus the screen the
      *        window is opening on (so a rule carrying a `ScreenId` constraint
      *        resolves against the window's current screen), evaluated on the
      *        window-open path (`calculateSnapToPlacementRule`, the highest-priority
-     *        restore chain level). See PhosphorSnapEngine::PlacementDirective. Empty
-     *        ordinals ⇒ no SnapToZone rule matched; multiple ordinals request a zone
-     *        span (their unioned bounding rect). The engine stays settings/rule-
+     *        restore chain level). See PhosphorSnapEngine::PlacementDirective. Both
+     *        lists empty ⇒ no SnapToZone rule matched; multiple targets across the
+     *        two lists request a zone span (their unioned bounding rect). The engine stays settings/rule-
      *        store-agnostic (LGPL boundary) — it only asks. When UNSET (default) no
      *        window is rule-snapped and the engine keeps its historical open
      *        behaviour (path unit tests rely on this). Same lifetime contract as

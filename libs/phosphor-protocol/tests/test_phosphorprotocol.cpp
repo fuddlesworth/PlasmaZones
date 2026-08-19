@@ -247,13 +247,20 @@ private Q_SLOTS:
         // scrollEdge while reading a vertical delta as a horizontal slide. The
         // handshake is the only thing rejecting that pairing, which is why the
         // bump must not be "optimized away" as unnecessary later.
-        // Bumped to 13 alongside the TileRequestEntry viewImmediate widening
-        // (a(siiiissbbbssiiibs) → a(siiiissbbbssiiibsb)), for the same reason
-        // v6 through v11 were bumped (v12 widened none): Qt matches signal-hook signatures
-        // before demarshalling, so a v12 effect's tiling slot would silently
-        // never fire — both sides must move together.
-        QCOMPARE(Service::ApiVersion, 13);
-        QCOMPARE(Service::MinPeerApiVersion, 13);
+        //
+        // Bumped to 13 when the scrolling tab indicators moved into the KWin
+        // effect: org.plasmazones.Scrolling lost its surface-id API and
+        // org.plasmazones.Tiling gained the strips / paint-override / colour
+        // transport the effect now requires. Again no signature widens, so the
+        // handshake alone refuses a mismatched daemon/effect pair.
+        //
+        // Bumped to 14 alongside the TileRequestEntry viewImmediate widening
+        // (a(siiiissbbbssiiibs) -> a(siiiissbbbssiiibsb)), for the same reason
+        // v6 through v11 were bumped: Qt matches signal-hook signatures before
+        // demarshalling, so a v13 effect's tiling slot would silently never
+        // fire — both sides must move together.
+        QCOMPARE(Service::ApiVersion, 14);
+        QCOMPARE(Service::MinPeerApiVersion, 14);
     }
 
     // SnapAssistCandidate round-trip is covered by test_compositor_common.

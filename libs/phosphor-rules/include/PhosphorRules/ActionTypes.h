@@ -97,13 +97,16 @@ inline constexpr QLatin1StringView Exclude{"exclude"};
 /// the slicer.
 inline constexpr QLatin1StringView ExcludePlacement{"excludePlacement"};
 inline constexpr QLatin1StringView Float{"float"};
-/// Snap a matched window into one or more zones on open. Carries a non-empty
-/// list of 1-based zone ordinals (`ActionParam::Zones`); a single ordinal snaps
-/// to that zone, multiple ordinals snap to their unioned bounding rect (zone
-/// spanning). Ordinals are layout-agnostic — they address "zone N of whatever
-/// layout is active on the window's screen", matching the snapToZone1..9
-/// shortcuts. Daemon-consumed (placement) on the SnapEngine open path; supersedes
-/// the retired per-layout `Layout::appRules`. Domain Window.
+/// Snap a matched window into one or more zones on open. Carries a list of
+/// 1-based zone ordinals (`ActionParam::Zones`) and/or a list of zone names
+/// (`ActionParam::ZoneNames`), at least one entry between them; a single target
+/// snaps to that zone, multiple targets snap to their unioned bounding rect
+/// (zone spanning). Both forms are layout-agnostic — an ordinal addresses "zone
+/// N of whatever layout is active on the window's screen" (matching the
+/// snapToZone1..9 shortcuts) and a name addresses "the zone called X in that
+/// layout", which lets one rule follow a zone across layouts that number it
+/// differently. Daemon-consumed (placement) on the SnapEngine open path;
+/// supersedes the retired per-layout `Layout::appRules`. Domain Window.
 inline constexpr QLatin1StringView SnapToZone{"snapToZone"};
 /// Route a matched window to a specific monitor on open. Carries the canonical
 /// target screen id (`ActionParam::TargetScreenId`, the EDID `Manuf:Model:Serial`

@@ -361,8 +361,8 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     if (!state) {
         // No state for the CURRENT context (fresh desktop, or the state was
         // just pruned) — the previous context's indicator must not stay
-        // painted; the overlay is driven solely by tabStripsChanged, so
-        // this bail is its only chance to clear.
+        // painted. The KWin effect that paints the pills is driven solely by
+        // tabStripsChanged, so this bail is its only chance to clear.
         clearTabStripsForScreen(screenId);
         return;
     }
@@ -993,7 +993,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
     // Tab-strip indicator model: one entry per VISIBLE tabbed column.
     // Change-gated: the payload is re-derived on every relayout, but an
     // unchanged strip set (the common focus-move / plain-retile case) must
-    // not re-drive an overlay repaint — and an empty state is announced
+    // not re-drive a repaint in the effect — and an empty state is announced
     // exactly once (clearTabStripsForScreen latches on the tracked set).
     QJsonArray strips;
     for (const ResolvedColumn& column : resolved.columns) {
@@ -1004,15 +1004,17 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // decided how much space to reserve.
         // Visible at the view this batch resolved, OR at the one it is sliding
         // FROM. The second term is what lets a column scrolling out of view
-        // keep its indicator for the length of the leg: the compositor slides
-        // the indicator surface by the same offset it slides the columns, so an
-        // indicator dropped the moment its column's final rect left the work
-        // area would vanish while the column it labels is still on screen
-        // travelling. Translating by +viewDelta undoes the slide, which is
-        // where the column was before this batch moved the view.
+        // keep its indicator for the length of the leg: the compositor applies
+        // the strip's view offset to the pills in the same paint pass that
+        // slides the columns, so an indicator dropped the moment its column's
+        // final rect left the work area would vanish while the column it
+        // labels is still on screen travelling. Translating by +viewDelta
+        // undoes the slide, which is where the column was before this batch
+        // moved the view.
         //
         // The extra entries cost nothing once at rest: they resolve outside the
-        // screen, so the per-screen surface simply clips them.
+        // screen, and the effect clips its painting to the screen's device
+        // region.
         const bool visibleNow = column.rect.intersects(params.workArea);
         // Along the MAIN axis: the view only ever slides along the strip.
         const bool visibleBefore =
@@ -1048,7 +1050,7 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // column's tab bar for the toggle's duration.
         QJsonObject strip;
         // The rect is the INDICATOR's, not the column's: it is what the
-        // overlay draws, and only this side knows how the position, gap and
+        // effect draws, and only this side knows how the position, gap and
         // within-column reservation combined to place it. Height and position
         // ride along so the consumer never re-derives the long axis from the
         // aspect ratio (a one-tab indicator can be square).
@@ -1057,9 +1059,9 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         // extent, while default clamp mode commits the straddling WINDOW
         // clamped at the screen edge — so on a straddling tabbed column the
         // bar can be offset from the window it labels, and a side-positioned
-        // bar on the overhanging side clips away with the overhang (the
-        // per-screen overlay clips everything off-screen, which is also how
-        // outward-placed indicators at panel-free edges behave normally).
+        // bar on the overhanging side clips away with the overhang (the effect
+        // clips its painting to the screen, which is also how outward-placed
+        // indicators at panel-free edges behave normally).
         // Re-deriving from the clamped extent was tried and rejected: an
         // intersect breaks legitimate outside-the-column placements, and a
         // second indicatorRectFor run against a clamped rect would disagree
@@ -1085,11 +1087,11 @@ void ScrollEngine::applyLayout(const QString& screenId, bool focusWindowAfter)
         }
         strip[QLatin1String("activeIndex")] = activeIndex;
         strip[QLatin1String("tabs")] = tabs;
-        // No view delta rides along, unlike the tile wire above. The indicators
-        // are drawn into a layer-shell surface of their own that the effect
-        // slides by the strip's view offset, so they need nothing but their
-        // resolved rect — the offset that moves them is the same one that moves
-        // the columns, applied in the same paint pass.
+        // No view delta rides along, unlike the tile wire above. The effect
+        // paints the pills itself and applies the strip's view offset in its
+        // own paint pass, so they need nothing but their resolved rect — the
+        // offset that moves them is the same one that moves the columns,
+        // applied in the same pass.
         strips.append(strip);
     }
     // Deliberately NOT frozen during an owned auto-scroll. A freeze-and-slide

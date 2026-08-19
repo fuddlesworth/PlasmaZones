@@ -86,8 +86,9 @@ QString actionDescription(const QString& type)
     }
     if (type == ActionType::SnapToZone) {
         return PhosphorI18n::tr(
-            "Snaps matching windows into the given zone numbers when they open. Several numbers "
-            "span their combined area.");
+            "Snaps matching windows into the given zones when they open. Zones can be picked by "
+            "number or by name, and a name finds that zone in whichever layout is active. Several "
+            "zones span their combined area.");
     }
     if (type == ActionType::RouteToScreen) {
         return PhosphorI18n::tr("Moves matching windows to a chosen monitor when they open.");

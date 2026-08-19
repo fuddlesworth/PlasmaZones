@@ -409,6 +409,16 @@ QVariantMap RuleController::defaultPayloadFor(const QString& typeWire) const
     return RuleAuthoring::defaultPayloadFor(typeWire);
 }
 
+QStringList RuleController::parseZoneNameList(const QString& text) const
+{
+    return RuleAuthoring::parseZoneNameList(text);
+}
+
+QString RuleController::formatZoneNameList(const QStringList& names) const
+{
+    return RuleAuthoring::formatZoneNameList(names);
+}
+
 QVariantList RuleController::validationIssuesForJson(const QVariantMap& ruleJson) const
 {
     // Build a partial rule from the variant map — enough to run the semantic

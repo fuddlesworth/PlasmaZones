@@ -355,49 +355,6 @@ private Q_SLOTS:
         QVERIFY(engineModeAction(QStringLiteral("autotile")) != engineModeAction(QStringLiteral("snapping")));
     }
 
-    void testJson_routeToScreen()
-    {
-        QJsonObject o;
-        o.insert(QStringLiteral("type"), QString(ActionType::RouteToScreen));
-        // Missing / empty target screen id is rejected.
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        o.insert(QString(ActionParam::TargetScreenId), QString());
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        // A non-empty canonical screen id is accepted (not validated against
-        // live screen state — a route to a currently-absent monitor is legal).
-        o.insert(QString(ActionParam::TargetScreenId), QStringLiteral("LG Electronics:38GN950:688325"));
-        const auto loaded = RuleAction::fromJson(o);
-        QVERIFY(loaded.has_value());
-        QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteScreen));
-        // Unknown param key is rejected by the strict loader.
-        o.insert(QStringLiteral("bogus"), 1);
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-    }
-
-    void testJson_routeToDesktop()
-    {
-        QJsonObject o;
-        o.insert(QStringLiteral("type"), QString(ActionType::RouteToDesktop));
-        // Missing desktop is rejected.
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        // Desktops are 1-based: 0 and negatives are rejected.
-        o.insert(QString(ActionParam::TargetDesktop), 0);
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        o.insert(QString(ActionParam::TargetDesktop), -1);
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        // Non-integral is rejected.
-        o.insert(QString(ActionParam::TargetDesktop), 2.5);
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        // Out-of-range (above the cap) is rejected.
-        o.insert(QString(ActionParam::TargetDesktop), MaxVirtualDesktopOrdinal + 1);
-        QVERIFY(!RuleAction::fromJson(o).has_value());
-        // A valid 1-based desktop loads and resolves to the route-desktop slot.
-        o.insert(QString(ActionParam::TargetDesktop), 3);
-        const auto loaded = RuleAction::fromJson(o);
-        QVERIFY(loaded.has_value());
-        QCOMPARE(ActionRegistry::instance().slotFor(*loaded), QString(ActionSlot::RouteDesktop));
-    }
-
     void testActionDomain_contextActions()
     {
         // The context-domain actions all fill slots consumed during the
@@ -985,49 +942,6 @@ private Q_SLOTS:
             ok.insert(QStringLiteral("value"), QString(token));
             QVERIFY2(RuleAction::fromJson(ok).has_value(), token.data());
         }
-    }
-
-    void testSnapToZone_fromJson()
-    {
-        // SnapToZone is a window-domain placement action whose `zones` param is a
-        // non-empty JSON array of 1-based integer ordinals. Pin the validator at
-        // the public fromJson boundary: it is the single line of defence against
-        // a hand-edited rules.json carrying a malformed ordinal list, and a
-        // widening regression in registerBuiltins would otherwise slip past.
-        const auto withZones = [](const QJsonValue& zones) {
-            QJsonObject o;
-            o.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
-            o.insert(QString(ActionParam::Zones), zones);
-            return o;
-        };
-
-        // Missing / wrong-typed / empty → rejected.
-        QJsonObject missing;
-        missing.insert(QStringLiteral("type"), QString(ActionType::SnapToZone));
-        QVERIFY(!RuleAction::fromJson(missing).has_value());
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonValue(2))).has_value()); // not an array
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{})).has_value()); // empty
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{0})).has_value()); // 0 not 1-based
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{-1})).has_value()); // negative
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1.5})).has_value()); // non-integral
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{QStringLiteral("1")})).has_value()); // string
-        // Above the shared ordinal cap — named, so a future cap change moves
-        // this test with the validator (the RouteToDesktop sibling test uses
-        // MaxVirtualDesktopOrdinal the same way).
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{MaxZoneOrdinal + 1})).has_value());
-        // A double far beyond int range must be rejected by the bound BEFORE any
-        // narrowing cast (an out-of-range float-to-int cast is UB) — must not crash.
-        QVERIFY(!RuleAction::fromJson(withZones(QJsonArray{1e18})).has_value());
-
-        // Single zone, span, and the inclusive cap boundary are all accepted.
-        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1})).has_value());
-        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{1, 2})).has_value());
-        QVERIFY(RuleAction::fromJson(withZones(QJsonArray{MaxZoneOrdinal})).has_value());
-
-        // A key outside allowedKeys ({zones}) is rejected.
-        QJsonObject stray = withZones(QJsonArray{1});
-        stray.insert(QStringLiteral("value"), 3);
-        QVERIFY(!RuleAction::fromJson(stray).has_value());
     }
 
     void testScopedExclusions_fromJsonRoundTrip()

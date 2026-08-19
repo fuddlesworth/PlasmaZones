@@ -1,3 +1,4 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # packaging/nix/package.nix — PlasmaZones build recipe for Nix/nixpkgs
@@ -143,6 +144,7 @@ stdenv.mkDerivation (finalAttrs: {
     kdePackages.kcoreaddons       # KCoreAddons: KPluginFactory, KAboutData, etc.
     kdePackages.kcmutils          # KCMUtils: KDE System Settings module support
     kdePackages.kglobalaccel      # KGlobalAccel: system-wide keyboard shortcuts
+    kdePackages.kcolorscheme      # KColorScheme: the KWin effect resolves the tab pills' theme colours
 
     # Kirigami: a pure *runtime* QML dependency. Nothing in the CMake build
     # looks for it (there is no find_package(KF6 ... Kirigami)) and QML imports
@@ -238,17 +240,19 @@ stdenv.mkDerivation (finalAttrs: {
     longDescription = ''
       PlasmaZones brings Windows PowerToys FancyZones-style zone management
       to KDE Plasma. Define zones on your screen, then drag windows into them
-      to snap and resize. Supports autotiling with 24 algorithms, a visual
-      layout editor, GLSL shader effects on zone overlays, per-monitor and
-      per-virtual-desktop layouts, and full KDE integration via a KWin effect
-      plugin and System Settings module.
+      to snap and resize. Supports autotiling with a library of bundled
+      tiling algorithms, a visual layout editor, GLSL shader effects on zone
+      overlays, per-monitor and per-virtual-desktop layouts, and full KDE
+      integration via a KWin effect plugin and System Settings module.
 
       The daemon (plasmazonesd) runs as a systemd user service and communicates
       over D-Bus. The settings app (plasmazones-settings) and layout editor are
       standalone Qt applications.
     '';
     homepage = "https://github.com/fuddlesworth/PlasmaZones";
-    license = licenses.gpl3Plus;
+    # GPL-3.0-or-later for the app, daemon, editor, settings and KCM;
+    # LGPL-2.1-or-later for the bundled Phosphor component libraries.
+    license = with licenses; [ gpl3Plus lgpl21Plus ];
     maintainers = [ ];   # Add your nixpkgs handle here when submitting upstream
     platforms = [ "x86_64-linux" "aarch64-linux" ];
 

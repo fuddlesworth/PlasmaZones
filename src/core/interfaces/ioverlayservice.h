@@ -15,7 +15,6 @@
 
 #include <PhosphorProtocol/ZoneTypes.h>
 
-#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QRect>
@@ -288,23 +287,6 @@ public:
     virtual void hideCheatsheet() = 0;
     virtual bool isCheatsheetVisible() const = 0;
 
-    /**
-     * @brief The wl_surface object id of every screen's live tab-indicator
-     *        surface, keyed by effective screen id.
-     *
-     * A replay source, not a second announcement channel. scrollTabSurfaceChanged
-     * fires only on change, and the surfaces outlive anything that merely
-     * re-reads them — so a consumer created AFTER a surface was announced has
-     * no way to learn about it, and the change gate means it never will. The
-     * D-Bus adaptor is exactly that consumer: the daemon deletes and re-news
-     * the whole adaptor set on every init(), while this service is
-     * constructor-owned and survives, so a fresh adaptor starts empty and the
-     * gate suppresses every re-announce.
-     *
-     * @return screen id to object id; empty when no screen has one.
-     */
-    virtual QHash<QString, quint32> liveScrollTabSurfaces() const = 0;
-
 Q_SIGNALS:
     void visibilityChanged(bool visible);
     void zoneActivated(PhosphorZones::Zone* zone);
@@ -320,36 +302,6 @@ Q_SIGNALS:
      */
     void snapAssistWindowSelected(const QString& windowId, const QString& zoneId, const QString& geometryJson,
                                   const QString& screenId);
-
-    /**
-     * @brief A tab of the scrolling tab indicator was clicked.
-     *
-     * Carries only the canonical window id: the consumer focuses that window,
-     * and the strip follows through its ordinary focus notification, so this
-     * path never needs to know which screen or column the tab belonged to.
-     *
-     * @param windowId Canonical id of the window whose tab was clicked
-     */
-    void scrollTabActivated(const QString& windowId);
-
-    /**
-     * @brief The Wayland surface carrying @p screenId's tab indicators changed.
-     *
-     * Relayed to the compositor, which slides that surface with the scrolling
-     * strip so the indicators travel with the columns they label. The
-     * compositor cannot work out which surface it is on its own: every one of
-     * the daemon's overlays reports the same window class, and a layer
-     * surface's scope, role and geometry are either identical between them or
-     * not exposed per surface. The protocol object id is the one handle both
-     * sides can name.
-     *
-     * @param screenId  Effective screen id whose indicator surface this is
-     * @param surfaceId wl_surface protocol object id, or 0 when the surface is
-     *                  gone. Zero MUST be sent before the surface is destroyed:
-     *                  Wayland reuses object ids, so a stale registration can
-     *                  come to name an unrelated surface.
-     */
-    void scrollTabSurfaceChanged(const QString& screenId, quint32 surfaceId);
 
     /**
      * @brief Load-bearing signal (NOT merely informational: shortcuts_wiring.cpp's

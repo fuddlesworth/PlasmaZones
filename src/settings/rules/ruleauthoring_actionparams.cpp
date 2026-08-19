@@ -19,6 +19,8 @@
 #include <PhosphorRules/RuleAction.h>
 
 #include <QLatin1StringView>
+#include <QSet>
+#include <QStringList>
 
 namespace PlasmaZones::RuleAuthoring {
 
@@ -198,7 +200,10 @@ QString paramLabel(const QString& type, const QString& key)
         return PhosphorI18n::tr("Opacity (%)");
     }
     if (type == ActionType::SnapToZone && key == ActionParam::Zones) {
-        return PhosphorI18n::tr("Zones");
+        return PhosphorI18n::tr("Zone numbers");
+    }
+    if (type == ActionType::SnapToZone && key == ActionParam::ZoneNames) {
+        return PhosphorI18n::tr("Zone names");
     }
     // Unsnapped-position restore override (window-domain, single bool value).
     // off is not inert: it force-suppresses restore for matched windows,
@@ -370,6 +375,11 @@ QString paramHint(const QString& type, const QString& key)
             "Zone numbers like “1, 2”, or a range like “1-3”. "
             "Multiple zones snap the window to their combined area.");
     }
+    if (type == ActionType::SnapToZone && key == ActionParam::ZoneNames) {
+        return PhosphorI18n::tr(
+            "Zone names like “Editor, Terminal”, found in whichever layout is active. "
+            "Give numbers, names, or both.");
+    }
     return {};
 }
 
@@ -540,9 +550,14 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
                                                          : QStringLiteral("#FF3DAEE9");
         } else if (kind == QLatin1String("zoneOrdinals")) {
             // Seed a valid single-zone default ([1]) so a fresh SnapToZone rule
-            // passes the validator (non-empty array of positive ordinals) before
-            // the user edits the zone list.
+            // has at least one target before the user edits the zone list (the
+            // validator needs one entry across the ordinal and name lists).
             payload[key] = QVariantList{1};
+        } else if (kind == QLatin1String("zoneNames")) {
+            // Seed an empty array: the zoneOrdinals seed above already makes a
+            // fresh SnapToZone rule savable, and an empty name list is valid
+            // alongside a non-empty ordinal list. The user adds names from here.
+            payload[key] = QVariantList{};
         } else if (kind == QLatin1String("decorationChain")) {
             // Seed an empty array: unlike zoneOrdinals, an empty chain IS a
             // valid payload (the "no decoration" sentinel), so a fresh
@@ -557,8 +572,10 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
             // Picker kinds (snappingLayout, scrollingTemplate, tilingAlgorithm,
             // animationEvent, shaderEffect, overlayShader, curveEditor,
             // screenId) and plain
-            // strings all start empty (zoneOrdinals and virtualDesktop are
-            // seeded above because their validators reject an empty value). The
+            // strings all start empty. Four kinds are seeded above instead:
+            // zoneOrdinals and virtualDesktop because their validators reject an
+            // empty value, zoneNames and decorationChain because an empty ARRAY
+            // (not an empty string) is their valid starting shape. The
             // user has to choose a value before the rule is savable, and
             // `canSave` surfaces the gap explicitly. Seeding a placeholder here
             // would mask the "user has to pick" state.
@@ -566,6 +583,78 @@ QVariantMap defaultPayloadFor(const QString& typeWire)
         }
     }
     return payload;
+}
+
+QStringList parseZoneNameList(const QString& text)
+{
+    // Separators are `,` and `;`. A token wrapped in straight double quotes may
+    // contain separators; a doubled quote inside a quoted token stands for one
+    // literal quote (the CSV convention), so every string formatZoneNameList
+    // can produce parses back to the same list. Entries are trimmed, blank
+    // entries dropped, entries longer than the wire bound dropped (the validator
+    // would refuse the whole action), and duplicates collapsed on the same
+    // case-insensitive key the engine's zoneByName matches on, keeping the first
+    // spelling and order.
+    QStringList out;
+    QSet<QString> seen;
+    const auto push = [&out, &seen](QString token) {
+        token = token.trimmed();
+        if (token.isEmpty() || token.size() > PhosphorRules::MaxZoneNameLength) {
+            return;
+        }
+        const QString key = token.toCaseFolded();
+        if (seen.contains(key)) {
+            return;
+        }
+        seen.insert(key);
+        out.append(token);
+    };
+    QString current;
+    bool inQuotes = false;
+    for (int i = 0; i < text.size(); ++i) {
+        const QChar c = text.at(i);
+        if (c == QLatin1Char('"')) {
+            if (inQuotes && i + 1 < text.size() && text.at(i + 1) == QLatin1Char('"')) {
+                current.append(c);
+                ++i;
+            } else {
+                inQuotes = !inQuotes;
+            }
+            continue;
+        }
+        if (!inQuotes && (c == QLatin1Char(',') || c == QLatin1Char(';'))) {
+            push(current);
+            current.clear();
+            continue;
+        }
+        current.append(c);
+    }
+    push(current);
+    return out;
+}
+
+QString formatZoneNameList(const QStringList& names)
+{
+    QStringList parts;
+    parts.reserve(names.size());
+    for (const QString& raw : names) {
+        const QString name = raw.trimmed();
+        if (name.isEmpty()) {
+            continue;
+        }
+        // Quote a name the parser could not otherwise read back verbatim: one
+        // containing a separator or a quote.
+        const bool needsQuotes =
+            name.contains(QLatin1Char(',')) || name.contains(QLatin1Char(';')) || name.contains(QLatin1Char('"'));
+        if (!needsQuotes) {
+            parts.append(name);
+            continue;
+        }
+        QString quoted = name;
+        quoted.replace(QLatin1Char('"'), QStringLiteral("\"\""));
+        parts.append(QLatin1Char('"') + quoted + QLatin1Char('"'));
+    }
+    return parts.join(QStringLiteral(", "));
 }
 
 } // namespace PlasmaZones::RuleAuthoring

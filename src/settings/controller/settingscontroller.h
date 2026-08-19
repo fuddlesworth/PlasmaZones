@@ -892,6 +892,13 @@ private Q_SLOTS:
     void reloadLocalRuleStore(bool persisted);
 
 private:
+    /// Install the RuleController's label resolvers (settingscontroller_rulelookups.cpp).
+    /// Called once from the ctor after m_rulesPage and the registries it reads exist.
+    void installRuleLabelLookups();
+    /// Re-emit the rule model's label-derived roles; connected to every
+    /// upstream change a resolver reads (screens, activities, layouts, desktop
+    /// names, the three shader registries).
+    void refreshRuleLabels();
     void setNeedsSave(bool needs);
     /// Reload deferred by onExternalSettingsChanged() while edits were
     /// pending — fire it once the app is fully clean again. Connected to

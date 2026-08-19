@@ -42,10 +42,27 @@ class PlasmaZonesEffect;
  * effect already accepts for Window / Workspace / scene items. Deleting the
  * filter uninstalls it (InputEventFilter dtor contract).
  *
- * DOCUMENTED GAPS. Two input classes still reach the invisible surface:
- *  - Pointer HOVER (enter/leave, focus-follows-mouse). KWin recomputes pointer
+ * This filter ALSO owns part of the pointer input for the compositor-drawn
+ * scrolling TAB INDICATORS (ScrollTabIndicatorPainter): pointerMotion hovers
+ * the pill under the cursor and pointerButton / touchDown activate it. The
+ * pills are not windows, so no window-level input path sees them; a filter
+ * at this weight is the one place the press can be claimed before
+ * click-to-focus hands it to the column underneath. The OTHER part is the
+ * effect's own pointer hooks: once the hover has armed KWin's mouse
+ * interception (for the pointing-hand cursor), KWin's Effects filter runs
+ * BEFORE this one and consumes every pointer event for the effect, so a
+ * pointer press over a hovered pill reaches PlasmaZonesEffect::pointerButton
+ * and never this filter. This filter's pill press branch therefore covers
+ * touch (no hover, no interception) and a press that arrives with no prior
+ * motion. Hover updates gate on "some payload exists"
+ * (TilingHandler::updateScrollTabHover), so a desktop with no tabbed column
+ * pays one branch per motion.
+ *
+ * DOCUMENTED GAPS. Two input classes still reach the invisible overhang:
+ *  - Pointer FOCUS (enter/leave, focus-follows-mouse). KWin recomputes pointer
  *    focus inside the device handler before filters run, so no filter can
- *    intercept it. Cosmetic: no button, wheel or touch lands there.
+ *    retarget it. Cosmetic: no button, wheel or touch lands there. (Pointer
+ *    MOTION itself is observable — pointerMotion is how the pills hover.)
  *  - TABLET tool tip/axis events. The tablet hooks are deliberately not
  *    overridden; a stylus is a pointing device the strip has no story for yet,
  *    and guessing one here would be worse than the honest gap. Named so the
@@ -63,9 +80,11 @@ public:
     explicit ScrollOverhangInputFilter(PlasmaZonesEffect* effect);
     ~ScrollOverhangInputFilter() override = default;
 
+    bool pointerMotion(KWin::PointerMotionEvent* event) override;
     bool pointerButton(KWin::PointerButtonEvent* event) override;
     bool pointerAxis(KWin::PointerAxisEvent* event) override;
     bool touchDown(KWin::TouchDownEvent* event) override;
+    bool touchMotion(KWin::TouchMotionEvent* event) override;
     bool touchUp(KWin::TouchUpEvent* event) override;
     bool touchCancel() override;
 

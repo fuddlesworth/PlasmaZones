@@ -154,15 +154,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
-    // A tab-indicator surface arriving (first map, or a re-map after the daemon
-    // tore its shell down) has to be put back under the passive overlay shell —
-    // the compositor stacks same-layer surfaces by creation and this one is
-    // always the newer of the two. Costs a set check per opened window when no
-    // indicator surface is registered, which is the common case.
-    if (isScrollTabIndicatorSurface(w)) {
-        restackScrollTabSurfaces();
-    }
-
     // Tileable-app predicate: a normal top-level window we both handle and can
     // tile, that didn't open minimized. Drives the snap-restore candidacy and
     // the first-frame suppression decision below. It does NOT gate the open

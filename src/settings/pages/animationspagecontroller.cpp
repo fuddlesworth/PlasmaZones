@@ -839,7 +839,7 @@ QVariantList AnimationsPageController::eventSections() const
     for (const QString& section : sectionOrder) {
         QVariantMap sectionEntry;
         sectionEntry.insert(QStringLiteral("section"), section);
-        sectionEntry.insert(QStringLiteral("label"), humanizeSegment(section));
+        sectionEntry.insert(QStringLiteral("label"), segmentLabel(section));
         sectionEntry.insert(QStringLiteral("paths"), sectionPaths.value(section));
         result.append(sectionEntry);
     }

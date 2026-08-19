@@ -798,8 +798,9 @@ Q_SIGNALS:
     /// single-tab column under hideWhenSingleTab) are simply absent, so a
     /// consumer never re-tests those conditions and cannot disagree with the
     /// relayout that sized the column around them. An empty array clears the
-    /// screen's indicators. The daemon enriches window ids with titles and
-    /// urgency, adds the paint settings, and drives the overlay.
+    /// screen's indicators. The daemon only relays this payload; the
+    /// compositor enriches the window ids with titles and urgency and paints
+    /// the pills itself.
     void tabStripsChanged(const QString& screenId, const QString& stripsJson);
 
 private:

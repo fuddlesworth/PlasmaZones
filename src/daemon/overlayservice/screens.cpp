@@ -159,17 +159,8 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             continue;
         }
         const auto& state = it.value();
-        // The tab shell is tested too, and it is not redundant with the passive
-        // shell beside it: a screen can hold a tab shell and nothing else. The
-        // tab shell is created straight from the strip path, while the passive
-        // shell is created lazily on a slot show and its prewarm is skipped
-        // when shaders and animations are both off. Missing that case left the
-        // whole key unvisited, so no PreDestroy ran, no retraction was
-        // announced, and a layer surface stayed mapped for a monitor that was
-        // gone with its id still published to the compositor.
         if (state.overlayPhysScreen == screen || state.zoneSelectorPhysScreen == screen
-            || (state.shell && state.shell->physScreen() == screen)
-            || (state.tabShell && state.tabShell->physScreen() == screen)) {
+            || (state.shell && state.shell->physScreen() == screen)) {
             destroyOverlayWindow(id);
             destroyZoneSelectorWindow(id);
             destroyPassiveShell(id);
@@ -181,9 +172,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             auto postIt = m_screenStates.constFind(id);
             const bool passiveGone =
                 postIt == m_screenStates.constEnd() || !postIt->shell || !postIt->shell->shellSurface();
-            const bool tabGone =
-                postIt == m_screenStates.constEnd() || !postIt->tabShell || !postIt->tabShell->shellSurface();
-            if (passiveGone && tabGone) {
+            if (passiveGone) {
                 m_screenStates.remove(id);
                 // Symmetric drop on the lib side - destroyPassiveShell
                 // only zeroes the ShellState fields, the entry itself

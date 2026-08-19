@@ -615,6 +615,14 @@ void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
         return;
     }
     m_motionClocksByOutput.emplace(output, std::make_unique<CompositorClock>(output));
+    // The painter's per-output state was dropped with the old output, and
+    // noteScrollTabOutputRemoved dropped that screen's payload with it, so
+    // for a plain re-plug this re-seeds nothing until the daemon's next
+    // strips broadcast names the screen again. It covers the narrower case
+    // of a payload that arrived between the remove and this add (the
+    // handler's fetch replies are not tied to the output object), and it
+    // re-rasters every other screen's model, which is harmless.
+    m_tilingHandler->rebuildAllScrollTabIndicators();
 }
 
 void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
@@ -677,6 +685,12 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // Runs before the motion-clock early-return so it fires even for an output
     // that never had an animation clock, same as the two clears above.
     m_stripViewAnimator->forgetOutput(output);
+    // A pill on the dying output may hold the hover and the override cursor;
+    // the handler's clear releases both with the painter's state and drops
+    // the screen's model and overrides (a re-plug is re-seeded by the
+    // daemon's replay or the next relayout). Takes the id resolved above
+    // rather than re-resolving, for the same cache reason.
+    m_tilingHandler->noteScrollTabOutputRemoved(output, removedScreenId);
 
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the

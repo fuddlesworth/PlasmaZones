@@ -503,25 +503,20 @@ private:
     /// preset lists), setActiveScreens (scrolling.cpp). Called from
     /// updateEngineScreens so both engines' sets flip atomically per
     /// context recompute.
+    ///
+    /// The same pass splits off the params the ENGINE has no use for and
+    /// pushes each to its own consumer, since only presentation depends on
+    /// them: the per-screen tab-indicator PAINT overrides (tabStyle, gaps,
+    /// corner radius and the three tab colours) to the Tiling adaptor, which
+    /// the KWin effect reads to paint the pills; the drop-indicator paint
+    /// overrides to the OverlayService; and the focus-follows-mouse,
+    /// crop-straddlers and vertical-axis screen lists to the Scrolling
+    /// adaptor as one behaviour map.
     void updateScrollingScreens(const QSet<QString>& scrollingScreens);
     /// Shared capture phase: store leaving-scrolling screens' column order
     /// into m_lastEngineOrders BEFORE either engine seeds (see
     /// updateEngineScreens' capture-all → seed-all ordering).
     void captureScrollingOrders(const QSet<QString>& scrollingScreens);
-    /// Parse @p stripsJson, enrich each tab with live title / urgency /
-    /// per-window colour, and drive @p screenId's overlay indicator.
-    void applyScrollTabStrips(const QString& screenId, const QString& stripsJson);
-    /// Re-run the enrichment for every screen holding a cached payload.
-    ///
-    /// Needed because enrichment reads live window state the ENGINE cannot
-    /// see, while the engine's tabStripsChanged is change-gated on the
-    /// structural payload alone. A window that starts demanding attention or
-    /// retitles moves no rect, so without this its tab would keep the values
-    /// it had at the last structural change.
-    void refreshScrollTabEnrichment();
-    /// Coalescing front door for refreshScrollTabEnrichment. Retitling is a
-    /// high-rate signal, so a burst collapses into a single refresh.
-    void scheduleScrollTabEnrichmentRefresh();
     void initializeUnifiedController();
     void connectLayoutSignals();
     void connectOverlaySignals();
@@ -857,6 +852,23 @@ private:
     // member (stable address) so the bound RuleEvaluator's per-revision cache
     // stays valid across back-to-back resolves.
     PhosphorRules::RuleSet m_excludeRuleSet;
+    /// Coalescing latch for the all-windows tab-colour broadcast. A KCM batch
+    /// save emits rulesChanged once per committed rule, and every emission
+    /// would otherwise make the effect re-query scrollTabColors for every tab
+    /// it paints. Consumed by the 0 ms single shot armed in init_engines.cpp,
+    /// which fires the one broadcast for the whole batch.
+    bool m_scrollTabColorsBroadcastPending = false;
+    /// Last TabColor* slice of m_ruleStore (rules carrying at least one of the
+    /// three per-window tab-colour actions), the equality guard for that
+    /// broadcast. Rules changes outside that surface (a rename of a rule the
+    /// slice does not hold, a snapping rule edit) leave this equal and are
+    /// dropped instead of invalidating every tab's colours; any edit to a
+    /// held rule, including its name or priority, trips it. The slice also
+    /// holds the terminal Exclude / ExcludePlacement rules, since those cut
+    /// the evaluator's walk ahead of a TabColor rule. Only the rules LIST is
+    /// compared, the same semantics as the exclude refilter's guard just
+    /// above it.
+    QList<PhosphorRules::Rule> m_tabColorRuleSlice;
     /// Native scrolling-template store. Created in the Daemon constructor,
     /// deliberately before the layout-source bundle is built so the template
     /// provider has a store to register against. initServices then injects it
@@ -1389,17 +1401,6 @@ private:
     // engine's order into the other. Keyed by TilingStateKey (not plain
     // screen name) so cross-desktop toggles don't overwrite each other.
     QHash<TilingStateKey, QStringList> m_lastEngineOrders;
-    /// The engine's RAW tab-strip payload per screen, kept so the enrichment
-    /// can be re-run without the engine re-emitting (see
-    /// refreshScrollTabEnrichment). Written by applyScrollTabStrips keyed on
-    /// the PARSED payload, so the engine's literal "[]" clear prunes the entry;
-    /// also pruned on virtual-screen reconfigure and when a screen leaves
-    /// scrolling. NOT rekeyed by OverlayService::rekeyOverlayState — after a
-    /// VS rekey the stale key's pushes are refused downstream and the live key
-    /// picks the cache back up on its next structural emit.
-    QHash<QString, QString> m_lastScrollTabStripsJson;
-    /// Set between a scheduleScrollTabEnrichmentRefresh() and its queued run.
-    bool m_scrollTabEnrichmentPending = false;
 
     /// One screen's last-applied assignment state: the resolved assignment
     /// id. (A resolved templateId used to ride along "for the KCM apply's

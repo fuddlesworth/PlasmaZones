@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Built-in action descriptor table, engine/window-management/animation/overlay
-// half. Split from ruleaction.cpp for file-size; registerBuiltins() calls this
-// then registerBuiltinsAppearance() in that order. Shared param validators and
-// slot helpers live in ruleaction_builtins_p.h.
+// half. Split from ruleaction.cpp for file-size; registerBuiltins() calls this,
+// then registerBuiltinsAppearance(), then registerBuiltinsIndicators(), in that
+// order. Shared param validators and slot helpers live in
+// ruleaction_builtins_p.h.
 
 #include <PhosphorRules/RuleAction.h>
 
@@ -317,37 +318,72 @@ void ActionRegistry::registerBuiltinsEngine()
         .slotFor = constantSlot(ActionSlot::Placement),
         .validate =
             [](const QJsonObject& p) {
-                // A non-empty array of positive integer (1-based) zone ordinals.
-                const QJsonValue v = p.value(ActionParam::Zones);
-                if (!v.isArray()) {
-                    return false;
-                }
-                const QJsonArray arr = v.toArray();
-                if (arr.isEmpty()) {
-                    return false;
-                }
-                for (const QJsonValue& e : arr) {
-                    if (!e.isDouble()) {
+                // Two optional arrays: `zones` (positive integer 1-based
+                // ordinals) and `zoneNames` (non-blank strings). Each PRESENT
+                // key must be a well-formed array, and at least one entry must
+                // exist across the two so the action always names a target.
+                int targets = 0;
+                if (p.contains(ActionParam::Zones)) {
+                    const QJsonValue v = p.value(ActionParam::Zones);
+                    if (!v.isArray()) {
                         return false;
                     }
-                    const double d = e.toDouble();
-                    // Bound on the DOUBLE before narrowing — a float-to-int cast
-                    // out of int's range is undefined behaviour. Reject < 1
-                    // (ordinals are 1-based) and an absurd upper value first; only
-                    // then is the cast for the integrality check well-defined.
-                    if (d < 1.0 || d > MaxZoneOrdinal) {
+                    const QJsonArray arr = v.toArray();
+                    for (const QJsonValue& e : arr) {
+                        if (!e.isDouble()) {
+                            return false;
+                        }
+                        const double d = e.toDouble();
+                        // Bound on the DOUBLE before narrowing — a float-to-int
+                        // cast out of int's range is undefined behaviour. Reject
+                        // < 1 (ordinals are 1-based) and an absurd upper value
+                        // first; only then is the cast for the integrality check
+                        // well-defined.
+                        if (d < 1.0 || d > MaxZoneOrdinal) {
+                            return false;
+                        }
+                        if (static_cast<double>(static_cast<int>(d)) != d) {
+                            return false; // non-integral
+                        }
+                    }
+                    targets += static_cast<int>(arr.size());
+                }
+                if (p.contains(ActionParam::ZoneNames)) {
+                    const QJsonValue v = p.value(ActionParam::ZoneNames);
+                    if (!v.isArray()) {
                         return false;
                     }
-                    if (static_cast<double>(static_cast<int>(d)) != d) {
-                        return false; // non-integral
+                    const QJsonArray arr = v.toArray();
+                    for (const QJsonValue& e : arr) {
+                        if (!e.isString()) {
+                            return false;
+                        }
+                        // Trim before measuring: the daemon's placement reader
+                        // trims before it applies the same bound, so the two
+                        // must measure the same string or a padded name could
+                        // pass one and fail the other.
+                        const QString name = e.toString().trimmed();
+                        if (name.isEmpty() || name.size() > MaxZoneNameLength) {
+                            return false;
+                        }
                     }
+                    targets += static_cast<int>(arr.size());
                 }
-                return true;
+                return targets > 0;
             },
         .terminal = false,
-        .allowedKeys = {QString(ActionParam::Zones)},
+        .allowedKeys = {QString(ActionParam::Zones), QString(ActionParam::ZoneNames)},
         .domain = ActionDomain::Window,
-        .params = {P{.key = QString(ActionParam::Zones), .kind = QStringLiteral("zoneOrdinals")}},
+        // Both picker-aware kinds carry an advisory `max` so the settings editor
+        // reads the bound from the schema instead of re-typing the constant:
+        // the ordinal cap for `zoneOrdinals`, the per-entry character cap for
+        // `zoneNames`.
+        .params = {P{.key = QString(ActionParam::Zones),
+                     .kind = QStringLiteral("zoneOrdinals"),
+                     .max = static_cast<double>(MaxZoneOrdinal)},
+                   P{.key = QString(ActionParam::ZoneNames),
+                     .kind = QStringLiteral("zoneNames"),
+                     .max = static_cast<double>(MaxZoneNameLength)}},
         // No tags: SnapToZone is daemon-placement only (consumed by the SnapEngine
         // open path), not an Effect / Border / Animation / Overlay action.
         .category = QStringLiteral("windowManagement"),

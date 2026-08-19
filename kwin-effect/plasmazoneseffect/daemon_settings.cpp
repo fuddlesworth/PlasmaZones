@@ -49,13 +49,6 @@ void PlasmaZonesEffect::slotSettingsChanged()
     // emits windowsTiled directly for those changes.
 }
 
-// Template implementation for loadSettingAsync — delegates to shared helper.
-template<typename Fn>
-void PlasmaZonesEffect::loadSettingAsync(const QString& name, Fn&& onValue)
-{
-    PhosphorProtocol::ClientHelpers::loadSettingAsync(this, name, std::forward<Fn>(onValue));
-}
-
 void PlasmaZonesEffect::loadCachedSettings()
 {
     // Uses raw QDBusMessage (not QDBusInterface) to avoid synchronous introspection
@@ -922,6 +915,12 @@ void PlasmaZonesEffect::loadCachedSettings()
         }
         m_tilingHandler->setWheelFocusInverted(v.toBool());
     });
+
+    // The compositor-drawn tab indicators' PAINT settings (style, gaps,
+    // radius, three colours) and the six label-font keys they share with the
+    // QML overlays live in daemon_settings_scrolltabs.cpp: one loader block
+    // behind one function, so this file stays under the size ceiling.
+    loadScrollTabIndicatorSettings();
 
     loadSettingAsync(QStringLiteral("snappingFocusFollowsMouse"), [this](const QVariant& v) {
         if (v.typeId() != QMetaType::Bool) {

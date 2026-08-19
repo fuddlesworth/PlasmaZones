@@ -36,6 +36,11 @@ file(GLOB_RECURSE PLASMAZONES_I18N_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/*.h"
     "${CMAKE_SOURCE_DIR}/kcm/*.cpp"
     "${CMAKE_SOURCE_DIR}/kcm/*.h"
+    # The KWin effect carries user-facing text of its own since the scrolling
+    # tab indicators moved into it (the untitled-tab placeholder); it loads
+    # the same "plasmazones" catalog at construction.
+    "${CMAKE_SOURCE_DIR}/kwin-effect/*.cpp"
+    "${CMAKE_SOURCE_DIR}/kwin-effect/*.h"
 )
 file(GLOB_RECURSE PLASMAZONES_I18N_QML CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/src/*.qml"

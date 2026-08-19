@@ -361,6 +361,11 @@ public:
     Zone* zone(int index) const;
     Zone* zoneById(const QUuid& id) const;
     Zone* zoneByNumber(int number) const;
+    /// First zone (in zone-number order) whose name equals @p name after
+    /// trimming, compared case-insensitively. Zone names are not unique, so a
+    /// duplicate name resolves to the lowest-numbered zone. Returns nullptr for
+    /// a blank @p name or no match.
+    Zone* zoneByName(const QString& name) const;
 
     Q_INVOKABLE void addZone(Zone* zone);
     Q_INVOKABLE void removeZone(Zone* zone);

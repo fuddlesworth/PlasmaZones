@@ -668,7 +668,7 @@ void ScrollEngine::sweepStripStash(const std::function<bool(const PhosphorEngine
 void ScrollEngine::clearTabStripsForScreen(const QString& screenId)
 {
     // Latch-guarded single clear: only screens that actually showed a strip
-    // get the "[]" broadcast, so plain relayouts never spam the overlay.
+    // get the "[]" broadcast, so plain relayouts never spam the effect.
     m_lastTabStripPayload.remove(screenId);
     if (m_screensWithTabStrips.remove(screenId)) {
         Q_EMIT tabStripsChanged(screenId, QStringLiteral("[]"));

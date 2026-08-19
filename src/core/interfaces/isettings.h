@@ -349,8 +349,11 @@ public:
     // places.
 
     /// Tab indicator alongside tabbed scrolling columns. Virtual with an
-    /// always-on default so the overlay service can gate through the
-    /// interface (the zoneSelectorEnabled pattern).
+    /// always-on default because two readers reach it through this interface
+    /// rather than the concrete Settings: the D-Bus settings registry, which
+    /// registers the key through the writer below, and the KWin effect, whose
+    /// loadCachedSettings pulls the value across that wire to decide whether
+    /// to paint the pills at all (the zoneSelectorEnabled pattern).
     virtual bool scrollingTabIndicatorEnabled() const
     {
         return true;
@@ -370,8 +373,9 @@ public:
     {
     }
 
-    // The tab indicator's PAINT settings, read by the overlay service through
-    // this interface for the same reason the toggle above is here. The
+    // The tab indicator's PAINT settings, on this interface for the same
+    // reason the toggle above is: the settings registry publishes them and the
+    // KWin effect's loadCachedSettings reads them back to paint the pills. The
     // indicator's GEOMETRY settings are deliberately absent: they change the
     // resolved column rect, so the scrolling engine reads them through
     // IScrollSettings and ships the finished rect in the tab-strip payload.

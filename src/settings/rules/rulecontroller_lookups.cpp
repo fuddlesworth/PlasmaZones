@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // RuleController label-lookup setters. These are tiny pass-throughs that
-// forward the resolver into RuleModel, and they form a coherent sub-surface.
+// forward the resolver into RuleModel, plus the zone-name enumerator the
+// SnapToZone picker reads, and they form a coherent sub-surface.
 // Same class as rulecontroller.cpp, separate TU, no API change.
 
 #include "rulecontroller.h"
@@ -49,6 +50,14 @@ void RuleController::setShaderEffectLookup(RuleModel::LabelLookup fn)
     m_model.setShaderEffectLabelLookup(std::move(fn));
 }
 
+void RuleController::setAnimationEventLookup(RuleModel::LabelLookup fn)
+{
+    // Summary enhancement like setShaderEffectLookup: absent, the three
+    // per-event overrides lead with the raw event path instead of its label
+    // (still distinct per event), exactly as an unresolved shader id prints raw.
+    m_model.setAnimationEventLabelLookup(std::move(fn));
+}
+
 void RuleController::setDecorationPackLookup(RuleModel::LabelLookup fn)
 {
     // Same summary-enhancement wiring as setShaderEffectLookup, resolved
@@ -61,6 +70,29 @@ void RuleController::setOverlayShaderLookup(RuleModel::LabelLookup fn)
     // Same separate-wiring rationale as setShaderEffectLookup above; the overlay
     // shader registry is distinct from the animation one.
     m_model.setOverlayShaderLabelLookup(std::move(fn));
+}
+
+void RuleController::setZoneNamesProvider(std::function<QStringList()> provider)
+{
+    m_zoneNamesProvider = std::move(provider);
+    // A clear (`{}`) arrives from the parent's teardown while the captured
+    // registry is going away: keep the last published list and emit nothing,
+    // the same silence the label-lookup clears above keep. A real install
+    // publishes immediately so the picker is populated before the first
+    // registry reload.
+    if (m_zoneNamesProvider) {
+        refreshZoneNames();
+    }
+}
+
+void RuleController::refreshZoneNames()
+{
+    QStringList next = m_zoneNamesProvider ? m_zoneNamesProvider() : QStringList();
+    if (next == m_zoneNames) {
+        return;
+    }
+    m_zoneNames = std::move(next);
+    Q_EMIT zoneNamesChanged();
 }
 
 void RuleController::setCurveLabelResolver(const QJSValue& resolver)

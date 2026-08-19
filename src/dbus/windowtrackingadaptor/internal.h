@@ -19,6 +19,7 @@
 #include <PhosphorEngine/PlacementEngineBase.h>
 #include <PhosphorEngine/WindowRegistry.h>
 #include <PhosphorIdentity/WindowId.h>
+#include <PhosphorProtocol/ServiceConstants.h>
 #include <PhosphorRules/WindowQuery.h>
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "core/platform/logging.h"
@@ -135,8 +136,8 @@ inline QJsonObject rectToJsonObject(const QRect& rect)
 // IsTiled / Zone) is deliberately absent: these resolvers run at window-open,
 // before any placement exists. A POSITIVE predicate over one of them stays
 // inert, which is the design; a NEGATED one would invert and match every
-// window, so the admission tests in rules.cpp refuse rules that negate any of
-// those four plus WindowClass (unanswerableWindowFields).
+// window, so the admission tests in rules_admission.h refuse rules that negate
+// any of those four plus WindowClass (unanswerableWindowFields).
 //
 // @p settings supplies the session colour scheme. It is the caller's INJECTED
 // ISettings, not Settings' static, so a test double substitutes a scheme like
@@ -200,7 +201,7 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     //
     // The token is EMPTY in a process with no GUI application (and off the GUI
     // thread), which engages the field with a value no leaf can match — inert
-    // for a positive leaf, INVERTING for a negated one. rules.cpp's admitWith
+    // for a positive leaf, INVERTING for a negated one. rules_admission.h's admitWith
     // binds the ColorScheme negation guard on exactly that condition, so an
     // empty token here is handled rather than merely tolerated.
     if (settings) {
@@ -225,11 +226,12 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // site.
     //
     // KNOWN GAP, stated so it is not mistaken for a deliberate design: no
-    // resolveCached-path resolver stamps Mode. There are SIX resolveCached
-    // callers in rules.cpp — four stamp ScreenId (placementZonesByRule,
-    // applyOpenScreenRouting, applyOpenDesktopRouting,
-    // applyOpenRoutingForTiling) and two stamp nothing at all
-    // (shouldRestoreFloatedPosition, shouldRestoreToZoneOnLogin), relying on
+    // resolveCached-path resolver stamps Mode. There are SIX
+    // resolveCachedFiltered callers across rules.cpp and rules_placement.cpp —
+    // four stamp ScreenId (placementZonesByRule, which uses the memo only when
+    // a screen was actually stamped, applyOpenScreenRouting,
+    // applyOpenDesktopRouting, applyOpenRoutingForTiling) and two stamp
+    // nothing at all (shouldRestoreFloatedPosition, shouldRestoreToZoneOnLogin), relying on
     // the ordering invariant that a stamper seeds the memo first. So a
     // user-authored rule pairing `Mode == "scrolling"` (or tiling/snapping)
     // with SnapToZone, RouteToScreen or RouteToDesktop cannot resolve
@@ -244,7 +246,7 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // matches precisely BECAUSE its inner leaf failed, so it INVERTS and the
     // rule fires for EVERY window — the far worse half, and one the editor
     // lets users author as a none-group. Neither is left to the empty-value
-    // coincidence: each resolver in rules.cpp passes a structural admission
+    // coincidence: each resolver in rules.cpp and rules_placement.cpp passes a structural admission
     // test (admitScreenStamped / admitScreenAndModeStamped /
     // admitNothingStamped, bound through admitWith) that drops any rule
     // referencing a field that resolver does not stamp, mirroring the
@@ -255,8 +257,8 @@ buildRuleQueryForWindow(const QPointer<PhosphorEngine::WindowRegistry>& registry
     // Two of those exclusions are NEGATION-scoped rather than blanket, because
     // the field is answerable for most windows and a blanket exclusion would
     // drop legitimate rules: the five window fields this builder cannot answer
-    // (rules.cpp's unanswerableWindowFields) and ColorScheme when the process
-    // has no palette to classify (rules.cpp's admitWith).
+    // (rules_admission.h's unanswerableWindowFields) and ColorScheme when the
+    // process has no palette to classify (rules_admission.h's admitWith).
     //
     // ActiveLayout resolves through the ONE definition every producer shares
     // (assignmentIdForScreen for the screen's current desktop and activity —
@@ -324,26 +326,33 @@ inline QString focused()
 } // namespace ScrollOpenKeys
 
 /// Keys of the per-window colour-override maps: tabColorRuleParams (consumed by
-/// the daemon's scroll tab-strip enrichment) and dropIndicatorRuleParams
-/// (consumed by the overlay service's drop-indicator slot). Same rationale as
+/// the KWin effect, which draws the scroll tab pills, through
+/// TilingAdaptor::scrollTabColors) and dropIndicatorRuleParams (consumed by
+/// the overlay service's drop-indicator slot). Same rationale as
 /// ScrollOpenKeys above — the seam was five hand-repeated literals across four
 /// files, where a typo silently drops an override instead of failing to build.
 ///
-/// These are also the QML property names the overlay items expose, so the
-/// producer, the layering step and the property write all have to agree on the
-/// same spelling; that is exactly what makes one home worth having.
+/// The three tab colours cross a process boundary, so their spellings live in
+/// PhosphorProtocol::Service::ScrollTabKey and these accessors only forward;
+/// the KWin effect reads the very same constants. indicatorColor and
+/// indicatorBorderColor stay local: they are also the QML property names the
+/// overlay's drop-indicator item exposes, so the producer, the layering step
+/// and the property write all have to agree on that spelling.
 namespace WindowColorKeys {
 inline QString activeColor()
 {
-    return QStringLiteral("activeColor");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::ActiveColor);
+    return s;
 }
 inline QString inactiveColor()
 {
-    return QStringLiteral("inactiveColor");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::InactiveColor);
+    return s;
 }
 inline QString urgentColor()
 {
-    return QStringLiteral("urgentColor");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::UrgentColor);
+    return s;
 }
 inline QString indicatorColor()
 {
@@ -355,26 +364,32 @@ inline QString indicatorBorderColor()
 }
 } // namespace WindowColorKeys
 
-/// The NON-colour overlay paint keys, WindowColorKeys' sibling for the same
-/// reason: each spelling is at once the rule-override map key the daemon
-/// produces, the key the overlay's layering step reads, and the QML property
-/// name the slot exposes — seven literals that were hand-repeated across
+/// The NON-colour paint keys, WindowColorKeys' sibling for the same reason:
+/// each spelling is at once the rule-override map key the daemon produces and
+/// the key its consumer reads back — literals that were hand-repeated across
 /// producer and consumer, where a rename silently drops the rule override
-/// instead of failing to build.
+/// instead of failing to build. The indicator* keys are additionally the QML
+/// property names the overlay's drop-indicator slot exposes.
 namespace WindowPaintKeys {
+/// The three tab-indicator paint keys the KWin effect reads off the per-screen
+/// context override map (TilingAdaptor::setScrollTabPaintOverrides). The
+/// effect draws the pills, so the spellings live in
+/// PhosphorProtocol::Service::ScrollTabKey, which both sides of the D-Bus
+/// boundary read; these accessors only forward to it.
 inline QString tabStyle()
 {
-    // "tabStyle", not "style": the name addresses the SLOT's declared
-    // property (see the push block in overlayservice/scrolltabs.cpp).
-    return QStringLiteral("tabStyle");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::TabStyle);
+    return s;
 }
 inline QString gapsBetweenTabs()
 {
-    return QStringLiteral("gapsBetweenTabs");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::GapsBetweenTabs);
+    return s;
 }
 inline QString cornerRadius()
 {
-    return QStringLiteral("cornerRadius");
+    static const QString s(PhosphorProtocol::Service::ScrollTabKey::CornerRadius);
+    return s;
 }
 inline QString indicatorEnabled()
 {

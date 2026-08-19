@@ -144,9 +144,14 @@ Item {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            // 0.14: the tab strip takes the same share of the preview height
-            // that the real tab indicator band takes of a column, eyeballed
-            // against the live strip so the miniature reads as the same UI.
+            // 0.14: a legibility figure eyeballed against the live strip so
+            // the miniature reads as the same UI, NOT the real band's
+            // proportion (the real thickness is
+            // ConfigDefaults::scrollingTabIndicatorWidth(), 4 px for the bar
+            // style, a sliver of a column). The card always draws the band
+            // across the top regardless of the configured Position and
+            // Style: it is a cue that the column is tabbed, not a mirror of
+            // the indicator.
             height: visible ? Math.round(parent.height * 0.14) : 0
             spacing: card.tilePadding
 
@@ -259,9 +264,8 @@ Item {
         opacity: 0.8
         font.family: card.fontFamily.length > 0 ? card.fontFamily : Kirigami.Theme.defaultFont.family
         // pixelSize, not pointSize: pointSize is -1 for pixel-defined theme
-        // fonts (the guarded form ScrollTabStripContent uses), and a
-        // negative product would be rejected, silently ignoring the user's
-        // font-size scale.
+        // fonts, and a negative product would be rejected, silently ignoring
+        // the user's font-size scale.
         font.pixelSize: Math.max(1, Math.round((Kirigami.Theme.defaultFont.pixelSize > 0 ? Kirigami.Theme.defaultFont.pixelSize : Kirigami.Units.gridUnit * 0.6) * 0.85 * card.fontSizeScale))
         font.weight: card.fontWeight
         font.italic: card.fontItalic

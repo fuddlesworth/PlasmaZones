@@ -335,6 +335,141 @@ void TilingAdaptor::setActiveLayouts(const QVariantMap& activeLayouts)
     Q_EMIT activeLayoutsChanged(activeLayouts);
 }
 
+void TilingAdaptor::relayScrollTabStrips(const QString& screenId, const QString& stripsJson)
+{
+    if (screenId.isEmpty()) {
+        qCWarning(lcDbusTiling) << "relayScrollTabStrips: empty screen id, dropping payload";
+        return;
+    }
+    // "[]" is the retraction spelling, and the replay cache stores absence
+    // rather than an empty array so a replaying effect reads "no indicators
+    // here" from the map shape alone (see the header doc). An empty string is
+    // treated the same way: it carries no columns either.
+    const bool retracts = stripsJson.isEmpty() || stripsJson == QLatin1String("[]");
+    if (retracts) {
+        m_lastScrollTabStrips.remove(screenId);
+    } else {
+        m_lastScrollTabStrips.insert(screenId, stripsJson);
+    }
+    // The signal always carries the canonical "[]" for a retraction, so a
+    // receiver never has to decide what an empty string means.
+    Q_EMIT scrollTabStripsChanged(screenId, retracts ? QStringLiteral("[]") : stripsJson);
+}
+
+void TilingAdaptor::setScrollTabPaintOverrides(const QString& screenId, const QVariantMap& overrides)
+{
+    if (screenId.isEmpty()) {
+        qCWarning(lcDbusTiling) << "setScrollTabPaintOverrides: empty screen id, dropping overrides";
+        return;
+    }
+    const auto it = m_scrollTabPaintOverrides.constFind(screenId);
+    const bool had = it != m_scrollTabPaintOverrides.constEnd();
+    if (overrides.isEmpty()) {
+        if (!had) {
+            return; // clearing a screen that carried nothing: no change
+        }
+        m_scrollTabPaintOverrides.remove(screenId);
+    } else {
+        if (had && *it == overrides) {
+            return;
+        }
+        m_scrollTabPaintOverrides.insert(screenId, overrides);
+    }
+    Q_EMIT scrollTabPaintOverridesChanged(screenId, overrides);
+}
+
+QVariantMap TilingAdaptor::scrollTabPaintOverrides() const
+{
+    QVariantMap out;
+    for (auto it = m_scrollTabPaintOverrides.constBegin(); it != m_scrollTabPaintOverrides.constEnd(); ++it) {
+        out.insert(it.key(), it.value());
+    }
+    return out;
+}
+
+void TilingAdaptor::clearScrollTabPaintOverridesWhere(const std::function<bool(const QString&)>& pred)
+{
+    // Load-bearing copy of the keys: setScrollTabPaintOverrides mutates the
+    // map being walked (it removes the entry for an empty map).
+    const QStringList screens = m_scrollTabPaintOverrides.keys();
+    for (const QString& screenId : screens) {
+        if (pred(screenId)) {
+            setScrollTabPaintOverrides(screenId, {});
+        }
+    }
+}
+
+void TilingAdaptor::relayScrollTabColorsChanged()
+{
+    // The broadcast makes the effect re-query every window it paints, so
+    // its verdicts move without any targeted relay passing through here.
+    // The targeted gate's memory is stale from this point and must not be
+    // allowed to suppress the next per-window relay against it.
+    m_lastScrollTabColorsRelay.clear();
+    Q_EMIT scrollTabColorsChanged(QString(), QVariantMap());
+}
+
+void TilingAdaptor::relayScrollTabColorsForWindow(const QString& windowId)
+{
+    if (windowId.isEmpty() || !m_windowTrackingAdaptor) {
+        return;
+    }
+    // Only windows the effect actually paints a pill for. The strip payload
+    // is compact JSON whose "tabs" arrays hold the column members' window
+    // ids, so a quoted-substring test over the cached payloads answers
+    // "is this window a tab on some screen" without parsing. Bounding the
+    // relay this way keeps the effect's per-window colour cache to the tabs
+    // it draws rather than every window that ever changed its title; a
+    // window that becomes a tab later is covered by the effect's own
+    // scrollTabColors query when the strip for it arrives.
+    const QString quoted = QLatin1Char('"') + windowId + QLatin1Char('"');
+    bool named = false;
+    for (auto it = m_lastScrollTabStrips.constBegin(); it != m_lastScrollTabStrips.constEnd(); ++it) {
+        if (it.value().contains(quoted)) {
+            named = true;
+            break;
+        }
+    }
+    if (!named) {
+        // The effect evicts its verdict for a window that stopped being a
+        // tab anywhere and re-queries on re-tab; the gate's memory has to go
+        // in step, or a re-tabbed window whose colours moved and moved back
+        // during the interval would be answered from a memory the effect no
+        // longer shares.
+        m_lastScrollTabColorsRelay.remove(windowId);
+        return;
+    }
+    // Change-gated like every other relay here: the effect compares and
+    // drops an unchanged map, so an unchanged one must not cross the bus at
+    // all (a window with no rule retitles as often as a terminal does).
+    const QVariantMap colors = m_windowTrackingAdaptor->tabColorRuleParams(windowId);
+    const auto it = m_lastScrollTabColorsRelay.constFind(windowId);
+    if (it != m_lastScrollTabColorsRelay.constEnd() && *it == colors) {
+        return;
+    }
+    m_lastScrollTabColorsRelay.insert(windowId, colors);
+    Q_EMIT scrollTabColorsChanged(windowId, colors);
+}
+
+QVariantMap TilingAdaptor::scrollTabStrips() const
+{
+    QVariantMap out;
+    for (auto it = m_lastScrollTabStrips.constBegin(); it != m_lastScrollTabStrips.constEnd(); ++it) {
+        out.insert(it.key(), it.value());
+    }
+    return out;
+}
+
+QVariantMap TilingAdaptor::scrollTabColors(const QString& windowId)
+{
+    // The WTA owns the resolve and its memo; this is a pass-through so the
+    // effect can reach it on the interface it already listens to.
+    if (!m_windowTrackingAdaptor || windowId.isEmpty()) {
+        return {};
+    }
+    return m_windowTrackingAdaptor->tabColorRuleParams(windowId);
+}
+
 QStringList TilingAdaptor::combinedManagedScreens() const
 {
     QSet<QString> all;
@@ -730,8 +865,10 @@ void TilingAdaptor::windowClosed(const QString& windowId)
     // differ for a class-mutating app), so removing only the close id would
     // strand the other entry for the process lifetime.
     m_lastFloatBroadcast.remove(windowId);
+    m_lastScrollTabColorsRelay.remove(windowId);
     if (m_windowTrackingAdaptor) {
         m_lastFloatBroadcast.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
+        m_lastScrollTabColorsRelay.remove(m_windowTrackingAdaptor->shadowWindowId(windowId));
     }
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
@@ -769,6 +906,7 @@ void TilingAdaptor::onTrackedWindowDestroyed(const QString& windowId)
     // residue of a class-mutating app is reclaimed by
     // pruneStaleFloatBroadcasts.
     m_lastFloatBroadcast.remove(windowId);
+    m_lastScrollTabColorsRelay.remove(windowId);
     removeUnclaimedOpen(windowId);
     removePendingOpen(windowId);
 }
@@ -784,6 +922,13 @@ void TilingAdaptor::pruneStaleFloatBroadcasts(const QStringList& aliveInstances)
     for (auto it = m_lastFloatBroadcast.begin(); it != m_lastFloatBroadcast.end();) {
         if (!alive.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
             it = m_lastFloatBroadcast.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = m_lastScrollTabColorsRelay.begin(); it != m_lastScrollTabColorsRelay.end();) {
+        if (!alive.contains(PhosphorIdentity::WindowId::extractInstanceId(it.key()))) {
+            it = m_lastScrollTabColorsRelay.erase(it);
         } else {
             ++it;
         }
@@ -855,7 +1000,13 @@ void TilingAdaptor::clearEngine()
     m_unclaimedOpens.clear();
     m_pendingOpens.clear();
     m_lastFloatBroadcast.clear();
+    m_lastScrollTabColorsRelay.clear();
     m_lastEnabledBroadcast.reset();
+    // Unlike m_activeLayouts, the strip cache MUST go: it names live windows
+    // and their column rects, and replaying it to an effect that loads during
+    // a daemon restart would paint pills for a layout no engine owns any more.
+    m_lastScrollTabStrips.clear();
+    m_scrollTabPaintOverrides.clear();
     // The WTA borrow is NOT cleared here — Daemon::stop's teardown block is
     // its canonical clear (setWindowTrackingAdaptor(nullptr)), and every
     // deref in this file null-checks.

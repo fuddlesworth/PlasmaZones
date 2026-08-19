@@ -1190,6 +1190,20 @@ target_link_libraries(test_tiling_adaptor_active_layouts PRIVATE Qt6::Test Qt6::
                                                                  plasmazones_core)
 add_test(NAME test_tiling_adaptor_active_layouts COMMAND test_tiling_adaptor_active_layouts)
 
+# Tab-indicator transport on TilingAdaptor: the scrollTabStripsChanged relay
+# and its scrollTabStrips replay cache (including the "[]" retraction and the
+# shutdown clear), the all-windows scrollTabColorsChanged broadcast, and the
+# scrollTabColors pass-through to the WTA's rule resolution. Also the
+# paint-override half of the same transport (setScrollTabPaintOverrides, the
+# scrollTabPaintOverridesChanged relay and its scrollTabPaintOverrides replay
+# getter, and the clearScrollTabPaintOverridesWhere sweep), plus the
+# per-window colour relay (relayScrollTabColorsForWindow).
+add_executable(test_tiling_adaptor_scroll_tabs dbus/test_tiling_adaptor_scroll_tabs.cpp)
+target_link_libraries(test_tiling_adaptor_scroll_tabs PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core
+                      PhosphorRules::PhosphorRules PhosphorEngine::PhosphorEngine
+                      PhosphorZones::PhosphorZones)
+add_test(NAME test_tiling_adaptor_scroll_tabs COMMAND test_tiling_adaptor_scroll_tabs)
+
 # Truth-table guard for WindowDragAdaptor::computeDragPolicy - pins the
 # (snap, autotile, context) matrix so the daemon's drag routing decision
 # can't drift relative to the compositor plugin's deleted local caches.
@@ -1590,14 +1604,17 @@ add_test(NAME test_profilestore COMMAND test_profilestore)
 # derives SectionRole / summaries from a rule's shape; RuleController
 # stages CRUD by UUID and builds the monitor overview. Compiles the model /
 # controller sources directly (they live in the plasmazones-settings
-# executable, not plasmazones_core).
-add_executable(test_rule_model
-    settings/rules/test_rule_model.cpp
+# executable, not plasmazones_core). The two source lists are declared ONCE
+# here and shared by every rules-page test target below, so a TU added to the
+# controller's multi-file class definition cannot be forgotten in one copy.
+set(PZ_RULE_MODEL_SOURCES
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
-    # Label tables + summaries, split from rulemodel.cpp for file-size.
+    # Label tables + summaries, split from rulemodel.cpp for file-size; the
+    # match-side labels split again into rulemodel_matchlabels.cpp.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_matchlabels.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_fieldtables.cpp
-    # rulemodel's action summary now shares its boolean polarity phrasing with
+    # rulemodel's action summary shares its boolean polarity phrasing with
     # the editor via RuleAuthoring::boolActionStateLabel.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
@@ -1605,6 +1622,23 @@ add_executable(test_rule_model
     # ruleauthoring_actions.cpp for file-size.
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actionparams.cpp
     ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
+)
+set(PZ_RULE_CONTROLLER_SOURCES
+    ${PZ_RULE_MODEL_SOURCES}
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
+    # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
+    # author surfaces, validation). The controller's class definition spans
+    # this TU and rulecontroller.cpp.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
+    # Label-lookup setters + wiring-completion gate. The controller's class
+    # definition spans this TU and rulecontroller.cpp.
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
+    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
+)
+add_executable(test_rule_model
+    settings/rules/test_rule_model.cpp
+    ${PZ_RULE_MODEL_SOURCES}
 )
 target_link_libraries(test_rule_model
     PRIVATE
@@ -1617,26 +1651,7 @@ add_test(NAME test_rule_model COMMAND test_rule_model)
 
 add_executable(test_rule_controller
     settings/rules/test_rule_controller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
-    # Label tables + summaries, split from rulemodel.cpp for file-size.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_fieldtables.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
-    # Read-only / projection methods (sections, rulesSnapshot, monitorOverview,
-    # author surfaces, validation). The controller's class definition spans
-    # this TU and rulecontroller.cpp.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
-    # Label-lookup setters + wiring-completion gate. The controller's class
-    # definition spans this TU and rulecontroller.cpp.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
-    # Per-param labels, hints, schema, and defaultPayloadFor, split from
-    # ruleauthoring_actions.cpp for file-size.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actionparams.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
+    ${PZ_RULE_CONTROLLER_SOURCES}
 )
 target_link_libraries(test_rule_controller
     PRIVATE
@@ -1649,26 +1664,12 @@ target_link_libraries(test_rule_controller
 )
 add_test(NAME test_rule_controller COMMAND test_rule_controller)
 
-# Overview/vocabulary half of the controller suite (monitorOverview projections,
-# vocabulary tokens, templates, action metadata). Same source set as
-# test_rule_controller; the controller's class definition spans several TUs.
+# Overview half of the controller suite (monitorOverview projections and the
+# curve-label resolver bridge). Same source set as test_rule_controller; the
+# controller's class definition spans several TUs.
 add_executable(test_rule_controller_overview
     settings/rules/test_rule_controller_overview.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel.cpp
-    # Label tables + summaries, split from rulemodel.cpp for file-size.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_labels.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulemodel_fieldtables.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_views.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_lookups.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/rulecontroller_baseline.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actiondescriptions.cpp
-    # Per-param labels, hints, schema, and defaultPayloadFor, split from
-    # ruleauthoring_actions.cpp for file-size.
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actionparams.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruleauthoring_actions.cpp
-    ${CMAKE_SOURCE_DIR}/src/settings/rules/ruletemplates.cpp
+    ${PZ_RULE_CONTROLLER_SOURCES}
 )
 target_link_libraries(test_rule_controller_overview
     PRIVATE
@@ -1680,6 +1681,24 @@ target_link_libraries(test_rule_controller_overview
         plasmazones_core
 )
 add_test(NAME test_rule_controller_overview COMMAND test_rule_controller_overview)
+
+# Vocabulary half of the controller suite (engine-mode picker tokens, input
+# hints, templates, action domains, default payload seeding), split from
+# test_rule_controller_overview for file-size.
+add_executable(test_rule_controller_vocabulary
+    settings/rules/test_rule_controller_vocabulary.cpp
+    ${PZ_RULE_CONTROLLER_SOURCES}
+)
+target_link_libraries(test_rule_controller_vocabulary
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        Qt6::DBus
+        PhosphorRules::PhosphorRules
+        PhosphorControl::PhosphorControl
+        plasmazones_core
+)
+add_test(NAME test_rule_controller_vocabulary COMMAND test_rule_controller_vocabulary)
 
 # Validation methods on D-Bus struct types - pins the accept/reject table
 # for validationError() so cross-field invariants (DragOutcome action range,
@@ -1959,6 +1978,22 @@ add_test(NAME test_surface_decoration_orientation COMMAND test_surface_decoratio
 # which ctest reports as SKIPPED rather than Passed — honest status for the
 # GPU gate. In-test QSKIPs still exit 0 via qExec (green, Qt's contract).
 set_tests_properties(test_surface_decoration_orientation PROPERTIES SKIP_RETURN_CODE 77)
+
+# The tab-indicator layout and raster half is pure Qt (QRect arithmetic and a
+# QPainter pass), with no KWin type in either entry point, so the raster TU
+# compiles straight into the test the same way StripViewAnimator's does. The
+# include path is the effect tree so its own "compositor/..." include resolves.
+# It stays out of the Unity blob here for the same reason it does in
+# kwin-effect/CMakeLists.txt (its file-local helpers carry generic names);
+# source-file properties are directory-scoped, so the effect tree's exclusion
+# does not reach this consuming target.
+set_source_files_properties(${CMAKE_SOURCE_DIR}/kwin-effect/compositor/scrolltabindicatorpainter_raster.cpp
+    PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+add_executable(test_scroll_tab_layout compositor-common/test_scroll_tab_layout.cpp
+               ${CMAKE_SOURCE_DIR}/kwin-effect/compositor/scrolltabindicatorpainter_raster.cpp)
+target_include_directories(test_scroll_tab_layout PRIVATE ${CMAKE_SOURCE_DIR}/kwin-effect)
+target_link_libraries(test_scroll_tab_layout PRIVATE Qt6::Test Qt6::Gui)
+add_test(NAME test_scroll_tab_layout COMMAND test_scroll_tab_layout)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment + config isolation
